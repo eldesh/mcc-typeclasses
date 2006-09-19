@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 1913 2006-05-07 13:44:36Z wlux $
+% $Id: CaseCheck.lhs 1971 2006-09-19 18:31:17Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -186,6 +186,7 @@ collect all defined identifiers.
 >   names _ (Variable _) = id
 >   names _ (Constructor _) = id
 >   names p (Paren e) = names p e
+>   names p (Typed e _) = names p e
 >   names p (Tuple es) = names p es
 >   names p (List es) = names p es
 >   names p (ListCompr e sts) = names p sts . names p e

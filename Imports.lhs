@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 1969 2006-09-19 18:29:25Z wlux $
+% $Id: Imports.lhs 1970 2006-09-19 18:30:18Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -33,12 +33,21 @@ unqualified import are performed.
 > importInterface :: ModuleIdent -> Bool -> Maybe ImportSpec
 >                 -> (PEnv,TCEnv,ValueEnv) -> Interface
 >                 -> (PEnv,TCEnv,ValueEnv)
-> importInterface m q is (pEnv,tcEnv,tyEnv) i =
->   (importEntities precs m q vs id i pEnv,
->    importEntities types m q ts (importData vs) i tcEnv,
->    importEntities values m q vs id i tyEnv)
->   where ts = isVisible addType is
+> importInterface m q is (pEnv,tcEnv,tyEnv) (Interface m' _ ds) =
+>   (importEntities precs m q vs id m' ds' pEnv,
+>    importEntities types m q ts (importData vs) m' ds' tcEnv,
+>    importEntities values m q vs id m' ds' tyEnv)
+>   where ds' = filter (not . isHiddenData) ds
+>         ts = isVisible addType is
 >         vs = isVisible addValue is
+
+> isHiddenData :: IDecl -> Bool
+> isHiddenData (IInfixDecl _ _ _ _) = False
+> isHiddenData (HidingDataDecl _ _ _) = True 
+> isHiddenData (IDataDecl _ _ _ _) = False
+> isHiddenData (INewtypeDecl _ _ _ _) = False
+> isHiddenData (ITypeDecl _ _ _ _) = False
+> isHiddenData (IFunctionDecl _ _ _) = False
 
 > isVisible :: (Import -> Set Ident -> Set Ident) -> Maybe ImportSpec
 >           -> Ident -> Bool
@@ -49,19 +58,10 @@ unqualified import are performed.
 > importEntities :: Entity a
 >                => (ModuleIdent -> IDecl -> [I a] -> [I a])
 >                -> ModuleIdent -> Bool -> (Ident -> Bool) -> (a -> a)
->                -> Interface -> TopEnv a -> TopEnv a
-> importEntities bind m q isVisible f (Interface m' _ ds) env =
+>                -> ModuleIdent -> [IDecl] -> TopEnv a -> TopEnv a
+> importEntities bind m q isVisible f m' ds env =
 >   foldr (uncurry (importTopEnv q m)) env
->         [(x,f y) | (x,y) <- foldr (bind m') [] ds', isVisible x]
->   where ds' = filter (not . isHiddenData) ds
-
-> isHiddenData :: IDecl -> Bool
-> isHiddenData (IInfixDecl _ _ _ _) = False
-> isHiddenData (HidingDataDecl _ _ _) = True 
-> isHiddenData (IDataDecl _ _ _ _) = False
-> isHiddenData (INewtypeDecl _ _ _ _) = False
-> isHiddenData (ITypeDecl _ _ _ _) = False
-> isHiddenData (IFunctionDecl _ _ _) = False
+>         [(x,f y) | (x,y) <- foldr (bind m') [] ds, isVisible x]
 
 > importData :: (Ident -> Bool) -> TypeInfo -> TypeInfo
 > importData isVisible (DataType tc n cs) =
@@ -99,17 +99,11 @@ the unqualified type identifier \verb|T| would be ambiguous if
 
 > importInterfaceIntf :: (PEnv,TCEnv,ValueEnv) -> Interface
 >                     -> (PEnv,TCEnv,ValueEnv)
-> importInterfaceIntf (pEnv,tcEnv,tyEnv) i =
->   (importEntitiesIntf precs i pEnv,
->    importEntitiesIntf types i tcEnv,
->    importEntitiesIntf values i tyEnv)
-
-> importEntitiesIntf :: Entity a
->                    => (ModuleIdent -> IDecl -> [I a] -> [I a])
->                    -> Interface -> TopEnv a -> TopEnv a
-> importEntitiesIntf bind (Interface m _ ds) env =
->   foldr (uncurry (qualImportTopEnv m)) env
->         (foldr (bind m) [] (filter (isJust . localIdent m . entity) ds))
+> importInterfaceIntf (pEnv,tcEnv,tyEnv) (Interface m _ ds) =
+>   (importEntitiesIntf precs m ds' pEnv,
+>    importEntitiesIntf types m ds' tcEnv,
+>    importEntitiesIntf values m ds' tyEnv)
+>   where ds' = filter (isJust . localIdent m . entity) ds
 
 > entity :: IDecl -> QualIdent
 > entity (IInfixDecl _ _ _ op) = op
@@ -118,6 +112,12 @@ the unqualified type identifier \verb|T| would be ambiguous if
 > entity (INewtypeDecl _ tc _ _) = tc
 > entity (ITypeDecl _ tc _ _) = tc
 > entity (IFunctionDecl _ f _) = f
+
+> importEntitiesIntf :: Entity a
+>                    => (ModuleIdent -> IDecl -> [I a] -> [I a])
+>                    -> ModuleIdent -> [IDecl] -> TopEnv a -> TopEnv a
+> importEntitiesIntf bind m ds env =
+>   foldr (uncurry (qualImportTopEnv m)) env (foldr (bind m) [] ds)
 
 \end{verbatim}
 The list of entities exported from a module is computed with the

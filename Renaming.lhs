@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 1875 2006-03-18 18:43:27Z wlux $
+% $Id: Renaming.lhs 1973 2006-09-19 19:06:48Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -122,6 +122,10 @@ syntax tree and renames all type and expression variables.
 >   do
 >     env <- bindVars emptyEnv tvs
 >     liftM2 (TypeDecl p tc) (mapM (renameVar env) tvs) (renameType env ty)
+> renameTopDecl (ClassDecl p cls tv) =
+>   do
+>     env <- bindVars emptyEnv [tv]
+>     liftM (ClassDecl p cls) (renameVar env tv)
 > renameTopDecl (BlockDecl d) = liftM BlockDecl (renameDecl emptyEnv d)
 
 > renameConstrDecl :: RenameEnv -> ConstrDecl -> RenameState ConstrDecl

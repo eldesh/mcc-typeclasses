@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 1912 2006-05-03 14:53:33Z wlux $
+% $Id: TypeSyntaxCheck.lhs 1973 2006-09-19 19:06:48Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -37,7 +37,7 @@ later for checking the optional export list of the current module.
 >                 -> Error (TypeEnv,[TopDecl])
 > typeSyntaxCheck m tcEnv ds =
 >   do
->     reportDuplicates duplicateType repeatedType (map tconstr tds)
+>     reportDuplicates duplicateType repeatedType (map tident tds)
 >     ds' <- mapE (checkTopDecl env) ds
 >     return (env,ds')
 >   where tds = filter isTypeDecl ds
@@ -55,6 +55,8 @@ later for checking the optional export list of the current module.
 >   globalBindTopEnv m tc (Data (qualifyWith m tc) [nconstr nc])
 > bindType m (TypeDecl _ tc _ _) =
 >   globalBindTopEnv m tc (Alias (qualifyWith m tc))
+> bindType m (ClassDecl _ cls _) =
+>   globalBindTopEnv m cls (Class (qualifyWith m cls))
 > bindType _ (BlockDecl _) = id
 
 \end{verbatim}
@@ -74,6 +76,10 @@ signatures.
 > checkTopDecl env (TypeDecl p tc tvs ty) =
 >   checkTypeLhs env p tvs &&>
 >   liftE (TypeDecl p tc tvs) (checkClosedType env p tvs ty)
+> checkTopDecl env (ClassDecl p cls tv) =
+>   do
+>     checkTypeLhs env p [tv]
+>     return (ClassDecl p cls tv)
 > checkTopDecl env (BlockDecl d) = liftE BlockDecl (checkDecl env d)
 
 > checkDecl :: TypeEnv -> Decl -> Error Decl
@@ -206,7 +212,9 @@ interpret the identifier as such.
 >               | not (isQualified tc) && null tys ->
 >                   return (const (VariableType (unqualify tc)))
 >               | otherwise -> errorAt p (undefinedType tc)
->             [_] -> return (ConstructorType tc)
+>             [Data _ _] -> return (ConstructorType tc)
+>             [Alias _] -> return (ConstructorType tc)
+>             [Class _] -> errorAt p (undefinedType tc)
 >             rs -> errorAt p (ambiguousType rs tc))
 >          (mapE (checkType env p) tys)
 > checkType env p (VariableType tv)
@@ -223,11 +231,12 @@ interpret the identifier as such.
 Auxiliary definitions.
 \begin{verbatim}
 
-> tconstr :: TopDecl -> P Ident
-> tconstr (DataDecl p tc _ _) = P p tc
-> tconstr (NewtypeDecl p tc _ _) = P p tc
-> tconstr (TypeDecl p tc _ _) = P p tc
-> tconstr (BlockDecl _) = internalError "tconstr"
+> tident :: TopDecl -> P Ident
+> tident (DataDecl p tc _ _) = P p tc
+> tident (NewtypeDecl p tc _ _) = P p tc
+> tident (TypeDecl p tc _ _) = P p tc
+> tident (ClassDecl p cls _) = P p cls
+> tident (BlockDecl _) = internalError "tident"
 
 \end{verbatim}
 Error messages.
@@ -244,15 +253,15 @@ Error messages.
 
 > ambiguousType :: [TypeKind] -> QualIdent -> String
 > ambiguousType rs tc = show $
->   text "Ambiguous type" <+> ppQIdent tc $$
+>   text "Ambiguous identifier" <+> ppQIdent tc $$
 >   fsep (text "Could refer to:" :
 >               punctuate comma (map (ppQIdent . origName) rs))
 
 > duplicateType :: Ident -> String
-> duplicateType tc = "Type " ++ name tc ++ " defined more than once"
+> duplicateType tc = name tc ++ " defined more than once"
 
 > repeatedType :: Ident -> String
-> repeatedType tc = "Redefinition of type " ++ name tc
+> repeatedType tc = "Redefinition of " ++ name tc
 
 > nonLinear :: Ident -> String
 > nonLinear tv =
@@ -261,7 +270,7 @@ Error messages.
 
 > noVariable :: Ident -> String
 > noVariable tv =
->   "Type constructor " ++ name tv ++
+>   "Type constructor or type class " ++ name tv ++
 >   " used in left hand side of type declaration"
 
 > unboundVariable :: Ident -> String

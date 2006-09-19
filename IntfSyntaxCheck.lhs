@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 1912 2006-05-03 14:53:33Z wlux $
+% $Id: IntfSyntaxCheck.lhs 1973 2006-09-19 19:06:48Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -42,6 +42,7 @@ The latter must not occur in type expressions in interfaces.
 >   qualBindTopEnv tc (Data tc (map constr (catMaybes cs)))
 > bindType (INewtypeDecl _ tc _ nc) = qualBindTopEnv tc (Data tc [nconstr nc])
 > bindType (ITypeDecl _ tc _ _) = qualBindTopEnv tc (Alias tc)
+> bindType (IClassDecl _ cls _) = qualBindTopEnv cls (Class cls)
 > bindType (IFunctionDecl _ _ _) = id
 
 \end{verbatim}
@@ -63,6 +64,10 @@ during syntax checking of type expressions.
 > checkIDecl env (ITypeDecl p tc tvs ty) =
 >   checkTypeLhs env p tvs &&>
 >   liftE (ITypeDecl p tc tvs) (checkClosedType env p tvs ty)
+> checkIDecl env (IClassDecl p cls tv) =
+>   do
+>     checkTypeLhs env p [tv]
+>     return (IClassDecl p cls tv)
 > checkIDecl env (IFunctionDecl p f ty) =
 >   liftE (IFunctionDecl p f) (checkType env p ty)
 
@@ -109,6 +114,7 @@ during syntax checking of type expressions.
 >               | otherwise -> errorAt p (undefinedType tc)
 >             [Data _ _] -> return (ConstructorType tc)
 >             [Alias _] -> errorAt p (badTypeSynonym tc)
+>             [Class _] -> errorAt p (undefinedType tc)
 >             _ -> internalError "checkType")
 >          (mapE (checkType env p) tys)
 > checkType env p (VariableType tv) =
@@ -143,7 +149,7 @@ Error messages.
 
 > noVariable :: Ident -> String
 > noVariable tv =
->   "Type constructor " ++ name tv ++
+>   "Type constructor or type class " ++ name tv ++
 >   " used in left hand side of type declaration"
 
 > unboundVariable :: Ident -> String

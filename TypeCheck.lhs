@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 1868 2006-03-02 23:28:17Z wlux $
+% $Id: TypeCheck.lhs 1973 2006-09-19 19:06:48Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -99,6 +99,7 @@ types and also because the name of the type could be ambiguous.
 >         bind (NewConstrDecl _ c ty) =
 >           bindConstr NewtypeConstructor m tcEnv tvs c [ty] ty0
 > bindConstrs _ _ (TypeDecl _ _ _ _) tyEnv = tyEnv
+> bindConstrs _ _ (ClassDecl _ _ _) tyEnv = tyEnv
 > bindConstrs _ _ (BlockDecl _) tyEnv = tyEnv
 
 > bindConstr :: (QualIdent -> TypeScheme -> ValueInfo) -> ModuleIdent

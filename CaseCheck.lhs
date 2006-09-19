@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 1971 2006-09-19 18:31:17Z wlux $
+% $Id: CaseCheck.lhs 1973 2006-09-19 19:06:48Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -26,11 +26,11 @@ four supported modes are (cf.\ Sect.~C.1 of~\cite{Hanus:Report}):
 
 In order to check identifier cases, the compiler collects and
 categorizes all type and value identifiers defined in the module. We
-recognize the following five identifier categories:
-\emph{TypeConstrId}, \emph{TypeVarId}, \emph{DataConstrId},
-\emph{FunctionId}, and \emph{VariableId}. At present, we do not check
-module names, even though Haskell requires them to start with an upper
-case letter.
+recognize the following six identifier categories:
+\emph{TypeConstrId}, \emph{TypeClassId}, \emph{TypeVarId},
+\emph{DataConstrId}, \emph{FunctionId}, and \emph{VariableId}. At
+present, we do not check module names, even though Haskell requires
+them to start with an upper case letter.
 \begin{verbatim}
 
 > module CaseCheck(caseCheck,caseCheckGoal) where
@@ -44,6 +44,7 @@ case letter.
 >   deriving (Eq,Show)
 > data Category =
 >     TypeConstrId
+>   | TypeClassId
 >   | TypeVarId
 >   | DataConstrId
 >   | FunctionId
@@ -85,6 +86,7 @@ categories.
 
 > haskellMode :: Category -> [Case]
 > haskellMode TypeConstrId = [UpperCase]
+> haskellMode TypeClassId = [UpperCase]
 > haskellMode TypeVarId = [LowerCase]
 > haskellMode DataConstrId = [UpperCase,ColonCase]
 > haskellMode FunctionId = [LowerCase,NoColonCase]
@@ -92,6 +94,7 @@ categories.
 
 > prologMode :: Category -> [Case]
 > prologMode TypeConstrId = [LowerCase]
+> prologMode TypeClassId = [LowerCase]
 > prologMode TypeVarId = [UpperCase]
 > prologMode DataConstrId = [LowerCase,ColonCase,NoColonCase]
 > prologMode FunctionId = [LowerCase,ColonCase,NoColonCase]
@@ -99,6 +102,7 @@ categories.
 
 > goedelMode :: Category -> [Case]
 > goedelMode TypeConstrId = [UpperCase]
+> goedelMode TypeClassId = [LowerCase]
 > goedelMode TypeVarId = [LowerCase]
 > goedelMode DataConstrId = [UpperCase,ColonCase,NoColonCase]
 > goedelMode FunctionId = [UpperCase,ColonCase,NoColonCase]
@@ -126,6 +130,8 @@ collect all defined identifiers.
 >   names _ (DataDecl p tc tvs cs) xs = typeNames p tc tvs ++ names p cs xs
 >   names _ (NewtypeDecl p tc tvs nc) xs = typeNames p tc tvs ++ names p nc xs
 >   names _ (TypeDecl p tc tvs _) xs = typeNames p tc tvs ++ xs
+>   names _ (ClassDecl p cls tv) xs =
+>     D p TypeClassId cls : D p TypeVarId tv : xs
 >   names p (BlockDecl d) xs = names p d xs
 
 > typeNames :: Position -> Ident -> [Ident] -> [Definition]
@@ -226,6 +232,7 @@ Warning messages.
 
 > kind :: Category -> String
 > kind TypeConstrId = "type constructor"
+> kind TypeClassId = "type class"
 > kind TypeVarId = "type variable"
 > kind DataConstrId = "data constructor"
 > kind FunctionId = "function"

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ExportSyntaxCheck.lhs 1912 2006-05-03 14:53:33Z wlux $
+% $Id: ExportSyntaxCheck.lhs 1973 2006-09-19 19:06:48Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -35,9 +35,9 @@ entities.
 
 > checkInterface :: ExportSpec -> Error ()
 > checkInterface (Exporting p es) =
->   mapE_ (errorAt p . ambiguousExportType . fst)
+>   mapE_ (errorAt p . ambiguousExport . fst)
 >         (duplicates [unqualify tc | ExportTypeWith tc _ <- es]) &&>
->   mapE_ (errorAt p . ambiguousExportValue . fst)
+>   mapE_ (errorAt p . ambiguousExport . fst)
 >         (duplicates ([c | ExportTypeWith _ cs <- es, c <- cs] ++
 >                      [unqualify f | Export f <- es]))
 
@@ -79,7 +79,8 @@ export a type constructor \texttt{x} \emph{and} a global function
 >     [t] -> expandThing' p fEnv tc (Just [exportType (abstract t)])
 >       where abstract (Data tc _) = Data tc []
 >             abstract (Alias tc) = Alias tc
->     _ -> errorAt p (ambiguousType tc)
+>             abstract (Class cls) = Class cls
+>     _ -> errorAt p (ambiguousName tc)
 
 > expandThing' :: Position -> FunEnv -> QualIdent -> Maybe [Export]
 >              -> Error [Export]
@@ -94,24 +95,26 @@ export a type constructor \texttt{x} \emph{and} a global function
 >                -> Error [Export]
 > expandTypeWith p tEnv tc cs =
 >   do
->     (tc',cs'') <- constrs p tEnv tc
->     mapE_ (errorAt p . undefinedDataConstr tc) (filter (`notElem` cs'') cs')
+>     (isType,tc',cs'') <- elements p tEnv tc
+>     mapE_ (errorAt p . undefinedElement isType tc)
+>           (filter (`notElem` cs'') cs')
 >     return [ExportTypeWith tc' cs']
 >   where cs' = nub cs
 
 > expandTypeAll :: Position -> TypeEnv -> QualIdent -> Error [Export]
 > expandTypeAll p tEnv tc =
 >   do
->     (tc',cs) <- constrs p tEnv tc
+>     (_,tc',cs) <- elements p tEnv tc
 >     return [ExportTypeWith tc' cs]
 
-> constrs :: Position -> TypeEnv -> QualIdent -> Error (QualIdent,[Ident])
-> constrs p tEnv tc =
+> elements :: Position -> TypeEnv -> QualIdent -> Error (Bool,QualIdent,[Ident])
+> elements p tEnv tc =
 >   case qualLookupTopEnv tc tEnv of
->     [] -> errorAt p (undefinedType tc)
->     [Data tc cs] -> return (tc,cs)
->     [Alias tc] -> return (tc,[])
->     _ -> errorAt p (ambiguousType tc)
+>     [] -> errorAt p (undefinedEntity tc)
+>     [Data tc cs] -> return (True,tc,cs)
+>     [Alias tc] -> return (True,tc,[])
+>     [Class cls] -> return (False,cls,[])
+>     _ -> errorAt p (ambiguousName tc)
 
 > expandLocalModule :: TypeEnv -> FunEnv -> [Export]
 > expandLocalModule tEnv fEnv =
@@ -126,6 +129,7 @@ export a type constructor \texttt{x} \emph{and} a global function
 > exportType :: TypeKind -> Export
 > exportType (Data tc cs) = ExportTypeWith tc cs
 > exportType (Alias tc) = ExportTypeWith tc []
+> exportType (Class cls) = ExportTypeWith cls []
 
 \end{verbatim}
 The expanded list of exported entities may contain duplicates. These
@@ -154,20 +158,11 @@ Error messages.
 > undefinedEntity x =
 >   "Entity " ++ qualName x ++ " in export list is not defined"
 
-> undefinedType :: QualIdent -> String
-> undefinedType tc = "Type " ++ qualName tc ++ " in export list is not defined"
-
 > moduleNotImported :: ModuleIdent -> String
 > moduleNotImported m = "Module " ++ moduleName m ++ " not imported"
 
-> ambiguousExportType :: Ident -> String
-> ambiguousExportType x = "Ambiguous export of type " ++ name x
-
-> ambiguousExportValue :: Ident -> String
-> ambiguousExportValue x = "Ambiguous export of " ++ name x
-
-> ambiguousType :: QualIdent -> String
-> ambiguousType tc = "Ambiguous type " ++ qualName tc
+> ambiguousExport :: Ident -> String
+> ambiguousExport x = "Ambiguous export of " ++ name x
 
 > ambiguousName :: QualIdent -> String
 > ambiguousName x = "Ambiguous name " ++ qualName x
@@ -175,8 +170,10 @@ Error messages.
 > exportDataConstr :: QualIdent -> String
 > exportDataConstr c = "Data constructor " ++ qualName c ++ " in export list"
 
-> undefinedDataConstr :: QualIdent -> Ident -> String
-> undefinedDataConstr tc c =
+> undefinedElement :: Bool -> QualIdent -> Ident -> String
+> undefinedElement True tc c =
 >   name c ++ " is not a data constructor of type " ++ qualName tc
+> undefinedElement False cls f =
+>   name f ++ " is not a method of type class " ++ qualName cls
 
 \end{verbatim}

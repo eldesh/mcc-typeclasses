@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ImportSyntaxCheck.lhs 1912 2006-05-03 14:53:33Z wlux $
+% $Id: ImportSyntaxCheck.lhs 1973 2006-09-19 19:06:48Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -40,6 +40,7 @@ declarations.
 > bindType m (INewtypeDecl _ tc _ nc) =
 >   bindUnqual tc (Data (qualQualify m tc) [nconstr nc])
 > bindType m (ITypeDecl _ tc _ _) = bindUnqual tc (Alias (qualQualify m tc))
+> bindType m (IClassDecl _ cls _) = bindUnqual cls (Class (qualQualify m cls))
 > bindType _ _ = id
 
 > bindValue :: ModuleIdent -> IDecl -> ExpFunEnv -> ExpFunEnv
@@ -145,8 +146,9 @@ data constructors are added.
 >                -> Error [Import]
 > expandTypeWith p m tEnv tc cs =
 >   do
->     cs'' <- constrs p m tEnv tc
->     mapE_ (errorAt p . undefinedDataConstr m tc) (filter (`notElem` cs'') cs')
+>     (isType,cs'') <- elements p m tEnv tc
+>     mapE_ (errorAt p . undefinedElement isType m tc)
+>           (filter (`notElem` cs'') cs')
 >     return [ImportTypeWith tc cs']
 >   where cs' = nub cs
 
@@ -154,15 +156,17 @@ data constructors are added.
 >               -> Error [Import]
 > expandTypeAll p m tEnv tc =
 >   do
->     cs <- constrs p m tEnv tc
+>     (_,cs) <- elements p m tEnv tc
 >     return [ImportTypeWith tc cs]
 
-> constrs :: Position -> ModuleIdent -> ExpTypeEnv -> Ident -> Error [Ident]
-> constrs p m tEnv tc =
+> elements :: Position -> ModuleIdent -> ExpTypeEnv -> Ident
+>          -> Error (Bool,[Ident])
+> elements p m tEnv tc =
 >   case lookupEnv tc tEnv of
->     Just (Data _ cs) -> return cs
->     Just (Alias _) -> return []
->     Nothing -> errorAt p (undefinedType m tc)
+>     Just (Data _ cs) -> return (True,cs)
+>     Just (Alias _) -> return (True,[])
+>     Just (Class _) -> return (False,[])
+>     Nothing -> errorAt p (undefinedEntity m tc)
 
 \end{verbatim}
 Error messages.
@@ -172,13 +176,11 @@ Error messages.
 > undefinedEntity m x =
 >   "Module " ++ moduleName m ++ " does not export " ++ name x
 
-> undefinedType :: ModuleIdent -> Ident -> String
-> undefinedType m tc =
->   "Module " ++ moduleName m ++ " does not export type " ++ name tc
-
-> undefinedDataConstr :: ModuleIdent -> Ident -> Ident -> String
-> undefinedDataConstr m tc c =
+> undefinedElement :: Bool -> ModuleIdent -> Ident -> Ident -> String
+> undefinedElement True m tc c =
 >   name c ++ " is not a data constructor of type " ++ name tc
+> undefinedElement False m cls f =
+>   name f ++ " is not a method of type class " ++ name cls
 
 > importDataConstr :: ModuleIdent -> Ident -> String
 > importDataConstr m c = "Explicit import of data constructor " ++ name c

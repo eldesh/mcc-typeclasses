@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 1912 2006-05-03 14:53:33Z wlux $
+% $Id: KindCheck.lhs 1973 2006-09-19 19:06:48Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -73,6 +73,8 @@ function in any particular order.
 > bindTC m tcEnv (TypeDecl _ tc tvs ty) =
 >   globalBindTopEnv m tc
 >                    (typeCon AliasType m tc tvs (expandMonoType tcEnv tvs ty))
+> bindTC m tcEnv (ClassDecl _ cls _) =
+>   globalBindTopEnv m cls (TypeClass (qualifyWith m cls))
 > bindTC _ _ (BlockDecl _) = id
 
 > checkSynonynms :: ModuleIdent -> [TopDecl] -> Error ()
@@ -80,10 +82,12 @@ function in any particular order.
 >   where bound (DataDecl _ tc _ _) = [tc]
 >         bound (NewtypeDecl _ tc _ _) = [tc]
 >         bound (TypeDecl _ tc _ _) = [tc]
+>         bound (ClassDecl _ _ _) = []
 >         bound (BlockDecl _) = []
 >         free (DataDecl _ _ _ _) = []
 >         free (NewtypeDecl _ _ _ _) = []
 >         free (TypeDecl _ _ _ ty) = ft m ty []
+>         free (ClassDecl _ _ _) = []
 >         free (BlockDecl _) = []
 
 > typeDecl :: ModuleIdent -> [TopDecl] -> Error ()
@@ -95,6 +99,7 @@ function in any particular order.
 >   | otherwise = return ()
 > typeDecl _ (TypeDecl p tc _ _ : ds) =
 >   errorAt p (recursiveTypes (tc : [tc' | TypeDecl _ tc' _ _ <- ds]))
+> typeDecl _ [ClassDecl _ _ _] = return ()
 
 > ft :: ModuleIdent -> TypeExpr -> [Ident] -> [Ident]
 > ft m (ConstructorType tc tys) tcs =
@@ -112,6 +117,7 @@ Kind checking is applied to all type expressions in the program.
 > checkTopDecl tcEnv (DataDecl _ _ _ cs) = mapE_ (checkConstrDecl tcEnv) cs
 > checkTopDecl tcEnv (NewtypeDecl _ _ _ nc) = checkNewConstrDecl tcEnv nc
 > checkTopDecl tcEnv (TypeDecl p _ _ ty) = checkType tcEnv p ty
+> checkTopDecl _ (ClassDecl _ _ _) = return ()
 > checkTopDecl tcEnv (BlockDecl d) = checkDecl tcEnv d
 
 > checkDecl :: TCEnv -> Decl -> Error ()

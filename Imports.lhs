@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 1970 2006-09-19 18:30:18Z wlux $
+% $Id: Imports.lhs 1973 2006-09-19 19:06:48Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -47,6 +47,7 @@ unqualified import are performed.
 > isHiddenData (IDataDecl _ _ _ _) = False
 > isHiddenData (INewtypeDecl _ _ _ _) = False
 > isHiddenData (ITypeDecl _ _ _ _) = False
+> isHiddenData (IClassDecl _ _ _) = False
 > isHiddenData (IFunctionDecl _ _ _) = False
 
 > isVisible :: (Import -> Set Ident -> Set Ident) -> Maybe ImportSpec
@@ -69,6 +70,7 @@ unqualified import are performed.
 > importData isVisible (RenamingType tc n nc) =
 >   maybe (DataType tc n []) (RenamingType tc n) (importConstr isVisible nc)
 > importData isVisible (AliasType tc n ty) = AliasType tc n ty
+> importData isVisible (TypeClass cls) = TypeClass cls
 
 > importConstr :: (Ident -> Bool) -> Ident -> Maybe Ident
 > importConstr isVisible c
@@ -111,6 +113,7 @@ the unqualified type identifier \verb|T| would be ambiguous if
 > entity (IDataDecl _ tc _ _) = tc
 > entity (INewtypeDecl _ tc _ _) = tc
 > entity (ITypeDecl _ tc _ _) = tc
+> entity (IClassDecl _ cls _) = cls
 > entity (IFunctionDecl _ f _) = f
 
 > importEntitiesIntf :: Entity a
@@ -137,6 +140,8 @@ following functions.
 >   qual tc (typeCon RenamingType m tc tvs (nconstr nc))
 > types m (ITypeDecl _ tc tvs ty) =
 >   qual tc (typeCon AliasType m tc tvs (toType m tvs ty))
+> types m (IClassDecl _ cls tv) =
+>   qual cls (TypeClass (qualQualify m cls))
 > types _ _ = id
 
 > values :: ModuleIdent -> IDecl -> [I ValueInfo] -> [I ValueInfo]

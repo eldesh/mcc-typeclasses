@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 1867 2006-03-02 18:35:01Z wlux $
+% $Id: Exports.lhs 1973 2006-09-19 19:06:48Z wlux $
 %
 % Copyright (c) 2000-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -60,6 +60,8 @@ types.
 >       where newConstr _ = newConstrDecl m tyEnv tc c
 >     [AliasType _ n ty] ->
 >       iTypeDecl ITypeDecl m tc n (const (fromType m ty)) : ds
+>     [TypeClass _] ->
+>       IClassDecl noPos (qualUnqualify m tc) (head nameSupply) : ds
 >     _ -> internalError "typeDecl"
 
 > iTypeDecl :: (Position -> QualIdent -> [Ident] -> a -> IDecl)
@@ -121,6 +123,7 @@ not module \texttt{B}.
 >   modules (IDataDecl _ tc _ cs) = modules tc . modules cs
 >   modules (INewtypeDecl _ tc _ nc) = modules tc . modules nc
 >   modules (ITypeDecl _ tc _ ty) = modules tc . modules ty
+>   modules (IClassDecl _ cls _) = modules cls
 >   modules (IFunctionDecl _ f ty) = modules f . modules ty
 
 > instance HasModule ConstrDecl where
@@ -163,6 +166,7 @@ compiler can check them without loading the imported modules.
 > definedType (IDataDecl _ tc _ _) tcs = tc : tcs
 > definedType (INewtypeDecl _ tc _ _) tcs = tc : tcs
 > definedType (ITypeDecl _ tc _ _) tcs = tc : tcs
+> definedType (IClassDecl _ _ _) tcs = tcs
 > definedType (IFunctionDecl _ _ _)  tcs = tcs
 
 > class HasType a where
@@ -178,6 +182,7 @@ compiler can check them without loading the imported modules.
 >   usedTypes (IDataDecl _ _ _ cs) = usedTypes cs
 >   usedTypes (INewtypeDecl _ _ _ nc) = usedTypes nc
 >   usedTypes (ITypeDecl _ _ _ ty) = usedTypes ty
+>   usedTypes (IClassDecl _ _ _) = id
 >   usedTypes (IFunctionDecl _ _ ty) = usedTypes ty
 
 > instance HasType ConstrDecl where

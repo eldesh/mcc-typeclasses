@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 1912 2006-05-03 14:53:33Z wlux $
+% $Id: Base.lhs 1973 2006-09-19 19:06:48Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -37,13 +37,17 @@ imported directly or indirectly into the current module.
 
 \end{verbatim}
 \paragraph{Type constructors}
-For all defined types, the compiler must maintain kind information. At
-present, Curry does not support type classes. Therefore, its type
-language is first order and the only information that must be recorded
-is the arity of each type. For algebraic data types and renaming
-types, the compiler also records all data constructors belonging to
-that type, for alias types the expanded right hand side type
-expression is saved.
+For all defined types and type classes, the compiler must maintain
+kind information. At present, the compiler does not support higher
+order type classes. Therefore, its type language is first order and
+the only information that must be recorded is the arity of each type.
+For algebraic data types and renaming types, the compiler also records
+all data constructors belonging to that type, for alias types the
+expanded right hand side type expression is saved. Type classes are
+recorded in the type constructor environment because they share a
+common name space. Since only single parameter type classes are
+supported and instance types must have kind $\ast$, no additional
+information besides the original name is recorded for type classes.
 
 Importing and exporting algebraic data types and renaming types is
 complicated by the fact that the constructors of the type may be
@@ -60,26 +64,30 @@ replaced by underscores in the interface.
 > data TypeInfo = DataType QualIdent Int [Maybe Ident]
 >               | RenamingType QualIdent Int Ident
 >               | AliasType QualIdent Int Type
+>               | TypeClass QualIdent
 >               deriving Show
 
 > instance Entity TypeInfo where
 >   origName (DataType tc _ _) = tc
 >   origName (RenamingType tc _ _) = tc
 >   origName (AliasType tc _ _) = tc
->   merge (DataType tc n cs) (DataType tc' _ cs')
->     | tc == tc' = Just (DataType tc n (mergeData cs cs'))
->     where mergeData cs cs'
->             | null cs = cs'
->             | null cs' = cs
->             | otherwise = zipWith mplus cs cs'
->   merge (DataType tc n _) (RenamingType tc' _ nc)
->     | tc == tc' = Just (RenamingType tc n nc)
->   merge (RenamingType tc n nc) (DataType tc' _ _)
->     | tc == tc' = Just (RenamingType tc n nc)
->   merge (RenamingType tc n nc) (RenamingType tc' _ _)
->     | tc == tc' = Just (RenamingType tc n nc)
->   merge (AliasType tc n ty) (AliasType tc' _ _)
->     | tc == tc' = Just (AliasType tc n ty)
+>   origName (TypeClass cls) = cls
+>   merge (DataType tc1 n cs1) (DataType tc2 _ cs2)
+>     | tc1 == tc2 = Just (DataType tc1 n (mergeData cs1 cs2))
+>     where mergeData cs1 cs2
+>             | null cs1 = cs2
+>             | null cs2 = cs1
+>             | otherwise = zipWith mplus cs1 cs2
+>   merge (DataType tc1 n _) (RenamingType tc2 _ nc)
+>     | tc1 == tc2 = Just (RenamingType tc1 n nc)
+>   merge (RenamingType tc1 n nc) (DataType tc2 _ _)
+>     | tc1 == tc2 = Just (RenamingType tc1 n nc)
+>   merge (RenamingType tc1 n nc) (RenamingType tc2 _ _)
+>     | tc1 == tc2 = Just (RenamingType tc1 n nc)
+>   merge (AliasType tc1 n ty) (AliasType tc2 _ _)
+>     | tc1 == tc2 = Just (AliasType tc1 n ty)
+>   merge (TypeClass cls1) (TypeClass cls2)
+>     | cls1 == cls2 = Just (TypeClass cls1)
 >   merge _ _ = Nothing
 
 \end{verbatim}
@@ -105,6 +113,7 @@ therefore should not fail.
 >     [DataType _ _ cs] -> cs
 >     [RenamingType _ _ c] -> [Just c]
 >     [AliasType _ _ _] -> []
+>     [TypeClass _] -> []
 >     _ -> internalError ("constructors " ++ show tc)
 
 \end{verbatim}
@@ -120,16 +129,19 @@ renaming types on one side and synonym types on the other side.
 > data TypeKind =
 >     Data QualIdent [Ident]
 >   | Alias QualIdent
+>   | Class QualIdent
 >   deriving (Eq,Show)
 
 > typeKind :: TypeInfo -> TypeKind
 > typeKind (DataType tc _ cs) = Data tc (catMaybes cs)
 > typeKind (RenamingType tc _ c) = Data tc [c]
 > typeKind (AliasType tc _ _) = Alias tc
+> typeKind (TypeClass cls) = Class cls
 
 > instance Entity TypeKind where
 >   origName (Data tc _) = tc
 >   origName (Alias tc) = tc
+>   origName (Class cls) = cls
 
 \end{verbatim}
 \paragraph{Function and constructor types}
@@ -477,13 +489,16 @@ Name supply for the generation of (type) variable names.
 i.e., use upper case for variables in Prolog mode.}
 
 Here is a list of predicates identifying various kinds of
-declarations.
+declarations. Note that type class declarations are considered type
+declarations because type constructors and type classes share a common
+name space.
 \begin{verbatim}
 
 > isTypeDecl, isBlockDecl :: TopDecl -> Bool
 > isTypeDecl (DataDecl _ _ _ _) = True
 > isTypeDecl (NewtypeDecl _ _ _ _) = True
 > isTypeDecl (TypeDecl _ _ _ _) = True
+> isTypeDecl (ClassDecl _ _ _) = True
 > isTypeDecl (BlockDecl _) = False
 > isBlockDecl (BlockDecl _) = True
 > isBlockDecl _ = False

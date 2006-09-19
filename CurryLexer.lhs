@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryLexer.lhs 1900 2006-04-19 17:44:40Z wlux $
+% $Id: CurryLexer.lhs 1973 2006-09-19 19:06:48Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -39,8 +39,8 @@ In this section a lexer for Curry is implemented.
 >   -- virtual punctation (inserted by layout)
 >   | VSemicolon | VRightBrace
 >   -- reserved identifiers
->   | KW_case | KW_data | KW_do | KW_else | KW_foreign | KW_free | KW_if
->   | KW_import | KW_in | KW_infix | KW_infixl | KW_infixr | KW_let
+>   | KW_case | KW_class | KW_data | KW_do | KW_else | KW_foreign | KW_free
+>   | KW_if | KW_import | KW_in | KW_infix | KW_infixl | KW_infixr | KW_let
 >   | KW_module | KW_newtype | KW_of | KW_then | KW_type | KW_where
 >   -- reserved operators
 >   | At | Colon | DotDot | DoubleColon | Equals | Backslash | Bar
@@ -151,6 +151,7 @@ all tokens in their source representation.
 >   showsPrec _ (Token Sym_Minus _) = showString "operator `-'"
 >   showsPrec _ (Token Sym_MinusDot _) = showString "operator `-.'"
 >   showsPrec _ (Token KW_case _) = showString "`case'"
+>   showsPrec _ (Token KW_class _) = showString "`class'"
 >   showsPrec _ (Token KW_data _) = showString "`data'"
 >   showsPrec _ (Token KW_do _) = showString "`do'"
 >   showsPrec _ (Token KW_else _) = showString "`else'"
@@ -209,6 +210,7 @@ pragmas.
 > reserved_ids, reserved_and_special_ids :: FM String Category
 > reserved_ids = fromListFM [
 >     ("case",    KW_case),
+>     ("class",   KW_class),
 >     ("data",    KW_data),
 >     ("do",      KW_do),
 >     ("else",    KW_else),

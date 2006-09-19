@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 1885 2006-04-05 21:23:18Z wlux $
+% $Id: CurryPP.lhs 1973 2006-09-19 19:06:48Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -70,6 +70,7 @@ Declarations
 >   sep [ppTypeDeclLhs "newtype" tc tvs <+> equals,indent (ppNewConstr nc)]
 > ppTopDecl (TypeDecl _ tc tvs ty) =
 >   sep [ppTypeDeclLhs "type" tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
+> ppTopDecl (ClassDecl _ cls tv) = ppTypeDeclLhs "class" cls [tv]
 > ppTopDecl (BlockDecl d) = ppDecl d
 
 > ppTypeDeclLhs :: String -> Ident -> [Ident] -> Doc
@@ -171,6 +172,7 @@ Interfaces
 >   sep [ppITypeDeclLhs "newtype" tc tvs <+> equals,indent (ppNewConstr nc)]
 > ppIDecl (ITypeDecl _ tc tvs ty) =
 >   sep [ppITypeDeclLhs "type" tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
+> ppIDecl (IClassDecl _ cls tv) =  ppITypeDeclLhs "class" cls [tv]
 > ppIDecl (IFunctionDecl _ f ty) = ppQIdent f <+> text "::" <+> ppTypeExpr 0 ty
 
 > ppITypeDeclLhs :: String -> QualIdent -> [Ident] -> Doc

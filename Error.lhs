@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Error.lhs 1912 2006-05-03 14:53:33Z wlux $
+% $Id: Error.lhs 1972 2006-09-19 18:32:32Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -44,7 +44,7 @@ to report more than one error. However, the standard \texttt{Monad}
 instance restricts error reporting to at most one error because the
 operator \texttt{(>>=)} cannot pass a value to its second argument
 when the first argument detects an error. This is particularly
-annoying if there ars sub-expressions in the second argument that do
+annoying if there are sub-expressions in the second argument that do
 not depend on the result of the first expression. For instance,
 consider the problem of checking an application. Given a data
 constructor \texttt{Apply Expression Expression} and a function
@@ -63,14 +63,12 @@ independent (error) monads and then combines their results. With the
 new operator, the \texttt{Apply} case of \texttt{check} can now be
 implemented as follows
 \begin{verbatim}
-  check (Apply e1 e2) =
-    check e1 &&& check e2 >>= \(e1',e2') ->
-    return (Apply e1 e2')
+  check (Apply e1 e2) = (check e1 >>= return . Apply) &&& check e2
 \end{verbatim}
 \begin{verbatim}
 
-> (&&&) :: Error a -> Error b -> Error (a,b)
-> Ok x       &&& Ok y       = Ok (x,y)
+> (&&&) :: Error (a -> b) -> Error a -> Error b
+> Ok f       &&& Ok x       = Ok (f x)
 > Ok _       &&& Errors es  = Errors es
 > Errors es  &&& Ok _       = Errors es
 > Errors es1 &&& Errors es2 = Errors (es1 ++ es2)
@@ -81,7 +79,7 @@ only the result of its second argument.
 \begin{verbatim}
 
 > (&&>) :: Error a -> Error b -> Error b
-> x &&> y = liftM snd (x &&& y)
+> x &&> y = liftM (const id) x &&& y
 
 \end{verbatim}
 For convenience, we introduce variants of some monad functions that
@@ -94,10 +92,10 @@ to \texttt{liftM} and included only for consistency.
 > liftE = liftM
 
 > liftE2 :: (a -> b -> c) -> Error a -> Error b -> Error c
-> liftE2 f x y = liftE (uncurry f) (x &&& y)
+> liftE2 f x y = liftE f x &&& y
 
 > liftE3 :: (a -> b -> c -> d) -> Error a -> Error b -> Error c -> Error d
-> liftE3 f x y z = liftE (uncurry (uncurry f)) (x &&& y &&& z)
+> liftE3 f x y z = liftE f x &&& y &&& z
 
 > sequenceE :: [Error a] -> Error [a]
 > sequenceE = foldr (liftE2 (:)) (return [])

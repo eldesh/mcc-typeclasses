@@ -1,0 +1,626 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: gc_2space.nw 1899 2006-04-19 10:50:11Z wlux $
+%
+% Copyright (c) 2001-2006, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Garbage Collection}\label{sec:copying-gc}
+The run-time system uses a two-space copying garbage collector. The
+collector operates on two separate heap spaces, from-space and
+to-space. Allocation is always performed in from-space. When the
+allocator runs out of memory, it copies all live nodes from from-space
+to to-space and then flips the roles of both spaces. The big advantage
+of a copying collector is that is has to scan only the live nodes in
+the heap and that it touches every live node only once. A disadvantage
+of the two-space copying collector is that it requires twice as much
+memory because of using two separate copies of the heap.  However,
+this is not much of a problem nowadays.
+
+A problem of copying collectors in the context of logic and functional
+logic languages is that they do not preserve allocation order.
+Allocation order is used in order to determine the necessity of
+trailing when a node is updated. Therefore, mixing up allocation order
+may lead to updates being redundantly recorded on the trail. This, in
+turn, will increase the size of saved search spaces in our
+implementation, and also will prevent the trailed nodes and their
+bindings from being garbage collected.
+
+In order to avoid these problems, we use a segment order preserving
+copying algorithm, which was proposed by Demoen, Engels, and
+Tarau~\cite{DemoenEngelsTarau96:OrderPreserving}. Their key idea is
+that it is not necessary to preserve allocation order exactly, but
+only with respect to the heap limits defined by the choice points.
+Therefore, the heap is divided into segments separated by
+choice points, and these segments are collected independently. Thus,
+their algorithm can be seen as a variant of generational garbage
+collection with the -- dynamically defined -- heap segments being the
+analogue of generations.
+
+An important issue with generational garbage collection schemes are
+cross generation pointers, which must be taken into account as
+additional roots for those generations that they are pointing to. In
+the usual implementations of generational garbage collection, before a
+particular generation is collected all live values from younger
+generations are first promoted into that generation and, therefore, no
+cross generation pointers from younger generations exist. In order to
+handle cross generation pointers from older generations, their roots are
+recorded in a special table. This is made feasible by the fact that
+such pointers can be created only by updating existing data structures
+in older generations, and such updates are expected to occur rarely.
+
+In a logic or functional logic language using trailing, exactly those
+updates are recorded on the trail. Thus, we get upward cross segment
+pointers from older heap segments essentially for free. During a
+garbage collection, we only need to scan the trail in order to find
+the roots of those pointers. There is a minor complication in our
+implementation because of the trails in saved search spaces that are
+scattered around in the heap. Fortunately, the runtime system always
+sets the active space of a search goal to a space in the same heap
+segment as its root space. Thereby, all updates which might result in
+cross segment pointers into younger heap segments are undone, and
+therefore it is sufficient to scan the global trail and the trails of
+the parents of the current search space. If this policy were changed,
+the runtime system would have to record -- at least -- all root spaces
+with cross segment [[active]] pointers, and the garbage collector
+would have to scan the trails of those spaces as well. See
+Sect.~\ref{sec:spaces} and in particular the to do note on
+page~\pageref{todo:lazy-spaces} for more details.
+
+With respect to downward cross generation pointers, we make no special
+provision at all. By collecting heap segments in bottom up order,
+nodes are promoted into the least recent segment in which they are
+actually used. This may be a younger segment than before the
+collection. Such promotion is rarely desired in a traditional
+generational garbage collector, but in logic and functional logic
+languages it has the benefit of allowing the promoted nodes to be
+released earlier upon failure, and also may help to avoid trailing for
+those nodes.
+
+In our implementation, the garbage collector allocates one large heap
+array and then splits it into two halves. The pointer [[from_space]]
+points to the base of the active heap, while [[to_space]] points to
+the inactive space. The size of both halves is stored in the variable
+[[heap_size]]. The size of the heap as well as the start of both heap
+spaces is aligned to a page boundary.
+
+Note that we must keep the variables [[heap_base]] and [[heap_end]] in
+sync with these variables when the two heaps are flipped after a
+garbage collection.
+
+<<gc_2space.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#ifdef HAVE_MPROTECT
+# include <sys/types.h>
+# include <sys/mman.h>
+#endif
+#include "debug.h"
+#include "run.h"
+#include "heap.h"
+#include "stack.h"
+#include "trail.h"
+#include "threads.h"
+#include "spaces.h"
+#include "vars.h"
+#include "stats.h"
+#include "main.h"
+
+static word *from_space;
+static word *to_space;
+static unsigned long heap_size;
+
+<<Garbage collector definitions>>
+
+void
+init_heap(unsigned long size)
+{
+    heap_size = (size + pagemask) & ~pagemask;
+    heap_base = (word *)malloc(2 * heap_size + pagemask);
+    if ( heap_base == NULL )
+        sys_error("init_heap");
+
+    heap_base  = (word *)(((long)heap_base + pagemask) & ~pagemask);
+    heap_size /= word_size;
+    from_space = heap_base;
+    to_space   = from_space + heap_size;
+    heap_end   = to_space;
+    hp = hlim  = heap_base;
+#ifdef HAVE_MPROTECT
+    mprotect(to_space, heap_size * word_size, PROT_NONE);
+#endif
+}
+
+@
+<<Flip the semi-spaces>>=
+aux = from_space; from_space = to_space; to_space = aux;
+heap_base = from_space; heap_end = from_space + heap_size;
+
+@
+Since the collector scans only live cells in the heap, finalized
+objects must be registered. The garbage collector uses a global array
+for saving pointers to finalized objects. It scans all elements in
+this array after the live nodes have been copied and calls the
+finalization function of those nodes that were not copied.
+
+<<gc_2space.c>>=
+static unsigned int n_finals, max_finals;
+static Node	    **finals;
+
+void
+register_final(Node *fin)
+{
+    assert(fin->info->final_fun != 0);
+
+    if ( n_finals == max_finals )
+    {
+	max_finals += 1024;
+	if ( finals == NULL )
+	    finals = (Node **)malloc(max_finals * sizeof(Node *));
+	else
+	    finals = (Node **)realloc(finals, max_finals * sizeof(Node *));
+	if ( finals == NULL )
+	{
+	    static char buf[32];
+
+	    sprintf(buf, "register_finals (%d)", n_finals);
+	    sys_error(buf);
+	}
+    }
+
+    finals[n_finals++] = fin;
+}
+
+@ 
+In order to collect heap segments in bottom up order, the collector
+first reverses the chain of nested choice points and search contexts.
+It then collects each segment in turn, starting at the bottom of the
+heap. At the end, the heap segment above the current choice point is
+collected. If no choice point or search context exists, the operation
+of the collector is similar to that of a conventional copying
+collector.
+
+<<gc_2space.c>>=
+void
+collect(unsigned int request)
+{
+    unsigned int     i, j, len;
+    word	     *aux;
+    Node	     **scan, **copy, **scan_stack, **slim;
+#if !COPY_SEARCH_SPACE
+    SaveRec	     *from_trail, *scan_trail, *copy_trail, *tlim;
+    SearchSpace	     *spc;
+    Choicepoint	     *scan_cp;
+#endif
+    Choicepoint	     *cp, *prev_cp, *next_cp;
+    struct root	     *roots;
+    struct dict_node *dict;
+
+    stats_begin_gc(hp - heap_base);
+    assert(hp <= heap_end);
+    assert(stack_base <= sp && sp <= stack_end);
+#if !COPY_SEARCH_SPACE
+    assert(trail_base <= tp && tp <= trail_end);
+#endif
+
+#ifdef HAVE_MPROTECT
+    mprotect(to_space, heap_size * word_size, PROT_READ | PROT_WRITE);
+#endif
+    in_gc      = true;
+    scan       = copy	    = (Node **)to_space;
+    scan_stack = stack_end;
+#if !COPY_SEARCH_SPACE
+    from_trail = scan_trail = copy_trail = trail_base;
+#endif
+
+    prev_cp = next_cp = 0;
+    if ( bp )
+    {
+	for ( cp = bp; cp; cp = prev_cp )
+	{
+	    prev_cp  = cp->btBp;
+	    cp->btBp = next_cp;
+	    next_cp  = cp;
+	}
+
+	for ( cp = next_cp; cp; cp = next_cp )
+	{
+	    next_cp  = cp->btBp;
+	    cp->btBp = prev_cp;
+	    <<Collect the heap segment below [[cp]]>>;
+	    prev_cp  = cp;
+	}
+    }
+    <<Collect the heap segment above the current choice point>>
+    <<Update the variable name dictionary>>
+    <<Update the finalized objects table>>
+    <<Flip the semi-spaces>>
+    hp	 = (word *)copy;
+    hlim = bp ? bp->btHp : heap_base;
+    assert(hp <= heap_end);
+    if ( hp + request >= heap_end )
+        heap_exhausted();
+    in_gc = false;
+#ifdef HAVE_MPROTECT
+    mprotect(to_space, heap_size * word_size, PROT_NONE);
+#endif
+    stats_end_gc(hp - heap_base);
+}
+
+@
+When a node is copied from from-space to to-space, its info pointer in
+from-space is replaced by a forwarding pointer to the new location.
+The lowest bit of the info pointer is used to mark forwarding
+pointers.
+
+<<Garbage collector definitions>>=
+#define GC_FLAGS                0x03
+#define FORWARD_FLAG            0x01
+#define is_forwarded(node)      ((*(long *)(node)) & FORWARD_FLAG)
+#define forward(node, new)	((*(long *)(node)) = (long)(new) | FORWARD_FLAG)
+#define get_forward(node)       ((Node *)(*(long *)(node) & ~GC_FLAGS))
+
+@
+Before copying a node, we must check whether its info pointer is
+already replaced by a forwarding pointer. In that case, only the
+pointer to the node is updated to point to the new location.
+Otherwise, a binary copy of the node is created at the top of
+to-space and its info pointer is replaced. Pointers to nodes outside
+of the heap as well as pointers to nodes above the current heap
+segment are not followed at all. We also shorten indirection chains,
+but only if the runtime system was configured with the
+\texttt{--enable-copying} option. It is not safe to shorten
+indirection chains in general when trailing is used, as the following
+example demonstrates.
+\begin{verbatim}
+  coin = 0; coin = 1
+  f x | z =:= y &> x =:= y = Just (x + z) where y,z free
+  main = f coin
+\end{verbatim}
+If a garbage collection happens in the body of \texttt{f} just after
+evaluating the guard \verb|z =:= y| \verb|&>| \verb|x =:= y| and
+indirection chains were shortened, the variable \texttt{z} would be
+bound to the selected result of \texttt{coin} and this binding would
+not be undone when switching to the other solution because \texttt{z}
+is allocated in the top-most heap segment when it is bound and
+therefore it is not recorded on the trail.
+
+<<Garbage collector definitions>>=
+static inline Node *
+GC_copy(Node ***p_alloc, Node *node)
+{
+    while ( is_boxed(node) && node >= (Node *)heap_base && node < (Node *)hlim )
+    {
+        if ( is_forwarded(node) )
+            node = get_forward(node);
+#if COPY_SEARCH_SPACE
+	else if ( node_kind(node) == INDIR_KIND )
+	{
+	    node = node->n.node;
+	    continue;
+	}
+#endif
+        else
+	{
+	    unsigned int sz;
+	    Node	 **alloc;
+
+            sz = node_size(node);
+	    if ( sz == 0 )
+		sz = node->a.length;
+
+	    alloc = *p_alloc;
+            ASSERT((word *)alloc + sz <= to_space + heap_size);
+            memcpy(alloc, node, sz * word_size);
+            forward(node, alloc);
+
+            node     = (Node *)alloc;
+            *p_alloc = alloc + sz;
+        }
+	break;
+    }
+
+    return node;
+}
+
+@ 
+For each heap segment, the garbage collector first compacts the
+corresponding trail segment by removing redundant entries. Next, the
+external roots, the stack, and the trail are scanned and all
+referenced objects below the current choice point's heap limit are           %'
+copied into to-space. Finally, the collector copies all nodes that are
+referenced directly or indirectly from these nodes into to-space as
+well.
+
+Note that the garbage collector updates the active pointer of the root
+space of the current search space explicitly because that pointer is
+almost always a cross segment pointer into a younger heap segment and
+therefore does not get updated when the root search space is copied
+into to-space. We make use of the invariant [[ss->root->active == ss]]
+that is preserved by the runtime system (cf. Sect.~\ref{sec:spaces}).
+
+<<Collect the heap segment below [[cp]]>>=
+hlim = cp->btHp;
+slim = (Node **)(cp + 1);
+#if !COPY_SEARCH_SPACE
+tlim = cp->btTp;
+<<Compact the current trail segment>>
+#endif
+<<Collect the external roots>>
+<<Collect the current stack segment>>
+cp->btRq  = (ThreadQueue)GC_copy(&copy, (Node *)cp->btRq);
+cp->btSpc = (SearchSpace *)GC_copy(&copy, (Node *)cp->btSpc);
+#if !COPY_SEARCH_SPACE
+<<Collect the current trail segment>>
+<<Collect all younger trail segments>>
+scan_trail = copy_trail;
+cp->btTp   = copy_trail;
+#endif
+<<Scan to-space and copy all reachable nodes into to-space>>
+#if !COPY_SEARCH_SPACE
+spc = cp->btSpc;
+if ( spc != &global_space )
+    spc->root->active = spc;
+#endif
+scan_stack = (Node **)cp;
+cp->btHp   = (word *)copy;
+
+@ 
+<<Collect the heap segment above the current choice point>>=
+hlim = hp;
+slim = sp;
+#if !COPY_SEARCH_SPACE
+tlim = tp;
+<<Compact the current trail segment>>
+#endif
+<<Collect the external roots>>
+<<Collect the current stack segment>>
+rq = (ThreadQueue)GC_copy(&copy, (Node *)rq);
+ss = (SearchSpace *)GC_copy(&copy, (Node *)ss);
+#if !COPY_SEARCH_SPACE
+<<Collect the current trail segment>>
+tp = copy_trail;
+#endif
+<<Scan to-space and copy all reachable nodes into to-space>>
+#if !COPY_SEARCH_SPACE
+if ( ss != &global_space )
+    ss->root->active = ss;
+#endif
+
+@ 
+All nodes referenced from the additional global and local roots are
+just copied into to-space.
+
+<<Collect the external roots>>=
+for ( roots = global_roots; roots; roots = roots->next )
+    *roots->root = GC_copy(&copy, *roots->root);
+for ( roots = local_roots; roots; roots = roots->next )
+    *roots->root = GC_copy(&copy, *roots->root);
+
+@ 
+For each heap segment, we collect only that part of the stack which
+corresponds to this segment. The part of the stack above this segment,
+i.e., corresponding to older segments in the heap, is not processed
+because it cannot contain pointers into the current segment. On the
+other hand, the part below the current segment, i.e., corresponding to
+younger segments in the heap, is not scanned because nodes that are
+referenced only from those stack segments can safely be promoted into
+the corresponding heap segments.
+
+<<Collect the current stack segment>>=
+while ( --scan_stack >= slim )
+    *scan_stack = GC_copy(&copy, *scan_stack);
+
+@ 
+Processing of the trail is somewhat more complicated. First of all, we
+note that nodes whose update was recorded on the trail may be no
+longer in use by the computation. Therefore, we consider the pointers
+to updated cells on the trail as weak roots, i.e., they do not
+contribute to the liveness of a node. Furthermore, if a node is
+promoted into a segment where an update for it was recorded on the
+trail, this trail entry becomes redundant since the old binding of the
+node will never be restored. Therefore, the first action while
+processing a heap segment is to compact its trail segment by removing
+all entries for nodes which were not copied up to this point.
+
+\attention\emph{Note:} This code assumes that only nodes within the
+heap are updated and their addresses recorded on the trail. If this
+were not the case, the code below would have to be changed so as to
+retain all trail entries which refer to updated nodes outside of the
+heap, too.
+
+<<Compact the current trail segment>>=
+for ( ; from_trail < tlim; from_trail++ )
+    if ( is_forwarded(from_trail->addr) )
+    {
+	*copy_trail	 = *from_trail;
+	copy_trail->addr = (word *)get_forward(copy_trail->addr);
+	copy_trail++;
+    }
+
+@ 
+After compacting the current trail segment, and copying the external
+roots and the current stack segment, the garbage collector processes
+the (partially compacted) trail. First, it scans the current trail
+segment in order to copy the current bindings of all nodes that were
+updated in this segment. These bindings have not been copied up to
+this point only if they are reached by an upward cross segment pointer
+and there are no other references from older segments. Since in that
+case the last reference to these bindings will be dropped upon
+backtracking from the current segment, it is safe to promote them into
+the current heap segment.
+
+<<Collect the current trail segment>>=
+for ( ; scan_trail < copy_trail; scan_trail++ )
+    if ( scan_trail->ofs )
+	scan_trail->addr[scan_trail->ofs] =
+	    GC_copy(&copy, (Node *)scan_trail->addr[scan_trail->ofs]);
+
+@ 
+Finally, the garbage collector scans the saved values in all younger
+trail segments. These nodes must be retained at least as long as the
+updated nodes exist. Therefore, if there is no other reference to a
+saved value on the trail and the updated node lives in the segment
+that is just collected, the saved value is promoted into this heap
+segment, unless it is allocated in a younger heap segment. Such may
+happen when a node is updated more than once, e.g., when multiple
+threads are blocked by the same variable or queue-me node. In that
+case, the saved bindings are retained in the segments where they were
+allocated and not promoted into the older segment of the updated node.
+This is handled automatically by the address range check in the
+[[GC_copy]] function.
+
+<<Collect all younger trail segments>>=
+for ( scan_trail = cp->btTp; scan_trail < tp; scan_trail++ )
+    if ( scan_trail->addr < hlim )
+	scan_trail->val = GC_copy(&copy, (Node *)scan_trail->val);
+
+@ 
+Besides the younger trail segments, the garbage collector must also
+process the scripts of the current search spaces' parents, since they %'
+are (implicitly) part of the corresponding trail segments.
+
+<<Collect all younger trail segments>>=
+scan_cp = cp;
+while ( scan_cp )
+{
+    scan_cp = scan_cp->btBp;
+    for ( spc = scan_cp ? scan_cp->btSpc : ss;
+	  spc && !is_forwarded(spc);
+	  spc = spc->parent )
+	if ( spc->script )
+	{
+	    len = vector_argc(spc->script) / wordsof(ScriptRec);
+	    for ( i = 0; i < len; i++ )
+		if ( spc->script->data[i].ofs )
+		    spc->script->data[i].outVal =
+			GC_copy(&copy, (Node *)spc->script->data[i].outVal);
+	}
+}
+
+@ 
+After the roots have been processed, the collector copies all other live
+nodes of the current segment into to-space. To this end, the nodes in
+to-space are interpreted as a queue with [[scan]] pointing to the head
+of the queue, and [[copy]] pointing to the tail. At each iteration of
+the loop below, the collector takes one node from the head of the
+queue and copies its arguments to the end of the queue unless those
+arguments have been copied already and only the argument
+pointers are updated. When the queue becomes empty, i.e., when
+[[scan]] reaches [[copy]], all live nodes in the current segment have
+been copied.
+
+<<Scan to-space and copy all reachable nodes into to-space>>=
+for ( ; scan != copy; scan += len )
+{
+    boolean   is_vect;
+    int       n, el_len;
+    NodeInfo  *info;
+    const int *otable;
+
+    ASSERT(!is_forwarded(scan));
+    info    = ((Node *)scan)->info;
+    len     = info->length;
+    otable  = info->offset_table;
+    is_vect = len == 0;
+    if ( is_vect )
+	len = ((Node *)scan)->a.length;
+
+    if ( otable == 0 )
+    {
+	for ( i = is_vect ? 2 : 1 ; i < len; i++ )
+	    scan[i] = GC_copy(&copy, scan[i]);
+    }
+    else
+    {
+	n = *otable++;
+	if ( n >= 0 )
+	{
+	    while ( n-- > 0 )
+	    {
+		i	= *otable++;
+		scan[i] = GC_copy(&copy, scan[i]);
+	    }
+	}
+	else
+	{
+	    ASSERT(is_vect);
+	    el_len = -n;
+	    for ( j = 2; j < len; j += el_len )
+	    {
+		otable = info->offset_table + 1;
+		n      = *otable++;
+		while ( n-- > 0 )
+		{
+		    i	      = *otable++;
+		    scan[j+i] = GC_copy(&copy, scan[j+i]);
+		}
+	    }
+	    ASSERT(j == len);
+	}
+    }
+}
+
+@ 
+At the end of the collection, the variable name dictionary and the
+finalized objects table are updated. In addition, the finalization
+function is called for all registered nodes which have become garbage.
+While processing the finalized objects table, we also compact it by
+removing the entries for the dead objects.
+
+<<Update the finalized objects table>>=
+for ( i = j = 0; i < n_finals; i++ )
+    if ( is_forwarded(finals[i]) )
+	finals[j++] = get_forward(finals[i]);
+    else
+	finals[i]->info->final_fun(finals[i]);
+n_finals = j;
+
+@ 
+In the variable name dictionary, we simply replace all forwarded
+pointers by their new addresses and reset all other pointers to [[0]].
+The function [[cleanup_names]] then releases those entries.
+
+<<Update the variable name dictionary>>=
+for ( dict = names_dict; dict; dict = dict->next )
+    if ( is_forwarded(dict->node) )
+	dict->node = get_forward(dict->node);
+    else
+	dict->node = 0;
+cleanup_names();
+
+@ 
+If a computation fails, all memory allocated since the current
+choice point or search context is released immediately. All finalized
+objects in the released heap segment are also finalized immediately.
+To this end, we scan the finalized objects table and check their
+addresses. Because the order of the entries in the table reflects the
+order of creation and the garbage collector preserves segment order,
+we only need to scan the table until reaching a pointer whose address
+is below the current heap limit. Furthermore, in order to avoid
+dangling pointers into the heap above the current heap limit, we set
+all global roots which point to nodes in the released heap segment
+to [[0]].
+
+<<gc_2space.c>>=
+void
+release_mem()
+{
+    unsigned int i = n_finals;
+    struct root	 *roots;
+
+    while ( i-- > 0 && (word *)finals[i] >= hlim )
+    {
+	ASSERT((word *)finals[i] < hp);
+	finals[i]->info->final_fun(finals[i]);
+    }
+    n_finals = ++i;
+
+    for ( roots = global_roots; roots; roots = roots->next )
+	if ( *roots->root >= (Node *)hlim )
+	    *roots->root = 0;
+
+    stats_backtrack(hp - hlim);
+    hp = hlim;
+}

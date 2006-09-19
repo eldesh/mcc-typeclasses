@@ -1,0 +1,430 @@
+# Makefile for the Curry compiler
+#
+# $Id: Makefile.in 1913 2006-05-07 13:44:36Z wlux $
+#
+# Copyright (c) 2000-2006 Wolfgang Lux
+# See LICENSE for the full license.
+#
+
+@SET_MAKE@
+
+# package information
+PACKAGE = @PACKAGE_TARNAME@
+VERSION = @PACKAGE_VERSION@
+
+# source directory
+srcdir = @srcdir@
+
+# install directories
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+bindir = @bindir@
+libdir = @libdir@
+mandir = @mandir@
+
+# compiler definitions
+HC = @HC@
+HCFLAGS = @HCFLAGS@
+
+LATEX = latex
+BIBTEX = bibtex
+
+INSTALL = @INSTALL@
+INSTALL_PROGRAM = @INSTALL_PROGRAM@
+INSTALL_DATA = @INSTALL_DATA@
+INSTALL_DIR = @INSTALL_DIR@
+
+# file lists
+PROGRAMS = cycc cymk newer @CAM2C@ @MACH@
+SCRIPTS = cyc cymake cyi
+man_MANS = cyc.1 cymake.1 cyi.1
+SUBDIRS = doc runtime curry
+
+cycc_SRCS = \
+	cycc.hs \
+	Ident.lhs \
+	Types.lhs \
+	CurrySyntax.lhs \
+	CurryPP.lhs \
+	CurryLexer.lhs \
+	CurryParser.lhs \
+	Base.lhs \
+	ImportSyntaxCheck.lhs \
+	TypeSyntaxCheck.lhs \
+	SyntaxCheck.lhs \
+	ExportSyntaxCheck.lhs \
+	CaseCheck.lhs \
+	UnusedCheck.lhs \
+	ShadowCheck.lhs \
+	OverlapCheck.lhs \
+	Renaming.lhs \
+	PrecCheck.lhs \
+	KindCheck.lhs \
+	TypeCheck.lhs \
+	IntfSyntaxCheck.lhs \
+	IntfCheck.lhs \
+	IntfEquiv.lhs \
+	Imports.lhs \
+	Exports.lhs \
+	TypeSubst.lhs \
+	TypeTrans.lhs \
+	Typing.lhs \
+	Trust.lhs \
+	Qual.lhs \
+	Desugar.lhs \
+	Simplify.lhs \
+	Lift.lhs \
+	IL.lhs \
+	ILPP.lhs \
+	ILTrans.lhs \
+	ILLift.lhs \
+	DTransform.lhs \
+	Cam.lhs \
+	CamPP.lhs \
+	ILCompile.lhs \
+	CCode.lhs \
+	CPretty.lhs \
+	CElim.lhs \
+	CPS.lhs \
+	CGen.lhs \
+	Modules.lhs \
+	Options.lhs \
+	Unlit.lhs \
+	LexComb.lhs \
+	LLParseComb.lhs \
+	Pretty.lhs \
+	Error.lhs \
+	Combined.lhs \
+	SCC.lhs \
+	NestEnv.lhs \
+	TopEnv.lhs \
+	Env.lhs \
+	Subst.lhs \
+	Map.lhs \
+	Set.lhs \
+	Position.lhs \
+	GetOpt.hs \
+	PathUtils.lhs \
+	Utils.lhs \
+	$(IOEXTS_LHS)
+cycc_XXX  = $(cycc_SRCS:.hs=.hi)
+cycc_INTF = $(cycc_XXX:.lhs=.hi)
+cycc_OBJS = $(cycc_INTF:.hi=.o)
+
+cymk_SRCS = \
+	cymk.hs \
+	Ident.lhs \
+	CurryDeps.lhs \
+	CurrySyntax.lhs \
+	CurryLexer.lhs \
+	CurryParser.lhs \
+	Unlit.lhs \
+	LexComb.lhs \
+	LLParseComb.lhs \
+	Error.lhs \
+	SCC.lhs \
+	Env.lhs \
+	Map.lhs \
+	Set.lhs \
+	Position.lhs \
+	GetOpt.hs \
+	PathUtils.lhs
+cymk_XXX  = $(cymk_SRCS:.hs=.hi)
+cymk_INTF = $(cymk_XXX:.lhs=.hi)
+cymk_OBJS = $(cymk_INTF:.hi=.o)
+
+newer_SRCS = \
+	newer.lhs
+newer_XXX  = $(newer_SRCS:.hs=.hi)
+newer_INTF = $(newer_XXX:.lhs=.hi)
+newer_OBJS = $(newer_INTF:.hi=.o)
+
+cam2c_SRCS = \
+	cam2c.lhs \
+	Cam.lhs \
+	CamParser.lhs \
+	CCode.lhs \
+	CPretty.lhs \
+	CElim.lhs \
+	CPS.lhs \
+	CGen.lhs \
+	LexComb.lhs \
+	LLParseComb.lhs \
+	Pretty.lhs \
+	Error.lhs \
+	GetOpt.hs \
+	SCC.lhs \
+	Map.lhs \
+	Set.lhs \
+	Position.lhs \
+	PathUtils.lhs \
+	Utils.lhs
+cam2c_XXX  = $(cam2c_SRCS:.hs=.hi)
+cam2c_INTF = $(cam2c_XXX:.lhs=.hi)
+cam2c_OBJS = $(cam2c_INTF:.hi=.o)
+
+mach_SRCS = \
+	mach.lhs \
+	MachInterp.lhs \
+	MachLoader.lhs \
+	MachNode.lhs \
+	MachStack.lhs \
+	MachEnviron.lhs \
+	MachChoice.lhs \
+	MachSpace.lhs \
+	MachThreads.lhs \
+	MachResult.lhs \
+	MachTypes.lhs \
+	Cam.lhs \
+	CamParser.lhs \
+	LLParseComb.lhs \
+	LexComb.lhs \
+	Position.lhs \
+	Error.lhs \
+	Combined.lhs \
+	GetOpt.hs \
+	Env.lhs \
+	Map.lhs \
+	Set.lhs \
+	Utils.lhs \
+	$(IOEXTS_LHS)
+mach_XXX  = $(mach_SRCS:.hs=.hi)
+mach_INTF = $(mach_XXX:.lhs=.hi)
+mach_OBJS = $(mach_INTF:.hi=.o)
+
+IOEXTS_LHS = @IOExts_lhs@
+IOEXTS_SRCS = ghc/IOExts.lhs hbc/IOExts.lhs nhc/IOExts.lhs
+
+SRCS = $(cycc_SRCS) $(cymk_SRCS) $(newer_SRCS) $(cam2c_SRCS) $(mach_SRCS)
+INTF = $(cycc_INTF) $(cymk_INTF) $(newer_INTF) $(cam2c_INTF) $(mach_INTF)
+OBJS = $(cycc_OBJS) $(cymk_OBJS) $(newer_OBJS) $(cam2c_OBJS) $(mach_OBJS)
+
+DISTFILES = README LICENSE NEWS curry.tex curry.bib \
+	configure configure.in aclocal.m4 config.guess config.sub install-sh \
+	Makefile.in ghc.mk ghc-make.mk hbc.mk nhc.mk makedoc.in in-place-config \
+	configure-bin.in Makefile-bin.in in-place-config-bin \
+	$(SCRIPTS:=.in) $(man_MANS:=.in) $(SRCS) $(IOEXTS_SRCS)
+
+# default target, build all programs and the library
+all: scripts programs runtime curry mans
+
+# program rules
+# program build rules are compiler specific and can be found in @hc@.mk
+programs: $(PROGRAMS)
+scripts: $(SCRIPTS)
+
+# non-existent target for forcing the execution of target
+# NB this is necessary on Solaris because System V makes do not
+#    understand .PHONY
+FORCE:
+
+# runtime library
+.PHONY: runtime
+runtime: FORCE
+	cd runtime && $(MAKE) $(MFLAGS)
+
+# Curry library
+.PHONY: curry
+curry: cycc runtime
+	cd curry && $(MAKE) $(MFLAGS)
+
+# manual pages
+mans: $(man_MANS)
+
+man_edit = sed \
+	-e 's,@bindir\@,$(bindir),g' \
+	-e 's,@libdir\@,$(libdir),g'
+
+cyc.1: Makefile $(srcdir)/cyc.1.in
+	rm -f cyc.1
+	$(man_edit) $(srcdir)/cyc.1.in >cyc.1
+cymake.1: Makefile $(srcdir)/cymake.1.in
+	rm -f cymake.1
+	$(man_edit) $(srcdir)/cymake.1.in >cymake.1
+cyi.1: Makefile $(srcdir)/cyi.1.in
+	rm -f cyi.1
+	$(man_edit) $(srcdir)/cyi.1.in >cyi.1
+
+# documentation
+.PHONY: curry.dvi curry.pdf tex
+curry.dvi: newer makedoc tex
+	./makedoc latex
+curry.pdf: newer makedoc tex
+	./makedoc pdflatex
+
+tex: FORCE
+	cd runtime; $(MAKE) $(MFLAGS) tex
+
+makedoc: Makefile $(srcdir)/makedoc.in
+	./config.status $@
+
+# link all source files into the current directory
+# NB if $(srcdir) is a relative path we have to modify the paths for target
+#    files which are located in subdirectories
+.DEFAULT:
+	@test ! -r $@ -a -f $(srcdir)/$@ && \
+	(test -d $(@D) || mkdir $(@D)) && \
+	if expr $(srcdir) : '/.*' >/dev/null; then \
+		(case "$(MFLAGS)" in -*s*) ;; *) set -x;; esac; \
+		 ln -s $(srcdir)/$@ $@); \
+	else \
+		srcdir=`echo $@ | sed -e 's:[^/]*$$::' -e 's:[^/]*/:../:g'` && \
+		(case "$(MFLAGS)" in -*s*) ;; *) set -x;; esac; \
+		 ln -s $${srcdir}$(srcdir)/$@ $@); \
+	fi
+
+# install the binaries
+begin_config = ^\# DO NOT DELETE: Beginning of in-place configuration$$
+end_config   = ^\# DO NOT DELETE: End of in-place configuration$$
+install_edit = sed \
+	-e '/$(begin_config)/,/$(end_config)/d' \
+	-e "s/%BUILD_DATE%/`date`/"
+
+install: install-dir install-subdirs
+install-dir: scripts cycc cymk newer mans
+	$(INSTALL_DIR) $(DESTDIR)$(bindir)
+	$(INSTALL_DIR) $(DESTDIR)$(libdir)
+	$(INSTALL_DIR) $(DESTDIR)$(libdir)/curry
+	$(INSTALL_DIR) $(DESTDIR)$(mandir)
+	$(INSTALL_DIR) $(DESTDIR)$(mandir)/man1
+	-rm -f $(DESTDIR)$(bindir)/cycc $(DESTDIR)$(libdir)/curry/cyc
+	$(install_edit) cyc > /tmp/cyc
+	$(INSTALL_PROGRAM) /tmp/cyc $(DESTDIR)$(bindir)
+	@rm -f /tmp/cyc
+	$(install_edit) cymake > /tmp/cymake
+	$(INSTALL_PROGRAM) /tmp/cymake $(DESTDIR)$(bindir)
+	@rm -f /tmp/cymake
+	$(install_edit) cyi > /tmp/cyi
+	$(INSTALL_PROGRAM) /tmp/cyi $(DESTDIR)$(bindir)
+	@rm -f /tmp/cyi
+	$(INSTALL_PROGRAM) -s cycc $(DESTDIR)$(libdir)/curry
+	$(INSTALL_PROGRAM) -s cymk $(DESTDIR)$(libdir)/curry
+	$(INSTALL_PROGRAM) -s newer $(DESTDIR)$(libdir)/curry
+	$(INSTALL_DATA) cyc.1 $(DESTDIR)$(mandir)/man1
+	$(INSTALL_DATA) cymake.1 $(DESTDIR)$(mandir)/man1
+	$(INSTALL_DATA) cyi.1 $(DESTDIR)$(mandir)/man1
+install-subdirs: runtime curry
+
+uninstall:
+	rm -f $(DESTDIR)$(bindir)/cyc $(DESTDIR)$(bindir)/cymake $(DESTDIR)$(bindir)/cyi $(DESTDIR)$(bindir)/cycc
+	rm -rf $(DESTDIR)$(libdir)/curry
+	rm -f $(DESTDIR)$(mandir)/man1/cyc.1 $(DESTDIR)$(mandir)/man1/cymake.1 $(DESTDIR)$(mandir)/man1/cyi.1
+
+# build the distributions
+distdir    = $(PACKAGE)-$(VERSION)
+bindistdir = $(distdir)-@target_cpu@-@target_os@
+
+dist: distdir
+	rm -f $(distdir).tar $(distdir).tar.gz
+	tar -cf $(distdir).tar $(distdir)
+	gzip $(distdir).tar
+	rm -rf $(distdir)
+distdir:
+	rm -rf $(distdir)
+	mkdir $(distdir) $(distdir)/ghc $(distdir)/hbc $(distdir)/nhc
+	for f in $(DISTFILES); do cp $(srcdir)/$$f $(distdir)/$$f; done
+	for d in $(SUBDIRS); do \
+		mkdir $(distdir)/$$d && \
+		(cd $$d && $(MAKE) $(MFLAGS) distdir distdir=../$(distdir)/$$d) || \
+		exit $$?; \
+	done
+
+bindist: bindistdir
+	rm -f $(bindistdir).tar $(bindistdir).tar.gz
+	cd $(bindistdir) && autoconf
+	tar -cf $(bindistdir).tar $(bindistdir)
+	gzip $(bindistdir).tar
+	rm -rf $(bindistdir)
+bindistdir: cycc cymk newer runtime curry
+	rm -rf $(bindistdir)
+	mkdir $(bindistdir) $(bindistdir)/bin $(bindistdir)/lib $(bindistdir)/doc $(bindistdir)/man
+	cp $(srcdir)/README $(srcdir)/LICENSE $(srcdir)/NEWS $(bindistdir)
+	cp $(srcdir)/aclocal.m4 $(srcdir)/install-sh $(bindistdir)
+	cp $(srcdir)/config.guess $(srcdir)/config.sub $(bindistdir)
+	sed -e 's/%PACKAGE_NAME%/@PACKAGE_NAME@/' \
+	    -e 's/%TARGET%/@target_cpu@-@target_os@/' \
+	    -e 's/%VERSION%/@PACKAGE_VERSION@/' \
+	    -e 's/%ARCH_CFLAGS%/@ARCH_CFLAGS@/' \
+	    -e 's/%USE_CYGPATH_WORKAROUND%/@USE_CYGPATH_WORKAROUND@/' \
+	    $(srcdir)/configure-bin.in > $(bindistdir)/configure.in
+	cp $(srcdir)/Makefile-bin.in $(bindistdir)/Makefile.in
+	cp $(srcdir)/in-place-config-bin $(bindistdir)/in-place-config
+	sed -e "s/%BUILD_DATE%/`date`/" $(srcdir)/cyc.in > $(bindistdir)/bin/cyc.in
+	sed -e "s/%BUILD_DATE%/`date`/" $(srcdir)/cymake.in > $(bindistdir)/bin/cymake.in
+	cp $(srcdir)/cyi.in $(bindistdir)/bin
+	for f in cycc cymk newer; do cp $$f $(bindistdir)/lib && strip $(bindistdir)/lib/$$f; done
+	for f in $(man_MANS); do \
+		cp $(srcdir)/$$f.in $(bindistdir)/man || exit $$?; \
+	done
+	for d in $(SUBDIRS); do \
+		(cd $$d && $(MAKE) $(MFLAGS) bindistdir distdir=../$(bindistdir)) || \
+		exit $$?; \
+	done
+
+# automatic reconfiguration
+$(srcdir)/configure: $(srcdir)/configure.in $(srcdir)/aclocal.m4
+	cd $(srcdir) && autoconf
+
+.PRECIOUS: Makefile
+Makefile: $(srcdir)/Makefile.in config.status
+	./config.status $@
+	$(MAKE) $(MFLAGS) depend
+
+cyc: $(srcdir)/cyc.in $(srcdir)/in-place-config config.status
+	./config.status $@
+
+cymake: $(srcdir)/cymake.in $(srcdir)/in-place-config config.status
+	./config.status $@
+
+cyi: $(srcdir)/cyi.in $(srcdir)/in-place-config config.status
+	./config.status $@
+
+.PRECIOUS: config.status
+config.status: $(srcdir)/configure
+	./config.status --recheck
+
+# clean up
+mostlyclean: mostlyclean-subdirs mostlyclean-dir
+mostlyclean-dir::
+	rm -f $(INTF) $(OBJS) 
+	rm -f cycc cymk newer cam2c mach 
+	rm -f $(man_MANS) core *.core
+
+clean: clean-subdirs clean-dir
+clean-dir:: mostlyclean-dir
+	rm -f curry.aux curry.toc curry.log runtime/runtime.aux
+	rm -f curry.bbl curry.blg curry.out curry.dvi curry.ps curry.pdf
+	for f in $(SRCS); do if test -h $$f; then rm $$f; fi; done
+
+distclean: distclean-subdirs distclean-dir
+	-rm -f config.status
+distclean-dir:: clean-dir
+	-rm -f Makefile makedoc $(SCRIPTS) .depend config.cache config.log
+	-rm -f *~ a.out *.bak *.BAK TAGS
+
+maintainerclean: maintainerclean-subdirs maintainerclean-dir
+	-rm -f configure config.status
+maintainerclean-dir:: distclean-dir
+
+# dependencies
+# NB: methods for computing the dependencies of Haskell modules differ
+#     between the various compilers and are defined in @hc@.mk (included below)
+depend: depend-dir depend-subdirs
+
+# recursive invocations
+mostlyclean-subdirs clean-subdirs distclean-subdirs maintainerclean-subdirs \
+depend-subdirs install-subdirs:
+	@fail=; subdirs="$(SUBDIRS)"; \
+	for d in $$subdirs; do \
+		target=`echo $@ | sed 's/-subdirs$$//'`; \
+		echo "Making $$target in $$d"; \
+		(cd $$d && $(MAKE) $(MFLAGS) $$target) || \
+		case "$(MFLAGS)" in -*k*) fail=yes;; *) exit $$?;; esac; \
+	done; \
+	test -z "$$fail"
+
+# include definitions specific to the Haskell compiler
+include $(srcdir)/@hc@.mk
+
+# include computed dependencies
+include .depend

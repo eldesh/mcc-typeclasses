@@ -1,0 +1,113 @@
+# Makefile for the binary distribution of the Curry compiler -*- makefile -*-
+#
+# $Id: Makefile-bin.in 1839 2006-01-07 12:14:21Z wlux $
+#
+# Copyright (c) 2002-2006, Wolfgang Lux
+#
+
+# source directory
+srcdir = @srcdir@
+VPATH = @srcdir@
+
+# install directories
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+bindir = @bindir@
+libdir = @libdir@
+mandir = @mandir@
+
+# compiler definitions
+CC = @CC@
+
+RANLIB = @RANLIB@
+
+INSTALL = @INSTALL@
+INSTALL_PROGRAM = @INSTALL_PROGRAM@
+INSTALL_DATA = @INSTALL_DATA@
+INSTALL_DIR = @INSTALL_DIR@
+
+# file lists
+bin_SCRIPTS = bin/cyc bin/cymake bin/cyi
+lib_PROGS   = lib/cycc lib/cymk lib/newer
+lib_SRCS    = lib/*.curry
+lib_INTF    = $(lib_SRCS:.curry=.icurry)
+rts_HDRS    = lib/*.h
+rts_LIB	    = lib/*.a
+man1_MANS   = man/cyc.1 man/cymake.1 man/cyi.1
+
+# default target, show usage and configuration
+all:
+	@echo 'Use "$(MAKE) install" to install the distribution'
+	@echo 'Use "$(MAKE) uninstall" to uninstall the distribution'
+	@echo 
+	@echo Compilation
+	@echo 'C compiler: $$(CC)     = $(CC)'
+	@echo
+	@echo Installation directories
+	@echo 'Binaries:  $$(bindir)          = $(bindir)'
+	@echo 'Libraries: $$(libdir)/curry    = $(libdir)/curry'
+	@echo 'Man Pages: $$(mandir)/man/man1 = $(mandir)/man/man1'
+
+# install the distribution
+begin_config = ^\# DO NOT DELETE: Beginning of in-place configuration$$
+end_config   = ^\# DO NOT DELETE: End of in-place configuration$$
+install_edit = sed \
+	-e '/$(begin_config)/,/$(end_config)/d' \
+	-e "s/%BUILD_DATE%/`date`/"
+
+install: $(man1_MANS)
+	$(INSTALL_DIR) $(bindir)
+	$(INSTALL_DIR) $(libdir)
+	$(INSTALL_DIR) $(libdir)/curry
+	$(INSTALL_DIR) $(mandir)
+	$(INSTALL_DIR) $(mandir)/man1
+	rm -f $(bindir)/cycc $(libdir)/curry/cyc
+	for f in $(bin_SCRIPTS); do \
+		cmd=`basename $$f`; \
+		$(install_edit) $$f > /tmp/$$cmd && \
+			$(INSTALL_PROGRAM) /tmp/$$cmd $(bindir)/$$cmd; \
+		rc=$$?; \
+		rm -f /tmp/$$cmd; \
+		test $$rc = 0 || exit $$rc; \
+	done
+	for f in $(lib_PROGS); do \
+		$(INSTALL_PROGRAM) $$f $(libdir)/curry || exit $$?; \
+	done
+	for f in $(lib_SRCS) $(lib_INTF) $(rts_HDRS) $(rts_LIB); do \
+		$(INSTALL_DATA) $$f $(libdir)/curry || exit $$?; \
+	done
+	for a in $(libdir)/curry/*.a; do $(RANLIB) $$a; done
+	for f in $(man1_MANS); do \
+		$(INSTALL_DATA) $$f $(mandir)/man1 || exit $$?; \
+	done
+
+# uninstall the distribution
+uninstall:
+	cd $(bindir) && rm -f `for f in $(bin_SCRIPTS); do basename $$f; done`
+	rm -f $(bindir)/cycc
+	rm -rf $(libdir)/curry
+	for f in $(man1_MANS); do rm -f $(mandir)/man1/`basename $$f`; done
+
+# automatic reconfiguration
+configure: configure.in aclocal.m4
+	cd $(srcdir) && autoconf
+
+Makefile: Makefile.in config.status
+	./config.status
+
+config.status: configure
+	./config.status --recheck
+
+man_edit = sed \
+	-e 's,@bindir\@,$(bindir),g' \
+	-e 's,@libdir\@,$(libdir),g'
+
+man/cyc.1: Makefile man/cyc.1.in
+	rm -f man/cyc.1
+	$(man_edit) man/cyc.1.in >man/cyc.1
+man/cymake.1: Makefile man/cymake.1.in
+	rm -f man/cymake.1
+	$(man_edit) man/cymake.1.in >man/cymake.1
+man/cyi.1: Makefile man/cyi.1.in
+	rm -f man/cyi.1
+	$(man_edit) man/cyi.1.in >man/cyi.1

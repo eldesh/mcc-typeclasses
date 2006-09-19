@@ -1,0 +1,304 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: foreign.nw 1865 2006-03-01 22:30:38Z wlux $
+%
+% Copyright (c) 2005, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Finalized Foreign Pointers}\label{sec:foreign}
+The \texttt{ForeignPtr} type allows adding finalization functions to a
+foreign pointer so that the associated memory can be released and
+other cleanup actions be performed when the foreign pointer node is
+garbage collected.
+
+<<foreign.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include "debug.h"
+#include "run.h"
+#include "heap.h"
+#include "stack.h"
+#include "threads.h"
+#include "spaces.h"
+#include "eval.h"
+#include "data.h"
+#include "io_monad.h"
+#include "cam.h"
+
+static void finalize_foreign_ptr(Node *);
+
+static const int ot_foreign_ptr[] = {
+    2,
+    word_offsetof(struct foreign_ptr_node, spc),
+    word_offsetof(struct foreign_ptr_node, fptr)
+};
+static NodeInfo foreign_ptr_info = {
+    FOREIGN_PTR_KIND, 0, foreign_ptr_node_size, ot_foreign_ptr, "ForeignPtr",
+    eval_whnf, 0, finalize_foreign_ptr
+};
+
+
+@ 
+Two kinds of finalization functions are supported. Functions with type
+\texttt{FinalizerPtr} have one argument, viz. the pointer to be
+finalized, and functions with type \texttt{FinalizerEnvPtr} have two
+arguments. The first is an environment pointer supplied when the
+function is associated with a foreign pointer, and the second is the
+pointer itself.
+
+<<foreign.c>>=
+enum { FINALIZER_TAG, FINALIZER_ENV_TAG };
+
+struct finalizer_node {
+    NodeInfo		 *info;
+    union finalizer_list *next;
+    void		 (*finalize)(void *);
+};
+struct finalizer_env_node {
+    NodeInfo		 *info;
+    union finalizer_list *next;
+    void		 (*finalize)(void *, void *);
+    void		 *env;
+};
+union finalizer_list {
+    NodeInfo		      *info;
+    struct finalizer_node     f;
+    struct finalizer_env_node fe;
+};
+
+#define finalizer_node_size	wordsof(struct finalizer_node)
+#define finalizer_env_node_size	wordsof(struct finalizer_env_node)
+
+static const int ot_finalizer[] = {
+    1, word_offsetof(struct finalizer_node, next)
+};
+static const int ot_finalizer_env[] = {
+    1, word_offsetof(struct finalizer_env_node, next)
+};
+
+NodeInfo finalizer_info = {
+    CAPP_KIND, FINALIZER_TAG, finalizer_node_size, ot_finalizer,
+    0, no_eval, 0, 0
+};
+NodeInfo finalizer_env_info = {
+    CAPP_KIND, FINALIZER_ENV_TAG, finalizer_env_node_size, ot_finalizer_env,
+    0, no_eval, 0, 0
+};
+
+@ 
+When a finalized foreign pointer node has become garbage,
+[[finalize_foreign_ptr]] will execute all finalization functions
+added to the node.
+
+<<foreign.c>>=
+static void
+finalize_foreign_ptr(Node *node)
+{
+    union finalizer_list *fptr = node->fp.fptr;
+
+    while ( fptr )
+	switch ( node_tag(fptr) )
+	{
+	case FINALIZER_TAG:
+	    fptr->f.finalize(node->fp.ptr);
+	    fptr = fptr->f.next;
+	    break;
+	case FINALIZER_ENV_TAG:
+	    fptr->fe.finalize(fptr->fe.env, node->fp.ptr);
+	    fptr = fptr->fe.next;
+	    break;
+	default:
+	    unexpected_tag("finalize_foreign_ptr", node_tag(fptr));
+	}
+}
+
+@ 
+The primitive [[__newForeignPtr]]\footnote{Note that this primitive
+implements the function \texttt{newForeignPtr\_} in module
+\texttt{ForeignPtr}, not \texttt{newForeignPtr}.} allocates a new
+foreign pointer node for its argument. No finalization function is
+associated with the pointer initially. Such functions must be added
+with [[__addForeignPtrFinalizer]] and [[__addForeignPtrFinalizerEnv]],
+respectively.
+
+<<foreign.c>>=
+DECLARE_ENTRYPOINT(__newForeignPtr);
+
+FUNCTION(__newForeignPtr)
+{
+    Node *fp;
+    EXPORT_LABEL(__newForeignPtr)
+ ENTRY_LABEL(__newForeignPtr)
+    EVAL_RIGID_PTR(__newForeignPtr);
+
+    CHECK_HEAP(foreign_ptr_node_size);
+    fp		= (Node *)hp;
+    fp->info	= &foreign_ptr_info;
+    fp->fp.spc	= ss;
+    fp->fp.ptr	= sp[0]->p.ptr;
+    fp->fp.fptr	= 0;
+    hp	       += foreign_ptr_node_size;
+
+    sp += 2;
+    register_final(fp);
+    RETURN(fp);
+}
+
+@ 
+The primitives [[__addForeignPtrFinalizer]] and
+[[__addForeignPtrFinalizerEnv]] add a finalization function to a
+finalized foreign pointer node. [[__addForeignPtrFinalizerEnv]] also
+provides the environment pointer for the finalization function. In
+order to ensure a deterministic semantics of finalizers, these
+functions must be executed in the same search space where the
+finalized foreign pointer node was created.
+
+<<foreign.c>>=
+DECLARE_ENTRYPOINT(__addForeignPtrFinalizer);
+DECLARE_ENTRYPOINT(__addForeignPtrFinalizerEnv);
+
+DECLARE_LABEL(__addForeignPtrFinalizer_1);
+DECLARE_LABEL(__addForeignPtrFinalizerEnv_1);
+DECLARE_LABEL(__addForeignPtrFinalizerEnv_2);
+
+FUNCTION(__addForeignPtrFinalizer)
+{
+    Node *aux;
+    EXPORT_LABEL(__addForeignPtrFinalizer)
+ ENTRY_LABEL(__addForeignPtrFinalizer)
+    EVAL_RIGID_PTR(__addForeignPtrFinalizer);
+    aux	  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = aux;
+    GOTO(__addForeignPtrFinalizer_1);
+}
+
+static
+FUNCTION(__addForeignPtrFinalizer_1)
+{
+    union finalizer_list *fptr;
+ ENTRY_LABEL(__addForeignPtrFinalizer_1)
+    EVAL_RIGID_FOREIGN_PTR(__addForeignPtrFinalizer_1);
+    if ( sp[0]->fp.spc != ss )
+	fail_with("addForeignPtrFinalizer: non-local pointer");
+
+    CHECK_HEAP(finalizer_node_size);
+    fptr	     = (union finalizer_list *)hp;
+    fptr->info	     = &finalizer_info;
+    fptr->f.next     = sp[0]->fp.fptr;
+    fptr->f.finalize = (void (*)(void *))sp[1]->p.ptr;
+    hp		    += finalizer_node_size;
+
+    sp[0]->fp.fptr = fptr;
+    sp		  += 3;
+    RETURN(unit);
+}
+
+FUNCTION(__addForeignPtrFinalizerEnv)
+{
+    Node *aux;
+    EXPORT_LABEL(__addForeignPtrFinalizerEnv)
+ ENTRY_LABEL(__addForeignPtrFinalizerEnv)
+    EVAL_RIGID_PTR(__addForeignPtrFinalizerEnv);
+    aux	  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = aux;
+    GOTO(__addForeignPtrFinalizerEnv_1);
+}
+
+static
+FUNCTION(__addForeignPtrFinalizerEnv_1)
+{
+    Node *aux;
+ ENTRY_LABEL(__addForeignPtrFinalizerEnv_1)
+    EVAL_RIGID_PTR(__addForeignPtrFinalizerEnv_1);
+    aux	  = sp[0];
+    sp[0] = sp[2];
+    sp[2] = aux;
+    GOTO(__addForeignPtrFinalizerEnv_2);
+}
+
+static
+FUNCTION(__addForeignPtrFinalizerEnv_2)
+{
+    union finalizer_list *fptr;
+ ENTRY_LABEL(__addForeignPtrFinalizerEnv_2)
+    EVAL_RIGID_FOREIGN_PTR(__addForeignPtrFinalizerEnv_2);
+    if ( sp[0]->fp.spc != ss )
+	fail_with("addForeignPtrFinalizerEnv: non-local pointer");
+
+    CHECK_HEAP(finalizer_env_node_size);
+    fptr	      = (union finalizer_list *)hp;
+    fptr->info	      = &finalizer_env_info;
+    fptr->fe.next     = sp[0]->fp.fptr;
+    fptr->fe.finalize = (void (*)(void *, void *))sp[1]->p.ptr;
+    fptr->fe.env      = sp[2]->p.ptr;
+    hp		     += finalizer_env_node_size;
+
+    sp[0]->fp.fptr = fptr;
+    sp		  += 4;
+    RETURN(unit);
+}
+
+@ 
+The primitive [[__unsafeForeignPtrToPtr]] returns the pointer value of
+a foreign pointer node. It is unsafe because the pointer may be
+finalized and therefore become invalid when the program retains no
+reference to the foreign pointer node itself.
+
+<<foreign.c>>=
+DECLARE_ENTRYPOINT(__unsafeForeignPtrToPtr);
+
+FUNCTION(__unsafeForeignPtrToPtr)
+{
+    Node *p;
+    EXPORT_LABEL(__unsafeForeignPtrToPtr)
+ ENTRY_LABEL(__unsafeForeignPtrToPtr)
+    EVAL_RIGID_FOREIGN_PTR(__unsafeForeignPtrToPtr);
+    if ( sp[0]->fp.ptr )
+    {
+	CHECK_HEAP(ptr_node_size);
+	p	 = (Node *)hp;
+	p->info  = &ptr_info;
+	p->p.ptr = sp[0]->fp.ptr;
+	hp	+= ptr_node_size;
+    }
+    else
+	p = (Node *)&null_ptr;
+
+    sp += 1;
+    RETURN(p);
+}
+
+@ 
+The only purpose of the primitive [[__touchForeignPtr]] is to retain a
+reference to its argument. Since this is achieved by passing the
+foreign pointer node on the stack, the function can simply ignore its
+argument and return to the caller.
+
+<<foreign.c>>=
+DECLARE_ENTRYPOINT(__touchForeignPtr);
+
+FUNCTION(__touchForeignPtr)
+{
+    EXPORT_LABEL(__touchForeignPtr)
+ ENTRY_LABEL(__touchForeignPtr)
+    sp += 2;
+    RETURN(unit);
+}
+
+@ 
+The primitive [[__castForeignPtr]] is intended for casting the (base)
+type of a foreign pointer. This function is effectively the identity
+function, but can take advantage of the fact that it is always passed
+a boxed object.
+
+<<foreign.c>>=
+DECLARE_ENTRYPOINT(__castForeignPtr);
+
+FUNCTION(__castForeignPtr)
+{
+    EXPORT_LABEL(__castForeignPtr)
+ ENTRY_LABEL(__castForeignPtr)
+    GOTO(sp[0]->info->eval);
+}

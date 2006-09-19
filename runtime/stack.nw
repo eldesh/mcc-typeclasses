@@ -1,0 +1,190 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: stack.nw 1899 2006-04-19 10:50:11Z wlux $
+%
+% Copyright (c) 2001-2006, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{The Stack}
+The stack of the abstract machine is used to pass arguments to
+functions and return results. In addition, temporary variables and
+return addresses are saved on the stack. Finally, the abstract machine
+creates choice points and search contexts on the stack which are used
+for the implementation of non-deterministic evaluation.
+
+The stack is allocated in an array starting at [[stack_base]] and
+ending at [[stack_end]]. The stack grows from top to bottom and
+overflows when the stack pointer [[sp]] drops below [[stack_base]].
+Note that [[sp]] always points to the node that was pushed last onto
+the stack.
+
+<<stack.h>>=
+extern Node **stack_base, **stack_end;
+extern Node **sp;
+
+@
+<<stack.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include "debug.h"
+#include "run.h"
+#include "heap.h"
+#include "stack.h"
+#include "main.h"
+
+Node **stack_base;
+Node **stack_end;
+Node **sp;
+
+@
+The initialization function allocates a stack array with the specified
+size and initializes the stack pointer.
+
+<<stack.h>>=
+extern void init_stack(unsigned int stack_size);
+
+@
+<<stack.c>>=
+void
+init_stack(unsigned int stack_size)
+{
+    stack_size = (stack_size + pagemask) & ~pagemask;
+    stack_base = (Node **)malloc(stack_size + pagemask);
+    if ( stack_base == NULL )
+	sys_error("init_stack");
+
+    stack_base = (Node **)(((long)stack_base + pagemask) & ~pagemask); 
+    stack_end  = stack_base + stack_size / word_size;
+    sp	       = stack_end;
+}
+
+@ 
+Before allocating items on the stack it should be checked that
+enough space is available. The macros [[CHECK_STACK]] and
+[[CHECK_STACK1]] can be used for that purpose. If a stack overflow
+occurs, the program is aborted with a fatal error by calling the
+function [[stack_overflow]].
+
+<<stack.h>>=
+extern void stack_overflow(void) __attribute__ ((noreturn));
+
+#define CHECK_STACK1()	 if ( sp == stack_base ) stack_overflow();
+#define CHECK_STACK(n)	 if ( sp - (n) < stack_base ) stack_overflow();
+
+@
+<<stack.c>>=
+void
+stack_overflow()
+{
+    fprintf(stderr,
+	    "Stack overflow; current size: %u bytes\n"
+	    "Use +RTS -kSIZE to increase stack size\n",
+	    stacksize);
+    exit(2);
+}
+
+@
+\subsubsection{Choice Points and Search Contexts}
+Choice points are used for saving the current state of the abstract
+machine at a non-deterministic split of a computation in global
+backtracking search. A search context is used for saving the current
+state of the abstract machine before entering an encapsulated search.
+The information saved in both includes a pointer to a null-terminated
+array of alternative continuations, the ready queue, the previous
+choice point or search context, the current top of the trail, the
+current heap pointer, the current search space and the global
+non-deterministic execution handlers (see below).
+
+Saving the current heap pointer allows releasing all memory allocated
+since the choice point or search context was created immediately upon
+backtracking and when returning from a failed encapsulated search,
+respectively.
+
+A pointer to the current choice point or search context is saved in
+the [[bp]] variable. Choice points and search contexts can be
+distinguished by examining the [[btAlts]] field. It contains a null
+pointer for search contexts as there are no alternative continuations.
+
+<<stack.h>>=
+#define is_search_context(cp)	((cp)->btAlts == 0)
+
+typedef struct choicepoint {
+    const Label	       *btAlts;		/* remaining alternatives */
+    unsigned int       btCid;		/* id of current thread */
+    Node	       **btDsBase;	/* saved thread stack base */
+    struct choicepoint *btBp;		/* previous choice point */
+    union thread_node  *btRq;		/* saved run queue */
+#if !COPY_SEARCH_SPACE
+    struct save_rec    *btTp;		/* saved trail pointer */
+#endif
+    struct dict_node   *btDict;		/* saved dictionary tail pointer */
+    word	       *btHp;		/* saved heap pointer */
+    SearchSpace	       *btSpc;		/* saved search space */
+    const struct nondet_handlers *btHandlers;
+} Choicepoint;
+
+extern Choicepoint *bp;
+
+@
+<<stack.c>>=
+Choicepoint *bp;
+
+@
+\subsubsection{Non-deterministic evaluation}
+The abstract machine uses the \texttt{Choices} statement in order to
+handle different non-deterministic solutions of a goal. Depending on
+the context, this statement is handled differently. In global search
+mode, a choice point is created like in the WAM. In a local search
+space, the search is stopped and a list of search continuations is
+returned to the caller. In monadic code, the program is aborted with
+an error message. The runtime system uses a set of labels to handle
+non-deterministic choices and failures. A pointer to the current set
+of handlers, which also includes an entry point to handle deadlocks,
+is saved in the global variable [[nondet_handlers]]. When the abstract
+machine enters or leaves an encapsulated search, this variable is
+updated appropriately.
+
+The [[choices]] handlers expect a pointer to a null-terminated array
+containing all continuation addresses on the top of the stack.
+
+<<stack.h>>=
+extern const struct nondet_handlers {
+    Label choices;
+    Label deadlock;
+    Label fail;
+} *nondet_handlers;
+
+@
+<<stack.c>>=
+const struct nondet_handlers *nondet_handlers;
+
+@
+\subsubsection{Exceptions}
+In order to handle I/O exceptions efficiently, the abstract machine
+creates an exception frame on the stack when a new exception handler
+is installed by the \texttt{catch} function. Each frame saves a
+pointer to the current exception handler, which must be a function of
+type \texttt{IOError -> IO a}, and the address of the previous
+exception frame. The pointer to the current exception frame is saved
+in the global variable [[efp]].
+
+In general, only the main thread of a program executes an I/O
+computation and therefore there will be only one dedicated exception
+handler. However, it is possible to run an I/O computation on any
+thread -- even within an encapsulated search -- with the help of
+\texttt{unsafePerformIO}. Therefore, each thread uses its own
+exception handler chain. The runtime system will initialize the
+variable [[efp]] with [[0]] when a new thread is created.
+
+<<stack.h>>=
+typedef struct exception_frame
+{
+    Node		   *handler;
+    struct exception_frame *frame;
+} ExceptionFrame;
+
+extern ExceptionFrame *efp;
+
+@
+<<stack.c>>=
+ExceptionFrame *efp;

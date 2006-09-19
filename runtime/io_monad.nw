@@ -1,0 +1,485 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: io_monad.nw 1872 2006-03-16 10:11:43Z wlux $
+%
+% Copyright (c) 2001-2005, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Monadic Code}\label{sec:io-monad}
+The monadic driver is implemented in the file [[io_monad.c]]. The main
+entry point into this module is the function [[curry_exec]], which
+executes a monadic goal.
+
+The function [[curry_exit]] stops the execution of the program with
+the given return code, which will be returned from [[curry_exec]].
+
+The function [[fail_with]] prints an error message and stops the
+execution with return code 1. It is effectively equivalent to calling
+\texttt{Prelude.error} with the formatted error message.
+
+The functions [[curry_argc]] and [[curry_argv]] return the arguments
+that were passed to [[curry_exec]].
+
+<<io_monad.h>>=
+extern int  curry_exec(NodeInfo *main_info_table, int argc, char **argv);
+extern void curry_exit(int rc) __attribute__((noreturn));
+
+extern void fail_with(const char *format, ...)
+    __attribute__((noreturn, format(printf, 1, 2)));
+
+extern int  curry_argc(void);
+extern char **curry_argv(void);
+
+DECLARE_ENTRYPOINT(__ioError);
+
+@ 
+<<io_monad.c>>=
+#include "config.h"
+#include <stdarg.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include "debug.h"
+#include "run.h"
+#include "heap.h"
+#include "stack.h"
+#include "threads.h"
+#include "spaces.h"
+#include "eval.h"
+#include "data.h"
+#include "io_monad.h"
+#include "cstring.h"
+#include "trace.h"
+#include "cam.h"
+
+DECLARE_LABEL(start_io);
+DECLARE_LABEL(stop_io);
+DECLARE_LABEL(choices_io);
+DECLARE_LABEL(deadlock_io);
+DECLARE_LABEL(fail_io);
+
+@ 
+In this file we also provide the handler functions for
+non-deterministic instructions, suspensions, and failures.
+Non-deterministic code will raise an error in monadic code, deadlocks
+and failures will terminate the program with an appropriate (error)
+message.
+
+@ 
+<<io_monad.c>>=
+static const struct nondet_handlers io_handlers = {
+    choices_io, deadlock_io, fail_io
+};
+
+static
+FUNCTION(choices_io)
+{
+ ENTRY_LABEL(choices_io)
+    fail_with("cannot duplicate the world");
+}
+
+static
+FUNCTION(deadlock_io)
+{
+ ENTRY_LABEL(deadlock_io)
+    fail_with("deadlock");
+}
+
+static
+FUNCTION(fail_io)
+{
+ ENTRY_LABEL(fail_io)
+    fail_with("failed");
+}
+
+@
+The global entry point [[start_io]] prepares the abstract machine for
+evaluating the monadic goal on the top of the stack. The IO monad is
+based on the type \texttt{IO}, which can be defined as
+\begin{equation}
+  \mbox{\texttt{type IO a = World -> (a,World)}}\label{eq:monadic-io}
+\end{equation}
+where the type \texttt{World} represents the state of the external
+world. The state of the file system, etc. are managed implicitly in
+the runtime system. Therefore, we can simply use the constant
+\texttt{()} as representation of the world. Since the representation
+is constant, we can use a simpler reader monad instead of a state
+monad to implement the \texttt{IO} type. Therefore, the runtime system
+really uses
+\begin{equation}
+  \mbox{\texttt{type IO a = () -> a}}\label{eq:our-io}
+\end{equation}
+Note that the IO monad is lazy, i.e., the result of a monadic action
+is computed only when it is used by the program. Thus, the program
+\verb|return undefined >> putStrLn "Hello world"| will print the
+string \verb|Hello world| on the standard output. While this is
+straight forward to implement using
+representation~(\ref{eq:monadic-io}), we must be careful not to
+evaluate the returned node in our representation~(\ref{eq:our-io}).
+
+The program used for executing a monadic goal evaluates the goal to
+head-normal form, but does not compute nor print the result of the
+monadic action itself.
+
+<<io_monad.c>>=
+static int  io_argc;
+static char **io_argv;
+static int  curry_rc = 0;
+
+int
+curry_exec(NodeInfo *main_info, int argc, char **argv)
+{
+    io_argc = argc;
+    io_argv = argv;
+
+    assert(main_info->kind == LAZY_KIND && main_info->tag == NOUPD_TAG &&
+	   main_info->length == closure_node_size(0));
+
+    CHECK_STACK1();
+    *--sp = (Node *)&main_info;
+
+    run(start_io);
+    hlim = heap_base;
+    release_mem();
+    return curry_rc;
+}
+
+void
+curry_exit(int rc)
+{
+    curry_rc = rc;
+    halt();
+}
+int
+curry_argc()
+{
+    return io_argc;
+}
+
+char **
+curry_argv()
+{
+    return io_argv;
+}
+
+static
+FUNCTION(start_io)
+{
+ ENTRY_LABEL(start_io)
+    nondet_handlers = &io_handlers;
+    TRACE(("start program\n"));
+    CHECK_STACK(2);
+    sp	 -= 2;
+    sp[0] = sp[2];
+    sp[1] = unit;
+    sp[2] = 0;
+    start_thread(3);
+    /* Hack: Change the return address of the main thread */
+    sp[2] = (Node *)stop_io;
+    GOTO(___64_);
+}
+
+static
+FUNCTION(stop_io)
+{
+ ENTRY_LABEL(stop_io)
+    curry_exit(0);
+}
+
+void
+fail_with(const char *format, ...)
+{
+    va_list args;
+
+    va_start(args, format);
+    fprintf(stderr, "Error: ");
+    vfprintf(stderr, format, args);
+    fprintf(stderr, "\n");
+    va_end(args);
+
+    curry_exit(1);
+}
+
+@
+The code for the primitive I/O actions \texttt{done}, \texttt{return},
+\texttt{(>>)}, and \texttt{(>>=)} is implemented in this file, too.
+The functions \texttt{done} and \texttt{(>>)} could be defined as
+prelude functions but we can implement them more efficiently here.
+Note that all functions take an additional argument due to the
+underlying representation of the \texttt{IO} monad. Also note that
+\texttt{return} does not evaluate its argument because of the lazy IO
+monad semantics.
+
+<<io_monad.c>>=
+DECLARE_ENTRYPOINT(__done);
+
+FUNCTION(__done)
+{
+    EXPORT_LABEL(__done)
+ ENTRY_LABEL(__done)
+    sp += 1;
+    RETURN(unit);
+}
+
+DECLARE_ENTRYPOINT(__return);
+
+FUNCTION(__return)
+{
+    Node *r;
+    EXPORT_LABEL(__return)
+ ENTRY_LABEL(__return)
+    r	= sp[0];
+    sp += 2;
+    RETURN(r);
+}
+
+DECLARE_ENTRYPOINT(___62__62_);
+DECLARE_LABEL(___62__62__1);
+
+FUNCTION(___62__62_)
+{
+    EXPORT_LABEL(___62__62_)
+ ENTRY_LABEL(___62__62_)
+    CHECK_STACK(2);
+    sp	 -= 2;
+    sp[0] = sp[2];
+    sp[1] = sp[4];
+    sp[2] = (Node *)___62__62__1;
+    GOTO(___64_);
+}
+
+static
+FUNCTION(___62__62__1)
+{
+ ENTRY_LABEL(___62__62__1)
+    sp += 1;
+    GOTO(___64_);
+}
+
+DECLARE_ENTRYPOINT(___62__62__61_);
+DECLARE_LABEL(___62__62__61__1);
+DECLARE_LABEL(___62__62__61__2);
+
+FUNCTION(___62__62__61_)
+{
+    EXPORT_LABEL(___62__62__61_)
+ ENTRY_LABEL(___62__62__61_)
+    CHECK_STACK(2);
+    sp	 -= 2;
+    sp[0] = sp[2];
+    sp[1] = sp[4];
+    sp[2] = (Node *)___62__62__61__1;
+    GOTO(___64_);
+}
+
+static
+FUNCTION(___62__62__61__1)
+{
+ ENTRY_LABEL(___62__62__61__1)
+    CHECK_STACK1();
+    sp	 -= 1;
+    sp[0] = sp[2];
+    sp[2] = (Node *)___62__62__61__2;
+    GOTO(___64_);
+}
+
+static
+FUNCTION(___62__62__61__2)
+{
+ ENTRY_LABEL(___62__62__61__2)
+    GOTO(___64_);
+}
+
+@
+The function [[catch]] lets the user catch I/O exceptions in monadic
+code. The function is passed a monadic action and an exception
+handler. It creates a new exception frame on the stack and saves the
+handler and the previous exception frame in the new frame, and then
+executes the monadic action in the new context. When the action
+returns normally, the frame is removed from the stack and the result
+is returned to the caller.
+
+<<io_monad.c>>=
+DECLARE_ENTRYPOINT(__catch);
+DECLARE_LABEL(__catch_1);
+
+FUNCTION(__catch)
+{
+    Node	   *action, *handler, *world;
+    ExceptionFrame *prevFrame;
+    EXPORT_LABEL(__catch)
+ ENTRY_LABEL(__catch)
+
+    CHECK_STACK(wordsof(ExceptionFrame));
+    action  = sp[0];
+    handler = sp[1];
+    world   = sp[2];
+
+    /* create and initialize the new exception frame */
+    sp += 3 - wordsof(ExceptionFrame);
+    prevFrame	 = efp;
+    efp		 = (ExceptionFrame *)sp;
+    efp->handler = handler;
+    efp->frame	 = prevFrame;
+
+    /* invoke the action */
+    sp	 -= 3;
+    sp[0] = action;
+    sp[1] = world;
+    sp[2] = (Node *)__catch_1;
+    GOTO(___64_);
+}
+
+static
+FUNCTION(__catch_1)
+{
+    Node	   *r;
+    ExceptionFrame *curFrame;
+
+ ENTRY_LABEL(__catch_1)
+    r = sp[0];
+
+    curFrame = efp;
+    efp	     = efp->frame;
+    sp	     = (Node **)curFrame + wordsof(ExceptionFrame);
+
+    RETURN(r);
+}
+
+@
+The function [[ioError]] raises a user exception. It removes the stack
+up to and including the current exception frame and applies the
+exception handler from that frame to the exception value. If no
+exception handler is available -- as may happen when
+[[unsafePerformIO]] is used -- the program is aborted using the
+[[error]] function from the prelude.
+
+<<io_monad.c>>=
+DECLARE_ENTRYPOINT(__Prelude__error);
+DECLARE_LABEL(__ioError_1);
+
+FUNCTION(__ioError)
+{
+    Node	   *exc, *handler, *world;
+    ExceptionFrame *curFrame;
+    EXPORT_LABEL(__ioError)
+ ENTRY_LABEL(__ioError)
+    TRACE(("%I throw %N\n", sp[0]));
+
+    if ( efp == 0 )
+    {
+	sp[1] = prefix_string("Uncaught I/O exception:\n", sp[0]);
+	sp   += 1;
+	GOTO(__Prelude__error);
+    }
+
+    exc	     = sp[0];
+    world    = sp[1];
+    curFrame = efp;
+    handler  = efp->handler;
+    efp	     = efp->frame;
+
+    sp    = (Node **)curFrame + wordsof(ExceptionFrame) - 4;
+    sp[0] = handler;
+    sp[1] = exc;
+    sp[2] = (Node *)__ioError_1;
+    sp[3] = world;
+    GOTO(___64_);
+}
+
+static
+FUNCTION(__ioError_1)
+{
+ ENTRY_LABEL(__ioError_1)
+    GOTO(___64_);
+}
+
+@
+The function [[unsafePerformIO]] allows executing a monadic action
+and returning its result into a regular function. The function can be
+used for implementing a simple (unsafe) trace function and can also
+serve for generating unique entities~\cite{AugustssonRittriSynek94:Unique}.
+
+Recall that the IO monad is lazy, therefore we must evaluate the result
+of the monadic action to head normal form, eventually.
+
+\textbf{As the name of the function suggests, its use is totally
+unsafe. This function is a hack and should not be used casually.}
+
+<<io_monad.c>>=
+DECLARE_ENTRYPOINT(__unsafePerformIO);
+DECLARE_LABEL(__unsafePerformIO_1);
+
+FUNCTION(__unsafePerformIO)
+{
+    EXPORT_LABEL(__unsafePerformIO)
+ ENTRY_LABEL(__unsafePerformIO)
+    CHECK_STACK(2);
+    sp	 -= 2;
+    sp[0] = sp[2];
+    sp[1] = unit;
+    sp[2] = (Node *)__unsafePerformIO_1;
+    GOTO(___64_);
+}
+
+static
+FUNCTION(__unsafePerformIO_1)
+{
+    Node *r;
+
+ ENTRY_LABEL(__unsafePerformIO_1)
+    r = sp[0];
+    if ( is_boxed(r) )
+	GOTO(r->info->eval);
+    sp += 1;
+    RETURN(r);
+}
+
+@
+The [[fixIO]] function was recently introduced in Haskell in order to
+allow recursive bindings in a monad. The function is the fixpoint
+operator in the IO monad with type [[(a -> IO a) -> IO a]] and
+corresponds to the regular fix point operator [[fix :: (a -> a) -> a]]
+that can be defined as
+\begin{equation}
+  \mbox{\texttt{fix f = let x = f x in x}}\label{eq:fix}
+\end{equation}
+in Curry.\footnote{Actually, this definition is not valid according to
+the Curry report because of the recursive value binding. However, it
+is accepted as an extension by our compiler.} The following is an
+attempt to implement fixIO in Curry. Using the
+representation~(\ref{eq:monadic-io}) of \texttt{IO a} together with
+\texttt{type World = ()}, [[fixIO]] can be defined as follows.
+\begin{equation}
+  \mbox{\texttt{fixIO f () = let (x,()) = f x () in (x,())}}\label{eq:fixIO}
+\end{equation}
+As we use the representation~(\ref{eq:our-io}) instead
+of~(\ref{eq:monadic-io}), our implementation is even closer to the
+definition of \texttt{fix}.
+\begin{equation}
+  \mbox{\texttt{fixIO f () = let x = f x () in x}}\label{eq:our-fixIO}
+\end{equation}
+
+<<io_monad.c>>=
+DECLARE_ENTRYPOINT(__fixIO);
+
+FUNCTION(__fixIO)
+{
+    Node *clos, *susp;
+    EXPORT_LABEL(__fixIO)
+ ENTRY_LABEL(__fixIO)
+    CHECK_HEAP(closure_node_size(2) + suspend_node_size(2));
+    clos  = (Node *)hp;
+    susp  = (Node *)(hp + closure_node_size(2));
+    hp   += closure_node_size(2) + suspend_node_size(2);
+
+    clos->info	    = &___64__info;
+    clos->c.args[0] = sp[0];
+    clos->c.args[1] = susp;
+
+    susp->info	    = ___64__lazy_info_table;
+    susp->s.spc	    = ss;
+    susp->s.args[0] = clos;
+    susp->s.args[1] = sp[1];
+
+    *++sp = susp;
+    GOTO(susp->info->eval);    
+}

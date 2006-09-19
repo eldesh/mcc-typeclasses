@@ -1,0 +1,47 @@
+dnl $Id: configure-bin.in 1906 2006-04-27 09:21:00Z wlux $
+dnl
+dnl Copyright (c) 2002-2006, Wolfgang Lux
+dnl
+
+AC_INIT([%PACKAGE_NAME% for %TARGET%],[%VERSION%],[wlux@uni-muenster.de])
+AC_PREREQ(2.50)
+AC_CONFIG_SRCDIR(lib/curry.h)
+
+dnl Checks for programs.
+AC_PROG_CC
+AC_PROG_RANLIB
+AC_PROG_INSTALL
+INSTALL_DIR='${INSTALL: -c=} -d -m 755'
+
+dnl Include additional compiler options for Gnu C
+if test "$GCC" = yes; then
+  CURRY_C_DYNAMIC_NO_PIC
+  ARCH_CFLAGS=%ARCH_CFLAGS%
+fi
+
+dnl Check for Cygpath
+AC_PATH_PROG(CYGPATH, cygpath)
+USE_CYGPATH_WORKAROUND=%USE_CYGPATH_WORKAROUND%
+if test "$USE_CYGPATH_WORKAROUND" = "yes" -a -z "$CYGPATH" ; then
+  AC_MSG_ERROR([cygpath not found])
+fi
+
+dnl Checks for libraries.
+AC_SEARCH_LIBS(sin, lm)
+AC_SEARCH_LIBS(inet_addr, nsl)
+AC_SEARCH_LIBS(socket, socket)
+
+dnl Check for a shell, which is suitable for cyi
+CURRY_CYI_SHELL
+
+AC_SUBST(ARCH_CFLAGS)
+AC_SUBST(INSTALL_DIR)
+AC_SUBST(USE_CYGPATH_WORKAROUND)
+AC_SUBST_FILE(in_place_config)
+in_place_config=$srcdir/in-place-config
+
+AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([bin/cyc], [chmod +x bin/cyc])
+AC_CONFIG_FILES([bin/cymake], [chmod +x bin/cymake])
+AC_CONFIG_FILES([bin/cyi], [chmod +x bin/cyi])
+AC_OUTPUT

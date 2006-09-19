@@ -1,0 +1,945 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: heap.nw 1899 2006-04-19 10:50:11Z wlux $
+%
+% Copyright (c) 2001-2006, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{The Heap}\label{sec:heap}
+<<heap.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include "debug.h"
+#include "run.h"
+#include "heap.h"
+#include "eval.h"
+#include "data.h"
+#include "main.h"
+
+@ 
+The heap is organized as an array of words, where the size of a word
+is equal to the size of pointers and (long) integer numbers on the
+target architecture.
+
+<<heap.h>>=
+/* booleans */
+#ifndef __cplusplus
+typedef enum bool { false, true } boolean;
+#else
+# define boolean bool
+#endif /*__cplusplus*/
+
+/* words */
+#define word_size	sizeof(word)
+#define wordsof(x)	((sizeof(x) + word_size - 1) / word_size)
+
+typedef void *word;
+
+@ 
+In the default configuration, all data except for integer numbers is
+allocated in the heap. Integer numbers are usually encoded directly in
+the pointer. Since all pointers into the heap must be aligned to -- at
+least -- a 4 byte boundary, the two least significant bits of a
+pointer are available as tag bits. The runtime system uses only the
+least significant bit, where 0 is used for pointers and 1 for integer
+numbers. Obviously, only integer numbers that can be represented in
+$n-1$ bits, where $n$ is the bit size of the target machine, can be
+encoded in this way; larger numbers must be allocated in the heap.
+This optimization can be disabled with the \texttt{--disable-unboxed}
+configuration option, which in turn sets the [[ONLY_BOXED_OBJECTS]]
+preprocessor flag.
+
+<<heap.h>>=
+/* check for boxed-ness of a node */
+#define is_unboxed(node)        (!ONLY_BOXED_OBJECTS && ((long)(node) & 0x01))
+#define is_boxed(node)          !is_unboxed(node)
+
+#if !ONLY_BOXED_OBJECTS
+# define mk_unboxed(x)		(Node *)(((x) << 1) | 0x01)
+# define unboxed_val(node)	((long)(node) >> 1)
+#endif
+
+@
+All other objects are stored as nodes in the heap. The first word of a
+node points to a node descriptor, which provides some shared
+information about the particular node. There is a fixed set of node
+kinds that are used to represent constructor applications, partial
+(function) applications, shared and unshared function applications,
+logical variables, and a few other primitive data types. Other kinds
+of nodes are used for managing the internal state of the runtime
+system, e.g., the state of inactive threads.
+
+The kind [[ABSTRACT_KIND]] is used for references to external data,
+e.g., files. The runtime system will never duplicate such nodes and
+use physical equality when comparing them in equality and disequality
+constraints.
+
+The following enumeration lists all kinds of nodes that are known to
+the runtime system.
+
+<<heap.h>>=
+enum {
+    CAPP_KIND,			/* constructor application */
+    PAPP_KIND,			/* partial application node */
+    LVAR_KIND,			/* (unbound) logic variable */
+    LAZY_KIND,			/* lazy function application node */
+    INDIR_KIND,			/* indirection node */
+    VECTOR_KIND,		/* vector nodes */
+    CHAR_KIND,			/* character node */
+    INT_KIND,			/* integer number */
+    FLOAT_KIND,			/* floating-point number */
+    PTR_KIND,			/* foreign pointer */
+    FOREIGN_PTR_KIND,		/* finalized foreign pointer */
+    ABSTRACT_KIND,		/* external objects */
+    THREAD_KIND,		/* thread queue node */
+    SEARCH_CONT_KIND,		/* search continuation */
+    SCRIPT_KIND			/* saved script/trail */
+};
+
+@
+In general, a node consists of a pointer to a node descriptor followed
+by a list of argument pointers. However, some kinds of nodes use
+different representations, e.g., a node representing a \verb|Float|
+number consists of a descriptor and a [[double]] value. Therefore,
+the [[Node]] type is defined as a union type. The first field of all
+variants as well as of the union itself is the [[info]] field, which
+points to the node descriptor. This descriptor comprises
+the node's kind, a tag value, the length of the node in words, a %'
+pointer offset table, a name used for printing the node, the
+evaluation code for the node, the entry point of the function
+corresponding to a partial application or function application node,
+and an optional finalization function.
+
+The meaning of the [[tag]] field depends on the node's kind. For %'
+constructor applications, it is used to distinguish data constructors
+of the same type. For instance, the constructors of the type
+\texttt{data Num = Prec Num | Zero | Succ Num} are assigned tags 0
+(\verb|Prec|), 1 (\verb|Zero|), and 2 (\verb|Succ|),
+respectively. Usually, data constructor tags are positive
+numbers. However, data constructors of existentially quantified 
+types are assigned negative tags.
+
+For partial application nodes, the [[tag]] field denotes the arity --
+i.e., the number of missing arguments -- of the application. In
+principle, small integer numbers and character codes could be stored
+in the [[tag]] field of integer and character nodes, respectively.
+However, the runtime system does not use this possibility at present.
+
+The length of a node includes the descriptor pointer; a valid size
+must therefore be greater than 0. If the length in the descriptor is
+[[0]], the runtime system assumes that the length of the node is
+stored in the first word of the node after the info pointer. This
+allows defining objects with variable size, e.g., arrays.
+
+The pointer offset table is used by the garbage collector to
+distinguish pointer and non-pointer fields in a node. The table starts
+with the number of pointer fields in the node. Their offsets within
+the node are saved in the following entries. All offsets in the table
+must be defined in units of [[word_size]]. The macro [[word_offsetof]]
+can be used to compute them. If the offset table pointer is 0, the
+garbage collector assumes that all fields in the node are valid
+pointers. In addition, the trivial offset table for purely binary
+nodes is predefined. It can be accessed through the global variable
+[[ot_binary]].
+
+Vector nodes require special treatment. If the elements of the vector
+have some internal structure that requires a non-trivial offset table,
+the first entry of the offset table must contain the negative size of
+an element. The size is then followed by the number of pointer fields
+in an element and their offsets.
+
+<<heap.h>>=
+/* node types -- defined below */
+typedef union node	       Node;
+typedef struct node_info       NodeInfo;
+typedef union thread_node      *ThreadQueue;	/* defined in threads.h */
+typedef struct search_space    SearchSpace;	/* defined in spaces.h */
+typedef struct constraint      Constraint;
+typedef void (*FinalFun)(Node *);
+
+struct node_info
+{
+    const short	       kind;		/* node kind */
+    const short	       tag;		/* tag value */
+    const unsigned int length;		/* length of the node */
+    const int          *offset_table;	/* pointer offset table */
+    const char	       *cname;		/* closure name */
+    const Label	       eval;		/* entry point for evaluation */
+    const Label	       entry;		/* function entry point */
+    const FinalFun     final_fun;	/* optional finalization function */
+};
+
+#define node_kind(node)		(node)->info->kind
+#define node_tag(node)		(node)->info->tag
+#define node_size(node)		(node)->info->length
+#define is_capp_node(node)	(node_kind(node) == CAPP_KIND)
+#define is_papp_node(node)	(node_kind(node) == PAPP_KIND)
+#define is_variable_node(node)	(node_kind(node) == LVAR_KIND)
+#define is_lazy_node(node)	(node_kind(node) == LAZY_KIND)
+#define is_indir_node(node)	(node_kind(node) == INDIR_KIND)
+#define is_vector_node(node)	(node_kind(node) == VECTOR_KIND)
+#define is_char_node(node)	(node_kind(node) == CHAR_KIND)
+#define is_int_node(node)	(node_kind(node) == INT_KIND)
+#define is_float_node(node)	(node_kind(node) == FLOAT_KIND)
+#define is_ptr_node(node)	(node_kind(node) == PTR_KIND)
+#define is_foreign_ptr_node(node) (node_kind(node) == FOREIGN_PTR_KIND)
+#define is_abstract_node(node)	(node_kind(node) == ABSTRACT_KIND)
+#define is_search_cont_node(node) (node_kind(node) == SEARCH_CONT_KIND)
+
+#define word_offsetof(type,field) ((word *)&(((type *)0)->field) - (word *)0)
+
+extern const int ot_binary[];
+
+@ 
+<<heap.c>>=
+const int ot_binary[] = { 0 };
+
+@ 
+In general, a node consists of an info pointer followed by an array of
+arguments. This representation is used for data constructor and
+(partial as well as full) function applications.
+
+<<heap.h>>=
+struct closure_node {
+    NodeInfo *info;
+    Node     *args[1];
+};
+
+#define closure_argc(node)	(node_size(node) - closure_node_size(0))
+#define closure_node_size(argc)	(wordsof(struct closure_node) + (argc) - 1)
+
+@
+The size of a vector node cannot be determined from its type at
+compile time, but only at runtime when the vector is allocated.
+Therefore, the size of a vector is saved in the first word of the node
+after the info pointer.
+
+<<heap.h>>=
+struct vector_node {
+    NodeInfo *info;
+    unsigned length;
+    Node     *args[1];
+};
+
+#define vector_argc(node) \
+    (((struct vector_node *)(node))->length - vector_node_size(0))
+#define vector_node_size(argc) \
+    (wordsof(struct vector_node) + (argc) - 1)
+
+@ 
+Integer numbers that cannot be represented in $n-1$ bits, where $n$ is
+the numbers of bits in a word, are allocated in the heap. An integer
+node in the heap consists of an info pointer and an integer value.
+
+The macro [[is_large_int]] can be used to test whether an integer
+number must be allocated in the heap.
+
+<<heap.h>>=
+#define is_large_int(i) \
+    (ONLY_BOXED_OBJECTS || (i) < LONG_MIN/2 || (i) > LONG_MAX/2)
+
+extern NodeInfo int_info;
+struct int_node {
+    NodeInfo *info;
+    long     i;
+};
+#define int_node_size	wordsof(struct int_node)
+
+#if ONLY_BOXED_OBJECTS
+# define long_val(node)	(node)->i.i
+#else
+# define long_val(node)	(is_unboxed(node) ? unboxed_val(node) : (node)->i.i)
+#endif
+
+@
+<<heap.c>>=
+NodeInfo int_info = { 
+    INT_KIND, 0, int_node_size, ot_binary, 0, eval_whnf, 0, 0
+};
+
+@ 
+Floating point numbers use type [[double]] for the represented number
+to get the maximum precision. On some architectures values of this
+type must be aligned on a double word boundary. As nodes in the heap
+are aligned to a word boundary only, floating point values in a heap
+node cannot be accessed directly in this case. The macros
+[[get_double_val]] and [[put_double_val]] can be used for accessing
+unaligned [[double]] values.
+
+\emph{Do not replace the assignments in [[get_double_val]] and
+[[put_double_val]] by a single call to [[memcpy]]. The Gnu C compiler
+may generate inline code for [[memcpy]] when it is called with a fixed
+size and may use floating-point instructions, which expect properly
+aligned operands, in order to copy a [[double]] sized memory
+region. Such happens, e.g., on the Sparc architecture.}
+
+<<heap.h>>=
+extern NodeInfo float_info;
+struct float_node {
+    NodeInfo *info;
+    double   d;
+};
+#define float_node_size         wordsof(struct float_node)
+
+#if UNALIGNED_DOUBLE
+# define get_double_val(_d,node)	_d = (node).d
+# define put_double_val(node,_d)	(node).d = _d
+#else
+union _conv {
+    double d;
+    long   l[2];
+};
+
+# define get_double_val(_d,node) do { \
+    union _conv conv; \
+    conv.l[0] = ((long *)&(node).d)[0]; \
+    conv.l[1] = ((long *)&(node).d)[1]; \
+    _d = conv.d; \
+} while ( 0 )
+# define put_double_val(node,_d) do { \
+    union _conv conv; \
+    conv.d = _d; \
+    ((long *)&(node).d)[0] = conv.l[0]; \
+    ((long *)&(node).d)[1] = conv.l[1]; \
+} while ( 0 )
+#endif
+
+@
+<<heap.c>>=
+NodeInfo float_info = {
+    FLOAT_KIND, 0, float_node_size, ot_binary, 0, eval_whnf, 0, 0
+};
+
+@ 
+Character nodes are mostly similar to (boxed) integer nodes. However,
+the characters in the range 0--255 are preallocated in the runtime
+system.
+
+<<heap.h>>=
+extern NodeInfo char_info;
+struct char_node {
+    NodeInfo *info;
+    int	     ch;
+};
+
+#define char_node_size		wordsof(struct char_node)
+
+extern struct char_node char_table[256];
+extern void init_chars(void);
+
+@
+<<heap.c>>=
+NodeInfo char_info = {
+    CHAR_KIND, 0, char_node_size, ot_binary, 0, eval_whnf, 0, 0
+};
+
+struct char_node char_table[256];
+
+void
+init_chars()
+{
+    int i;
+
+    for ( i = 0; i < 256; i++ )
+    {
+	char_table[i].info = &char_info;
+	char_table[i].ch   = i;
+    }
+}
+
+@ 
+Foreign pointer nodes encompass the info pointer and a generic pointer
+field. This representation is used for C object pointers as well as C
+function pointers. The latter is actually not ANSI C conformant, since
+the ANSI C standard does not allow casting [[void]] pointers into
+function pointers and vice versa. However, this is supported by many
+compilers and we make use of such casts already in the [[run]]
+function when using the trampoline configuration (see
+Sect.~\ref{sec:execution}).
+
+<<heap.h>>=
+enum { PTR_TAG, FUNPTR_TAG, STABPTR_TAG };
+
+extern NodeInfo ptr_info, funptr_info, stabptr_info;
+struct ptr_node {
+    NodeInfo *info;
+    void     *ptr;
+};
+#define ptr_node_size		wordsof(struct ptr_node)
+
+extern const struct ptr_node null_ptr, null_funptr, null_stabptr;
+
+@ 
+<<heap.c>>=
+NodeInfo ptr_info = {
+    PTR_KIND, PTR_TAG, ptr_node_size, ot_binary, "Ptr", eval_whnf, 0, 0
+};
+NodeInfo funptr_info = {
+    PTR_KIND, FUNPTR_TAG, ptr_node_size, ot_binary, "FunPtr", eval_whnf, 0, 0
+};
+NodeInfo stabptr_info = {
+    PTR_KIND, STABPTR_TAG, ptr_node_size, ot_binary, "StablePtr",
+    eval_whnf, 0, 0
+};
+
+const struct ptr_node null_ptr     = { &ptr_info, 0 };
+const struct ptr_node null_funptr  = { &funptr_info, 0 };
+const struct ptr_node null_stabptr = { &stabptr_info, 0 };
+
+@ 
+Finalized foreign pointer nodes associate a C object pointer with a
+list of finalization functions that are executed when the node is
+garbage collected. Since a program can add finalization functions to a
+node after it was created, we have to record the search space in which
+the foreign pointer node was created. No public info descriptor is
+declared for finalized foreign pointer nodes because they are created
+exclusively by the code in [[foreign.nw]]~(see
+Sect.~\ref{sec:foreign}).
+
+<<heap.h>>=
+struct foreign_ptr_node {
+    NodeInfo		 *info;
+    SearchSpace		 *spc;
+    void		 *ptr;
+    union finalizer_list *fptr;
+};
+#define foreign_ptr_node_size	wordsof(struct foreign_ptr_node)
+
+@
+Indirection nodes are used in order to preserve sharing when a
+variable node is bound and a lazy application is overwritten with its
+result, respectively. This is done by changing the info pointer of the
+node and setting the [[node]] field in the indirection node.
+
+Note that the size of an indirection node may be smaller than that of
+the original node. However, it is safe to set the node info pointer to
+[[indir_info]] only when the overwritten node's state cannot be              %'
+recovered, i.e., the node is not protected by a choice point. For that
+reason, variables and lazy applications will provide specialized
+indirection info vectors that match the size of the overwritten node.
+
+<<heap.h>>=
+extern NodeInfo indir_info;
+struct indir_node {
+    NodeInfo	*info;
+#if !COPY_SEARCH_SPACE
+    SearchSpace	*spc;		/* defining search space (of original node) */
+#endif
+    Node	*node;		/* referenced node */
+};
+#define indir_node_size		wordsof(struct indir_node)
+
+@
+<<heap.c>>=
+NodeInfo indir_info = {
+    INDIR_KIND, 0, indir_node_size, 0, 0, eval_indir, 0, 0
+};
+
+@ 
+Unbound logic variable nodes comprise a pointer to the search space in
+which the variable was created, a list of threads which are delayed by
+the variable, and a list of constraints on that variable other than
+equality constraints. The latter are implemented by overwriting the
+variable node.
+
+<<heap.h>>=
+extern NodeInfo variable_info_table[];
+struct variable_node {
+    NodeInfo	*info;
+    SearchSpace	*spc;		/* defining search space */
+    ThreadQueue	wq;		/* wait queue */
+    Constraint	*cstrs;		/* constraint list */
+};
+#define variable_node_size      wordsof(struct variable_node)
+
+@
+<<heap.c>>=
+#if !COPY_SEARCH_SPACE
+NodeInfo variable_info_table[] = {
+    { LVAR_KIND, 0, variable_node_size, 0, 0, eval_whnf, 0, 0 },
+    { INDIR_KIND, 0, variable_node_size, 0, 0, eval_indir, 0, 0 }
+};
+#else
+NodeInfo variable_info_table[] = {
+    { LVAR_KIND, 0, variable_node_size, 0, 0, eval_whnf, 0, 0 }
+};
+#endif
+
+@
+At present, the abstract machine supports only disequality constraints.
+However, we implement a more general interface for constraints here.
+A list of constraints can be attached to a variable node. The [[eval]]
+field in the node info structure of a constraint must point to a
+binary function that is called when the variable is bound and that
+checks whether the bound value is compatible with the constraint. Both
+arguments are passed to the function on the data stack with the bound
+value on the top of the stack.
+
+<<heap.h>>=
+extern NodeInfo constraint_info;
+struct constraint {
+    NodeInfo   *info;
+    Constraint *cstrs;		/* link to next constraint or 0 */
+};
+
+@ 
+Lazy application nodes (a.k.a. suspended applications) are composed of
+a pointer to the search space in which the node was created and an
+array of arguments. The search space pointer is required because a
+lazy application must be evaluated in the search space where it was
+created or a descendant of that space in order to properly share its
+result. When the evaluation of a lazy application is finished, the
+node is overwritten with an indirection pointing to the result.
+Furthermore, in order to prevent multiple threads from evaluating a
+lazy application concurrently, the node is immediately overwritten
+with a queue-me node (see below) when the evaluation is started.
+
+When a lazy application node is not shared, there is no need to
+overwrite the node. In fact, since the node does not change, there is
+also no need to record the search space in which the node was created.
+Therefore, we use the standard closure layout for unshared application
+nodes. The different kinds of lazy application nodes can be
+distinguished by the [[tag]] value of their node descriptor, where
+[[NOUPD_TAG]] is used for unshared application nodes, which are not
+updated, [[UPD_TAG]] is used for shared lazy application nodes that
+are updated, and [[QUEUEME_TAG]] is used for queue-me nodes.
+
+<<heap.h>>=
+enum { NOUPD_TAG, UPD_TAG, QUEUEME_TAG };
+
+#define is_unshared_lazy_node(node) \
+    (is_lazy_node(node) && node_tag(node) == NOUPD_TAG)
+#define is_shared_lazy_node(node) \
+    (is_lazy_node(node) && node_tag(node) == UPD_TAG)
+#define is_queueMe_node(node) \
+    (is_lazy_node(node) && node_tag(node) == QUEUEME_TAG)
+
+@ 
+A shared lazy application node must provide space for at least one
+argument into which the result of the application can be written.
+When a shared lazy application node is overwritten that is protected
+by a choice point, its size cannot be changed. Therefore specialized
+info vectors for queue-me and indirection nodes, which take the
+original size of the application into account, must be provided for
+each function (see the [[LAZYINFO]] macro below). However, if the node
+is not protected when it is overwritten, we will shrink its size so
+that the arguments of the application can be garbage collected when
+they are no longer used.
+
+<<heap.h>>=
+struct suspend_node {
+    NodeInfo	*info;
+    SearchSpace	*spc;		/* defining search space */
+    Node	*args[1];	/* arguments */
+};
+#define	suspend_argc(node)	(node_size(node) - raw_suspend_node_size(0))
+#define suspend_node_size(argc)	raw_suspend_node_size((argc) > 1 ? (argc) : 1)
+#define raw_suspend_node_size(argc) (wordsof(struct suspend_node) + (argc) - 1)
+
+@ 
+When the evaluation of a shared lazy application node is started, it
+is changed into a queue-me node that prevents other threads from
+evaluating the node as well. Generic queue-me nodes, as described by
+[[queueMe_info_table[0]]], are used as a means of synchronization in
+the runtime system.
+
+<<heap.h>>=
+extern NodeInfo queueMe_info_table[];
+struct queueMe_node {
+    NodeInfo	*info;
+    SearchSpace	*spc;		/* defining search space */
+    ThreadQueue wq;		/* pointer to waitqueue */
+};
+#define queueMe_node_size       wordsof(struct queueMe_node)
+
+@
+<<heap.c>>=
+#if !COPY_SEARCH_SPACE
+NodeInfo queueMe_info_table[] = {
+    { LAZY_KIND, QUEUEME_TAG, queueMe_node_size, 0, 0, eval_queueMe, 0, 0 },
+    { INDIR_KIND, 0, queueMe_node_size, 0, 0, eval_indir, 0, 0 }
+};
+#else
+NodeInfo queueMe_info_table[] = {
+    { LAZY_KIND, QUEUEME_TAG, queueMe_node_size, 0, 0, eval_queueMe, 0, 0 }
+};
+#endif
+
+@ 
+Search continuations.
+
+<<heap.h>>=
+extern NodeInfo search_cont_info;
+struct search_cont_node {
+    NodeInfo	*info;
+    SearchSpace *spc;		/* local space of the continuation */
+    Node	*susp;		/* suspended goal application */
+    Node	*var;		/* goal variable */
+    Label	code;		/* next instruction to be executed */
+    ThreadQueue rq;		/* saved ready queue */
+};
+#define search_cont_node_size   wordsof(struct search_cont_node)
+
+@
+<<heap.c>>=
+NodeInfo search_cont_info = {
+    SEARCH_CONT_KIND, 0, search_cont_node_size, 0, "<state>", no_eval, 0, 0
+};
+
+@
+Combined node type.
+
+<<heap.h>>=
+union node {
+    NodeInfo *info;
+    struct closure_node c;
+    struct vector_node a;
+    struct char_node ch;
+    struct int_node i;
+    struct float_node f;
+    struct ptr_node p;
+    struct foreign_ptr_node fp;
+    struct variable_node v;
+    struct suspend_node s;
+    struct queueMe_node q;
+    struct indir_node n;
+    struct search_cont_node sc;
+};
+
+@ 
+The following macros can be used to define data constructors. These
+macros implicitly preallocate a node for constant constructors. Note
+that this variable has type [[NodeInfo *]] in order to avoid
+allocating redundant fields present in the [[Node]] union.
+
+<<heap.h>>=
+#define DECLARE_CONST(name) \
+DECLARE_DATA(name); \
+extern NodeInfo *const name##_node
+
+#define DECLARE_DATA(name) \
+extern NodeInfo name##_info
+
+#define DEFINE_CONST(name,cname,tag) \
+DEFINE_DATA(name,cname,tag,0); \
+NodeInfo *const name##_node = &name##_info
+
+#define DEFINE_DATA(name,cname,tag,arity) \
+NodeInfo name##_info = { \
+    CAPP_KIND, tag, closure_node_size(arity), 0, cname, eval_whnf, 0, 0 \
+}
+
+@ 
+The macro [[CONST]] returns a correctly typed pointer to the
+preallocated node of a constant constructor, and [[INFO]] returns the
+info pointer of a data constructor.
+
+<<heap.h>>=
+#define CONST(name)		(Node *)(&name##_node)
+#define INFO(name)		&name##_info
+
+@ 
+For a function, an info vector has to be defined for each arity at
+which the function can be applied. These info vectors are allocated in
+an array in ascending order with respect to the number of arguments.
+
+The following macros can be used to initialize the elements of these
+info tables. They presume the existence of an entry point for
+evaluating a (fully applied) closure node whose name is composed of
+the prefix [[eval_clos_]] and the arity of the function.
+
+<<heap.h>>=
+#define FUNINFO(fname,entrypoint,arity) \
+{ LAZY_KIND, NOUPD_TAG, closure_node_size(arity), 0, fname, \
+  eval_clos_##arity, entrypoint, 0 }
+
+#define PAPPINFO(fname,argc,entrypoint,arity) \
+{ PAPP_KIND, (arity) - (argc), closure_node_size(argc), 0, fname, \
+  eval_whnf, entrypoint, 0 },
+
+@ 
+In addition to the info table, a descriptor table for lazy
+applications must be provided for every function. The following macro
+can be used to initialize this table. It assumes that the entry point
+is named by adding the function's arity to the prefix [[eval_lazy_]].        %'
+
+<<heap.h>>=
+#if !COPY_SEARCH_SPACE
+# define LAZYINFO(fname,entrypoint,arity) { \
+    { LAZY_KIND, UPD_TAG, suspend_node_size(arity), 0, fname, \
+      eval_lazy_##arity, entrypoint, 0 }, \
+    { LAZY_KIND, QUEUEME_TAG, suspend_node_size(arity), 0, 0, \
+      eval_queueMe, 0, 0 },					\
+    { INDIR_KIND, 0, suspend_node_size(arity), 0, 0, eval_indir, 0, 0 } \
+}
+#else
+# define LAZYINFO(fname,entrypoint,arity) { \
+    { LAZY_KIND, UPD_TAG, suspend_node_size(arity), 0, fname, \
+      eval_lazy_##arity, entrypoint, 0 } \
+}
+#endif
+
+@ 
+For benefit of the printing code, the runtime system implements two
+predicates [[is_tuple]] and [[is_operator]] that check whether a node
+info corresponds to a tuple and an operator, respectively. The function
+[[is_tuple]] returns [[true]], if the name consists of a (non-empty)
+sequence of commas which are enclosed in parentheses. The function
+[[is_operator]] returns [[true]], if the name contains any
+non-alphanumeric characters except for [[']] and [[_]]. Dots ([[.]]) %'
+that precede an alphanumeric character are ignored because they are
+assumed to separate a module qualifier from the unqualified name. Note
+that the empty list and unit constructors are not considered as
+operators.
+
+<<heap.h>>=
+extern boolean is_tuple(NodeInfo *info);
+extern boolean is_operator(NodeInfo *info);
+
+@ 
+<<heap.c>>=
+boolean
+is_tuple(NodeInfo *info)
+{
+    const char *cp = info->cname;
+
+    if ( cp == 0 || *cp++ != '(' || *cp++ != ',' )
+	return false;
+    while ( *cp == ',' )
+	cp++;
+    return *cp++ == ')' && *cp == '\0';
+}
+
+boolean
+is_operator(NodeInfo *info)
+{
+    const char *cp;
+
+    if ( info == INFO(___91__93_) || info == INFO(___40__41_) || !info->cname )
+	return false;
+
+    for ( cp = info->cname; *cp != '\0'; cp++ )
+    {
+	if ( *cp == '.' )
+	    cp++;
+	if ( !isalnum(*cp) && *cp != '\'' && *cp != '_' )
+	    return true;
+	else if ( *cp == '_' )
+	{
+	    if ( cp[1] == '#' )
+		cp++;
+	    else if ( strncmp(cp + 1, "debug#", 6) )
+		cp += 6;
+	}
+    }
+    return false;
+}
+
+@ 
+The heap is organized as a large array of words starting at
+[[heap_base]] with its top at [[heap_end]]. The current allocation
+pointer into the heap is kept in the variable [[hp]], which
+corresponds to the abstract machine register with the same name. The
+variable [[hlim]] saves the value of the allocation pointer at the
+time when the current choice point or search context was created. It
+is used to avoid trailing of variables and suspended applications that
+are younger than the current choice point.
+
+<<heap.h>>=
+extern word *hp, *hlim;
+extern word *heap_base, *heap_end;
+
+@
+<<heap.c>>=
+word *hp;
+word *hlim;
+word *heap_base;
+word *heap_end;
+
+@
+Allocation is performed simply by incrementing the allocation pointer
+by the appropriate amount. Before any allocation is performed, it
+should be checked that enough words are still available in the heap.
+Otherwise, the garbage collector must be called first. The macro
+[[CHECK_HEAP]] can be used for that purpose. The [[collect]] function
+is passed the number of additional words that are required. If this
+amount is not available after the collection, the program will be
+aborted. The global flag [[in_gc]] is set while the garbage collector
+is executing.
+
+<<heap.h>>=
+extern boolean in_gc;
+extern void collect(unsigned int);
+#define CHECK_HEAP(n) do { if ( hp + (n) > heap_end ) collect(n); } while ( 0 )
+
+@
+<<heap.c>>=
+boolean in_gc = false;
+
+@ 
+The macro \texttt{primPerformGC} forcibly invokes the garbage
+collector. Since it is not tied to an allocation, it does not request
+any additional memory.
+
+<<heap.h>>=
+#define primPerformGC()	collect(0)
+
+@
+In order to find all live nodes during a garbage collection, the
+garbage collector must know \emph{all} external roots into the
+graph. The compiler ensures that all nodes which are used by the
+program can be found through the abstract machine's registers. However,      %'
+roots in foreign code are not known to the compiler and must be
+registered explicitly. The runtime system maintains two global lists
+rooted in the variables [[local_roots]] and [[global_roots]],
+respectively, for this purpose. The list [[local_roots]] is intended
+for registering temporary variables inside a function, whereas
+[[global_roots]] is intended for global variables whose livetime
+extends beyond a function invocation. Both lists are implemented as
+simple linked lists whose elements contain the addresses of the
+additional roots.
+
+<<heap.h>>=
+struct root {
+    struct root *next;
+    Node	**root;
+};
+
+extern struct root *global_roots, *local_roots;
+
+@ 
+<<heap.c>>=
+struct root *global_roots, *local_roots;
+
+@ 
+The macros [[BEGIN_LOCAL_ROOTS1]], [[BEGIN_LOCAL_ROOTS2]], and
+[[BEGIN_LOCAL_ROOTS3]] open a new local block within a function and
+register their argument variables as additional roots. The macro
+[[END_LOCAL_ROOTS]] closes the block and unregisters the variables.
+
+\emph{Make sure that the variables are properly initialized before a
+garbage collection occurs in the block.}
+
+<<heap.h>>=
+#define BEGIN_LOCAL_ROOTS1(x) { \
+    LOCAL_ROOTS1(x);		\
+    local_roots = &__local_root__;
+#define BEGIN_LOCAL_ROOTS2(x,y) { \
+    LOCAL_ROOTS2(x,y);		  \
+    local_roots = &__local_root2_;
+#define BEGIN_LOCAL_ROOTS3(x,y,z) { \
+    LOCAL_ROOTS3(x,y,z);	    \
+    local_roots = &__local_root3_;
+#define END_LOCAL_ROOTS		       \
+    local_roots = __local_root__.next; \
+}
+
+#define LOCAL_ROOTS1(x)		       \
+    struct root __local_root__;	       \
+    __local_root__.next = local_roots; \
+    __local_root__.root = (Node **)&(x)
+#define LOCAL_ROOTS2(x,y)		   \
+    struct root __local_root2_;		   \
+    LOCAL_ROOTS1(x);			   \
+    __local_root2_.next = &__local_root__; \
+    __local_root2_.root = (Node **)&(y)
+#define LOCAL_ROOTS3(x,y,z)		   \
+    struct root __local_root3_;		   \
+    LOCAL_ROOTS2(x,y);			   \
+    __local_root3_.next = &__local_root2_; \
+    __local_root3_.root = (Node **)&(z)
+
+@
+Global roots can be registered with the function [[add_global_root]].
+If a global root is no longer used, it can be released by calling
+[[remove_global_root]] for it. In order to prevent dangling pointers
+from global roots, the runtime system will set a global root to [[0]]
+when the computation that has allocated the node fails.
+
+<<heap.h>>=
+extern void add_global_root(Node **root);
+extern void remove_global_root(Node **root);
+
+@ 
+<<heap.c>>=
+void
+add_global_root(Node **root)
+{
+    struct root *head;
+
+    head = (struct root *)malloc(sizeof(struct root));
+    if ( head == NULL )
+	sys_error("add_global_root");
+
+    head->next	 = global_roots;
+    head->root	 = root;
+    global_roots = head;
+}
+
+void
+remove_global_root(Node **root)
+{
+    struct root *prev, *curr;
+
+    for ( prev = 0, curr = global_roots; curr; prev = curr, curr = curr->next )
+	if ( curr->root == root )
+	{
+	    if ( prev )
+		prev->next = curr->next;
+	    else
+		global_roots = curr->next;
+	    free(curr);
+	    return;
+	}
+
+    curry_panic("remove_global_root: %p not registered as a root\n", root);
+}
+
+@
+All nodes that require finalization may have to be registered with the
+garbage collector. In particular, this is necessary for the two-space
+copying collector which traverses only the live cells.
+
+<<heap.h>>=
+extern void register_final(Node *node);
+
+@ 
+When a computation fails, all memory above the current heap limit
+becomes garbage immediately. The function [[release_mem]] can be used
+to clean up the memory in this case. In particular, the finalization
+function of all objects allocated in this region of the heap is called
+and the heap pointer [[hp]] is reset to the heap limit [[hlim]].
+
+<<heap.h>>=
+extern void release_mem(void);
+
+@ 
+The initialization function is reponsible for the initialization of
+the heap. Because the initialization depends on the garbage collector
+being used, this function must be implemented by the garbage
+collector.
+
+<<heap.h>>=
+extern void init_heap(unsigned long);
+
+@
+The function [[heap_exhausted]] is used to terminate the program if
+not enough space is available after a garbage collection.
+
+<<heap.h>>=
+extern void heap_exhausted(void) __attribute__ ((noreturn));
+
+@
+<<heap.c>>=
+void
+heap_exhausted()
+{
+    fprintf(stderr,
+	    "Not enough free memory after garbage collection\n"
+	    "Current heap size: %lu bytes\n"
+	    "Use +RTS -hSIZE -RTS to increase heap size\n",
+	    heapsize);
+    exit(2);
+}

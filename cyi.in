@@ -1,0 +1,361 @@
+#! @CYI_SHELL@
+# @configure_input@
+#
+# A poor (wo)man's interactive top-level for Curry
+#
+# $Id: cyi.in 1920 2006-05-10 17:58:33Z wlux $
+#
+# Copyright (c) 2002-2006, Wolfgang Lux
+# See LICENSE for the full license.
+#
+
+if test -n "${ZSH_VERSION+set}"; then
+  emulate ksh
+fi
+
+# Configuration parameters
+cyi=`basename $0`
+version=@PACKAGE_VERSION@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+bindir=@bindir@
+libdir=@libdir@
+# DO NOT DELETE: Beginning of in-place configuration
+srcdir="@srcdir@"
+@in_place_config@
+# DO NOT DELETE: End of in-place configuration
+
+echo "    _____ __ __"
+echo "   / ___/ |  / _               Muenster Curry Compiler"
+echo "  / /     | / | |              Version $version, Copyright (c) 1998-2006"
+echo " / /___  / /  | |"
+echo " \____/ /_/   |_|              Type :h for help"
+echo 
+
+cyc=${CYC-$bindir/cyc}
+cymake=$bindir/cymake
+editor=${VISUAL-${EDITOR-/usr/bin/vi}}
+srcdir=
+source=
+target=
+module=
+cyopts=
+prompt='> '
+goal=
+
+case `echo "echo\c"` in
+  echo ) echo_c='\c';;		# SYSV style
+  *    ) echo_c= ;;
+esac
+case `echo -n "echo"` in
+  echo ) echo_n=-n;;		# BSD style
+  *    ) echo_n= ;;
+esac
+
+backslash_warning ( ) {
+cat <<\EOF 2>&1
+Warning: Backslashes on the command line must be escaped
+  For instance, use \\x -> x for a lambda abstraction
+  and '\\n' for the linefeed character.
+EOF
+}
+
+read_test ( ) {
+  input='foo\nbar'
+  read $read_r line <<EOF
+$input
+EOF
+  test "$input" = "$line"
+}
+
+# Some shells (e.g. Solaris /bin/sh, AIX /bin/bsh) terminate if read -r
+# is used with a here document, therefore check that read -r is accepted
+# before checking that it works. Note that some versions of GNU bash
+# (e.g. the one distributed with Mac OS X 10.2) fail to read from an
+# input pipe.
+
+rawread=no
+read_r=
+if read_test; then
+  rawread=yes
+else
+  if echo "" | read -r line 2>/dev/null; then
+    read_r=-r
+    if read_test; then rawread=yes; else read_r=; fi
+  fi
+  test $rawread = yes || backslash_warning
+fi
+
+help ( ) {
+  echo "Commands"
+  echo "  GOAL                  evaluate GOAL"
+  echo "  :^[GOAL]              evaluate (previous) GOAL"
+  echo "  :d[ebug] [GOAL]       debug (previous) GOAL"
+  echo "  :t[ype] [GOAL]        print type of (previous) GOAL"
+  echo "  :l[oad] MODULE        load (and compile) MODULE"
+  echo "  :l[oad]               unload current module"
+  echo "  :r[eload]             repeat last :load command"
+  echo "  :f[reshen]            recompile current module"
+  echo "  :clean                remove compile files for current module"
+  echo "  :e[dit] FILE          edit FILE"
+  echo "  :e[dit]               edit current module"
+  echo "  :s[et] OPTION...      add OPTIONs to current compiler options"
+  echo "  :u[nset] WORD...      remove WORDs from compiler options"
+  echo "  :cd DIR           	change current directory"
+  echo "  :cd           	show current directory"
+  echo "  :!COMMAND          	execute shell COMMAND"
+  echo "  :v[ersion]            print the compiler version"
+  echo "  :q[uit]               quit"
+  echo
+  echo "Valid GOALs (all variables must be declared)"
+  echo "  EXPR                  expression"
+  echo "  EXPR where DECLS      expression with additional declarations"
+  echo
+  test $rawread = yes || backslash_warning
+}
+
+compile_source ( ) {
+  test -n "$source" && (cd "$srcdir" && $cymake $* $cyopts $source)
+}
+
+msg_comp ( ) {
+  echo $echo_n "[Compiling ...$echo_c"
+}
+
+msg_done ( ) {
+  case "$TERM" in
+    "" | dumb | emacs ) echo "]";;
+    * ) echo $echo_n "              $echo_c";;
+  esac
+}
+
+set_goal ( ) {
+  set -- "$1" $1
+  case $# in
+    1 )
+      if test -z "$goal"; then
+        echo "No goal"
+	return 1
+      fi
+      ;;
+    * ) goal=$1;;
+  esac
+}
+
+trap 'rm -f /tmp/cyi$$@EXEEXT@' 0 1 2 3 15
+run_goal ( ) {
+  msg_comp && 
+  (cd "$srcdir" && $cymake $cyopts -q $1 -a $module -e "$goal" -o /tmp/cyi$$) && 
+  msg_done &&
+  /tmp/cyi$$
+  rm -f /tmp/cyi$$@EXEEXT@
+}
+
+load ( ) {
+  eval set -- $1
+  case $# in
+    0 )
+      srcdir=.
+      source=
+      target=
+      module=
+      prompt="Prelude> "
+      ;;
+    1 )
+      case $1 in
+        *.curry | *.lcurry ) 
+	    if test -f "$1"; then
+              srcdir=`pwd`; source=$1
+            else
+	      echo "source file $1 does not exist"
+	    fi
+	    ;;
+        * ) f=`echo $1 | tr '.' '/'`
+            if test -f "$f.lcurry"; then
+              srcdir=`pwd`; source="$f.lcurry"
+            else if test -f "$f.curry"; then
+              srcdir=`pwd`; source="$f.curry"
+            else
+              echo "missing source file for $1"
+	      return
+            fi; fi
+            ;;
+      esac
+      reload
+      ;;
+    * ) echo "too many files";;
+  esac
+}
+
+reload ( ) {
+  compile_source || return
+  target=$source
+  case $target in
+    *.curry ) module=`expr "$target" : '\(.*\).curry'`;;
+    *.lcurry ) module=`expr "$target" : '\(.*\).lcurry'`;;
+  esac
+  read line < $module.icurry
+  set -- $line
+  prompt="$2> "
+}
+
+clean ( ) {
+  test -n "$target" || return
+  (cd "$srcdir" && $cymake -q --clean $cyopts $target)
+}
+
+edit ( ) {
+  eval set -- $1
+  case $# in
+    0 ) test -n "$source" || { echo "no source file"; return; }
+	(cd "$srcdir" && $editor "$source");;
+    1 ) $editor "$1";;
+    * ) echo "too many files";;
+  esac
+}
+
+evaluate ( ) {
+  set_goal "$1" && run_goal
+}
+
+debug ( ) {
+  set_goal "$1" && run_goal -g
+}
+
+type_goal ( ) {
+  set_goal "$1" &&
+  msg_comp && 
+  { test -z "$target" || (cd "$srcdir" && $cymake $cyopts -q $target); } &&
+  msg_done &&
+  (cd "$srcdir"; $cyc $cyopts -m "$target" -T "$goal")
+}
+
+show_options ( ) {
+  echo "Current settings:"
+  echo "$cyopts"
+}
+
+set_options ( ) {
+  if test $# -eq 0; then
+    show_options
+  else
+    cyopts="$cyopts $*"
+    if tty -s; then show_options; fi
+  fi
+}
+
+unset_options ( ) {
+  for opt in $*; do
+    set -- $cyopts
+    cyopts=
+    while test $# -gt 0; do
+      if test "X$1" = "X$opt"; then shift; cyopts="$cyopts $*"; break; fi
+      cyopts="$cyopts $1"
+      shift
+    done
+  done
+  if tty -s; then show_options; fi
+}
+
+chdir ( ) {
+  set -- $line
+  case $# in
+    0 ) pwd;;
+    * ) eval cd $line;;
+  esac
+}
+
+system ( ) {
+  set -- $line
+  case $# in
+    0 ) ${SHELL-/bin/sh};;
+    * ) /bin/sh -c "$line";;
+  esac
+}
+
+while test $# -gt 0; do
+  case $1 in
+    -[ilDILU] ) cyopts="$cyopts $1 $2"; shift;;
+    -[ilDILOU]* ) cyopts="$option $1";;
+    -* ) echo "$cyi: unknown option $1"; exit 1;;
+    * ) break;;
+  esac
+  shift
+done
+
+if tty -s; then
+  if test -n "${BASH_VERSION+set}"; then
+    do_read ( ) {
+      history -n ~/.cyi_history
+      read -e -p "$prompt" -r $1 || return $?
+      eval echo \"\$$1\" >> ~/.cyi_history
+    }
+  elif test -n "${ZSH_VERSION+set}"; then
+    zmodload zsh/zle
+    do_read (  ) {
+      eval $1=
+      vared -p"$prompt" $1
+    }
+  elif test -n "${RANDOM+set}"; then
+    # assume Korn Shell
+    HISTFILE=~/.cyi_history
+    set -o emacs
+    do_read ( ) {
+      read -s -r $1?"$prompt"
+    }
+  else
+    do_read ( ) {
+      echo $echo_n "$prompt$echo_c"
+      read $read_r $1
+    }
+  fi
+else
+  do_read ( ) {
+    read $read_r $1
+  }
+fi
+
+quit ( ) {
+    echo "[Leaving $cyi]"
+    exit 0
+}
+
+interpret ( ) {
+  line=$1
+  set -- $line
+  case $1 in
+    "" ) ;;
+    :h | :help ) help;;
+    :l | :load ) line=`expr "$line" : $1'\([^;]*\)'`; load "$line";;
+    :r | :reload ) reload;;
+    :f | :freshen ) clean && reload;;
+    :clean ) clean;;
+    :e | :edit ) line=`expr "$line" : $1'\([^;]*\)'`; edit "$line";;
+    :t ) line=`expr "$line" : ':t\(.*\)'`; type_goal "  $line";;
+    :type ) line=`expr "$line" : ':type\(.*\)'`; type_goal "     $line";;
+    :s | :set ) shift; set_options $*;;
+    :u | :un | :unset ) shift; unset_options $*;;
+    :cd ) line=`expr "$line" : $1'\([^;]*\)'`; chdir "$line";;
+    :!* ) line=`expr "$line" : ':![ 	]*\(.*\)'`; system "$line";;
+    :v | :version ) $cyc -v;;
+    :q | :quit ) quit;;
+    :d ) line=`expr "$line" : ':d\(.*\)'`; debug "  $line";;
+    :debug ) line=`expr "$line" : ':debug\(.*\)'`; debug "      $line";;
+    ':^'* ) line=`expr "$line" : ':^\(.*\)'`; evaluate "  $line";;
+    :* ) echo "unknown command, use :h for help";;
+    * ) evaluate "$line";;
+  esac
+}
+
+if test -r .cyirc; then
+  while read line; do interpret "$line"; done < .cyirc
+elif test -r "$HOME"/.cyirc; then
+  while read line; do interpret "$line"; done < "$HOME"/.cyirc
+fi
+
+load "$1"
+
+while do_read line; do
+  interpret "$line"
+done
+quit

@@ -1,0 +1,276 @@
+dnl $Id: configure.in 1920 2006-05-10 17:58:33Z wlux $
+dnl
+dnl Copyright (c) 2002-2006, Wolfgang Lux
+dnl See LICENSE for the full license.
+dnl
+
+AC_INIT([curry],[0.9.10],[wlux@uni-muenster.de])
+AC_PREREQ(2.50)
+AC_CONFIG_SRCDIR(runtime/curry.nw)
+AC_CONFIG_HEADERS(runtime/config.h, [touch runtime/.config.h.stamp])
+
+
+dnl Check for system type
+AC_CANONICAL_TARGET
+
+
+dnl Checks for programs.
+AC_PROG_CC
+AC_PROG_RANLIB
+AC_PROG_LN_S
+AC_PROG_MAKE_SET
+AC_PROG_INSTALL
+INSTALL_DIR='${INSTALL: -c=} -d -m 755'
+
+
+dnl Check configuration options
+AC_ARG_ENABLE(trampoline,
+ [  --enable-trampoline     use trampoline code to implement tail jumps])
+case $enable_trampoline in
+  yes ) AC_DEFINE(USE_TRAMPOLINE);;
+  "" )
+    # enable trampoline when Gnu C is not used and on systems which use
+    # position independent code
+    if test "$GCC" != "yes"; then
+      enable_trampoline=yes
+      AC_DEFINE(USE_TRAMPOLINE)
+    else
+      case $target_os in
+        darwin* )
+          enable_trampoline=yes
+          AC_DEFINE(USE_TRAMPOLINE)
+        ;;
+      esac
+    fi;;
+esac
+
+AC_ARG_ENABLE(unboxed,
+ [  --disable-unboxed       do not use unboxed integer representation])
+case $enable_unboxed in
+   no ) AC_DEFINE(ONLY_BOXED_OBJECTS);;
+esac
+
+AC_ARG_ENABLE(copying,
+ [  --enable-copying        enable a purely copying implementation for
+                          non-deterministic search])
+case $enable_copying in
+  yes ) AC_DEFINE(COPY_SEARCH_SPACE);;
+esac
+
+AC_ARG_ENABLE(stability,
+ [  --enable-stability      don't perform a non-deterministic computation step
+                          while other threads can run deterministic code])
+case $enable_stability in
+   yes ) AC_DEFINE(YIELD_NONDET);;
+esac
+
+AC_ARG_ENABLE(occurs-check,
+ [  --disable-occurs-check  do not perform an occurs-check in (=:=)])
+case $enable_occurs_check in
+  no ) AC_DEFINE(NO_OCCURS_CHECK);;
+esac
+
+AC_ARG_ENABLE(stdlib,
+ [  --disable-stdlib        compile only the prelude but not the standard library])
+case $enable_stdlib in
+  no ) STDLIB=no;;
+  *  ) STDLIB=stdlib;;
+esac
+
+AC_ARG_ENABLE(debug,
+ [  --disable-debug         do not compile any libraries for debugging support])
+case $enable_debug in
+  no ) DEBUG=no;;
+  *  ) DEBUG=debug;;
+esac
+
+AC_ARG_ENABLE(cam2c,
+ [  --enable-cam2c          build abstract machine code to C compiler])
+case $enable_cam2c in
+  yes ) CAM2C=cam2c;;
+  *   ) CAM2C=;;
+esac
+
+AC_ARG_ENABLE(mach,
+ [  --enable-mach           build abstract machine interpreter])
+case $enable_mach in
+  yes ) MACH=mach;;
+  *   ) MACH=;;
+esac
+
+
+dnl Check for additional C compiler options
+if test "$GCC" = yes; then
+  CURRY_C_DYNAMIC_NO_PIC
+  CFLAGS="$CFLAGS -Wall -fno-strict-aliasing"
+  if test "$enable_trampoline" != yes; then
+    case $target_cpu in
+      powerpc|powerpc64|rs6000|x86_64 ) ARCH_CFLAGS=-fomit-frame-pointer;;
+      i?86 | sparc ) ARCH_CFLAGS=;;
+      * ) AC_MSG_WARN([
+This is architecture is not yet supported.
+Please report back any additional CFLAGS needed for compilation.
+]);;
+    esac
+    CFLAGS="$CFLAGS $ARCH_CFLAGS"
+  fi
+fi
+
+
+dnl Check for a shell which is suitable for cyi
+CURRY_CYI_SHELL
+
+
+dnl Check for Haskell compilers
+AC_ARG_WITH(hc, [  --with-hc=COMP          use COMP as Haskell'98 compiler],
+	    [WithHc=$withval],[WithHc=])
+
+case $WithHc in
+  no ) AC_MSG_ERROR([Invalid argument to --with-hc: no]);;
+  "" | yes )
+    AC_MSG_CHECKING([for Haskell 98 compiler])
+    AC_MSG_RESULT([])
+    CURRY_PROG_GHC
+    if test -n "$GHC"; then
+      AC_MSG_RESULT([using $GHC for compilation])
+    else
+      CURRY_PROG_HBC
+      if test -n "$HBC"; then
+        AC_MSG_RESULT([using $HBC for compilation])
+      else
+        CURRY_PROG_NHC
+	if test -n "$NHC"; then
+	  AC_MSG_RESULT([using $NHC for compilation])
+        else
+          AC_MSG_ERROR([No Haskell 98 compiler found])
+	fi
+      fi
+    fi
+    ;;
+  * ) CURRY_HC_VERSION(WithHc);;
+esac
+
+if test -n "$GHC"; then
+  hc=ghc HC="$GHC"
+  AC_ARG_ENABLE(ghc_make,
+    [  --disable-ghc-make      ghc only: Do not use ghc --make])
+  case $enable_ghc_make in
+    no ) ;;
+    *  )
+      AC_MSG_CHECKING([whether $GHC --make works])
+      cat <<eof >conftest.hs
+main = return ()
+eof
+      if $GHC --make $HCFLAGS -o conftest conftest >/dev/null 2>&1 && test -f conftest; then
+        hc=ghc-make
+        AC_MSG_RESULT([yes])
+      else
+        AC_MSG_RESULT([no])
+      fi
+      rm -f conftest* a.out
+      ;;
+  esac
+  CURRY_HC_HLIB(GHC,
+    [HCFLAGS="$HCFLAGS -ighc"
+     IOExts_lhs=ghc/IOExts.lhs],
+    [CURRY_GHC_IOEXTS
+     IOExts_lhs=])
+elif test -n "$HBC"; then
+  hc=hbc HC="$HBC"
+  IOExts_lhs=hbc/IOExts.lhs
+elif test -n "$NHC"; then
+  hc=nhc HC="$NHC"
+  IOExts_lhs=nhc/IOExts.lhs
+else
+  AC_MSG_ERROR([Sorry, you need a Haskell 98 compiler])
+fi
+
+CURRY_HC_PATH_STYLE
+
+
+dnl Check for Cygpath
+AC_PATH_PROG(CYGPATH, cygpath)
+if test "$USE_CYGPATH_WORKAROUND" = "yes" -a -z "$CYGPATH" ; then
+  AC_MSG_ERROR([cygpath not found])
+fi
+
+
+dnl Check for noweb programs
+AC_CHECK_PROG(TANGLE, notangle, notangle)
+AC_CHECK_PROG(WEAVE, noweave, noweave)
+AC_CHECK_PROG(CPIF, cpif, cpif)
+
+if test -z "$TANGLE" || test -z "$CPIF"; then TANGLE=':' CPIF=':'; fi
+if test -z "$WEAVE"; then WEAVE=': \#'; fi
+
+
+dnl Checks for libraries.
+AC_SEARCH_LIBS(sin, m)
+AC_SEARCH_LIBS(inet_addr, nsl)
+AC_SEARCH_LIBS(socket, socket)
+
+
+dnl Checks for header files.
+AC_CHECK_HEADERS([sys/socket.h])
+AC_CHECK_HEADERS([ieeefp.h])
+
+
+dnl Checks for compiler characteristics.
+AC_C_CONST
+AC_C_VOLATILE
+AC_C_INLINE
+CURRY_UNALIGNED_DOUBLE
+
+
+dnl Check for typedefs and structures
+AC_CHECK_TYPES([socklen_t],,,[AC_INCLUDES_DEFAULT
+#ifdef HAVE_SYS_SOCKET_H
+# include <sys/socket.h>
+#endif])
+
+
+dnl Checks for library functions.
+AC_FUNC_FORK
+AC_ARG_ENABLE(mprotect,
+ [  --disable-mprotect      do not mprotect the inactive semi-space of the heap])
+case $enable_mprotect in
+  no ) ;;
+  * )
+    AC_CHECK_FUNCS(mprotect)
+    ;;
+esac
+
+
+dnl Generate output files
+AC_SUBST(ARCH_CFLAGS)
+AC_SUBST(hc)
+AC_SUBST(HC)
+AC_SUBST(HCFLAGS)
+AC_SUBST(IOExts_lhs)
+AC_SUBST(INSTALL_DIR)
+AC_SUBST(STDLIB)
+AC_SUBST(DEBUG)
+AC_SUBST(CAM2C)
+AC_SUBST(MACH)
+AC_SUBST(USE_CYGPATH_WORKAROUND)
+
+AC_SUBST_FILE(in_place_config)
+in_place_config=$srcdir/in-place-config
+
+AC_CONFIG_COMMANDS_PRE([
+$TANGLE -c -L -Rconfig.h.in $srcdir/runtime/curry.nw | $CPIF -ne $srcdir/runtime/config.h.in])
+
+AC_CONFIG_FILES([Makefile], [test -f .depend || touch .depend])
+AC_CONFIG_FILES([doc/Makefile])
+AC_CONFIG_FILES([runtime/Makefile],
+	        [test -f runtime/.depend || touch runtime/.depend])
+AC_CONFIG_FILES([curry/Makefile],
+		[test -f curry/.depend || touch curry/.depend])
+AC_CONFIG_FILES([cyc], [chmod +x cyc])
+AC_CONFIG_FILES([cymake], [chmod +x cymake])
+AC_CONFIG_FILES([cyi], [chmod +x cyi])
+AC_CONFIG_FILES([makedoc], [chmod +x makedoc])
+
+AC_CONFIG_COMMANDS([depend], [${MAKE-make} depend])
+
+AC_OUTPUT

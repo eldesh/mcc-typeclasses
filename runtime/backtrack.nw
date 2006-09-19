@@ -1,0 +1,462 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: backtrack.nw 1899 2006-04-19 10:50:11Z wlux $
+%
+% Copyright (c) 2002-2006, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Global Search}\label{sec:global-search}
+In global search mode, the abstract machine uses backtracking for the
+implementation of non-deterministic computations because it is more
+efficient than a depth-first search strategy implemented on top of
+encapsulated search.
+
+There is only one entry point to this file, viz. the function
+[[curry_eval]] which evaluates its arguments and prints all solutions
+to the standard output. This function initializes the abstract machine
+and then evaluates all solutions of the goal using backtracking.
+
+The names of all free variables to which the goal is applied are
+passed as second argument to [[curry_eval]] in a [[0]]-terminated
+array.
+
+<<backtrack.h>>=
+extern int curry_eval(NodeInfo *goal_info, const char *fv_names[],
+		      int argc, char **argv);
+
+@ 
+<<backtrack.c>>=
+#include "curry.h"
+#include <unistd.h>
+#include <ctype.h>
+#include "print.h"
+#include "vars.h"
+#include "stats.h"
+
+DECLARE_LABEL(start);
+DECLARE_LABEL(stop);
+DECLARE_LABEL(choices);
+DECLARE_LABEL(fail);
+
+@
+In this file, we also provide the handler functions for
+non-deterministic choices, suspensions and failures in global search.
+The handler invoked for a non-deterministic choice allocates a choice
+point on the stack. Upon backtracking to the choice point, the machine
+will execute the next alternative either with an updated choice point
+or after dropping the choice point, depending on how many alternatives
+remain.
+
+Note that at present, saving the current search space and
+non-deterministic execution handlers in a choice point is rather
+redundant because they do not change. Yet, saving this information
+paves the way for implementing a predefined depth first search
+strategy for encapsulated search in a future version of the compiler.
+
+<<backtrack.c>>=
+static const struct nondet_handlers global_handlers = { choices, stop, fail };
+
+#if COPY_SEARCH_SPACE
+static void copy_goal_names(void);
+#endif
+
+static
+FUNCTION(choices)
+{
+    Choicepoint	 *oldBp;
+    unsigned int cp_sz, stk_sz;
+    const Label	 *choice_conts;
+ ENTRY_LABEL(choices)
+    choice_conts = (const Label *)*sp++;
+    assert(choice_conts[1] != 0);
+
+    TRACE(("%I try\n"));
+    oldBp  = bp;
+    stk_sz = (bp ? (Node **)bp : stack_end) - sp;
+    cp_sz  = wordsof(Choicepoint) + stk_sz;
+
+    /* create a new choice point on the stack */
+    CHECK_STACK(cp_sz);
+    bp		   = (Choicepoint *)(sp - wordsof(Choicepoint));
+    bp->btAlts	   = choice_conts + 1;
+    bp->btCid	   = cid;
+    bp->btDsBase   = ds_base;
+    bp->btBp	   = oldBp;
+    bp->btRq	   = rq;
+#if !COPY_SEARCH_SPACE
+    bp->btTp	   = tp;
+#endif
+    bp->btDict	   = names_tail;
+    bp->btHp	   = hp;
+    bp->btSpc	   = ss;
+    bp->btHandlers = nondet_handlers;
+
+    /* adjust the heap limit */
+    hlim = hp;
+
+    /* create a copy of the stack below the choice point */
+    memcpy(sp - cp_sz, sp, stk_sz*word_size);
+    sp	    -= cp_sz;
+    ds_base -= cp_sz;
+#if COPY_SEARCH_SPACE
+    (void)copy_graph(0, 0);
+    copy_goal_names();
+#endif
+
+    /* continue at the first alternative */
+    GOTO(choice_conts[0]);
+}
+
+static
+FUNCTION(fail)
+{
+    unsigned int stk_sz;
+    const Label	 *choice_conts;
+ ENTRY_LABEL(fail)
+    TRACE(("%I fail\n"));
+
+    /* if no alternatives are available terminate the program */
+    if ( bp == 0 )
+    {
+	assert(cid != 0);
+	halt();
+    }
+
+#if !COPY_SEARCH_SPACE
+    /* restore the old bindings from the trail */
+    RESTORE(bp->btTp);
+#endif
+
+    /* restore registers from the choice point */
+    cid	    = bp->btCid;
+    rq	    = bp->btRq;
+
+    /* release the memory allocated since the last choice point */
+    release_names(bp->btDict);
+    release_mem();
+
+    /* if only one alternative remains, drop the choice point */
+    choice_conts = bp->btAlts;
+    assert(choice_conts[0] != 0);
+    if ( choice_conts[1] == 0 )
+    {
+	ds_base		= bp->btDsBase;
+	ss		= bp->btSpc;
+	nondet_handlers = bp->btHandlers;
+	sp		= (Node **)bp + wordsof(Choicepoint);
+	bp		= bp->btBp;
+	hlim		= bp ? bp->btHp : 0;
+	TRACE(("%I trust\n"));
+    }
+
+    /* otherwise update the choice point */
+    else
+    {
+	bp->btAlts = choice_conts + 1;
+
+	/* copy the stack */
+	stk_sz	 = (bp->btBp ? (Node **)bp->btBp : stack_end)
+		   - (Node **)(bp + 1);
+	sp       = (Node **)bp - stk_sz;
+	ds_base  = bp->btDsBase - wordsof(Choicepoint) - stk_sz;
+	memcpy(sp, sp + wordsof(Choicepoint) + stk_sz, stk_sz * word_size);
+#if COPY_SEARCH_SPACE
+	(void)copy_graph(0, 0);
+	copy_goal_names();
+#endif
+	TRACE(("%I retry\n"));
+    }
+
+    /* continue at the next alternative */
+    GOTO(choice_conts[0]);
+}
+
+#if COPY_SEARCH_SPACE
+static void
+copy_goal_names()
+{
+    unsigned int i, n;
+    Node	 *old_goal, *goal;
+
+    /* insert the copied global variables into the dictionary */
+    /* NB: copied names must be strdup'ed so that they can be
+     *     released with free(3) upon backtracking */
+    old_goal = bp->btBp ? ((Node **)bp->btBp)[-2] : stack_end[-2];
+    goal     = ((Node **)bp)[-2];
+    for ( i = 1, n = closure_argc(goal); i < n; i++ )
+	add_name(goal->c.args[i], strdup(lookup_name(old_goal->c.args[i])));
+}
+#endif
+
+@
+The function [[curry_eval]] is the main function for a program which
+evaluates a (non-monadic) goal. It applies the goal function to a list
+of free variables and incrementally computes the non-deterministic
+solutions of this application. First, it calls [[eval_apply]] in order
+to create the application node. Next, [[eval_first]] is used in order
+to initialize the abstract machine for the evaluation of the application
+and to compute a first solution. The runtime system assumes that the
+goal expression has been transformed into a function
+\begin{quote}
+  $f$ $x_0$ $x_1$ \dots{} $x_n$ = $x_0$ \texttt{=:=} \emph{goal}
+\end{quote}
+where $x_1$, \dots, $x_n$ are the free variables of the goal
+expression. The unification forces the evaluation of the goal to
+normal form. When this function returns successfully, the abstract
+machine halts and [[curry_eval]] prints the result bound to $x_0$
+together with the constraints for the free variables $x_1$, \dots,
+$x_n$. If there are non-deterministic alternatives to the computed
+solution -- i.e., if a choice point exists -- and the user chooses to
+see more solutions, [[eval_next]] is used in order to compute the next
+solution by backtracking to the current choice point.
+
+When the program is connected to a terminal, the user is asked after
+every solution if she wants to see more solutions. Otherwise, all
+solutions are computed. The interactive and non-interactive operation
+can be enforced by passing the options \texttt{-i} and \texttt{-n},
+respectively, to the program.
+
+The functions [[eval_first]] and [[eval_next]] use [[cid == 0]] in
+order to check whether execution has stopped without a failure. The
+[[fail]] code above does not reset the machine registers; therefore,
+if no alternative continuation is available in [[fail]] and the
+machine is halted, [[cid]] contains a valid thread id. On the other
+hand, the [[stop]] code, which is invoked when a deadlock occurs in
+global search mode, sets [[cid]] to [[0]]. Both [[eval_first]] and
+[[eval_next]] return the goal application upon successful termination.
+Note that this node may be different from the one passed to
+[[eval_first]] when the runtime system was configured with the
+\texttt{--enable-copying} option. The special values [[-1]] and [[0]]
+are returned when a deadlock has occurred and when the are no
+solutions, respectively.
+
+<<backtrack.c>>=
+static Node    *eval_apply(NodeInfo *, const char **);
+static Node    *eval_first(Node *);
+static Node    *eval_next(void);
+static Node    *do_eval(Label ip);
+static boolean eval_continue(boolean *);
+static void    bad_usage(const char *) __attribute__((noreturn));
+
+static void
+bad_usage(const char *pname)
+{
+    fprintf(stderr, "usage: %s [-i|-n]\n", pname);
+    fprintf(stderr, " -i\tforce interactive mode\n");
+    fprintf(stderr, " -n\tforce non-interactive mode\n");
+    exit(1);
+}
+
+int
+curry_eval(NodeInfo *goal_info, const char *fv_names[], int argc, char **argv)
+{
+    int	    opt;
+    boolean first = true, interactive;
+    Node    *goal;
+
+    /* check if process is connected to a terminal */
+    interactive = isatty(0) == 1;
+
+    /* process command line options */
+    while ( (opt = getopt(argc, argv, "in")) != EOF )
+	switch ( opt )
+	{
+	case 'i':
+	    interactive = true;
+	    break;
+	case 'n':
+	    interactive = false;
+	    break;
+	default:
+	    fprintf(stderr, "%s: unknown option -%c\n", argv[0], opt);
+	    bad_usage(argv[0]);
+	}
+
+    if ( optind != argc )
+    {
+	fprintf(stderr, "%s: too many arguments\n", argv[0]);
+	bad_usage(argv[0]);
+    }
+
+    /* evaluate and display solutions of the goal */
+    goal = eval_first(eval_apply(goal_info, fv_names));
+    if ( goal )
+	for ( ;; )
+	{
+	    if ( !interactive )
+	    {
+		if ( first )
+		    first = false;
+		else
+		    printf(" | ");
+	    }
+	    if ( goal != (Node *)-1 )
+		print_result(fv_names, goal->c.args + 1, goal->c.args[0]);
+	    else
+		printf("Suspended");
+
+	    if ( !eval_continue(&interactive) )
+		break;
+
+	    goal = eval_next();
+	    if ( goal == 0 )
+	    {
+		printf("%s\n", interactive ? "No more solutions" : "");
+		break;
+	    }
+	}
+    else
+	fprintf(interactive ? stdout : stderr, "No solution\n");
+
+    /* execute finalization functions of the live objects */
+    hlim = heap_base;
+    release_mem();
+
+    return 0;
+}
+
+static Node *
+eval_apply(NodeInfo *goal_info, const char *fv_names[])
+{
+    unsigned int	 i, n;
+    const char		 **fv;
+    Node		 *clos, *var;
+    struct variable_node *vars;
+
+    for ( n = 0, fv = fv_names; *fv; n++, fv++ )
+	;
+    assert(goal_info->kind == LAZY_KIND && goal_info->tag == NOUPD_TAG &&
+	   goal_info->length == closure_node_size(n + 1));
+
+    CHECK_HEAP(closure_node_size(n + 1) + (n + 1) * variable_node_size);
+    vars = (struct variable_node *)hp;
+    for ( i = 0; i <= n; i++ )
+    {
+	var	     = (Node *)hp;
+	var->info    = variable_info_table;
+	var->v.spc   = ss;
+	var->v.wq    = 0;
+	var->v.cstrs = 0;
+	hp	    += variable_node_size;
+    }
+
+    clos       = (Node *)hp;
+    clos->info = goal_info;
+    for ( i = 0; i <= n; i++ )
+	clos->c.args[i] = (Node *)(vars + i);
+    hp += closure_node_size(n + 1);
+
+    for ( i = 0; i < n; i++ )
+	add_name((Node *)(vars + i + 1), fv_names[i]);
+
+    return clos;
+}
+
+static Node *
+eval_first(Node *goal)
+{
+    Node *susp;
+
+    CHECK_HEAP(queueMe_node_size);
+    susp	= (Node *)hp;
+    susp->info	= queueMe_info_table;
+    susp->q.spc	= ss;
+    susp->q.wq	= 0;
+    hp	       += queueMe_node_size;
+
+    sp	  = stack_end - 2;
+    sp[0] = goal;
+    sp[1] = susp;
+
+    return do_eval(start);
+}
+
+static Node *
+eval_next()
+{
+    return do_eval(fail);
+}
+
+static Node *
+do_eval(Label ip)
+{
+    Node *susp;
+
+    run(ip);
+    if ( cid != 0 )
+	return 0;
+
+    susp = bp ? ((Node **)bp)[-1] : stack_end[-1];
+    while ( is_boxed(susp) && is_indir_node(susp) )
+	susp = susp->n.node;
+    if ( is_boxed(susp) && is_lazy_node(susp) )
+	return (Node *)-1;
+
+    return bp ? ((Node **)bp)[-2] : stack_end[-2];
+}
+
+static boolean
+eval_continue(boolean *interactive)
+{
+    int c, c1;
+
+    /* terminate the program if no alternatives remain */
+    if ( bp == 0 )
+    {
+	printf("\n");
+	return false;
+    }
+
+    if ( *interactive )
+    {
+	printf("\nMore solutions? [Y(es)/n(o)/a(ll)] ");
+	fflush(stdout);
+	c = getchar();
+	while ( c != EOF && c != '\n' && isspace(c) )
+	    c = getchar();
+	for ( c1 = c; c1 != EOF && c1 != '\n'; )
+	    c1 = getchar();
+	if ( c1 == EOF )
+	    printf("\n");
+
+	if ( c == 'n' || c == 'N' || c == EOF )
+	    return false;
+	else if ( c == 'a' || c == 'A' )
+	    *interactive = false;
+    }
+    else
+	fflush(stdout);
+
+    /* backtrack to the next solution */
+    return true;
+}
+
+static
+FUNCTION(start)
+{
+    Node  *susp, *goal;
+    Label eval;
+ ENTRY_LABEL(start)
+    nondet_handlers = &global_handlers;
+    TRACE(("start program\n"));
+
+    goal = sp[0];
+    susp = sp[1];
+    eval = goal->info->eval;
+
+    CHECK_STACK(4);
+    sp	 -= 4;
+    sp[0] = goal;
+    sp[1] = (Node *)update;
+    sp[2] = susp;
+    sp[3] = 0;
+    start_thread(4);
+    GOTO(eval);
+}
+
+static
+FUNCTION(stop)
+{
+ ENTRY_LABEL(stop)
+    cid = 0;
+    halt();
+}

@@ -1,0 +1,262 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: compare.nw 1872 2006-03-16 10:11:43Z wlux $
+%
+% Copyright (c) 2001-2005, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Polymorphic Comparisons}
+The [[compare]] function implements (polymorphic) comparison of terms.
+It returns one of the values [[EQ]], [[LT]], and [[GT]] depending on
+the order of its arguments and evaluates both arguments only as far as
+necessary to determine the ordering. As we cannot define a (stable)
+order for partial applications and abstract types, respectively,
+[[compare]] raises a runtime error when it is applied to such
+arguments.
+
+<<compare.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "debug.h"
+#include "run.h"
+#include "heap.h"
+#include "stack.h"
+#include "eval.h"
+#include "threads.h"
+#include "data.h"
+#include "cstring.h"
+#include "cam.h"
+#include "trace.h"
+
+DECLARE_CONST(__Prelude__LT);
+DECLARE_CONST(__Prelude__EQ);
+DECLARE_CONST(__Prelude__GT);
+
+#define pair_cons_node_size closure_node_size(3)
+static DEFINE_DATA(pair_cons, ",:", CONS_TAG, 3);
+
+DECLARE_ENTRYPOINT(__Prelude__error);
+DECLARE_ENTRYPOINT(__compare);
+
+DECLARE_LABEL(__compare_1);
+DECLARE_LABEL(__compare_2);
+DECLARE_LABEL(__compare_3);
+
+FUNCTION(__compare)
+{
+    EXPORT_LABEL(__compare)
+ ENTRY_LABEL(__compare)
+    TRACE_FUN("compare", 2);
+    GOTO(__compare_1);
+}
+
+static
+FUNCTION(__compare_1)
+{
+    Node *aux;
+ ENTRY_LABEL(__compare_1)
+    EVAL_RIGID_POLY(__compare_1);
+    aux	  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = aux;
+    GOTO(__compare_2);
+}
+
+static
+FUNCTION(__compare_2)
+{
+    boolean	 is_vect;
+    long         x, y;
+    unsigned int i, n;
+    double	 d, e;
+    Node	 *cmp;
+    Node	 *arg1, *arg2;
+    Node	 *next, *arglist;
+    Node	 **argp1, **argp2;
+ ENTRY_LABEL(__compare_2)
+    EVAL_RIGID_POLY(__compare_2);
+    n	    = 0;
+    arg1    = sp[1];
+    arg2    = sp[0];
+    is_vect = false;
+
+#if !ONLY_BOXED_OBJECTS
+    if ( is_unboxed(arg1) )
+    {
+	if ( is_unboxed(arg2) )
+	{
+	    x = (long)arg1;
+	    y = (long)arg2;
+	}
+	else
+	{
+	    assert(is_int_node(arg2));
+	    x = unboxed_val(arg1);
+	    y = arg2->i.i;
+	}
+	cmp = x == y ? CONST(__Prelude__EQ)
+	    : x < y ? CONST(__Prelude__LT) : CONST(__Prelude__GT);
+    }
+    else if ( is_unboxed(arg2) )
+    {
+	assert(is_int_node(arg1));
+	x = arg1->i.i;
+	y = unboxed_val(arg2);
+	cmp = x == y ? CONST(__Prelude__EQ)
+	    : x < y ? CONST(__Prelude__LT) : CONST(__Prelude__GT);
+    }
+    else
+#endif
+    {
+	switch ( node_kind(arg1) )
+	{
+	case CHAR_KIND:
+	    assert(is_char_node(arg2));
+	    x = arg1->ch.ch;
+	    y = arg2->ch.ch;
+	    cmp = x == y ? CONST(__Prelude__EQ)
+		: x < y ? CONST(__Prelude__LT) : CONST(__Prelude__GT);
+	    break;
+        case INT_KIND:
+	    assert(is_int_node(arg2));
+	    x = arg1->i.i;
+	    y = arg2->i.i;
+	    cmp = x == y ? CONST(__Prelude__EQ)
+		: x < y ? CONST(__Prelude__LT) : CONST(__Prelude__GT);
+	    break;
+        case FLOAT_KIND:
+	    assert(is_float_node(arg2));
+	    get_double_val(d, arg1->f);
+	    get_double_val(e, arg2->f);
+	    cmp = d == e ? CONST(__Prelude__EQ)
+		: d < e ? CONST(__Prelude__LT) : CONST(__Prelude__GT);
+            break;
+	case PTR_KIND:
+	    assert(is_ptr_node(arg2));
+	    cmp = arg1->p.ptr == arg2->p.ptr ? CONST(__Prelude__EQ)
+		: arg1->p.ptr < arg2->p.ptr ? CONST(__Prelude__LT)
+					    : CONST(__Prelude__GT);
+	    break;
+	case FOREIGN_PTR_KIND:
+	    assert(is_foreign_ptr_node(arg2));
+	    cmp = arg1->fp.ptr == arg2->fp.ptr ? CONST(__Prelude__EQ)
+		: arg1->fp.ptr < arg2->fp.ptr ? CONST(__Prelude__LT)
+					      : CONST(__Prelude__GT);
+	    break;
+	case VECTOR_KIND:
+	    assert(is_vector_node(arg2));
+	    is_vect = true;
+	    x	    = arg1->a.length;
+	    y	    = arg2->a.length;
+	    if ( x == y )
+	    {
+		cmp = CONST(__Prelude__EQ);
+		n   = vector_argc(arg1);
+	    }
+	    else
+		cmp = x < y ? CONST(__Prelude__LT) : CONST(__Prelude__GT);
+	    break;
+	case PAPP_KIND:
+	    *++sp = from_string("compare applied to partial application");
+	    GOTO(__Prelude__error);
+	case SEARCH_CONT_KIND:
+	case ABSTRACT_KIND:
+	    *++sp = from_string("compare applied to abstract type");
+	    GOTO(__Prelude__error);
+	case CAPP_KIND:
+	    assert(is_capp_node(arg2));
+	    x = (long)node_tag(arg1);
+	    y = (long)node_tag(arg2);
+	    if ( x < 0 )
+	    {
+		assert(y < 0);
+		*++sp = from_string("compare applied to existentially "
+				    "quantified type");
+		GOTO(__Prelude__error);
+	    }
+	    else if ( x == y )
+	    {
+		assert(y >= 0);
+		cmp = CONST(__Prelude__EQ);
+		n   = closure_argc(arg1);
+		assert(closure_argc(arg2) == n);
+	    }
+	    else
+		cmp = x < y ? CONST(__Prelude__LT) : CONST(__Prelude__GT);
+            break;
+        default:
+	    invalid_arg("compare", node_kind(arg1));
+        }
+    }
+
+    if ( cmp != CONST(__Prelude__EQ) || n == 0 )
+    {
+	sp += 2;
+	RETURN(cmp);
+    }
+    else if ( n == 1 )
+    {
+	sp[0] = is_vect? arg1->a.args[0] : arg1->c.args[0];
+	sp[1] = is_vect? arg2->a.args[0] : arg2->c.args[0];
+	GOTO(__compare);
+    }
+
+    arglist = nil;
+    CHECK_HEAP(n * pair_cons_node_size);
+    argp1 = is_vect ? sp[1]->a.args : sp[1]->c.args;
+    argp2 = is_vect ? sp[0]->a.args : sp[0]->c.args;
+
+    for ( i = n, argp1 += n, argp2 += n; i-- > 1; )
+    {
+	next		= (Node *)hp;
+	next->info	= INFO(pair_cons);
+	next->c.args[0] = *--argp1;
+	next->c.args[1] = *--argp2;
+	next->c.args[2] = arglist;
+	arglist		= next;
+	hp	       += pair_cons_node_size;
+    }
+
+    CHECK_STACK(2);
+    sp	 -= 2;
+    sp[0] = *--argp1;
+    sp[1] = *--argp2;
+    sp[2] = (Node *)__compare_3;
+    sp[3] = arglist;
+    GOTO(__compare);
+}
+
+static
+FUNCTION(__compare_3)
+{
+    Node *cmp, *arg1, *arg2, *arglist;
+ ENTRY_LABEL(__compare_3)
+    cmp = sp[0];
+    if ( cmp != CONST(__Prelude__EQ) )
+    {
+	sp += 2;
+	RETURN(cmp);
+    }
+
+    ASSERT(sp[1]->info == INFO(pair_cons));
+    arglist = sp[1];
+    arg1    = arglist->c.args[0];
+    arg2    = arglist->c.args[1];
+    arglist = arglist->c.args[2];
+
+    if ( arglist == nil )
+    {
+	sp[0] = arg1;
+	sp[1] = arg2;
+	GOTO(__compare);
+    }
+
+    CHECK_STACK(2);
+    sp	 -= 2;
+    sp[0] = arg1;
+    sp[1] = arg2;
+    sp[2] = (Node *)__compare_3;
+    sp[3] = arglist;
+    GOTO(__compare);
+}

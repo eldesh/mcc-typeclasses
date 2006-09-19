@@ -1,0 +1,156 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: equal.nw 1872 2006-03-16 10:11:43Z wlux $
+%
+% Copyright (c) 2001-2004, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Strict Equality}
+The primitive function [[(==)]] implements strict equality for ground
+terms. It returns [[True]], if both arguments evaluate to equal terms,
+and [[False]] otherwise. Both arguments are evaluated only as far as
+necessary in order to determine (in)equality.
+
+<<equal.h>>=
+DECLARE_ENTRYPOINT(___61__61_);
+
+@ 
+<<equal.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "debug.h"
+#include "run.h"
+#include "heap.h"
+#include "stack.h"
+#include "eval.h"
+#include "threads.h"
+#include "data.h"
+#include "unify.h"
+#include "cam.h"
+#include "trace.h"
+
+DECLARE_CONST(__Prelude__True);
+DECLARE_CONST(__Prelude__False);
+
+#define pair_cons_node_size closure_node_size(3)
+static DEFINE_DATA(pair_cons, ",:", CONS_TAG, 3);
+
+DECLARE_ENTRYPOINT(___61__61_);
+
+DECLARE_LABEL(___61__61__1);
+DECLARE_LABEL(___61__61__2);
+DECLARE_LABEL(___61__61__3);
+
+FUNCTION(___61__61_)
+{
+    EXPORT_LABEL(___61__61_)
+ ENTRY_LABEL(___61__61_)
+    TRACE_FUN("==", 2);
+    GOTO(___61__61__1);
+}
+
+static
+FUNCTION(___61__61__1)
+{
+    Node *aux;
+ ENTRY_LABEL(___61__61__1)
+    EVAL_RIGID_POLY(___61__61__1);
+    aux	  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = aux;
+    GOTO(___61__61__2);
+}
+
+static
+FUNCTION(___61__61__2)
+{
+    boolean	 is_vect;
+    unsigned int i, n;
+    Node	 *arg1, *arg2;
+    Node	 *next, *arglist;
+    Node	 **argp1, **argp2;
+ ENTRY_LABEL(___61__61__2)
+    EVAL_RIGID_POLY(___61__61__2);
+
+    n	 = 0;
+    arg1 = sp[1];
+    arg2 = sp[0];
+
+    if ( !eq_root(arg1, arg2, &n) )
+    {
+	sp += 2;
+	RETURN(CONST(__Prelude__False));
+    }
+    else if ( n == 0 )
+    {
+	sp += 2;
+	RETURN(CONST(__Prelude__True));
+    }
+    else if ( n == 1 )
+    {
+	is_vect = is_vector_node(arg1);
+	sp[0]	= is_vect? arg1->a.args[0] : arg1->c.args[0];
+	sp[1]	= is_vect? arg2->a.args[0] : arg2->c.args[0];
+	GOTO(___61__61_);
+    }
+
+    arglist = nil;
+    is_vect = is_vector_node(arg1);
+    CHECK_HEAP(n * pair_cons_node_size);
+    argp1 = is_vect ? sp[1]->a.args : sp[1]->c.args;
+    argp2 = is_vect ? sp[0]->a.args : sp[0]->c.args;
+
+    for ( i = n, argp1 += n, argp2 += n; i-- > 1; )
+    {
+	next		= (Node *)hp;
+	next->info	= INFO(pair_cons);
+	next->c.args[0] = *--argp1;
+	next->c.args[1] = *--argp2;
+	next->c.args[2] = arglist;
+	arglist		= next;
+	hp	       += pair_cons_node_size;
+    }
+
+    CHECK_STACK(2);
+    sp	 -= 2;
+    sp[0] = *--argp1;
+    sp[1] = *--argp2;
+    sp[2] = (Node *)___61__61__3;
+    sp[3] = arglist;
+    GOTO(___61__61_);
+}
+
+static
+FUNCTION(___61__61__3)
+{
+    Node *eq, *arg1, *arg2, *arglist;
+ ENTRY_LABEL(___61__61__3)
+    eq = sp[0];
+    if ( eq != CONST(__Prelude__True) )
+    {
+	sp += 2;
+	RETURN(eq);
+    }
+
+    ASSERT(sp[1]->info == INFO(pair_cons));
+    arglist = sp[1];
+    arg1    = arglist->c.args[0];
+    arg2    = arglist->c.args[1];
+    arglist = arglist->c.args[2];
+
+    if ( arglist == nil )
+    {
+	sp[0] = arg1;
+	sp[1] = arg2;
+	GOTO(___61__61_);
+    }
+
+    CHECK_STACK(2);
+    sp	 -= 2;
+    sp[0] = arg1;
+    sp[1] = arg2;
+    sp[2] = (Node *)___61__61__3;
+    sp[3] = arglist;
+    GOTO(___61__61_);
+}

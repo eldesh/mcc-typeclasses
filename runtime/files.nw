@@ -1,0 +1,2061 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: files.nw 1902 2006-04-22 18:13:50Z wlux $
+%
+% Copyright (c) 2001-2006, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Files}
+The functions in this file implement the primitive monadic actions
+that read from and write to files and streams. This module has an
+initialization function that initializes the standard channels and
+optionally changes the buffer mode for standard input and standard
+output. Pass [[-1]] as first argument to [[init_files]] in order to
+use the default buffer mode.
+
+<<files.h>>=
+extern void init_files(int, long);
+
+@ 
+<<files.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <limits.h>
+#include <errno.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include "debug.h"
+#include "run.h"
+#include "heap.h"
+#include "stack.h"
+#include "threads.h"
+#include "spaces.h"
+#include "search.h"
+#include "trail.h"
+#include "eval.h"
+#include "data.h"
+#include "cstring.h"
+#include "cam.h"
+#include "io_monad.h"
+#include "trace.h"
+
+#if !HAVE_WORKING_VFORK
+# define vfork fork
+#endif
+
+@ 
+Files are implemented as finalized objects so that a file is
+closed automatically when it becomes garbage. A file node comprises
+its (C) file pointer, a set of flags, and an optional buffer. At
+present, two flag bits are used which are set when the file is
+readable and writable, respectively. When a file is closed, both bits
+are cleared and the file pointer is set to [[0]]. The file is in a
+semi-closed state when the readable and writable bits are cleared, but
+the file pointer is not [[0]]. This is used for file handles to which
+[[hGetContents]] has been applied.
+
+When a file handle that is connected to a process is finalized, the
+runtime system tries to read its termination status in order not to
+leave zombie processes around. Since the garbage collection
+should not be blocked until the process really terminates,
+[[finalize_process]] calls [[waitpid]] with the [[WNOHANG]] flag.
+
+<<files.c>>=
+#define EVAL_RIGID_FILE(l)	EVAL_RIGID_ABSTRACT(l)
+
+enum file_flags { readable, writable };
+#define mask(flag) (1<<(flag))
+
+enum { FILE_TAG, PROCESS_TAG };
+
+#define file_node_size wordsof(Handle)
+typedef struct file_node {
+    NodeInfo *info;
+    FILE     *fp;
+    short    flags;
+    short    bmode;
+    long     bsize;
+    char     *buffer;
+} Handle;
+
+#define process_node_size wordsof(ProcessHandle)
+typedef struct process_node {
+    NodeInfo *info;
+    FILE     *fp;
+    short    flags;
+    short    bmode;
+    long     bsize;
+    char     *buffer;
+    pid_t    pid;
+    int	     status;
+} ProcessHandle;
+
+#define is_open(file)	  ((file)->flags & (mask(readable) | mask(writable)))
+#define is_readable(file) ((file)->flags & mask(readable))
+#define is_writable(file) ((file)->flags & mask(writable))
+
+static void close_handle(Handle *file);
+static void finalize_file(Node *node);
+static void finalize_process(Node *node);
+
+static NodeInfo file_info = {
+    ABSTRACT_KIND, FILE_TAG, file_node_size, ot_binary, "<Handle>",
+    eval_whnf, 0, finalize_file
+};
+
+static NodeInfo process_info = {
+    ABSTRACT_KIND, PROCESS_TAG, process_node_size, ot_binary, "<ProcessHandle>",
+    eval_whnf, 0, finalize_process
+};
+
+static void
+close_handle(Handle *file)
+{
+    if ( file->fp )
+    {
+	fclose(file->fp);
+	file->fp    = NULL;
+	file->flags = 0;
+	if ( file->buffer )
+	    free(file->buffer);
+    }
+}
+
+static void
+finalize_file(Node *file)
+{
+    close_handle((Handle *)file);
+}
+
+static void
+finalize_process(Node *node)
+{
+    ProcessHandle *proc = (ProcessHandle *)node;
+
+    finalize_file(node);
+    if ( proc->pid )
+	waitpid(proc->pid, &proc->status, WNOHANG);
+}
+
+@ 
+The functions [[stdin]], [[stdout]], and [[stderr]] return predefined
+handles for the standard file channels. The nodes are allocated
+statically in the runtime system. However, the file pointers of these
+nodes cannot be initialized statically because under Linux -- in
+contrast to most other operating systems -- the standard file
+pointers are not declared as pointers into a static array of file
+descriptors, but as global variables.
+
+Note that we assume that the standard error channel is always
+unbuffered, whereas the setting of the standard input and output
+channels is not known -- unless it is changed in [[init_files]].
+
+<<files.c>>=
+static Handle stdin_node = {
+    &file_info, NULL, mask(readable), -1, 0, NULL
+};
+static Handle stdout_node = {
+    &file_info, NULL, mask(writable), -1, 0, NULL
+};
+static Handle stderr_node = {
+    &file_info, NULL, mask(writable), _IONBF, 0, NULL
+};
+
+
+DECLARE_ENTRYPOINT(__stdin);
+DECLARE_ENTRYPOINT(__stdout);
+DECLARE_ENTRYPOINT(__stderr);
+
+FUNCTION(__stdin)
+{
+    EXPORT_LABEL(__stdin)
+ ENTRY_LABEL(__stdin)
+    RETURN((Node *)&stdin_node);
+}
+
+FUNCTION(__stdout)
+{
+    EXPORT_LABEL(__stdout)
+ ENTRY_LABEL(__stdout)
+    RETURN((Node *)&stdout_node);
+}
+
+FUNCTION(__stderr)
+{
+    EXPORT_LABEL(__stderr)
+ ENTRY_LABEL(__stderr)
+    RETURN((Node *)&stderr_node);
+}
+
+@
+The function [[openFile]] opens a file with the specified file name
+and file mode. Files can be opened for reading, writing, and with
+read-write access, respectively. The file access mode is specified
+using a constant from the type \texttt{IOMode} that is declared as
+follows in the library module \texttt{IO}.
+\begin{verbatim}
+  data IOMode = ReadMode | WriteMode | AppendMode | ReadWriteMode
+\end{verbatim}
+
+\ToDo{\texttt{openFile} should implement the
+single-writer/multiple-reader locking semantics mandated by the
+Haskell library report.}
+
+<<files.c>>=
+enum {
+    ReadMode_tag,
+    WriteMode_tag,
+    AppendMode_tag,
+    ReadWriteMode_tag
+};
+
+DECLARE_CONST(__IO__ReadMode);
+DECLARE_CONST(__IO__WriteMode);
+DECLARE_CONST(__IO__AppendMode);
+DECLARE_CONST(__IO__ReadWriteMode);
+
+DECLARE_ENTRYPOINT(__openFile);
+DECLARE_LABEL(__openFile_1);
+DECLARE_LABEL(__openFile_2);
+
+
+FUNCTION(__openFile)
+{
+    EXPORT_LABEL(__openFile)
+ ENTRY_LABEL(__openFile)
+    TRACE_FUN("openFile", 3);
+    CHECK_STACK(1);
+    sp	 -= 1;
+    sp[0] = sp[1];
+    sp[1] = (Node *)__openFile_1;
+    GOTO(nf_string);
+}
+
+static
+FUNCTION(__openFile_1)
+{
+    Node *fn;
+ ENTRY_LABEL(__openFile_1)
+    fn	  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = fn;
+    GOTO(__openFile_2);
+}
+
+static
+FUNCTION(__openFile_2)
+{
+    const char *fn, *mode;
+    int	       flags;
+    FILE       *fp;
+    Handle     *file;
+ ENTRY_LABEL(__openFile_2)
+    /* determine the access mode */
+    EVAL_RIGID_DATA(__openFile_2);
+    switch ( node_tag(sp[0]) )
+    {
+    case ReadMode_tag:
+	mode  = "r";
+	flags = mask(readable);
+	break;
+    case WriteMode_tag:
+	mode  = "w";
+	flags = mask(writable);
+	break;
+    case AppendMode_tag:
+	mode  = "a";
+	flags = mask(writable);
+	break;
+    case ReadWriteMode_tag:
+	mode  = "r+";
+	flags = mask(readable) | mask(writable);
+	break;
+    default:
+	unexpected_tag("openFile (mode)", node_tag(sp[0]));
+    }
+
+    /* open the file */
+    fn = to_string(sp[1]);
+    fp = fopen(fn, mode);
+    free((char *)fn);
+    if ( fp == NULL )
+    {
+	*++sp = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+    else
+	sp += 3;
+
+    /* create the file node */
+    CHECK_HEAP(file_node_size);
+    file	 = (Handle *)hp;
+    file->info	 = &file_info;
+    file->fp	 = fp;
+    file->flags  = flags;
+    file->bmode  = -1;
+    file->bsize  = 0;
+    file->buffer = NULL;
+    hp		+= file_node_size;
+    register_final((Node *)file);
+
+    /* return the file */
+    RETURN((Node *)file);
+}
+
+@ 
+The function [[openFd]] is a variant of [[openFile]] that creates a
+new file node for a file descriptor.
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__openFd);
+DECLARE_LABEL(__openFd_1);
+DECLARE_LABEL(__openFd_2);
+
+
+FUNCTION(__openFd)
+{
+    EXPORT_LABEL(__openFd)
+ ENTRY_LABEL(__openFd)
+    TRACE_FUN("openFd", 3);
+    GOTO(__openFd_1);
+}
+
+static
+FUNCTION(__openFd_1)
+{
+    Node *fd;
+ ENTRY_LABEL(__openFd_1)
+    EVAL_RIGID_INT(__openFd_1);
+    fd	  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = fd;
+    GOTO(__openFd_2);
+}
+
+static
+FUNCTION(__openFd_2)
+{
+    const char *mode;
+    int	       flags;
+    FILE       *fp;
+    Handle     *file;
+ ENTRY_LABEL(__openFd_2)
+    /* determine the access mode */
+    EVAL_RIGID_DATA(__openFd_2);
+    switch ( node_tag(sp[0]) )
+    {
+    case ReadMode_tag:
+	mode  = "r";
+	flags = mask(readable);
+	break;
+    case WriteMode_tag:
+	mode  = "w";
+	flags = mask(writable);
+	break;
+    case AppendMode_tag:
+	mode  = "a";
+	flags = mask(writable);
+	break;
+    case ReadWriteMode_tag:
+	mode  = "r+";
+	flags = mask(readable) | mask(writable);
+	break;
+    default:
+	unexpected_tag("openFd (mode)", node_tag(sp[0]));
+    }
+
+    /* open the file */
+    fp = fdopen(long_val(sp[1]), mode);
+    if ( fp == NULL )
+    {
+	*++sp = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+    else
+	sp += 3;
+
+    /* create the file node */
+    CHECK_HEAP(file_node_size);
+    file	 = (Handle *)hp;
+    file->info	 = &file_info;
+    file->fp	 = fp;
+    file->flags  = flags;
+    file->bmode  = -1;
+    file->bsize  = 0;
+    file->buffer = NULL;
+    hp		+= file_node_size;
+    register_final((Node *)file);
+
+    /* return the file */
+    RETURN((Node *)file);
+}
+
+@
+The function [[hClose]] closes a file handle. Calling [[hClose]] for a
+closed file handle has no effect.
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__hClose);
+
+FUNCTION(__hClose)
+{
+    EXPORT_LABEL(__hClose)
+ ENTRY_LABEL(__hClose)
+    EVAL_RIGID_FILE(__hClose);
+    close_handle((Handle *)sp[0]);
+    sp += 2;
+    RETURN(unit);
+}
+
+@
+The functions [[hIsOpen]], [[hIsClosed]], [[hIsReadable]],
+[[hIsWritable]], and [[hIsSeekable]] test whether these properties
+apply to a file handle. Note that for a semi-closed handle neither
+[[hIsOpen]] nor [[hIsClosed]] returns \texttt{True}.
+
+<<files.c>>=
+DECLARE_CONST(__Prelude__False);
+DECLARE_CONST(__Prelude__True);
+
+#define Prelude_False CONST(__Prelude__False)
+#define Prelude_True  CONST(__Prelude__True)
+
+DECLARE_ENTRYPOINT(__hIsOpen);
+DECLARE_ENTRYPOINT(__hIsClosed);
+DECLARE_ENTRYPOINT(__hIsReadable);
+DECLARE_ENTRYPOINT(__hIsWritable);
+DECLARE_ENTRYPOINT(__hIsSeekable);
+
+FUNCTION(__hIsOpen)
+{
+    Node   *r;
+    EXPORT_LABEL(__hIsOpen)
+ ENTRY_LABEL(__hIsOpen)
+    EVAL_RIGID_FILE(__hIsOpen);
+    r	= is_open((Handle *)sp[0]) ? Prelude_True : Prelude_False;
+    sp += 2;
+    RETURN(r);
+}
+
+FUNCTION(__hIsClosed)
+{
+    Node   *r;
+    EXPORT_LABEL(__hIsClosed)
+ ENTRY_LABEL(__hIsClosed)
+    EVAL_RIGID_FILE(__hIsClosed);
+    r	= ((Handle *)sp[0])->fp == NULL ? Prelude_True : Prelude_False;
+    sp += 2;
+    RETURN(r);
+}
+
+FUNCTION(__hIsReadable)
+{
+    Node   *r;
+    EXPORT_LABEL(__hIsReadable)
+ ENTRY_LABEL(__hIsReadable)
+    EVAL_RIGID_FILE(__hIsReadable);
+    r	= is_readable((Handle *)sp[0]) ? Prelude_True : Prelude_False;
+    sp += 2;
+    RETURN(r);
+}
+
+FUNCTION(__hIsWritable)
+{
+    Node   *r;
+    EXPORT_LABEL(__hIsWritable)
+ ENTRY_LABEL(__hIsWritable)
+    EVAL_RIGID_FILE(__hIsWritable);
+    r	= is_writable((Handle *)sp[0]) ? Prelude_True : Prelude_False;
+    sp += 2;
+    RETURN(r);
+}
+
+FUNCTION(__hIsSeekable)
+{
+    Handle *file;
+    Node   *r;
+    EXPORT_LABEL(__hIsSeekable)
+ ENTRY_LABEL(__hIsSeekable)
+    EVAL_RIGID_FILE(__hIsSeekable);
+    file = (Handle *)sp[0];
+    sp	+= 2;
+
+    if ( !is_open(file) )
+	r = Prelude_False;
+    else if ( ftell(file->fp) != - 1 )
+	r = Prelude_True;
+    else
+    {
+	clearerr(file->fp);
+	r = Prelude_False;
+    }
+    RETURN(r);
+}
+
+@
+The functions [[isEOF]] and [[hIsEOF]] return whether all of the
+specified file has been read, i.e., whether the next call to
+[[hGetChar]] for the handle will raise an end-of-file exception.
+[[isEOF]] is an abbreviation for [[hIsEOF stdin]].
+
+Note that the semantics of [[hIsEOF]] is different from the C
+semantics. Whereas [[hIsEOF]] returns [[True]] after the last
+character of the file has been read, the C library sets the
+end-of-file condition only after reading the end-of-file character.
+Therefore, our implementation reads the next character from the file
+and puts it back with [[ungetc]]. Unfortunately, this may block the
+program until the next character is available.
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__isEOF);
+DECLARE_ENTRYPOINT(__hIsEOF);
+
+FUNCTION(__isEOF)
+{
+    EXPORT_LABEL(__isEOF)
+ ENTRY_LABEL(__isEOF)
+    CHECK_STACK(1);
+    sp	 -= 1;
+    sp[0] = (Node *)&stdin_node;
+    GOTO(__hIsEOF);
+}
+
+FUNCTION(__hIsEOF)
+{
+    int	   c;
+    Node   *r;
+    Handle *file;
+    EXPORT_LABEL(__hIsEOF)
+ ENTRY_LABEL(__hIsEOF)
+    EVAL_RIGID_FILE(__hIsEOF);
+    file = (Handle *)sp[0];
+
+    if ( !is_readable(file) )
+    {
+	sp[0] = from_string("hIsEOF: handle not readable");
+	GOTO(__ioError);
+    }
+
+    assert(file->fp != NULL);
+    c = getc(file->fp);
+    if ( c == EOF && ferror(file->fp) )
+    {
+	sp[0] = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+    ungetc(c, file->fp);
+
+    sp += 2;
+    r	= c == EOF ? Prelude_True : Prelude_False;
+    RETURN(r);
+}
+
+@ 
+The functions [[getChar]] and [[hGetChar]] read a single character
+from the specified input handle, with [[getChar]] being an
+abbreviation for [[hGetChar stdin]]. Both functions raise an
+end-of-file exception when reading beyond the last character of the
+input. An access exception is reported when the handle is not open for
+reading. Note that this also happens when the handle is in a
+semi-closed state after [[hGetContents]] has been applied to it.
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__getChar);
+DECLARE_ENTRYPOINT(__hGetChar);
+
+FUNCTION(__getChar)
+{
+    EXPORT_LABEL(__getChar)
+ ENTRY_LABEL(__getChar)
+    CHECK_STACK(1);
+    sp	 -= 1;
+    sp[0] = (Node *)&stdin_node;
+    GOTO(__hGetChar);
+}
+
+FUNCTION(__hGetChar)
+{
+    int	   c;
+    Node   *r;
+    Handle *file;
+    EXPORT_LABEL(__hGetChar)
+ ENTRY_LABEL(__hGetChar)
+    EVAL_RIGID_FILE(__hGetChar);
+    file = (Handle *)sp[0];
+
+    if ( !is_readable(file) )
+    {
+	sp[0] = from_string("hGetChar: handle not readable");
+	GOTO(__ioError);
+    }
+
+    assert(file->fp != NULL);
+    c = getc(file->fp);
+    if ( c == EOF )
+    {
+	sp[0] = from_string(feof(file->fp) ? "End of file" : strerror(errno));
+	GOTO(__ioError);
+    }
+
+    sp += 2;
+    r	= (Node *)(char_table + (c & 0xff));
+    RETURN(r);
+}
+
+@
+The function [[hLookAhead]] returns the next character from the input
+file without removing it from the input stream.
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__hLookAhead);
+
+FUNCTION(__hLookAhead)
+{
+    int	   c;
+    Node   *r;
+    Handle *file;
+    EXPORT_LABEL(__hLookAhead)
+ ENTRY_LABEL(__hLookAhead)
+    EVAL_RIGID_FILE(__hLookAhead);
+    file = (Handle *)sp[0];
+
+    if ( !is_readable(file) )
+    {
+	sp[0] = from_string("hLookAhead: handle not readable");
+	GOTO(__ioError);
+    }
+
+    assert(file->fp != NULL);
+    c = getc(file->fp);
+    if ( c == EOF )
+    {
+	sp[0] = from_string(feof(file->fp) ? "End of file" : strerror(errno));
+	GOTO(__ioError);
+    }
+    ungetc(c, file->fp);
+
+    sp += 2;
+    r	= (Node *)(char_table + (c & 0xff));
+    RETURN(r);
+}
+
+@
+The functions [[getLine]] and [[hGetLine]] read a single line from the
+specified handle, with [[getLine]] being an abbreviation for
+[[hGetLine stdin]]. We implement these functions in the runtime system
+instead of defining them in terms of [[hIsEOF]] and [[hGetChar]]
+because this makes a more efficient implementation possible using
+the [[fgets]] function. Note that [[fgets]] retains a newline
+character in the input buffer; we have to remove it before converting
+the string. If no newline has been read, we continue to read more
+characters from the standard input until reaching either the
+end-of-file or reading a newline character.
+
+Concatenation of the line segments is a little bit tricky. We do not
+use the \texttt{(++)} operator from the prelude in order to avoid the
+quadratic complexity introduced by it when constructing the string
+from left to right. Instead we use an indirection node at the end of
+each segment and set its pointer after reading the next segment. Note
+that this destructive update does not have to be trailed because
+[[hGetLine]] is an atomic action with respect to the Curry runtime
+system.
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__getLine);
+DECLARE_ENTRYPOINT(__hGetLine);
+
+FUNCTION(__getLine)
+{
+    EXPORT_LABEL(__getLine)
+ ENTRY_LABEL(__getLine)
+    CHECK_STACK(1);
+    sp	 -= 1;
+    sp[0] = (Node *)&stdin_node;
+    GOTO(__hGetLine);
+}
+
+FUNCTION(__hGetLine)
+{
+    char buf[256], *cp;
+    Node *line, *tail;
+    FILE *fp;
+    EXPORT_LABEL(__hGetLine)
+ ENTRY_LABEL(__hGetLine)
+    EVAL_RIGID_FILE(__hGetLine);
+
+    if ( !is_readable((Handle *)sp[0]) )
+    {
+	sp[0] = from_string("hGetLine: handle not readable");
+	GOTO(__ioError);
+    }
+
+    fp = ((Handle *)sp[0])->fp;
+    assert(fp != NULL);
+    if ( !fgets(buf, sizeof(buf), fp) )
+    {
+	sp[0] = from_string(feof(fp) ? "End of file" : strerror(errno));
+	GOTO(__ioError);
+    }
+
+    CHECK_STACK(2);
+    sp   -= 2;
+    sp[0] = sp[1] = 0;
+    sp[3] = nil;
+
+    /* in this loop:
+       sp[0]: pointer to indirection tail node
+       sp[1]: pointer to last line segment
+       sp[2]: file handle
+       sp[3]: head of line
+       NB the file handle in sp[2] is not used in the loop below;
+          nevertheless, it must be kept on the stack so that the
+	  file is not closed by the garbage collector while we are
+	  reading from it.
+     */
+    do
+    {
+	for ( cp = buf; *cp != '\n' && *cp != '\0'; cp++ )
+	    ;
+
+	if ( *cp == '\n' )
+	{
+	    *cp  = '\0';
+	    tail = nil;
+	}
+	else
+	{
+	    CHECK_HEAP(indir_node_size);
+	    tail	 = (Node *)hp;
+	    tail->info	 = &indir_info;
+#if !COPY_SEARCH_SPACE
+	    tail->n.spc	 = ss;
+#endif
+	    tail->n.node = nil;
+	    hp		+= indir_node_size;
+	}
+
+	sp[0] = tail;
+	line  = prefix_string(buf, tail);
+	if ( sp[3] == nil )
+	    sp[3] = line;
+	else
+	    sp[1]->n.node = line;
+	sp[1] = sp[0];
+    } while ( sp[1] != nil && fgets(buf, sizeof(buf), fp) );
+
+    line = sp[3];
+    sp	+= 4;
+    RETURN(line);
+}
+
+@ 
+The functions [[getContents]] and [[hGetContents]] return the contents
+of the specified file as a lazy stream, where [[getContents]] is an
+abbreviation for [[hGetContents stdin]]. The handle is put into a
+semi-closed state by setting the flags to [[0]]. The character stream
+is constructed on demand with the help of the [[lazyRead]] function.
+
+The function [[readFile]] is just a wrapper function that combines
+[[openFile]] and [[hGetContents]]. We define it here so that the type
+[[IOMode]] need not be defined in the prelude.
+
+An alert reader might be surprised that [[hGetContents]] returns a
+suspended application node. However, recall that this node should be
+considered the first component of a pair composed of a result and the
+state of the world. From these, only the result is really returned
+because the representation of the world would be a simple constant
+(cf. p.~\pageref{eq:monadic-io} in Sect.~\ref{sec:io-monad}).
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__readFile);
+DECLARE_ENTRYPOINT(__getContents);
+DECLARE_ENTRYPOINT(__hGetContents);
+DECLARE_LABEL(lazyRead);
+
+DECLARE_LABEL(eval_lazy_1);
+
+static NodeInfo lazyRead_lazy_info_table[] = LAZYINFO("lazyRead", lazyRead, 1);
+
+static
+FUNCTION(eval_lazy_1)
+{
+    boolean local;
+    Node    *susp, *x;
+    Label   entry;
+ ENTRY_LABEL(eval_lazy_1)
+    /* suspend the search if the node is not local */
+    local = is_local_space(sp[0]->s.spc);
+    if ( !local )
+	suspend_search(resume, sp[0], sp[0]->s.spc);
+
+    /* get the argument */
+    susp  = sp[0];
+    entry = susp->info->entry;
+    x	  = susp->s.args[0];
+
+    /* create an indirection if there is an update frame immediately above */
+    if ( local && (Label)sp[1] == update )
+    {
+#if !COPY_SEARCH_SPACE
+	if ( (word *)susp < hlim )
+	{
+	    DO_SAVE(susp, n.node);
+	    susp->info += 2;
+	}
+	else
+#endif
+	    susp->info = &indir_info;
+	assert(is_queueMe_node(sp[2]));
+	susp->n.node = sp[2];
+    }
+
+    /* otherwise, lock the application node and create an update frame */
+    else
+    {
+	CHECK_STACK(2);
+	sp   -= 2;
+	sp[1] = (Node *)update;
+
+#if !COPY_SEARCH_SPACE
+	if ( (word *)susp < hlim )
+	{
+	    DO_SAVE(susp, q.wq);
+	    susp->info++;
+	}
+	else
+#endif
+	    susp->info = queueMe_info_table;
+	susp->q.wq = 0;
+    }
+
+    /* enter the callee */
+    sp[0] = x;
+    GOTO(entry);
+}
+
+FUNCTION(__readFile)
+{
+    Node *fn, *world;
+    EXPORT_LABEL(__readFile)
+ ENTRY_LABEL(__readFile)
+    fn	  = sp[0];
+    world = sp[1];
+
+    CHECK_STACK(3);
+    sp	 -= 3;
+    sp[0] = fn;
+    sp[1] = CONST(__IO__ReadMode);
+    sp[2] = world;
+    sp[3] = (Node *)__hGetContents;
+    GOTO(__openFile);
+}
+
+FUNCTION(__getContents)
+{
+    EXPORT_LABEL(__getContents)
+ ENTRY_LABEL(__getContents)
+    CHECK_STACK(1);
+    sp	 -= 1;
+    sp[0] = (Node *)&stdin_node;
+    GOTO(__hGetContents);
+}
+
+FUNCTION(__hGetContents)
+{
+    Node   *susp;
+    Handle *file;
+    EXPORT_LABEL(__hGetContents)
+ ENTRY_LABEL(__hGetContents)
+    EVAL_RIGID_FILE(__hGetContents);
+    file = (Handle *)sp[0];
+
+    if ( !is_readable(file) )
+    {
+	sp[0] = from_string("hGetContents: handle not readable");
+	GOTO(__ioError);
+    }
+
+    /* put the file into a semi-closed state */
+    file->flags = 0;
+
+    /* construct the (lazy) input stream */
+    CHECK_HEAP(suspend_node_size(1));
+    susp	    = (Node *)hp;
+    susp->info	    = lazyRead_lazy_info_table;
+    susp->s.spc	    = ss;
+    susp->s.args[0] = sp[0];
+    hp		   += suspend_node_size(1);
+
+    sp += 2;
+    RETURN(susp);
+}
+
+static
+FUNCTION(lazyRead)
+{
+    int	   c;
+    Node   *list, *tail;
+    Handle *file;
+ ENTRY_LABEL(lazyRead)
+    TRACE_FUN("lazyRead", 1);
+
+    file = (Handle *)sp[0];
+    if ( file->fp == NULL )
+	list = nil;
+    else
+    {
+	c = fgetc(file->fp);
+	if ( c == EOF )
+	{
+	    close_handle(file);
+	    list = nil;
+	}
+	else
+	{
+	    CHECK_HEAP(suspend_node_size(1) + cons_node_size);
+
+	    tail	    = (Node *)hp;
+	    tail->info	    = lazyRead_lazy_info_table;
+	    tail->s.spc	    = ss;
+	    tail->s.args[0] = sp[0];
+	    hp		   += suspend_node_size(1);
+
+	    list	    = (Node *)hp;
+	    list->info	    = &cons_info;
+	    list->c.args[0] = (Node *)(char_table + (c & 0xff));
+	    list->c.args[1] = tail;
+	    hp		   += cons_node_size;
+	}
+    }
+
+    sp += 1;
+    RETURN(list);
+}
+
+@
+The functions [[putChar]] and [[hPutChar]] write a single character to
+the specified handle, where [[putChar]] is an abbreviation for
+[[hPutChar stdout]].
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__putChar);
+DECLARE_ENTRYPOINT(__hPutChar);
+DECLARE_LABEL(__hPutChar_1);
+
+FUNCTION(__putChar)
+{
+    EXPORT_LABEL(__putChar)
+ ENTRY_LABEL(__putChar)
+    CHECK_STACK(1);
+    sp	 -= 1;
+    sp[0] = sp[1];
+    sp[1] = (Node *)&stdout_node;
+    GOTO(__hPutChar_1);
+}
+
+FUNCTION(__hPutChar)
+{
+    Node *file;
+    EXPORT_LABEL(__hPutChar)
+ ENTRY_LABEL(__hPutChar)
+    EVAL_RIGID_FILE(__hPutChar);
+    file  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = file;
+    GOTO(__hPutChar_1);
+}
+
+static
+FUNCTION(__hPutChar_1)
+{
+    Handle *file;
+ ENTRY_LABEL(__hPutChar_1)
+    EVAL_RIGID_CHAR(__hPutChar_1);
+    file = (Handle *)sp[1];
+
+    if ( !is_writable(file) )
+    {
+	*++sp = from_string("hPutChar: handle not writable");
+	GOTO(__ioError);
+    }
+
+    assert(file->fp != NULL);
+    if ( putc(sp[0]->ch.ch, file->fp) == EOF )
+    {
+	*++sp = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+
+    sp += 3;
+    RETURN(unit);
+}
+
+@ 
+The functions [[putStr]] and [[hPutStr]] write a string to a file
+handle, with [[putStr]] being an abbreviation for [[hPutStr stdout]].
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__putStr);
+DECLARE_ENTRYPOINT(__hPutStr);
+DECLARE_LABEL(__hPutStr_1);
+DECLARE_LABEL(__hPutStr_2);
+
+FUNCTION(__putStr)
+{
+    EXPORT_LABEL(__putStr)
+ ENTRY_LABEL(__putStr)
+    CHECK_STACK(1);
+    sp	 -= 1;
+    sp[0] = sp[1];
+    sp[1] = (Node *)&stdout_node;
+    GOTO(__hPutStr_1);
+}
+
+FUNCTION(__hPutStr)
+{
+    Node *file;
+    EXPORT_LABEL(__hPutStr)
+ ENTRY_LABEL(__hPutStr)
+    EVAL_RIGID_FILE(__hPutStr);
+    file = sp[0];
+
+    if ( !is_writable((Handle *)file) )
+    {
+	*++sp = from_string("hPutStr: handle not writable");
+	GOTO(__ioError);
+    }
+
+    sp[0] = sp[1];
+    sp[1] = file;
+    GOTO(__hPutStr_1);
+}
+
+static
+FUNCTION(__hPutStr_1)
+{
+    Node *list;
+ ENTRY_LABEL(__hPutStr_1)
+    EVAL_RIGID_DATA(__hPutStr_1);
+    list = sp[0];
+    switch ( node_tag(list) )
+    {
+    case NIL_TAG:
+	sp += 3;
+	RETURN(unit);
+    case CONS_TAG:
+	CHECK_STACK1();
+	sp   -= 1;
+	sp[0] = list->c.args[0];
+	sp[1] = list->c.args[1];
+	GOTO(__hPutStr_2);
+    default:
+	unexpected_tag("hPutStr", node_tag(list));
+    }
+}
+
+static
+FUNCTION(__hPutStr_2)
+{
+    Handle *file;
+ ENTRY_LABEL(__hPutStr_2)
+    EVAL_RIGID_CHAR(__hPutStr_2);
+
+    file = (Handle *)sp[2];
+    if ( fputc(sp[0]->ch.ch, file->fp) == EOF )
+    {
+	sp   += 2;
+	sp[0] = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+
+    sp += 1;
+    GOTO(__hPutStr_1);
+}
+
+@ 
+The functions [[writeFile]] and [[appendFile]] write a string to a
+file. The current contents of the file is replaced by the string
+when using [[writeFile]]. When [[appendFile]] is used, the string is
+appended to the end of the file. Both functions create the file if it
+does not exist.
+
+The functions make use of an auxiliary function [[hPutContents]] that
+calls [[hPutStr]] and then closes the file handle.
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__writeFile);
+DECLARE_ENTRYPOINT(__appendFile);
+DECLARE_ENTRYPOINT(__hPutContents);
+DECLARE_LABEL(__hPutContents_1);
+
+FUNCTION(__writeFile)
+{
+    Node *fn, *world;
+    EXPORT_LABEL(__writeFile)
+ ENTRY_LABEL(__writeFile)
+    fn	  = sp[0];
+    world = sp[2];
+
+    CHECK_STACK(3);
+    sp	 -= 3;
+    sp[0] = fn;
+    sp[1] = CONST(__IO__WriteMode);
+    sp[2] = world;
+    sp[3] = (Node *)__hPutContents;
+    GOTO(__openFile);
+}
+
+FUNCTION(__appendFile)
+{
+    Node *fn, *world;
+    EXPORT_LABEL(__appendFile)
+ ENTRY_LABEL(__appendFile)
+    fn	  = sp[0];
+    world = sp[2];
+
+    CHECK_STACK(3);
+    sp	 -= 3;
+    sp[0] = fn;
+    sp[1] = CONST(__IO__AppendMode);
+    sp[2] = world;
+    sp[3] = (Node *)__hPutContents;
+    GOTO(__openFile);
+}
+
+FUNCTION(__hPutContents)
+{
+    Node *file, *str, *world;
+    EXPORT_LABEL(__hPutContents)
+ ENTRY_LABEL(__hPutContents)
+    file  = sp[0];
+    str	  = sp[1];
+    world = sp[2];
+
+    CHECK_STACK(3);
+    sp	 -= 3;
+    sp[0] = file;
+    sp[1] = str;
+    sp[2] = world;
+    sp[3] = (Node *)__hPutContents_1;
+    sp[4] = file;
+    GOTO(__hPutStr);
+}
+
+static
+FUNCTION(__hPutContents_1)
+{
+ ENTRY_LABEL(__hPutContents_1)
+    sp += 1;
+    GOTO(__hClose);
+}
+
+@
+The function [[hFileSize]] returns the size of a file in bytes,
+provided that the file is seekable.
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__hFileSize);
+
+FUNCTION(__hFileSize)
+{
+    long   curpos, endpos;
+    Node   *r;
+    Handle *file;
+    EXPORT_LABEL(__hFileSize)
+ ENTRY_LABEL(__hFileSize)
+    EVAL_RIGID_FILE(__hFileSize);
+    file = (Handle *)sp[0];
+
+    if ( !is_open(file) )
+    {
+	sp[0] = from_string("hFileSize: handle not open");
+	GOTO(__ioError);
+    }
+
+    assert(file->fp != NULL);
+    curpos = ftell(file->fp);
+    if ( curpos == -1 || fseek(file->fp, 0, SEEK_END) == -1 )
+    {
+	sp[0] = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+
+    endpos = ftell(file->fp);
+    if ( endpos == -1 || fseek(file->fp, curpos, SEEK_SET) == -1 )
+    {
+	sp[0] = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+
+    sp += 2;
+#if !ONLY_BOXED_OBJECTS
+    if ( !is_large_int(endpos) )
+	r = mk_unboxed(endpos);
+    else
+#endif
+    {
+	CHECK_HEAP(int_node_size);
+	r	= (Node *)hp;
+	r->info = &int_info;
+	r->i.i  = endpos;
+	hp     += int_node_size;
+    }
+    RETURN(r);
+}
+
+@
+The function [[hIsTerminalDevice]] returns [[True]] if the specified
+handle is connected to a terminal and [[False]] otherwise. We use the
+[[isatty]] function for testing this property.
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__hIsTerminalDevice);
+
+FUNCTION(__hIsTerminalDevice)
+{
+    Node   *r;
+    Handle *file;
+    EXPORT_LABEL(__hIsTerminalDevice)
+ ENTRY_LABEL(__hIsTerminalDevice)
+    EVAL_RIGID_FILE(__hIsTerminalDevice);
+    file = (Handle *)sp[0];
+
+    if ( !is_open(file) )
+    {
+	sp[0] = from_string("hIsTerminalDevice: handle not open");
+	GOTO(__ioError);
+    }
+    assert(file->fp != NULL);
+
+    sp += 2;
+    r	= isatty(fileno(file->fp)) ? Prelude_True : Prelude_False;
+    RETURN(r);
+}
+
+@
+The function [[hGetBuffering]] returns the buffering mode used for the
+given file handle. Unfortunately, there is no portable way to
+determine the buffering mode used for a file handle. Therefore, the
+mode is saved in the file structure when [[hSetBuffering]] is called
+(see below). The initial buffering mode is determined by checking
+whether the file is connected to a terminal or to a file. In the
+former case we assume that line buffering is used, otherwise block
+buffering is assumed.
+
+The buffer mode is returned as an instance of the type
+\texttt{BufferMode} declared in module \texttt{IO} as follows.
+\begin{verbatim}
+  data BufferMode = NoBuffering | LineBuffering | BlockBuffering (Maybe Int)
+\end{verbatim}
+
+<<files.c>>=
+enum { Nothing_tag, Just_tag };
+DECLARE_CONST(__Prelude__Nothing);
+DECLARE_DATA(__Prelude__Just);
+
+enum { NoBuffering_tag, LineBuffering_tag, BlockBuffering_tag };
+DECLARE_CONST(__IO__NoBuffering);
+DECLARE_CONST(__IO__LineBuffering);
+DECLARE_DATA(__IO__BlockBuffering);
+
+DECLARE_ENTRYPOINT(__hGetBuffering); 
+
+FUNCTION(__hGetBuffering)
+{
+    short  bmode;
+    long   bsize;
+    Node   *size, *r;
+    Handle *file;
+    EXPORT_LABEL(__hGetBuffering)
+ ENTRY_LABEL(__hGetBuffering)
+    EVAL_RIGID_FILE(__hGetBuffering);
+    file = (Handle *)sp[0];
+
+    if ( !is_open(file) )
+    {
+	sp[0] = from_string("hGetBuffering: handle not open");
+	GOTO(__ioError);
+    }
+
+    assert(file->fp != NULL);
+    sp += 2;
+    for (;;)
+    {
+	bmode = file->bmode;
+	bsize = file->bsize;
+	switch ( bmode )
+	{
+	case -1:
+	    file->bmode = isatty(fileno(file->fp)) ? _IOLBF : _IOFBF;
+	    continue;
+	case _IONBF:
+	    r = CONST(__IO__NoBuffering);
+	    break;
+	case _IOLBF:
+	    r = CONST(__IO__LineBuffering);
+	    break;
+	case _IOFBF:
+	    CHECK_HEAP(int_node_size + 2 * closure_node_size(1));
+	    if ( bsize )
+	    {
+#if !ONLY_BOXED_OBJECTS
+		if ( !is_large_int(bsize) )
+		    r = mk_unboxed(bsize);
+		else
+#endif
+		{
+		    r	    = (Node *)hp;
+		    r->info = &int_info;
+		    r->i.i  = bsize;
+		    hp	   += int_node_size;
+		}
+
+		size		= (Node *)hp;
+		size->info	= INFO(__Prelude__Just);
+		size->c.args[0] = r;
+		hp	       += closure_node_size(1);
+	    }
+	    else
+		size = CONST(__Prelude__Nothing);
+
+	    r		 = (Node *)hp;
+	    r->info	 = INFO(__IO__BlockBuffering);
+	    r->c.args[0] = size;
+	    hp		+= closure_node_size(1);
+	    break;
+	default:
+	    curry_panic("hGetBuffering: invalid buffer mode %d\n", bmode);
+	}
+	break;
+    }
+
+    RETURN(r);
+}
+
+@
+The function [[hSetBuffering]] changes the current buffering mode of a
+file handle.
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__hSetBuffering);
+DECLARE_LABEL(__hSetBuffering_1);
+DECLARE_LABEL(__hSetBuffering_2);
+DECLARE_LABEL(__hSetBuffering_3);
+
+FUNCTION(__hSetBuffering)
+{
+    Node *file;
+    EXPORT_LABEL(__hSetBuffering)
+ ENTRY_LABEL(__hSetBuffering)
+    EVAL_RIGID_FILE(__hSetBuffering);
+    file  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = file;
+    GOTO(__hSetBuffering_1);
+}
+
+static
+FUNCTION(__hSetBuffering_1)
+{
+    short  bmode;
+    Handle *file;
+ ENTRY_LABEL(__hSetBuffering_1)
+    EVAL_RIGID_DATA(__hSetBuffering_1);
+    switch ( node_tag(sp[0]) )
+    {
+    case NoBuffering_tag:
+	bmode = _IONBF;
+	break;
+    case LineBuffering_tag:
+	bmode = _IOLBF;
+	break;
+    case BlockBuffering_tag:
+	sp[0] = sp[0]->c.args[0];
+	GOTO(__hSetBuffering_2);
+    default:
+	unexpected_tag("hSetBuffering", node_tag(sp[0]));
+    }
+
+    file = (Handle *)sp[1];
+    if ( !is_open(file) )
+    {
+	*++sp = from_string("hSetBuffering: handle not open");
+	GOTO(__ioError);
+    }
+
+    assert(file->fp != NULL);
+    if ( setvbuf(file->fp, NULL, bmode, 0) == -1 )
+    {
+	*++sp = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+    file->bmode = bmode;
+    file->bsize = 0;
+    if ( file->buffer )
+	free(file->buffer);
+    file->buffer = NULL;
+
+    sp += 3;
+    RETURN(unit);
+}
+
+static
+FUNCTION(__hSetBuffering_2)
+{
+    Handle *file;
+ ENTRY_LABEL(__hSetBuffering_2)
+    EVAL_RIGID_DATA(__hSetBuffering_2);
+    switch ( node_tag(sp[0]) )
+    {
+    case Nothing_tag:
+	break;
+    case Just_tag:
+	sp[0] = sp[0]->c.args[0];
+	GOTO(__hSetBuffering_3);
+    default:
+	unexpected_tag("hSetBuffering (mode)", node_tag(sp[0]));
+    }
+
+    file = (Handle *)sp[1];
+    if ( !is_open(file) )
+    {
+	*++sp = from_string("hSetBuffering: handle not open");
+	GOTO(__ioError);
+    }
+
+    assert(file->fp != NULL);
+    if ( setvbuf(file->fp, NULL, _IOFBF, 0) == -1 )
+    {
+	*++sp = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+    file->bmode = _IOFBF;
+    file->bsize = 0;
+    if ( file->buffer )
+	free(file->buffer);
+    file->buffer = NULL;
+
+    sp += 3;
+    RETURN(unit);
+}
+
+static
+FUNCTION(__hSetBuffering_3)
+{
+    long   bsize;
+    char   *buffer;
+    Handle *file;
+ ENTRY_LABEL(__hSetBuffering_3)
+    EVAL_RIGID_INT(__hSetBuffering_3);
+    file  = (Handle *)sp[1];
+    if ( !is_open(file) )
+    {
+	*++sp = from_string("hSetBuffering: handle not open");
+	GOTO(__ioError);
+    }
+
+    bsize = long_val(sp[0]);
+    if ( bsize > 0 )
+    {
+	buffer = (char *)malloc(bsize);
+	if ( buffer == NULL )
+	    sys_error("hSetBuffering");
+    }
+    else
+	buffer = NULL;
+
+    assert(file->fp != NULL);
+    if ( setvbuf(file->fp, buffer, _IOFBF, bsize) == -1 )
+    {
+	*++sp = from_string(strerror(errno));
+	free(buffer);
+	GOTO(__ioError);
+    }
+    file->bmode = _IOFBF;
+    file->bsize = bsize;
+    if ( file->buffer )
+	free(file->buffer);
+    file->buffer = buffer;
+
+    sp += 3;
+    RETURN(unit);
+}
+
+@
+The function [[hFlush]] flushes the output buffer associated with
+the specified handle.
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__hFlush);
+
+FUNCTION(__hFlush)
+{
+    Handle *file;
+    EXPORT_LABEL(__hFlush)
+ ENTRY_LABEL(__hFlush)
+    EVAL_RIGID_FILE(__hFlush);
+    file = (Handle *)sp[0];
+
+    if ( !is_writable(file) )
+    {
+	sp[0] = from_string("hFlush: handle not writable");
+	GOTO(__ioError);
+    }
+
+    assert(file->fp != NULL);
+    if ( fflush(file->fp) == -1 )
+    {
+	sp[0] = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+
+    sp += 2;
+    RETURN(unit);
+}
+
+@
+The function [[hTell]] returns the current I/O position of the file
+associated with the specified handle.
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__hTell); 
+
+FUNCTION(__hTell)
+{
+    long   curpos;
+    Node   *r;
+    Handle *file;
+    EXPORT_LABEL(__hTell)
+ ENTRY_LABEL(__hTell)
+    EVAL_RIGID_FILE(__hTell);
+    file = (Handle *)sp[0];
+
+    if ( !is_open(file) )
+    {
+	sp[0] = from_string("hTell: handle not open");
+	GOTO(__ioError);
+    }
+
+    assert(file->fp != NULL);
+    curpos = ftell(file->fp);
+    if ( curpos == -1 )
+    {
+	sp[0] = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+
+    sp += 2;
+#if !ONLY_BOXED_OBJECTS
+    if ( !is_large_int(curpos) )
+	r = mk_unboxed(curpos);
+    else
+#endif
+    {
+	CHECK_HEAP(int_node_size);
+	r	= (Node *)hp;
+	r->info = &int_info;
+	r->i.i  = curpos;
+	hp     += int_node_size;
+    }
+    RETURN(r);
+}
+
+@
+The function [[hSeek]] sets the I/O position of the specified handle
+to a new position. The second argument determines how the offset
+(the third argument) is interpreted. It must be a constant from the
+type \texttt{SeekMode} defined in the module \texttt{IO} as follows.
+\begin{verbatim}
+  data SeekMode = AbsoluteSeek | RelativeSeek | SeekFromEnd
+\end{verbatim}
+
+<<files.c>>=
+enum { AbsoluteSeek_tag, RelativeSeek_tag, SeekFromEnd_tag };
+DECLARE_CONST(__IO__AbsoluteSeek);
+DECLARE_CONST(__IO__RelativeSeek);
+DECLARE_CONST(__IO__SeekFromEnd);
+
+DECLARE_ENTRYPOINT(__hSeek);
+DECLARE_LABEL(__hSeek_1);
+DECLARE_LABEL(__hSeek_2);
+
+FUNCTION(__hSeek)
+{
+    Node *file;
+    EXPORT_LABEL(__hSeek)
+ ENTRY_LABEL(__hSeek)
+    EVAL_RIGID_FILE(__hSeek);
+    file  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = file;
+    GOTO(__hSeek_1);
+}
+
+static
+FUNCTION(__hSeek_1)
+{
+    Node *mode;
+ ENTRY_LABEL(__hSeek_1)
+    EVAL_RIGID_DATA(__hSeek_1);
+    mode  = sp[0];
+    sp[0] = sp[2];
+    sp[2] = mode;
+    GOTO(__hSeek_2);
+}
+
+static
+FUNCTION(__hSeek_2)
+{
+    int	   smode;
+    Handle *file;
+ ENTRY_LABEL(__hSeek_2)
+    EVAL_RIGID_INT(__hSeek_2);
+
+    file = (Handle *)sp[1];
+    if ( !is_open(file) )
+    {
+	sp   += 2;
+	sp[0] = from_string("hSeek: handle not open");
+	GOTO(__ioError);
+    }
+
+    switch ( node_tag(sp[2]) )
+    {
+    case AbsoluteSeek_tag:
+	smode = SEEK_SET;
+	break;
+    case RelativeSeek_tag:
+	smode = SEEK_CUR;
+	break;
+    case SeekFromEnd_tag:
+	smode = SEEK_END;
+	break;
+    default:
+	unexpected_tag("hSeek (mode)", node_tag(sp[2]));
+    }
+
+    assert(file->fp != NULL);
+    if ( fseek(file->fp, long_val(sp[0]), smode) == -1 )
+    {
+	sp   += 2;
+	sp[0] = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+
+    sp += 4;
+    RETURN(unit);
+}
+
+
+@ 
+The function [[openProcess]] executes a shell command and returns a
+file descriptor connected to the standard input and output of the
+subprocess. We cannot use [[popen]] here, as using it with the [[r+]]
+mode is a non-portable extension.
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__openProcess);
+DECLARE_LABEL(__openProcess_1);
+DECLARE_LABEL(__openProcess_2);
+
+FUNCTION(__openProcess)
+{
+    EXPORT_LABEL(__openProcess)
+ ENTRY_LABEL(__openProcess)
+    CHECK_STACK(1);
+    sp	 -= 1;
+    sp[0] = sp[1];
+    sp[1] = (Node *)__openProcess_1;
+    GOTO(nf_string);
+}
+
+static
+FUNCTION(__openProcess_1)
+{
+    Node *cmd;
+ ENTRY_LABEL(__openProcess_1)
+    CHECK_STACK(1);
+    cmd	  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = cmd;
+    GOTO(__openProcess_2);
+}
+
+static
+FUNCTION(__openProcess_2)
+{
+    int		  r, fds[2], flags;
+    pid_t	  pid;
+    const char	  *cmd, *mode;
+    FILE	  *fp;
+    ProcessHandle *proc;
+ ENTRY_LABEL(__openProcess_2)
+    /* determine the access mode */
+    EVAL_RIGID_DATA(__openProcess_2);
+    cmd = to_string(sp[1]);
+    switch ( node_tag(sp[0]) )
+    {
+    case ReadMode_tag:
+	mode  = "r";
+	flags = mask(readable);
+	break;
+    case WriteMode_tag:
+    case AppendMode_tag:
+	mode  = "w";
+	flags = mask(writable);
+	break;
+    case ReadWriteMode_tag:
+	mode  = "r+";
+	flags = mask(readable) | mask(writable);
+	break;
+    default:
+	unexpected_tag("openProcess (mode)", node_tag(sp[0]));
+    }
+
+    /* depending on the mode create either a pipe or a socket pair */
+    if ( flags == (mask(readable) | mask(writable)) )
+	r = socketpair(AF_UNIX, SOCK_STREAM, 0, fds);
+    else
+	r = pipe(fds);
+    if ( r == -1 )
+    {
+	*++sp = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+
+    /* start a new process for the command */
+    pid = vfork();
+    switch ( pid )
+    {
+    case 0:
+	/* set up appropriate connections in the child process */
+	/* NB when a pipe is used (i.e., read-only or write-only
+	 *    connection), the appropriate end of the pipe is used;
+	 *    otherwise (i.e., read-write connection), we arbitrarily
+	 *    choose the second descriptor of the socket pair. */
+	if ( flags == mask(readable) )
+	    dup2(fds[1], 1);
+	else if ( flags == mask(writable) )
+	    dup2(fds[0], 0);
+	else
+	{
+	    dup2(fds[1], 0);
+	    dup2(fds[1], 1);
+	}
+
+	/* close the pipe/socketpair handles */
+	close(fds[0]);
+	close(fds[1]);
+
+	/* start the child process */
+	execl("/bin/sh", "sh", "-c", cmd, (char *)0);
+	_exit(1);
+    case -1:
+	close(fds[0]);
+	close(fds[1]);
+	*++sp = from_string(strerror(errno));
+	GOTO(__ioError);
+    default:
+	free((char *)cmd);
+	break;
+    }
+
+    /* close the unused descriptor */
+    if ( flags == mask(writable) )
+    {
+	close(fds[0]);
+	fds[0] = fds[1];
+    }
+    else
+	close(fds[1]);
+
+    /* create a file for the pipe/socketpair */
+    fp	= fdopen(fds[0], mode);
+    if ( fp == NULL )
+    {
+	close(fds[0]);
+	*++sp = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+    else
+	sp += 3;
+
+    /* create the process node */
+    CHECK_HEAP(process_node_size);
+    proc	 = (ProcessHandle *)hp;
+    proc->info	 = &process_info;
+    proc->fp	 = fp;
+    proc->flags  = flags;
+    proc->bmode  = _IOFBF;
+    proc->bsize	 = 0;
+    proc->buffer = NULL;
+    proc->pid	 = pid;
+    proc->status = 0;
+    hp		+= process_node_size;
+    register_final((Node *)proc);
+
+    /* return the process node */
+    RETURN((Node *)proc);
+}
+
+@ 
+The function [[pClose]] closes the connection to a process and returns
+its termination status. This function raises an IO error when it is
+applied to a handle that is not connected to a process. However, it is
+safe to call [[pClose]] more than once for a handle that was created
+by [[openProcess]].
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__pClose);
+
+FUNCTION(__pClose)
+{
+    int		  res;
+    ProcessHandle *proc;
+    Node	  *r;
+    EXPORT_LABEL(__pClose)
+ ENTRY_LABEL(__pClose)
+    EVAL_RIGID_FILE(__pClose);
+    proc = (ProcessHandle *)sp[0];
+    if ( proc->info != &process_info )
+    {
+	sp[0] = from_string("pClose applied to a handle that "
+			    "is not connected to a process");
+	GOTO(__ioError);
+    }
+    sp += 2;
+
+    if ( proc->fp )
+    {
+	fclose(proc->fp);
+	proc->fp    = NULL;
+	proc->flags = 0;
+	if ( proc->buffer )
+	    free(proc->buffer);
+	waitpid(proc->pid, &proc->status, 0);
+	proc->pid = 0;
+    }
+    else if ( proc->pid )
+    {
+	waitpid(proc->pid, &proc->status, 0);
+	proc->pid = 0;
+    }
+
+    if ( WIFSIGNALED(proc->status) )
+	res = -WTERMSIG(proc->status);
+    else
+    {
+	ASSERT(WIFEXITED(proc->status));
+	res = WEXITSTATUS(proc->status);
+    }
+
+#if !ONLY_BOXED_OBJECTS
+    if ( !is_large_int(res) )
+	r = mk_unboxed(res);
+    else
+#endif
+    {
+	CHECK_HEAP(int_node_size);
+	r	= (Node *)hp;
+	r->info = &int_info;
+	r->i.i  = res;
+	hp     += int_node_size;
+    }
+    RETURN(r);
+}
+
+@ 
+The function [[connectTcpSocket]] creates a socket that is connected
+to a specified port at a given host.
+
+<<files.c>>=
+DECLARE_ENTRYPOINT(__connectTcpSocket);
+DECLARE_LABEL(__connectTcpSocket_1);
+DECLARE_LABEL(__connectTcpSocket_2);
+DECLARE_LABEL(__connectTcpSocket_3);
+
+FUNCTION(__connectTcpSocket)
+{
+    EXPORT_LABEL(__connectTcpSocket)
+ ENTRY_LABEL(__connectTcpSocket)
+    CHECK_STACK(1);
+    sp	 -= 1;
+    sp[0] = sp[1];
+    sp[1] = (Node *)__connectTcpSocket_1;
+    GOTO(nf_string);
+}
+
+static
+FUNCTION(__connectTcpSocket_1)
+{
+    Node *host;
+ ENTRY_LABEL(__connectTcpSocket_1)
+    host  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = host;
+    GOTO(__connectTcpSocket_2);
+}
+
+static
+FUNCTION(__connectTcpSocket_2)
+{
+    Node *port;
+ ENTRY_LABEL(__connectTcpSocket_2)
+    EVAL_RIGID_INT(__connectTcpSocket_2)
+    port  = sp[0];
+    sp[0] = sp[2];
+    sp[2] = port;
+    GOTO(__connectTcpSocket_3);
+}
+
+static
+FUNCTION(__connectTcpSocket_3)
+{
+    int		       fd, port, flags;
+    const char	       *host, *mode;
+    FILE	       *fp;
+    Handle	       *sock;
+    struct hostent     *hostent;
+    struct sockaddr_in addr;
+ ENTRY_LABEL(__connectTcpSocket_3)
+    EVAL_RIGID_DATA(__connectTcpSocket_3)
+    host = to_string(sp[1]);
+    port = long_val(sp[2]);
+    switch ( node_tag(sp[0]) )
+    {
+    case ReadMode_tag:
+	mode  = "r";
+	flags = mask(readable);
+	break;
+    case WriteMode_tag:
+    case AppendMode_tag:
+	mode  = "w";
+	flags = mask(writable);
+	break;
+    case ReadWriteMode_tag:
+	mode  = "r+";
+	flags = mask(readable) | mask(writable);
+	break;
+    default:
+	unexpected_tag("connectTcpSocket (mode)", node_tag(sp[0]));
+    }
+
+    /* setup the socket address structure */
+    hostent	    = gethostbyname(host);
+    addr.sin_family = AF_INET;
+    addr.sin_port   = htons(port);
+    if ( hostent )
+	addr.sin_addr.s_addr = *(unsigned long *)hostent->h_addr_list[0];
+    else if ( (addr.sin_addr.s_addr = inet_addr(host)) == (in_addr_t)~0 )
+    {
+	free((char *)host);
+	sp   += 2;
+	sp[0] = from_string("unknown host");
+	GOTO(__ioError);
+    }
+    free((char *)host);
+
+    /* create a new socket */
+    fd = socket(AF_INET, SOCK_STREAM, 0);
+    if ( fd < 0 )
+    {
+	sp   += 2;
+	sp[0] = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+
+    /* connect the socket to specified port */
+    if ( connect(fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) < 0 )
+    {
+	close(fd);
+	sp   += 2;
+	sp[0] = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+
+    /* create a file for the scoket */
+    fp = fdopen(fd, mode);
+    if ( fp == NULL )
+    {
+	close(fd);
+	sp   += 2;
+	sp[0] = from_string(strerror(errno));
+	GOTO(__ioError);
+    }
+    sp += 4;
+
+    /* create the file node */
+    CHECK_HEAP(file_node_size);
+    sock	 = (Handle *)hp;
+    sock->info	 = &file_info;
+    sock->fp	 = fp;
+    sock->flags  = flags;
+    sock->bmode  = _IOFBF;
+    sock->bsize	 = 0;
+    sock->buffer = NULL;
+    hp		+= file_node_size;
+    register_final((Node *)sock);
+
+    /* return the socket */
+    RETURN((Node *)sock);
+}
+
+@
+The function [[init_files]] initializes the standard channels and
+optionally changes the buffer mode for standard input and output.
+
+<<files.c>>=
+void
+init_files(int bmode, long bsize)
+{
+    char *buffer;
+
+    /* set up the standard file pointers */
+    stdin_node.fp = stdin;
+    stdout_node.fp = stdout;
+    stderr_node.fp = stderr;
+
+    /* eventually change buffer modes for standard input and output */
+    if ( bmode != -1 )
+    {
+	/* don't allocate buffers if the file is not fully buffered */
+	if ( bmode != _IOFBF )
+	    bsize = 0;
+
+	/* change the buffer mode for the standard input channel */
+	if ( bsize )
+	{
+	    buffer = (char *)malloc(bsize);
+	    if ( buffer == NULL )
+		sys_error("init_files (input buffer)");
+	}
+	else
+	    buffer = NULL;
+	if ( setvbuf(stdin, buffer, bmode, bsize) == -1 )
+	    sys_error("setvbuf (stdin)");
+	stdin_node.bmode  = bmode;
+	stdin_node.bsize  = bsize;
+	stdin_node.buffer = buffer;
+
+	/* change the buffer mode for the standard input channel */
+	if ( bsize )
+	{
+	    buffer = (char *)malloc(bsize);
+	    if ( buffer == NULL )
+		sys_error("init_files (output buffer)");
+	}
+	else
+	    buffer = NULL;
+	if ( setvbuf(stdout, buffer, bmode, bmode) == -1 )
+	    sys_error("setvbuf (stdout)");
+	stdout_node.bmode  = bmode;
+	stdout_node.bsize  = bsize;
+	stdout_node.buffer = buffer;
+    }
+}

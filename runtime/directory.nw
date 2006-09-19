@@ -1,0 +1,87 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: directory.nw 1744 2005-08-23 16:17:12Z wlux $
+%
+% Copyright (c) 2003-2005, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Directories}
+The header file [[directory.h]] provides the necessary includes for
+the foreign function declarations in the \texttt{Directory} module. In
+addition, it implements a few functions that do not map directly onto
+functions in the C library.
+
+<<directory.h>>=
+#include <sys/types.h>
+#include <sys/param.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <dirent.h>
+#include <errno.h>
+
+#define maxpathlen()		MAXPATHLEN
+#define dirent_d_name(dp)	((struct dirent *)dp)->d_name
+
+@ 
+The function [[exist_d]] returns [[true]] if the argument exists and
+is a directory. The function [[exist_f]] returns [[true]] if the
+argument exists and is not a directory.
+
+<<directory.h>>=
+static inline int
+exist_d(const char *path)
+{
+    struct stat st;
+    return stat(path, &st) == 0 ? st.st_mode & S_IFDIR
+	: (errno == ENOTDIR || errno == ENOENT) ? 0 : -1;
+}
+
+static inline int
+exist_f(const char *path)
+{
+    struct stat st;
+    return stat(path, &st) == 0 ? !(st.st_mode & S_IFDIR)
+	: (errno == ENOTDIR || errno == ENOENT) ? 0 : -1;
+}
+
+@ 
+The functions [[rename_d]] and [[rename_f]] rename a directory and a
+file, respectively.
+
+<<directory.h>>=
+static inline int
+rename_d(const char *from, const char *to)
+{
+    struct stat st;
+    if ( stat(from, &st) == 0 )
+    {
+	if ( st.st_mode & S_IFDIR )
+	    return rename(from, to);
+	errno = ENOTDIR;
+    }
+    return -1;
+}
+
+static inline int
+rename_f(const char *from, const char *to)
+{
+    struct stat st;
+    if ( stat(from, &st) == 0 )
+    {
+	if ( !(st.st_mode & S_IFDIR) )
+	    return rename(from, to);
+	errno = EISDIR;
+    }
+    return -1;
+}
+
+@ 
+The function [[modtime]] returns the modification time of an existing
+file or [[-1]] in case of an error.
+
+<<directory.h>>=
+static inline int
+modtime(const char *path)
+{
+    struct stat st;
+    return stat(path, &st) == 0 ? st.st_mtime : -1;
+}

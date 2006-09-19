@@ -1,0 +1,159 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: data.nw 1910 2006-05-01 09:37:16Z wlux $
+%
+% Copyright (c) 2001-2006, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Predefined Data Types}
+This file contains the implementation of all runtime system functions
+related to the predefined data types \texttt{()}, \texttt{[a]}, and
+\texttt{Success}. Tuples are defined in each compiled module as needed
+because there is no upper limit on the size of tuples.
+
+<<data.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include "debug.h"
+#include "run.h"
+#include "heap.h"
+#include "stack.h"
+#include "spaces.h"
+#include "eval.h"
+#include "unify.h"
+#include "trace.h"
+#include "data.h"
+#include "cam.h"
+
+@ 
+The descriptors for the data constructors \texttt{()}, \texttt{[]},
+\texttt{:}, and \texttt{Success} are defined by the runtime system.
+
+<<data.h>>=
+#define UNIT_TAG	___40__41__tag
+#define NIL_TAG		___91__93__tag
+#define CONS_TAG	___58__tag
+#define SUCCESS_TAG	__Success_tag
+
+enum { UNIT_TAG };
+enum { NIL_TAG, CONS_TAG };
+enum { SUCCESS_TAG };
+
+DECLARE_CONST(___40__41_);
+DECLARE_CONST(___91__93_);
+DECLARE_DATA(___58_);
+DECLARE_CONST(__Success);
+
+#define nil		CONST(___91__93_)
+#define unit		CONST(___40__41_)
+#define Success		CONST(__Success)
+#define cons_info	___58__info
+#define cons_node_size	closure_node_size(2)
+
+@ 
+<<data.c>>=
+DEFINE_CONST(___40__41_, "()", UNIT_TAG);
+DEFINE_CONST(___91__93_, "[]", NIL_TAG);
+DEFINE_DATA(___58_, ":", CONS_TAG, 2);
+DEFINE_CONST(__Success, "Success", SUCCESS_TAG);
+
+@ 
+The functions [[___40__41__unify]], [[___91__93__unify]], and
+[[___58__unify]] instantiate their argument with a fresh data term.
+There is no corresponding function for type [[Success]] because its
+constructor is hidden and cannot be instantiated in a flexible match.
+
+<<data.h>>=
+DECLARE_ENTRYPOINT(___40__41__unify);
+DECLARE_ENTRYPOINT(___91__93__unify);
+DECLARE_ENTRYPOINT(___58__unify);
+
+<<data.c>>=
+FUNCTION(___40__41__unify)
+{
+    EXPORT_LABEL(___40__41__unify)
+ ENTRY_LABEL(___40__41__unify)
+    CHECK_STACK1();
+    sp	 -= 1;
+    sp[0] = CONST(___40__41_);
+    GOTO(bind_var);
+}
+
+FUNCTION(___91__93__unify)
+{
+    EXPORT_LABEL(___91__93__unify)
+ ENTRY_LABEL(___91__93__unify)
+    CHECK_STACK1();
+    sp	 -= 1;
+    sp[0] = CONST(___91__93_);
+    GOTO(bind_var);
+}
+
+FUNCTION(___58__unify)
+{
+    Node *v1, *v2, *n;
+    EXPORT_LABEL(___58__unify)
+ ENTRY_LABEL(___58__unify)
+    CHECK_STACK1();
+    CHECK_HEAP(2 * variable_node_size + cons_node_size);
+
+    v1		= (Node *)hp;
+    v1->info	= variable_info_table;
+    v1->v.spc	= ss;
+    v1->v.wq	= 0;
+    v1->v.cstrs = 0;
+    hp	       += variable_node_size;
+
+    v2		= (Node *)hp;
+    v2->info	= variable_info_table;
+    v2->v.spc	= ss;
+    v2->v.wq	= 0;
+    v2->v.cstrs = 0;
+    hp	       += variable_node_size;
+
+    n		 = (Node *)hp;
+    n->info	 = &cons_info;
+    n->c.args[0] = v1;
+    n->c.args[1] = v2;
+    hp		+= cons_node_size;
+
+    sp	 -= 1;
+    sp[0] = n;
+    GOTO(bind_var);
+}
+
+@ 
+The function [[___58_]] is used for partial applications of the list
+constructor. Note that it is not necessary to export the entry point
+because the function will never be called directly.
+
+<<data.h>>=
+extern NodeInfo ___58__papp_info_table[];
+extern const struct closure_node ___58__function;
+
+@ 
+<<data.c>>=
+DECLARE_LABEL(___58_);
+NodeInfo ___58__papp_info_table[] = {
+    PAPPINFO(":", 0, ___58_, 2)
+    PAPPINFO(":", 1, ___58_, 2)
+};
+const struct closure_node ___58__function = { ___58__papp_info_table, { 0 } };
+
+static
+FUNCTION(___58_)
+{
+    Node *cons;
+ ENTRY_LABEL(___58_)
+    TRACE_FUN(":", 2);
+
+    CHECK_HEAP(cons_node_size);
+    cons	    = (Node *)hp;
+    cons->info	    = &cons_info;
+    cons->c.args[0] = sp[0];
+    cons->c.args[1] = sp[1];
+    hp		   += cons_node_size;
+
+    sp += 2;
+    RETURN(cons);
+}

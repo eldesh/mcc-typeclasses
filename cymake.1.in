@@ -1,0 +1,179 @@
+.\"Modified from man(1) of FreeBSD, the NetBSD mdoc.template, and mdoc.samples.
+.\"See Also:
+.\"man mdoc.samples for a complete listing of options
+.\"man mdoc for the short list of editing options
+.\"/usr/share/misc/mdoc.template
+.\"
+.\" $Id: cymake.1.in 1885 2006-04-05 21:23:18Z wlux $
+.\"
+.\" Copyright (c) 2004-2006, Wolfgang Lux
+.\" See LICENSE for the full license.
+.\"
+.Dd 17.11.05               \" DATE 
+.Dt cymake 1      \" Program name and manual section number 
+.Os
+.Sh NAME                 \" Section Header - required - don't modify 
+.Nm cymake
+.Nd A make like build tool for Curry programs.
+.Sh SYNOPSIS             \" Section Header - required - don't modify
+.Nm
+.Op Ar option No ...
+.Ar target No ...
+.Sh DESCRIPTION          \" Section Header - required - don't modify
+.Nm
+is a
+.Xr make 1
+like tool for compiling Curry programs. Dependencies are automatically
+extracted from the source files; there is no need to construct or
+maintain a Makefile.
+.Pp
+.Nm
+accepts options and file names on the command line in an arbitrary
+order. The file arguments determine what to compile. If
+.Ar target
+is the name of an executable (i.e. it has no extension),
+.Ar target Ns Pa .lcurry
+or
+.Ar target Ns Pa .curry
+is assumed to contain the main module of the program. All modules it
+depends on are compiled (if necessary) and linked to an executable. If
+.Ar target
+is the name of a source module (i.e. it ends in
+.Pa .lcurry
+or
+.Pa .curry
+or an object module (i.e. it ends in
+.Pa .o )
+then the object file for that module is generated. Archive files and
+shared libraries (i.e. files ending with
+.Pa .a ,
+.Pa .so ,
+.Pa .dylib ,
+or
+.Pa .dll )
+are not targets, but passed as additional arguments to the linker.
+.Pp
+.Nm
+allows several programs to reside in the same directory. Modules can
+be shared between several programs. Directories to search for modules
+can be specified with the
+.Fl i
+flag, in the same way as for 
+.Xr cyc 1 .
+In addition, directories which are searched for interfaces of library
+modules can be specified with the
+.Fl P
+flag.
+.Pp
+.Nm
+correctly handles the fact that the Curry compiler generates two
+files, an object file and an interface file, for each module compiled.
+.Pp
+.Ss Options
+.Nm
+understands the following options:
+.Bl -tag -width -indent
+.It Fl n
+No execution mode. Print commands but do not execute them.
+.It Fl q
+Quiet mode. Do not print commands before executing them.
+.It Fl M
+Output a Makefile compatible dependency list on the standard output.
+.It Fl a
+Always link the executable, even if it is not out of date with respect
+to its object files. This is useful if only the goal to be evaluated
+by the program is changed.
+.It Fl e Ar goal
+Evaluate
+.Ar goal
+instead of function
+.Li main .
+This option cannot be used when compiling more than one module.
+.It Fl T Ar goal
+Compute the type of
+.Ar goal .
+This option cannot be used when compiling more than one module.
+.It Fl -debug
+Compile the program for use with the debugger. As object files
+compiled with
+.Fl -debug
+cannot be linked with object files compiled without
+.Fl -debug ,
+.Nm
+uses the suffix
+.Pa .d.o
+instead of
+.Pa .o
+for object files when this option is specified.
+.It Fl i Ar dir
+Add directory
+.Ar dir
+to the list of paths used to locate imported modules. By default, the
+compiler searches only the current directory for source files. Note
+that the current directory is always searched first.
+.It Fl P Ar dir
+Add directory
+.Ar dir
+to the list of paths used to locate interface files for library
+modules. By default, the compiler searches for interface files in its
+standard library directory
+.Pa @libdir@/curry .
+.Pp
+The compiler scans the directories specified with
+.Fl P
+before the installation directory; thus, it is possible to hide the
+interfaces of the standard library by using this option.
+.It Fl o Ar file
+Puts the executable file in
+.Ar file .
+This option cannot be used when compiling more than one module. This
+option is ignored if compiling to an object file.
+.It Fl -clean
+Remove all compiled files for a program. If specified in conjunction
+with
+.Fl -debug
+only the object files for the debugger, i.e. with suffix
+.Pa .d.o ,
+are removed.
+.El
+Most other flags are assumed to be compiler options and are passed to
+.Nm cyc
+when compiling and linking modules.
+.Pp
+.Sh ENVIRONMENT
+.Bl -tag -width -indent -compact
+.It Ev CURRY_PATH
+The environment variable
+.Ev CURRY_PATH
+is used to locate the auxiliary executables used by
+.Nm .
+The default value is
+.Pa @libdir@/curry .
+.Pp
+.It Ev CURRY_IMPORT_PATH
+.It Ev CURRY_INCLUDE_PATH
+.It Ev CURRY_LIBRARY_PATH
+The environment variables
+.Ev CURRY_IMPORT_PATH ,
+.Ev CURRY_INCLUDE_PATH ,
+and
+.Ev CURRY_LIBRARY_PATH
+contain colon-separated lists of directories that are searched for
+imported interfaces, included header files, and library files,
+respectively. Their default value is
+.Ev $CURRY_PATH .
+.El                      
+.Sh FILES                \" File used or created by the topic of the man page
+.Bl -tag -width -indent
+.It Pa @bindir@/cyc
+The Curry compiler.
+.It Pa @libdir@/curry/cymk
+Dependency generator for Curry programs.
+.It Pa @libdir@/curry/newer
+Helper program to determine if a target of out of date.
+.It Pa @libdir@/curry/*.icurry
+Interface files for the standard library.
+.El
+.Sh SEE ALSO 
+.Xr cyc 1 , 
+.Xr cyi 1

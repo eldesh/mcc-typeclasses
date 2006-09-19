@@ -1,0 +1,587 @@
+.\"Modified from man(1) of FreeBSD, the NetBSD mdoc.template, and mdoc.samples.
+.\"See Also:
+.\"man mdoc.samples for a complete listing of options
+.\"man mdoc for the short list of editing options
+.\"/usr/share/misc/mdoc.template
+.\"
+.\" $Id: cyc.1.in 1913 2006-05-07 13:44:36Z wlux $
+.\"
+.\" Copyright (c) 2004-2006, Wolfgang Lux
+.\" See LICENSE for the full license.
+.\"
+.Dd 17.11.05               \" DATE 
+.Dt cyc 1      \" Program name and manual section number 
+.Os
+.Sh NAME                 \" Section Header - required - don't modify 
+.Nm cyc
+.Nd A native code compiler for Curry.
+.Sh SYNOPSIS             \" Section Header - required - don't modify
+.Nm
+.Op Ar option No ...
+.Ar file No ...
+.Sh DESCRIPTION          \" Section Header - required - don't modify
+.Nm
+is a native code compiler for the multi-paradigm declarative language
+Curry. Normally, it performs compilation, assembly, and linking. The
+``overall options'' allow stopping this process at an intermediate
+stage. For example, the
+.Fl c
+option says not to run the linker. The output then consists of object
+files output by the assembler.
+.Pp
+Other options control one stage of processing; for instance, the
+.Fl -debug
+option tells
+.Nm cyc
+to compile Curry modules such that they can be evaluated by the
+declarative debugger. 
+.Pp
+The 
+.Nm 
+program accepts options and file names as operands. Options and file
+names can be mixed on the command line. In general, the order of
+options is not relevant with the exception of additional libraries
+specified with 
+.Fl l
+options. On many systems, these should be specified last on the
+command line in order to ensure proper linking of programs.
+.Pp
+The source language of a file and the associated processing is
+determined by the file name extension. Argument names which end with
+.Pa .curry
+are taken to be Curry source, names ending in
+.Pa .lcurry
+are taken to be literate Curry source, names ending in
+.Pa .c
+are taken to be C code, names ending in 
+.Pa .s
+are taken to be assembler programs, and
+.Pa .o
+are object files.
+.Pp
+By default, a program linked with
+.Nm  cyc
+executes the
+.Li main
+function in the main module of the program. The compiler assumes that
+the last Curry source file appearing on the command line defines the
+main module. A different main module can be specified explicitly with
+the
+.Fl M
+option. It is possible to specify a different goal with the
+.Fl e
+option. If the type of the goal is 
+.Nm IO Ar t ,
+for some arbitrary type
+.Ar t ,
+the program executes the corresponding I/O action. Otherwise, the goal
+is evaluated and its solutions are presented incrementally on the
+standard output.
+.Pp
+.Ss Overall Options
+The following options control the general processing of source files.
+.Bl -tag -width -indent
+.It Fl n
+Do not execute any command, but display each command that normally
+would be executed.
+.It Fl v
+Display each command before it is executed by
+.Nm .
+.It Fl C
+Stop processing after generating C code from the Curry source modules.
+.It Fl S
+Stop processing after generating assembler code from the Curry and C
+source files.
+.It Fl c
+Compile and assemble the source file but do not link.
+.It Fl o Ar file
+Place the output in a file named
+.Ar file .
+Since only one output file can be specified, it does not make sense to
+use
+.Fl o
+when compiling more than one input file unless you are producing an
+executable file as output.
+.Pp
+If
+.Fl o
+is not specified, the default is to put an executable file in
+.Pa a.out ,
+the object file for 
+.Ar source Ns Ar .suffix
+in
+.Ar source Ns Pa .o
+its assembler file in
+.Ar source Ns Pa .s ,
+and its C file in 
+.Ar source Ns Pa .c .
+.El
+.Ss Compiling Curry Modules
+The names of Curry source files must end with
+.Pa .curry
+or
+.Pa .lcurry .
+The latter are taken to contain literate Curry source and are
+deliterated first. All Curry source files are compiled into C code. In
+addition, for every source file 
+.Ar file Ns Pa .curry
+and
+.Ar file Ns Pa .lcurry ,
+respectively, the compiler creates a file
+.Ar file Ns Pa .icurry
+containing the module's interface. The compiler uses module interfaces
+when processing import declarations in a source module. In order for
+the compiler to find the interfaces of imported modules, the name of
+the source file should agree with its module name. Hierarchical module
+names of the form
+.Li A.B.C
+are mapped onto the filesystem as in Java, i.e., the compiler expects
+to find the interface of this module in file
+.Pa C.icurry
+in directory 
+.Pa A/B
+relative to the directory where the compiler was invoked or to one of
+the directories specifying the import search path.
+.Pp
+The following options control the compilation of Curry source into C
+code.
+.Pp
+.Bl -tag -width -indent -compact
+.It Fl g
+Deprecated synonym for
+.Fl -debug .
+.Pp
+.It Fl -debug
+Prepare the compiled code for executing the program with the
+declarative debugger.
+.Pp
+Note that code compiled with this option is incompatible with code
+compiled without this option. This option must therefore be used
+consistently for compiling and linking all modules of a program.
+.Pp
+.It Fl -trusted
+This flag has an effect only in conjunction with one of previous
+options. It tells that debugger that it can trust all functions from a
+module compiled with this flag. The debugger will not ask questions
+about such functions.
+.Pp
+.It Fl i Ar dir
+Add directory
+.Ar dir
+to the list of paths used to locate interface files. By default, the
+compiler searches for interface files in the current directory and in
+its standard library directory
+.Pa @libdir@/curry .
+.Pp
+.It Fl Whaskell
+.It Fl Wprolog
+.It Fl Wgoedel
+Warn whenever a definition does not obey the selected case mode
+(cf. Sect. C.1 of the Curry report).
+.Pp
+.It Fl Wall
+ Enable all warnings below.
+.Pp
+.It Fl Wunused
+Enable all unused warnings below.
+.Pp
+.It Fl Wunused-data
+Warn whenever a data constructor is not used.
+.Pp
+.It Fl Wunused-decl
+Warn whenever a function or pattern declaration is not used.
+.Pp
+.It Fl Wunused-var
+Warn whenever a function or pattern argument is not used.
+.Pp
+.It Fl Wshadow
+Warn whenever a local declaration shadows a declaration from an outer
+scope.
+.Pp
+.It Fl Woverlap
+Warn whenever a function's equations have overlapping left hand sides.
+.Pp
+.It Fl H Ar size
+Change the heap size used by the compiler to
+.Ar size .
+It is possible to use the abbreviations
+.Ar size Ns Li k
+and
+.Ar size Ns Li M
+to specify the heap size in kBytes and MBytes, respectively.
+.Pp
+Note that this option does not effect the heap size of the compiled
+executable. Use 
+.Fl h Ar size
+for this (see below). 
+.El
+.Pp
+.Ss Compiling C Files
+The following list describes only the most common options understood
+by
+.Nm
+when compiling C source either directly or as a result of previously
+compiling Curry source into C code. In fact, 
+.Nm
+passes on most of its options to the C compiler. For a detailed
+description of these options see the
+.Xr gcc 1
+man page.
+.Bl -tag -width -indent
+.It Fl D Ar name
+Predefine 
+.Ar name
+as a macro, with definition
+.Li 1 .
+.It Fl D Ar name=defn
+Predefine
+.Ar name
+as a macro with definition
+.Ar defn .
+.It Fl U Ar name
+Cancel any previous definition of
+.Ar name ,
+either built in or provided with a
+.Fl D
+definition.
+.It Fl I Ar dir
+Add directory
+.Ar dir
+to the list of paths used to locate header files. The standard library
+directory
+.Pa ( @libdir@/curry )
+is always included in this list.
+.It Fl O
+equivalent to
+.Fl O1 .
+.It Fl O Ns Ar level
+Controls optimization of the compiled code. 
+.Fl O0
+disables all optimizations. Note that
+.Fl O3
+and higher levels will fail to produce valid code for Curry modules on
+many architectures.
+.It Fl -ccopt Ar opt
+Passes the option
+.Ar opt
+to the C compiler without interpretation. For instance, in order to
+include debugging symbols in the compiled C code, invoke the compiler
+with
+.Fl -ccopt Fl g .
+.El
+.Ss Linking
+The following options are relevant while linking a program. The
+compiler creates a tiny C code file in this phase, which contains the
+startup code initializing the Curry runtime system and starting the
+evaluation of the goal. This file is compiled like other C code during
+the link phase.
+.Bl -tag -width -indent
+.It Fl g
+Deprecated synonym for
+.Fl -debug .
+.It Fl -debug
+Compile a program that invokes the declarative debugger. All Curry
+modules must have been compiled with the
+.Fl -debug
+option as well.
+.It Fl h Ar size
+Use
+.Ar size
+bytes for the heap of the Curry program. Note that actually twice as
+much memory is allocated for the heap because the runtime system uses
+a two-space copying collector. The abbreviations
+.Ar size Ns Li k
+and
+.Ar size Ns Li M
+can be used for specifying the size in kBytes and MBytes,
+respectively. The default is to use a 4 MByte heap. 
+.It Fl k Ar size
+Use
+.Ar size
+bytes for the stack of the Curry program. The abbreviations
+.Ar size Ns Li k
+and
+.Ar size Ns Li M
+can be used for specifying the size in kBytes and MBytes,
+respectively. The default is to use a 512 kByte stack.
+.It Fl t Ar size
+Use
+.Ar size
+bytes for the trail stack of the Curry program. The abbreviations
+.Ar size Ns Li k
+and
+.Ar size Ns Li M
+can be used for specifying the size in kBytes and MBytes,
+respectively. The default is to use a 512 kByte trail stack.
+.It Fl p
+Print cumulated execution times and memory usage statistics at the end
+of the run. If specified more than once, also print memory statistics
+at each garbage collection.
+.It Fl e Ar goal
+Evaluate
+.Ar goal
+instead of
+.Li main .
+The
+.Ar goal
+is evaluated with respect to the Curry module specified explicitly
+with the
+.Fl M
+option, the last module occurring on the command line, or the
+.Li Prelude
+otherwise.
+.It Fl T Ar goal
+Compute the type of
+.Ar goal .
+The
+.Ar goal Ns No 's
+type is computed with respect to the Curry module specified explicitly
+with the
+.Fl M
+option, the last module occurring on the command line, or the
+.Li Prelude
+otherwise.
+.It Fl M Ar module
+Use
+.Ar module
+as main module of the program. An explicit goal specified with the
+.Fl e
+option is evaluated in the context of
+.Ar module .
+By default, the compiler assumes that the last Curry source file
+appearing on the command line contains the main module of the
+program. It may be necessary to specify the main module explicitly
+when there are no source file arguments.
+.Pp
+.Ar Module
+is either the name of a source file (ending in 
+.Pa .lcurry
+or
+.Pa .curry )
+or the name of a module whose source can be located in the current
+directory.
+.It Fl L Ar dir
+Add directory
+.Ar dir
+to the list of paths used to locate libraries specified with
+.Fl l
+options. The standard library directory
+.Pa @libdir@/curry
+is always included in this list.
+.It Fl l Ar lib
+Search the library named
+.Ar lib
+when linking.
+.It Fl -ldopt Ar opt
+Passes the option
+.Ar opt
+to the C compiler without interpretation. In contrast to
+.Fl -ccopt
+(see above),
+.Ar opt
+is used only during the link phase.
+.El
+.Pp
+.Ss Running Programs
+The operation of a Curry program depends on the type of the goal being
+evaluated. If it is of type
+.Li IO Ar t ,
+the I/O action described by the goal is executed. All command line
+arguments except for the runtime system options (see below) are
+available to the program and can be accessed with the function
+.Li System.getArgs .
+.Pp
+If the goal's type is not
+.Li IO Ar t ,
+the program computes and prints the solutions of the goal with a depth
+first search strategy. A solution comprises the normal form of the
+goal and the bindings and constraints for its free variables. When run
+on an interactive terminal, solutions are presented one by one giving
+the user a chance to stop the computation after each
+solution. Otherwise, all solutions of the goal are computed.
+.Pp
+This behavior can be changed by passing one of the options
+.Fl i
+and
+.Fl n
+to the program. If invoked with
+.Fl i ,
+the program computes the solutions incrementally as if it were run on
+an interactive terminal. If invoked with
+.Fl n ,
+the goal's solutions are computed all at once.
+.Pp
+All Curry programs run with fixed size heap, stack, and trail. Their
+sizes can be specified at link time, but can be changed at run-time by
+passing options to the Curry runtime system. Such options must be
+enclosed with
+.Cm +RTS
+and
+.Fl RTS
+arguments on the command line. The
+.Fl RTS
+switch may be omitted if it is the last argument on the command line.
+.Pp
+The Curry runtime system understands the following options:
+.Bl -tag -width -indent
+.It Fl b Ns Ar mode
+Use buffer mode
+.Ar mode
+for the standard input and output of the program where the following
+.Ar mode Ns No s
+are recognized
+.Bl -tag -width -indent -compact
+.It Cm n
+Unbuffered
+.It Cm l
+Line buffered
+.It Cm f Ar n
+Fully buffered
+.El
+The optional number
+.Ar n
+allows specifying the buffer size when using fully buffered mode.
+.It Fl h Ar n
+Use
+.Ar n
+bytes for the heap in this run of the program. Note that actually
+twice as much memory is allocated for the heap because the runtime
+system uses a two-space copying collector. The abbreviations
+.Ar n Ns Li k
+and
+.Ar n Ns Li M
+can be used for specifying the size in kBytes and MBytes,
+respectively.
+.It Fl k Ar n
+Use
+.Ar n
+bytes for the stack in this run of the program. The abbreviations
+.Ar n Ns Li k
+and
+.Ar n Ns Li M
+can be used for specifying the size in kBytes and MBytes,
+respectively.
+.It Fl t Ar n
+Use
+.Ar n
+bytes for the trail stack in this run of the program. The
+abbreviations
+.Ar n Ns Li k
+and
+.Ar n Ns Li M
+can be used for specifying the size in kBytes and MBytes,
+respectively.
+.It Fl p
+Print cumulated execution times and memory usage statistics at the end
+of the run. If specified more than once, also print memory statistics
+at each garbage collection.
+.It Fl d
+Turn on the low-level tracer of the abstract machine. In general you
+do not want to see its output, but it may give hints to why a program
+does not compute an expected solution or runs into a deadlock. Beware
+that tracing can slow down program execution considerably and the
+output may be excessively large.
+.El
+.Sh ENVIRONMENT
+.Bl -tag -width -indent -compact
+.It Ev CURRY_PATH
+The environment variable
+.Ev CURRY_PATH
+is used to locate the compiler executables. The default value is
+.Pa @libdir@/curry .
+.Pp
+.It Ev CURRY_IMPORT_PATH
+.It Ev CURRY_INCLUDE_PATH
+.It Ev CURRY_LIBRARY_PATH
+The environment variables
+.Ev CURRY_IMPORT_PATH ,
+.Ev CURRY_INCLUDE_PATH ,
+and
+.Ev CURRY_LIBRARY_PATH
+contain colon-separated lists of directories that are searched for
+imported interfaces, included header files, and library files,
+respectively. Their default value is
+.Ev $CURRY_PATH .
+.El                      
+.Sh FILES                \" File used or created by the topic of the man page
+.Bl -tag -width -indent
+.It Pa @libdir@/curry/cycc
+The Curry to C compiler.
+.It Pa @libdir@/curry/*.icurry , @libdir@/curry/*.h
+Interface and header files for the standard library and runtime
+system of the Curry compiler.
+.It Pa @libdir@/curry/libcurry.a
+The runtime system and standard library.
+.It Pa @libdir@/curry/libcurry_g.a
+Standard library prepared for debugging. All library modules have
+been compiled with
+.Fl -trusted .
+.El
+.Sh EXAMPLES
+.Bl -tag -width -indent -compact
+.It Li cyc test.curry
+This command compiles and links the Curry module in
+.Pa test.curry .
+The executable is put in
+.Pa a.out
+and evaluates the
+.Li main
+function in
+.Pa test.curry .
+.Pp
+.It Li cyc -h12M -O2 A.lcurry B.lcurry -o B
+This command compiles and links the Curry modules in
+.Pa A.lcurry
+and
+.Pa B.lcurry
+in that order. Both files are assumed to contain literate Curry
+source. The code is optimized by the C compiler using optimization
+level 2. The executable is put in file
+.Pa B .
+It evaluates the
+.Li main
+function in
+.Pa B.lcurry
+and uses a larger default heap (12 MBytes).
+.Pp
+.It Li cyc -c nat.curry
+.It Li cyc -e "add n Z =:= S Z where n free" nat.o -Mnat -o one
+The first of these commands compiles the Curry module in
+.Pa nat.curry
+and places the object file in
+.Pa nat.o .
+The second command then links the object file into a program which
+evaluates the goal
+.Li add n Z =:= S Z where n free
+in the context of this module. Note that this context must be
+specified explicitly with a
+.Fl M
+option because no Curry module was named on the second command
+line. The executable is placed in
+.Pa one .
+.Pp
+.It Li cyc -e "length Xs where Xs free"
+This command compiles and links a program that evaluates the goal
+.Li length Xs where Xs free No .
+The executable is placed in
+.Pa a.out .
+.Pp
+.It Li a.out -x +RTS -k512k -h8M -t0 -RTS foo
+executes
+.Pa a.out
+with an 8 MByte heap, a 512 kByte stack, and no trail stack. The
+arguments
+.Fl x
+and
+.Cm foo
+are passed to the Curry program and are available from Curry code via
+.Li System.getArgs .
+Note that running a program without a trail stack, as in this example,
+requires that the code is completely deterministic and does not use
+encapsulated search.
+.El
+.Pp
+.Sh SEE ALSO 
+.Xr cyi 1 , 
+.Xr cymake 1 ,
+.Xr gcc 1

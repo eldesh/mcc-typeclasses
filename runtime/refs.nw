@@ -1,0 +1,104 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: refs.nw 1865 2006-03-01 22:30:38Z wlux $
+%
+% Copyright (c) 2004, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Mutable References}
+The \texttt{IOExts} library implements mutable references in the
+\texttt{IO} monad. The implementation is based on three primitives,
+which are defined in this file.
+
+<<refs.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "debug.h"
+#include "run.h"
+#include "heap.h"
+#include "stack.h"
+#include "trail.h"
+#include "eval.h"
+#include "threads.h"
+#include "data.h"
+#include "cam.h"
+
+#define EVAL_RIGID_IOREF(l)	EVAL_RIGID_ABSTRACT(l)
+
+typedef struct ioref_node {
+    NodeInfo *info;
+    Node     *ref;
+} IORef;
+
+#define ioref_node_size wordsof(IORef)
+
+static NodeInfo ioref_info = {
+    ABSTRACT_KIND, 0, closure_node_size(1), 0, "<IORef>", eval_whnf, 0, 0
+};
+
+@ 
+The function [[newIORef]] creates a new [[IORef]] and initializes it
+with the specified value.
+
+<<refs.c>>=
+DECLARE_ENTRYPOINT(__newIORef);
+
+FUNCTION(__newIORef)
+{
+    IORef *ref;
+    EXPORT_LABEL(__newIORef)
+ ENTRY_LABEL(__newIORef)
+    CHECK_HEAP(ioref_node_size);
+    ref	      = (IORef *)hp;
+    ref->info = &ioref_info;
+    ref->ref  = sp[0];
+    hp	     += ioref_node_size;
+    
+    sp += 2;
+    RETURN((Node *)ref);
+}
+
+@ 
+The function [[readIORef]] returns the value that is currently saved
+in a mutable reference. Note that the value is \emph{not} evaluated
+to head normal form because the \texttt{IO} monad is lazy.
+
+<<refs.c>>=
+DECLARE_ENTRYPOINT(__readIORef);
+
+FUNCTION(__readIORef)
+{
+    IORef *ref;
+    EXPORT_LABEL(__readIORef)
+ ENTRY_LABEL(__readIORef)
+    EVAL_RIGID_IOREF(__readIORef);
+    ref = (IORef *)sp[0];
+    sp += 2;
+    RETURN(ref->ref);
+}
+
+@ 
+The function [[writeIORef]] updates the value saved in a mutable
+reference. The old value is saved on the trail even though the
+\texttt{IO} monad is expected to run only deterministic code. However,
+trailing prevents program crashes when this function is used inside an
+[[unsafePerformIO]]. Note that this makes it impossible to use mutable
+references for generating globally unique indices that are different
+even across different branches of a non-deterministic search.
+
+<<refs.c>>=
+DECLARE_ENTRYPOINT(__writeIORef);
+
+FUNCTION(__writeIORef)
+{
+    IORef *ref;
+    EXPORT_LABEL(__writeIORef)
+ ENTRY_LABEL(__writeIORef)
+    EVAL_RIGID_IOREF(__writeIORef);
+    ref = (IORef *)sp[0];
+    SAVE(ref, ref);
+    ref->ref = sp[1];
+    sp	    += 3;
+    RETURN(unit);
+}

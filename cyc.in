@@ -1,0 +1,343 @@
+#! /bin/sh
+# @configure_input@
+#
+# Shell script for compiling Curry modules
+#
+# $Id: cyc.in 1913 2006-05-07 13:44:36Z wlux $
+#
+# Copyright (c) 2002-2006, Wolfgang Lux
+# See LICENSE for the full license.
+#
+
+# Configuration parameters
+cyc=`basename $0`
+version=@PACKAGE_VERSION@
+build="%BUILD_DATE%"
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+bindir=@bindir@
+libdir=@libdir@
+# DO NOT DELETE: Beginning of in-place configuration
+srcdir="@srcdir@"
+@in_place_config@
+# DO NOT DELETE: End of in-place configuration
+: ${CURRY_PATH=$libdir/curry}
+: ${CURRY_IMPORT_PATH=$CURRY_PATH}
+: ${CURRY_INCLUDE_PATH=$CURRY_PATH}
+: ${CURRY_LIBRARY_PATH=$CURRY_PATH}
+: ${CC="@CC@ @ARCH_CFLAGS@"}
+export CURRY_IMPORT_PATH
+
+# Local variables
+exec=
+verbose=
+toC=
+toS=
+toO=
+cycc=$CURRY_PATH/cycc
+cyccopts=
+rtopts=
+debug=
+ccopts=
+ldopts=
+hsize=
+ssize=
+tsize=
+stats=
+trace=
+saveTemps=
+libs=
+dbglib=
+curry=
+files=
+temps=
+linkfiles=
+imports=
+main=
+goal=
+typeIt=
+ofile=
+
+# functions
+check_size ( ) {
+    eval _x=\$"$2"
+    case $_x in
+      "" ) echo 1>&2 "$cyc: missing size after $1"; exit 1;;
+      *[kK] ) _y=`expr "$_x" : '\([0-9]*\)[kK]$'`"*k";;
+      *[mM] ) _y=`expr "$_x" : '\([0-9]*\)[mM]$'`"*M";;
+      * ) _y=`expr "$_x" : '\([0-9]*\)$'`;;
+    esac
+    case $_y in
+      [0-9]* ) eval $2=$_y;;
+      * ) echo 1>&2 "$cyc: illegal size after $1: $_x"; exit 1;;
+    esac
+}
+
+incr ( ) {
+    eval _x=\$"$1"; test -n "$_x" || _x=0
+    _y="$2"; test -n "$_y" || _y=1
+    eval $1=`expr "$_x" + "$_y"`
+}
+
+# Option processing
+while test $# -gt 0; do
+  case $1 in
+    # Overall options
+    -c ) toO=1;;
+    -C ) toC=1;;
+    -S ) toS=1;;
+    -o ) ofile=$2; shift;;
+    -o* ) ofile=`expr "$1" : '-o\(.*\)'`;;
+    -n ) exec=echo;;
+    -v ) verbose=-v; ccopts="$ccopts -v";;
+
+    # (C-)Preprocessor definitions
+    -[DU] ) ccopts="$ccopts $1 $2"; shift;;
+    -[DU]* ) ccopts="$ccopts $1";;
+
+    # Special definitions
+    -gg ) debug=-g;;
+    -gc-2space | --gc-2space )
+	echo 1>&2 "$cyc: deprecated option $1"
+	echo 1>&2 "the two-space copying collector is the default"
+	;;
+    -gc-compact | --gc-compact )
+	echo 1>&2 "$cyc: deprecated option $1"
+	echo 1>&2 "the compacting collector is no longer available"
+	;;
+    -save-temps ) saveTemps=$1;;
+
+    # cyc options
+    -no-intf | --no-intf | -no-icurry | --no-icurry ) 
+	cyccopts="$cyccopts --no-icurry";;
+    -Whaskell ) cyccopts="$cyccopts --haskell-mode";;
+    -Wprolog ) cyccopts="$cyccopts --prolog-mode";;
+    -Wgoedel ) cyccopts="$cyccopts --goedel-mode";;
+    -W?* ) cyccopts=$cyccopts\ --warn-`expr "$1" : '-W\(.*\)'`;;
+    -warn* ) cyccopts="$cyccopts -$1";;
+    --warn* ) cyccopts="$cyccopts $1";;
+    -dump* ) cyccopts="$cyccopts -$1";;
+    --dump* ) cyccopts="$cyccopts $1";;
+    -g | -debug | --debug ) cyccopts="$cyccopts --debug"; dbglib=-lcurry_g;;
+    -trusted | --trusted ) cyccopts="$cyccopts --trusted";;
+
+    # goal options
+    -M ) main=$2; shift;;
+    -M* ) main=`expr "$1" : '-M\(.*\)'`;;
+    -e ) goal=$2; shift;;
+    -e* ) goal=`expr "$1" : '-e\(.*\)'`;;
+    -T ) typeIt=$2; shift;;
+    -T* ) typeIt=`expr "$1" : '-T\(.*\)'`;;
+
+    # C Compiler options
+    -cc ) CC=$2; shift;;
+    -ccopt-* | --ccopt-* | -ccopts-* | --ccopts-* )
+      ccopts=$ccopts\ `expr "$1" : '-*ccopts*\(-.*\)'`;;
+    -ccopt | -ccopts | --ccopt | --ccopts ) ccopts="$ccopts $2"; shift;;
+    -O* ) ccopts="$ccopts $1";;
+
+    # Include files and imported modules
+    -I ) ccopts="$ccopts -I$2"; shift;;
+    -I* ) ccopts="$ccopts $1";;
+    -i ) ccopts="$ccopts -I$2"; imports="$imports -i $2"; shift;;
+    -i* ) ccopts=$ccopts\ -I`expr "$1" : '-i\(.*\)'`; imports="$imports $1";;
+
+    # Linker options
+    -ldopt-* | --ldopt-* | -ldopts-* |--ldopts-* )
+      ldopts=$ldopts\ `expr "$1" : '-*ldopts*\(-.*\)'`;;
+    -ldopt | -ldopts | --ldopt | --ldopts ) ldopts="$ldopts $2"; shift;;
+    -L ) ldopts="$ldopts -L$2"; shift;;
+    -L* ) ldopts="$ldopts $1";;
+    -l ) libs="$libs -l$2"; shift;;
+    -l* ) libs="$libs $1";;
+
+    # Runtime system options for cycc
+    -H* ) rtopts="$rtopts $1";;
+    +RTS )
+	shift
+	while test $# -gt 0 -a "$1" != "-RTS"; do
+	  rtopts="$rtopts $1";
+	  shift
+	done;;
+
+    # Default values for the executable
+    -d ) incr trace 1;;
+    -p ) incr stats 1;;
+    -h ) hsize=$2; shift; check_size -h hsize;;
+    -h* ) hsize=`expr "$1" : '-h\(.*\)'`; check_size -h hsize;;
+    -k ) ssize=$2; shift; check_size -k ssize;;
+    -k* ) ssize=`expr "$1" : '-k\(.*\)'`; check_size -k ssize;;
+    -t ) tsize=$2; shift; check_size -t tsize;;
+    -t* ) tsize=`expr "$1" : '-t\(.*\)'`; check_size -t tsize;;
+
+    # Pass all other flags to the C compiler
+    -* ) ccopts="$ccopts $1";;
+
+    # Save all files
+    * ) files="$files $1";;
+  esac
+  shift
+done
+
+# Add runtime options to cycc
+test -n "$rtopts" && cycc="$cycc +RTS $rtopts -RTS"
+
+# Eventually display the compiler version
+if test -n "$verbose"; then
+  echo 1>&2 "$cyc version $version (built on $build)"
+  test "$exec" && verbose=
+fi
+# Check for conflicting options
+if test -n "$goal" -a -n "$typeIt"; then
+  echo 1>&2 "$cyc: conflicting options -e and -T specified"
+  exit 1
+fi
+
+# Check for input files
+if test -z "$files$goal$typeIt"; then
+  test -n "$verbose" && exit 0
+  echo 1>&2 "$cyc: no input files"
+  exit 1
+fi
+
+# Add all default include directories to the C compiler's flags
+ifs=$IFS
+IFS=:
+for d in $CURRY_INCLUDE_PATH; do 
+  ccopts="$ccopts -I$d"
+done
+for d in $CURRY_LIBRARY_PATH; do 
+  ldopts="$ldopts -L$d"
+done
+IFS=$ifs
+
+# Cygpath workaround: converts path to Windows-style
+if test -n "@USE_CYGPATH_WORKAROUND@"; then
+  CURRY_IMPORT_PATH=`@CYGPATH@ -w -p $CURRY_IMPORT_PATH`
+fi
+
+# Remove all temporary files upon exit
+# NB check for empty temps for non POSIX compliant rm's (e.g. Mac OS X 10.1)
+trap 'test "$temps" && rm -f $temps' 0 1 2 3 15
+
+# Process all files
+set -- $files
+if test -n "$ofile" -a -n "$toC$toS$toO" -a $# -gt 1; then
+  echo 1>&2 "$cyc: cannot specify -o with -c, -S, or -C and multiple input files"
+  exit 1
+fi
+
+if test -n "$typeIt"; then
+  if test $# -gt 1; then
+    echo 1>&2 "$cyc: cannot specify -T with multiple input files"
+    exit 1
+  fi
+
+  test -n "$verbose" && echo 1>&2 $cycc $imports -t \"$typeIt\" $cyccopts ${1-$main}
+  $exec $cycc $imports -t "$typeIt" $cyccopts ${1-$main}
+  exit $?
+fi
+
+i=0
+for f in $files; do
+  i=`expr $i + 1`
+  stem=
+  curry_ccopts=
+
+  # Compile Curry source files into C code
+  case $f in
+    *.curry | *.lcurry )
+      curry_ccopts=-I`dirname $f`
+      curry=$f
+      stem=`expr "$f" : '\(.*\)\.curry'`
+      stem=$stem`expr "$f" : '\(.*\)\.lcurry'`
+      if test -n "$toC"; then
+        if test -n "$ofile"; then
+	  target=$ofile
+	else
+	  target=$stem.c
+	fi
+      else
+        if test -n "$debug$saveTemps"; then
+	  target=$stem.c
+	else
+          target=/tmp/cyc$$_$i.c
+	  temps="$temps $target"
+	fi
+      fi
+      # Cygpath workaround: converts paths to Windows-style
+      if test -n "@USE_CYGPATH_WORKAROUND@"; then
+        target2=`@CYGPATH@ -w $target`
+        f2=`@CYGPATH@ -w $f`
+       else 
+        target2=$target
+        f2=$f
+      fi
+      test -n "$verbose" && echo 1>&2 $cycc $imports $cyccopts -o $target2 $f2
+      $exec $cycc $imports $cyccopts -o $target2 $f2 || exit $?
+      f=$target
+      ;;
+  esac
+  test -n "$toC" && continue
+
+  # Compile C/assembler code into assembler code or object files
+  case $f in
+    *.[cs] )
+      test -n "$stem" || stem=`expr "$f" : '\(.*\)\.[cs]'`
+      if test -n "$toS"; then c=-S suffix=.s; else c=-c suffix=.o; fi
+      if test -n "$toS$toO"; then
+        if test -n "$ofile"; then
+	  target=$ofile
+	else
+	  target=$stem$suffix
+	fi
+      else
+        if test -n "$saveTemps"; then
+	  target=$stem.o
+	else
+          target=/tmp/cyc$$_$i.o
+	  temps="$temps $target"
+	fi
+      fi
+      test -n "$verbose" && echo 1>&2 $CC $debug $curry_ccopts $ccopts $saveTemps $c -o $target $f
+      $exec $CC $debug $curry_ccopts $ccopts $saveTemps $c -o $target $f || exit $?
+      f=$target
+      ;;
+  esac
+  test -n "$toS$toO" && continue
+
+  # Add all files for the link step
+  linkfiles="$linkfiles $f"
+done
+
+# Eventually link the program
+if test -z "$toC$toS$toO"; then
+  temps="$temps /tmp/cyc$$.c"
+  case $main in
+    "" ) main="$curry";;
+    *.curry | *.lcurry ) ;;
+    * ) test -f $main.curry && main=$main.curry
+	test -f $main.lcurry && main=$main.lcurry;;
+  esac
+  target=/tmp/cyc$$.c
+  # Cygpath workaround: converts path to Windows-style
+  if test -n "@USE_CYGPATH_WORKAROUND@"; then
+    target2=`@CYGPATH@ -w $target`
+  else
+    target2=$target
+  fi
+  test -n "$verbose" && echo 1>&2 $cycc $imports -e\"$goal\" $cyccopts $main -o $target2
+  $exec $cycc $imports $cyccopts -e"$goal" $main -o $target2 || exit $?
+
+  test -n "$hsize" && ldopts="$ldopts -DDEFAULT_HEAPSIZE=$hsize"
+  test -n "$ssize" && ldopts="$ldopts -DDEFAULT_STACKSIZE=$ssize"
+  test -n "$tsize" && ldopts="$ldopts -DDEFAULT_TRAILSIZE=$tsize"
+  test -n "$stats" && ldopts="$ldopts -DDEFAULT_SHOW_STATS=$stats"
+  test -n "$trace" && ldopts="$ldopts -DDEFAULT_DO_TRACE=$trace"
+  test -n "$ofile" && ldopts="$ldopts -o $ofile"
+  test -n "$verbose" && echo 1>&2 $CC $debug $ccopts $ldopts /tmp/cyc$$.c $linkfiles $libs $dbglib -lcurry @LDFLAGS@ @LIBS@
+  $exec $CC $debug $ccopts $ldopts /tmp/cyc$$.c $linkfiles $libs $dbglib -lcurry @LDFLAGS@ @LIBS@ || exit $?
+fi
+
+# done
+exit 0

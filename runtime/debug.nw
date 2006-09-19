@@ -1,0 +1,76 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: debug.nw 1865 2006-03-01 22:30:38Z wlux $
+%
+% Copyright (c) 2002,2005-2006, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Debugging}
+When the preprocessor symbol [[DEBUG]] is defined, the code will
+include a few assertions. Otherwise these assertions are
+ignored.
+
+<<debug.h>>=
+#ifdef DEBUG
+# undef NDEBUG
+# define ASSERT(e) assert(e)
+#else
+# define ASSERT(e)
+#endif
+#include <assert.h>
+
+@ 
+The function [[curry_panic]] prints an error message and aborts the
+program when something unexpected happens. The functions
+[[invalid_arg]] and [[unexpected_tag]] handle the particular case that
+an argument with an unexpected kind or tag was passed to a runtime
+system function.
+
+The function [[sys_error]] prints an error message with the C
+function [[perror]] and then exits the program. This is used in case
+of a system error that cannot be handled by the program.
+
+<<debug.h>>=
+extern void curry_panic(const char *format, ...)
+    __attribute__((noreturn, format(printf, 1, 2)));
+extern void invalid_arg(const char *func, int kind) __attribute__((noreturn));
+extern void unexpected_tag(const char *func, int tag) __attribute__((noreturn));
+extern void sys_error(const char *msg) __attribute__((noreturn));
+
+@ 
+<<debug.c>>=
+#include "config.h"
+#include <stdarg.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include "debug.h"
+
+void
+curry_panic(const char *format, ...)
+{
+    va_list args;
+
+    va_start(args, format);
+    vfprintf(stderr, format, args);
+    va_end(args);
+
+    abort();
+}
+
+void
+invalid_arg(const char *func, int kind)
+{
+    curry_panic("%s: invalid argument (kind %d)\n", func, kind);
+}
+
+void
+unexpected_tag(const char *func, int tag)
+{
+    curry_panic("%s: invalid argument (tag %d)\n", func, tag);
+}
+
+void
+sys_error(const char *msg)
+{
+    perror(msg);
+    exit(1);
+}

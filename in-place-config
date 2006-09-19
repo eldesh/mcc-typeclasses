@@ -1,0 +1,24 @@
+cmd=$0
+while test -h "$cmd"; do
+  link=`ls -ld "$cmd" | sed -n 's/^.* -> //p'`
+  case $link in
+    "" ) break;;
+    /* ) cmd=$link;;
+    * )  cmd=`dirname "$cmd"`/$link;;
+  esac
+done
+
+bindir=`dirname "$cmd"`
+case $bindir in
+  /* ) ;;
+  * ) bindir=`(cd "$bindir"; pwd)`;;
+esac
+case $srcdir in
+  /* ) ;;
+  * ) srcdir=$bindir/$srcdir;;
+esac
+
+: ${CURRY_PATH=$bindir}
+: ${CURRY_IMPORT_PATH=$bindir/curry}
+: ${CURRY_INCLUDE_PATH=$bindir/runtime:$srcdir/runtime}
+: ${CURRY_LIBRARY_PATH=$bindir/curry}

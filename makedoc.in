@@ -1,0 +1,67 @@
+#!/bin/sh
+# @configure_input@
+#
+# Shell script to bring the internal Curry documentation up to date
+# usage: makedoc [latex|pdflatex]
+# where latex will create curry.dvi
+#   and pdflatex will create curry.pdf
+#
+# $Id: makedoc.in 1744 2005-08-23 16:17:12Z wlux $
+#
+# Copyright (c) 2005, Wolfgang Lux
+# See LICENSE for the full license
+#
+
+# check command usage
+test $# -eq 1 || { echo 2>&1 "usage: $0 [latex|pdflatex]"; exit 2; }
+
+# configuration
+# NB unfortunately not all test implementations support the -nt
+#    operator (e.g., the built-in test command of the Solaris 2.7
+#    Bourne Shell) so we use our own replacement.
+srcdir=@srcdir@
+builddir=`dirname $0`
+
+case $builddir in
+  /* ) ;;
+  * ) while :; do
+        case $builddir in
+          ./* ) builddir=`expr "$builddir" : '\./\(.*\)'`;;
+          . ) builddir=`pwd`; break;;
+          * ) builddir=`pwd`/"$builddir"; break;;
+        esac
+      done;;
+esac
+
+case $srcdir in
+  /* ) ;;
+  * ) srcdir=$builddir/$srcdir
+esac
+
+LATEX=$1
+: ${BIBTEX=bibtex}
+NEWER=$builddir/newer
+
+cd "$srcdir" || exit $?
+
+# check if the bibliography is out of date
+# NB information in the .bbl file depends on the .aux file; therefore
+#    run LaTeX first if that file is out of date
+$NEWER curry.bbl curry.bib || {
+  $NEWER curry.aux curry.tex *.lhs runtime/*.tex || {
+    $LATEX '\nonstopmode\input{curry}' || exit $?
+    grep -e 'LaTeX Error:' curry.log >/dev/null 2>&1 && exit 1
+  }
+  $BIBTEX curry || exit $?
+}
+
+# always execute LaTeX at least once
+$LATEX '\nonstopmode\input{curry}' || exit $?
+
+# stop if an error was detected
+grep -e 'LaTeX Error:' curry.log >/dev/null 2>&1 && exit 1
+
+# eventually run LaTeX again in order to get the cross references right
+if grep -e '^LaTeX Warning:.*Rerun to get cross-references right.' curry.log >/dev/null 2>&1; then
+  $LATEX '\nonstopmode\input{curry}'
+fi

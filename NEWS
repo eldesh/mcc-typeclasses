@@ -1,0 +1,355 @@
+Main changes in release 0.9.10
+
+Build Environment:
+- The compiler can be used without installing it.
+- Build issues with ghc 6.4 have been fixed.
+- Use ghc --make when it is supported.
+- Source distributions now include an abstract machine code to C
+  compiler.
+
+Compiler:
+- The compiler now reports all duplicate or undefined identifiers in a
+  scope before giving up.
+- The compiler can optionally report warnings for case mode
+  violations, unused identifiers, shadowing definitions, and equations
+  with overlapping left hand side patterns.
+- Existentially quantified types finally enabled again.
+- Trust annotations introduced.
+- Evaluation annotations removed.
+- The compiler generates better code for case expressions in some
+  cases.
+
+Interactive Environment:
+- On systems where GNU Bash or a Korn shell (but not the public domain
+  version) are installed, the interpreter now supports command line
+  editing. In addition, a history of previously entered goals and
+  commands is maintained in file ~/.cyi_history.
+- Initialization file .cyirc or ~/.cyirc is read at startup.
+- The :cd command now works for directories whose name contains
+  embedded blanks.
+- The value Success is shown in the answer to a constraint expression
+  only when there are no constraints.
+
+Curry Library and Runtime System:
+- Module prelude renamed into Prelude.
+- Additional prelude type: ShowS.
+- New prelude functions: shows, showChar, showString, showList,
+  showParen, ($!!), ($#), ($##), unknown, and ensureGround.
+- New functions Char.minChar, Char.maxChar, Integer.minInt, and
+  Integer.maxInt that report the smallest and largest elements of
+  types Char and Int, respectively. 
+- Implementation of AllSolutions.getSearchTree changed to use strong
+  encapsulation for logical variables, too. In addition, the search
+  tree now properly reflects the state of the goal at the time when
+  the getSearchTree action is evaluated rather than fixing the state
+  when the first solution is computed.
+- New function IOExts.openFd.
+- New library modules Lexing, NameSupply, and Socket.
+- An alternative implementation of encapsulated search is available,
+  which can be enabled with --enable-copying during configuration.
+- The full Unicode character set range is now supported.
+
+Noteworthy Bug Fixes:
+- A long standing issue where builds would fail when using the vendor
+  supplied make command on Solaris systems has been fixed.
+- Gnu C specific features are now enabled only when using the Gnu C
+  compiler.
+- The import and export specifications T() and T(..) are now also
+  accepted when T is a type synonym.
+- A potential stack overflow problem for functions returning a
+  variable has been eliminated.
+- A problem where programs using encapsulated search could crash in
+  certain situations has been fixed.
+- A problem where a program could fail when show was applied to an
+  infix constructor application other than the list constructor (:)
+  has been fixed.
+- A space leak has been closed where file handles opened with one of
+  the functions IOExts.openProcess and IOExts.openTcpSocket were not
+  closed automatically. Note that these functions are used by the
+  Ports module, too.
+- The functions Integer.ilog, Integer.isqrt, and Integer.pow now fail
+  for negative arguments.
+- The string ['x','y','\200','2','3'] is now printed "xy\200\&23".
+
+
+Main changes in release 0.9.9
+
+Build Environment:
+- The runtime system protects the inactive semi-space of the heap with
+  mprotect(2) on systems which support it. This can be turned off with
+  the new configuration option --disable-mprotect.
+- The source distribution's Makefile includes rules to build the
+  internal documentation.
+- On Mac OS X, -mdynamic-no-pic is used unless the compiler does not
+  accept this option.
+
+Compiler:
+- cymake passes archive files (*.a, *.so, *.dylib, *.dll) to the
+  linker instead of complaining about a missing source file.
+- The :set and :unset commands in the interpreter accumulate and
+  remove individual options.
+- The :debug and :type commands of the interpreter as well as the new
+  command :^ use the previous goal if the goal was omitted on the
+  command line. 
+
+Debugger:
+- The debugger is no longer restricted to the first solution of a goal.
+- User interface improved.
+
+Curry Library and Runtime System:
+- The compiler and runtime system should now work on 64-bit
+  architectures using the LP64 programming model, most notably the AMD 
+  x86-64. Many thanks to Adam Peacock for his help in tracking down
+  the problems on this architecture.
+- Functions rigid and rigidSpine introduced in release 0.9.8 have been
+  renamed into ensureNotFree and ensureSpine, respectively, following
+  a consensus on the Curry mailing list about the names of these
+  functions.
+- The range of Int numbers is now always equal to that of C long
+  values on the target system.
+- The functions div and mod now use the semantics mandated by the
+  Haskell report, i.e. the quotient is rounded toward negative
+  infinity. Use the new functions quot and rem when the quotient shall
+  be truncated toward zero.
+- Floating-point numbers are now printed with maximum precision.
+- Function readFloat for converting strings into floating-point
+  numbers implemented.
+- A more efficient representation is used for lazy applications.
+
+Foreign Function Interface:
+- Foreign function declarations using the ccall calling convention
+  have been extended to support the import of static addresses and
+  dynamic function wrappers. In addition, the basic marshalable types
+  now include pointers.
+- Most libraries from the Haskell 98 Foreign Function Interface
+  addendum have been implemented as far as they do not require type
+  classes.
+
+Documentation:
+  Sections about porting to a new architecture and building the
+  internal documentation added.
+
+Noteworthy Bug Fixes:
+- It is now possible to use Gnu C version 3.4 and optimization level
+  -O3 with the default configuration.
+- In some rare cases the compiler would print too general types for an
+  expression.
+- In a misguided attempt to avoid duplicate solutions, the (=/=)
+  operator was using equality constraints for some arguments. This is
+  no longer the case as it is a source of incompleteness. The new
+  implementation correctly reports the solution y/=0 for the goal
+  let x,y free in (x,y) =/= (undefined,0), which was lost before.
+- File handles opened with one of the functions IO.openFile,
+  IOExts.openProcess, and IOExts.connectTcpSocket are no longer closed
+  automatically at end of file or when an error occurs.
+- It is no longer possible to write to a handle opened in
+  ReadWriteMode after IO.hGetContents has been applied to it.
+- Rounding errors for large floating-point numbers in source text are
+  now avoided.
+- Better algorithm used for (Float.^).
+- A bug was introduced in release 0.9.7 that caused partial
+  applications of tuple constructors to be printed incorrectly. This
+  has been fixed. 
+
+
+Main changes in release 0.9.8
+
+Build Environment:
+- The compiler can now be built on Microsoft Windows with CygWin
+  without special configuration options. [Thanks again to Diego
+  Berrueta.]
+- It is now possible to use g++ as backend C compiler.
+- Configure scripts upgraded to autoconf >= 2.50.
+- Unix man pages for cyc, cymake, and cyi.
+
+Compiler:
+- Let expressions with free variable declarations are no longer
+  restricted to type Success.
+- All functions use flexible evaluation by default.
+- choice and rigid are no longer keywords.
+- Syntax of external declarations now uses foreign import instead of
+  external.
+- Partial support for ccall calling convention in foreign function
+  declarations.
+- Faster code for lazy applications of nullary and unary functions.
+
+Curry Library and Runtime System:
+- The copying garbage collector now uses a segment order preserving
+  algorithm. The compacting collector has been removed as the new
+  copying collector is both faster and more accurate than it. The
+  command line arguments -gc-2space and -gc-compact are deprecated and
+  will be removed in the next release.
+- Type of (&>) generalized to Success -> a -> a.
+- Non-deterministic choice operator (?) added to the prelude.
+- seq and ($!) are no longer rigid, new functions rigid and rigidSpine
+  added to the prelude.
+- Equality constraints x=:=e, where x is an unbound variable and e is
+  in normal form are evaluated more efficiently.
+- Equality and disequality constraints between two partial
+  applications are now restricted to ground terms.
+- (==) and (!=) can now be used for comparing partial applications and
+  terms with abstract types (e.g. file handles) for (in)equality.
+- compare and the operators (<), (>), (<=), (>=) raise a runtime error
+  when applied to partial applications and terms with abstract types.
+- undefined is equivalent to failed again.
+- Fix minor incompatibilities with the Haskell report in the Numeric
+  module. In particular, readSigned now recognizes parenthesized
+  numbers, and readDec, readOct, and readHex no longer accept leading
+  blanks.
+- trace function now writes its message to the standard error channel
+  and appends a newline to the message.
+- New modules compatible with PAKCS: AllSolutions, Combinatorial,
+  Float, Integer, Parser, and Ports (only internal and stream ports).
+- The Read module has been replaced by a (mostly) PAKCS compatible one.
+- Unsafe module is now compatible with PAKCS.
+
+Documentation:
+- Section about limitations of encapsulated search added to the user's
+  guide.
+
+Noteworthy Bug Fixes:
+- The C compiler backend no longer reports an error for out of range
+  floating-point numbers. In addition, infinite values and NaNs are now
+  shown as Infinite, -Infinite, and NaN, respectively.
+- show no longer encloses the names of abstract data types (e.g.,
+  files) in parentheses.
+- Correct implementation of equality and disequality constraints
+  between partial applications of tuple constructors computed in
+  different modules.
+- A few rare bugs with nested encapsulated searches have been fixed.
+- Two problems with the debugger have been fixed, where computation
+  trees related to local bindings could be lost in the presence of
+  guards or case expressions, and programs using if-then-else or case
+  expressions in arguments could crash.
+
+
+Main changes in release 0.9.7
+
+- Support for building and using the compiler on Microsoft Windows
+  using the CygWin environment.
+  [The necessary changes were kindly contributed by Diego Berrueta.]
+- cyc's option -y renamed into -T. cymake now supports -T, too.
+- Integer literals can now be used as floating-point numbers.
+- The unary negation operator - works for integer and floating-point
+  numbers. Use of -. for negating floating-point numbers is deprecated.
+- The compiler no longer allows to mix import and other
+  declarations. This change is in conformance with the Curry report
+  and makes cymake's dependency analysis more fault tolerant.
+- It is now possible to define and use (infix) constructor operators.
+- Operator fixities must be declared in the same declaration group as
+  the operator. To this end, fixity declarations are allowed in local
+  declaration groups. Fixity declarations can still be mixed freely
+  with other declarations.
+- Curried syntax is supported on the left-hand side of declarations.
+- Support constraint guards in case expressions. Actually, they have
+  been supported since the introduction of guarded case alternatives
+  in release 0.9.6, but the documentation did say otherwise.
+- Array module reimplemented. This fixes, in particular, the broken
+  accum and accumArray functions.
+- Finite maps and sets added to the library.
+- Add module IOExts which implements a subset of the Hugs/ghc module
+  with the same name. At present, this includes the monadic fixpoint
+  function fixIO, mutable references, and mutable arrays.
+- Random module added.
+- Add new primitive function ground to module Success.
+- The generated code has become slightly faster, again.
+- Bug fixes.
+
+
+Main changes in release 0.9.6
+
+- THE COMPILER HAS BEEN RENAMED. The compiler proper must now be invoked
+  with the name cyc (instead of cycc).
+- Hierachical modules mapped onto the filesystem, i.e., module
+  SubProj.Lib.Mod is now expected in one of the files Mod.curry and
+  Mod.lcurry in the subdirectory SubProj/Lib of the current directory
+  or of one of the directories in the import search path.
+- Interface files are no longer created in the current directory but
+  in the same directory as the source file.
+- The compiler now uses the source file name to compute the name of
+  the interface file instead of the module name. This should make a
+  difference only for the main file of a program.
+- The module system finally conforms to the Haskell 98 module
+  system. In particular, it is now possible to define an entity with
+  the same name as an imported entity. However, such entities can be
+  accessed only with their qualified name.
+- cyc's -m option renamed into -M because it conflicts with a Gnu C
+  option.
+- cymake can now search for imported modules in other directories.
+- Make output of the debugger a little bit more readable when
+  higher-order functions are used.
+- as, hiding, qualified can be used as identifiers in programs. They
+  are given special treatment only in import declarations.
+- Syntax extensions:
+  * newtype declarations,
+  * @-patterns,
+  * lazy patterns,
+  * guarded right hand sides for pattern declarations and case
+    alternatives, and
+  * expression type signatures.
+- Prelude changes
+  * Make if_then_else rigid.
+  * Fix handling of negative arguments in take, drop, and splitAt.
+- Additional modules from the Haskell library (partially) implemented:
+  * Directory,
+  * IO,
+  * Numeric, and
+  * Time.
+- The notorious space leak for lazy pattern bindings has been fixed.
+- Performance of the compiler improved, in particular for large files
+  and files with many constants.
+- Bug fixes and minor performance enhancements in the compiled code.
+
+
+Main changes in release 0.9.5
+
+- Changed to match version 0.8 of the Curry report.
+- Faster implementation.
+- Characters and strings are no longer displayed using integer numbers.
+- Occurs check in unification.
+- Restrictions on (partially) solved goals returned from try have been
+  removed.
+- Handle partial applications as data constructors in equality and
+  disequality constraints.
+- IO Exceptions implemented.
+  Use ioError to throw IO exceptions, and catch to catch IO exceptions.
+- Existentially quantified data types disabled because the current
+  implementation was unsound regarding equality constraints. They will
+  be included in a future release after fixing the problem.
+- New option --clean to cymake.
+  This removes all compiled files for the target modules and its
+  imported modules.
+- New commands :freshen and :clean in interactive environment.
+- The function undefined now aborts the running program with an error
+  message. Use failed to fail only the current solution.
+- More functions from the Haskell prelude: getContents, interact.
+- Module Monad from the Haskell library is now included. This module
+  also implements the functions sequence, sequence_, mapM, and mapM_
+  from the Haskell prelude.
+- New syntax for external declarations which is closer to the proposed
+  FFI for Haskell.
+- It is now possible to change the buffer mode used for standard input
+  and output with a runtime system option.
+- Bug fixes...
+
+
+Main changes in release 0.9.1
+
+- cyi and cymake now work on Solaris 2.7 and OS'es with test commands
+  that do not support the -nt operator.
+- Runtime option to change the stack size renamed into -k.
+- Defaults for all runtime options can now be passed to the compiler
+  during linking. Thus, all options are now available under the
+  interactive environment.
+
+
+Main changes in release 0.9
+
+- Interactive environment cyi.
+- Make-like build tool cymake.
+- Declarative Debugger.
+- More library modules.
+- Programs can evaluate arbitrary goals.
+  No additional flags needed to distinguish IO and non-IO goals.
+- Lots of bug fixes.
+

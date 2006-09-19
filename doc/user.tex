@@ -1,0 +1,2169 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage{typearea}
+\usepackage[latin1]{inputenc}
+\usepackage[bookmarks,bookmarksopen,colorlinks]{hyperref}
+\usepackage{url,alltt,graphics}
+
+\frenchspacing
+
+\newcommand{\literal}[1]{\textrm{\tt #1}}
+\newcommand{\meta}[1]{\textrm{\it #1}}
+\newcommand{\Toy}{\ensuremath{\mathcal{TOY}}}
+\newcommand{\lb}{\char`\{}
+\newcommand{\rb}{\char`\}}
+
+\newcommand{\cyiinput}[1]{\textsl{#1}}
+
+\setlength{\arraycolsep}{0.2em}
+
+\title{Münster Curry \\ User's Guide \\ {\normalsize Release 0.9.10}}
+\author{Wolfgang Lux}
+
+%\setcounter{tocdepth}{2}
+
+\begin{document}
+\maketitle
+\newpage
+\tableofcontents
+\newpage
+
+\section{Overview}
+The Münster Curry compiler is a mature native code compiler for the declarative multi-paradigm language \href{http://www.informatik.uni-kiel.de/~mh/curry/}{Curry}~\cite{Hanus06:Report}. The language supported by the compiler is compatible with version 0.8.2 of the Curry report except for some minor differences with respect to the module system. Many syntax extensions including \texttt{newtype} declarations, infix data constructors, lazy patterns, and recursive pattern bindings are available for compatibility with Haskell~\cite{PeytonJones03:Haskell98}.\footnote{Type classes and the record syntax may be supported in future releases.} Other supported extensions include existentially quantified data types, disequality constraints, and I/O exceptions. A distinctive feature of the Münster Curry compiler is the integration of a declarative debugger of wrong answers~\cite{CL02:ENTCS76}. An interactive Curry environment and a make-like build tool for Curry programs are also part of the distribution. A graphical user interface is available separately for Mac OS X.
+
+The Münster Curry compiler is portable to many Unix operating systems with precompiled binaries being available for Linux (i386), Mac OS X, and eventually other Unix variants. It is possible to build and use the Münster Curry compiler on Windows systems using the CygWin environment. The only additional software needed for compiling and running Curry programs is the Gnu C compiler. Building and installing the Münster Curry compiler from its sources requires a Haskell 98 compiler, too. Building and installing the compiler from source and binary distributions can be achieved with the commands
+\begin{verbatim}
+./configure
+make install
+\end{verbatim}
+in most cases.
+
+Source and binary distributions as well as further information can be found at \\ \url{http://danae.uni-muenster.de/~lux/curry}.
+
+\section{Installation}
+\subsection{Binary Distribution}\label{sec:binary}
+Precompiled binary distributions are available for Linux (i386), Mac OS X, and eventually other systems. After unpacking the archive, change into the directory corresponding to your platform and run the configure script in that directory. You can then use the scripts \verb"cyc", \verb"cymake", and \verb"cyi" from the \verb"bin" directory (e.g., by setting up soft links from a directory which is included in \verb"$PATH") or install the compiler with \verb"make install". It is possible to uninstall the compiler with the command \verb"make uninstall". By default, the compiler binaries are installed in the directory \verb"/usr/local/bin", interface files, header files, and libraries in \verb"/usr/local/lib/curry", and manual pages in \verb"/usr/local/man/man1".
+
+It is recommended that you uninstall a previous release of the Münster Curry compiler before installing a new version in the same directory. You can use \verb"make uninstall" from the unpacked and configured binary distribution for that purpose. This command will correctly remove older releases of the compiler.
+
+The configure script is a standard Gnu configure script that understands the following options:
+\begin{description}
+  \item[\texttt{--prefix=}\emph{prefix}] Use \emph{prefix} instead of \verb"/usr/local" as base directory for the installation. For instance, in order to install the compiler in the directories \verb"bin" and \verb"lib/curry" in your home directory, you can use the command \verb"configure --prefix=$HOME".
+  \item[\texttt{--bindir=}\emph{bindir}] Install the compiler binaries in directory \emph{bindir} instead of \verb"/usr/local/bin".
+  \item[\texttt{--libdir=}\emph{libdir}] Install the library files in directory \emph{libdir}\verb"/curry" instead of \verb"/usr/local/lib/curry".
+  \item [\texttt{--mandir=}\emph{mandir}] Install the manual pages in directory \emph{mandir}\verb"/man1" instead of \verb"/usr/local/man/man1".
+\end{description}
+
+\subsection{Source Distribution}\label{sec:source}
+The Münster Curry compiler is known to work under Linux (Intel i386, AMD x86-64, Power PC), NetBSD i386, FreeBSD, Solaris for Sparc, Mac OS X, and will probably run out of the box on most other Unix operating systems as well. 
+
+In order to rebuild the Münster Curry compiler from its sources, you need a Haskell 98 compiler and a modern make. It is recommended to use \verb"ghc" for compiling Haskell sources, but \verb"hbc" and \verb"nhc98" are supported as well. The makefiles are known to work with Gnu make, BSD make, and Solaris' make command. They may work with other make commands, too.
+
+Compilation from the unpacked source directory is achieved with the commands
+\begin{verbatim}
+./configure
+make
+\end{verbatim}
+After successful compilation, you can use the scripts \verb"cyc", \verb"cymake", and \verb"cyi" from the build directory (e.g., by setting up soft links from a directory which is included in \verb"$PATH") or install the compiler with the command \verb"make install". An installed compiler can be uninstalled with the command \verb"make uninstall". This is generally recommended before installing a new version of the compiler.
+
+The configure script automatically determines the required software. In particular, it will check for one of the supported Haskell compilers in the path, trying \verb"ghc", \verb"hbc", and \verb"nhc98" in that order. It is also possible to select a particular compiler with the \verb"--with-hc" option.
+
+The configure script understands the following options.
+\begin{description}
+  \item[\texttt{--prefix=}\emph{prefix}] Use \emph{prefix} instead of \verb"/usr/local" as base directory for the installation. For instance, in order to install the compiler in the directories \verb"bin" and \verb"lib/curry" in your home directory, you can use the command \verb"configure --prefix=$HOME".
+  \item[\texttt{--bindir=}\emph{bindir}] Install the compiler binaries in directory \emph{bindir} instead of \verb"/usr/local/bin".
+  \item[\texttt{--libdir=}\emph{libdir}] Install the library files in directory \emph{libdir}\verb"/curry" instead of \verb"/usr/local/lib/curry".
+  \item [\texttt{--mandir=}\emph{mandir}] Install the manual pages in directory \emph{mandir}\verb"/man1" instead of \verb"/usr/local/man/man1".
+  \item[\texttt{--with-hc=}\emph{hc}] Use the command \emph{hc} for compiling Haskell sources. E.g., if you have \verb"ghc" and \verb"hbc" installed on your machine and prefer building the compiler with \verb"hbc", you can use \verb"configure --with-hc=hbc". \verb"configure" will check that the compiler \emph{hc} is a supported Haskell 98 compiler.
+  \item[\texttt{--disable-ghc-make}] With this option, you can specify that ghc's \verb"--make" option should not be used and Haskell source files are compiled individually. The advantage of this configuration is that it allows you to specify options for particular source files on the make command line. E.g., if you want to build a compiler for profiling and get profiling data for all top-level functions in file \texttt{TypeCheck.lhs}, you can use the command
+\begin{verbatim}
+  make HCFLAGS='-prof -auto' TypeCheck_HCFLAGS=-auto-all
+\end{verbatim}
+This option has no effect when hbc or nhc98 are used.
+  \item[\texttt{--disable-stdlib}] This option disables compilation of all library modules except for the prelude.
+  \item[\texttt{--disable-debug}] This option disables compilation of the Curry libraries with debugging information. Note that the compiler still can be used for compiling modules with debugging information, but you will be unable to build programs from these modules due to missing definitions for the standard library. This option is useful in order to speed up compilation on a slow machine if you do not intend to use the debugger.
+  \item[\texttt{--disable-occurs-check}] The semantics of Curry requires performing an occurs check in equality and disequality constraints in order to avoid constructing cyclic data terms. With this option, the occurs check can be disabled. This can improve performance on some examples, but may lead to worse performance and non-termination on others. Using this option is not recommended.
+  \item[\texttt{--enable-stability}] This flag enables some experimental code that suspends threads performing a non-deterministic instantiation of variables while other deterministic computations can be run. This strategy is known as stability from AKL and Oz. For instance, given the definitions
+\begin{verbatim}
+data Nat  = Z | S Nat
+nat Z     = success
+nat (S n) = nat n
+\end{verbatim}
+the expression \verb"let n free in nat n & n =:= S Z" is evaluated deterministically because the deterministic binding of \verb"n" in the equality constraint will get precedence over the non-deterministic instantiation of \verb"n" in \verb"nat".
+  \item[\texttt{--enable-copying}] By default, the bindings of local variables in different solutions of a search goal are managed with an extended trailing scheme. This option enables an alternative implementation, where independent copies of the search goal are used for each branch of the goal's search tree. This allows for a slightly more efficient execution of deterministic code, but can slow down non-deterministic code considerably in some situations. See~\cite{Lux04:Compare} for a comparison of both configurations.
+  \item[\texttt{--enable-trampoline}] By default, the compiler uses some extensions of the Gnu C compiler in order to implement tail calls efficiently by inserting assembler jump instructions into the code. This trick works on many architectures, but is not fully portable. For instance, it does not work under Mac OS X and is also incompatible with building code for shared libraries on most systems.
+
+If the compiler is configured with \texttt{--enable-trampoline}, it uses a portable but slower implementation where a global loop (the so-called trampoline) is used for dispatching tail calls. If your Curry programs keep crashing with bus errors or segmentation faults try reconfiguring the compiler with this option. Note that \texttt{--enable-trampoline} is the default when using a C compiler other than Gnu C and also on Mac OS X.
+  \item[\texttt{--disable-unboxed}] Normally, the runtime system encodes integer values that fit into $n-1$ bits, where $n$ is the number of bits in a machine word, in pointers rather than allocating a node in the heap for them. This improves efficiency mostly due to the avoided allocations, but makes pattern matching and integer operations slightly more complex. When the system is configured with \texttt{--disable-unboxed} all integer numbers are allocated in the heap. This option is useful only for measuring the performance gain of the default configuration and should not be used otherwise.
+  \item[\texttt{--disable-mprotect}] In order to detect errors in the two-space copying garbage collector early, the runtime system makes the inactive semi-space of the heap inaccessible using the \texttt{mprotect}(2) system call. This requires that \texttt{mprotect} is able to protect individual memory pages, which should be the case on most operating systems. The configure script checks only for the availability of the \texttt{mprotect} call, but does not check whether it actually works. On systems where \texttt{mprotect} exists, but is not able to protect individual pages, its use can be disabled by passing the \texttt{--disable-mprotect} option to \texttt{configure}.
+  \item[\texttt{--enable-cam2c}] The source distribution includes a compiler from abstract machine code to C. This compiler is built by default only when the \texttt{--enable-cam2c} option is passed to \texttt{configure}. Note that this compiler is mainly intended for testing the C code generator of the Curry compiler and is not other integrated with the compiler.
+  \item[\texttt{--enable-mach}] The source distribution also includes an interpreter for the abstract machine underlying the implementation of the Münster Curry compiler. This interpreter is built when the \texttt{--enable-mach} option is passed to \texttt{configure}. Note that the interpreter is poorly maintained and may be removed in a future release.
+\end{description}
+
+\subsubsection{Porting to a New Architecture}\label{sec:source-porting}
+The Münster Curry compiler was designed to be as portable as possible and should work on systems where an ANSI C compiler and a POSIX compatible environment are available. It has been tested on different 32-bit and 64-bit architectures, and should work on all 32-bit and 64-bit systems where the size of a C \verb"long" is equal to that of a pointer.
+
+In order to generate efficient code, the Münster Curry compiler uses some Gnu C extensions which work on a lot of architectures, but are not strictly portable. In particular, the default code generation model is incompatible with position independent code on most architectures. On systems where position independent code is the default -- e.g., Apple's Mac OS X and IBM's AIX -- and eventually on other systems, the compiler may have to be configured with the \verb"--enable-trampoline" option in order to produce working executables.\footnote{In fact, this option is already the default on Mac OS X systems.}
+
+In order to test the compiler on an unsupported architecture, you can use the test suites in \url{http://danae.uni-muenster.de/~lux/curry/examples.tar.gz} and \url{http://danae.uni-muenster.de/~lux/curry/more-examples.tar.gz}. After unpacking the archives, execute \verb"make test CYC="\emph{path-to-cyc} for both of them. This should report \texttt{All tests completed successfully} at the end. In that case, you can ignore the error messages produced while running the tests. Otherwise, send a bug report to \href{mailto:wlux@uni-muenster.de}{wlux@uni-muenster.de}.
+
+\subsubsection{Building the Documentation}\label{sec:source-documentation}
+The internal documentation of the Münster Curry compiler, which describes the compiler and runtime system implementation, can be built from the build directory by invoking either \verb"make curry.dvi" or \verb"make curry.pdf" depending on the format you prefer. These targets require a working \LaTeX{} installation (which must include \verb"pdflatex" in order to build \verb"curry.pdf") and in addition \verb"noweb.sty" from Norman Ramsey's noweb literate programming tool\footnote{\url{http://www.eecs.harvard.edu/~nr/noweb/}}.
+
+The source distribution includes pre-built \TeX{} sources for the runtime system, which were created with noweb version 2.10c. These files may cause errors when used together with a \verb"noweb.sty" from an earlier noweb release. In that case you have two options. Either upgrade noweb from a CTAN mirror or remove all \verb".tex" files except for \verb"runtime.tex" from the runtime directory in the source tree. This is achieved best by changing into the runtime directory in your build(!) directory and invoking \verb"make maintainerclean" there. Note that this will also remove the \verb".h" and \verb".c" files in the runtime directory and cause them to be rebuilt with your local noweb installation when the runtime system is built with \verb"make" the next time.
+
+\subsection{Installation on Microsoft Windows}\label{sec:ins-windows}
+The Münster Curry compiler can be built on Windows systems with CygWin -- provided the development packages (make, gcc) are installed -- and a working Haskell compiler. Currently, this appears to work only for the native Win32 binaries of ghc. The following installation instructions are derived from notes kindly provided by Diego Berrueta.
+
+\noindent
+Note: In the following, \verb"<CYGWIN>" represents the directory where CygWin is installed.
+
+
+\begin{enumerate}
+\item Install the Win32 version of ghc in \verb"<CYGWIN>/usr/local/ghc".
+\item Add \verb"/usr/local/ghc/bin" to the path. Make sure that the executable is found by typing \verb"ghc -v" in the CygWin console. This should print out a long list configuration and package information for ghc.
+\item Unpack the sources of the Münster Curry compiler in some convenient place and change into the \verb"curry-0.9.10" directory.
+\item Configure, compile, and install the compiler:
+\begin{verbatim}
+./configure
+make
+make install
+\end{verbatim}
+\item Ready to test. Make sure that \verb"/usr/local/bin" is in your \verb"PATH".
+
+\end{enumerate}
+
+\section{Using the Compiler}\label{sec:cyc}
+The Curry compiler is invoked with the command \verb"cyc". Normally, it performs compilation, assembly, and linking. The ``overall options'' allow stopping this process at an intermediate stage. For example, the \verb"-c" option says not to run the linker. The output then consists of object files output by the assembler.
+
+Other options control one stage of processing; for instance, the \verb"--debug" option tells \verb"cyc" to compile Curry modules such that they can be evaluated by the declarative debugger (see Sect.~\ref{sec:debugger}).
+
+The \verb"cyc" program accepts options and file names as operands. Options and file names can be mixed on the command line. In general, the order of options is not relevant with the exception of additional libraries specified with \verb"-l" options. On many systems, these should be specified last on the command line in order to ensure proper linking of programs.
+
+The order of file names does matter as it determines the order in which the files are compiled. In particular, it is essential to specify Curry source modules such that each module is compiled before any module that depends on it. \verb"cyc" compiles and links exactly those files which are named on the command line and does not include imported modules automatically. In general, you should use \verb"cymake" (see Sect.~\ref{sec:cymake}) in order to build programs composed of more than one source module.
+
+The source language of a file and the associated processing is determined by the file name extension. Argument names which end with \verb".curry" are taken to be Curry source, names ending in \verb".lcurry" are taken to be literate Curry source, names ending in \verb".c" are taken to be C code, names ending in \verb".s" are taken to be assembler programs, and \verb".o" are object files.
+
+By default, a program linked with \verb"cyc" executes the \verb"main" function in the main module of the program. The compiler assumes that the last Curry source file appearing on the command line defines the main module. A different main module can be specified explicitly with the \verb"-M" option. It is possible to specify a different goal with the \verb"-e" option. See Sect.~\ref{sec:goals} for a description of the syntax of goals. If the type of the goal is \verb"IO"~$t$, for some arbitrary type $t$, the program executes the corresponding I/O action. Otherwise, the goal is evaluated and its solutions are presented incrementally on the standard output.
+
+\subsection{Overall Options}\label{sec:overall}
+The following options control the general processing of source files.
+\begin{description}
+  \item[-n] Do not execute any command, but display each command that normally would be executed.
+  \item[-v] Display each command before it is executed by \verb"cyc".
+  \item[-C] Stop processing after generating C code from the Curry source modules.
+  \item[-S] Stop processing after generating assembler code from the Curry and C source files.
+  \item[-c] Compile and assemble the source file but do not link.
+  \item[-o \emph{file}] Place the output in a file named \emph{file}. Since only one output file can be specified, it does not make sense to use \verb"-o" when compiling more than one input file unless you are producing an executable file as output.
+
+If \verb"-o" is not specified, the default is to put an executable file in \verb"a.out", the object file for \emph{source.suffix} in \emph{source}\verb".o", its assembler file in \emph{source}\verb".s", and its C file in \emph{source}\verb".c".
+\end{description}
+
+\subsection{Compiling Curry Modules}\label{sec:compiling}
+The names of Curry source files must end with \verb".curry" or \verb".lcurry". The latter are taken to contain literate Curry source and are deliterated first. All Curry source files are compiled into C code. In addition, for every source file \emph{file}\verb".curry" and \emph{file}\verb".lcurry", respectively, the compiler creates a file \emph{file}\verb".icurry" containing the module's interface. The compiler uses module interfaces when processing import declarations in a source module. In order for the compiler to find the interfaces of imported modules, the name of the source file should agree with its module name. Hierarchical module names of the form \verb"A.B.C" are mapped onto the filesystem as in Java, i.e., the compiler expects to find the interface of this module in file \verb"C.icurry" in directory \verb"A/B" relative to the directory where the compiler was invoked or to one of the directories specifying the import search path (see also Sect.~\ref{sec:hierarchical}).
+
+The following options control the compilation of Curry source into C code.
+\begin{description}
+  \item[-g] Deprecated synonym for \verb"--debug".
+  \item[-\relax-debug] Prepare the compiled code for executing the program with the declarative debugger.
+
+Note that code compiled with this option is incompatible with code compiled without this option. This option must therefore be used consistently for compiling and linking all modules of a program.
+  \item[-\relax-trusted] This flag has an effect only in conjunction with one of previous options. It tells that debugger that it can trust all functions from a module compiled with this flag. The debugger will not ask questions about such functions.
+  \item[-i\emph{dir}] Add directory \emph{dir} to the list of paths used to locate interface files. By default, the compiler searches for interface files in the current directory and in its standard library directory (usually \verb"/usr/local/lib/curry").
+  \item[-Whaskell]
+  \item[-Wprolog] \vspace{-\medskipamount}
+  \item[-Wgoedel] \vspace{-\medskipamount}Warn whenever a definition does not obey the selected case mode (cf. Sect. C.1 of the Curry report~\cite{Hanus06:Report}).
+  \item[-Wall] Enable all warnings below.
+  \item[-Wunused] Enable all unused warnings below.
+  \item[-Wunused-data] Warn whenever a data constructor is not used.
+  \item[-Wunused-decl] Warn whenever a function or pattern declaration is not used.
+  \item[-Wunused-var] Warn whenever a function or pattern argument is not used.
+  \item[-Wshadow] Warn whenever a local declaration shadows a declaration from an outer scope.
+  \item[-Woverlap] Warn whenever a function's equations have overlapping left hand sides.
+  \item[-H\emph{size}] Change the heap size used by the compiler to \emph{size}. It is possible to use the abbreviations \emph{size}\verb"k" and \emph{size}\verb"M" to specify the heap size in kBytes and MBytes, respectively.
+
+Note that this option does not effect the heap size of the compiled executable. Use \verb"-h"\emph{size} for this (see Sect.~\ref{sec:linking}).
+\end{description}
+
+\subsection{Compiling C Files}\label{sec:compiling-c}
+The following list describes only the most common options understood by \verb"cyc" when compiling C source either directly or as a result of previously compiling Curry source into C code. In fact, \verb"cyc" passes on most of its options to the C compiler. For a detailed description of these options see the Gnu C man pages and documentation.
+\begin{description}
+  \item[-D\emph{name}] Predefine \emph{name} as a macro, with definition \verb"1".
+  \item[-D\emph{name}=\emph{defn}] Predefine \emph{name} as a macro with definition \emph{defn}.
+  \item[-U\emph{name}] Cancel any previous definition of \emph{name}, either built in or provided with a \verb"-D" definition.
+  \item[-I\emph{dir}] Add directory \emph{dir} to the list of paths used to locate header files. The standard library directory (usually \verb"/usr/local/lib/curry") is always included in this list.
+  \item[-O] equivalent to \verb"-O1"
+  \item[-O\emph{level}] Controls optimization of the compiled code. \verb"-O0" disables all optimizations. Note that \verb"-O3" and higher levels will fail to produce valid code for Curry modules on many architectures.
+  \item[-\relax-ccopt \emph{opt}] Passes the option \emph{opt} to the C compiler without interpretation. For instance, in order to include debugging symbols in the compiled C code, invoke the compiler with \verb"--ccopt -g".
+\end{description}
+
+\subsection{Linking}\label{sec:linking}
+The following options are relevant while linking a program. The compiler creates a tiny C code file in this phase, which contains the startup code initializing the Curry runtime system and starting the evaluation of the goal. This file is compiled like other C code during the link phase.
+\begin{description}
+  \item[-g] Deprecated synonym for \verb"--debug".
+  \item[-\relax-debug] Compile a program that invokes the declarative debugger. All Curry modules must have been compiled with the \verb"--debug" option as well.
+  \item[-h\emph{size}] Use \emph{size} bytes for the heap of the Curry program. Note that actually twice as much memory is allocated for the heap because the runtime system uses a two-space copying collector. The abbreviations \emph{size}\verb"k" and \emph{size}\verb"M" can be used for specifying the size in kBytes and MBytes, respectively. The default is to use a 4~MByte heap.
+  \item[-k\emph{size}] Use \emph{size} bytes for the stack of the Curry program. The abbreviations \emph{size}\verb"k" and \emph{size}\verb"M" can be used for specifying the size in kBytes and MBytes, respectively. The default is to use a 512~kByte stack.
+  \item[-t\emph{size}] Use \emph{size} bytes for the trail stack of the Curry program. The abbreviations \emph{size}\verb"k" and \emph{size}\verb"M" can be used for specifying the size in kBytes and MBytes, respectively. The default is to use a 512~kByte trail stack.
+  \item[-p] Print cumulated execution times and memory usage statistics at the end of the run. If specified more than once, also print memory statistics at each garbage collection.
+  \item[-e\emph{goal}] Evaluate \emph{goal} instead of \verb"main". See Sect.~\ref{sec:goals} for a description of the goal syntax. The \emph{goal} is evaluated with respect to the Curry module specified explicitly with the \verb"-M" option, the last module occurring on the command line, or the \verb"Prelude" otherwise.
+  \item[-T\emph{goal}] Compute the type of \emph{goal}. See Sect.~\ref{sec:goals} for a description of the goal syntax. The \emph{goal}'s type is computed with respect to the Curry module specified explicitly with the \verb"-M" option, the last module occurring on the command line, or the \verb"Prelude" otherwise.
+  \item[-M\emph{module}] Use \emph{module} as main module of the program. An explicit goal specified with the \verb"-e" option is evaluated in the context of \emph{module}. By default, the compiler assumes that the last Curry source file appearing on the command line contains the main module of the program. It may be necessary to specify the main module explicitly when there are no source file arguments.
+
+  \emph{Module} is either the name of a source file (ending in \verb".lcurry" or \verb".curry") or the name of a module whose source can be located in the current directory.
+  \item[-L\emph{dir}] Add directory \emph{dir} to the list of paths used to locate libraries specified with \verb"-l" options. The standard library directory (in the standard configuration: \verb"/usr/local/lib/curry") is always included in this list.
+  \item[-l\emph{lib}] Search the library named \emph{lib} when linking.
+  \item[-\relax-ldopt \emph{opt}] Passes the option \emph{opt} to the C compiler without interpretation. In contrast to \verb"--ccopt" (see Sect.~\ref{sec:compiling-c}), \emph{opt} is used only during the link phase.
+\end{description}
+
+\subsection{Environment}
+\begin{description}
+\item[CURRY\_PATH] The environment variable \verb"CURRY_PATH" is used to locate the compiler executables. The default value is \verb"/usr/local/lib/curry".
+\item[CURRY\_IMPORT\_PATH]
+\item[CURRY\_INCLUDE\_PATH] \vspace{-\medskipamount}
+\item[CURRY\_LIBRARY\_PATH] \vspace{-\medskipamount}
+The environment variables \verb"CURRY_IMPORT_PATH", \verb"CURRY_INCLUDE_PATH", and \verb"CURRY_LIBRARY_PATH" contain colon-separated lists of directories that are searched for imported interfaces, included header files, and library files, respectively. Their default value is \verb"$CURRY_PATH".
+\end{description}
+
+\subsection{Examples}
+\begin{verbatim}
+cyc test.curry
+\end{verbatim}
+This command compiles and links the Curry module in \verb"test.curry". The executable is put in \verb"a.out" and evaluates the \verb"main" function in \verb"test.curry".
+\begin{verbatim}
+cyc -h12M -O2 A.lcurry B.lcurry -o B
+\end{verbatim}
+This command compiles and links the Curry modules in \verb"A.lcurry" and \verb"B.lcurry" in that order. Both files are assumed to contain literate Curry source. The code is optimized by the C compiler using optimization level 2. The executable is put in file \verb"B". It evaluates the \verb"main" function in \verb"B.lcurry" and uses a larger default heap (12 MBytes).
+\begin{verbatim}
+cyc -c nat.curry
+cyc -e "add n Z =:= S Z where n free" nat.o -Mnat -o one
+\end{verbatim}
+The first of these commands compiles the Curry module in \verb"nat.curry" and places the object file in \verb"nat.o". The second command then links the object file into a program which evaluates the goal \verb"add n Z =:= S Z where n free" in the context of this module. Note that this context must be specified explicitly with a \verb"-M" option because no Curry module was named on the second command line. The executable is placed in \verb"one".
+\begin{verbatim}
+cyc -e "length Xs where Xs free"
+\end{verbatim}
+This command compiles and links a program that evaluates the goal \texttt{length Xs where Xs free}. The executable is placed in \verb"a.out".
+
+\subsection{Running Programs}\label{sec:running}
+The operation of a Curry program depends on the type of the goal being evaluated. If it is of type \verb"IO"~$t$, the I/O action described by the goal is executed. All command line arguments except for the runtime system options (see below) are available to the program and can be accessed with the function \verb"System.getArgs".
+
+If the goal's type is not \verb"IO"~$t$, the program computes and prints the solutions of the goal with a depth first search strategy. A solution comprises the normal form of the goal and the bindings and constraints for its free variables. When run on an interactive terminal, solutions are presented one by one giving the user a chance to stop the computation after each solution. Otherwise, all solutions of the goal are computed.
+
+This behavior can be changed by passing one of the options \verb"-i" and \verb"-n" to the program. If invoked with \verb"-i", the program computes the solutions incrementally as if it were run on an interactive terminal. If invoked with \verb"-n", the goal's solutions are computed all at once.
+
+All Curry programs run with fixed size heap, stack, and trail. Their sizes can be specified at link time (see Sect.~\ref{sec:linking}), but can be changed at run-time by passing options to the Curry runtime system. Such options must be enclosed with \verb"+RTS" and \verb"-RTS" arguments on the command line. The \verb"-RTS" switch may be omitted if it is the last argument on the command line.
+
+The Curry runtime system understands the following options:
+\begin{description}
+  \item[-b \emph{mode}] Use buffer mode \emph{mode} for the standard input and output of the program where the following \emph{mode}s are recognized \\
+    \begin{tabular}{ll}
+      \texttt{n} & Unbuffered \\
+      \texttt{l} & Line buffered \\
+      \texttt{f}[\emph{n}] & Fully buffered \\
+    \end{tabular} \\
+    The optional number \emph{n} allows specifying the buffer size when using fully buffered mode.
+  \item[-h \emph{n}] Use \emph{n} bytes for the heap in this run of the program. Note that actually twice as much memory is allocated for the heap because the runtime system uses a two-space copying collector. The abbreviations \emph{n}\verb"k" and \emph{n}\verb"M" can be used for specifying the size in kBytes and MBytes, respectively.
+  \item[-k \emph{n}] Use \emph{n} bytes for the stack in this run of the program. The abbreviations \emph{n}\verb"k" and \emph{n}\verb"M" can be used for specifying the size in kBytes and MBytes, respectively.
+ \item[-t \emph{n}] Use \emph{n} bytes for the trail stack in this run of the program. The abbreviations \emph{n}\verb"k" and \emph{n}\verb"M" can be used for specifying the size in kBytes and MBytes, respectively.
+  \item[-p] Print cumulated execution times and memory usage statistics at the end of the run. If specified more than once, also print memory statistics at each garbage collection.
+  \item[-d] Turn on the low-level tracer of the abstract machine. In general you do not want to see its output, but it may give hints to why a program does not compute an expected solution or runs into a deadlock. Beware that tracing can slow down program execution considerably and the output may be excessively large.
+\end{description}
+
+\paragraph{Example}
+\begin{verbatim}
+prog -x +RTS -k512k -h8M -t0 -RTS foo
+\end{verbatim}
+executes \verb"prog" with an 8 MByte heap, a 512 kByte stack, and no trail stack. The arguments \verb"-x" and \verb"foo" are passed to the Curry program and are available from Curry code via \verb"System.getArgs". Note that running a program without a trail stack, as in this example, requires that the code is completely deterministic and does not use encapsulated search.
+
+\section{Using the Debugger}\label{sec:debugger}
+The Münster Curry compiler includes a declarative debugger of wrong answers. This debugger can be used for finding the source of a wrong answer in the program. The idea of a declarative debugger is to compute a representation of the program's computation, the so-called computation tree. In the Curry debugger, each node of the computation tree corresponds to a basic fact \emph{f $t_1$ \dots{} $t_n$ = t} where $f$ is the name of a function and $t$ and all $t_i$ are data terms. Data terms can include the special value $\bot$ denoting an unevaluated expression. The value $\bot$ is represented by an underscore (\verb"_") in the output of the debugger.
+
+The debugger will ask questions about the correctness of these basic facts in order to find (an instance of) a program rule which computes a value that does not match the intended semantics of the program.
+
+In order to debug a program, all of its modules have to be recompiled with the \verb"--debug" command line flag. %In addition, you may use the flag \verb"--trusted" for those modules whose implementation you trust. If a function is compiled with the \verb"--trusted" flag, the debugger assumes that all basic facts for this function are correct and will not ask questions about them. Note that the prelude and the standard library modules have been compiled with the \verb"--trusted" option.
+
+The debugger is capable of handling programs which use encapsulated search. Note that wrong answers whose cause is actually a missing answer in a search goal cannot be detected. The debugger cannot yet handle programs involving I/O.
+
+\subsection{Trusted functions}\label{sec:trusted}
+When debugging larger programs, it is very inconvenient to answer questions about lot of functions which are supposed to be correct. In order to narrow down the region of the program that is explored in the debugger, the compiler allows annotating whole modules as well as individual functions as trusted. The debugger assumes that basic facts for trusted function are always correct and will not ask any questions for them. Note that the prelude and the standard libraries are always trusted.
+
+A whole module can be trusted by invoking with the compiler with the \verb"--trusted" option in addition to \verb"--debug".  Individual functions can be trusted by means of trust annotations in the source code.
+
+Lexically, trust annotations appear as nested comments using \verb"{-#" and \verb"#-}" as delimiters\footnote{This is deliberately modeled after Haskell's pragma notation.}. Syntactically, trust annotations are declarations that can appear where a function declaration is allowed. To this end, the Curry grammar is extended as follows (cf. appendix C.3 in~\cite{Hanus06:Report}).
+\begin{eqnarray*}
+  \meta{FunctionDeclaration} & ::= &
+    \meta{Signature} \mid \meta{TrustAnnot} \mid \meta{Equat} \\
+  \meta{TrustAnnot} & ::= &
+    \mbox{\literal{\char`\{-\#} $(\literal{TRUST} \mid \literal{SUSPECT})$
+               $(\meta{FunctionNames} \mid \literal{\char`\_})$ \literal{\#-\char`\}}}
+\end{eqnarray*}
+
+An explicit trust annotation \verb"{-# TRUST" $f_{1}$, $\dots$, $f_{n}$ \verb"#-}" declares $f_{1},\dots,f_{n}$ as trusted functions. The annotation \verb"{-# TRUST _ #-}" declares all functions in its declaration group, which are not listed in an explicit trust annotation, as trusted functions. Local functions are trusted automatically when their enclosing function is trusted. Thus, adding an annotation \verb"{-# TRUST _ #-}" at the top-level of a module is equivalent to compiling the module with \verb"--trusted".
+
+\verb"{-# SUSPECT" \dots{} \verb"#-}" annotations have the opposite effect as \texttt{TRUST}  annotations, i.e., they declare functions as untrusted. This is useful in order to narrow down the set of functions where a bug is suspected when a module is compiled with \verb"--trusted". In some sense, adding a \texttt{SUSPECT} annotation to an otherwise trusted module is the equivalent of setting a breakpoint in a conventional debugger for an imperative language.
+
+\section{Building programs with \texttt{cymake}}\label{sec:cymake}
+\verb"cymake" is a make like tool for compiling Curry programs. Dependencies are automatically extracted from the source files; there is no need to construct or maintain a Makefile.
+
+\verb"cymake" accepts options and file names on the command line in an arbitrary order. The file arguments determine what to compile. If \emph{file} is the name of an executable (i.e.\  it has no extension), \emph{file}\verb".lcurry" or \emph{file}\verb".curry" is assumed to contain the main module of the program. All modules it depends on are compiled (if necessary) and linked to an executable. If \emph{file} is the name of a source module (i.e.\  it ends in \verb".lcurry" or \verb".curry") or an object module (i.e.\ it ends in \verb".o") then the object file for that module is generated. Archive files and shared libraries (i.e.\ files ending with \verb".a", \verb".so", \verb".dylib", or \verb".dll") are not targets, but passed as additional arguments to the linker.
+
+\verb"cymake" allows several programs to reside in the same directory. Modules can be shared between several programs. Directories to search for modules can be specified with the \verb"-i" flag, in the same way as for \verb"cyc". In addition, directories which are searched for interfaces of library modules can be specified with the \verb"-P" flag.
+
+\verb"cymake" correctly handles the fact that the Curry compiler generates two files, an object file and an interface file, for each module compiled.
+
+\subsection{Options}
+\verb"cymake" understands the following options:
+\begin{description}
+  \item[-n] No execution mode. Print commands but do not execute them.
+  \item[-q] Quiet mode. Do not print commands before executing them.
+  \item[-M] Output a Makefile compatible dependency list on the standard output.
+  \item[-a] Always link the executable, even if it is not out of date with respect to its object files. This is useful if only the goal to be evaluated by the program is changed.
+  \item[-e \emph{goal}] Evaluate \emph{goal} instead of function \verb"main". This option cannot be used when compiling more than one module. See Sect.~\ref{sec:goals} for a description of the syntax of goals.
+  \item[-T\emph{goal}] Compute the type of \emph{goal}. This option cannot be used when compiling more than one module. See Sect.~\ref{sec:goals} for a description of the goal syntax.
+  \item[-\relax-debug] Compile the program for use with the debugger. As object files compiled with \verb"--debug" cannot be linked with object files compiled without \verb"--debug", \verb"cymake" uses the suffix \verb".d.o" instead of \verb".o" for object files when this option is specified.
+  \item[-i\emph{dir}] Add directory \emph{dir} to the list of paths used to locate imported modules. By default, the compiler searches only the current directory for source files. Note that the current directory is always searched first.
+  \item[-P\emph{dir}] Add directory \emph{dir} to the list of paths used to locate interface files for library modules. By default, the compiler searches for interface files in its standard library directory (usually \verb"/usr/local/lib/curry").
+  
+  The compiler scans the directories specified with \verb"-P" before the installation directory; thus, it is possible to hide the interfaces of the standard library by using this option.
+  \item[-o \emph{file}] Puts the executable file in \emph{file}. This option cannot be used when compiling more than one module. This option is ignored if compiling to an object file.
+  \item[-\relax-clean] Remove all compiled files for a program. If specified in conjunction with \verb"--debug" only the object files for the debugger, i.e. with suffix \verb".d.o", are removed.
+\end{description}
+Most other flags are assumed to be compiler options and are passed to \verb"cyc" when compiling and linking modules.
+
+\subsection{Environment}
+\begin{description}
+\item[CURRY\_PATH] The environment variable \verb"CURRY_PATH" is used to locate the auxiliary executables used by \verb"cymake".  The default value is \verb"/usr/local/lib/curry".
+\item[CURRY\_IMPORT\_PATH] 
+\item[CURRY\_INCLUDE\_PATH] \vspace{-\medskipamount}
+\item[CURRY\_LIBRARY\_PATH] \vspace{-\medskipamount}The environment variables \verb"CURRY_IMPORT_PATH", \verb"CURRY_INCLUDE_PATH", and \verb"CURRY_LIBRARY_PATH" contain colon-separated lists of directories that are searched for imported interfaces, included header files, and library files, respectively. Their default value is \verb"$CURRY_PATH".
+\end{description}
+
+\subsection{Modules and the Filesystem}\label{sec:hierarchical}
+Starting with release 0.9.6, the Münster Curry compiler maps hierarchical module names onto the filesystem as in Java. This is of particular importance in conjunction with \verb"cymake" which tries to find sources for imported modules. For instance, the source for an imported module \verb"Lib.Data.Set" is expected in one of the files \verb"Lib/Data/Set.lcurry" and \verb"Lib/Data/Set.curry". This path is relative to the directory where \verb"cymake" is invoked or one of the directories specified with the \verb"-i" option and does not depend on the path of the source file or target being compiled. This makes it possible to import modules of one subproject into sources of another subproject. The compiler uses the same procedure for locating interface files of imported modules. Therefore, you should always compile the sources of hierarchical modules from the base directory of the project.
+
+For instance, given the following directory layout
+\begin{center}
+\includegraphics{hierdir}
+\end{center}
+and the following association between files and modules
+\begin{center}\tt
+  \begin{tabular}{ll@{\qquad\quad}ll}
+    \textrm{File} & \textrm{Module} & \textrm{File} & \textrm{Module} \\
+    main.curry & main &  SubProj/Sub.curry & Sub \\
+    Lib/Data.curry & Lib.Data & SubProj/Lib/Mod1.curry & Sub.Mod1 \\
+    Lib/Funs.curry & Lib.Funs & SubProj/Lib/Mod2.curry & Sub.Mod2
+  \end{tabular}
+\end{center}
+it is possible to rebuild the program and all of its imported modules using the single command \verb"cymake -iSub main".
+
+\subsection{Using Libraries}
+The \verb"-i" and \verb"-P" options of \verb"cymake" allow searching for imported Curry modules and library interfaces in various directories besides the current directory and the standard library directory. Imported source files, which are found in the current directory and along the paths specified with \verb"-i" options, are updated as necessary and the compiled object files are automatically included when linking the executable program.
+
+Interfaces found along the paths specified with \verb"-P" options are used for determining whether a source module is out of date, but they cause no object files to be linked to the program. As \verb"cymake" does not provide means to specify additional object files to be linked with a program, the object files corresponding to these interfaces must be placed in a library, which must be specified when invoking \verb"cymake".
+
+As an example, consider the following directory hierarchy
+\begin{center}
+\includegraphics{sampledir}
+\end{center}
+where the files in directory \verb"modules" are part of the program and the files in directory \verb"library" constitute an independent library.
+
+Assuming that the files \verb"L1.curry" and \verb"L2.curry" define the modules \verb"L1" and \verb"L2", respectively, it is possible to bring the library up to date with the command
+\begin{verbatim}
+(cd library; cymake L[12].curry; ar rc Lib.a L[12].o; ranlib Lib.a)
+\end{verbatim}
+
+In order to bring the program \verb"prog" up to date when the files \verb"M1.curry" and \verb"M2.curry" define the modules \verb"M1" and \verb"M2", respectively, the following command can be used:
+\begin{verbatim}
+cymake -imodules -Plibrary prog library/Lib.a
+\end{verbatim}
+Note that this command will not recompile the files \verb"L1.curry" and \verb"L2.curry" if they are newer than the corresponding object files in directory \verb"library". Nevertheless, the interface files \verb"L1.icurry" and \verb"L2.icurry" can cause a recompilation of \verb"prog.curry", \verb"M1.curry", and \verb"M2.curry", respectively, if these modules are out of date with respect to the interfaces.
+
+\subsection{Using \texttt{make}}
+When \verb"cymake" is invoked with the \verb"-M" option, it generates \verb"make" style dependencies which can be included in a  \verb"Makefile". The generated dependencies assume that the Makefile contains definitions similar to
+\begin{verbatim}
+.SUFFIXES=.curry .lcurry .icurry .o
+.curry.o:
+        cyc -c $< -o $@
+.lcurry.o:
+        cyc -c $< -o $@
+.o.icurry:
+        @test -f "$@" || \
+        (echo "$@ does not exist"; \
+         echo "Remove $< and run make again"; exit 1)
+\end{verbatim}
+in order to compile Curry modules. The \verb".o.icurry" rule is essential for a correct operation of \verb"make" with respect to the generated dependencies.
+
+\section{Using the Interactive Environment}\label{sec:cyi}
+\verb"cyi" is an interactive environment that allows evaluating and debugging Curry goals with respect to a Curry module loaded into the interpreter. At startup, \verb"cyi" reads and interprets commands from the file \verb".cyirc" in the current directory if it exists, or from \verb".cyirc" in your home directory otherwise, and then loads either the first module specified on the command line or the Curry prelude.
+
+\subsection{Goals}\label{sec:goals}
+A goal is a Curry expression optionally followed by a where-clause that can be used for providing local definitions for the goal (see appendix C.3 in~\cite{Hanus06:Report} for the context free syntax of Curry).
+\begin{eqnarray*}
+\emph{Goal} & ::= & \mbox{\emph{Expr} [\texttt{where} \emph{LocalDefs}]}
+\end{eqnarray*}
+All free variables of the goal must be declared either in the where clause or by using a let expression as goal.
+
+The bindings of the free variables are displayed together with the normal form of the goal after successful evaluation unless the goal is of type \verb"IO"~$t$.
+
+\subsection{Commands}
+At the prompt of the interactive environment, the following commands can be entered:
+\begin{description}
+  \item[\emph{goal}] Evaluate \emph{goal} in the context of the current module.
+  \item[:\texttt{\^}[\emph{goal}]] Evaluate \emph{goal} in the context of the current module. If \emph{goal} is omitted, the previous goal is evaluated again.
+  \item[:debug [\emph{goal}]] Invoke the debugger for \emph{goal}. It may take some time to recompile the source modules with debugging information. If \emph{goal} is omitted, the debugger is invoked for the previous goal.
+  \item[:type [\emph{goal}]] Print the type of \emph{goal} instead of evaluating it. If \emph{goal} is omitted, the type of the previous goal is shown.
+  \item[:load \emph{module}] Set the current evaluation context to \emph{module}. This command will compile \emph{module} and all modules it depends on. The module can be specified either by the name of its source file (ending in \verb".lcurry" or \verb".curry") or a plain module name. \verb"cyi" displays the name of the current module in its prompt.
+  \item[:load] Reset the current evaluation context to the Curry prelude.
+  \item[:reload] Repeat the last load command.
+  \item[:freshen] Recompile the current module and all imported source files.
+  \item[:clean] Remove all compiled files for the current module and all imported source files.
+  \item[:edit \emph{file}] Invoke the editor for \emph{file}. The default editor is \verb"/usr/bin/vi", but this can be changed by setting one of the environment variables \verb"VISUAL" and \verb"EDITOR" to your preferred editor before starting \verb"cyi".
+  \item[:edit] Edit the source file of the current module.
+  \item[:set \emph{option} \dots] Add \emph{option}s to the list of compiler options.
+  \item[:unset \emph{word} \dots] Remove \emph{word}s from the list of compiler options.
+  \item[:cd \emph{dir}] Change the current directory to \emph{dir}.
+  \item[:cd] Print the current directory.
+  \item[:!\emph{command}] Execute the shell command \emph{command}.
+  \item[:version] Display the compiler's version.
+  \item[:help] Show the list of supported commands.
+  \item[:quit] Quit \verb"cyi".
+\end{description}
+All commands, except for \verb":cd" and \verb":clean", may be abbreviated to their first letter.
+
+\subsection{Limitations}
+\verb"cyi" is implemented as a shell script which invokes \verb"cymake" and \verb"cyc" for compiling modules and goals. Commands are read from the standard input using the shell's builtin \verb"read" command. Some shells, e.g. \verb"/bin/sh" on Solaris, cannot read raw input but apply backslash processing to the input. When \verb"cyi" is executed by such a shell, all backslash characters on the command line must be escaped by another backslash character; i.e., you have to enter \verb"\\x -> x" in a goal instead of \verb"\x -> x" and \verb"ord '\\n'" instead of \verb"ord '\n'". In order to remind you of this limitation, \verb"cyi" displays the following warning at startup when it is appropriate.
+\begin{verbatim}
+Warning: Backslashes on the command line must be escaped
+  For instance, use \\x -> x for a lambda abstraction
+  and '\\n' for the linefeed character.
+\end{verbatim}
+
+On most systems you should not see the above warning and can enter your goals as expected because the configure scripts of the Münster Curry compiler will look for a shell that supports raw reads. If this is not the case, you may want to install a modern shell, e.g., Gnu bash, on your system and reinstall the compiler. Be careful to remove the file \verb"config.cache" if it exists in your build directory before running \verb"configure" again.
+
+Command line editing and history require support from the \verb"read" command of the shell, which executes the \verb"cyi" script. This is available only for Gnu Bash and Korn shells except for the public domain version. Command line editing also works for the Z shell, but without history.
+
+\subsection{Example Session}
+Figs.~\ref{fig:sample-session1} and \ref{fig:sample-session2} on the following pages show a typescript of an example session with \verb"cyi". User input is typeset in a \cyiinput{slanted} typeface. The file \verb"nat.curry" contains the following definitions.
+\begin{verbatim}
+data Nat = Z | S Nat
+
+nat Z     = success
+nat (S n) = nat n
+
+add Z     n = Z
+add (S m) n = S (add m n)
+
+sub m n | add d n =:= m = d where d free
+\end{verbatim}
+Note that \verb"add" deliberately contains an error, which is corrected during the session.
+\begin{figure}
+\begin{alltt}
+lux@localhost:~ % cyi
+\verb"    _____ __ __"
+\verb"   / ___/ |  / _               Muenster Curry Compiler"
+\verb"  / /     | / | |              Version 0.9.10, Copyright (c) 1998-2006"
+\verb" / /___  / /  | |"
+\verb" \____/ /_/   |_|              Type :h for help"
+
+Prelude> \cyiinput{length [1,2,3,4]}
+4
+Prelude> \cyiinput{length Xs where Xs free}
+\{Xs = []\} 0
+More solutions? [Y(es)/n(o)/a(ll)] 
+\{Xs = [_a]\} 1
+More solutions? [Y(es)/n(o)/a(ll)] 
+\{Xs = [_a, _b]\} 2
+More solutions? [Y(es)/n(o)/a(ll)] \cyiinput{n}
+Prelude> \cyiinput{:l nat}
+/usr/local/bin/cyc -c nat.curry -o nat.o
+nat> \cyiinput{let N free in nat N}
+\{N = Z\}
+More solutions? [Y(es)/n(o)/a(ll)] 
+\{N = S Z\}
+More solutions? [Y(es)/n(o)/a(ll)] \cyiinput{n}
+nat> \cyiinput{sub (S (S Z)) X where X free}
+S (S Z)
+More solutions? [Y(es)/n(o)/a(ll)] \cyiinput{n}
+\end{alltt}
+\caption{Sample session}
+\label{fig:sample-session1}
+\end{figure}
+\begin{figure}
+\begin{alltt}
+nat> \cyiinput{:d}
+
+Entering debugger...
+ 
+Considering the following basic fact:
+1. nat.sub (S (S Z)) _a  -> (S (S Z))
+Is this valid? [y(es)/n(o)/a(bort)] \cyiinput{n}
+
+Considering the following basic fact:
+1. nat.add (S (S Z)) _a  -> (S (S Z))
+Is this valid? [y(es)/n(o)/a(bort)] \cyiinput{n}
+
+Considering the following basic fact:
+1. nat.add (S Z) _a  -> (S Z)
+Is this valid? [y(es)/n(o)/a(bort)] \cyiinput{n}
+
+Considering the following basic fact:
+1. nat.add Z _a  -> Z
+Is this valid? [y(es)/n(o)/a(bort)] \cyiinput{n}
+
+ ** Function nat.add is incorrect **
+ Wrong instance: nat.add Z _a  -> Z
+
+Buggy node found
+Debugger exiting
+nat> \cyiinput{:e nat.curry}
+nat> \cyiinput{:r}
+/usr/local/bin/cyc -c nat.curry -o nat.o
+nat> \cyiinput{:\^}
+\{X = S (S Z)\} Z
+More solutions? [Y(es)/n(o)/a(ll)] \cyiinput{a}
+\{X = S Z\} S Z | \{X = Z\} S (S Z)
+\end{alltt}
+\caption{Sample session(cont'd)}
+\label{fig:sample-session2}
+\end{figure}
+
+\section{Libraries}\label{sec:library}
+In addition to the standard prelude, the Münster Curry compiler is distributed with a subset of the Haskell 98 and Haskell 98 foreign function interface libraries (see~\cite{PeytonJones03:Haskell98} and \cite{Chakravarty03:FFI}, respectively), a few modules compatible with PAKCS, and some other library modules, which are specific to the Münster Curry compiler.
+
+\subsection{Prelude}\label{sec:lib-Prelude}
+The \texttt{Prelude} implements the data types and functions of appendix B of the Curry report~\cite{Hanus06:Report}. In addition, the following extensions are implemented in the \texttt{Prelude} of the Münster Curry compiler.
+\begin{itemize}
+\item Additional operators \verb"quot" and \verb"rem" for integer division.
+\begin{verbatim}
+quot :: Int -> Int -> Int
+rem  :: Int -> Int -> Int
+\end{verbatim}
+The semantics of \verb"div", \verb"mod", \verb"quot", and \verb"rem" follows the Haskell 98 report in that \verb"div" and \verb"mod" truncate the quotient toward negative infinity and \verb"quot" and \verb"rem" truncate the quotient toward zero. Fig.~\ref{fig:int-division} gives an example.
+\begin{figure}
+  \begin{center}
+    \begin{tabular}{|c|c||c|c|c|c|c|}
+    \hline
+    x & y & x `div` y & x `mod` y & x `quot` y & x `rem` y \\
+    \hline
+    \hline
+    7 & 3 & 2 & 1 & 2 & 1 \\
+    \hline
+    7 & -3 & -3 & -2 & -2 & 1 \\
+    \hline
+    -7 & 3 & -3 & 2 & -2 & -1 \\
+    \hline
+    -7 & -3 & 2 & -1 & 2 & -1 \\ 
+    \hline
+    \end{tabular}
+    \caption{Integer division operators}
+    \label{fig:int-division}
+  \end{center}
+\end{figure}
+\item Arithmetic operations for floating-point numbers:
+\begin{verbatim}
+(+.) :: Float -> Float -> Float
+(-.) :: Float -> Float -> Float
+(*.) :: Float -> Float -> Float
+(/.) :: Float -> Float -> Float
+negateFloat :: Float -> Float
+\end{verbatim}
+Note: Unary negation for floating-point numbers can be achieved with either the (prefix) operator \verb"-" or with \verb"-.", but the latter is deprecated. Conversion between floating-point and integer numbers is achieved with the functions
+\begin{verbatim}
+floatFromInt  :: Int -> Float
+truncateFloat :: Float -> Int
+roundFloat    :: Float -> Int
+\end{verbatim}
+\item Disequality constraints
+\begin{verbatim}
+(=/=) :: a -> a -> Success
+\end{verbatim}
+See also Sect.~\ref{sec:ext-disequal}
+\item The \verb"undefined" function:
+\begin{verbatim}
+undefined = failed
+\end{verbatim}
+\item The function
+\begin{verbatim}
+ensureGround :: a -> a
+\end{verbatim}
+returns its argument and ensures (lazily) that the normal form of the result is a ground term.
+\item The type
+\begin{verbatim}
+type ShowS = String -> String
+\end{verbatim}
+and the functions
+\begin{verbatim}
+shows :: a -> ShowS
+showChar :: Char -> ShowS
+showString :: String -> ShowS
+showList :: [a] -> ShowS
+showParen :: Bool -> ShowS -> ShowS
+\end{verbatim}
+from the Haskell prelude are defined. Note that \texttt{showList} is a polymorphic function and therefore will show strings in list notation, not in string notation.
+\item Additional I/O functions:
+\begin{verbatim}
+getContents :: IO String
+\end{verbatim}
+returns the whole standard input as a (lazy) string. The actions \verb"getChar" and \verb"getLine" raise an end-of-file exception after this I/O action has been executed.
+\begin{verbatim}
+interact :: (String -> String) -> IO ()
+interact f = getContents >>= putStr . f
+\end{verbatim}
+\item I/O exceptions
+\begin{verbatim}
+type IOError = String
+ioError :: IOError -> IO a
+catch :: IO a -> (IOError -> IO a) -> IO a
+\end{verbatim}
+\verb"ioError"~\emph{ioe} raises an I/O exception with error message \emph{ioe}. \verb"catch"~\emph{io}~$f$ executes the I/O action \emph{io}. If no I/O exception is raised during the evaluation of \emph{io}, \verb"catch"~\emph{io}~$f$ is equivalent to \emph{io}. Otherwise, the function $f$ is applied to the error message of the exception and its result is returned from \verb"catch"~\emph{io}~$f$.
+
+Note: The type \verb"IOError" will become an abstract type in future releases for compatibility with Haskell.
+\end{itemize}
+
+\subsection{Haskell 98 Library}
+The Haskell 98 Library is partially implemented. The following sections describe only the differences with respect to part II of the Haskell 98 Language Report~\cite{PeytonJones03:Haskell98}.
+
+\subsubsection{Ratio}
+Not implemented.
+
+\subsubsection{Complex}
+Not implemented.
+
+\subsubsection{Numeric}\label{sec:lib-Numeric}
+All functions except \verb"fromRat" and \verb"floatToDigits" are implemented. However, due to the lack of type classes, they are restricted to the types \verb"Int" and \verb"Float", respectively.
+
+\subsubsection{Ix}
+The methods of class \verb"Ix" are available, but only for (pairs of) \verb"Int".
+
+\subsubsection{Array}\label{sec:lib-Array}
+All functions of this module are implemented. However, indices are restricted to type \verb"Int". As the index type is fixed, the type \verb"Array" has only one argument, viz. the type of the elements, instead of two. Instead of making \verb"Array" an instance of the \verb"Functor" class and implementing the method \verb"fmap", the module exports the equivalent function
+\begin{verbatim}
+amap :: (a->b) -> Array a -> Array b
+\end{verbatim}
+
+\subsubsection{List}
+This module defines all functions except for the \verb"generic"\dots{} variants. The latter are generalization of the prelude functions \verb"take", \verb"drop", etc. to arbitrary index types which are instances of the \verb"Integral" class. As only \verb"Int" is available in the Münster Curry compiler, there seems no point in implementing these functions.
+
+This module also defines all functions that are re-exported from the Haskell prelude but absent from the Curry prelude, in particular the functions \verb"init", \verb"last", \verb"scanl", \verb"scanl1", \verb"scanr", \verb"scanr1", \verb"cycle", \verb"sum", \verb"product", \verb"maximum", and \verb"minimum". Due to the lack of type classes, the functions \verb"sum" and \verb"product" are available only for lists with elements of type \verb"Int".
+
+\subsubsection{Maybe}
+Fully implemented.
+
+\subsubsection{Char}
+All functions except \verb"readLitChar", \verb"showLitChar", and \verb"lexLitChar" are implemented. There is no support for Unicode or other character sets at present. Reasonable results should be expected only for characters in the ASCII character range, i.e. between \verb"'\NUL'" and \verb"'\DEL'".
+
+This module also exports the non-standard functions
+\begin{verbatim}
+minChar :: Char
+maxChar :: Char
+\end{verbatim}
+which return the smallest and largest character values. These functions are provided as a temporary workaround until the Münster Curry compiler supports type classes.
+
+\subsubsection{Monad}\label{sec:lib-Monad}
+All functions except \verb"guard" and \verb"msum" are implemented, but are available only for \verb"IO". Note that \verb"guard" and \verb"msum" require an instance of \verb"MonadPlus" and \verb"IO" is not an instance of this class in Haskell. This module also defines the functions \verb"sequence", \verb"sequence_", \verb"mapM", and \verb"mapM_" that are re-exported from the Haskell prelude, but defined as \verb"sequenceIO", \verb"sequenceIO_", \verb"mapIO", and \verb"mapIO_" in the Curry prelude.
+
+\subsubsection{IO}\label{sec:lib-IO}
+All functions except for \verb"hWaitForInput", \verb"hReady", and the \verb"IOError" related functions are implemented. Note that \verb"IOError" is currently equal to \verb"String". This will change in future releases.
+
+\subsubsection{Directory}\label{sec:lib-Directory}
+Implemented except for the type \verb"Permissions" and the related functions \verb"getPermissions" and \verb"setPermissions". Note that a compatible definition of \verb"Permissions" requires records.
+
+\subsubsection{System}
+Fully implemented.
+
+\subsubsection{Time}\label{sec:lib-Time}
+Only the type \verb"ClockTime" and the function \verb"getClockTime" are implemented at present.
+
+\subsubsection{Locale}
+Not implemented.
+
+\subsubsection{CPUTime}
+Not implemented.
+
+\subsubsection{Random}\label{sec:lib-Random}
+All functions and methods of this module have been implemented, except for the \verb"Read" and \verb"Show" instances of \verb"StdGen". In addition, due to the lack of type classes only one instance of \verb"RandomGen" and \verb"Random", namely those for \verb"StdGen" and \verb"Int", respectively, are available.
+
+\subsection{Foreign Function Interface}\label{sec:lib-ffi}
+A subset of the libraries from the Haskell 98 Foreign Function Interface addendum~\cite{Chakravarty03:FFI} have been implemented as far as they do not make use of type classes. In the following, only the differences with respect to the addendum are described; for a detailed documentation of the functions and their semantics see Sections~5 and~6 of~\cite{Chakravarty03:FFI}.
+
+Note that in the current implementation only arguments and results of types \texttt{Bool}, \texttt{Char}, \texttt{Int}, \texttt{Float}, \texttt{Ptr}, \texttt{FunPtr}, and \texttt{StablePtr} can be marshaled. In particular, values of type \texttt{Bool} and \texttt{Char} are marshaled to \texttt{int}, values of type \texttt{Int} are marshaled to \texttt{long}, values of type \texttt{Float} are marshaled to \texttt{double} and the pointer types are marshaled to \texttt{void *}.
+
+\subsubsection{Foreign}
+This module exports the function \texttt{unsafePerformIO} and all entities from the modules \texttt{Bits}, \texttt{Ptr}, \texttt{ForeignPtr}, \texttt{StablePtr}, \texttt{MarshalAlloc}, \texttt{MarshalError}, and \texttt{MarshalUtils}.
+
+\subsubsection{Bits}
+All member functions of the class \texttt{Bits} have been implemented as functions for type \texttt{Int}.
+
+\subsubsection{Int}
+Not yet implemented.
+
+\subsubsection{Word}
+Not yet implemented.
+
+\subsubsection{Ptr}
+All types and functions are implemented except for \texttt{freeHaskellFunPtr}. This function is not useful without support for callbacks from foreign code into Curry, which is not implemented at present.
+
+\subsubsection{ForeignPtr}
+All types and functions are implemented except for \texttt{mallocForeignPtr}, \texttt{mallocForeignPtrArray}, and \texttt{mallocForeignPtrArray0}, which require type classes.
+
+\subsubsection{StablePtr}
+Fully implemented.
+
+\subsubsection{Storable}
+Not implemented because it does not make sense without type classes. The module \texttt{CTypes} offers replacements for the \texttt{peek} and \texttt{poke} member functions.
+
+\subsubsection{MarshalAlloc}
+All functions except for \texttt{malloc}, \texttt{alloc}, and \texttt{realloc} are implemented.
+
+\subsubsection{MarshalArray}
+Not implemented due to lack of type classes.
+
+\subsubsection{MarshalError}
+Only the result value checks \texttt{throwIf}, \texttt{throwIf\_}, \texttt{throwIfNeg}, \texttt{throwIfNeg\_}, and \texttt{throwIfNull} as well as function \texttt{void} are implemented. The I/O error related functions have not been implemented because they assume a different error representation.
+
+\subsubsection{MarshalUtils}
+All functions except for \texttt{new} and \texttt{with} are implemented. The functions \texttt{toBool} and \texttt{fromBool} are restricted to \texttt{Int} arguments and results, respectively.
+
+\subsubsection{CForeign}
+This module exports all entities from the modules \texttt{CTypes}, \texttt{CString}, and \texttt{CError}.
+
+\subsubsection{CTypes}
+This module is considerably different from the Haskell FFI specification in order to work around the lack of type classes. In particular, the types \texttt{CChar}, \texttt{CInt} etc. are defined as type synonyms. For each type C$t$, this module defines functions \texttt{alignment$t$ :: Int}, \texttt{sizeOf$t$ :: Int}, \texttt{peek$t$ :: Ptr C$t$ -> IO C$t$}, and \texttt{poke$t$ :: Ptr C$t$ -> C$t$ -> IO ()}, that return the alignment constraints for values of type \texttt{C$t$}, the size of values of type \texttt{C$t$}, read from a memory location with type \texttt{C$t$}, and write to a memory location with type \texttt{C$t$}, respectively.
+
+These functions are also defined for the types \texttt{Ptr}, \texttt{FunPtr}, and \texttt{StablePtr}.
+
+\subsubsection{CString}
+Only the types \texttt{CString}, \texttt{CStringLen} and the functions \texttt{peekCString}, \texttt{peekCStringLen}, \texttt{newCString}, \texttt{newCStringLen}, \texttt{withCString}, and \texttt{withCStringLen} are implemented. Note that the Münster Curry compiler does not support Unicode characters at present and therefore all of these functions are restricted to 8-bit characters.
+
+\subsubsection{CError}
+\begin{sloppy}
+All functions are implemented, but \texttt{throwErrnoIfMinus1}, \texttt{throwErrnoIfMinus1\_}, \texttt{throwErrnoIfMinus1Retry}, and \texttt{throwErrnoIfMinus1Retry\_} are restricted to \texttt{IO} actions returning an \texttt{Int} result.
+
+\end{sloppy}
+\subsection{Library Modules Compatible with PAKCS}
+\subsubsection{AllSolutions}\label{sec:lib-AllSolutions}
+This module provides a collection of functions for obtaining lists of solutions of constraints and expressions. The implementation is based on the I/O action \verb"getSearchTree" proposed in~\cite{BrasselHanusHuch04:Encapsulating}. In contrast to the \verb"try" primitive, this function is able to encapsulate \emph{all} non-determinism of a computation. Note that the returned search tree is computed lazily. Therefore, \verb"getSearchTree" can be applied safely to expressions that have an infinite number of normal forms.
+\begin{verbatim}
+module AllSolutions where
+
+-- data type representing solutions of a goal
+--  Fail   no solution
+--  Val x  solution x (which is a normal form)
+--  Or ts  disjunction of solutions
+data SearchTree a = Fail | Val a | Or [SearchTree a]
+
+-- (allValuesD t) returns all solutions of search tree t with a
+-- depth-first left-to-right strategy
+allValuesD :: SearchTree a -> [a]
+
+-- (allValuesB t) returns all solutions of search tree t with a
+-- breadth-first strategy
+allValuesB :: SearchTree a -> [a]
+
+-- (getSearchTree x) returns a search tree for x's evaluation, which
+-- encapsulates all non-determinism
+getSearchTree :: a -> IO (SearchTree a)
+
+-- (getOneSolution g) returns one solution of goal g with an
+-- incomplete depth-first left-to-right strategy
+getOneSolution :: (a -> Success) -> IO (Maybe a)
+
+-- (getAllSolutions g) returns all solutions of goal g with an
+-- incomplete depth-first left-to-right strategy
+getAllSolutions :: (a -> Success) -> IO [a]
+
+-- (getOneValue x) returns one normal form of x with an incomplete
+-- depth-first left-to-right strategy
+getOneValue :: a -> IO (Maybe a)
+
+-- (getAllValues x) returns all normal forms of x with an incomplete
+-- depth-first left-to-right strategy
+getAllValues :: a -> IO [a]
+
+-- (getAllFailures x g) returns all normal forms of x for which g x has
+-- no solution
+getAllFailures :: a -> (a -> Success) -> IO [a]
+\end{verbatim}
+
+
+\subsubsection{Combinatorial}\label{sec:lib-Combinatorial}
+The \verb"Combinatorial" module provides some common non-deterministic operations.
+\begin{verbatim}
+module Combinatorial where
+
+-- (permute xs) non-deterministically computes any permutation of xs
+permute :: [a] -> [a]
+
+-- (subset xs) non-deterministically computes any sublist of xs
+subset :: [a] -> [a]
+
+-- (sizedSubset n xs) non-deterministically computes any sublist of xs
+-- with n elements
+sizedSubset :: Int -> [a] -> [a]
+
+-- (splitSet xs) non-deterministically splits xs into sublists ys,zs 
+-- such that ys and zs have the same elements as xs
+splitSet :: [a] -> ([a], [a])
+
+-- (partition xs) non-deterministically computes any partition of xs
+partition :: [a] -> [[a]]
+\end{verbatim}
+Note that all functions except \verb"permute" interpret their input lists as multi-sets and there is no guarantee about the order of elements in the result list. For instance, if one of the results of \verb"partition [1,2,3,4]" is the list \verb"[[1],[2,3],[4]]", no permutation of that list, i.e., neither \verb"[[1],[3,2],[4]]" nor \verb"[[1],[4],[2,3]]", are returned as well.
+
+\subsubsection{Float}\label{sec:lib-Float}
+This module contains a lot of useful functions on floating-point numbers.
+\begin{verbatim}
+module Float where
+infixl 8 ^, ^^, **
+infixl 7 *., /.
+infixl 6 +., -.
+
+-- (+.), (-.), (*.), (/.) re-exported for PAKCS compatibility
+(+.) :: Float -> Float -> Float
+(-.) :: Float -> Float -> Float
+(*.) :: Float -> Float -> Float
+(/.) :: Float -> Float -> Float
+
+-- (<.), (>.), (<=.), (>=.) ordering relations restricted to Floats
+(<.) :: Float -> Float -> Bool
+(>.) :: Float -> Float -> Bool
+(<=.) :: Float -> Float -> Bool
+(>=.) :: Float -> Float -> Bool
+
+-- pi = 3.14159265358979323846
+pi :: Float
+
+-- Convert an integer to a floating-point number
+i2f :: Int -> Float
+
+-- Convert a floating-point number to an integer rounding towards 0
+truncate :: Float -> Int
+
+-- Convert a floating-point number to the nearest integer number
+round :: Float -> Int
+
+-- (x^n) computes the nth power of x, n must be non-negative
+(^) :: Float -> Int -> Float
+
+-- (x^^n) computes the nth power of x, n may be negative
+(^^) :: Float -> Int -> Float
+
+-- (x^^y) raises x to power y
+(**) :: Float -> Float -> Float
+
+-- (sqrt x) returns the square root of x
+sqrt :: Float -> Float
+
+-- (log x) returns the natural logarithm of x
+log :: Float -> Float
+
+-- (log10 x) returns the logarithm in base 10 of x
+log10 :: Float -> Float
+
+-- (exp x) returns e**x
+exp :: Float -> Float
+
+-- trigonometric functions
+sin :: Float -> Float
+cos :: Float -> Float
+tan :: Float -> Float
+
+-- inverse trigonometric functions
+asin :: Float -> Float
+acos :: Float -> Float
+atan :: Float -> Float
+
+-- (atan2 y x) computes the principal value of atan (y/.x) using the
+-- signs of both arguments in order to determine the quadrant the result
+-- is in; this function is useful for converting rectangular coordinates
+-- into polar coordinates
+atan2 :: Float -> Float -> Float
+
+-- hyperbolic functions
+sinh :: Float -> Float
+cosh :: Float -> Float
+tanh :: Float -> Float
+\end{verbatim}
+The constant \verb"pi", and the functions \verb"(^)", \verb"(^^)", \verb"(**)", \verb"log10", \verb"asin", \verb"acos", \verb"atan", \verb"sinh", \verb"cosh", and \verb"tanh" are available only for the Münster Curry compiler.
+
+\subsubsection{Integer}\label{sec:lib-Integer}
+This module contains useful functions on integer numbers. Note that in contrast to PAKCS,  the Münster Curry compiler supports only fixed width integer numbers. The smallest and largest integer values can be determined with the functions \verb"minInt" and \verb"maxInt", respectively. Note that these functions are not available in PAKCS and are provided only as a temporary workaround until the Münster Curry compiler supports type classes.
+\begin{verbatim}
+module Integer where
+
+-- (minInt) returns the smallest representable integer number 
+minInt :: Int
+
+-- (maxInt) returns the largest representable integer number
+maxInt :: Int
+
+-- (pow m n) returns the m raised to the power of n
+pow :: Int -> Int -> Int
+
+-- (ilog n) returns the floor of the logarithm in base 10 of n
+ilog :: Int -> Int
+
+-- (isqrt n) returns the floor of the square root of n
+isqrt :: Int -> Int
+
+-- (factorial n) returns the factorial of n
+factorial :: Int -> Int
+
+-- (binomial m n) returns m*(m-1)*...*(m-n+1)/n*(n-1)*...*1
+-- Fails if n <= 0 or m >= n
+binomial :: Int -> Int -> Int
+
+-- (abs n) returns the absolute value of n
+abs :: Int -> Int
+
+-- (max3 m n o) returns the maximum of m, n, and o
+max3 :: a -> a -> a -> a
+
+-- (min3 m n o) returns the maximum of m, n, and o
+min3 :: a -> a -> a -> a
+
+-- (maxlist l) returns the maximum value from list l
+maxlist :: [a] -> a
+
+-- (minlist l) returns the minimum value from list l
+minlist :: [a] -> a
+
+-- (bitTrunc m n) returns the m least significant bits of n
+bitTrunc :: Int -> Int -> Int
+
+-- (bitAnd m n) returns the bitwise and of m and n
+bitAnd :: Int -> Int -> Int
+
+-- (bitOr m n) returns the bitwise or of m and n
+bitOr :: Int -> Int -> Int
+
+-- (bitXor m n) returns the bitwise exclusive of m and n
+bitXor :: Int -> Int -> Int
+
+-- (bitNot n) returns the bitwise complement of n
+bitNot :: Int -> Int
+
+-- (even n) returns whether n is even
+even :: Int -> Bool
+
+-- (odd n) returns whether n is odd
+odd :: Int -> Bool
+\end{verbatim}
+
+\subsubsection{Parser}\label{sec:lib-Parser}
+This module implements functional logic parsing combinators~\cite{CL99:Parsing}. The implementation has been optimized to avoid a quadratic time complexity problem with respect to the length of the input stream, which is present in the original version.
+\begin{verbatim}
+module Parser where
+infixr 4 <*>
+infixr 2 <|>, <||>
+infixr 3 >>>
+
+-- Raw parser type
+type Parser a = [a] -> [a]
+
+-- Parsers with attributes (a.k.a representations)
+type ParserRep a b = a -> Parser b
+
+-- Basic parsers
+empty :: Parser a
+terminal :: a -> Parser a
+satisfy :: (a -> Success) -> ParserRep a a
+
+-- Concatention
+(<*>) :: Parser a -> Parser a -> Parser a
+
+-- Alternatation
+(<|>) :: Parser a -> Parser a -> Parser a
+(<||>) :: ParserRep a b -> ParserRep a b -> ParserRep a b
+
+-- (p >>> x) attaches attribute x to parser p
+(>>>) :: Parser a -> b -> ParserRep b a
+
+-- Parsers for p* and p+, respectively
+star :: ParserRep a b -> ParserRep [a] b
+some :: ParserRep a b -> ParserRep [a] b
+
+-- (parse p xs) non-deterministically succeeds for any valid parse of xs
+parse :: Parser a -> [a] -> Success
+
+-- (parseRep p xs) non-deterministically returns any representation
+-- of xs computed by parser p
+parseRep :: ParserRep a b -> [b] -> a
+
+-- (parseOne p xs) deterministically returns only one representation
+-- of xs computed by parser p
+parseOne :: ParserRep a b -> [b] -> a
+\end{verbatim}
+
+\subsubsection{Ports}\label{sec:lib-Ports}
+The Münster Curry compiler implements a subset of PAKCS' distributed Curry functionality~\cite{Hanus99:Ports}. In particular, this module supports internal ports (created with \verb"openPort") and stream ports, which allow connecting with a subprocess (\verb"openProcessPort") and a TCP socket (\verb"openSocketConnectPort"), respectively. This functionality is sufficient in order to implement graphical interfaces with PAKCS' \verb"Tk" module, and also for connecting to Web servers and to implement simple Web browsers.
+
+Distributed ports with arbitrary argument types (\verb"openNamedPort" and \verb"connectPort") are not supported because their implementation requires type information that is not available in the runtime system of the Münster Curry compiler.
+
+The function \verb"closePort" is an addition for the Münster Curry compiler, which allows closing a port explicitly. If a port is closed, the message stream will become finite, and a program that sends a message to a closed port fails.
+\begin{verbatim}
+module Ports where
+data Port a
+
+-- (openPort p ms) creates an internal port p with message stream ms
+openPort :: Port a -> [a] -> Success
+
+-- (closePort p) closes port p
+closePort :: Port a -> Success
+
+-- (send m p) sends message m to port p
+send :: a -> Port a -> Success
+
+-- doSend m p = doSolve (send m p)
+doSend :: a -> Port a -> IO ()
+
+-- Stream Port messages
+-- SP_Put s: send s followed by a newline to the port
+-- SP_GetLine s: instantiates s with the next line read from the port
+-- SP_GetChar c: instantiates c with the next character from the port
+-- SP_EOF b: instantiates b with True at the end of the input stream
+-- SP_Close: closes the port
+data SP_Msg
+  = SP_Put String
+  | SP_GetLine String
+  | SP_GetChar Char
+  | SP_EOF Bool
+  | SP_Close
+
+-- (openProcessPort cmd) runs the shell command cmd as a new subprocess
+-- and returns a stream port connected to the input and output channels
+-- of that process
+openProcessPort :: String -> IO (Port SP_Msg)
+
+-- (openSocketConnectPort p h) returns a stream port connected to the
+-- TCP socket with port number p at host h
+openSocketConnectPort :: Int -> String -> IO (Port SP_Msg)
+
+-- (choiceSPEP p ms) returns either a line read from the stream port p
+-- or the message list ms provided that it is instantiated to a
+-- non-variable term
+choiceSPEP :: Port SP_Msg -> [a] -> Either String [a]
+
+-- (newObject f s p) applies the function f to an initial state s and
+-- the messages received on the port p
+-- NB newObject constrains p to a fresh (local) port, so this argument
+--    should be a free variable
+newObject :: (a -> [b] -> Success) -> a -> Port b -> Success
+\end{verbatim}
+The function \verb"choiceSPEP" is supposed to perform a fair merge between the lines available on the stream port and the message stream. The current implementation, however, always returns the message list unless it is a variable. This may change in a future release of the Münster Curry compiler.
+
+\subsubsection{Read}\label{sec:lib-Read}
+The module \verb"Read" implements conversions from strings to integer and floating-point numbers. Since its implementation is based on the \verb"Numeric" module, there are some subtle differences with the PAKCS implementation. In particular, all functions fail if the argument string does not represent a valid number. On the other hand, the Münster Curry compiler's \verb"readInt" function recognizes parenthesized numbers and allows spaces between the minus sign and the number. In addition, \verb"readHex" is case insensitive, i.e., \verb'readHex " AbCd "' returns the number $43981$. The function \verb"readFloat" is an extension of the Münster Curry compiler.
+\begin{verbatim}
+module Read where
+
+readFloat :: String -> Float
+readNat   :: String -> Int
+readInt   :: String -> Int
+readHex   :: String -> Int
+\end{verbatim}
+
+\subsubsection{Socket}\label{sec:lib-Socket}
+The module \verb"Socket" provides an interface to the Unix socket system calls and is compatible with PAKCS. Note that only TCP sockets are supported at present and that there is no support for IPv6.
+\begin{verbatim}
+module Socket where
+
+-- Abstract socket type
+data Socket
+
+-- Creates a new INET socket. Use socketBind, socketListen, and
+-- socketAccept for establishing a server for this socket.
+socketINET :: IO Socket
+
+-- Binds a socket to a port number. If the port number is a free
+-- variable, the system picks a port number and binds the variable
+-- to it.
+socketBind :: Socket -> Int -> IO ()
+
+-- Defines the maximum backlog queue of a port.
+socketListen :: Socket -> Int -> IO ()
+
+-- Creates a server side socket bound to a port number. If the port
+-- number is a free variable, the system picks a port number and binds
+-- the variable to it. The implementation currently sets a queue limit
+-- of 10 connections.
+listenOn :: Int -> IO Socket
+
+-- Returns a connection of a client to a socket. The connection is
+-- returned as a pair consisting of a string identifying the client
+-- (the format of this string is implementation-dependent) and a handle
+-- to a stream communication with the client. The handle is both
+-- readable and writable.
+socketAccept :: Socket -> IO (String, IO.Handle)
+
+-- Waits until a connection of a client to a socket is available. If
+-- no connection is available within the time limit, it returns Nothing,
+-- otherwise the connection is returned as a pair consisting of a string
+-- identifying the client (the format of this string is
+-- implementation-dependent) and a handle to a stream communication with
+-- the client.
+--
+-- Example call: (waitForSocketAccept socket timeout)
+-- Parameters:
+--   socket - a socket
+--   timeout - milliseconds to wait for input (< 0 : no time out)
+waitForSocketAccept :: Socket -> Int -> IO (Maybe (String, IO.Handle))
+
+-- Creates a new connection to a Unix socket.
+-- Example call: (connectToSocket host port)
+-- Parameters:
+--   host - the host name of the connection
+--   port - the port number of the connection
+-- Returns:
+--   the handle of the stream (connected to the port port@host)
+--   which is both readable and writable
+connectToSocket :: String -> Int -> IO IO.Handle
+\end{verbatim}
+
+
+\subsubsection{Unsafe}\label{sec:lib-Unsafe}
+Do not use this module unless you have really good reasons for doing so and can prove your program to be safe. 
+\begin{verbatim}
+module Unsafe where
+isVar              :: a -> Bool
+spawnConstraint    :: Success -> a -> a
+trace              :: String -> a -> a
+unsafeInterleaveIO :: IO a -> IO a
+unsafePerformIO    :: IO a -> a
+\end{verbatim}
+
+\subsection{Library Modules Specific to the Münster Curry Compiler}
+\subsubsection{FiniteMap}\label{sec:lib-FiniteMap}
+This module provides an implementation of finite maps based on 2-3 trees.
+\begin{verbatim}
+module FiniteMap where
+
+infix 4 `eqFM`, `neqFM`
+
+-- abstract type
+data FM a b
+
+-- eqFM, neqFM compare the contents of the maps, not their structure
+-- as (==) and (/=) do
+eqFM  :: FM a b -> FM a b -> Bool
+neqFM :: FM a b -> FM a b -> Bool
+
+-- check for the empty map
+nullFM :: FM a b -> Bool
+
+-- the empty map
+zeroFM :: FM a b
+
+-- unitFM constructs a map with a single association
+unitFM :: a -> b -> FM a b
+
+-- adding and removing elements
+addToFM      :: a -> b -> FM a b -> FM a b
+deleteFromFM :: a -> FM a b -> FM a b
+
+-- lookupFM x returns the value associated with x, or Nothing
+-- if there is no such value
+lookupFM :: a -> FM a b -> Maybe b
+
+-- conversion between association lists and finite maps
+fromListFM :: [(a, b)] -> FM a b
+toListFM   :: FM a b -> [(a, b)]
+
+-- mapFM f fm applies f to values in the map
+mapFM :: (a -> b) -> FM c a -> FM c b
+
+showFM :: FM a b -> [Char]
+showsFM :: FM a b -> ShowS
+\end{verbatim}
+
+\subsubsection{IOExts}\label{sec:lib-IOExts}
+The module \verb"IOExts" implements a few useful functions for compatibility with Hugs and ghc. The \verb"fixIO" function implements a fix-point operator in the \verb"IO" monad as proposed in~\cite{EL00:Recursive}. The functions \verb"openFd", \verb"openProcess", \verb"pClose", and \verb"connectTcpSocket" are only available for the Münster Curry compiler.
+\begin{verbatim}
+module IOExts where
+
+-- monadic fix-point operator
+fixIO :: (a -> IO a) -> IO a
+
+-- functions from Unsafe/Trace re-exported for compatibility
+-- with Hugs and ghc
+unsafePerformIO    :: IO a -> a
+unsafeInterleaveIO :: IO a -> IO a
+trace :: String -> a -> a
+
+-- mutable references
+data IORef a
+newIORef    :: a -> IO (IORef a)
+readIORef   :: IORef a -> IO a
+writeIORef  :: IORef a -> a -> IO ()
+modifyIORef :: IORef a -> (a -> a) -> IO ()
+
+-- mutable arrays
+data IOArray a
+newIOArray    :: (Int,Int) -> a -> IO (IOArray a)
+boundsIOArray :: IOArray a -> (Int,Int)
+readIOArray   :: IOArray a -> Int -> IO a
+writeIOArray  :: IOArray a -> Int -> a -> IO ()
+freezeIOArray :: IOArray a -> IO (Array.Array a)
+thawIOArray   :: Array.Array a -> IO (IOArray a)
+unsafeFreezeIOArray :: IOArray a -> IO (Array.Array a)
+unsafeThawIOArray   :: Array.Array a -> IO (IOArray a)
+
+-- open a file handle for a Unix file descriptor
+openFd :: Int -> IO.IOMode -> IO IO.Handle
+
+-- check whether a file handle is connected to a terminal
+hIsTerminalDevice :: IO.Handle -> IO Bool
+
+-- run a subprocess
+openProcess :: String -> IO.IOMode -> IO IO.Handle
+pClose :: IO.Handle -> IO Int
+
+-- connect to a TCP socket
+connectTcpSocket :: String -> Int -> IO.IOMode -> IO IO.Handle
+
+-- invoke the garbage collector
+performGC :: IO ()
+\end{verbatim}
+The I/O action \verb"openProcess"~\emph{cmd}~\emph{mode} returns a handle that is connected to the standard input and/or output channels of a new subprocess executing the shell command \emph{cmd}. Note that handles created with \verb"openProcess" use block buffering by default. In order to run an interactive subprocess, you will probably want to change this to line buffering or no buffering at all using \verb"IO.hSetBuffering".
+
+The I/O action \verb"pClose" closes a process handle that was opened with \verb"openProcess" and returns the associated process' termination status. The result will be a non-negative number if the process did terminate regularly. In this case, the number is equal to the exit code of the child process. If the child was terminated due to a signal, the result of \verb"pClose" will be the negative signal number. It is an error to apply \verb"pClose" to a handle that was not opened with \verb"openProcess". However, it is possible to apply \verb"hClose" to a handle opened with \verb"openProcess". In that case, the calling process is not blocked until the child process is terminated. In addition, it is possible to apply \verb"pClose" and \verb"hClose" more than once to the same handle. All calls to \verb"pClose" will return the same result.
+
+The I/O action  \verb"connectTcpSocket"~$h$~$p$~\emph{mode} returns a handle that is connected to the TCP socket with port number $p$ at host $h$. For instance, you can use this function to open a connection to the web server running at \verb"danae.uni-muenster.de".
+\begin{verbatim}
+connectTcpSocket "danae.uni-muenster.de" 80 ReadWriteMode
+\end{verbatim}
+The host $h$ can be specified either as a hostname, which must be resolvable to an internet address on the current machine, or as an IP address in dotted decimal notation, e.g., \verb"127.0.0.1". At present, \verb"connectTcpSocket" supports only IPv4 addresses. Note that handles created with \verb"connectTcpSocket" use block buffering by default. If this is not appropriate for your application, change the buffering mode with \verb"IO.hSetBuffering".
+
+\subsubsection{IOVector}
+The implementations of arrays (Sect.~\ref{sec:lib-Array}) and mutable arrays (Sect.~\ref{sec:lib-IOExts}) are actually based on mutable vectors that use zero-based indexing.
+\begin{verbatim}
+module IOVector where
+data IOVector a
+newIOVector    :: Int -> a -> IO (IOVector a)
+copyIOVector   :: IOVector a -> IO (IOVector a)
+readIOVector   :: IOVector a -> Int -> IO a
+writeIOVector  :: IOVector a -> Int -> a -> IO ()
+lengthIOVector :: IOVector a -> Int
+\end{verbatim}
+
+\subsubsection{Lexing}\label{sec:lib-Lexing}
+This module implements lazy lexing combinators based on~\cite{Chakravarty99:Lexing}.
+\begin{verbatim}
+module Lexing where
+infixl 4 `star`, `plus`, `quest`
+infixl 3 +>
+infixl 2 >|<, >||<
+
+type Position = (String, Int, Int)
+type LexerState a = (String, Position, a)
+
+type Regexp s t = Lexer s t -> Lexer s t
+data Lexer s t
+type OneToken s t = (Maybe t, Lexer s t, LexerState s)
+
+type Action t = String -> Position -> Maybe t
+type Meta s t = Position -> s -> (Position, s, Maybe (Lexer s t))
+
+-- Regular expressions
+epsilon :: Regexp s t
+char :: Char -> Regexp s t
+(+>) :: Regexp s t -> Regexp s t -> Regexp s t
+(>|<) :: Regexp s t -> Regexp s t -> Regexp s t
+star :: Regexp s t -> Regexp s t -> Regexp s t
+plus :: Regexp s t -> Regexp s t -> Regexp s t
+quest :: Regexp s t -> Regexp s t -> Regexp s t
+
+alt :: String -> Regexp s t
+string :: String -> Regexp s t
+ident :: Regexp s t
+
+-- Lexer actions
+lexaction :: Regexp s t -> Action t -> Lexer s t
+(>||<) :: Lexer s t -> Lexer s t -> Lexer s t
+
+-- Meta actions
+lexmeta :: Regexp s t -> Meta s t -> Lexer s t
+ctrlLexer :: Lexer s t
+
+-- Lexing
+execLexer :: Lexer s t -> LexerState s -> [t]
+lexOne :: Lexer s t -> LexerState s -> OneToken s t
+\end{verbatim}
+
+\subsubsection{NameSupply}\label{sec:lib-NameSupply}
+This module implements unique name supplies based on~\cite{AugustssonRittriSynek94:Unique}. Note that all functions of this module are referentially transparent, i.e., they will return the same names when applied to the same arguments. For instance,
+\begin{verbatim}
+  do
+    ns <- initialNameSupply
+    print (getName ns,getName ns)
+\end{verbatim}
+will print the pair \verb"(0,0)" and not \verb"(0,1)".
+\begin{verbatim}
+module NameSupply
+
+data NameSupply
+
+-- (initialNameSupply) returns a new name supply
+initialNameSupply :: IO NameSupply
+
+-- (splitNameSupply ns) returns two name supplies, whose generated
+-- names will be distinct.
+splitNameSupply :: NameSupply -> (NameSupply, NameSupply)
+
+-- (listNameSupply ns) returns an infinite list of name supplies, whose
+-- generated names will be distinct.
+listNameSupply :: NameSupply -> [NameSupply]
+
+type Name = Int
+
+-- (getName ns) returns the unique name of name supply ns.
+getName :: NameSupply -> Name
+
+-- (listName ns) returns an infinite list of unique names.
+listName :: NameSupply -> [Name]
+\end{verbatim}
+
+\subsubsection{Set}\label{sec:lib-Set}
+This module implements functions on sets. The implementation is based on finite maps (see Sect.~\ref{sec:lib-FiniteMap}).
+\begin{verbatim}
+module Set where
+
+infixl 8 `addToSet`,`deleteFromSet`
+infixl 7 `unionSet`,`intersectionSet`
+infixl 6 `diffSet`,`symDiffSet`
+infix  4 `eqSet`,`neqSet`,`elemSet`,`notElemSet`,`subsetSet`
+
+-- abstract type
+data Set a
+
+-- eqSet, neqSet compare the contents of the sets, not their structure
+-- as (==) and (/=) do
+eqSet  :: Set a -> Set a -> Bool
+neqSet :: Set a -> Set a -> Bool
+
+-- check for the empty set
+nullSet :: Set a -> Bool
+
+-- the empty set
+zeroSet :: Set a
+
+-- unitSet returns a singleton set
+unitSet :: a -> Set a
+
+-- adding and removing elements
+addToSet      :: a -> Set a -> Set a
+deleteFromSet :: a -> Set a -> Set a
+
+-- elemSet, notElemSet check set membership
+elemSet    :: a -> Set a -> Bool
+notElemSet :: a -> Set a -> Bool
+
+-- subsetSet xs ys checks whether xs is a subset of or equal to ys
+subsetSet :: Set a -> Set a -> Bool
+
+-- common set operations
+unionSet        :: Set a -> Set a -> Set a
+unionSets       :: [Set a] -> Set a
+intersectionSet :: Set a -> Set a -> Set a
+diffSet         :: Set a -> Set a -> Set a
+symDiffSet      :: Set a -> Set a -> Set a
+
+-- conversion between sets and lists
+fromListSet :: [a] -> Set a
+toListSet   :: Set a -> [a]
+
+-- mapSet f xs applies f to every element of xs
+mapSet :: (a -> b) -> Set a -> Set b
+
+-- domainFM fm returns the set of all keys of the finite map fm
+domainFM :: FiniteMap.FM a b -> Set a
+
+showSet :: Set a -> [Char]
+showsSet :: Set a -> ShowS
+\end{verbatim}
+
+\subsubsection{Success}\label{sec:lib-Success}
+This module implements some frequently used functions for constraints.
+\begin{verbatim}
+module Success(Success, success, (&), (&>),
+               module Success) where
+infix  0 ==>, <==
+
+-- Computes the concurrent conjunction of a list of constraints
+andC :: [Success] -> Success
+
+-- Computes the sequential conjunction of a list of constraints
+andS :: [Success] -> Success
+
+-- Is a given predicate satisfied by all elements in a list?
+allC :: (a -> Success) -> [a] -> Success
+
+-- (c ==> x) evaluates x if the constraint c is satisfied
+(==>) :: Success -> a -> a
+
+-- (x <== c) is equivalent to (c ==> x)
+(<==) :: a -> Success -> a
+
+-- (choose xs) non-deterministically chooses one element
+-- from the list xs
+choose :: [a] -> a
+
+-- (ground e) ensures that e is a ground data term; the argument is
+-- evaluated lazily as with Prelude.id
+ground :: a -> a
+\end{verbatim}
+Note that \texttt{ground} is just an alias for \texttt{Prelude.ensureGround}. This definition is present only for backward compatibility and will be removed in a future release.
+
+\subsubsection{Trace}
+This module exports the impure function \texttt{trace}, which is sometimes useful for debugging, although understanding the output that it produces can sometimes be a major challenge unless you are familiar with the intimate details of how programs are executed. 
+
+Beware that \texttt{trace} may change the order of evaluation in your program and, in particular, will suspend the running thread if the first argument is not a ground term.
+\begin{verbatim}
+module Trace where
+trace :: String -> a -> a
+\end{verbatim}
+
+\section{Extensions and Limitations}\label{sec:diffs}
+\subsection{Extensions}
+\subsubsection{Polymorphic Integer Literals and Negation}\label{sec:ext-polyliterals}
+The Münster Curry compiler allows integer literals -- i.e., numbers which neither contain a decimal point nor an exponent -- to be used as floating-point numbers. The type of an integer literal is determined by the context where it occurs and defaults to \verb"Int" if it is not constrained by the code of the module being compiled.
+
+For instance, the following expressions are accepted by the compiler and have type \verb"Float".
+\begin{verbatim}
+1::Float
+17 +. 25
+3.1415 /. 2
+\end{verbatim}
+
+This ad-hoc polymorphism can also be used in patterns.
+\begin{verbatim}
+foo :: [Float] -> Success
+foo (0 : 1 : _) = success
+
+bar 0 = Zero
+bar 0.5 = Half
+bar 1 = One
+\end{verbatim}
+The type of \verb"foo" would be \verb"[Int] -> Success" if the type signature were omitted unless \verb"foo" is applied to a list whose elements are of type \verb"Float", e.g. \verb"foo [0.0,1.0]", in the same module. Note that the ad-hoc polymorphism of literals does not extend to functions. Thus, if the type signature for \verb"foo" were omitted, \verb"foo" could be applied either to lists of integers or to lists of floating-point numbers, but not to both.
+
+The prefix operator \texttt{-} can be used for negating integer as well as floating-point numbers in patterns and expressions. Floating-point numbers can also be negated with the operator \texttt{-.}, but this is deprecated.
+
+\subsubsection{Disequality Constraints}\label{sec:ext-disequal}
+The Münster Curry compiler supports disequality constraints similar to \Toy\footnote{\url{http://toy.sourceforge.net}}. The constraint $e_1$~\verb"=/="~$e_2$ is satisfied when $e_1$ and $e_2$ reduce to different -- not necessarily finite -- data terms. Disequality constraints for the free variables of a solved goal are printed together with their bindings at the end of evaluation.
+
+Disequality constraints are never instantiated by the runtime system, which can lead to problems with finite domains. For instance, \verb"x =/= False" is not replaced by \verb"x =:= True". The runtime system therefore does not notice that the constraint \texttt{x =/= False \& x =/= True}, where \verb"x" is unbound, cannot be satisfied. This incompleteness can even lead to wrong results. For instance, given the definition
+\begin{verbatim}
+f x | y =/= False & y =/= True = x where y free
+\end{verbatim}
+the goal \verb'f "Wrong"' will return the string \verb'"Wrong''', even though \verb"f"'s guard can never be satisfied\footnote{Thanks to Rafael Caballero for making me aware of this issue.}.
+
+\subsubsection{Existentially Quantified Types}\label{sec:ext-exist}
+The Münster Curry compiler supports existentially quantified data types as proposed by Läufer and Odersky~\cite{LO94:TOPLAS}. The syntax of data constructor declarations has been changed to:
+\begin{eqnarray*}
+\mbox{\emph{ConstrDeclaration}}
+    & ::= &[\mbox{\texttt{forall} \emph{TypeVarID$_1$} \dots{} \emph{TypeVarID$_m$} \literal{.}}] \\
+    & & \mbox{\emph{DataConstrID} \emph{SimpleTypeExpr$_1$} \dots{} \emph{SimpleTypeExpr$_n$}}
+\end{eqnarray*}
+where \emph{TypeVarID$_1$}, \dots{}, \emph{TypeVarID$_m$} are the names of the existentially quantified type variables that can be used in the argument types of the data constructor.\footnote{The \texttt{forall} syntax can also be used for infix data constructors, see Sect.~\ref{sec:ext-infix} below.}
+
+For instance, the declaration
+\begin{verbatim}
+data Key a = forall b . Key b (b -> a)
+\end{verbatim}
+introduces a polymorphic type \verb"Key" with the single constructor \verb"Key". Since the type variable \verb"b" is existentially quantified, it is possible to combine keys for different types in a list:
+\begin{verbatim}
+keys = [Key "123" length, Key 2 (+ 1), Key '\ETX' ord]
+\end{verbatim}
+
+Existentially quantified types can be used in expressions and patterns just like other data constructors. However, within the scope of a pattern, existentially quantified type variables can be unified only with themselves. Thus, the definition
+\begin{verbatim}
+keySum (Key x f) (Key y g) = f x + g y
+\end{verbatim}
+is valid, whereas
+\begin{verbatim}
+invalidKeySum (Key x f) (Key y g) = f y + g x
+\end{verbatim}
+is rejected because \texttt{f}'s argument type cannot be unified with the type of \texttt{y} (and similarly for \texttt{g} and \texttt{x}). In addition, the compiler reports an error if an existentially quantified type variable escapes the scope in which it is visible as, for instance, in the following definition.
+\begin{verbatim}
+badEscape (Key x f) = x
+\end{verbatim}
+Here, the existentially quantified type of the variable \texttt{x} would appear in the result of the function \texttt{badEscape}.
+
+\paragraph{Limitations} 
+The \texttt{invalidKeySum} example above indicates that there is a typing issue with the polymorphic operators \texttt{(=:=)}, \texttt{(=/=)}, and \texttt{(==)}. For instance, given the -- otherwise useless -- data type definition
+\begin{verbatim}
+data T = forall a. C a
+\end{verbatim}
+an expression like \texttt{C 1 =:= C 'a'} is accepted by the compiler because both arguments have the same type. As a consequence, the implementation must perform runtime type checking when one of the polymorphic operators is applied to an existentially quantified type. Because enough type information is available in the Münster Curry implementation only for non-variable terms, equality and disequality constraints are blocked until the arguments are sufficiently instantiated when applied to existentially quantified data types. Therefore, the expression
+\begin{verbatim}
+let x,f free in Key x f =:= Key "abc" length
+\end{verbatim}
+suspends instead of binding the variables \texttt{x} and \texttt{f}. Note that this restriction does not apply when a variable is unified with a data term with an existentially quantified type, e.g.,
+\begin{verbatim}
+let x free in x =:= Key 'a' ord
+\end{verbatim}
+
+A similar issue applies to the polymorphic function \texttt{compare}. However, since there is no apparent order between terms of different types, this operations fails with a runtime error when it is applied to arguments with existentially quantified types. This happens even if the arguments of the constructors happen to have compatible types at runtime as, for instance, in the expression \texttt{C 1 `compare`  C 2}. This restriction may be lifted in a future version of the compiler.
+
+\paragraph{Local Universal Quantification}
+Local universal quantification of types is not yet supported but planned for a future release.
+
+\subsubsection{Partial Applications in Equality and Disequality Constraints}\label{sec:ext-partial}
+It is possible to use partial applications in equality and disequality constraints; they are handled similar to data constructors. For instance,
+\begin{verbatim}
+let x free in x =:= id (const (2 * 2))
+\end{verbatim}
+succeeds and binds \verb"x" to \verb"const 4". In the current implementation, equality and disequality constraints between two partial applications are restricted to ground terms. Thus,
+\begin{verbatim}
+let x free in const x =:= id (const (2 * 2))
+\end{verbatim}
+does not bind \verb"x" to 4, but suspends. This is necessary because equality of partial applications cannot be checked without runtime type checking and the current runtime system provides enough type information only for ground terms, but not for variables. This restriction may be lifted in a future release.
+
+\subsubsection{Local Fixity Declarations}\label{sec:ext-fixity}
+The Münster Curry compiler accepts fixity declarations within local binding groups. Thus, it is possible to assign fixities to operators defined in such groups. In particular, this allows defining operators with associated fixities for a goal in the interactive top-level (see Sect.~\ref{sec:goals} for the syntax of goals). You can freely mix fixity and value declarations in a group. This is also true for fixity and block declarations at the module level.
+
+For instance, you can enter the following goal at the interactive prompt:
+\begin{verbatim}
+length xs <== xs =:= [1] where xs free; infix 0 <==; x <== c | c = x
+\end{verbatim}
+Note that the operator \verb"<==" is also defined in the library module \texttt{Success} (Sect.~\ref{sec:lib-Success}).
+
+\subsubsection{Lazy Patterns}\label{sec:ext-lazy-pattern}
+The Münster Curry compiler extends pattern syntax further by supporting lazy pattern matching as in Haskell. Lazy patterns are useful for delaying pattern matching of the arguments of a function until those arguments are actually needed. A pattern is turned into a lazy pattern by prefixing it with the character \verb"~".
+\begin{eqnarray*}
+  \mbox{\meta{SimplePattern}} & ::= & \dots \\
+    & | & \mbox{\literal{\~} \meta{SimplePattern}}
+\end{eqnarray*}
+
+For instance, consider the two functions
+\begin{verbatim}
+f b (x,y) = if b then x * y else 0
+g b ~(x,y) = if b then x * y else 0
+\end{verbatim}
+The goal \verb"f False undefined" fails, whereas \verb"g False undefined" evaluates to \verb"0". Lazy pattern matching can be implemented with the help of a local pattern declaration as well, e.g.,
+\begin{verbatim}
+h b xy = if b then x * y else 0 where (x,y) = xy
+\end{verbatim}
+This definition is completely equivalent to \verb"g". However, lazy patterns are more convenient, especially because they can be nested as shown in the following example.
+\begin{verbatim}
+triple ~(a : ~(b : ~(c : _))) = (a,b,c)
+\end{verbatim}
+Note the spaces between the colons and the tildes in the definition. When the function \verb"triple" is used, its argument list is evaluated only when the caller uses the elements of the triple and only as far as necessary. For instance, if only the first element is used, only the first node of the list is evaluated. In pure Curry, one has to use three local declarations in order to write an equivalent function.
+\begin{verbatim}
+triple' list = (a,b,c)
+  where (a,rest_a) = list
+        (b,rest_b) = rest_a
+        (c,_) = rest_b
+\end{verbatim}
+
+\emph{Note that lazy patterns are handled like variables when computing the definitional tree of a function.} Thus, one has to be careful not to define functions with overlapping rules. For instance, if \verb"triple" were extended by another equation
+\begin{verbatim}
+triple [] = (undefined,undefined,undefined)
+\end{verbatim}
+the evaluation of triple would become non-deterministic. 
+
+\subsubsection{Type Renamings}\label{sec:ext-newtype}
+The Münster Curry compiler supports type renamings with \verb"newtype" declarations as in Haskell.
+\begin{eqnarray*}
+  \meta{BlockDeclaration} & ::= & \dots \\
+    & | & \meta{NewtypeDeclaration} \\
+  \meta{NewtypeDeclaration} & ::= & \mbox{\literal{newtype} \meta{TypeConstrID} \meta{TypeVarID}$_1$ \dots \meta{TypeVarID}$_n$ \literal{=}} \\
+    &   & \mbox{\meta{DataConstrID} \meta{SimpleTypeExpr}}
+\end{eqnarray*}
+I.e., a  type renaming declaration is similar to an algebraic data type declaration with a single unary constructor. However, with respect to the dynamic semantics, a type introduced with a \verb"newtype" declaration is more similar to a type synonym in that the constructor is effectively compiled away. In contrast to a type synonym, a renaming type is not equivalent to the renamed type and cannot be used interchangeably with it. This makes it possible to introduce abstract types without the additional cost of introducing data constructor applications. For instance, a simple stack type can be defined as follows:
+\begin{verbatim}
+module Stack(Stack(), empty, push, pop, top, isEmpty) where
+newtype Stack a = Stack [a]
+empty = Stack []
+push x (Stack xs) = Stack (x:xs)
+pop (Stack (_:xs)) = Stack xs
+top (Stack (x:_)) = x
+isEmpty (Stack xs) = null xs
+\end{verbatim}
+In contrast to the definition \verb"type Stack' a = [a]", it is not possible to apply arbitrary list functions to a stack. E.g., the expression \verb"head stk" is rejected by the compiler if \verb"stk" is of type \verb"Stack "$t$ (for some arbitrary type $t$), whereas it were accepted for type \verb"Stack' "$t$. Furthermore, the \verb"Stack" type is exported as an abstract type, i.e., clients in another module cannot create stacks except by using the exported functions \verb"empty" and \verb"push". Compared to the definition
+\begin{verbatim}
+data Stack'' = Stack'' [a]
+\end{verbatim}
+we have that $\texttt{Stack}\;\bot = \bot$, whereas $\texttt{Stack''}\;\bot \not= \bot$. The use of a newtype is also slightly more efficient than an algebraic data type with respect to memory usage and execution time.
+
+\subsubsection{Expression Type Signatures}\label{sec:ext-type-sigs}
+Another extension supported by the Münster Curry compiler are expression type signatures:
+\begin{eqnarray*}
+  \meta{Expr} & ::= & \mbox{\meta{Expr'} \literal{::} \meta{TypeExpr}} \\
+    & | & \meta{Expr'}
+\end{eqnarray*}
+where the definition of \meta{Expr'} is the same as for \meta{Expr} in the Curry report. In addition, the definition of conditional expressions is changed into
+\begin{eqnarray*}
+\meta{CondExprs} & ::= & \mbox{\literal{|} \meta{Expr'} \literal{=} \meta{Expr} [\meta{CondExprs}]}
+\end{eqnarray*}
+Therefore, in order to use an expression type signature in the guard of a conditional expression, it has to be enclosed in parentheses as in the following example:
+\begin{verbatim}
+rId b x | (b :: Bool) = x
+\end{verbatim}
+This restriction was made for compatibility with Haskell.
+
+Until the Münster Curry compiler supports type classes, expression type signatures are mostly useful in order to specify the type of numeric literals (see Sect.~\ref{sec:ext-polyliterals}). They may be helpful for locating type errors, too.
+
+\subsubsection{Constraint Guards in Case Expressions}\label{sec:ext-case}
+Besides boolean guard expressions, the Münster Curry compiler also allows constraint guards in case expressions. Similar to function rules, only a single constraint guard is allowed for each alternative. A guarded alternative $p$ \literal{|} $c$ \literal{->} $e$, where $c$ is a constraint, is considered syntactic sugar for the alternative $p$ \literal{->} $c$ \literal{\&>} $e$. This means that the case expression does not fall through to the next alternative if the constraint fails. Instead, the whole case expression fails in this case. Thus, the case expression
+\begin{verbatim}
+case (1,3) of
+  (x,y) | (x < 0) =:= True -> (0,y)
+  xy -> xy
+\end{verbatim}
+fails, in contrast to
+\begin{verbatim}
+case (1,3) of
+  (x,y) | (x < 0) -> (0,y)
+  xy -> xy
+\end{verbatim}
+which evaluates to the pair \verb"(1,3)".
+
+\subsubsection{Constructor Operators}\label{sec:ext-infix}
+The Münster Curry compiler allows defining and using infix constructor operators other than the predefined constructor \verb"(:)". For instance, you can define an algebraic data type \verb"Assoc", which represents an association between two values, as follows:
+\begin{verbatim}
+data Assoc a b = a := b
+\end{verbatim}
+Such constructors can be used in patterns in the expected way. For instance, the following function exchanges the rôles of both arguments.
+\begin{verbatim}
+flipAssoc (x := y) = y := x
+\end{verbatim}
+At any time, it is possible to enclose a constructor operator in parentheses in order to use it in prefix form and to enclose a constructor identifier in backquotes in order to use it in infix position. Fixity declarations apply to constructors occurring in a pattern as well.
+
+In order to accommodate constructor operators, the following rules of the Curry syntax are changed.
+\begin{eqnarray*}
+  \mbox{\meta{ConstrDeclaration}}
+    & ::= & \mbox{\meta{DataConstrID} \meta{SimpleTypeExpr$_1$} \dots{} \meta{SimpleTypeExpr$_n$}} \\
+    & | & \mbox{\meta{TypeAppl} \meta{InfixConID} \meta{TypeAppl}} \\
+ \mbox{\meta{Pattern}}
+   & ::= & \mbox{\meta{QDataConstrID} \meta{Pattern$_1$} \dots{} \meta{Pattern$_n$} [\meta{QInfixConID} \meta{Pattern}]} \\
+   & | & \mbox{\meta{SimplePattern} [\meta{QInfixConID} \meta{Pattern}]} \\
+ \mbox{\meta{QInfixConID}}
+   & ::= & \mbox{[\meta{ModuleID} \literal{.}] \meta{InfixConID}} \\
+   & | & \mbox{\literal{:}}
+\end{eqnarray*}
+The Münster Curry compiler does not impose any restrictions on the names of constructor operators -- i.e., $\meta{InfixConID} = \meta{InfixOpID}$ -- but it is recommended to use only names starting with a colon for infix constructors. This convention is compatible with Haskell.
+
+\subsubsection{Generalized Function Left-Hand Sides}\label{sec:ext-curried-lhs}
+Similar to Haskell, the Münster Curry compiler allows using a curried style for the left-hand side of a function rule. This is very convenient for defining higher-order operator symbols. For instance, the curried syntax can be used in the definition of the function composition operator \verb"(.)".
+\begin{verbatim}
+(f . g) x = f (g x)
+\end{verbatim}
+The definition of \meta{FunLHS} in the Curry syntax is changed as follows.
+\begin{displaymath}
+  \begin{array}{rclr}
+    \mbox{\meta{FunLHS}}
+      & ::= & \mbox{\meta{FunctionName}} \mid \mbox{\meta{FunLHS$_1$}} \\
+    \mbox{\meta{FunLHS$_1$}} 
+      & ::= & \mbox{\meta{FunctionName} \meta{SimplePattern$_1$} \dots{} \meta{SimplePattern$_n$}} & (n\geq1) \\
+      & | & \mbox{\meta{SimplePattern} \meta{InfixOpID} \meta{SimplePattern}}  \\
+      & | & \mbox{\literal{(} \meta{FunLHS$_1$} \literal{)} \meta{SimplePattern$_1$} \dots{} \meta{SimplePattern$_n$}} & (n\geq1)
+  \end{array}
+\end{displaymath}
+
+\subsubsection{Mutually Recursive Variable Bindings}
+The compiler allows mutually recursive variable bindings; for instance,
+\begin{verbatim}
+let { xs = 0:ys; ys = 1:xs } in xs
+\end{verbatim}
+returns an infinite list of alternating 0's and 1's. Each right hand side expression is evaluated only once. Therefore, given the definition
+\begin{verbatim}
+coin = 0
+coin = 1
+\end{verbatim}
+the expression
+\begin{verbatim}
+let xs = coin : xs in xs
+\end{verbatim}
+returns either an infinite list of 0's or an infinite list of 1's.
+
+\subsubsection{Extended Import/Export Specifications}
+As in Haskell it is possible to import or export only some of the constructors of a data type by specifying the list of visible constructors explicitly. For instance, the import declaration \verb"import Prelude(Bool(True))" brings the constructor \verb"True" into scope but not \verb"False".
+
+The syntax is as follows
+\begin{eqnarray*}
+  \mbox{\meta{Export}} & ::= & \dots{} \\
+      & | & \mbox{\meta{QTypeConstrID} (\meta{DataConstrID$_1$} \literal{,} \dots{} \literal{,} \meta{DataConstrID$_n$})} \def\equation{$n \geq 0$} \\
+  \mbox{\meta{Import}} & ::= & \dots{} \\
+      & | & \mbox{\meta{TypeConstrID} (\meta{DataConstrID$_1$} \literal{,} \dots{} \literal{,} \meta{DataConstrID$_n$})} \def\equation{$n \geq 0$}
+\end{eqnarray*}
+
+\subsubsection{Foreign Function Interface}\label{sec:ext-ffi}
+The Münster Curry compiler supports a subset of the Haskell foreign function interface~\cite{Chakravarty03:FFI}. The current implementation allows only importing foreign functions and supports only calling conventions \verb"primitive" and \verb"ccall". The calling convention \verb"primitive" is a non-portable addition of the Münster Curry compiler and must be used only for C functions that use the calling conventions of the compiler's runtime system. Argument types of functions using the \verb"ccall" calling convention are restricted to the types \verb"Bool", \verb"Char", \verb"Int", \verb"Float", \verb"Ptr"~$t$, \verb"FunPtr"~$t$, and \verb"StablePtr"~$t$ in this release where $t$ is an arbitrary type. In addition to these, types of the form \verb"IO"~$t$ can be used as result types, where $t$ must be either \verb"()" or a valid argument type.
+
+The syntax of foreign function declarations is\footnote{The identifiers \literal{primitive} and \literal{ccall} are not keywords, but given a special meaning only in foreign function declarations. For instance, the declaration \literal{foreign import primitive ccall :: IO ()} is accepted by the compiler.}
+\begin{eqnarray*}
+\mbox{\meta{ForeignDecl}} & ::= & \mbox{\literal{foreign} \begin{tabular}[t]{@{}l}\literal{import} \meta{CallConv} [\meta{Safety}] [\meta{ImpEnt}] \\ \meta{FunctionName} \literal{::} \meta{TypeExpr} \end{tabular}} \\
+\mbox{\meta{CallConv}} & ::= & \literal{primitive} \mid \literal{ccall} \\
+\mbox{\meta{Safety}} & ::= & \literal{safe} \mid \literal{unsafe}
+\end{eqnarray*}
+At present, the safety level is ignored and present only for compatibility with the Haskell Foreign Function Interface addendum. The syntax of import entity specifications depends on the calling convention being used. For functions using the \verb"primitive" calling convention the string is used as the name of the foreign function. Name mangling is applied to this name and therefore, there are no restrictions on valid names. For functions using the \verb"ccall" calling convention, this string must comply with the following grammar.
+\begin{eqnarray*}
+\mbox{\meta{ImpEnt}} & ::= &  \literal{"} \; [\mbox{\literal{static}}] \; [\mbox{\meta{chname}}] \; [\mbox{\literal{\&}}] \; [\mbox{\meta{cident}}] \; \literal{"} \\
+ & \mid & \literal{"} \; [\mbox{\literal{dynamic}}] \; \literal{"}
+\end{eqnarray*}
+The optional \meta{chname}, which must end with the suffix \verb".h" in order to distinguish it from a \emph{cident}, allows including a C header file into the compiled code. Besides providing a prototype for the foreign function, this makes it possible to provide foreign function declarations for C macros.
+
+The optional \meta{cident} is the name of the foreign C function and must conform to the rules for valid C identifiers. If this name is omitted, the compiler assumes that the name of the foreign function is equal to that of the Curry function, which must be a valid C identifier in that case.
+
+The optional \verb"&" modifier imports the address of the entity denoted by \meta{cident} or the Curry name of the declaration if \meta{cident} is omitted. The type of foreign address imports is restricted to \verb"Ptr"~$t$ and \verb"FunPtr"~$t$, where $t$ is an arbitrary type.
+
+The import entity specification \verb"dynamic" defines a wrapper that allows calling a foreign function value with type \verb"FunPtr"~$t$. The type of a dynamic wrapper must have the form $\mbox{\literal{FunPtr}}\:t \rightarrow t$ where $t$ is a valid foreign function type.
+
+Arguments of type \verb"Bool", \verb"Char", and \verb"Int" are converted to \verb"int", arguments of type \verb"Float" are converted to \verb"double", and arguments of type \verb"Ptr"~$t$, \verb"FunPtr"~$t$, and \verb"StablePtr"~$t$ are converted to \verb"void *". An inverse conversion is applied to function results. If a function is declared with result type \verb"IO ()", the function's result (if any) is ignored and the Curry function always returns the constant \verb"()".
+
+The following declarations import the \verb"sin" function from the standard C library, the global \verb"errno" variable, and provide a wrapper for calling C function pointers of functions that take a \verb"long" value and return a boolean result.
+\begin{verbatim}
+foreign import ccall "math.h" sin :: Float -> Float
+foreign import ccall "errno.h &" errno :: Ptr Int
+foreign import ccall "dynamic"
+        callC :: FunPtr (Int -> Bool) -> Int -> Bool
+\end{verbatim}
+
+\subsection{Limitiations and Incompatibilities}\label{sec:limitations}
+\begin{itemize}
+  \item The identifiers \verb"newtype" and \verb"foreign" and the operator symbol \verb"~" are keywords and cannot be used as variable, function or (type) constructor names.
+  \item The range of \verb"Int" is limited to $-2^{31} \cdots 2^{31}-1$ on 32-bit machines and $-2^{63} \cdots 2^{63}-1$ on 64-bit machines. Overflow is not detected.
+  \item The operators \texttt{div} and \texttt{mod} truncate the quotient toward negative infinity, i.e., \verb"(-7) `div` 3" yields \verb"-3" and \verb"(-7) `mod` 3" yields \verb"2". This semantics is compatible with the Haskell 98 report, but not with older releases of the Münster Curry compiler nor with PAKCS. Use \verb"quot" and \verb"rem" for division that truncates toward zero. Note that the semantics of \verb"div" and \verb"mod" for negative numbers is not specified in the Curry report.
+  \item A type, data constructor, or top-level function with the same name as an imported entity of the same kind can only be accessed using its qualified name. E.g., the compiler will report an error for the module
+\begin{verbatim}
+module Main where
+length = foldr (const (1 +)) 0
+main = print (length [])
+\end{verbatim}
+to the effect that the identifier \verb"length" in the body of \verb"main" is ambiguous. In order to compile the module, either the \verb"length" function from the prelude must be hidden by adding the import declaration
+\begin{verbatim}
+import Prelude hiding(length)
+\end{verbatim}
+or \verb"length" must be qualified, i.e.,
+\begin{verbatim}
+main = print (Main.length [])
+\end{verbatim}
+This incompatibility, which is consistent with the Haskell 98 module system, is present because it allows better detection of unintentional name conflicts between different modules, which usually are an indication of code duplication.
+  \item A hiding clause in an import declaration effects the qualified name in addition to the unqualified name. Thus, a hiding specification makes the identifier inaccessible if not brought into scope with another import declaration. This behavior differs from the Curry report, but is consistent with the (revised) Haskell 98 language definition~\cite{PeytonJones03:Haskell98} and was chosen in order to effectively control the qualified name space inside a module. Note that the qualified names are relevant for deciding which data constructors of a type are exported.
+  \item Pattern matching in list comprehensions is always performed rigidly. For instance, the evaluation of \verb"[x | True <- [x]]" suspends when \verb"x" is an unbound variable. When following the report strictly, this expression should evaluate non-de\-ter\-mi\-nistically to \verb"[True]" and \verb"[False]". However, note that \verb"[x | 0 <- [x]]" does suspend even according to the Curry report.
+  \item There is a conflict between sharing of non-local variables and encapsulated search. For instance, for the program
+\begin{verbatim}
+coin = 0
+coin = 1
+main = findall (\x -> x =:= c) ++ findall (\x -> x =:= c)
+  where c = coin
+\end{verbatim}
+\verb"main" can evaluate either to the list \verb"[0,1,0,1]" -- i.e., sharing of the variable \verb"c" is lost -- or non-deterministically to the lists \verb"[0,0]" and \verb"[1,1]" -- i.e., encapsulation is lost. The former choice is called \emph{strong encapsulation} in~\cite{BrasselHanusHuch04:Encapsulating}, the latter \emph{weak encapsulation}. The Münster Curry compiler's \verb"try" implementation uses weak encapsulation, i.e., it preserves sharing of non-local variables, because the results of an expression depend on the order of evaluation when using strong encapsulation. For instance, depending on whether \verb"(+)" evaluates its arguments from left to right or from right to left, the expression
+\begin{verbatim}
+let c = coin in c + foldr (+) 0 (findall (\x -> x =:= c))
+\end{verbatim}
+will either have results \verb"0" and \verb"2", or \verb"1" and \verb"2" with strong encapsulation, whereas it has results \verb"0" and \verb"2" regardless of evaluation order with weak encapsulation.
+
+The downside of weak encapsulation is that some non-determinism cannot be encapsulated. In particular, you cannot define a function \texttt{allValues :: a -> [a]} that returns all normal forms to which the argument expression can be reduced. You also have to be careful with partial applications as search goals. E.g., in \texttt{findall (=:= coin)}, the non-deterministic function \texttt{coin} is evaluated outside of the encapsulated search because this expression is equivalent to \texttt{let c = coin in findall (\symbol{92}x -> x =:= c)}. In order to encapsulate the non-deterministic function \verb"coin" use \texttt{findall (\symbol{92}x -> x =:= coin)} instead. The general rule of thumb is that for the Münster Curry compiler the result of an expression is the same as would be with an eager evaluation strategy modulo those subexpressions that were not evaluated at all.
+
+Because strong encapsulation is nevertheless useful, the Münster Curry compiler also offers an alternative interface to encapsulated search based on the I/O action \verb"getSearchTree" in module \verb"AllSolutions" (see Sect.~\ref{sec:lib-AllSolutions}).
+\end{itemize}
+
+\subsection{Known Bugs}
+\begin{itemize}
+\item When the compiler is built with hbc or nhc98, an out of range error is reported for numeric character escape sequences with character codes greater than 255.
+\item The implementation of disequality constraints is incomplete. For instance, the goal \verb"x =/= Just undefined" fails even though it has a solution for \verb"x"$=$\verb"Nothing", as can be observed with the goal \verb"x =:= Nothing & x =/= Just undefined". This problem is expected to be removed in a future release.
+
+\item The compiler fails or enters an infinite loop for programs which contain certain kinds of cyclic variable definitions, e.g.,
+\begin{verbatim}
+bug   = x where x = x
+cycle = x where { x = y; y = x }
+\end{verbatim}
+\item The \verb"send" constraint in the \verb"Ports" library (Sect.~\ref{sec:lib-Ports}) may loose messages because of unintended sharing. For instance, \texttt{foldr (\&) success (replicate 5 (send "Hello" p))} sends the string \verb'"Hello"' only once to the port and not five times.
+
+\item Equality and disequality constraints may lead to segmentation faults when applied to cyclic data structures, e.g. in the goal \texttt{xs =:= repeat 'x' where repeat x = let xs = x:xs in xs}. Note that the prelude's definition of \verb"repeat" does not create cyclic data structures.
+
+\item It is not possible to debug programs that involve cyclic data structures.
+
+\item It is not possible to debug programs that involve computations of type \verb"IO"~$t$ in any way, including expressions using \verb"unsafePerformIO". Unfortunately, this means that the debugger cannot be used for programs that use arrays, as the Array module uses \verb"unsafePerformIO" (in a safe way) in order to implement non-mutable arrays on top of mutable arrays.
+
+\item The basic facts shown by the debugger can be way too complex to understand and there is no provision to omit inner terms of deeply nested data terms.
+
+\item The debugger has insane memory demands for some non-trivial programs and goals.
+
+\item The compiler may generate invalid interfaces if type constructors are used that start with a lower case letter, which is followed by a -- possibly empty -- sequence of digits.
+
+\item It is not possible to define dynamic foreign function wrappers for functions taking \verb"int" arguments and returning \verb"int" results. This is not much of a problem on 32-bit architectures where \verb"int" and \verb"long" are equivalent, but matters on 64-bit machines. As a workaround, you have to define additional wrappers that promote the \verb"long" arguments to \verb"int" and vice versa for the result. This issue will be addressed in a future release that has support for type classes.
+\end{itemize}
+
+\section{Common Problems and Solutions}
+\begin{itemize}
+\item \textit{When compiling and linking my program with \texttt{cyc} or \texttt{cymake}, the compiler reports an error ``\texttt{line 1.1: main is undefined}''.} \\
+This error means that the compiler was unable to determine the main function of your program.  In general, this error is reported when your program's main module does not define and export a function \texttt{main}. However, this error is also reported when you link a program with \texttt{cyc} from object files and did not specify the main module with the \texttt{-M} option (see Sect.~\ref{sec:linking}).
+
+\item \textit{The compiler complains about my function \dots{} being already defined.} \\
+Curry requires all rules of a function to be adjacent.
+
+\item \textit{The compiler complains about an ``unexpected token qualified operator `\texttt{m..}'{}'' in the expression \texttt{[m..n]}.} \\
+The problem here is that the parser tokenizes the expression into the four tokens ``['', ``m..'', ``n'', and ``]'', but not into ``['', ``m'', ``..'', ``n'', and ``]'' as you might expect. This is due to the fact that Curry  -- in contrast to Haskell -- does not require module names to start with a capital letter, but we want to allow qualified uses of the dot operator (e.g., \verb"Prelude..").\footnote{Incidentally, Haskell has the same problem with enumerations for data types, e.g., \texttt{[False..True]}} In order to avoid this error, always use spaces before and after the \verb".." token. See also the thread ``Slight change of the Curry syntax'' in the Curry mailing list.
+
+\item \textit{My program fails with a stack or trail overflow or complains that there is not enough free memory after a garbage collection.} \\
+First, make sure that your program did not enter an infinite loop.
+
+If this is not the case, you can rerun the program with larger stack, trail, and heap sizes by passing the options \verb"-k"\meta{size}, \verb"-t"\meta{size}, and \verb"-h"\meta{size}, respectively, to the runtime system (see Sect.~\ref{sec:running})
+
+For instance, to run your program \verb"heavyrecursion" with a 2 MByte stack, use the command
+\begin{verbatim}
+heavyrecursion +RTS -k2M -RTS
+\end{verbatim}
+You can omit \verb"-RTS" if there are no program options or arguments following.
+
+You can also change the default sizes when linking the program by passing the options \verb"-h"\meta{size}, \verb"-k"\meta{size}, and \verb"-t"\meta{size} to the compiler (see Sect.~\ref{sec:linking})
+
+In order to see the default sizes used by a program, invoke it with \verb"+RTS -v"
+
+\item \textit{When I enter the goal \texttt{foldr (+) 0 [1..50000]}, the interpreter complains about a stack overflow.} \\
+Use the \verb":set" command for changing the default sizes for the program with the compiler options \verb"-h"\meta{size}, \verb"-k"\meta{size}, and \verb"-t"\meta{size}, respectively.
+
+Incidentally, \verb"foldr (+) 0 [1..32000]" works in the default configuration.
+
+\item \textit{The interpreter complains about an undefined entity X in my goal.} \\
+In contrast to most other logic and functional logic languages all free variables of a goal have to be declared explicitly in the Münster Curry implementation. Thus, in order to see the solutions of the unary predicate \verb"nat" enter
+\begin{verbatim}
+nat X where X free
+\end{verbatim}
+or use a let expression as goal.
+\begin{verbatim}
+let X free in nat X
+\end{verbatim}
+
+\item \textit{My program fails with \texttt{ERROR: Cannot duplicate the world}.} \\
+This happens when your program performs a non-deterministic computation in an I/O context. Make sure that all non-determinism is encapsulated in a program with type \verb"IO"~$t$ (see also the next item). Recall that the evaluation of a function can be non-deterministic for two reasons. Either it is called with an argument that is not sufficiently instantiated or the function's definition has overlapping patterns.\footnote{The compiler emits a warning for such functions when it is invoked with options \texttt{-Woverlap} or \texttt{-Wall} (see Sect.~\ref{sec:compiling}).} The latter happens regularly when converting Haskell functions to Curry, since in Haskell functions are matched from top to bottom and only the first match is used, whereas in Curry all matching equations are considered. For instance, in Haskell you could define \verb"null" by
+\begin{verbatim}
+null [] = True
+null _  = False
+\end{verbatim}
+This definition would be non-deterministic in Curry. Either replace the default pattern \verb"_" by explicit cases for the remaining alternatives, i.e.,
+\begin{verbatim}
+null []    = True
+null (_:_) = False
+\end{verbatim}
+or use a \verb"case" expression:
+\begin{verbatim}
+null xs =
+  case xs of
+    [] -> True
+    _  -> False
+\end{verbatim}
+Note that in the latter case, \verb"null" becomes a rigid function.
+
+\item \textit{My program is non-deterministic even though I use \texttt{findall} to encapsulate non-deterministic expressions.} \\
+In the Münster Curry compiler's implementation of encapsulated search, only computations which are local to the search goal are encapsulated. Non-determinism which occurs in arguments passed to a search goal cannot be encapsulated. See the last item in Sect.~\ref{sec:limitations} for a longer explanation of this issue.
+
+\item \textit{All my programs fail immediately with a bus error or segmentation fault.} \\
+Reconfigure the compiler with \verb"--enable-trampoline" (see Sect.~\ref{sec:source}).
+\end{itemize}
+
+\section{Release History}\label{sec:release-notes}
+\subsection*{Release 0.9.10 (May 10\textsuperscript{th}, 2006)}
+\paragraph{Build Environment}
+  \begin{itemize}
+  \item The compiler can be used without installing it (see Sects.~\ref{sec:binary} and~\ref{sec:source}).
+  \item Build issues with ghc 6.4 have been fixed.
+  \item Use \texttt{ghc --make} when it is supported.
+  \item Source distributions now include an abstract machine code to C compiler.
+  \end{itemize}
+\paragraph{Compiler}
+  \begin{itemize}
+  \item The compiler now reports all duplicate or undefined identifiers in a scope before giving up.
+  \item The compiler can optionally report warnings for case mode violations, unused identifiers, shadowing definitions, and equations with overlapping left hand side patterns (see Sect.~\ref{sec:compiling}).
+  \item Existentially quantified types finally enabled again (see Sect.~\ref{sec:ext-exist}).
+  \item Trust annotations introduced (see Sect.~\ref{sec:trusted}).
+  \item Evaluation annotations removed.
+  \item The compiler generates better code for case expressions in some cases.
+  \end{itemize}
+\paragraph{Interactive Environment}
+  \begin{itemize}
+  \item On systems where GNU Bash or a Korn shell (but not the public domain version) are installed, the interpreter now supports command line editing. In addition, a history of previously entered goals and commands is maintained in file \verb"~/.cyi_history".
+  \item Initialization file \verb".cyirc" or \verb"~/.cyirc" is read at startup.
+  \item The \texttt{:cd} command now works for directories whose name contains embedded blanks.
+  \item The value \texttt{Success} is shown in the answer to a constraint expression only when there are no constraints. 
+  \end{itemize}
+\paragraph{Curry Library and Runtime System}
+  \begin{itemize}
+  \item Module \verb"prelude" renamed into \verb"Prelude".
+  \item Additional prelude type: \verb"ShowS" (see Sect.~\ref{sec:lib-Prelude}).
+  \item New prelude functions: \verb"shows", \verb"showChar", \verb"showString", \verb"showList", \verb"showParen", \verb"($!!)", \verb"($#)", \verb"($##)", \verb"unknown", and \verb"ensureGround" (see Sect.~\ref{sec:lib-Prelude}).
+  \item New functions \verb"Char.minChar", \verb"Char.maxChar", \verb"Integer.minInt", and \verb"Integer.maxInt" that report the smallest and largest elements of types \verb"Char" and \verb"Int", respectively.
+  \item Implementation of \texttt{AllSolutions.getSearchTree} (see Sect.~\ref{sec:lib-AllSolutions}) changed to use strong encapsulation for logical variables, too. In addition, the search tree now properly reflects the state of the goal at the time when the \texttt{getSearchTree} action is evaluated rather than fixing the state when the first solution is computed.
+  \item New function \verb"IOExts.openFd" (see Sect.~\ref{sec:lib-IOExts}).
+  \item New library modules \verb"Lexing" (see Sect.~\ref{sec:lib-Lexing}), \verb"NameSupply" (see Sect.~\ref{sec:lib-NameSupply}), and \verb"Socket" (see Sect.~\ref{sec:lib-Socket}).
+  \item An alternative implementation of encapsulated search is available, which can be enabled with \texttt{--enable-copying} during configuration (see Sect.~\ref{sec:source}).
+  \item The full Unicode character set range is now supported.
+  \end{itemize}
+\paragraph{Noteworthy Bug Fixes}
+  \begin{itemize}
+  \item A long standing issue where builds would fail when using the vendor supplied make command on Solaris systems has been fixed.
+  \item Gnu C specific features are now enabled only when using the Gnu C compiler.
+  \item The import and export specifications \verb"T()" and \verb"T(..)" are now also accepted when T is a type synonym.
+  \item A potential stack overflow problem for functions returning a variable has been eliminated.
+  \item A problem where programs using encapsulated search could crash in certain situations has been fixed.
+  \item A problem where a program could fail when \texttt{show} was applied to an infix constructor application other than the list constructor \texttt{(:)} has been fixed.
+  \item A space leak has been closed where file handles opened with one of the functions \texttt{IOExts.openProcess} and \texttt{IOExts.openTcpSocket} were not closed automatically. Note that these functions are used by the \texttt{Ports} module, too.
+  \item The functions \verb"Integer.ilog", \verb"Integer.isqrt", and \verb"Integer.pow" now fail for negative arguments.
+  \item The string \verb"['x','y','\200','2','3']" is now printed \verb|"xy\200\&23"|.
+  \end{itemize}
+
+\subsection*{Release 0.9.9 (May 14\textsuperscript{th}, 2005)}
+\paragraph{Build Environment}
+  \begin{itemize}
+  \item The runtime system protects the inactive semi-space of the heap with \texttt{mprotect}(2) on systems which support it. This can be turned off with the new configuration option \verb"--disable-mprotect" (see Sect.~\ref{sec:source}).
+  \item The source distribution's Makefile includes rules to build the internal documentation (see Sect.~\ref{sec:source-documentation}).
+  \item On Mac OS X, \texttt{-mdynamic-no-pic} is used unless the compiler does not accept this option.
+  \end{itemize}
+\paragraph{Compiler}
+  \begin{itemize}
+  \item \verb"cymake" passes archive files (\verb"*.a", \verb"*.so", \verb"*.dylib", \verb"*.dll") to the linker instead of complaining about a missing source file.
+  \item The \verb":set" and \verb":unset" commands in the interpreter accumulate and remove individual options.
+  \item The \verb":debug" and \verb":type" commands of the interpreter as well as the new command \verb":^" use the previous goal if the goal was omitted on the command line.
+  \end{itemize}
+\paragraph{Debugger}
+  \begin{itemize}
+  \item The debugger is no longer restricted to the first solution of a goal.
+  \item User interface improved.
+  \end{itemize}
+\paragraph{Curry Library and Runtime System}
+  \begin{itemize}
+  \item The compiler and runtime system should now work on 64-bit architectures using the LP64 programming model, most notably the AMD x86-64. Many thanks to Adam Peacock for his help in tracking down the problems on this architecture.
+  \item Functions \verb"rigid" and \verb"rigidSpine" introduced in release 0.9.8 have been renamed into \verb"ensureNotFree" and \verb"ensureSpine", respectively, following a consensus on the Curry mailing list about the names of these functions.
+  \item The range of \texttt{Int} numbers is now always equal to that of C \verb"long" values on the target system.
+  \item The functions \texttt{div} and \texttt{mod} now use the semantics mandated by the Haskell report, i.e. the quotient is rounded toward negative infinity. Use the new functions \texttt{quot} and \texttt{rem} when the quotient shall be truncated toward zero.
+  \item Floating-point numbers are now printed with maximum precision.
+  \item Function \texttt{readFloat} for converting strings into floating-point numbers implemented (see Sects.~\ref{sec:lib-Numeric} and \ref{sec:lib-Read}).
+  \item A more efficient representation is used for lazy applications.
+  \end{itemize}
+\paragraph{Foreign Function Interface}
+  \begin{itemize}
+  \item Foreign function declarations using the \verb"ccall" calling convention have been extended to support the import of static addresses and dynamic function wrappers. In addition, the basic marshalable types now include pointers (see Sect.~\ref{sec:ext-ffi}).
+  \item Most libraries from the Haskell 98 Foreign Function Interface addendum have been implemented as far as they do not require type classes (see Sect.~\ref{sec:lib-ffi}).
+  \end{itemize}
+\paragraph{Documentation}
+  \begin{itemize}
+  \item Sections about porting to a new architecture (Sect.~\ref{sec:source-porting}) and building the internal documentation (Sect.~\ref{sec:source-documentation}) added.
+  \end{itemize}
+\paragraph{Noteworthy Bug Fixes}
+  \begin{itemize}
+  \item It is now possible to use Gnu C version 3.4 and optimization level \verb"-O3" with the default configuration.
+  \item In some rare cases the compiler would print too general types for an expression.
+  \item In a misguided attempt to avoid duplicate solutions, the \texttt{(=/=)} operator was using equality constraints for some arguments. This is no longer the case as it is a source of incompleteness. The new implementation correctly reports the solution \verb"y/=0" for the goal \texttt{let x,y free in (x,y) =/= (undefined,0)}, which was lost before.
+  \item File handles opened with one of the functions \verb"IO.openFile", \verb"IOExts.openProcess", and \verb"IOExts.connectTcpSocket" are no longer closed automatically at end of file or when an error occurs.
+  \item It is no longer possible to write to a handle opened in \verb"ReadWriteMode" after \verb"IO.hGetContents" has been applied to it.
+  \item Rounding errors for large floating-point numbers in source text are now avoided.
+  \item Better algorithm used for \verb"(Float.^)".
+  \item A bug was introduced in release 0.9.7 that caused partial applications of tuple constructors to be printed incorrectly. This has been fixed.
+  \end{itemize}
+
+\subsection*{Release 0.9.8 (Nov 8\textsuperscript{th}, 2004)}
+\paragraph{Build Environment}
+  \begin{itemize}
+  \item The compiler can now be built on Microsoft Windows with CygWin without special configuration options.\footnote{Thanks again to Diego Berrueta.}
+  \item It is now possible to use g$+\!+$ as backend C compiler.
+  \item Configure scripts upgraded to autoconf $\geq$ 2.50.
+  \item Unix man pages for \verb"cyc", \verb"cymake", and \verb"cyi".
+  \end{itemize}
+\paragraph{Compiler}
+  \begin{itemize}
+  \item Let expressions with free variable declarations are no longer restricted to type \verb"Success".
+  \item All functions use flexible evaluation by default.
+  \item \verb"choice" and \verb"rigid" are no longer keywords.
+  \item Syntax of external declarations now uses \verb"foreign import" instead of \verb"external".
+  \item Partial support for \verb"ccall" calling convention in foreign function declarations (see Sect.~\ref{sec:ext-ffi}).
+  \item Faster code for lazy applications of nullary and unary functions.
+  \end{itemize}
+\paragraph{Curry Library and Runtime System}
+  \begin{itemize}
+  \item The copying garbage collector now uses a segment order preserving algorithm. The compacting collector has been removed as the new copying collector is both faster and more accurate than it. The command line arguments \verb"-gc-2space" and \verb"-gc-compact" are deprecated and will be removed in the next release.
+  \item Type of \verb"(&>)" generalized to \verb"Success -> a -> a".
+  \item Non-deterministic choice operator \verb"(?)" added to the prelude (see Sect.~\ref{sec:lib-Prelude}).
+  \item \verb"seq" and \verb"($!)" are no longer rigid, new functions \verb"rigid" and \verb"rigidSpine" added to the prelude (see Sect.~\ref{sec:lib-Prelude}).
+  \item Equality constraints $x$\verb"=:="$e$, where $x$ is an unbound variable and $e$ is in normal form are evaluated more efficiently.
+  \item Equality and disequality constraints between two partial applications are now restricted to ground terms (see Sect.~\ref{sec:ext-partial} for a rationale).
+  \item \verb"(==)" and \verb"(!=)" can now be used for comparing partial applications and terms with abstract types (e.g. file handles) for (in)equality.
+  \item \verb"compare" and the operators \verb"(<)", \verb"(>)", \verb"(<=)", \verb"(>=)" raise a runtime error when applied to partial applications and terms with abstract types.
+  \item \verb"undefined" is equivalent to \verb"failed" again.
+  \item Fix minor incompatibilities with the Haskell report in the \verb"Numeric" module. In particular, \verb"readSigned" now recognizes parenthesized numbers, and \verb"readDec", \verb"readOct", and \verb"readHex" no longer accept leading blanks.
+  \item \verb"trace" function now writes its message to the standard error channel and appends a newline to the message.
+  \item New modules compatible with PAKCS: \verb"AllSolutions" (Sect.~\ref{sec:lib-AllSolutions}), \verb"Combinatorial" (Sect.~\ref{sec:lib-Combinatorial}), \verb"Float" (Sect.~\ref{sec:lib-Float}), \verb"Integer" (Sect.~\ref{sec:lib-Integer}), \verb"Parser" (Sect.~\ref{sec:lib-Parser}), and \verb"Ports" (only internal and stream ports; see Sect.~\ref{sec:lib-Ports}).
+  \item The \verb"Read" module (Sect.~\ref{sec:lib-Read}) has been replaced by a (mostly) PAKCS compatible one.
+  \item \verb"Unsafe" module (Sect.~\ref{sec:lib-Unsafe}) is now compatible with PAKCS.
+  \end{itemize}
+\paragraph{Documentation}
+  \begin{itemize}
+  \item Section about limitations of encapsulated search added to the user's guide (Sect.~\ref{sec:limitations}).
+  \end{itemize}
+\paragraph{Noteworthy Bug Fixes}
+  \begin{itemize}
+  \item The C compiler backend no longer reports an error for out of range floating-point numbers. In addition, infinite values and NaNs are now shown as \verb"Infinite", \verb"-Infinite", and \verb"NaN", respectively.
+  \item \verb"show" no longer encloses the names of abstract data types (e.g., files) in parentheses.
+  \item Correct implementation of equality and disequality constraints between partial applications of tuple constructors computed in different modules.
+  \item A few rare bugs with nested encapsulated searches have been fixed.
+  \item Two problems with the debugger have been fixed, where computation trees related to local bindings could be lost in the presence of guards or case expressions, and programs using if-then-else or case expressions in arguments could crash.
+  \end{itemize}
+
+\subsection*{Release 0.9.7 (May 4\textsuperscript{th}, 2004)}
+\begin{itemize}
+\item Support for building and using the compiler on Microsoft Windows using the CygWin environment (cf. Sect.~\ref{sec:ins-windows}).\footnote{The necessary changes were kindly contributed by Diego Berrueta.}
+\item \verb"cyc"'s option \verb"-y" renamed into \verb"-T". cymake now supports \verb"-T", too.
+\item Integer literals can now be used as floating-point numbers (cf. Sect.~\ref{sec:ext-polyliterals}).
+\item The unary negation operator \verb"-" works for integer and floating-point numbers. Use of \verb"-." for negating floating-point numbers is deprecated.
+\item The compiler no longer allows mixing import and other declarations. This change is in conformance with the Curry report and makes \verb"cymake"'s dependency analysis more fault tolerant.
+\item It is now possible to define and use (infix) constructor operators (cf. Sect.~\ref{sec:ext-infix}).
+\item Operator fixities must be declared in the same declaration group as the operator. To this end, fixity declarations are allowed in local declaration groups (cf. Sect.~\ref{sec:ext-fixity}). Fixity declarations can still be mixed freely with other declarations.
+\item Curried syntax is supported on the left-hand side of declarations (cf. Sect.~\ref{sec:ext-curried-lhs}).
+\item Support constraint guards in case expressions. Actually, they have been supported since the introduction of guarded case alternatives in release 0.9.6, but the documentation did say otherwise.
+\item \verb"Array" module (Sect.~\ref{sec:lib-Array}) reimplemented. This fixes, in particular, the broken \verb"accum" and \verb"accumArray" functions.
+\item Finite maps (Sect.~\ref{sec:lib-FiniteMap}) and sets (Sect.~\ref{sec:lib-Set}) added to the library.
+\item Add module \verb"IOExts" which implements a subset of the Hugs/ghc module with the same name. At present, this includes the monadic fixpoint function \verb"fixIO", mutable references, and mutable arrays (cf. Sect.~\ref{sec:lib-IOExts}).
+\item \verb"Random" module added (cf. Sect.~\ref{sec:lib-Random}).
+\item Add new primitive function \verb"ground" to module \verb"Success" (cf. Sect.~\ref{sec:lib-Success}).
+\item The generated code has become slightly faster, again.
+\item Bug fixes.
+\end{itemize}
+
+\subsection*{Release 0.9.6 (Nov 5\textsuperscript{th}, 2003)}
+\begin{itemize}
+\item \textbf{The compiler has been renamed}. The compiler proper must now be invoked with the name \verb"cyc" (instead of \verb"cycc").
+\item Hierachical modules mapped onto the filesystem, i.e., module \verb"SubProj.Lib.Mod" is now expected in one of the files \verb"Mod.curry" and \verb"Mod.lcurry" in the subdirectory \verb"SubProj/Lib" of the current directory or of one of the directories in the import search path. (cf. Sect.~\ref{sec:hierarchical})
+\item Interface files are no longer created in the current directory but in the same directory as the source file.
+\item The compiler now uses the source file name for computing the name of the interface file instead of the module name. This should make a difference only for the main file of a program.
+\item The module system finally conforms to the Haskell 98 module system. In particular, it is now possible to define an entity with the same name as an imported entity. However, such entities can be accessed only with their qualified name.
+\item \verb"cyc"'s \verb"-m" option renamed into \verb"-M" because it conflicts with a Gnu C option.
+\item \verb"cymake" can now search for imported modules in other directories.
+\item Make output of the debugger a little bit more readable when higher-order functions are used.
+\item \verb"as", \verb"hiding", and \verb"qualified" can be used as identifiers in programs. They are given special treatment only in import declarations.
+\item Syntax extensions:
+  \begin{itemize}
+  \item newtype declarations (Sect.~\ref{sec:ext-newtype}),
+  \item @-patterns,
+  \item lazy patterns (Sect.~\ref{sec:ext-lazy-pattern}),
+  \item guarded right hand sides for pattern declarations and case alternatives (Sect.~\ref{sec:ext-case}), and
+  \item expression type signatures (Sect.~\ref{sec:ext-type-sigs}).
+  \end{itemize}
+\item Prelude changes
+  \begin{itemize}
+  \item Make \verb"if_then_else" rigid.
+  \item Fix handling of negative arguments in \verb"take", \verb"drop", and \verb"splitAt".
+  \end{itemize}
+\item Additional modules from the Haskell library (partially) implemented:
+  \begin{itemize}
+  \item \verb"Directory" (Sect.~\ref{sec:lib-Directory}),
+  \item \verb"IO" (Sect.~\ref{sec:lib-IO}),
+  \item \verb"Numeric" (Sect.~\ref{sec:lib-Numeric}), and
+  \item \verb"Time" (Sect.~\ref{sec:lib-Time}).
+  \end{itemize}
+\item The notorious space leak for lazy pattern bindings has been fixed.
+\item Performance of the compiler improved, in particular for large files and files with many constants.
+\item Bug fixes and minor performance enhancements in the compiled code.
+\end{itemize}
+
+\subsection*{Release 0.9.5 (May 1\textsuperscript{th}, 2003)}
+\begin{itemize}
+\item Changed to match version 0.8 of the Curry report.
+\item Faster implementation.
+\item Characters and strings are no longer displayed using integer numbers.
+\item Occurs check in unification.
+\item Restrictions on (partially) solved goals returned from \verb"try" have been removed.
+\item Handle partial applications as data constructors in equality and disequality constraints (Sect.~\ref{sec:ext-partial}).
+\item IO Exceptions implemented. Use \verb"ioError" for throwing I/O exceptions, and \verb"catch" for catching I/O exceptions (cf. Sect.~\ref{sec:lib-Prelude}).
+\item Existentially quantified data types disabled because the current implementation was unsound regarding equality constraints. They will be included in a future release after fixing the problem.
+\item New option \verb"--clean" to \verb"cymake". This removes all compiled files for the target modules and its imported modules.
+\item New commands \verb":freshen" and \verb":clean" in interactive environment.
+\item The function \verb"undefined" now aborts the running program with an error message. Use \verb"failed" for failing only the current solution.
+\item More functions from the Haskell prelude: \verb"getContents", \verb"interact" (cf. Sect.~\ref{sec:lib-Prelude}).
+\item It is now possible to change the buffer mode used for standard input and output with a runtime system option (Sect.~\ref{sec:running}).
+\item Module \verb"Monad" from the Haskell library is now included. This module also implements the functions \verb"sequence", \verb"sequence_", \verb"mapM", and \verb"mapM_" from the Haskell prelude (Sect.~\ref{sec:lib-Monad}).
+\item New syntax for external declarations which is closer to the proposed FFI for Haskell (Sect~\ref{sec:ext-ffi}).
+\item Bug fixes\dots{}
+\end{itemize}
+
+\subsection*{Release 0.9.1 (Nov 12\textsuperscript{th}, 2002)}
+This is mostly a bug-fix release.
+\begin{itemize}
+\item \verb"cyi" and \verb"cymake" now work on Solaris 2.7 and other OS'es with \verb"test" commands that do not support the \verb"-nt" operator.
+\item Runtime option for changing the stack size renamed into \verb"-k".
+\item Defaults for all runtime options can now be passed to the compiler during linking. Thus, all runtime options are now available under the interactive environment.
+\end{itemize}
+
+\subsection*{Release 0.9 (Nov 4\textsuperscript{th}, 2002)}
+\begin{itemize}
+\item Interactive environment \verb"cyi".
+\item Make-like build tool \verb"cymake".
+\item Declarative Debugger.
+\item More library modules.
+\item Programs can evaluate arbitrary goals, no additional flags needed for distinguishing IO and non-IO goals.
+\item Lots of bug fixes.
+\end{itemize}
+
+\begin{thebibliography}{BBH04}
+\bibitem[ARS94]{AugustssonRittriSynek94:Unique}
+L.\ Augustsson, M.\ Rittri, D.\ Synek.
+\textsl{On generating unique names}.
+Journal of Functional Programming 4(1), 1994. pp.~117--123.
+
+\bibitem[BBH04]{BrasselHanusHuch04:Encapsulating}
+B.\ Braßel, M.\ Hanus, F.\ Huch.
+\textsl{Encapsulating Non-Determinism in Functional Logic Computations}.
+Proc.~WFLP '04, pp.~74--90.
+Aachener Informatik Berichte AIB-2004-05.
+
+\bibitem[Cha99]{Chakravarty99:Lexing}
+M.\ Chakravarty.
+\textsl{Lazy Lexing is Fast}.
+Proc.\ FLOPS~'99, pp.~68--84. Springer LNCS 1772.
+
+\bibitem[Cha03]{Chakravarty03:FFI}
+M.\ Chakravarty (ed.).
+\textsl{The Haskell 98 Foreign Function Interface 1.0}. \\
+Available at:
+\url{http://www.cse.unsw.edu.au/~chak/haskell/ffi/}
+
+\bibitem[CL99]{CL99:Parsing}
+R.\ Caballero, F.J.\ López-Fraguas.
+\textsl{A Functional-Logic Perspective on Parsing}.
+Proc.\ FLOPS~'99, pp.~85--99. Springer LNCS 1772.
+
+\bibitem[CL02]{CL02:ENTCS76}
+R.\ Caballero, W.\ Lux.
+\textsl{Declarative Debugging for Encapsulated Search}.
+WFLP'02 -- Selected Papers.
+Electronic Notes in Theoretical Computer Science, Vol. 76. \\
+\url{http://www.elsevier.com/locate/entcs/volume76.html}
+
+\bibitem[EL00]{EL00:Recursive}
+L.\ Erkök, J.\ Launchbury.
+\textsl{Recursive Monadic Bindings}.
+Proc.\ ICFP~'00, pp.~174--185. ACM Press.
+Also available at: \\ \url{http://www.cse.ogi.edu/pacsoft/projects/rmb}
+
+\bibitem[Han99]{Hanus99:Ports}
+M.\ Hanus.
+\textsl{Distributed Programming in a Multi-Paradigm Declarative Language}.
+Proc.\ PPDP~'99, pp.~188--205. Springer LNCS 1702.
+Also available at: \\ \url{http://www.informatik.uni-kiel.de/~mh/publications/papers/}
+
+\bibitem[Han06]{Hanus06:Report}
+M.\ Hanus (ed.).
+\textsl{Curry: An Integrated Functional Logic Language. (Version 0.8.2)}.
+Available at: \\
+\url{http://www.informatik.uni-kiel.de/~mh/curry/report.html}
+
+\bibitem[LO94]{LO94:TOPLAS}
+K.\ L\"aufer, M.\ Odersky.
+\textsl {Polymorphic Type Inference and Abstract Data Types}.
+ACM TOPLAS 16(5), 1994. pp~1411--1430.
+
+\bibitem[Lux04]{Lux04:Compare}
+Wolfgang Lux.
+\textsl{Comparing Copying and Trailing Implementations for Encapsulated Search}
+Proc.\ WFLP~'04. Aachener Informatik Berichte AIB-2004-05. pp.~91--103.
+Also available at: \\
+\url{http://danae.uni-muenster.de/~lux/pubs/wflp04.html}
+ 
+\bibitem[Pey03]{PeytonJones03:Haskell98}
+S.\ Peyton Jones (ed.).
+\textsl{Haskell 98 Language and Libraries. The Revised Report.}
+Cambridge University Press. April 2003. \\
+Also available at: \url{http://haskell.org/definition/}
+\end{thebibliography}
+
+\end{document}

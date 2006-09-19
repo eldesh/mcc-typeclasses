@@ -1,0 +1,713 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: eval.nw 1899 2006-04-19 10:50:11Z wlux $
+%
+% Copyright (c) 2001-2006, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Evaluation}\label{sec:eval}
+Every node has an entry point, which is called when the program has to
+evaluate a node. The common entry points are defined in this module,
+entry points for functions and lazy applications nodes are generated
+by the compiler. All entry points are called with the node to be
+evaluated on the top of the stack.
+
+<<eval.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "debug.h"
+#include "run.h"
+#include "heap.h"
+#include "stack.h"
+#include "trail.h"
+#include "threads.h"
+#include "spaces.h"
+#include "search.h"
+#include "trace.h"
+#include "eval.h"
+#include "cam.h"
+
+@
+Some nodes, e.g. thread nodes, do not represent values and cannot be
+evaluated at all. The entry point [[no_eval]] aborts the program if
+such a node is ever entered.
+
+<<eval.h>>=
+DECLARE_ENTRYPOINT(no_eval);
+
+@
+<<eval.c>>=
+FUNCTION(no_eval)
+{
+    EXPORT_LABEL(no_eval)
+ ENTRY_LABEL(no_eval)
+    curry_panic("internal error: no_eval entered\n");
+}
+
+@ 
+Numbers, data constructor applications, and partial applications are
+already in weak head normal form.  Their evaluation code,
+[[eval_whnf]], simply returns the node to the caller.
+
+<<eval.h>>=
+DECLARE_ENTRYPOINT(eval_whnf);
+
+@
+<<eval.c>>=
+FUNCTION(eval_whnf)
+{
+    Node *self;
+    EXPORT_LABEL(eval_whnf)
+ ENTRY_LABEL(eval_whnf)
+    self = *sp++;
+    RETURN(self);
+}
+
+@
+An indirection node is evaluated by dereferencing the node and calling
+the evaluation method of the referenced node. In order to speed up the
+evaluation of indirection chains, we use a loop that checks whether
+the referenced node is itself an indirection node.  If the referenced
+node is an unboxed integer number we return immediately to the caller.
+
+<<eval.h>>=
+DECLARE_ENTRYPOINT(eval_indir);
+
+@
+<<eval.c>>=
+FUNCTION(eval_indir)
+{
+    Node *node;
+    EXPORT_LABEL(eval_indir)
+ ENTRY_LABEL(eval_indir)
+    node = sp[0];
+    ASSERT(is_boxed(node) && is_indir_node(node));
+
+    /* dereference the indirection */
+    do
+        node = node->n.node;
+    while ( is_boxed(node) && is_indir_node(node) );
+
+    /* enter the node */
+    if ( is_unboxed(node) )
+    {
+	sp += 1;
+        RETURN(node);
+    }
+    sp[0] = node;
+    GOTO(node->info->eval);
+}
+
+@
+The [[eval_queueMe]] code is used when the node on the top of the
+stack is a queue-me node. In this case, the current thread is
+suspended until the evaluation of the corresponding application is
+finished and the queue-me node is overwritten with the result.
+
+When this code is invoked with an update frame on the top of the
+stack, the queue-me node recorded in the update frame is overwritten
+with an indirection to the queue-me node just entered and the update
+frame is removed from the stack.
+
+As a minor optimization, if the current thread would return to
+[[stop_thread]] after the queue-me node being entered is overwritten
+with its result, the current thread is terminated immediately.
+
+<<eval.h>>=
+DECLARE_ENTRYPOINT(eval_queueMe);
+
+@
+<<eval.c>>=
+FUNCTION(eval_queueMe)
+{
+    Node	*susp, *susp2;
+    Label	cont_ip;
+    ThreadQueue wq;
+    EXPORT_LABEL(eval_queueMe)
+ ENTRY_LABEL(eval_queueMe)
+    susp = sp[0];
+    if ( (Label)sp[1] == update )
+    {
+	susp2 = sp[2];
+	assert(is_queueMe_node(susp2) && is_local_space(susp2->q.spc));
+	if ( is_local_space(susp->q.spc) || !susp2->q.wq )
+	{
+	    wq = susp2->q.wq;
+#if !COPY_SEARCH_SPACE
+	    SAVE(susp2, n.node);
+	    susp2->info++;
+#else
+	    susp2->info	  = &indir_info;
+#endif
+	    susp2->n.node = susp;
+
+	    if ( wq )
+	    {
+		wq = join_queues(susp->q.wq, wq);
+		if ( wq != susp->q.wq )
+		{
+		    SAVE(susp, q.wq);
+		    susp->q.wq = wq;
+		}
+	    }
+
+	    if ( (Label)sp[3] == stop_thread )
+		GOTO(stop_thread);
+	    sp	 += 2;
+	    sp[0] = susp;
+	}
+    }
+    else if ( (Label)sp[1] == stop_thread )
+	GOTO(stop_thread);
+
+    cont_ip = resume;
+    if ( !is_local_space(susp->q.spc) )
+    {
+	suspend_search(cont_ip, susp, susp->q.spc);
+	susp	= sp[0];
+	cont_ip	= (Label)sp[1];
+	*++sp	= susp;
+    }
+    GOTO(suspend_thread(cont_ip, susp));
+}
+
+@
+When a thread is continued, which has been suspended because of
+entering a queue-me node, the node on the top of the stack has to be
+dereferenced before actually returning. The [[resume]] code performs
+this task. Note that the node on the top of the stack is always in
+weak head normal form when [[resume]] is entered. Therefore, it is
+safe to return to the caller without entering the result.
+
+<<eval.h>>=
+DECLARE_ENTRYPOINT(resume);
+
+@ 
+<<eval.c>>=
+FUNCTION(resume)
+{
+    Node  *result;
+    Label ret_ip;
+    EXPORT_LABEL(resume)
+ ENTRY_LABEL(resume)
+    /* dereference the indirection */
+    result = sp[0];
+    ret_ip = (Label)sp[1];
+    while ( is_boxed(result) && result->info->kind == INDIR_KIND )
+	result = result->n.node;
+    *++sp = result;
+
+    /* return to the caller */
+    GOTO(ret_ip);
+}
+
+@
+The [[update]] code is responsible for updating a lazy application
+node with the result of the application. All threads that were delayed
+because they also tried to evaluate the application are woken, but the
+current thread is not interrupted.
+
+<<eval.h>>=
+DECLARE_ENTRYPOINT(update);
+
+@
+<<eval.c>>=
+FUNCTION(update)
+{
+    Node       *result, *susp;
+    Label       ret_ip;
+    ThreadQueue wq;
+    EXPORT_LABEL(update)
+ ENTRY_LABEL(update)
+    result = sp[0];
+    susp   = sp[1];
+    ret_ip = (Label)sp[2];
+    sp	  += 2;
+    ASSERT(is_boxed(susp) && is_queueMe_node(susp) &&
+	   is_local_space(susp->q.spc));
+
+    /* update the suspended application */
+    TRACE(("%I %N = %N\n", susp, result));
+    wq = susp->q.wq;
+#if !COPY_SEARCH_SPACE
+    SAVE(susp, q.wq);
+    susp->info++;
+#else
+    susp->info	 = &indir_info;
+#endif
+    susp->n.node = result;
+    sp[0]	 = result;
+
+    /* wake all threads on the wait-queue of the application */
+    if ( wq )
+	wake_threads(wq);
+
+    /* return to the caller */
+    GOTO(ret_ip);
+}
+
+@ 
+When an unbound variable is matched in a rigid switch and when a
+non-local variable is matched in a flexible switch, the running thread
+is suspended until the variable is instantiated. This is handled by
+the runtime system code [[sync_var]], which also ensures that the
+bound variable node will be dereferenced after the thread is resumed.
+
+<<eval.h>>=
+DECLARE_ENTRYPOINT(sync_var);
+
+@ 
+<<eval.c>>=
+FUNCTION(sync_var)
+{
+    Node  *var;
+    Label cont_ip;
+    EXPORT_LABEL(sync_var)
+ ENTRY_LABEL(sync_var)
+    var	    = sp[0];
+    cont_ip = resume;
+    if ( !is_local_space(var->v.spc) )
+    {
+	suspend_search(cont_ip, var, var->v.spc);
+	var	= sp[0];
+	cont_ip = (Label)sp[1];
+	*++sp	= var;
+    }
+    GOTO(delay_thread(cont_ip, var));
+}
+
+@ 
+When stability is enabled, the current thread suspends before it
+instantiates an unbound variable non-deterministically. After the
+thread is resumed, it must check whether the variable was bound in the
+meantime. In this case, execution returns to the beginning of the
+switch, otherwise the variable is instantiated non-deterministically.
+This check is implemented in the [[flex_yield_resume]] code, which
+expects an array with the continuations that instantiate the variable,
+the variable node, and the entry point of the switch in that order on
+the stack.
+
+<<eval.h>>=
+#if YIELD_NONDET
+DECLARE_ENTRYPOINT(flex_yield_resume);
+#endif
+
+@ 
+<<eval.c>>=
+#if YIELD_NONDET
+FUNCTION(flex_yield_resume)
+{
+    Node  *node;
+    Label cont_ip;
+    EXPORT_LABEL(flex_yield_resume)
+ ENTRY_LABEL(flex_yield_resume)
+    node = sp[1];
+    for (;;)
+    {
+	if ( is_boxed(node) )
+	    switch ( node->info->kind )
+	    {
+	    case INDIR_KIND:
+		node = node->n.node;
+		continue;
+	    case LVAR_KIND:
+		sp[1] = node;
+		GOTO(nondet_handlers->choices);
+	    default:
+		break;
+	    }
+	break;
+    }
+    cont_ip = (Label)sp[2];
+    sp	   += 2;
+    sp[0]   = node;
+    GOTO(cont_ip);
+}
+#endif
+
+@ 
+The compiler transforms applications of higher order functions into
+first order applications by inserting applications of the (binary)
+primitive [[@]]. The code of this function first evaluates the
+function argument to a (ground) head normal form. If the result is a
+closure taking exactly one argument, a tail call to that function is
+performed. Otherwise, a new partial application node is returned to
+the caller. The info vector of the new closure is computed by using
+the fact that the node descriptors for all partial applications of a
+function are allocated in an array which is indexed by the number of
+arguments to which the function is applied.
+
+Actually, the compiler generates a whole family of functions [[@]]$_n$
+for each module and number of arguments $n$ to which an unknown
+function is applied in that module. The function [[@]] is defined here
+because it is used in other runtime system functions. The compiler
+also uses this function in place of [[@]]$_1$.
+
+Note that we do not provide a function info table for [[@]] because
+this function is never applied partially.
+
+<<eval.h>>=
+DECLARE_ENTRYPOINT(___64_);
+extern NodeInfo ___64__info, ___64__lazy_info_table[];
+
+@ 
+<<eval.c>>=
+DECLARE_LABEL(eval_clos_2);
+DECLARE_LABEL(eval_lazy_2);
+
+NodeInfo ___64__info		  = FUNINFO("@", ___64_, 2);
+NodeInfo ___64__lazy_info_table[] = LAZYINFO("@", ___64_, 2);
+
+static
+FUNCTION(eval_clos_2)
+{
+    Node *clos;
+ ENTRY_LABEL(eval_clos_2)
+    CHECK_STACK1();
+    clos  = sp[0];
+    sp	 -= 1;
+    sp[0] = clos->c.args[0];
+    sp[1] = clos->c.args[1];
+    GOTO(clos->info->entry);
+}
+
+static
+FUNCTION(eval_lazy_2)
+{
+    boolean local;
+    Node    *susp, *x, *y;
+    Label   entry;
+ ENTRY_LABEL(eval_lazy_2)
+    /* suspend the search if the node is not local */
+    local = is_local_space(sp[0]->s.spc);
+    if ( !local )
+	suspend_search(resume, sp[0], sp[0]->s.spc);
+
+    /* get the arguments */
+    susp  = sp[0];
+    entry = susp->info->entry;
+    x	  = susp->s.args[0];
+    y	  = susp->s.args[1];
+
+    /* create an indirection if there is an update frame immediately above */
+    if ( local && (Label)sp[1] == update )
+    {
+	CHECK_STACK1();
+	sp -= 1;
+
+#if !COPY_SEARCH_SPACE
+	if ( (word *)susp < hlim )
+	{
+	    DO_SAVE(susp, n.node);
+	    susp->info += 2;
+	}
+	else
+#endif
+	    susp->info = &indir_info;
+	assert(is_queueMe_node(sp[3]));
+	susp->n.node = sp[3];
+    }
+
+    /* otherwise, lock the application node and create an update frame */
+    else
+    {
+	CHECK_STACK(3);
+	sp   -= 3;
+	sp[2] = (Node *)update;
+
+#if !COPY_SEARCH_SPACE
+	if ( (word *)susp < hlim )
+	{
+	    DO_SAVE(susp, q.wq);
+	    susp->info++;
+	}
+	else
+#endif
+	    susp->info = queueMe_info_table;
+	susp->q.wq = 0;
+    }
+
+    /* enter the callee */
+    sp[0] = x;
+    sp[1] = y;
+    GOTO(entry);
+}
+
+DECLARE_LABEL(___64__1);
+
+FUNCTION(___64_)
+{
+    EXPORT_LABEL(___64_)
+ ENTRY_LABEL(___64_)
+    TRACE_FUN("@", 2);
+    GOTO(___64__1);
+}
+
+static
+FUNCTION(___64__1)
+{
+    unsigned int argc;
+    Node	 *clos;
+    NodeInfo	 *fInfo;
+ ENTRY_LABEL(___64__1)
+    /* evaluate the function argument to head normal form */
+    EVAL_RIGID_PAPP(___64__1);
+    clos = sp[0];
+
+    /* check the number of missing arguments */
+    fInfo = clos->info;
+    argc  = closure_argc(clos);
+    if ( fInfo->tag == 1 )
+    {
+	/* push the arguments onto the stack */
+	switch ( argc )
+	{
+	case 0:
+	    sp += 1;
+	    break;
+	case 1:
+	    sp[0] = clos->c.args[0];
+	    break;
+	default:
+	    CHECK_STACK(argc - 1);
+	    sp -= argc - 1;
+	    memcpy(sp, clos->c.args, argc * word_size);
+	    break;
+	}
+
+	/* perform a tail call to the function */
+	GOTO(fInfo->entry);
+    }
+
+    /* allocate a new closure for the application */
+    CHECK_HEAP(closure_node_size(argc + 1));
+
+    /* create a new closure from the old closure and the argument */
+    clos = (Node *)hp;
+    memcpy(clos, sp[0], closure_node_size(argc) * word_size);
+    clos->info++;
+    clos->c.args[argc] = sp[1];
+    hp += closure_node_size(argc + 1);
+
+    /* return to the caller */
+    sp += 2;
+    RETURN(clos);
+}
+
+@ 
+The primitive function \texttt{seq} evaluates both of its argument to
+head normal form starting with the left argument.
+
+<<eval.c>>=
+DECLARE_ENTRYPOINT(__seq);
+
+FUNCTION(__seq)
+{
+    Node *node;
+    EXPORT_LABEL(__seq)
+ ENTRY_LABEL(__seq)
+    EVAL_FLEX_POLY(__seq);
+    node = sp[1];
+    if ( is_boxed(node) )
+    {
+	sp += 1;
+	GOTO(node->info->eval);
+    }
+    sp += 2;
+    RETURN(node);
+}
+
+@ 
+The primitive function \texttt{failed} simply invokes the current
+failure handler.
+
+<<eval.c>>=
+DECLARE_ENTRYPOINT(__failed);
+
+FUNCTION(__failed)
+{
+    EXPORT_LABEL(__failed)
+ ENTRY_LABEL(__failed)
+    FAIL();
+}
+
+@ 
+The unsafe primitive function \texttt{isVar} returns \texttt{True} if
+its argument evaluates to an unbound variable. This function is
+implemented only for compatibility with PAKCS.
+
+<<eval.c>>=
+DECLARE_CONST(__Prelude__True);
+DECLARE_CONST(__Prelude__False);
+
+DECLARE_ENTRYPOINT(__isVar);
+
+FUNCTION(__isVar)
+{
+    Node *r;
+    EXPORT_LABEL(__isVar)
+ ENTRY_LABEL(__isVar)
+    EVAL_FLEX_POLY(__isVar);
+    r	= is_boxed(sp[0]) && is_variable_node(sp[0]) ? CONST(__Prelude__True)
+						     : CONST(__Prelude__False);
+    sp += 1;
+    RETURN(r);
+}
+
+@ 
+The primitive function \texttt{ensureNotFree} evaluates its argument
+to head normal form and suspends until it is instantiated to a
+non-variable term.
+
+<<eval.c>>=
+DECLARE_ENTRYPOINT(__ensureNotFree);
+
+FUNCTION(__ensureNotFree)
+{
+    Node *node;
+    EXPORT_LABEL(__ensureNotFree)
+ ENTRY_LABEL(__ensureNotFree)
+    EVAL_RIGID_POLY(__ensureNotFree);
+    node = *sp++;
+    RETURN(node);
+}
+
+@ 
+The polymorphic function \texttt{ensureGround} ensures that the normal
+form of its argument is a ground data term. This is done lazily so
+that \texttt{ensureGround} is semantically equivalent to
+\texttt{Prelude.id} otherwise.
+
+<<eval.c>>=
+DECLARE_ENTRYPOINT(__ensureGround);
+DECLARE_LABEL(__ensureGround_1);
+
+DECLARE_LABEL(eval_lazy_1);
+
+static
+FUNCTION(eval_lazy_1)
+{
+    boolean local;
+    Node    *susp, *x;
+    Label   entry;
+ ENTRY_LABEL(eval_lazy_1)
+    /* suspend the search if the node is not local */
+    local = is_local_space(sp[0]->s.spc);
+    if ( !local )
+	suspend_search(resume, sp[0], sp[0]->s.spc);
+
+    /* get the argument */
+    susp  = sp[0];
+    entry = susp->info->entry;
+    x	  = susp->s.args[0];
+
+    /* create an indirection if there is an update frame immediately above */
+    if ( local && (Label)sp[1] == update )
+    {
+#if !COPY_SEARCH_SPACE
+	if ( (word *)susp < hlim )
+	{
+	    DO_SAVE(susp, n.node);
+	    susp->info += 2;
+	}
+	else
+#endif
+	    susp->info = &indir_info;
+	assert(is_queueMe_node(sp[2]));
+	susp->n.node = sp[2];
+    }
+
+    /* otherwise, lock the application node and create an update frame */
+    else
+    {
+	CHECK_STACK(2);
+	sp   -= 2;
+	sp[1] = (Node *)update;
+
+#if !COPY_SEARCH_SPACE
+	if ( (word *)susp < hlim )
+	{
+	    DO_SAVE(susp, q.wq);
+	    susp->info++;
+	}
+	else
+#endif
+	    susp->info = queueMe_info_table;
+	susp->q.wq = 0;
+    }
+
+    /* enter the callee */
+    sp[0] = x;
+    GOTO(entry);
+}
+
+FUNCTION(__ensureGround)
+{
+    EXPORT_LABEL(__ensureGround)
+ ENTRY_LABEL(__ensureGround)
+    TRACE_FUN("ensureGround", 1);
+    GOTO(__ensureGround_1);
+}
+
+static
+FUNCTION(__ensureGround_1)
+{
+    boolean	    is_vect;
+    unsigned int    n, sz;
+    Node	    *node, **argp, *susp;
+    static NodeInfo ensureGround_lazy_info_table[] =
+	LAZYINFO("ensureGround", __ensureGround, 1);
+ ENTRY_LABEL(__ensureGround_1)
+    EVAL_RIGID_POLY(__ensureGround_1);
+    node = sp[0];
+    if ( is_boxed(node) )
+    {
+	switch ( node_kind(node) )
+	{
+	case VECTOR_KIND:
+	    is_vect = true;
+	    n	    = vector_argc(node);
+	    sz	    = node->a.length;
+	    break;
+	case CAPP_KIND:
+	case PAPP_KIND:
+	    is_vect = false;
+	    n	    = closure_argc(node);
+	    sz	    = node->info->length;
+	    break;
+	default:
+	    is_vect = false;
+	    n	    = 0;
+	    sz	    = 0;
+	    break;
+	}
+
+	if ( n > 0 )
+	{
+	    CHECK_HEAP(sz + n * suspend_node_size(1));
+
+	    node = (Node *)(hp + n * suspend_node_size(1));
+	    memcpy(node, sp[0], sz * word_size);
+
+	    for ( argp = is_vect ? node->a.args : node->c.args;
+		  n > 0; 
+		  argp++, n-- )
+	    {
+		susp		= (Node *)hp;
+		susp->info	= ensureGround_lazy_info_table;
+		susp->s.spc	= ss;
+		susp->s.args[0]	= *argp;
+		hp	       += suspend_node_size(1);
+
+		*argp = susp;
+	    }
+
+	    ASSERT((Node *)hp == node);
+	    hp  += sz;
+	}
+    }
+
+    sp += 1;
+    RETURN(node);
+}

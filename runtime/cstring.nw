@@ -1,0 +1,513 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: cstring.nw 1916 2006-05-08 21:36:20Z wlux $
+%
+% Copyright (c) 2001-2006, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{C String Interface}\label{sec:string}
+The C string library interface provides some functions that translate
+C strings into Curry strings and vice versa. In addition, this file
+includes two functions that convert character and floating-point
+literals into their (C) string representations.
+
+<<cstring.h>>=
+extern Node	*from_string(const char *cp);
+extern Node	*from_string_len(const char *cp, unsigned long len);
+extern Node	*prefix_string(const char *cp, Node *);
+extern Node	*prefix_string_len(const char *cp, unsigned long len, Node *);
+extern unsigned string_length(Node *);
+extern char	*copy_string(Node *, char *buf);
+extern char	*to_string(Node *);
+
+extern char *lit_char(char *buf, int c0, int c, int q);
+extern char *lit_double(char *buf, double d);
+
+DECLARE_ENTRYPOINT(nf_string);
+
+@ 
+<<cstring.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <locale.h>
+#include <ctype.h>
+#include <limits.h>
+#include <math.h>
+#ifdef HAVE_IEEEFP_H
+# include <ieeefp.h>
+#endif
+#include "debug.h"
+#include "run.h"
+#include "heap.h"
+#include "stack.h"
+#include "threads.h"
+#include "eval.h"
+#include "data.h"
+#include "io_monad.h"
+#include "cstring.h"
+#include "cam.h"
+#include "trace.h"
+
+@
+The functions [[from_string]] and [[from_string_len]] translate a C
+string into the corresponding Curry list of characters and return a
+pointer to the list. The whole string is translated at once by these
+functions. In order to prepend a C string to a given list of
+characters, use the functions [[prefix_string]] and
+[[prefix_string_len]] instead.
+
+<<cstring.c>>=
+Node *
+from_string(const char *cp)
+{
+    return prefix_string_len(cp, strlen(cp), nil);
+}
+
+Node *
+from_string_len(const char *cp, unsigned long len)
+{
+    return prefix_string_len(cp, len, nil);
+}
+
+Node *
+prefix_string(const char *cp, Node *list)
+{
+    return prefix_string_len(cp, strlen(cp), list);
+}
+
+Node *
+prefix_string_len(const char *cp, unsigned long len, Node *list)
+{
+    if ( len > 0 )
+    {
+	Node *tail;
+
+	BEGIN_LOCAL_ROOTS1(list)
+	CHECK_HEAP(len * cons_node_size);
+	END_LOCAL_ROOTS
+
+	cp  += len;
+	tail = list;
+
+	do
+	{
+	    list	    = (Node *)hp;
+	    list->info	    = &cons_info;
+	    list->c.args[0] = (Node *)(char_table + (*--cp & 0xff));
+	    list->c.args[1] = tail;
+	    hp		   += cons_node_size;
+	    tail	    = list;
+	}
+	while ( --len > 0 );
+    }
+    return list;
+}
+
+@
+Translating a Curry string into a C string is more difficult because
+we have to evaluate the string to a ground normal form first. The
+Curry code [[nf_string]] can be used to handle this.
+
+<<cstring.c>>=
+DECLARE_LABEL(nf_string_1);
+DECLARE_LABEL(nf_string_2);
+
+FUNCTION(nf_string)
+{
+    EXPORT_LABEL(nf_string)
+ ENTRY_LABEL(nf_string)
+    TRACE_FUN("nf_string", 1);
+    CHECK_STACK1();
+    sp	 -= 1;
+    sp[0] = sp[1];
+    GOTO(nf_string_1);
+}
+
+static
+FUNCTION(nf_string_1)
+{
+    Node *list;
+ ENTRY_LABEL(nf_string_1)
+    EVAL_RIGID_DATA(nf_string_1);
+    list = sp[0];
+    switch ( node_tag(list) )
+    {
+    case NIL_TAG:
+	list = sp[1];
+	sp  += 2;
+	RETURN(list);
+    case CONS_TAG:
+	CHECK_STACK1();
+	sp   -= 1;
+	sp[0] = list->c.args[0];
+	sp[1] = list->c.args[1];
+	GOTO(nf_string_2);
+    default:
+	unexpected_tag("nf_string", node_tag(list));
+    }
+}
+
+static
+FUNCTION(nf_string_2)
+{
+ ENTRY_LABEL(nf_string_2)
+    EVAL_RIGID_CHAR(nf_string_2);
+    sp++;
+
+    /* continue to evaluate the tail of the string */
+    GOTO(nf_string_1);
+}
+
+@ 
+The function [[string_length]] returns the length of a Curry string.
+The function [[copy_string]] copies a Curry string into a string 
+buffer terminated with a final [['\0']] character. The buffer must be
+large enough to hold the string including the terminator
+character. Finally, the function [[to_string]] uses [[malloc]] to
+allocate a suitable buffer and copies the Curry string argument into
+this buffer.
+
+<<cstring.c>>=
+unsigned
+string_length(Node *list)
+{
+    unsigned n = 0;
+
+    while ( list->info->kind != CAPP_KIND || list->info->tag != NIL_TAG )
+    {
+	while ( list->info->kind == INDIR_KIND )
+	    list = list->n.node;
+
+	assert(list->info->kind == CAPP_KIND);
+	if ( list->info->tag == CONS_TAG )
+	    n++, list = list->c.args[1];
+	else
+	    assert(list->info->tag == NIL_TAG);
+    }
+
+    return n;
+}
+
+char *
+copy_string(Node *list, char *buf)
+{
+    char *cp = buf;
+    Node *head;
+
+    while ( list->info->kind != CAPP_KIND || list->info->tag != NIL_TAG )
+    {
+	while ( list->info->kind == INDIR_KIND )
+	    list = list->n.node;
+	assert(list->info->kind == CAPP_KIND);
+
+	if ( list->info->tag == CONS_TAG )
+	{
+	    head = list->c.args[0];
+	    while ( is_boxed(head) && head->info->kind == INDIR_KIND )
+		head = head->n.node;
+	    assert(is_boxed(head) && head->info->kind == CHAR_KIND);
+	    *cp++ = head->ch.ch;
+	    list  = list->c.args[1];
+	}
+	else
+	    assert(list->info->tag == NIL_TAG);
+    }
+    *cp = '\0';
+    return buf;
+}
+
+char *
+to_string(Node *list)
+{
+    unsigned n   = string_length(list);
+    char     *cp = (char *)malloc(n + 1);
+
+    if ( cp == NULL )
+	sys_error("to_string");
+    return copy_string(list, cp);
+}
+
+@ 
+The primitives [[__newCString]] and [[__newCStringLen]] convert a
+Curry string into a heap allocated C string. In addition,
+[[__newCStringLen]] also returns the length of the string.
+
+<<cstring.c>>=
+DECLARE_ENTRYPOINT(__newCString);
+DECLARE_ENTRYPOINT(__newCStringLen);
+
+DECLARE_LABEL(__newCString_1);
+DECLARE_LABEL(__newCStringLen_1);
+
+#define pair_node_size closure_node_size(2)
+static DEFINE_DATA(pair, "(,)", 0, 2);
+
+FUNCTION(__newCString)
+{
+    EXPORT_LABEL(__newCString)
+ ENTRY_LABEL(__newCString)
+    sp[1] = (Node *)__newCString_1;
+    GOTO(nf_string);
+}
+
+static
+FUNCTION(__newCString_1)
+{
+    char *cp;
+    Node *p;
+ ENTRY_LABEL(__newCString_1)
+    cp = to_string(*sp++);
+
+    CHECK_HEAP(ptr_node_size);
+    p	     = (Node *)hp;
+    p->info  = &ptr_info;
+    p->p.ptr = cp;
+    hp	    += ptr_node_size;
+
+    RETURN(p);
+}
+
+FUNCTION(__newCStringLen)
+{
+    EXPORT_LABEL(__newCStringLen)
+ ENTRY_LABEL(__newCStringLen)
+    sp[1] = (Node *)__newCStringLen_1;
+    GOTO(nf_string);
+}
+
+static
+FUNCTION(__newCStringLen_1)
+{
+    unsigned int l;
+    char	 *cp;
+    Node	 *p, *i, *r;
+ ENTRY_LABEL(__newCStringLen_1)
+    l  = string_length(sp[0]);
+    cp = (char *)malloc(l + 1);
+    if ( cp == NULL )
+	sys_error("newCStringLen");
+    copy_string(*sp++, cp);
+
+    CHECK_HEAP(ptr_node_size + int_node_size + pair_node_size);
+    p	     = (Node *)hp;
+    p->info  = &ptr_info;
+    p->p.ptr = cp;
+    hp	    += ptr_node_size;
+#if !ONLY_BOXED_OBJECTS
+    if ( !is_large_int((long)l) )
+	i = mk_unboxed(l);
+    else
+#endif
+    {
+	i	= (Node *)hp;
+	i->info = &int_info;
+	i->i.i  = l;
+	hp     += int_node_size;
+    }
+    r		 = (Node *)hp;
+    r->info	 = &pair_info;
+    r->c.args[0] = p;
+    r->c.args[1] = i;
+    hp		+= pair_node_size;
+
+    RETURN(r);
+}
+
+@ 
+The primitives [[__peekCString]] and [[__peekCStringLen]] convert a C
+string into a Curry string. [[__peekCString]] computes the length of
+the C string using [[strlen]], whereas the length is passed explicitly
+to [[__peekCString]]. This allows converting C strings with embedded
+\verb|\NUL| characters as well as substrings.
+
+<<cstring.c>>=
+DECLARE_ENTRYPOINT(__peekCString);
+DECLARE_ENTRYPOINT(__peekCStringLen);
+
+DECLARE_LABEL(__peekCStringLen_1);
+DECLARE_LABEL(__peekCStringLen_2);
+
+FUNCTION(__peekCString)
+{
+    char *cp;
+    Node *r;
+    EXPORT_LABEL(__peekCString)
+ ENTRY_LABEL(__peekCString)
+    EVAL_RIGID_PTR(__peekCString);
+    cp = (char *)sp[0]->p.ptr;
+    if ( cp == NULL )
+    {
+	sp[0] = from_string("peekCString: null pointer");
+	GOTO(__ioError);
+    }
+    r	= from_string(cp);
+    sp += 2;
+    RETURN(r);
+}
+
+FUNCTION(__peekCStringLen)
+{
+    EXPORT_LABEL(__peekCStringLen)
+ ENTRY_LABEL(__peekCStringLen)
+    EVAL_RIGID_DATA(__peekCStringLen);
+    CHECK_STACK1();
+    sp	 -= 1;
+    sp[0] = sp[1]->c.args[0];
+    sp[1] = sp[1]->c.args[1];
+    GOTO(__peekCStringLen_1);
+}
+
+static
+FUNCTION(__peekCStringLen_1)
+{
+    Node *aux;
+ ENTRY_LABEL(__peekCStringLen_1)
+    EVAL_RIGID_PTR(__peekCStringLen_1);
+    aux	  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = aux;
+    GOTO(__peekCStringLen_2);
+}
+
+static
+FUNCTION(__peekCStringLen_2)
+{
+    char *cp;
+    long l;
+    Node *r;
+ ENTRY_LABEL(__peekCStringLen_2)
+    EVAL_RIGID_INT(__peekCStringLen_2);
+    l = long_val(sp[0]);
+    if ( l > 0 )
+    {
+	cp = (char *)sp[1]->p.ptr;
+	if ( cp == NULL )
+	{
+	    *++sp = from_string("peekCStringLen: null pointer");
+	    GOTO(__ioError);
+	}
+	r = from_string_len(cp, l);
+    }
+    else
+	r = nil;
+    sp += 3;
+    RETURN(r);
+}
+
+@ 
+The function [[lit_char]] converts a character into its printable
+representation (without quotes). The argument [[q]] is used for
+specifying the quote character. This character will be escaped with a
+backslash character in the return value. Passing [['\0']] as quote
+character avoids escaping. The argument [[c0]] specifies the preceding
+character and is used in order to insert a ``null character'' escape
+sequence \verb|\&| between a numeric character escape sequence and a
+digit so that it is possible to distinguish the strings
+\verb|['\137',9]| and \verb|['\1379']|. Similarly, \verb|\&| is
+inserted between \verb|\SO| (ASCII code 14) and \verb|H| in order to
+distinguish the strings \verb|['\SO','H']| and \verb|['\SOH']|.
+
+The buffer passed to [[lit_char]] must be long enough to accommodate
+the converted string. Since at present characters are limited to the
+range between \verb|chr 0| and \verb|chr 255|, five bytes are
+sufficient.
+
+<<cstring.c>>=
+static const char *asciiTab[] = {
+    "\\NUL", "\\SOH", "\\STX", "\\ETX", "\\EOT", "\\ENQ", "\\ACK", "\\a",
+    "\\b",   "\\t",   "\\n",   "\\v",   "\\f",   "\\r",  "\\SO",  "\\SI",
+    "\\DLE", "\\DC1", "\\DC2", "\\DC3", "\\DC4", "\\NAK", "\\SYN", "\\ETB",
+    "\\CAN", "\\EM",  "\\SUB", "\\ESC", "\\FS",  "\\GS",  "\\RS",  "\\US"
+};
+
+char *
+lit_char(char *buf, int c0, int c, int q)
+{
+    if ( c >= '\0' && c < ' ' )
+	strcpy(buf, asciiTab[c]);
+    else if ( c == 0177 )
+	strcpy(buf, "\\DEL");
+    else if ( c >= ' ' && c < 0177 )
+    {
+	char *cp = buf;
+
+	if ( c == q || c == '\\' )
+	    *cp++ = '\\';
+	else if ( (c == 'H' && c0 == 016/*'\SO'*/) ||
+		  (isdigit(c) && c0 > 0177) )
+	{
+	    *cp++ = '\\';
+	    *cp++ = '&';
+	}
+	*cp++ = c;
+	*cp   = '\0';
+    }
+    else
+	sprintf(buf, "\\%d", c);
+
+    return buf;
+}
+
+@ 
+The function [[lit_double]] converts a floating-point value into a
+string. The conversion essentially uses the [[%g]] format of
+[[sprintf]], but appends a suffix \verb|.0| to the number if there is
+no fraction and no exponent in the printed representation. Infinities
+and NaNs are handled specially because their printed representation
+depends on the operating systems and no \verb|.0| suffix must be
+appended to them. The buffer passed to [[lit_double]] must be long
+enough to accomodate the largest possible string. For the IEEE double
+format, at least 25 characters\footnote{One sign character, up to 17
+  significant digits, a decimal point, the character \texttt{e}
+  marking the exponent, a sign and three digits in the exponent, and
+  the final \texttt{NUL} character.} must be provided.
+
+In general, 17 significant digits are required in order to print an
+IEEE double value exactly. However, the [[%.17g]] floating point
+format may produce spurious insignificant digits at the end of the
+string. For instance, many implementations will print the string
+\verb|"0.20000000000000001"| for \verb|printf("%.17g", 0.2)|
+instead of \verb|"0.2"|. In order to avoid such results, we first try
+to convert the number with 16 significant digits. If the resulting
+string does not match the number exactly, we will call [[sprintf]]
+again; this time with 17 significant digits. Note that this code
+assumes that the Curry lexer computes the same number as the C
+function [[strtod]].
+
+\ToDo{Use a better algorithm for converting floating-point numbers
+  into strings in order to avoid the string to double
+  conversion. See~\cite{BurgerDybvig96:Printing} for an alternative.}
+
+<<cstring.c>>=
+char *
+lit_double(char *buf, double d)
+{
+    const char *loc;
+
+    if ( finite(d) )
+    {
+	loc = setlocale(LC_NUMERIC, NULL);
+	setlocale(LC_NUMERIC, "C");
+
+	sprintf(buf, "%.16g", d);
+	if ( strtod(buf, NULL) != d )
+	    sprintf(buf, "%.17g", d);
+	if ( !strpbrk(buf, ".e") )
+	    strcat(buf, ".0");
+
+	setlocale(LC_NUMERIC, loc);
+    }
+    else if ( isnan(d) )
+	strcpy(buf, "NaN");
+    else
+    {
+	char *cp = buf;
+
+	if ( d < 0 )
+	    *cp++ = '-';
+	strcpy(cp, "Infinity");
+    }
+
+    return buf;
+}

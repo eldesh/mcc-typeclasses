@@ -1,0 +1,74 @@
+# Makefile for the Curry documentation
+#
+# $Id: Makefile.in 1744 2005-08-23 16:17:12Z wlux $
+#
+# Copyright (c) 2002-2003, Wolfgang Lux
+# See ../LICENSE for the full license.
+#
+
+@SET_MAKE@
+
+# source directory
+top_srcdir = @top_srcdir@
+srcdir = @srcdir@
+VPATH = @srcdir@
+
+# install directories
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+bindir = @bindir@
+libdir = @libdir@
+
+# program definitions
+INSTALL = @INSTALL@
+INSTALL_PROGRAM = @INSTALL_PROGRAM@
+INSTALL_DATA = @INSTALL_DATA@
+INSTALL_DIR = @INSTALL_DIR@
+
+# file lists
+
+doc_FILES = user.tex user.html user.pdf report.pdf \
+	    hierdir.eps hierdir.png sampledir.eps sampledir.png
+doc_FILES_PATH = $(doc_FILES:%=@srcdir@/%)
+
+DISTFILES = Makefile.in $(doc_FILES)
+DISTFILES_PATH = $(DISTFILES:%=@srcdir@/%)
+BINDISTFILES = $(doc_FILES_PATH)
+
+# suffix rules
+
+# default target is empty
+all:
+
+# build the distribution
+# distdir must be set by the caller
+distdir: $(DISTFILES_PATH)
+	cp $(DISTFILES_PATH) $(distdir)
+bindistdir: $(BINDISTFILES)
+	cp $(BINDISTFILES) $(distdir)/doc
+
+# install target is empty
+install:
+
+# automatic reconfiguration
+$(top_srcdir)/configure: $(top_srcdir)/configure.in $(top_srcdir)/aclocal.m4
+	cd $(top_srcdir) && autoconf
+
+.PRECIOUS: Makefile
+Makefile: $(srcdir)/Makefile.in ../config.status
+	cd .. && ./config.status doc/Makefile
+
+.PRECIOUS: ../config.status
+../config.status: $(top_srcdir)/configure
+	cd .. && ./config.status --recheck
+
+# clean up
+mostlyclean:
+clean: mostlyclean
+distclean: clean
+	-rm -f *~ *.out *.log *.aux *.toc *.bak
+	-rm -f Makefile
+maintainerclean: distclean
+
+# dependencies
+depend:

@@ -1,0 +1,256 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: vars.nw 1744 2005-08-23 16:17:12Z wlux $
+%
+% Copyright (c) 2002-2005, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Naming variables}
+For printing the result as well as for the \texttt{browse} function
+and for the debugger we need to associate variable nodes with unique
+names. This is done by maintaining a dictionary that maps the
+addresses of variables onto names.
+
+<<vars.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "debug.h"
+#include "run.h"
+#include "heap.h"
+#include "stack.h"
+#include "vars.h"
+
+@ 
+At present the dictionary is implemented as a simple linked list
+rooted in [[names_dict]] and a pointer to the last node of the
+dictionary is saved in [[names_tail]].
+
+The type of dictionary nodes has to be exported because the garbage
+collector must update the node pointers in the
+dictionary. \textbf{These declarations should not be used in any other
+module!}
+
+\ToDo{Use a hash table for the dictionary.}
+
+<<vars.h>>=
+struct dict_node {
+    Node	     *node;		/* variable node         */
+    const char	     *name;		/* name of variables     */
+    struct dict_node *next;		/* link to next variable */
+};
+
+extern struct dict_node *names_dict, *names_tail;
+
+@ 
+<<vars.c>>=
+struct dict_node *names_dict;
+struct dict_node *names_tail;
+
+@ 
+New entries can be inserted into the dictionary using the function
+[[add_name]]. The name will [[free]]d when the dictionary is released,
+so the [[name]] argument should point to a [[malloc]]ed string --
+except for entries allocated in the startup code that are never going
+to be released.
+
+<<vars.h>>=
+extern void add_name(Node *node, const char *name);
+
+@ 
+<<vars.c>>=
+void
+add_name(Node *node, const char *name)
+{
+    struct dict_node *next;
+
+    next = (struct dict_node *)malloc(sizeof(struct dict_node));
+    if ( next == 0 )
+	sys_error("add_name");
+
+    next->node = node;
+    next->name = name;
+    next->next = 0;
+
+    if ( names_tail == 0 )
+    {
+	ASSERT(names_dict == 0);
+	names_dict = names_tail = next;
+    }
+    else
+    {
+	names_tail->next = next;
+	names_tail	 = next;
+    }
+}
+
+@ 
+The function [[release_names]] releases all dictionary entries after
+[[new_tail]]. If this argument is [[0]] the whole dictionary is
+released.
+
+This function should be used to remove only the segment of dictionary
+that was created since that last choicepoint or search context was
+installed. Releasing a bigger segment might leave dangling pointers in
+the control stack.
+
+<<vars.h>>=
+extern void release_names(struct dict_node *new_tail);
+
+@ 
+<<vars.c>>=
+void
+release_names(struct dict_node *new_tail)
+{
+    struct dict_node *curr, *next;
+
+    if ( new_tail != names_tail )
+    {
+	names_tail = new_tail;
+	if ( new_tail == 0 )
+	{
+	    curr       = names_dict;
+	    names_dict = 0;
+	}
+	else
+	{
+	    curr	   = new_tail->next;
+	    new_tail->next = 0;
+	}
+
+	for ( ; curr; curr = next )
+	{
+	    next = curr->next;
+	    free((char *)curr->name);
+	    free(curr);
+	}
+    }
+}
+
+@ 
+In order to cleanup the dictionary after a garbage collection and
+update all pointers in the control stack, the function
+[[cleanup_names]] should be used. This function looks for dictionary
+nodes which point to no node at all and release the memory occupied by
+them. In addition, the saved dictionary tails on the control stack
+are moved to the previous node which is still in use.
+
+The processing is performed in three steps. First the dictionary list
+is reversed (in order to be able to advance the dictionary pointers
+backwards). In a next step the choicepoints and search contexts in the
+control stack are processed from top to bottom and all dictionary
+pointers are set to the next dictionary node with a non-null node
+pointer. In the last phase, the dictionary list is reversed again and
+all nodes which do not point to a node are released.
+
+\ToDo{We can speed up the second phase a bit by making use of the fact
+the many choicepoints will save the same dictionary. We only need to
+find the next used dictionary for the first choicepoint in such a
+sequence and can re-use the new dictionary tail for all these
+choicepoints.}
+
+<<vars.h>>=
+extern void cleanup_names(void);
+
+@ 
+<<vars.c>>=
+void
+cleanup_names()
+{
+    struct dict_node *prev, *curr, *next;
+    Choicepoint	     *cp;
+
+    /* Phase I: reverse the dictionary */
+    prev = 0;
+    for ( curr = names_dict; curr; curr = next )
+    {
+	next	   = curr->next;
+	curr->next = prev;
+	prev	   = curr;
+    }
+
+    /* Phase II: update the control stack */
+    for ( cp = bp; cp; cp = cp->btBp )
+    {
+	curr = cp->btDict;
+	while ( curr && curr->node == 0 )
+	    curr = curr->next;
+	cp->btDict = curr;
+    }
+
+    /* Phase III: re-reverse the dictionary and release unused nodes */
+    curr = prev;
+    prev = 0;
+    for ( ; curr; curr = next )
+    {
+	next = curr->next;
+	if ( curr->node == 0 )
+	{
+	    free((char *)curr->name);
+	    free(curr);
+	}
+	else
+	{
+	    curr->next = prev;
+	    prev       = curr;
+	}
+    }
+    names_dict = prev;
+}
+
+@ 
+The function [[lookup_name]] returns the name of the given (variable)
+node from the dictionary. If there is no name in the dictionary, a new
+name is created with the help of the local function [[gen_name]].
+
+<<vars.h>>=
+extern const char *lookup_name(Node *node);
+
+@ 
+<<vars.c>>=
+static const char *gen_name(void);
+
+extern const char *lookup_name(Node *node)
+{
+    const char	     *name;
+    struct dict_node *dict;
+
+    for ( dict = names_dict; dict; dict = dict->next )
+	if ( dict->node == node )
+	    return dict->name;
+
+    name = gen_name();
+    add_name(node, name);
+    return name;
+}
+
+@ 
+The private function [[gen_name]] uses the counter [[dict_index]] in
+order to create unique names. In order to avoid name conflicts with
+entities defined in the program, all generated names start with an
+underscore.
+
+\ToDo{Provide a runtime option is to use either uppercase or lowercase
+names for generated names.}
+
+\ToDo{The counter should be reset when the dictionary is released
+during backtracking.}
+
+<<vars.c>>=
+static unsigned long dict_index;
+
+static const char *
+gen_name()
+{
+    char name[13];
+
+    name[0] = '_';
+    name[1] = 'a' + dict_index % 26;
+    if ( dict_index < 26 )
+	name[2] = '\0';
+    else
+	sprintf(name + 2, "%ld", dict_index / 26);
+    dict_index++;
+
+    return (const char *)strdup(name);
+}

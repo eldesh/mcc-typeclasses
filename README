@@ -1,0 +1,222 @@
+This is release 0.9.10 of the Münster Curry compiler.
+
+The Münster Curry compiler is a mature native code compiler for the
+declarative multi-paradigm language Curry. The language supported by
+the compiler is compatible with version 0.8.2 of the Curry report
+except for some minor differences with respect to the module
+system. Many syntax extensions including newtype declarations, infix
+data constructors, lazy patterns, and recursive pattern bindings are
+available for compatibility with Haskell. Other supported extensions
+include existentially quantified data types, disequality constraints,
+and I/O exceptions. A distinctive feature of the Münster Curry
+compiler is the integration of a declarative debugger of wrong
+answers. An interactive Curry environment and a make-like build tool
+for Curry programs are also part of the distribution. A graphical user
+interface is available separately for Mac OS X.
+
+The Münster Curry compiler is portable to many Unix operating systems
+with precompiled binaries being available for Linux (x86), Mac OS X,
+and eventually other Unix variants. It is possible to build and use
+the Münster Curry compiler on Windows systems using the CygWin
+environment. The only additional software needed for compiling and
+running Curry programs is the Gnu C compiler. Building and installing
+the Münster Curry compiler from its sources requires a Haskell 98
+compiler, too. Building and installing the compiler from source and
+binary distributions can be achieved with the commands
+
+  ./configure
+  make install
+
+in most cases.
+
+A user's guide describing the installation and usage of the Münster
+Curry compiler in detail is available in html, dvi, and pdf formats in
+the doc directory.
+
+Required Software:
+==================
+In order to compile Curry programs the Gnu C compiler is required.
+
+In order to build the Münster Curry compiler from its sources, a
+Haskell 98 compiler (ghc 4.x, ghc 5.x, ghc 6.x, hbc 0.9999.5b and
+nhc98 1.16 or later are known to work) and a modern make command (Gnu
+make, BSD make, and Solaris' make command are known to work) are
+required.
+
+In order to build and use the Münster Curry compiler on Windows
+system, the CygWin environment must be installed.
+
+Installation on Unix systems:
+=============================
+The quick way to install the compiler is to unpack the source or
+precompiled binary distribution and execute
+
+  ./configure
+  make
+
+This will create the commands cyc, cymake, and cyi in the build
+directory (source distribution) or the bin subdirectory (binary
+distributions). The compiler and associated files can optionally be
+installed into the directories /usr/local/bin, /usr/local/lib/curry,
+and /usr/local/man/man1 with the command
+
+  make install
+
+In order to install the compiler to a different directory, e.g.
+$HOME/bin, $HOME/lib/curry, and $HOME/man/man1 instead, use
+
+  ./configure --prefix=$HOME
+  make install
+
+Don't forget to include $HOME/bin in your PATH and eventually
+$HOME/man in MANPATH in latter case.
+
+More options for installation can be found in the user's guide.
+
+Installation on Windows systems:
+================================
+The Münster Curry compiler can be built on Windows systems with CygWin
+-- provided the development packages (make, gcc) are installed -- and
+a working Haskell compiler. Currently, this appears to work only for
+the native Win32 binaries of ghc. The following installation
+instructions are derived from notes kindly provided by Diego Berrueta.
+
+Note: In the following, <CYGWIN> represents the directory where CygWin
+is installed.
+
+1) Install the Win32 version of ghc in <CYGWIN>/usr/local/ghc.
+
+2) Add /usr/local/ghc/bin to the path. Make sure that the executable
+   is found by typing ghc -v in the CygWin console. This should print
+   out a long list configuration and package information for ghc.
+
+3) Unpack the sources of the Münster Curry compiler in some convenient
+   place and change into the curry-0.9.10 directory.
+
+4) Configure, compile, and install the compiler:
+     ./configure
+     make
+     make install
+
+5) Ready to test. Make sure that /usr/local/bin is in your PATH.
+
+Usage:
+======
+The interactive environment is started with the command
+
+  cyi
+
+At startup, commands from the file .cyirc or ~/.cyirc are interpreted
+if these files exist (giving precedence to .cyirc). You can then enter
+goals on the command line and load modules into the environment using
+the :load command. Note that all free variables must be declared
+either in a where clause or by using a let expression as goal.
+
+The Curry compiler is invoked with the command cyc and compiles
+and links Curry source files, C source files, assembler files,
+and object files into an executable. Its invocation is similar
+to that of most other Unix command line compilers. In particular,
+the default name of the executable is a.out and option -c stops
+processing after generating object files. If you use cyc to link
+object files to a program, you must specify the program's main module
+with the -M option.
+
+A make-like build tool is also available and can be invoked with
+the command cymake.
+
+Compiled programs evaluate the goal main from the main module by
+default. A different goal can be selected with the -e option of cyc
+and cymake.
+
+For more information about compiler and runtime options read the
+user's guide.
+
+Extensions:
+===========
+* Declarative debugger
+  The debugger can be invoked with the :debug command in the
+  interactive environment and by compiling a program with the
+  --debug option.
+
+* Disequality Constraints
+  The operator (=/=) :: a -> a -> Success implements disequality
+  constraints between finite data terms. The constraint e1 =/= e2 is
+  satisfied when e1 and e2 reduce to different finite data
+  terms.
+
+* Existentially Quantified Types
+  Existentially quantified types can be introduced with a forall
+  clause in a data constructor declaration, e.g.,
+
+    data Key a = forall b . Key b (b -> a)
+
+  Existentially quantified types allow you to construct lists with
+  heterogeneous elements, e.g.,
+
+    keys = [Key "123" length, Key 2 (+ 1), Key '\ETX' ord]
+
+* Partial applications in equality and disequality constraints
+  It possible to use partial applications in equality and disequality
+  constraints. They are handled just like data constructors. For instance,
+
+    let x free in x =:= id (const (2 * 2))
+
+  will succeed an bind x to const 4. However, equality and
+  disequality constraints between two partial applications are
+  restricted to ground terms. Thus,
+
+    let x free in const x =:= id (const (2 * 2))
+
+  does not bind x to 4, but suspends. This restriction is necessary
+  because this extension is not type safe.
+
+* IO Exceptions
+  Exceptions are mostly like in Haskell, except that the IOError type
+  is currently an alias for String instead of being an abstract data
+  type.
+
+  Exceptions in user code can be thrown by passing an exception
+  message to the function
+    throw :: IOError -> IO a.
+
+  It is possible to catch exceptions with the catch function:
+    catch :: IO a -> (IOError -> IO a) -> IO a
+  The first argument to catch is the action to be executed and the
+  second is the exception handler. When executed catch calls its
+  first argument. If this returns normally, the result of catch is
+  the same as for the first argument. If an IO exception is raised
+  while executing the first argument the exception message is passed
+  to the exception handler and the result of the exception handler is
+  returned from catch.
+
+* Recursive pattern bindings are supported; this allows defining
+  cyclic data structures, e.g.,
+
+    let xs = 0:ys; ys = 1:xs in xs
+
+* Many syntax extensions for compatibility with Haskell. See
+  Sect. 8.1 in the User's Guide.
+
+* Many modules from the Haskell standard library (though necessarily
+  without overloading) and the Foreign Function Interface addendum.
+
+Bugs -- Limitations:
+====================
+* Top-level definitions which shadow imported declarations can only be
+  accessed by their qualified name. Note that a top-level definition
+  in module M can always be referred with a qualified name M.x.
+
+* A hiding clause in an import specification also affects qualified
+  imports. E.g. after the declaration import m1(f), the entity f from
+  m1 is not accessible in the current module, neither with an
+  unqualified reference f nor with a qualified reference m1.f. This
+  behavior is consistent with the (revised) Haskell 98 report.
+
+* The compiler fails or enters an infinite loop for programs which
+  contain certain kinds of cyclic variable definitions, e.g.,
+    bug   = x where x = x
+    cycle = x where x = y; y = x
+
+Contact:
+========
+Wolfgang Lux <wlux@uni-muenster.de>

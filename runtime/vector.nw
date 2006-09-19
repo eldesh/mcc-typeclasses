@@ -1,0 +1,219 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: vector.nw 1910 2006-05-01 09:37:16Z wlux $
+%
+% Copyright (c) 2002-2005, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Array Library}
+The \texttt{Array} library is based on a few C functions which use
+tuples to implement vectors with zero-based indexing. All of these
+functions are in fact actions in the IO monad in order to ensure a
+proper sequentialization of the operations performed on the vector.
+
+We use the string \texttt{"(,)"} as closure name for vectors because
+this will make the printing code treat vectors as tuples.
+
+<<vector.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <limits.h>
+#include "debug.h"
+#include "run.h"
+#include "heap.h"
+#include "stack.h"
+#include "trail.h"
+#include "eval.h"
+#include "threads.h"
+#include "data.h"
+#include "io_monad.h"
+#include "cam.h"
+
+static NodeInfo vector_info = { VECTOR_KIND, 0, 0, 0, "(,)", eval_whnf, 0, 0 };
+static const struct vector_node empty = {
+    &vector_info, vector_node_size(0), { 0 }
+};
+
+@ 
+The action [[newIOVector]] allocates a new vector with a specified
+size and assigns an initial value to every element of the vector.
+
+<<vector.c>>=
+DECLARE_ENTRYPOINT(__newIOVector);
+
+FUNCTION(__newIOVector)
+{
+    long i, n;
+    Node *init, *vec;
+    EXPORT_LABEL(__newIOVector)
+ ENTRY_LABEL(__newIOVector)
+    EVAL_RIGID_INT(__newIOVector);
+    n = long_val(sp[0]);
+    if ( n < 0 )
+	fail_with("newIOVector: negative length (%ld)", n);
+
+    if ( n == 0 )
+	vec = (Node *)&empty;
+    else
+    {
+	CHECK_HEAP(vector_node_size(n));
+	init = sp[1];
+	while ( is_boxed(init) && is_indir_node(init) )
+	    init = init->n.node;
+	vec	      = (Node *)hp;
+	vec->info     = &vector_info;
+	vec->a.length = vector_node_size(n);
+	for ( i = 0; i < n; i++ )
+	    vec->a.args[i] = init;
+	hp += vector_node_size(n);
+    }
+
+    sp += 3;
+    RETURN(vec);
+}
+
+@ 
+The action [[copyIOVector]] creates a copy of a vector. As it does not
+contain any information, the empty vector can be shared and need not
+be copied.
+
+<<vector.c>>=
+DECLARE_ENTRYPOINT(__copyIOVector);
+
+FUNCTION(__copyIOVector)
+{
+    Node *vec;
+    EXPORT_LABEL(__copyIOVector)
+ ENTRY_LABEL(__copyIOVector)
+    EVAL_RIGID_VECTOR(__copyIOVector);
+
+    vec = sp[0];
+    if ( vector_argc(vec) > 0 )
+    {
+	CHECK_HEAP(vec->a.length);
+	vec = (Node *)hp;
+	memcpy(vec, sp[0], sp[0]->a.length * word_size);
+	hp += vec->a.length;
+    }
+
+    sp += 2;
+    RETURN(vec);
+}
+
+@ 
+The action [[readIOVector]] returns the $i$th element of a vector. If
+the index is outside the range of the vector, the program is aborted.
+The element is \emph{not} evaluated to head normal form as the IO
+monad is lazy.
+
+<<vector.c>>=
+DECLARE_ENTRYPOINT(__readIOVector);
+DECLARE_LABEL(__readIOVector_1);
+
+FUNCTION(__readIOVector)
+{
+    Node *aux;
+    EXPORT_LABEL(__readIOVector)
+ ENTRY_LABEL(__readIOVector)
+    EVAL_RIGID_VECTOR(__readIOVector);
+    aux	  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = aux;
+    GOTO(__readIOVector_1);
+}
+
+static
+FUNCTION(__readIOVector_1)
+{
+    long  i;
+    Node *vec, *r;
+ ENTRY_LABEL(__readIOVector_1)
+    EVAL_RIGID_INT(__readIOVector_1);
+
+    i	= long_val(sp[0]);
+    vec = sp[1];
+    sp += 3;
+    if ( i < 0 || (unsigned long)i >= vector_argc(vec) )
+	fail_with("readIOVector: index out range (%ld)", i);
+
+    r = vec->a.args[i];
+    RETURN(r);
+}
+
+@ 
+The action [[writeIOVector]] updates the $i$th element of a vector. As
+for [[readIOVector]], the index must be checked before calling this
+function.
+
+<<vector.c>>=
+DECLARE_ENTRYPOINT(__writeIOVector);
+DECLARE_LABEL(__writeIOVector_1);
+
+FUNCTION(__writeIOVector)
+{
+    Node *aux;
+    EXPORT_LABEL(__writeIOVector)
+ ENTRY_LABEL(__writeIOVector)
+    EVAL_RIGID_VECTOR(__writeIOVector);
+    aux	  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = aux;
+    GOTO(__writeIOVector_1);
+}
+
+static
+FUNCTION(__writeIOVector_1)
+{
+    long i;
+    Node *vec, *node;
+ ENTRY_LABEL(__writeIOVector_1)
+    EVAL_RIGID_INT(__writeIOVector_1);
+
+    i	 = long_val(sp[0]);
+    vec	 = sp[1];
+    node = sp[2];
+    sp	+= 4;
+
+    if ( i < 0 || (unsigned long)i >= vector_argc(vec) )
+	fail_with("writeIOVector: index out range (%ld)", i);
+
+    SAVE(vec, a.args[i]);
+    vec->a.args[i] = node;
+    RETURN(unit);
+}
+
+@ 
+The function [[lengthIOVector]] returns the length of a vector, i.e.,
+the number of elements that can be stored in the vector. This function
+is not a monadic action because the length of a vector does not
+change.
+
+<<vector.c>>=
+DECLARE_ENTRYPOINT(__lengthIOVector);
+
+FUNCTION(__lengthIOVector)
+{
+    int  n;
+    Node *r;
+    EXPORT_LABEL(__lengthIOVector)
+ ENTRY_LABEL(__lengthIOVector)
+    EVAL_RIGID_VECTOR(__lengthIOVector);
+
+    n	= vector_argc(sp[0]);
+    sp += 1;
+
+#if !ONLY_BOXED_OBJECTS
+    if ( !is_large_int(n) )
+	r = mk_unboxed(n);
+    else
+#endif
+    {
+	CHECK_HEAP(int_node_size);
+	r	= (Node *)hp;
+	r->info = &int_info;
+	r->i.i  = n;
+	hp     += int_node_size;
+    }
+    RETURN(r);
+}

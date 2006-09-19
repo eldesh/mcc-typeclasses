@@ -1,0 +1,121 @@
+\documentclass[fleqn,10pt,titlepage]{article}
+\usepackage[latin1]{inputenc}
+\usepackage[bookmarks,colorlinks]{hyperref}
+\usepackage{noweb,a4wide}
+
+\pagestyle{noweb}
+%\noweboptions{}
+
+\title{Implementing Curry}
+\author{Wolfgang Lux \\
+Institut für Wirtschaftsinformatik \\
+Universität Münster \\
+\texttt{wlux@uni-muenster.de} \\
+\href{http://danae.uni-muenster.de/~lux}%
+{\texttt{\normalsize http://danae.uni-muenster.de/\char`\~lux}}
+\and
+With Contributions From: \\
+Raffael Caballero \\
+Dpto. de Sistemas Informáticos y Programación \\
+Universidad Complutense de Madrid \\
+\texttt{rafa@sip.ucm.es}
+}
+
+\reversemarginpar
+\newcommand{\attention}{\mbox{}\marginpar{\raggedleft \large\bfseries ! 
+ $\rightarrow$}}
+\newcommand{\ToDo}[1]{\attention\emph{To do: #1}}
+
+\newcommand{\Dom}{\mathcal{D}om}
+\newcommand{\Ran}{\mathcal{R}an}
+\newcommand{\VRan}{\mathcal{VR}an}
+\newcommand{\Eval}[1]{\mathcal{E}val[\![#1]\!]}
+\newcommand{\Red}{\Rightarrow}
+
+\newcommand{\lb}{\char`\{}
+\newcommand{\rb}{\char`\}}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{.5\baselineskip}
+\setlength{\partopsep}{0pt}
+\setlength{\topsep}{0pt}
+
+\begin{document}
+\maketitle
+\setcounter{page}{2}
+\tableofcontents
+\newpage
+\input{Ident.lhs}
+\input{CurrySyntax.lhs}
+\input{CurryLexer.lhs}
+\input{CurryParser.lhs}
+\input{CurryPP.lhs}
+\input{Base.lhs}
+\input{ImportSyntaxCheck.lhs}
+\input{TypeSyntaxCheck.lhs}
+\input{SyntaxCheck.lhs}
+\input{ExportSyntaxCheck.lhs}
+\input{Renaming.lhs}
+\input{PrecCheck.lhs}
+\input{KindCheck.lhs}
+\input{Types.lhs}
+\input{TypeSubst.lhs}
+\input{TypeTrans.lhs}
+\input{TypeCheck.lhs}
+\input{Typing.lhs}
+\input{Trust.lhs}
+\input{IntfSyntaxCheck.lhs}
+\input{IntfCheck.lhs}
+\input{IntfEquiv.lhs}
+\input{Imports.lhs}
+\input{Exports.lhs}
+\input{Qual.lhs}
+\input{CaseCheck.lhs}
+\input{UnusedCheck.lhs}
+\input{ShadowCheck.lhs}
+\input{OverlapCheck.lhs}
+\input{Desugar.lhs}
+\input{Simplify.lhs}
+\input{Lift.lhs}
+\input{IL.lhs}
+\input{ILPP.lhs}
+\input{ILTrans.lhs}
+\input{ILLift.lhs}
+\input{DTransform.lhs}
+\input{Cam.lhs}
+\input{ILCompile.lhs}
+\input{CCode.lhs}
+\input{CPS.lhs}
+\input{CGen.lhs}
+\input{CElim.lhs}
+\input{Modules.lhs}
+\input{Options.lhs}
+\input{CurryDeps.lhs}
+\input{cam2c.lhs}
+\input{newer.lhs}
+\include{runtime/runtime}
+\input{MachInterp.lhs}
+\input{mach.lhs}
+\appendix
+\input{Error.lhs}
+\input{Combined.lhs}
+\input{Position.lhs}
+\input{Unlit.lhs}
+\input{LexComb.lhs}
+\input{LLParseComb.lhs}
+\input{Env.lhs}
+\input{TopEnv.lhs}
+\input{NestEnv.lhs}
+\input{Subst.lhs}
+\input{Map.lhs}
+\input{Set.lhs}
+\input{SCC.lhs}
+\input{Utils.lhs}
+\input{PathUtils.lhs}
+\input{hbc/IOExts.lhs}
+\input{nhc/IOExts.lhs}
+\input{ghc/IOExts.lhs}
+\nwfilename{}
+\bibliographystyle{alpha}
+\bibliography{curry}
+\end{document}

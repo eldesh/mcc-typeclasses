@@ -1,0 +1,202 @@
+# Makefile for the Curry runtime system
+#
+# $Id: Makefile.in 1904 2006-04-23 17:44:42Z wlux $
+#
+# Copyright (c) 2001-2006, Wolfgang Lux
+# See ../LICENSE for the full license.
+#
+
+@SET_MAKE@
+
+# source directory
+top_srcdir = @top_srcdir@
+srcdir = @srcdir@
+VPATH = @srcdir@
+
+# install directories
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+bindir = @bindir@
+libdir = @libdir@
+
+# compiler definitions
+CC = @CC@
+CPPFLAGS = -I. -I$(srcdir) @CPPFLAGS@
+CFLAGS = @CFLAGS@
+LDFLAGS = @LDFLAGS@
+LDLIBS = @LIBS@
+
+AR = ar
+RANLIB = @RANLIB@
+
+TANGLE = @TANGLE@
+TCFLAGS = -c -L
+WEAVE = @WEAVE@
+WFLAGS = -n -x
+CPIF = @CPIF@
+
+INSTALL = @INSTALL@
+INSTALL_PROGRAM = @INSTALL_PROGRAM@
+INSTALL_DATA = @INSTALL_DATA@
+INSTALL_DIR = @INSTALL_DIR@
+
+# file lists
+rts_H = curry.h \
+	debug.h \
+	run.h \
+	prims.h \
+	heap.h \
+	stack.h \
+	threads.h \
+	spaces.h \
+	trail.h \
+	backtrack.h \
+	search.h \
+	io_monad.h \
+	data.h \
+	eval.h \
+	equal.h \
+	unify.h \
+	disequal.h \
+	cstring.h \
+	files.h \
+	directory.h \
+	print.h \
+	vars.h \
+	main.h \
+	cam.h \
+	trace.h \
+	stats.h
+rts_C = debug.c \
+	run.c \
+	prims.c \
+	heap.c \
+	gc_2space.c \
+	stack.c \
+	threads.c \
+	spaces.c \
+	trail.c \
+	backtrack.c \
+	search.c \
+	io_monad.c \
+	data.c \
+	eval.c \
+	constraints.c \
+	unify.c \
+	disequal.c \
+	equal.c \
+	compare.c \
+	foreign.c \
+	stable.c \
+	cstring.c \
+	files.c \
+	random.c \
+	refs.c \
+	vector.c \
+	show.c \
+	print.c \
+	vars.c \
+	main.c \
+	trace.c \
+	stats.c
+rts_O = $(rts_C:.c=.o)
+rts_LIBS = libcurry.a
+rts_NW = $(rts_H:.h=.nw) $(rts_C:.c=.nw)
+rts_TEX = $(rts_NW:.nw=.tex)
+
+# NB Don't replace @srcdir@ below by $(srcdir), this does not work for
+#    BSD make which does not perform variable expansion in the patterns
+rts_NW_PATH = $(rts_NW:%=@srcdir@/%)
+rts_H_PATH = $(rts_H:%=@srcdir@/%)
+rts_C_PATH = $(rts_C:%=@srcdir@/%)
+rts_TEX_PATH = $(rts_TEX:%=@srcdir@/%)
+
+DISTFILES1 = Makefile.in config.h.in protect-us-in-defn runtime.tex $(rts_NW)
+DISTFILES2 = $(rts_H) $(rts_C) $(rts_TEX)
+DISTFILES1_PATH = $(DISTFILES1:%=@srcdir@/%)
+DISTFILES2_PATH = $(DISTFILES2:%=@srcdir@/%)
+BINDISTFILES = config.h $(rts_H_PATH)
+
+
+# suffix rules
+.SUFFIXES: .h .c .o .a .nw .tex .dvi
+
+.c.o:
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+.nw.h:
+	$(TANGLE) $(TCFLAGS) -R$(@F) $< | $(CPIF) -ne $@
+.nw.c:
+	$(TANGLE) $(TCFLAGS) -R$(@F) $< | $(CPIF) -ne $@
+.nw.tex:
+	cd $(*D) && $(WEAVE) $(WFLAGS) -filter "sed -f protect-us-in-defn" $(<F) > $(@F)
+
+# default target, build the runtime system
+all: rts
+
+# runtime library
+rts: config.h $(rts_H_PATH) $(rts_LIBS)
+
+libcurry.a: $(rts_O)
+	rm -f $@
+	$(AR) cru $@ $(rts_O)
+	$(RANLIB) $@
+
+# build source files from noweb-docu (all other files by standard rules)
+$(srcdir)/config.h.in: $(srcdir)/curry.nw
+	$(TANGLE) $(TCFLAGS) -R$(@F) $(srcdir)/curry.nw | $(CPIF) -ne $@
+
+# build the documentation (TeX files) from the sources
+tex: $(rts_TEX_PATH)
+
+# build the distribution
+# distdir must be set by the caller
+# NB copy DISTFILES1 and DISTFILES2 separately in order to ensure that
+#    DISTFILES2 are younger than DISTFILES1 and won't be tangled/weaved again
+distdir: $(DISTFILES1_PATH) $(DISTFILES2_PATH)
+	cp $(DISTFILES1_PATH) $(distdir)
+	cp $(DISTFILES2_PATH) $(distdir)
+bindistdir: $(BINDISTFILES)	
+	cp $(BINDISTFILES) $(distdir)/lib
+
+# install the binaries
+install: config.h $(rts_H_PATH)
+	$(INSTALL_DIR) $(DESTDIR)$(libdir)
+	$(INSTALL_DIR) $(DESTDIR)$(libdir)/curry
+	for f in config.h $(rts_H_PATH); do \
+		$(INSTALL_DATA) $$f $(DESTDIR)$(libdir)/curry; \
+	done
+
+# automatic reconfiguration
+# NB config.status might not update config.h, touch .config.h.stamp instead
+$(top_srcdir)/configure: $(top_srcdir)/configure.in $(top_srcdir)/aclocal.m4
+	cd $(top_srcdir) && autoconf
+
+.PRECIOUS: Makefile
+Makefile: $(srcdir)/Makefile.in ../config.status
+	cd .. && ./config.status runtime/Makefile
+	$(MAKE) $(MFLAGS) depend
+
+config.h: .config.h.stamp
+.config.h.stamp: $(srcdir)/config.h.in ../config.status
+	cd .. && ./config.status runtime/config.h
+
+.PRECIOUS: ../config.status
+../config.status: $(top_srcdir)/configure
+	cd .. && ./config.status --recheck
+
+# clean up
+mostlyclean:
+	-rm -f $(rts_O) $(rts_LIBS)
+	-rm -f core *.core
+clean: mostlyclean
+distclean: clean
+	-rm -f Makefile config.h .depend .config.h.stamp
+	-rm -f *~ a.out *.bak *.BAK TAGS
+maintainerclean: distclean
+	-rm -f $(rts_H_PATH) $(rts_C_PATH) $(rts_TEX_PATH) $(srcdir)/config.h.in
+
+# dependencies
+depend: config.h $(rts_H_PATH) $(rts_C_PATH)
+	 $(CC) $(CPPFLAGS) -M $(rts_C_PATH) > .depend
+
+include .depend

@@ -1,0 +1,969 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: unify.nw 1899 2006-04-19 10:50:11Z wlux $
+%
+% Copyright (c) 2001-2006, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Unification}\label{sec:unification}
+The equality constraint \texttt{=:=} tries to unify its arguments. The
+auxiliary entry point [[bind_var]] is used to bind a variable to a
+data term that does not contain this variable. Note that [[bind_var]]
+does not return [[Success]], but the node to which the variable was
+bound.
+
+<<unify.h>>=
+DECLARE_ENTRYPOINT(___61__58__61_);
+DECLARE_ENTRYPOINT(bind_var);
+
+#if NO_OCCURS_CHECK
+# define occurs(var,arg,nf)	(*(nf) = is_unboxed(arg), false)
+#else
+extern boolean occurs(Node *, Node *, boolean *);
+#endif
+extern boolean eq_root(Node *, Node *, unsigned int *);
+extern boolean eq_args(Node *, Node *, unsigned int, Node **);
+
+@ 
+<<unify.c>>=
+#include "config.h"
+#include "debug.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "run.h"
+#include "heap.h"
+#include "stack.h"
+#include "eval.h"
+#include "threads.h"
+#include "spaces.h"
+#include "trail.h"
+#include "data.h"
+#include "equal.h"
+#include "unify.h"
+#include "cam.h"
+#include "trace.h"
+
+#define pair_cons_node_size closure_node_size(3)
+static DEFINE_DATA(pair_cons, ",:", CONS_TAG, 3);
+
+DECLARE_CONST(__Prelude__True);
+
+DECLARE_LABEL(___61__58__61__1);
+DECLARE_LABEL(___61__58__61__2);
+DECLARE_LABEL(unify_var);
+DECLARE_LABEL(unify_var_1);
+DECLARE_LABEL(unify_args);
+DECLARE_LABEL(unify_args_1);
+DECLARE_LABEL(unify_args_2);
+DECLARE_LABEL(unify_papp_args);
+DECLARE_LABEL(unify_papp_args_1);
+
+FUNCTION(___61__58__61_)
+{
+    EXPORT_LABEL(___61__58__61_)
+ ENTRY_LABEL(___61__58__61_)
+    TRACE_FUN("=:=", 2);
+    GOTO(___61__58__61__1);
+}
+
+static
+FUNCTION(___61__58__61__1)
+{
+    Node *aux;
+ ENTRY_LABEL(___61__58__61__1)
+    EVAL_FLEX_POLY(___61__58__61__1);
+    aux	  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = aux;
+    GOTO(___61__58__61__2);
+}
+
+static
+FUNCTION(___61__58__61__2)
+{
+    Node *arg1, *arg2;
+ ENTRY_LABEL(___61__58__61__2)
+    EVAL_FLEX_POLY(___61__58__61__2);
+    arg1 = sp[1];
+    arg2 = sp[0];
+
+    while ( is_boxed(arg1) && is_indir_node(arg1) )
+	arg1 = arg1->n.node;
+    if ( is_boxed(arg1) && is_variable_node(arg1) )
+    {
+	/* check for trivial unification */
+	if ( arg1 != arg2 )
+	{
+	    sp[0] = arg1;
+	    sp[1] = arg2;
+	    GOTO(unify_var);
+	}
+    }
+    else if ( is_boxed(arg2) && is_variable_node(arg2) )
+    {
+	sp[0] = arg2;
+	sp[1] = arg1;
+	GOTO(unify_var);
+    }
+    else
+    {
+	unsigned int n = 0;
+
+	if ( !eq_root(arg1, arg2, &n) )
+	    FAIL();
+	else if ( n > 0 )
+	{
+	    boolean exist_type;
+	    Node    *arglist;
+
+	    /* NB assign exist_type before calling eq_args because a
+	     *    garbage collection in eq_args will invalidate arg1 */
+	    exist_type = is_papp_node(arg1)
+		|| (is_capp_node(arg1) && node_tag(arg1) < 0);
+	    arglist = nil;
+	    if ( !eq_args(arg1, arg2, n, &arglist) )
+		FAIL();
+
+	    if ( arglist != nil )
+	    {
+		*++sp = arglist;
+		GOTO(exist_type ? unify_papp_args : unify_args);
+	    }
+	}
+    }
+
+    sp += 2;
+    RETURN(Success);
+}
+
+@ 
+The implementation of strict equality is based on the two functions
+[[eq_root]] and [[eq_args]]. The function [[eq_roots]] computes
+whether the root nodes of two terms are equal. The function
+[[eq_args]] constructs a list of argument pairs from the two nodes,
+for which equality still needs to be checked.
+
+In general, two nodes are considered equal if they have the same info
+pointer. In addition, for primitive nodes representing characters and
+numbers, their values must match. Abstract nodes are considered equal
+only if they are physically equal. A special case is needed for
+tuples and their partial applications because the compiler allocates
+(private) info pointers for tuples in every module.
+
+\label{unsafe-equality}
+Note that [[eq_root]] is capable of comparing terms of different
+types. This is due to the fact that polymorphic equality is not type
+safe when applied to partial applications or data constructors with
+existentially quantified types. For instance, the expression
+\begin{verbatim}
+  flip const 1 =:= flip const Nothing
+\end{verbatim}
+is accepted by the type checker because \texttt{flip const 1} and
+\texttt{flip const Nothing} have the same (polymorphic) type. Despite
+this unsoundness, we support equality for partial applications because
+it allows returning functional values through logic variables.
+
+<<unify.c>>=
+boolean
+eq_root(Node *arg1, Node *arg2, unsigned int *argc)
+{
+    boolean eq;
+    double  d, e;
+
+    *argc = 0;
+
+#if !ONLY_BOXED_OBJECTS
+    if ( is_unboxed(arg1) )
+    {
+	if ( is_unboxed(arg2) )
+	    eq = arg1 == arg2;
+	else
+	    eq = is_int_node(arg2) && unboxed_val(arg1) == arg2->i.i;
+    }
+    else if ( is_unboxed(arg2) )
+    {
+	eq = is_int_node(arg1) && arg1->i.i == unboxed_val(arg2);
+    }
+    else
+#endif
+    if ( arg1->info == arg2->info )
+    {
+	switch ( node_kind(arg1) )
+	{
+	case CHAR_KIND:
+	    eq = arg1->ch.ch == arg2->ch.ch;
+	    break;
+        case INT_KIND:
+	    eq = arg1->i.i == arg2->i.i;
+	    break;
+        case FLOAT_KIND:
+	    get_double_val(d, arg1->f);
+	    get_double_val(e, arg2->f);
+	    eq = d == e;
+            break;
+	case PTR_KIND:
+	    eq = arg1->p.ptr == arg2->p.ptr;
+	    break;
+	case FOREIGN_PTR_KIND:
+	    eq = arg1->fp.ptr == arg2->fp.ptr;
+	    break;
+	case VECTOR_KIND:
+	    eq = arg1->a.length == arg2->a.length;
+	    if ( eq )
+		*argc = vector_argc(arg1);
+	    break;
+	case SEARCH_CONT_KIND:
+	case ABSTRACT_KIND:
+	    eq = arg1 == arg2;
+	    break;
+	case CAPP_KIND:
+	case PAPP_KIND:
+	    eq	  = true;
+	    *argc = closure_argc(arg1);
+	    break;
+
+	default:
+	    invalid_arg("eq_root", node_kind(arg1));
+        }
+    }
+    else if ( is_tuple(arg1->info) && is_tuple(arg2->info)
+	      && arg1->info->kind == arg2->info->kind
+	      && arg1->info->tag == arg2->info->tag
+	      && arg1->info->length == arg2->info->length )
+    {
+	eq = true;
+	*argc = closure_argc(arg1);
+    }
+    else
+	eq = false;
+
+    return eq;
+}
+
+@ 
+When two terms have the same root, the arguments need to be compared
+in order to decide equality. The function [[eq_args]] constructs a
+list of argument pairs for a pair of data constructor applications or
+partial applications that have the same root. The function already
+checks for trivial equalities itself and returns [[true]] if both
+arguments are possibly equal and [[false]] otherwise.
+
+We consider an equality trivial here if both corresponding arguments
+are ground atoms. In addition, if both arguments are data constructor
+applications with different roots, [[eq_args]] returns [[false]]
+immediately.
+
+<<unify.c>>=
+boolean
+eq_args(Node *arg1, Node *arg2, unsigned int n, Node **arglist)
+{
+    boolean	 is_vect;
+    unsigned int i;
+    double	 d, e;
+    Node	 *x, *y, *next, **argp1, **argp2;
+
+    *arglist = nil;
+    if ( n == 0 )
+	return true;
+
+    BEGIN_LOCAL_ROOTS2(arg1, arg2)
+    CHECK_HEAP(n * pair_cons_node_size);
+    END_LOCAL_ROOTS
+
+    is_vect = is_vector_node(arg1);
+    argp1   = (is_vect ? arg1->a.args : arg1->c.args) + n;
+    argp2   = (is_vect ? arg2->a.args : arg2->c.args) + n;
+
+    for ( i = n; i-- > 0; )
+    {
+	x = *--argp1;
+	y = *--argp2;
+	while ( is_boxed(x) && is_indir_node(x) )
+	    x = x->n.node;
+	while ( is_boxed(y) && is_indir_node(y) )
+	    y = y->n.node;
+
+#if !ONLY_BOXED_OBJECTS
+	if ( is_unboxed(x) )
+	{
+	    if ( is_unboxed(y) )
+	    {
+		if ( x != y )
+		    return false;
+		continue;
+	    }
+	    else if ( is_int_node(y) )
+	    {
+		if ( unboxed_val(x) != y->i.i )
+		    return false;
+		continue;
+	    }
+	}
+	else if ( is_unboxed(y) )
+	{
+	    if ( is_int_node(x) )
+	    {
+		if ( x->i.i != unboxed_val(y) )
+		    return false;
+		continue;
+	    }
+	}
+	else
+#endif
+	{
+	    switch ( node_kind(x) )
+	    {
+	    case CAPP_KIND:
+		if ( is_capp_node(y) )
+		{
+		    if ( x->info != y->info
+			 && (!is_tuple(x->info) || !is_tuple(y->info)
+			     || x->info->length != y->info->length) )
+			return false;
+		    if ( closure_argc(x) == 0 )
+			continue;
+		}
+		break;
+	    case PAPP_KIND:
+		if ( is_papp_node(y) )
+		{
+		    if ( x->info != y->info
+			 && (!is_tuple(x->info) || !is_tuple(y->info)
+			     || x->info->tag != y->info->tag
+			     || x->info->length != y->info->length) )
+			return false;
+		    if ( closure_argc(x) == 0 )
+			continue;
+		}
+		break;
+	    case LVAR_KIND:
+		if ( x == y )
+		    continue;
+		break;
+	    case LAZY_KIND:
+		break;
+	    case VECTOR_KIND:
+		if ( is_vector_node(y) )
+		{
+		    if ( x->info != y->info || x->a.length != y->a.length )
+			return false;
+		    if ( vector_argc(x) == 0 )
+			continue;
+		}
+		break;
+	    case CHAR_KIND:
+		if ( is_char_node(y) )
+		{
+		    if ( x->ch.ch != y->ch.ch )
+			return false;
+		    continue;
+		}
+		break;
+	    case INT_KIND:
+		if ( is_int_node(y) )
+		{
+		    if ( x->i.i != y->i.i )
+			return false;
+		    continue;
+		}
+		break;
+	    case FLOAT_KIND:
+		if ( is_float_node(y) )
+		{
+		    get_double_val(d, x->f);
+		    get_double_val(e, y->f);
+		    if ( d != e )
+			return false;
+		    continue;
+		}
+		break;
+	    case PTR_KIND:
+		if ( is_ptr_node(y) )
+		{
+		    if ( x->p.ptr != y->p.ptr )
+			return false;
+		    continue;
+		}
+		break;
+	    case FOREIGN_PTR_KIND:
+		if ( is_foreign_ptr_node(y) )
+		{
+		    if ( x->fp.ptr != y->fp.ptr )
+			return false;
+		    continue;
+		}
+		break;
+	    case ABSTRACT_KIND:
+		if ( is_abstract_node(y) )
+		{
+		    if ( x != y )
+			return false;
+		    continue;
+		}
+		break;
+	    case SEARCH_CONT_KIND:
+		if ( is_search_cont_node(y) )
+		{
+		    if ( x != y )
+			return false;
+		    continue;
+		}
+		break;
+	    default:
+		invalid_arg("eq_args", node_kind(x));
+	    }
+	}
+
+	next		= (Node *)hp;
+	next->info	= &pair_cons_info;
+	next->c.args[0] = x;
+	next->c.args[1] = y;
+	next->c.args[2] = *arglist;
+	*arglist	= next;
+	hp	       += pair_cons_node_size;
+    }
+
+    return true;
+}
+
+@
+The unification of the arguments of data terms proceeds
+concurrently. Instead of calling the code for the predefined operator
+[[&]], we handle the concurrent evaluation ourselves. Thus, we can
+make use of the fact that the unification always returns the value
+[[Success]] and can never return an unbound variable.
+
+<<unify.c>>=
+static
+FUNCTION(unify_args)
+{
+    Node *susp, *arglist;
+ ENTRY_LABEL(unify_args)
+    CHECK_STACK(6);
+    CHECK_HEAP(queueMe_node_size);
+
+    arglist = sp[0];
+    ASSERT(arglist->info == &pair_cons_info);
+    if ( arglist->c.args[2] == nil )
+    {
+	sp   -= 1;
+	sp[0] = arglist->c.args[0];
+	sp[1] = arglist->c.args[1];
+	GOTO(___61__58__61_);
+    }
+
+    susp	= (Node *)hp;
+    susp->info	= queueMe_info_table;
+    susp->q.spc	= ss;
+    susp->q.wq	= 0;
+    hp	       += queueMe_node_size;
+
+    sp	 -= 6;
+    sp[0] = arglist->c.args[0];
+    sp[1] = arglist->c.args[1];
+    sp[2] = (Node *)update;
+    sp[3] = susp;
+    sp[4] = (Node *)unify_args_1;
+    sp[5] = susp;
+    sp[6] = arglist->c.args[2];
+    start_thread(5);
+    GOTO(___61__58__61_);
+}
+
+static
+FUNCTION(unify_args_1)
+{
+    Node *r;
+ ENTRY_LABEL(unify_args_1)
+    for ( r = sp[0]; node_kind(r) == INDIR_KIND; r = r->n.node )
+	;
+
+    if ( node_kind(r) == CAPP_KIND )
+	sp++;
+    else
+    {
+	ASSERT(node_kind(r) == LAZY_KIND && node_tag(r) == QUEUEME_TAG);
+	CHECK_STACK1();
+	sp   -= 1;
+	sp[0] = sp[2];
+	sp[1] = (Node *)unify_args_2;
+	sp[2] = r;
+    }
+    GOTO(unify_args);
+}
+
+static
+FUNCTION(unify_args_2)
+{
+    Node *r;
+ ENTRY_LABEL(unify_args_2)
+    ASSERT(node_kind(sp[0]) == CAPP_KIND);
+    for ( r = sp[1]; node_kind(r) == INDIR_KIND; r = r->n.node )
+	;
+
+    if ( node_kind(r) == LAZY_KIND && node_tag(r) == QUEUEME_TAG )
+    {
+	*++sp = r;
+	GOTO(r->info->eval);
+    }
+    ASSERT(node_kind(sp[0]) == CAPP_KIND);
+
+    sp += 2;
+    RETURN(r);
+}
+
+@ 
+As explained above (p.~\pageref{unsafe-equality}), computing the
+equality of two partial applications and of two data constructors with
+existentially quantified types, respectively, is not type safe. In
+order to prevent ill-typed nodes from escaping the scope of an
+equality constraint, e.g., by using a function \texttt{cast x | flip
+const x =:= flip const y = y where y free} with type \texttt{a -> b},
+we restrict equality constraints between partial applications and
+between existentially quantified data constructors to ground terms.
+This is implemented by applying the \texttt{(==)} primitive to each
+pair of arguments and checking that all of these applications reduce
+to \texttt{True}.
+
+\ToDo{Using \texttt{(==)} and checking argument pairs sequentially is
+probably too restrictive. Provide a more general solution by defining
+and using a rigid variant of \texttt{(=:=)}.}
+
+<<unify.c>>=
+static
+FUNCTION(unify_papp_args)
+{
+    Node *arg1, *arg2, *arglist;
+ ENTRY_LABEL(unify_papp_args)
+    ASSERT(sp[0]->info == INFO(pair_cons));
+    arglist = sp[0];
+    arg1    = arglist->c.args[0];
+    arg2    = arglist->c.args[1];
+    arglist = arglist->c.args[2];
+
+    CHECK_STACK(3);
+    sp	 -= 3;
+    sp[0] = arg1;
+    sp[1] = arg2;
+    sp[2] = (Node *)unify_papp_args_1;
+    sp[3] = arglist;
+    GOTO(___61__61_);
+}
+
+static
+FUNCTION(unify_papp_args_1)
+{
+ ENTRY_LABEL(unify_papp_args_1)
+    if ( *sp++ != CONST(__Prelude__True) )
+	FAIL();
+
+    if ( sp[0] == nil )
+    {
+	sp += 1;
+	RETURN(Success);
+    }
+    GOTO(unify_papp_args);
+}
+
+@
+If a variable is unified with a data term, we have to perform an
+occurs check in order to ensure that the term remains finite. The
+check can be disabled with the \texttt{--disable-occurs-check}
+configuration option, and is performed by the [[occurs]] function
+below. As a side effect, [[occurs]] also checks for unevaluated nodes
+in the data term and sets the flag whose address is given by the
+argument [[nf]] to [[false]]. Thus, by setting this flag to [[true]]
+initially, it is possible to check whether the data term is in normal
+form. This information is used in order to bind the variable directly
+to the data term and avoid evaluating it redundantly to normal form
+again. \emph{Beware that the value of [[nf]] is valid only if the
+variable does not occur in the data term.}
+
+As in [[eq_args]], we perform trivial unifications directly in
+[[unify_var]] and thus can avoid creating redundant threads and
+variables. In fact, the code below works the other way around. First,
+a flat copy of the data term is created and then those arguments whose
+unification is not trivial are replaced by fresh variables.
+
+<<unify.c>>=
+#if !NO_OCCURS_CHECK
+boolean
+occurs(Node *var, Node *arg, boolean *nf)
+{
+    unsigned i, argc;
+    Node     **argp;
+
+    while ( is_boxed(arg) )
+    {
+	if ( arg == var )
+	    return true;
+
+	argc = 0;
+	argp = 0;
+	switch ( node_kind(arg) )
+	{
+	case CAPP_KIND:
+	case PAPP_KIND:
+	    argc = closure_argc(arg);
+	    argp = arg->c.args;
+	    break;
+	case LAZY_KIND:
+	    *nf = false;
+	    break;
+	case INDIR_KIND:
+	    arg = arg->n.node;
+	    continue;
+	case VECTOR_KIND:
+	    argc = vector_argc(arg);
+	    argp = arg->a.args;
+	    break;
+	}
+
+	for ( i = 0; i < argc; i++ )
+	    if ( occurs(var, *argp++, nf) )
+		return true;
+	break;
+    }
+    return false;
+}
+#endif /* !NO_OCCURS_CHECK */
+
+static
+FUNCTION(unify_var)
+{
+    boolean	 nf, is_vect;
+    unsigned int i, n, sz;
+    Node	 *var, *arg, *next, *arglist, **argp;
+ ENTRY_LABEL(unify_var)
+    if ( !is_local_space(sp[0]->v.spc) )
+    {
+	if ( is_boxed(sp[1]) && is_variable_node(sp[1])
+	     && is_local_space(sp[1]->v.spc) )
+	{
+	    next  = sp[0];
+	    sp[0] = sp[1];
+	    sp[1] = next;
+	}
+	else
+	{
+	    CHECK_STACK1();
+	    sp	 -= 1;
+	    sp[0] = sp[1];
+	    sp[1] = (Node *)___61__58__61__1;
+	    GOTO(sync_var);
+	}
+    }
+
+    nf	= true;
+    var = sp[0];
+    arg = sp[1];
+    if ( occurs(var, arg, &nf) )
+	FAIL();
+
+    arglist = nil;
+    if ( !nf )
+    {
+	switch ( node_kind(arg) )
+	{
+	case VECTOR_KIND:
+	    is_vect = true;
+	    n	    = vector_argc(arg);
+	    sz	    = arg->a.length;
+	    break;
+	case CAPP_KIND:
+	case PAPP_KIND:
+	    is_vect = false;
+	    n	    = closure_argc(arg);
+	    sz	    = arg->info->length;
+	    break;
+	default:
+	    is_vect = false;
+	    n	    = 0;
+	    sz	    = 0;
+	    break;
+	}
+
+	if ( n > 0 )
+	{
+	    CHECK_HEAP(sz + n * (variable_node_size + pair_cons_node_size));
+	    memcpy(hp, sp[1], sz * word_size);
+	    sp[1] = (Node *)hp;
+	    hp	 += sz;
+
+	    argp  = is_vect ? sp[1]->a.args : sp[1]->c.args;
+	    argp += n;
+	    for ( i = n; i-- > 0; )
+	    {
+		arg = *--argp;
+		while ( is_boxed(arg) && is_indir_node(arg) )
+		    arg = arg->n.node;
+		if ( is_boxed(arg) &&
+		     ((is_capp_node(arg) && closure_argc(arg) > 0) ||
+		      (is_papp_node(arg) && closure_argc(arg) > 0) ||
+		      (is_vector_node(arg) && vector_argc(arg) > 0) ||
+		      is_lazy_node(arg)) )
+		{
+		    var	= *argp	    = (Node *)hp;
+		    var->info	    = variable_info_table;
+		    var->v.spc	    = ss;
+		    var->v.wq	    = 0;
+		    var->v.cstrs    = 0;
+		    hp		   += variable_node_size;
+
+		    next	    = (Node *)hp;
+		    next->info	    = &pair_cons_info;
+		    next->c.args[0] = var;
+		    next->c.args[1] = arg;
+		    next->c.args[2] = arglist;
+		    hp		   += pair_cons_node_size;
+
+		    arglist	    = next;
+		}
+		else
+		    *argp = arg;
+	    }
+	}
+    }
+
+    /* bind the variable */
+    CHECK_STACK(2);
+    var	  = sp[0];
+    arg	  = sp[1];
+    sp	 -= 2;
+    sp[0] = arg;
+    sp[1] = var;
+    sp[2] = (Node *)unify_var_1;
+    sp[3] = arglist;
+    GOTO(bind_var);
+}
+
+static
+FUNCTION(unify_var_1)
+{
+    Node *arglist;
+ ENTRY_LABEL(unify_var_1)
+    arglist = sp[1];
+    if ( arglist == nil )
+    {
+	sp += 2;
+	RETURN(Success);
+    }
+    sp += 1;
+    GOTO(unify_args);
+}
+
+@
+When a variable is bound, the runtime system first has to check that
+the binding does not conflict with any of the constraints imposed on
+the variable. This is checked simply by calling the disequality
+primitive for the bound value and each constraint in turn. The
+variable node itself is overwritten with an indirection to the bound
+value. As for updating a suspended application node, all threads that
+have been delayed in a rigid pattern matching for the variable are
+woken again. In contrast to suspended applications, these threads are
+run before continuing the current thread.
+
+If a variable is bound to another variable, no thread is actually
+woken. Instead, the wait queues of both variables are concatenated. We
+must also check the constraints of the other variable in this case.
+As we cannot update a non-local variable, the current search is
+suspended if the other variable is a non-local variable with
+constraints or waiting threads.
+
+In general, the [[bind_var]] code is called immediately from a
+flexible pattern match or from the unification code. However, when
+[[bind_var]] is called after resuming a search continuation, the
+variable may be instantiated already. This may happen if a search
+strategy applies the search continuation to some non-variable term in
+order to restrict the search space, as in the following example:
+\begin{verbatim}
+  main = concatMap try $ map (`inject` nonNull) $ try goal 
+  goal xs = length xs =:= 1
+  nonNull (_:_) = success
+\end{verbatim}
+In this case, [[bind_var]] is implicitly transformed into a
+unification between the two values.
+
+<<unify.c>>=
+DECLARE_LABEL(check_constraints);
+DECLARE_LABEL(check_constraints_1);
+DECLARE_LABEL(wake);
+DECLARE_LABEL(bind_var_1);
+
+FUNCTION(bind_var)
+{
+    boolean	is_var;
+    Node	*var, *node;
+    Constraint	*cstrs;
+    ThreadQueue	wq;
+    EXPORT_LABEL(bind_var)
+ ENTRY_LABEL(bind_var)
+    node = sp[0];
+    var	 = sp[1];
+
+    if ( !is_boxed(var) || !is_variable_node(var)
+	 || !is_local_space(var->v.spc) )
+    {
+	CHECK_STACK(2);
+	sp   -= 2;
+	sp[0] = var;
+	sp[1] = node;
+	sp[2] = (Node *)bind_var_1;
+	sp[3] = node;
+	GOTO(___61__58__61_);
+    }
+
+    cstrs  = var->v.cstrs;
+    wq	   = var->v.wq;
+    is_var = false;
+    for (;;)
+    {
+	if ( is_boxed(node) )
+	    switch ( node->info->kind )
+	    {
+	    case INDIR_KIND:
+		node = node->n.node;
+		continue;
+	    case LVAR_KIND:
+		if ( !is_local_space(node->v.spc) && (wq || cstrs) )
+		{
+		    CHECK_STACK1();
+		    sp	 -= 1;
+		    sp[0] = node;
+		    sp[1] = (Node *)bind_var;
+		    GOTO(sync_var);
+		}
+		is_var = true;
+		break;
+	    }
+	break;
+    }
+
+    /* update the variable */
+    TRACE(("%I %N = %N\n", var, node));
+#if !COPY_SEARCH_SPACE
+    if ( (word *)var < hlim )
+    {
+	if ( (word *)&var->v.wq == (word *)&var->n.node )
+	{
+	    if ( (word *)var->v.wq < hlim )
+		DO_SAVE(var, v.wq);
+	}
+	else if ( (word *)&var->v.cstrs == (word *)&var->n.node )
+	{
+	    if ( (word *)var->v.cstrs < hlim )
+		DO_SAVE(var, v.cstrs);
+	}
+	var->info++;
+    }
+    else
+#endif
+	var->info = &indir_info;
+    var->n.node = node;
+
+    /* handle the wait queue of the variable */
+    sp += 2;
+    if ( wq )
+    {
+	if ( is_var )
+	{
+	    SAVE(node, v.wq);
+	    node->v.wq = join_queues(wq, node->v.wq);
+	}
+	else
+	{
+	    sp	 -= 2;
+	    sp[0] = (Node *)wake;
+	    sp[1] = (Node *)wq;
+	}
+    }
+
+    /* if there are any constraints on the variable re-check them */
+    if ( cstrs )
+    {
+        CHECK_STACK(2);
+	sp   -= 2;
+        sp[0] = (Node *)check_constraints;
+        sp[1] = (Node *)cstrs;
+    }
+
+    /* we need to check the constraints of the other variable, too */
+    if ( is_var && is_local_space(node->v.spc) && node->v.cstrs )
+    {
+        CHECK_STACK(2);
+	sp   -= 2;
+        sp[0] = (Node *)check_constraints;
+        sp[1] = (Node *)node->v.cstrs;
+	SAVE(node, v.cstrs);
+	node->v.cstrs = 0;
+    }
+
+    /* continue evaluation */
+    RETURN(node);
+}
+
+static
+FUNCTION(bind_var_1)
+{
+    Node *node;
+ ENTRY_LABEL(bind_var_1)
+    node = sp[1];
+    sp	+= 2;
+    RETURN(node);
+}
+
+static
+FUNCTION(check_constraints)
+{
+    Node       *node;
+    Constraint *cstrs;
+ ENTRY_LABEL(check_constraints)
+    node  = sp[0];
+    cstrs = (Constraint *)sp[1];
+    ASSERT(cstrs != 0);
+
+    CHECK_STACK(3);
+    sp	 -= 3;
+    sp[0] = node;
+    sp[1] = (Node *)cstrs;
+    sp[2] = (Node *)check_constraints_1;
+    sp[4] = (Node *)cstrs->cstrs;
+    GOTO(cstrs->info->eval);
+}
+
+static
+FUNCTION(check_constraints_1)
+{
+    Node       *node;
+    Constraint *cstrs;
+ ENTRY_LABEL(check_constraints_1)
+    /* XXX check for suspended constraints? */
+    cstrs = (Constraint *)sp[2];
+    if ( cstrs )
+    {
+	sp += 1;
+	GOTO(check_constraints);
+    }
+
+    node = sp[1];
+    sp	+= 3;
+    RETURN(node);
+}
+
+static
+FUNCTION(wake)
+{
+    Node	*node;
+    Label	ret_ip;
+    ThreadQueue	wq;
+ ENTRY_LABEL(wake)
+    /* handle the wait queue of the variable */
+    node   = sp[0];
+    wq	   = (ThreadQueue)sp[1];
+    ret_ip = (Label)sp[2];
+    sp	  += 2;
+    sp[0]  = node;
+
+    /* wake all threads from the queue */
+    GOTO(activate_threads(wq, ret_ip));
+}

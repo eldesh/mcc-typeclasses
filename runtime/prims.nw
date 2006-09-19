@@ -1,0 +1,302 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: prims.nw 1901 2006-04-19 18:16:24Z wlux $
+%
+% Copyright (c) 2004-2005, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Primitive Operations}
+This file provides the definitions of a few arithmetic primitives and
+related functions. Many of these functions are so simple that they are
+defined as macros in order to avoid the cost of an additional function
+call. The primitives for the operators \texttt{div}, \texttt{mod},
+\texttt{quot}, and \texttt{rem} are implemented as in Haskell, i.e.,
+\begin{displaymath}
+  \begin{array}{r@{\null+\null}c@{\null=\null}l}
+    x\,\texttt{`div`}\,y & x\,\texttt{`mod`}\,y & x \\
+    x\,\texttt{`quot`}\,y & x\,\texttt{`rem`}\,y & x
+  \end{array}
+\end{displaymath}
+In addition, the quotient is truncated toward negative infinity for
+\texttt{div} and toward zero for \texttt{quot}.
+
+Unfortunately, the ANSI C standard deliberately leaves it unspecified
+whether the operators \texttt{/} and \texttt{\%} truncate the quotient
+toward zero or negative infinity. Our implementation of
+[[primDivInt]], [[primModInt]], [[primQuotInt]], and [[primRemInt]] is
+designed to work on both kinds of machines, correcting the quotient
+and remainder as necessary. We use the fact that the remainder must
+have the same sign as the dividend when truncating toward zero, and
+the same sign as the divisor when truncating toward negative
+infinity.\footnote{One might think of using the \texttt{ldiv} function
+  instead of \texttt{/} and \texttt{\%} because the ANSI C standard
+  requires it to truncate the quotient toward zero. However, a code
+  inspection of several popular \texttt{ldiv} implementations reveals
+  that they do not get things right. For instance, the \texttt{ldiv}
+  implementation used by many BSD derivatives -- including FreeBSD,
+  NetBSD, and Darwin -- fails to correct the quotient and remainder on
+  machines truncating toward negative infinity when the dividend is
+  negative and the divisor is positive. E.g., these implementations
+  would return \texttt{-3} as quotient and \texttt{2} as remainder for
+  \texttt{ldiv(-7,3)}. In some versions of the Gnu C library, e.g.,
+  \url{ftp://sources.redhat.com/pub/newlib/newlib-1.13.tar.gz}, this
+  error was recognized, but a wrong correction is applied. In
+  particular these \texttt{ldiv} implementations would return quotient
+  \texttt{-4} and remainder \texttt{5} for \texttt{ldiv(-7,3)}.}
+
+\ToDo{Determine the semantics of \texttt{/} and \texttt{\%} during
+  configuration and avoid the redundant correction for either
+  \texttt{div} and \texttt{mod} or \texttt{quot} and \texttt{rem}.}
+
+<<prims.h>>=
+#define primMinInt() LONG_MIN
+#define primMaxInt() LONG_MAX
+      
+#define primAddInt(x,y) (x + y)
+#define primSubInt(x,y) (x - y)
+#define primMulInt(x,y) (x * y)
+static inline long
+primDivInt(long x, long y)
+{
+    long q = x / y, r = x % y;
+    return (y > 0 && r < 0) || (y < 0 && r > 0) ? q - 1 : q;
+}
+static inline long
+primModInt(long x, long y)
+{
+    long r = x % y;
+    return (y > 0 && r < 0) || (y < 0 && r > 0) ? r + y : r;
+}
+static inline long
+primQuotInt(long x, long y)
+{
+    long q = x / y, r = x % y;
+    return (x < 0 && r > 0) || (x > 0 && r < 0) ? q + 1 : q;
+}
+static inline long
+primRemInt(long x, long y)
+{
+    long r = x % y;
+    return (x < 0 && r > 0) || (x > 0 && r < 0) ? r - y : r;
+}
+
+@ 
+The primitive operations from the \texttt{Bits} library are also
+implemented as macros except for the shift and rotate operations.
+Note that the shift count of the C operators [[<<]] and [[>>]] is
+usually interpreted modulo some small multiple of the word size (e.g.,
+modulo 64 on the PowerPC architecture in 32-bit mode).
+
+<<prims.h>>=
+#define primAndInt(x,y) ((x)&(y))
+#define primOrInt(x,y)  ((x)|(y))
+#define primXorInt(x,y) ((x)^(y))
+#define primNotInt(x)   (~(x))
+
+#define primBitSizeInt()  (CHAR_BIT*sizeof(long))
+
+extern long primShiftLInt(long, long);
+extern long primShiftRInt(long, long);
+extern long primRotateLInt(long, long);
+extern long primRotateRInt(long, long);
+
+@ 
+<<prims.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <limits.h>
+#include <math.h>
+#include "prims.h"
+#include "run.h"
+#include "heap.h"
+#include "io_monad.h"
+
+long
+primShiftLInt(long x, long n)
+{
+    if ( n < 0 )
+	return primShiftRInt(x, -n);
+    else if ( (unsigned long)n >= primBitSizeInt() )
+	return 0;
+    else
+	return x << n;
+}
+
+long
+primShiftRInt(long x, long n)
+{
+    if ( n < 0 )
+	return primShiftLInt(x, -n);
+    else if ( (unsigned long)n >= primBitSizeInt() )
+	return x >= 0 ? 0 : -1;
+    else
+	return x >> n;
+}
+
+long
+primRotateLInt(long x, long n)
+{
+    if ( n == 0 || x == 0 || x == -1 )
+	return x;
+    else if ( n > 0 )
+    {
+	n %= primBitSizeInt();
+	return ((unsigned long)x @<< n)
+	    | ((unsigned long)x >> (primBitSizeInt() - n));
+    }
+    else
+	return primRotateRInt(x, -n);
+}
+
+long
+primRotateRInt(long x, long n)
+{
+    if ( n == 0 || x == 0 || x == -1 )
+	return x;
+    else if ( n > 0 )
+    {
+	n %= primBitSizeInt();
+	return ((unsigned long)x >> n)
+	    | ((unsigned long)x << (primBitSizeInt() - n));
+    }
+    else
+	return primRotateLInt(x, -n);
+}
+
+@
+The arithmetic operations on floating-point numbers and the conversion
+of integer numbers into floating point numbers and vice versa are also
+trivial except for rounding, which cannot be defined easily as a
+macro.
+
+<<prims.h>>=
+#define primAddFloat(x,y) (x + y)
+#define primSubFloat(x,y) (x - y)
+#define primMulFloat(x,y) (x * y)
+#define primDivFloat(x,y) (x / y)
+
+#define primFloat(x)  (x)
+#define primTrunc(x) ((long)(x))
+extern long primRound(double);
+
+@ 
+<<prims.c>>=
+long
+primRound(double d)
+{
+    double frac;
+
+#define odd(n) (n & 0x01)
+    frac = modf(d, &d);
+    if ( frac > 0.5 || (frac == 0.5 && odd((long)d)) )
+	d += 1.0;
+    else if ( frac < -0.5 || (frac == -0.5 && odd((long)d)) )
+	d -= 1.0;
+#undef odd
+    return (long)d;
+}
+
+@ 
+Conversions between characters and integer numbers are implemented
+here, too. The function [[primChr]] reports an error when it is
+applied to a code outside of the Unicode character set range.
+
+<<prims.h>>=
+#define primMinChar() 0
+#define primMaxChar() 0x10ffff
+#define primOrd(c) (c)
+extern int primChr(long);
+
+@ 
+<<prims.c>>=
+int
+primChr(long c)
+{
+    if ( c < primMinChar() || c > primMaxChar() )
+	fail_with("chr: code %ld is out-of-range", c);
+    return c;
+}
+
+@ 
+The primitive operations on C pointers are implemented trivially as
+macros except for alignment, which needs a little bit more care in
+order to handle large pointers that are interpreted as negative
+integers and negative alignment constraints correctly. We must cast
+[[void]] pointers into [[char]] pointers because ANSI C does not
+support arithmetic operations on [[void]] pointers.
+
+\ToDo{Avoid the redundant check for \texttt{y < 0} on machines where
+  where \texttt{/} and \texttt{\%} truncate the quotient toward
+  negative infinity.}
+
+<<prims.h>>=
+#define primNullPtr()		0
+#define primCastPtr(x)		(x)
+#define primPlusPtr(x,y)	((char *)x + y)
+#define primMinusPtr(x,y)	((char *)x - (char *)y)
+static inline void *
+primAlignPtr(void *p, long y)
+{
+    long r = (long)p % y;
+    return (char *)p + (r > 0 ? (y < 0 ? -y : y) : 0) - r;
+}
+
+@ 
+The \texttt{primPeek}\dots{} and \texttt{primPoke}\dots{} macros read
+and write values referenced through a pointer.
+
+<<prims.h>>=
+#define primPeekChar(p)	  (*(char *)p)
+#define primPeekSChar(p)  (*(signed char *)p)
+#define primPeekUChar(p)  (*(unsigned char *)p)
+#define primPeekShort(p)  (*(short *)p)
+#define primPeekUShort(p) (*(unsigned short *)p)
+#define primPeekInt(p)	  (*(int *)p)
+#define primPeekUInt(p)	  (*(unsigned int *)p)
+#define primPeekLong(p)	  (*(long *)p)
+#define primPeekULong(p)  (*(unsigned long *)p)
+#define primPeekFloat(p)  (*(float *)p)
+#define primPeekDouble(p) (*(double *)p)
+#define primPeekPtr(p)	  (*(void **)p)
+#define primPeekFunPtr(p) (*(void (**)(void))p)
+
+#define primPokeChar(p,c)     do { *(char *)p = c; } while ( 0 )
+#define primPokeSChar(p,c)    do { *(signed char *)p = c; } while ( 0 )
+#define primPokeUChar(p,c)    do { *(unsigned char *)p = c; } while ( 0 )
+#define primPokeShort(p,s)    do { *(short *)p = s; } while ( 0 )
+#define primPokeUShort(p,s)   do { *(unsigned short *)p = s; } while ( 0 )
+#define primPokeInt(p,i)      do { *(int *)p = i; } while ( 0 )
+#define primPokeUInt(p,i)     do { *(unsigned int *)p = i; } while ( 0 )
+#define primPokeLong(p,l)     do { *(long *)p = l; } while ( 0 )
+#define primPokeULong(p,l)    do { *(unsigned long *)p = l; } while ( 0 )
+#define primPokeFloat(p,f)    do { *(float *)p = f; } while ( 0 )
+#define primPokeDouble(p,d)   do { *(double *)p = d; } while ( 0 )
+#define primPokePtr(p1,p2)    do { *(void **)p1 = p2; } while ( 0 )
+#define primPokeFunPtr(p1,p2) do { *(void (**)(void))p1 = p2; } while ( 0 )
+
+@
+The \texttt{primSizeOf}\dots{} and \texttt{primAlignment}\dots{}
+macros return the storage requirements and alignment constraints of
+the corresponding C types. No macros are defined for the unsigned
+types because they have the same constraints as their signed
+counterparts.
+
+<<prims.h>>=
+#define primSizeOfChar()   sizeof(char)
+#define primSizeOfShort()  sizeof(short)
+#define primSizeOfInt()	   sizeof(int)
+#define primSizeOfLong()   sizeof(long)
+#define primSizeOfFloat()  sizeof(float)
+#define primSizeOfDouble() sizeof(double)
+#define primSizeOfPtr()	   sizeof(void *)
+#define primSizeOfFunPtr() sizeof(void (*)(void))
+
+#define alignment(t)	      offsetof(struct { char x; t y; }, y)
+#define primAlignmentChar()   alignment(char)
+#define primAlignmentShort()  alignment(short)
+#define primAlignmentInt()    alignment(int)
+#define primAlignmentLong()   alignment(long)
+#define primAlignmentFloat()  alignment(float)
+#define primAlignmentDouble() alignment(double)
+#define primAlignmentPtr()    alignment(void *)
+#define primAlignmentFunPtr() offsetof(struct { char x; void (*y)(void); }, y)

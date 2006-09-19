@@ -1,0 +1,442 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: print.nw 1899 2006-04-19 10:50:11Z wlux $
+%
+% Copyright (c) 2001-2006, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Printing the Result}
+When the computation is finished, the computed result and the bindings of
+all global variables can be printed with the function [[print_result]].
+
+<<print.h>>=
+extern void print_result(const char *var_names[], Node *vars[], Node *result);
+
+@ 
+<<print.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "debug.h"
+#include "run.h"
+#include "heap.h"
+#include "trail.h"
+#include "data.h"
+#include "disequal.h"
+#include "vars.h"
+#include "cstring.h"
+#include "print.h"
+
+static void    print_node(unsigned int, Node *);
+static void    print_app(unsigned int, Node *, unsigned int, Node **);
+static boolean is_string(Node *);
+static void    print_string(Node *);
+static void    print_list(Node *);
+static void    print_tuple(Node *, unsigned int, Node **);
+static boolean print_constraints(boolean, Node *);
+static boolean print_app_constraints(boolean, unsigned int, Node **);
+static boolean print_constrained_var(boolean, Node *);
+
+@ 
+The function [[print_result]] prints the computed result and the
+bindings of the global variables. Only those variables which have been
+bound by the program are actually printed. In order to assign names to
+the unbound variables, a dictionary is used (see below). This
+dictionary is initialized with the names of the goal's free variables %'
+when the initial goal application is allocated (see
+Sect.~\ref{sec:global-search}).
+
+<<print.c>>=
+void
+print_result(const char **var_names, Node **vars, Node *result)
+{
+    unsigned int     i, n;
+    boolean	     hasAnswer;
+    struct dict_node *tail;
+
+    tail      = names_tail;
+    hasAnswer = false;
+    for ( n = 0; var_names[n]; n++ )
+	if ( is_unboxed(vars[n]) || !is_variable_node(vars[n]) )
+	{
+	    if ( !hasAnswer )
+	    {
+		printf("{%s = ", var_names[n]);
+		hasAnswer = true;
+	    }
+	    else
+		printf(", %s = ", var_names[n]);
+	    print_node(0, vars[n]);
+	}
+
+    hasAnswer = print_constraints(hasAnswer, result);
+    for ( i = 0; i < n; i++ )
+	hasAnswer = print_constraints(hasAnswer, vars[i]);
+
+    if ( !hasAnswer )
+	print_node(0, result);
+    else
+    {
+	while ( is_boxed(result) && is_indir_node(result) )
+	    result = result->n.node;
+	if ( is_unboxed(result) || result->info != INFO(__Success) )
+	{
+	    printf("} ");
+	    print_node(0, result);
+	}
+	else
+	    printf("}");
+    }
+
+    release_names(tail);
+}
+
+@
+In general, when a node is printed we will use the closure name
+found in the node descriptor. However, some kinds of nodes are
+handled differently. In particular, for each unbound variable a name
+is generated and this name is shown by the printer. Special functions
+are used for printing lists and tuples. The [[prec]] parameter is used
+to determine when to enclose a term in parentheses. At present, we
+distinguish three different levels: [[0]] is used for terms at the
+top-level and arguments of a list or tuple, [[1]] is used for
+arguments within an infix application, and [[2]] is used for arguments
+in a regular application.
+
+<<print.c>>=
+static void
+print_node(unsigned int prec, Node *node)
+{
+    char	 buf[32];
+    unsigned int argc;
+    double	 d;
+    const char	 *name;
+
+    for (;;)
+    {
+#if !ONLY_BOXED_OBJECTS
+	if ( is_unboxed(node) )
+	    printf(prec > 0 && unboxed_val(node) < 0 ? "(%ld)" : "%ld",
+		   unboxed_val(node));
+	else
+#endif
+	    switch ( node_kind(node) )
+	    {
+	    case CAPP_KIND:
+		if ( node->info == (NodeInfo *)&cons_info )
+		{
+		    if ( is_string(node) )
+			print_string(node);
+		    else
+			print_list(node);
+		}
+		else if ( is_tuple(node->info) )
+		    print_tuple(node, closure_argc(node), node->c.args);
+		else
+		    print_app(prec, node, closure_argc(node), node->c.args);
+		break;
+	    case PAPP_KIND:
+		print_app(prec, node, closure_argc(node), node->c.args);
+		break;
+	    case LVAR_KIND:
+		printf("%s", lookup_name(node));
+		break;
+	    case LAZY_KIND:
+		switch ( node_tag(node) )
+		{
+		case NOUPD_TAG:
+		    print_app(prec, node, closure_argc(node), node->c.args);
+		    break;
+		case UPD_TAG:
+		    argc = suspend_argc(node);
+		    if ( argc == 1 && node->s.args[0] == 0 )
+			argc = 0;
+		    print_app(prec, node, argc, node->s.args);
+		    break;
+		case QUEUEME_TAG:
+		    printf("Suspended");
+		    break;
+		default:
+		    unexpected_tag("print_node", node_tag(node));
+		}
+		break;
+	    case INDIR_KIND:
+		node = node->n.node;
+		continue;
+	    case VECTOR_KIND:
+		 if ( is_tuple(node->info) )
+		     print_tuple(node, vector_argc(node), node->a.args);
+		 else
+		     print_app(prec, node, vector_argc(node), node->a.args);
+		break;
+	    case CHAR_KIND:
+		printf("'%s'", lit_char(buf, '\0', node->ch.ch, '\''));
+		break;
+	    case INT_KIND:
+		printf(prec > 0 && node->i.i < 0 ? "(%ld)" : "%ld",
+		       node->i.i);
+		break;
+	    case FLOAT_KIND:
+		get_double_val(d, node->f);
+		lit_double(buf, d);
+		printf(prec > 0 && buf[0] == '-' ? "(%s)" : "%s", buf);
+		break;
+	    case PTR_KIND:
+		printf(prec > 1 ? "(%s %p)" : "%s %p",
+		       node->info->cname, node->p.ptr);
+		break;
+	    case FOREIGN_PTR_KIND:
+		printf(prec > 1 ? "(%s %p)" : "%s %p",
+		       node->info->cname, node->fp.ptr);
+		break;
+	    case ABSTRACT_KIND:
+	    case SEARCH_CONT_KIND:
+		name = node->info->cname;
+		if ( name == 0 )
+		    name = "<abstract>";
+		printf("%s", name);
+		break;
+	    default:
+		invalid_arg("print_node", node_kind(node));
+	    }
+	break;
+    }
+}
+
+static void
+print_app(unsigned int prec, Node *node, unsigned int argc, Node **argv)
+{
+    unsigned int i;
+    boolean	 isop   = is_operator(node->info) && !is_tuple(node->info);
+    boolean	 infix  = isop && argc == 2;
+    boolean	 parens = infix ? prec > 0 : prec > 1 && argc != 0;
+
+    if ( parens )
+	putchar('(');
+
+    if ( infix )
+    {
+	print_node(1, argv[0]);
+	printf(" %s ", node->info->cname);
+	print_node(1, argv[1]);
+    }
+    else
+    {
+	printf(isop ? "(%s)" : "%s", node->info->cname);
+
+	for ( i = 0; i < argc ; i++ )
+	{
+	    putchar(' ');
+	    print_node(2, argv[i]);
+	}
+    }
+
+    if ( parens )
+	putchar(')');
+}
+
+@
+The list printer shows lists in Curry's usual list notation. If
+the tail of the list is not an empty list, it will be printed in
+Prolog style, i.e., the tail is separated from the rest of the list by
+a vertical bar instead of a comma.                                           %'
+
+If the list is ground and consists of only characters, it is displayed
+as a string. Note that we need to traverse the whole list in order to
+check this property. Fortunately, we know that the printing code is
+applied to finite data terms only.
+
+<<print.c>>=
+static boolean
+is_string(Node *list)
+{
+    Node *head;
+
+    while ( list->info == &cons_info )
+    {
+	head = list->c.args[0];
+	while ( is_boxed(head) && head->info->kind == INDIR_KIND )
+	    head = head->n.node;
+	if ( is_unboxed(head) || head->info->kind != CHAR_KIND )
+	    return false;
+
+	list = list->c.args[1];
+	while ( list->info->kind == INDIR_KIND )
+	    list = list->n.node;
+    }
+
+    return list == nil;
+}
+
+static void
+print_string(Node *list)
+{
+    char buf[8];
+    int	 c0, c;
+    Node *head;
+
+    c0 = '\0';
+    putchar('"');
+    while ( list->info == &cons_info )
+    {
+	head = list->c.args[0];
+	while ( is_boxed(head) && head->info->kind == INDIR_KIND )
+	    head = head->n.node;
+	ASSERT(is_boxed(head) && head->info->kind == CHAR_KIND);
+	c = head->ch.ch;
+	printf("%s", lit_char(buf, c0, c, '"'));
+	c0 = c;;
+
+	list = list->c.args[1];
+	while ( list->info->kind == INDIR_KIND )
+	    list = list->n.node;
+   }
+   ASSERT(list == nil);
+   putchar('"');
+}
+
+static void
+print_list(Node *list)
+{
+    char sep = '[';
+
+    while ( list->info == &cons_info )
+    {
+	putchar(sep);
+	print_node(0, list->c.args[0]);
+	sep = ',';
+
+	list = list->c.args[1];
+	while ( list->info->kind == INDIR_KIND )
+	    list = list->n.node;
+    }
+
+    if ( list != nil )
+    {
+	putchar('|');
+	print_node(0, list);
+    }
+
+    putchar(']');
+}
+
+static void
+print_tuple(Node *node, unsigned int argc, Node **argv)
+{
+    unsigned int i;
+    boolean	 first = true;
+
+    putchar('(');
+
+    for ( i = 0; i < argc; i++ )
+    {
+	if ( first )
+	    first = false;
+	else
+	    printf(",");
+	print_node(0, argv[i]);
+    }
+
+    putchar(')');
+}
+
+@
+The printer traverses the result and all free variables and outputs
+all constraints it encounters. In order to print the constraints for a
+variable only once, the constraint field of the variable node is reset
+before the constraint is printed. The constraint itself is saved on
+the trail so that it is restored when the runtime system backtracks to
+compute the next solution.
+
+<<print.c>>=
+static boolean
+print_constraints(boolean hasAnswer, Node *node)
+{
+    unsigned int argc;
+
+    for (;;)
+    {
+	if ( is_boxed(node) )
+	    switch ( node_kind(node) )
+	    {
+	    case CAPP_KIND:
+	    case PAPP_KIND:
+		hasAnswer = print_app_constraints(hasAnswer,
+						  closure_argc(node),
+						  node->c.args);
+		break;
+	    case LVAR_KIND:
+		if ( node->v.cstrs )
+		    hasAnswer = print_constrained_var(hasAnswer, node);
+		break;
+	    case LAZY_KIND:
+		switch ( node_tag(node) )
+		{
+		case NOUPD_TAG:
+		    hasAnswer = print_app_constraints(hasAnswer,
+						      closure_argc(node),
+						      node->c.args);
+		    break;
+		case UPD_TAG:
+		    argc = suspend_argc(node);
+		    if ( argc > 1 || node->s.args[0] )
+			hasAnswer = print_app_constraints(hasAnswer,
+							  argc,
+							  node->s.args);
+		    break;
+		}
+		break;
+	    case INDIR_KIND:
+		node = node->n.node;
+		continue;
+	    case VECTOR_KIND:
+		hasAnswer = print_app_constraints(hasAnswer,
+						  vector_argc(node),
+						  node->a.args);
+		break;
+	    }
+	break;
+    }
+    return hasAnswer;
+}
+
+static boolean
+print_app_constraints(boolean hasAnswer, unsigned int argc, Node **argv)
+{
+    unsigned int i;
+
+    for ( i = 0; i < argc; i++ )
+	hasAnswer = print_constraints(hasAnswer, argv[i]);
+
+    return hasAnswer;
+}
+
+static boolean
+print_constrained_var(boolean hasAnswer, Node *var)
+{
+    Constraint *cstrs;
+
+    ASSERT(is_variable_node(var) && var->v.cstrs != 0);
+
+    cstrs = var->v.cstrs;
+    SAVE(var, v.cstrs);
+    var->v.cstrs = 0;
+
+    for ( ; cstrs; cstrs = cstrs->cstrs )
+    {
+	if ( !hasAnswer )
+	{
+	    printf("{");
+	    hasAnswer = true;
+	}
+	else
+	    printf(", ");
+	print_node(0, var);
+	printf(" /= ");
+	print_node(0, ((Disequality *)cstrs)->node);
+
+	hasAnswer = print_constraints(hasAnswer, ((Disequality *)cstrs)->node);
+    }
+
+    return hasAnswer;
+}

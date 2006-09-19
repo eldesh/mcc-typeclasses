@@ -1,0 +1,981 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: spaces.nw 1899 2006-04-19 10:50:11Z wlux $
+%
+% Copyright (c) 2003-2006, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Managing Search Spaces}\label{sec:spaces}
+By default, the runtime system uses an extended trailing scheme in
+order to manage multiple bindings for variables and shared
+applications in an encapsulated search. A new search space is created
+each time [[try]] is applied to a new search goal. Variable nodes and
+shared lazy applications are tagged with the search space that was
+active at the time of their allocation. Search spaces are organized in
+trees with the root space corresponding to the initial evaluation of a
+particular search goal, and the other nodes of that tree corresponding
+to different evaluation states of that goal. Within each tree, the
+bindings of only one space are active at each time. A pointer to this
+space is recorded in the [[active]] field of the root space. The
+current search space is maintained in the global variable [[ss]].
+
+\textbf{Invariant}: The runtime system preserves the invariant
+[[ss->root->active == ss]]. The garbage collector makes use of this
+invariant.
+
+Since only local variables and applications can be changed by a
+computation and their bindings are not visible outside of the search
+goal, it is possible to switch bindings lazily, i.e., only when
+another search space from the same tree is activated. This allows
+implementing the well known optimization of performing undo and redo
+operations only up to the closest common ancestor.
+
+The runtime system can also be configured to use a copying
+implementation of encapsulated search~\cite{Lux04:CopyTrail}, where a
+copy of the search goal is used whenever the evaluation of a partially
+solved search goal is continued. In that case, search spaces only
+serve as tags that allow distinguishing local and non-local variables
+and shared lazy applications, respectively, and carry no further
+information.
+
+<<spaces.h>>=
+#if 0
+typedef struct search_space SearchSpace; /* already declared in heap.h */
+#endif
+#if !COPY_SEARCH_SPACE
+typedef struct script Script;
+#endif
+
+struct search_space {
+    NodeInfo	*info;
+#if !COPY_SEARCH_SPACE
+    SearchSpace	*root;		/* pointer to root space */
+    SearchSpace	*parent;	/* parent space */
+    SearchSpace	*active;	/* active space (valid only on root) */
+    Script	*script;	/* saved local bindings */
+#endif
+};
+
+extern SearchSpace	 *ss;
+extern const SearchSpace global_space;
+
+@ 
+<<spaces.c>>=
+#include "config.h"
+#include "debug.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <setjmp.h>
+#include "run.h"
+#include "heap.h"
+#include "stack.h"
+#include "threads.h"
+#include "spaces.h"
+#include "trail.h"
+#include "eval.h"
+#include "vars.h"
+
+#if !COPY_SEARCH_SPACE
+static void switch_bindings(SearchSpace *space);
+static void set_safe_ancestor(SearchSpace *space, Choicepoint *cp);
+static SearchSpace *copy_search_space(SearchSpace *spc, SearchSpace *space);
+#endif
+static Node *copy_node(Node *node, SearchSpace *space);
+
+static NodeInfo search_space_info = {
+    CAPP_KIND, 0, wordsof(struct search_space), 0, 0, no_eval, 0, 0
+};
+
+const SearchSpace global_space = {
+#if !COPY_SEARCH_SPACE
+    &search_space_info,
+    (SearchSpace *)&global_space,
+    0,
+    (SearchSpace *)&global_space,
+    0
+#else
+    &search_space_info
+#endif
+};
+
+SearchSpace *ss = (SearchSpace *)&global_space;
+
+@ 
+Each variable and shared application is tagged with the search space
+in which it was created. A node is considered local when its search
+space and the current search space have the same root.
+
+<<spaces.h>>=
+#if !COPY_SEARCH_SPACE
+# define is_local_space(space) ((space)->root == ss->root)
+#else
+# define is_local_space(space) ((space) == ss)
+#endif
+
+@ 
+When [[try]] returns, a new search space is created, which saves the
+bindings of all variables updated during the evaluation of [[try]] and
+also their previous values, which are recorded on the global trail
+stack. They are saved to the \emph{script} of the new search space.
+
+\emph{Note}: The script is not made part of the search space, but
+referenced indirectly because the garbage collector currently can
+handle only fixed size nodes and variable size nodes, which are
+composed of equally sized elements.
+
+<<spaces.h>>=
+#if !COPY_SEARCH_SPACE
+typedef struct script_rec {
+    word	 *addr;		/* address to be updated */
+    word	 inInfo;	/* info vector inside space */
+    word	 outInfo;	/* info vector outside space */
+    unsigned int ofs;		/* offset within node */
+    word	 inVal;		/* value inside space */
+    word	 outVal;	/* value outside space */
+} ScriptRec;
+
+struct script {
+    NodeInfo  *info;
+    unsigned  length;
+    ScriptRec data[1];
+};
+#endif
+
+@
+<<spaces.c>>=
+#if !COPY_SEARCH_SPACE
+static const int ot_script[] = {
+    -wordsof(ScriptRec), 3,
+    word_offsetof(ScriptRec, addr),
+    word_offsetof(ScriptRec, inVal),
+    word_offsetof(ScriptRec, outVal)
+};
+static NodeInfo script_info = {
+    SCRIPT_KIND, 0, 0, ot_script, 0, no_eval, 0, 0
+};
+#endif
+
+@
+When the runtime system activates the bindings of a search space, only
+the bindings of those search spaces up to the closest common ancestor
+of the current active space and the new active space are undone. In
+order to find that ancestor, the function [[switch_bindings]] first
+marks all search spaces along the path from the new active space up
+to the root of the tree. Next, it processes all search spaces along
+the path from the current active space to the root and undoes their
+bindings until reaching a marked search space. Obviously, this is the
+closest common ancestor. Finally, the marks along the path from the
+root space to the new active space are reset and the bindings of all
+search spaces starting at the closest common ancestor are restored.
+
+During the marking phase, we apply the usual pointer reversal trick to
+the parent pointer chain in order to keep track of the path from the
+root to the space being activated. A search space is marked by setting
+the least significant bit of the reversed parent pointer.
+
+<<spaces.c>>=
+#if !COPY_SEARCH_SPACE
+static void
+switch_bindings(SearchSpace *space)
+{
+    unsigned int n;
+    ScriptRec	 *script;
+    SearchSpace	 *root, *common, *child, *parent;
+
+    root = space->root;
+
+    /* Return if the space is already active */
+    if ( root->active == space )
+	return;
+
+    /* Phase 1: mark everything up to the root and reverse parent pointers */
+    child = 0;
+    while ( space )
+    {
+	parent	      = space->parent;
+	space->parent = (SearchSpace *)((long)child | 0x01);
+	child 	      = space;
+	space 	      = parent; 
+    }
+
+    /* Phase 2: undo bindings up to closest common ancestor */
+    space = root->active;
+    while ( !((long)space->parent & 0x01) )
+    {
+	<<Undo the bindings of space [[space]]>>
+	space = space->parent;
+    }
+
+    /* Phase 3: unmark everything and activate bindings of new space */
+    common = space;
+    parent = 0;
+    space  = root;
+    while ( space )
+    {
+	child	      = (SearchSpace *)((long)space->parent & ~0x01);
+	space->parent = parent;
+	if ( space == common )
+	    common = 0;
+	else if ( common == 0 )
+	{
+	    <<Redo the bindings of space [[space]]>>
+	}
+	parent	      = space;
+	space	      = child;
+    }
+
+    /* The new space is now active */
+    root->active = parent;
+}
+#endif
+
+@ 
+<<Undo the bindings of space [[space]]>>=
+if ( space->script )
+{
+    n	   = vector_argc(space->script) / wordsof(ScriptRec);
+    script = space->script->data + n;
+    while ( n-- > 0 )
+    {
+	--script;
+	ASSERT(heap_base <= script->addr && script->addr < heap_end);
+	script->addr[INFO_OFS]	  = script->outInfo;
+	script->addr[script->ofs] = script->outVal;
+    }
+}
+
+@ 
+<<Redo the bindings of space [[space]]>>=
+if ( space->script )
+{
+    n = vector_argc(space->script) / wordsof(ScriptRec);
+    script = space->script->data;
+    for ( ; n-- > 0; script++ )
+    {
+	ASSERT(heap_base <= script->addr && script->addr < heap_end);
+	script->addr[INFO_OFS]    = script->inInfo;
+	script->addr[script->ofs] = script->inVal;
+    }
+}
+
+@ 
+We have to be a little bit careful with the lazy update strategy in
+conjunction with the immediate release upon failure policy employed by
+the runtime system. If a search goal is evaluated inside another
+encapsulated search or within a global backtracking search, failure of
+the outer search may leave dangling pointers in the heap because the
+active space of the inner search goal may have become garbage. For that
+reason, we always set the [[active]] pointer in the root space to a
+``safe'' space, which is a space that is allocated in the same heap
+segment as the root space. To that end, the runtime system must call
+the function [[leave_context]] before dropping the current search
+context.
+
+\ToDo{\label{todo:lazy-spaces}These updates could be delayed by
+  recording root spaces whose active space is allocated in a younger
+  heap segment and changing the active space to the first parent below
+  the heap limit upon failure. Earlier implementations were using a
+  finalization function on search spaces for this purpose. This was
+  abandoned because the segment order preserving copying garbage
+  collector (Sect.~\ref{sec:copying-gc}) would have to scan the trails
+  of those active spaces, too, in order to find the roots of cross
+  segment pointers. It is also unclear whether such a scheme is worth
+  the effort. Examples where such cross segment active pointers occur
+  look quite contrived as they require an interleaved execution of
+  nested searches.}
+
+Note that when a search succeeds or returns because of a
+non-deterministic split, its heap segment becomes part of the
+enclosing search space. Therefore, the choicepoint that identifies the
+top-most heap segment must be passed to [[set_safe_ancestor]].
+
+<<spaces.h>>=
+#if !COPY_SEARCH_SPACE
+extern void leave_context(void);
+#else
+# define leave_context()  /* empty */
+#endif
+
+@ 
+<<spaces.c>>=
+#if !COPY_SEARCH_SPACE
+void
+leave_context()
+{
+    set_safe_ancestor(ss, bp->btBp);
+}
+
+static void
+set_safe_ancestor(SearchSpace *space, Choicepoint *cp)
+{
+    unsigned int n;
+    word	 *lim;
+    SearchSpace  *root;
+    ScriptRec	 *script;
+
+    /* find the heap segment containing the root space */
+    root = space->root;
+    lim	 = hp;
+    while ( cp && root < (SearchSpace *)cp->btHp )
+    {
+	lim = cp->btHp;
+	cp  = cp->btBp;
+    }
+
+    /* undo the bindings of all spaces above that segment */
+    while ( space >= (SearchSpace *)lim )
+    {
+	<<Undo the bindings of space [[space]]>>
+	space = space->parent;
+    }
+
+    /* save the active space */
+    root->active = space;
+}
+#endif
+
+@ 
+The function [[new_search_space]] allocates a new empty search space
+for a search goal and assigns it to the global variable [[ss]]. The
+new space is its own root and its (non-existent) bindings are
+considered active.
+
+<<spaces.h>>=
+extern void new_search_space(void);
+
+@
+<<spaces.c>>=
+void
+new_search_space()
+{
+    SearchSpace *newSpace;
+
+    CHECK_HEAP(wordsof(SearchSpace));
+    ss = newSpace    = (SearchSpace *)hp;
+    newSpace->info   = &search_space_info;
+#if !COPY_SEARCH_SPACE
+    newSpace->root   = newSpace;
+    newSpace->parent = 0;
+    newSpace->active = newSpace;
+    newSpace->script = 0;
+#endif
+    hp		    += wordsof(SearchSpace);
+}
+
+@
+The function [[inject_search_space]] tries to inject the bindings of a
+space into the current search space by adopting the current space as a
+child of the other space. Obviously, this is possible only if the
+current space is a root space. Otherwise, the graph of the search
+continuation must be copied into the current space.
+
+<<spaces.h>>=
+#if !COPY_SEARCH_SPACE
+extern boolean inject_search_space(SearchSpace *);
+#else
+# define inject_search_space(space)  false
+#endif
+
+@
+<<spaces.c>>=
+#if !COPY_SEARCH_SPACE
+boolean
+inject_search_space(SearchSpace *space)
+{
+    /* fail if current space is not a root space */
+    if ( ss == &global_space || ss->parent )
+	return false;
+
+    /* otherwise re-parent the current space */
+    ss->root   = space->root;
+    ss->parent = space;
+    ss->active = 0;
+
+    /* activate the parent's bindings and succeed */
+    switch_bindings(space);
+    ss->root->active = ss;
+    return true;
+}
+#endif
+
+@
+The function [[save_search_space]] saves the current bindings of the
+local variables and lazy application nodes of the search goal by
+creating a new search space. The new space then becomes the current
+search space. If the trail is empty, i.e., the goal has not bound any
+variables that could be instantiated differently in another solution
+of the goal, no new search space node is allocated.
+
+<<spaces.h>>=
+#if !COPY_SEARCH_SPACE
+extern void save_search_space(void);
+#else
+# define save_search_space()  /* empty */
+#endif
+
+@ 
+<<spaces.c>>=
+#if !COPY_SEARCH_SPACE
+void
+save_search_space()
+{
+    unsigned int i, n;
+    SearchSpace	 *space;
+    SaveRec	 *trail;
+    Script	 *script;
+
+    assert(ss != &global_space);
+
+    /* compute the size of the trail segment to be saved */
+    n = tp - bp->btTp;
+    CHECK_HEAP(wordsof(SearchSpace) + vector_node_size(n * wordsof(ScriptRec)));
+
+    /* eventually allocate a new search space */
+    /* NB garbage collection can decrease the size of the trail */
+    n = tp - bp->btTp;
+    if ( n > 0 )
+    {
+	/* initialize the script of the space */
+	trail	       = bp->btTp;
+	script	       = (Script *)hp;
+	script->info   = &script_info;
+	script->length = vector_node_size(n * wordsof(ScriptRec));
+	hp	      += vector_node_size(n * wordsof(ScriptRec));
+
+	for ( i = 0; i < n; i++ )
+	{
+	    script->data[i].addr    = trail[i].addr;
+	    script->data[i].inInfo  = trail[i].addr[INFO_OFS];
+	    script->data[i].outInfo = trail[i].info;
+	    script->data[i].ofs     = trail[i].ofs;
+	    script->data[i].inVal   = trail[i].addr[trail[i].ofs];
+	    script->data[i].outVal  = trail[i].val;
+	}
+
+	/* allocate a new search space */
+	space	      = (SearchSpace *)hp;
+	space->info   = &search_space_info;
+	space->root   = ss->root;
+	space->parent = ss;
+	space->active = 0;
+	space->script = script;
+	hp	     += wordsof(SearchSpace);
+
+	/* the new search space is now active */
+	ss = space->root->active = space;
+    }
+}
+#endif
+
+@ 
+The function [[discard_search_space]] discards all memory allocated
+in the current search context.
+
+<<spaces.h>>=
+extern void discard_search_space(void);
+
+@ 
+<<spaces.c>>=
+void
+discard_search_space()
+{
+#if !COPY_SEARCH_SPACE
+    /* undo the bindings of the current space */
+    RESTORE(bp->btTp);
+#endif
+
+    /* release the memory allocated in the current space */
+    release_names(bp->btDict);
+    release_mem();
+}
+
+@
+The function [[restore_search_space]] restores the bindings of a
+search space and assigns it to the global variable [[ss]].
+
+<<spaces.h>>=
+#if !COPY_SEARCH_SPACE
+extern void restore_search_space(SearchSpace *space);
+#else
+# define restore_search_space(space)  (ss = (space))
+#endif
+
+@ 
+<<spaces.c>>=
+#if !COPY_SEARCH_SPACE
+void
+restore_search_space(SearchSpace *space)
+{
+    /* activate the search space's bindings */
+    ss = space;
+    switch_bindings(space);
+}
+#endif
+
+@ 
+When a search goal is restored into another search space that
+is not a root space, it must be copied into that search space. Copying
+is performed by the function [[copy_graph]], which is also used for
+copying the solution of a solved goal into the current search
+space. As a special case, [[copy_graph]] copies all nodes on the stack
+and the ready queue if [[graph == 0]] and the runtime system has been
+configured with the [[--enable-copying]] option. This special case is
+used in order to create a copy of the current state of the computation
+at a non-deterministic choice in global search.
+
+<<spaces.h>>=
+extern Node *copy_graph(Node *graph, SearchSpace *space);
+
+@
+We use an algorithm similar to a two-space copying garbage collector
+in [[copy_graph]]. The algorithm uses two pointers into the free space
+above the current allocation pointer [[hp]]. The pointer [[alloc]] is
+a temporary allocation pointer and [[scan]] is used for processing the
+nodes that have been copied already, but whose arguments still need to
+be copied. Whenever a node is copied, its info pointer is replaced by
+a forwarding pointer to the new node. However, in contrast to a
+copying garbage collector, we have to restore the old info pointer
+after the graph has been copied. Therefore, we record the addresses of
+all copied nodes at the end of the heap using our own trail pointer
+[[ntp]]. Note that we do not need to save the info pointers as they
+can be recovered from the copied nodes.
+
+Some special care is necessary when we run out of memory while copying
+a graph, i.e., when [[alloc]] reaches [[ntp]]. Instead of extending
+the garbage collector such as to handle the forwarding pointers and
+preserve the allocation order with respect to the [[scan]] pointer, we
+resort to a simpler solution that discards the partial copy, performs
+the garbage collection, and then restarts the copying process. Note
+that this is computationally not more expensive than an extended
+garbage collection scheme because otherwise the garbage collector
+would be copying the partial copy of the graph.
+
+If we run out of memory in [[copy_graph]] for a second time, the
+program is aborted because further garbage collections cannot reclaim
+additional space.
+
+<<spaces.c>>=
+static Node **alloc;			/* temp. allocation pointer */
+static Node **ntp;			/* used for saving updated node */
+
+@
+We use the least significant bit in the info pointer of a node to mark
+forwarding pointers.
+
+<<spaces.c>>=
+#define FORWARD_FLAG		0x01
+#define is_forwarded(node)	((long)(node)->info & FORWARD_FLAG)
+#define forward(node, new) \
+    ((node)->info = (NodeInfo *)((long)(new) | FORWARD_FLAG))
+#define get_forward(node)       ((Node *)((long)(node)->info & ~FORWARD_FLAG))
+
+@ 
+In order to request a garbage collection while copying a graph, a
+[[longjmp]] to [[restart_copy]] is executed.
+
+<<spaces.c>>=
+static jmp_buf restart_copy;
+
+@
+The function [[copy_node]] copies a single node from the graph. It
+returns the original node if the node is allocated outside of the heap
+as well as for non-local variables and shared applications. Otherwise,
+the node is copied to the top of the heap and a forwarding pointer is
+left in the old node. As a special case, when [[copy_node]] is called
+with [[space == 0]], all variables and shared applications are copied
+into the current space. This is used in order to support the
+[[getSearchTree]] function, which implements encapsulated search with
+strong encapsulation (see p.~\pageref{encapsulation} in
+Sect.~\ref{encapsulation}). Note that [[space]] cannot be null when
+copying a search goal that was returned from an encapsulated search.
+
+One has to be careful when the copied graph contains (local) search
+continuations. Since these continuations could contain references to
+variables from the copied graph, they have to be copied as well using
+fresh search spaces. There are two options here. Either one can
+create a fresh root space for each local search space encountered, or
+one retains the original search tree structure. We have chosen the
+latter option because the copying algorithm uses a breadth first
+traversal, whereas copying local continuations into fresh root spaces
+requires a depth first traversal in order to ensure that the local
+bindings of a space are in effect while its nodes are being copied.
+
+In our implementation, we cannot activate the bindings of a particular
+local search space during copying, as this could leave cross segment
+pointers in the graph at the end of [[copy_graph]]. Therefore, we must
+not shorten any indirection chains within those spaces. Shortening is
+valid only for indirection nodes from the copied graph as well as for
+indirections in outer search spaces. Note that this restriction does
+not apply when the runtime system is configured to use a copying
+implementation of encapsulated search. In that case, all indirection
+chains can be shartened.
+
+Actually, copying of local continuations could be avoided for
+continuations that are closed, i.e., which do not reference any
+non-local nodes. There is also no need to copy search continuations
+from global spaces. However, the runtime system currently offers no
+means to distinguish local and non-local continuations and to check
+whether a search continuation is closed.
+
+\ToDo{Avoid copying of search continuations that were allocated
+outside of the copied space. Checking for such continuations requires
+adding a pointer to that space in which a search continuation node was
+allocated to them.}
+
+<<spaces.c>>=
+static Node *
+copy_node(Node *node, SearchSpace *space)
+{
+    boolean	 do_copy;
+    unsigned int sz;
+
+    while ( is_boxed(node) && node >= (Node *)heap_base && node < (Node *)hp )
+    {
+	/* check for a node that is already forwarded */
+	if ( is_forwarded(node) )
+	    node = get_forward(node);
+
+	/* check whether we can/must share the node */
+	else
+	{
+	    switch ( node_kind(node) )
+	    {
+	    case CHAR_KIND:
+	    case INT_KIND:
+	    case FLOAT_KIND:
+	    case PTR_KIND:
+	    case FOREIGN_PTR_KIND:
+	    case ABSTRACT_KIND:
+		do_copy = false;
+		break;
+
+	    case LVAR_KIND:
+		do_copy = !space || is_forwarded(node->v.spc);
+		break;
+
+	    case LAZY_KIND:
+		do_copy = node_tag(node) == NOUPD_TAG
+		    || !space
+		    || is_forwarded(node->s.spc);
+		break;
+
+	    case INDIR_KIND:
+#if !COPY_SEARCH_SPACE
+		if ( is_forwarded(node->n.spc)
+		     && space && node->n.spc->root != space->root )
+		{
+		    do_copy = true;
+		    break;
+		}
+#endif
+		node = node->n.node;
+		continue;
+
+	    case SEARCH_CONT_KIND:
+		/* FIXME: non-local continuations need not be copied */
+		do_copy = true;
+		break;
+
+	    default:
+		do_copy = true;
+		break;
+	    }
+
+	    if ( do_copy )
+	    {
+		/* the node has to be copied; check if space is available */
+		sz = node_size(node);
+		if ( sz == 0 )
+		    sz = node->a.length;
+		if ( alloc + sz + 1 >= ntp )
+		    longjmp(restart_copy, sz + 1);
+
+		/* copy the node to the new location and leave a forwarding
+		 * pointer in the original node */
+		memcpy(alloc, node, sz * word_size);
+		*--ntp = node;
+		forward(node, alloc);
+		node   = (Node *)alloc;
+		alloc += sz;
+	    }
+	}
+	break;
+    }
+
+    /* return the new address */
+    return node;
+}
+
+@ 
+In order to distinguish local nodes, which have to be copied, and
+nodes from global search spaces, which are shared, [[copy_node]]
+checks whether a node's search space is forwarded or not. This means         %' 
+that a search space and its parents have to be copied \emph{before}
+any node from that space is copied. This is handled by the function
+[[copy_search_space]]. Note that this function does not update the
+parent pointers of the copied spaces because this is handled by the
+loop in [[copy_graph]] below.
+
+We maintain the invariant that for a copied search space, all of its
+parents have been copied as well. Therefore, [[copy_search_space]]
+applies itself to the active space of the search space tree.
+
+<<spaces.c>>=
+#if !COPY_SEARCH_SPACE
+static SearchSpace *
+copy_search_space(SearchSpace *spc, SearchSpace *space)
+{
+    SearchSpace *copy;
+
+    /* copy the space itself */
+    assert(spc != &global_space);
+    copy = (SearchSpace *)copy_node((Node *)spc, space);
+
+    /* eventually copy the active space and its parents */
+    /* NB don't activate the copied space's bindings since this could
+     *    leave cross segment pointers behind */
+    if ( !is_forwarded(spc->root->active) )
+	copy_search_space(spc->root->active, space);
+
+    /* copy all parent spaces */
+    /* NB parent pointers will be updated later */
+    for ( spc = spc->parent; spc && !is_forwarded(spc); spc = spc->parent )
+	copy_node((Node *)spc, space);
+
+    /* return the copied space */
+    return copy;
+}
+#else
+# define copy_search_space(spc, space) \
+    (SearchSpace *)copy_node((Node *)(spc), space)
+#endif
+
+@
+The main loop of the copying algorithm is implemented in [[copy_graph]].
+After activating the bindings of the source space and copying the root
+node of the graph, this function scans the copied nodes and recursively
+copies their arguments. At the end, the info pointers of the copied
+nodes are restored.
+
+<<spaces.c>>=
+Node *
+copy_graph(Node *graph, SearchSpace *space)
+{
+    boolean	 gc_done = false;
+    unsigned int sz;
+    Node	 *copy, **scan;
+#if !COPY_SEARCH_SPACE
+    SearchSpace	 *spc;
+
+    assert(graph != 0);
+#endif
+    assert(space != &global_space);
+
+    /* handle gc request */
+    BEGIN_LOCAL_ROOTS2(graph, space)
+    sz = setjmp(restart_copy);
+    if ( sz )
+    {
+	if ( gc_done )
+	    heap_exhausted();
+
+	sz += alloc - (Node **)hp;
+	sz += (Node **)heap_end - ntp;
+	for ( ; ntp < (Node **)heap_end; ntp++ )
+	{
+	    ASSERT(is_forwarded(*ntp));
+	    (*ntp)->info = get_forward(*ntp)->info;
+	}
+	if ( space )
+	{
+#if !COPY_SEARCH_SPACE
+	    for ( spc = space; spc; spc = spc->parent )
+		spc->info = &search_space_info;
+	    set_safe_ancestor(space, bp);
+#else
+	    space->info = &search_space_info;
+#endif
+	}
+	collect(sz);
+	gc_done = true;
+    }
+
+    /* activate the bindings of the graph's space and setup forwarding
+     * pointers for the graph's space and its parents */
+    if ( space )
+    {
+#if !COPY_SEARCH_SPACE
+	switch_bindings(space);
+	for ( spc = space; spc; spc = spc->parent )
+	    forward(spc, ss);
+#else
+	forward(space, ss);
+#endif
+    }
+
+    /* copy the root of the graph */
+    alloc = (Node **)hp;
+    ntp	  = (Node **)heap_end;
+    copy  = copy_node(graph, space);
+#if COPY_SEARCH_SPACE
+    if ( !copy )
+    {
+	/* NB don't update the stack here because the copied pointers would
+	 *    not be followed during a garbage collection */
+	assert(bp != 0);
+	for ( scan = (Node **)bp; scan-- > sp; )
+	    copy_node(*scan, space);
+	copy_node((Node *)rq, space);
+	copy = 0;
+    }
+#endif
+
+    /* copy all children */
+    for ( scan = (Node **)hp; scan < alloc; scan += sz )
+    {
+	unsigned int i, n;
+	ThreadQueue  tq;
+#if !COPY_SEARCH_SPACE
+	Script	     *script;
+#endif
+	Node	     *node;
+
+	node = (Node *)scan;
+	sz   = node_size(node);
+	if ( sz == 0 )
+	    sz = node->a.length;
+
+	switch ( node_kind(node) )
+	{
+	case CAPP_KIND:
+	case PAPP_KIND:
+	    n = closure_argc(node);
+	    for ( i = 0; i < n; i++ )
+		node->c.args[i] = copy_node(node->c.args[i], space);
+	    break;
+
+	case LVAR_KIND:
+	    if ( is_forwarded(node->v.spc) )
+		node->v.spc = (SearchSpace *)get_forward(node->v.spc);
+	    else
+		node->v.spc = ss;
+	    node->v.wq	  = (ThreadQueue)copy_node((Node *)node->v.wq, space);
+	    node->v.cstrs =
+		(Constraint *)copy_node((Node *)node->v.cstrs, space);
+	    break;
+
+	case LAZY_KIND:
+	    switch ( node_tag(node) )
+	    {
+	    case NOUPD_TAG:
+		for ( i = 0, n = closure_argc(node); i < n; i++ )
+		    node->c.args[i] = copy_node(node->c.args[i], space);
+		break;
+	    case UPD_TAG:
+	    case QUEUEME_TAG:
+		if ( is_forwarded(node->s.spc) )
+		    node->s.spc = (SearchSpace *)get_forward(node->s.spc);
+		else
+		    node->s.spc = ss;
+		for ( i = 0, n = suspend_argc(node); i < n; i++ )
+		    node->s.args[i] = copy_node(node->s.args[i], space);
+		break;
+	    default:
+		unexpected_tag("copy_graph", node_tag(node));
+		break;
+	    }
+	    break;
+
+#if !COPY_SEARCH_SPACE
+	case INDIR_KIND:
+	    assert(is_forwarded(node->n.spc));
+	    node->n.spc = (SearchSpace *)get_forward(node->n.spc);
+	    for ( i = 0, n = suspend_argc(node); i < n; i++ )
+		node->s.args[i] = copy_node(node->s.args[i], space);
+	    break;
+#endif
+
+	case VECTOR_KIND:
+	    n = vector_argc(node);
+	    for ( i = 0; i < n; i++ )
+		node->a.args[i] = copy_node(node->a.args[i], space);
+	    break;
+
+	case THREAD_KIND:
+	    tq = (ThreadQueue)node;
+	    if ( tq->t.id )
+	    {
+		tq->t.next = (ThreadQueue)copy_node((Node *)tq->t.next, space);
+		tq->t.ds   = copy_node(tq->t.ds, space);
+	    }
+	    else
+	    {
+		tq->s.next = (ThreadQueue)copy_node((Node *)tq->s.next, space);
+		tq->s.thd  = (ThreadQueue)copy_node((Node *)tq->s.thd, space);
+		tq->s.link = (ThreadQueue)copy_node((Node *)tq->s.link, space);
+	    }
+	    break;
+
+	case SEARCH_CONT_KIND:
+	    node->sc.spc  = copy_search_space(node->sc.spc, space);
+	    node->sc.susp = copy_node(node->sc.susp, space);
+	    node->sc.var  = copy_node(node->sc.var, space);
+	    node->sc.rq	  = (ThreadQueue)copy_node((Node *)node->sc.rq, space);
+	    break;
+
+#if !COPY_SEARCH_SPACE
+	case SCRIPT_KIND:
+	    script = (Script *)node;
+	    n	   = vector_argc(script) / wordsof(ScriptRec);
+	    for ( i = 0; i < n; i++ )
+	    {
+		script->data[i].addr =
+		    (word *)copy_node((Node *)script->data[i].addr, space);
+		script->data[i].inVal =
+		    (word)copy_node((Node *)script->data[i].inVal, space);
+		script->data[i].outVal =
+		    (word)copy_node((Node *)script->data[i].outVal, space);
+	    }
+	    break;
+#endif
+
+	default:
+	    invalid_arg("copy_graph", node_kind(node));
+	}
+    }
+    assert(scan == (Node **)alloc);
+    END_LOCAL_ROOTS
+    hp = (word *)alloc;
+
+    /* eventually update the stack */
+#if COPY_SEARCH_SPACE
+    if ( !copy )
+    {
+	for ( scan = (Node **)bp; scan-- > sp; )
+	    *scan = copy_node(*scan, space);
+	rq = (ThreadQueue)copy_node((Node *)rq, space);
+    }
+#endif
+    
+    /* restore the old graph */
+    for ( ; ntp < (Node **)heap_end; ntp++ )
+    {
+	ASSERT(is_forwarded(*ntp));
+	(*ntp)->info = get_forward(*ntp)->info;
+    }
+
+    /* eventually restore a safe ancestor of the source space */
+    if ( space )
+    {
+#if !COPY_SEARCH_SPACE
+	for ( spc = space; spc; spc = spc->parent )
+	    spc->info = &search_space_info;
+	set_safe_ancestor(space, bp);
+#else
+	space->info = &search_space_info;
+#endif
+    }
+
+    /* return the copy */
+    return copy;
+}

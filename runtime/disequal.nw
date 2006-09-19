@@ -1,0 +1,358 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: disequal.nw 1872 2006-03-16 10:11:43Z wlux $
+%
+% Copyright (c) 2002-2005, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Disequality Constraints}
+The representation of disequality constraints extends the common
+[[Constraint]] structure with the term from which the variable has to
+be different.
+
+<<disequal.h>>=
+extern NodeInfo diseq_constraint_info;
+typedef struct diseq_constraint {
+    Constraint cstr;
+    Node       *node;
+} Disequality;
+
+@ 
+The primitive function [[=/=]] implements disequality constraints.
+
+<<disequal.h>>=
+DECLARE_ENTRYPOINT(___61__47__61_);
+
+@ 
+<<disequal.c>>=
+#include "config.h"
+#include "debug.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "run.h"
+#include "heap.h"
+#include "stack.h"
+#include "eval.h"
+#include "threads.h"
+#include "spaces.h"
+#include "trail.h"
+#include "data.h"
+#include "unify.h"
+#include "equal.h"
+#include "disequal.h"
+#include "cam.h"
+#include "trace.h"
+
+DECLARE_CONST(__Prelude__True);
+
+DECLARE_LABEL(___61__47__61__1);
+DECLARE_LABEL(___61__47__61__2);
+DECLARE_LABEL(diseq_var);
+DECLARE_LABEL(diseq_args);
+DECLARE_LABEL(diseq_args_1);
+DECLARE_LABEL(diseq_args_2);
+DECLARE_LABEL(diseq_papp_args);
+DECLARE_LABEL(diseq_papp_args_1);
+DECLARE_LABEL(check_diseq);
+
+#define diseq_constraint_size wordsof(Disequality)
+NodeInfo diseq_constraint_info = {
+    CAPP_KIND, 0, diseq_constraint_size, 0, 0, check_diseq, 0, 0
+};
+
+FUNCTION(___61__47__61_)
+{
+    EXPORT_LABEL(___61__47__61_)
+ ENTRY_LABEL(___61__47__61_)
+    TRACE_FUN("=/=", 2);
+    GOTO(___61__47__61__1);
+}
+
+static
+FUNCTION(___61__47__61__1)
+{
+    Node *aux;
+ ENTRY_LABEL(___61__47__61__1)
+    EVAL_FLEX_POLY(___61__47__61__1);
+    aux	  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = aux;
+    GOTO(___61__47__61__2);
+}
+
+static
+FUNCTION(___61__47__61__2)
+{
+    Node *arg1, *arg2;
+ ENTRY_LABEL(___61__47__61__2)
+    EVAL_FLEX_POLY(___61__47__61__2);
+    arg1 = sp[1];
+    arg2 = sp[0];
+
+    while ( is_boxed(arg1) && is_indir_node(arg1) )
+	arg1 = arg1->n.node;
+    if ( is_boxed(arg1) && is_variable_node(arg1) )
+    {
+	/* check for trivial disequality (x=/=x) */
+	if ( arg1 != arg2 )
+	{
+	    sp[0] = arg1;
+	    sp[1] = arg2;
+	    GOTO(diseq_var);
+	}
+    }
+    else if ( is_boxed(arg2) && is_variable_node(arg2) )
+    {
+	sp[0] = arg2;
+	sp[1] = arg1;
+	GOTO(diseq_var);
+    }
+    else
+    {
+	unsigned int n = 0;
+
+	if ( !eq_root(arg1, arg2, &n) )
+	{
+	    sp += 2;
+	    RETURN(Success);
+	}
+	else if ( n > 0 )
+	{
+	    boolean exist_type;
+	    Node    *arglist;
+
+	    /* NB assign exist_type before calling eq_args because a
+	     *    garbage collection in eq_args will invalidate arg1 */
+	    exist_type = is_papp_node(arg1)
+		|| (is_capp_node(arg1) && node_tag(arg1) < 0);
+	    arglist = nil;
+	    if ( !eq_args(arg1, arg2, n, &arglist) )
+	    {
+		sp += 2;
+		RETURN(Success);
+	    }
+
+	    if ( arglist != nil )
+	    {
+		*++sp = arglist;
+		GOTO(exist_type ? diseq_papp_args : diseq_args);
+	    }
+	}
+    }
+
+    FAIL();
+}
+
+@
+A disequality constraint between a variable and another expression is
+handled by evaluating the expression to normal form and adding the
+resulting data term to the constraint list of the variable. In
+order to ensure that a constraint is always a data term, the runtime
+system should create a new variable and unify this variable with the
+argument (which also causes evaluation to normal form). However, we
+add the expression directly to the constraint list here, which should
+not cause any problems as the runtime system does not rely on
+disequality constraints being in normal form.
+
+Note that this implementation is incomplete. For instance, it will not
+compute the valid solution \verb|x=Nothing| for the constraint
+\verb|x =/= Just undefined|. In order to compute such solutions, the
+runtime system should replace a constraint
+$x$ \texttt{=/=} $c_i\,e_1\,\dots\,e_{k_i}$
+by
+\begin{quote}
+\texttt{(}$x$ \texttt{=:=} $c_1\,y_{1,1}\,\dots\,y_{1,k_1}$
+\texttt{|} $\dots$ \texttt{|}
+$x$ \texttt{=:=} $c_n\,y_{n,1}\,\dots\,y_{n,k_n}$
+\texttt{)} \texttt{\&}
+$x$ \texttt{=/=} $c_i\,e_1\,\dots\,e_{k_i}$
+\end{quote}
+where $c_1, \dots, c_n$ are all data constructors (with arities $k_1,
+\dots, k_n$, respectively) of the same data type as $c_i$ and
+\texttt{|} denotes the disjunction operator. Unfortunately, these
+data constructors are not known in the runtime system.
+
+\ToDo{Maintain information about sibling constructors in the runtime
+  system.}
+
+\ToDo{Avoid adding redundant disequalities by checking the constraint
+  lists before adding a new constraint.}
+
+<<disequal.c>>=
+static
+FUNCTION(diseq_var)
+{
+    boolean	nf;
+    Node	*aux;
+    Disequality *cstr;
+ ENTRY_LABEL(diseq_var)
+    if ( !is_local_space(sp[0]->v.spc) )
+    {
+	if ( is_boxed(sp[1]) && is_variable_node(sp[1])
+	     && is_local_space(sp[1]->v.spc) )
+	{
+	    aux   = sp[0];
+	    sp[0] = sp[1];
+	    sp[1] = aux;
+	}
+	else
+	{
+	    CHECK_STACK1();
+	    sp	 -= 1;
+	    sp[0] = sp[1];
+	    sp[1] = (Node *)___61__47__61__1;
+	    GOTO(sync_var);
+	}
+    }
+
+    nf = true;
+    if ( occurs(sp[0], sp[1], &nf) )
+    {
+	sp += 2;
+	RETURN(Success);
+    }
+
+    /* add the constraint to the variable */
+    CHECK_HEAP(diseq_constraint_size);
+    cstr	     = (Disequality *)hp;
+    cstr->cstr.info  = &diseq_constraint_info;
+    cstr->cstr.cstrs = sp[0]->v.cstrs;
+    cstr->node	     = sp[1];
+    hp		    += diseq_constraint_size;
+
+    SAVE(sp[0], v.cstrs);
+    sp[0]->v.cstrs = (Constraint *)cstr;
+
+    /* if necessary, evaluate the argument to normal form */
+    if ( nf )
+    {
+	sp += 2;
+	RETURN(Success);
+    }
+    sp[0] = sp[1];
+    GOTO(___61__58__61_);
+}
+
+@ 
+The function [[diseq_args]] handles disequalities between the
+arguments of two data terms with the same root. Such a disequality can
+be solved only by introducing a disjunction into the program. In
+particular, the disequality
+$c\,e_1\,\dots\,e_n$ \texttt{=/=} $c\,e_1'\,\dots\,e_n'$
+is equivalent to the disjunction
+$e_1$ \texttt{=/=} $e_1'$ \texttt{|}                                         %'
+$e_2$ \texttt{=/=} $e_2'$ \texttt{|} \dots \texttt{|}                        %'
+$e_n$ \texttt{=/=} $e_n'$                                                    %'
+where \texttt{|} denotes the disjunction operator.
+
+\ToDo{The current implementation handles the above disjunction as
+  nested binary disjunctions by treating \texttt{|} as a binary
+  operator which associates to the right. This does not matter much
+  for global backtracking search, but leads to a slightly unbalanced
+  tree of solutions in encapsulated search. A better implementation
+  should split a disjunction for \emph{n} argument pairs into \emph{n}
+  continuations in one step.}
+
+<<disequal.c>>=
+static
+FUNCTION(diseq_args)
+{
+    static const Label diseq_args_choices[] = { diseq_args_1, diseq_args_2, 0 };
+ ENTRY_LABEL(diseq_args)
+    if ( sp[0]->c.args[2] == nil )
+	GOTO(diseq_args_1);
+
+    CHECK_STACK(1);
+    sp -= 1;
+    sp[0] = (Node *)diseq_args_choices;
+#if YIELD_NONDET
+    if ( rq )
+        GOTO(yield_thread(nondet_handlers->choices));
+#endif
+    GOTO(nondet_handlers->choices);
+}
+
+static
+FUNCTION(diseq_args_1)
+{
+    Node *arglist;
+ ENTRY_LABEL(diseq_args_1)
+    CHECK_STACK1();
+    arglist = sp[0];
+    sp	   -= 1;
+    sp[0]   = arglist->c.args[0];
+    sp[1]   = arglist->c.args[1];
+    GOTO(___61__47__61_);
+}
+
+static
+FUNCTION(diseq_args_2)
+{
+ ENTRY_LABEL(diseq_args_2)
+    sp[0] = sp[0]->c.args[2];
+    GOTO(diseq_args);
+}
+
+@ 
+As explained on p.~\pageref{unsafe-equality} in
+Sect.~\ref{unsafe-equality}, computing the equality of two partial
+applications and of two data constructors with existentially
+quantified types, respectively, is not type safe. In order to prevent
+ill-typed nodes from escaping the scope of a disequality constraint,
+we restrict disequality constraints between partial applications and
+between existentially quantified data constructors to ground terms.
+This is implemented by applying the \texttt{(==)} primitive to each
+pair of arguments and checking that at least one of these applications
+reduces to \texttt{False}.
+
+\ToDo{Using \texttt{(==)} and checking arguments sequentially is
+probably too restrictive. Provide a more general solution by defining
+and using a rigid variant of \texttt{(=/=)}.}
+
+<<disequal.c>>=
+static
+FUNCTION(diseq_papp_args)
+{
+    Node *arg1, *arg2, *arglist;
+ ENTRY_LABEL(diseq_papp_args)
+    arglist = sp[0];
+    arg1    = arglist->c.args[0];
+    arg2    = arglist->c.args[1];
+    arglist = arglist->c.args[2];
+
+    CHECK_STACK(3);
+    sp	 -= 3;
+    sp[0] = arg1;
+    sp[1] = arg2;
+    sp[2] = (Node *)diseq_papp_args_1;
+    sp[3] = arglist;
+    GOTO(___61__61_);
+}
+
+static
+FUNCTION(diseq_papp_args_1)
+{
+ ENTRY_LABEL(diseq_papp_args_1)
+    if ( *sp++ != CONST(__Prelude__True) )
+    {
+	sp += 1;
+	RETURN(Success);
+    }
+
+    if ( sp[0] == nil )
+	FAIL();
+    GOTO(diseq_papp_args);
+}
+
+@
+The function [[check_diseq]] is used to check that a value is compatible
+with a given constraint.
+
+<<disequal.c>>=
+static
+FUNCTION(check_diseq)
+{
+ ENTRY_LABEL(check_diseq)
+    sp[1] = ((Disequality *)sp[1])->node;
+    GOTO(___61__47__61_);
+}

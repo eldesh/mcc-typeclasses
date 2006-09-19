@@ -1,0 +1,264 @@
+# Makefile for the Curry library
+#
+# $Id: Makefile.in 1908 2006-04-29 12:33:17Z wlux $
+#
+# Copyright (c) 2004-2006, Wolfgang Lux
+# See ../LICENSE for the full license.
+#
+
+@SET_MAKE@
+
+# source directory
+top_srcdir = @top_srcdir@
+srcdir = @srcdir@
+
+# install directories
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+bindir = @bindir@
+libdir = @libdir@
+
+# configuration variables
+# set to stdlib/debug to enable and to no to disable buidling of standard
+# and debugging libraries, resp.
+# note that the prelude is always compiled
+stdlib = @STDLIB@
+debug = @DEBUG@
+
+# compiler definitions
+CC = @CC@
+CPPFLAGS = -I../runtime -I$(top_srcdir)/runtime -I$(srcdir) @CPPFLAGS@
+CFLAGS = @CFLAGS@
+
+AR = ar
+RANLIB = @RANLIB@
+
+INSTALL = @INSTALL@
+INSTALL_PROGRAM = @INSTALL_PROGRAM@
+INSTALL_DATA = @INSTALL_DATA@
+INSTALL_DIR = @INSTALL_DIR@
+
+# file lists
+curry_prelude_SRCS = \
+	Prelude.curry \
+	IO.curry
+curry_stdlib_SRCS  = \
+	AllSolutions.curry \
+	Array.curry \
+	Bits.curry \
+	CError.curry \
+	CForeign.curry \
+	CString.curry \
+	CTypes.curry \
+	Char.curry \
+	Combinatorial.curry \
+	Directory.curry \
+	FiniteMap.curry \
+	Float.curry \
+	Foreign.curry \
+	ForeignPtr.curry \
+	IOExts.curry \
+	IOVector.curry \
+	Ix.curry \
+	Integer.curry \
+	Lexing.curry \
+	List.curry \
+	MarshalAlloc.curry \
+	MarshalError.curry \
+	MarshalUtils.curry \
+	Maybe.curry \
+	Monad.curry \
+	NameSupply.curry \
+	Numeric.curry \
+	Parser.curry \
+	Ports.curry \
+	Ptr.curry \
+	Random.curry \
+	Read.curry \
+	Set.curry \
+	Socket.curry \
+	StablePtr.curry \
+	Success.curry \
+	System.curry \
+	Time.curry \
+	Trace.curry \
+	Unsafe.curry
+curry_stdlib_HDRS = \
+	CError.h \
+	Socket.h
+
+curry_SRCS = $(curry_prelude_SRCS) $(curry_$(stdlib)_SRCS)
+curry_INTF = $(curry_SRCS:.curry=.icurry)
+curry_CSRC = $(curry_INTF:.icurry=.c)
+curry_DCSRC= $(curry_INTF:.icurry=.d.c)
+curry_OBJS = $(curry_INTF:.icurry=.o)
+curry_DOBJS= $(curry_INTF:.icurry=.d.o)
+curry_LIBS = libcurry.a
+
+debug_SRCS = DebugPrelude.curry
+debug_INTF = $($(debug)_SRCS:.curry=.icurry)
+debug_CSRC = $(debug_INTF:.icurry=.c)
+debug_OBJS = $(debug_INTF:.icurry=.o)
+debug_LIBS = libcurry_g.a
+
+DISTFILES = Makefile.in $(curry_prelude_SRCS) $(curry_stdlib_SRCS) \
+	    $(curry_stdlib_HDRS) $(debug_SRCS)
+DISTFILES_PATH = $(DISTFILES:%=@srcdir@/%)
+BINDISTFILES = $(curry_SRCS) $($(debug)_SRCS) \
+	       $(curry_INTF) $($(debug)_INTF) \
+	       $(curry_LIBS) $($(debug)_LIBS)
+
+# Getting the dependencies right for the runtime system header files
+# is a little bit tricky as most of them are found in the runtime source
+# directory. However, config.h is located in the build directory which
+# may be different from the source directory.
+# The definitions are a little bit involved in order to avoid a duplicate
+# target warning under Gnu make when the source and build directory are
+# the same.
+# NB Don't replace @top_srcdir@ by $(top_srcdir) in the definition of
+#    rts_H_PATH:sh as Solaris make does not perform variable substitutions
+#    in the command (BSD make does, however).
+
+rts_LIB = ../runtime/libcurry.a
+rts_H_PATH = $(shell echo $(top_srcdir)/runtime/*.h)
+rts_H_PATH:sh = echo @top_srcdir@/runtime/*.h
+rts_H = ../runtime/config.h $(rts_H_PATH:@top_srcdir@/runtime/config.h=)
+
+# suffix rules
+.SUFFIXES: .curry .icurry .c .o .d.c .d.o
+.curry.c:
+	rm -rf .$*
+	mkdir .$*
+	../cycc $(CYCCFLAGS) $($*_CYCCFLAGS) --split-code -o .$*/$* $<
+	touch $@
+.curry.d.c:
+	rm -rf .$*.d
+	mkdir .$*.d
+	../cycc -g --trusted $(CYCCFLAGS) $($*_CYCCFLAGS) --split-code -o .$*.d/$* $<
+	touch $@
+.c.icurry:
+	@test -f $@ || (echo "$@ does not exist!"; echo "Remove $< and run make again."; exit 1)
+.c.o:
+	fail=; \
+	set .$*/*.c; test "$$1" = ".$*/*.c" || \
+	for f in $$*; do \
+		$(CC) $(CPPFLAGS) $(CFLAGS) -c $$f \
+			-o .$*/`basename $$f .c`.o || \
+			case "$(MFLAGS)" in -*k*) fail=yes;; *) exit $$?;; esac; \
+	done; \
+	test -z "$$fail"
+	touch $@
+# this rule is going to make BSD make happy
+.d.c.d.o:
+	fail=; \
+	set .$*.d/*.c; test "$$1" = ".$*.d/*.c" || \
+	for f in $$*; do \
+		$(CC) $(CPPFLAGS) $(CFLAGS) -c $$f \
+			-o .$*.d/`basename $$f .c`.o || \
+			case "$(MFLAGS)" in -*k*) fail=yes;; *) exit $$?;; esac; \
+	done; \
+	test -z "$$fail"
+	touch $@
+
+# default target, build the Curry library
+all: curry
+
+# Curry modules
+curry: $(curry_LIBS) $($(debug)_LIBS)
+
+$(curry_CSRC) $(debug_CSRC): ../cycc
+$(curry_DCSRC): ../cycc
+$(curry_OBJS) $(curry_DOBJS) $(debug_OBJS): $(rts_H)
+
+obj_dirs = sed -e 's/\([A-Za-z_.]*\)\.o/.\1/g'
+
+libcurry.a: $(rts_LIB) $(curry_OBJS) $(curry_INTF)
+	cp $(rts_LIB) $@
+	find `echo $(curry_OBJS) | $(obj_dirs)` -name '*.o' | \
+		xargs $(AR) q $@
+	$(RANLIB) $@
+libcurry_g.a: $(debug_OBJS) $(curry_DOBJS) $(debug_INTF) $(curry_INTF)
+	rm -f $@
+	find `echo $(debug_OBJS) $(curry_DOBJS) | $(obj_dirs)` -name '*.o' | \
+		xargs $(AR) qc $@
+	$(RANLIB) $@
+
+# link all source files into the current directory
+# NB if $(srcdir) is a relative path we have to modify the paths for target
+#    files which are located in subdirectories
+.DEFAULT:
+	@test ! -r $@ -a -f $(srcdir)/$@ && \
+	(test -d $(@D) || mkdir $(@D)) && \
+	if expr $(srcdir) : '/.*' >/dev/null; then \
+		(case "$(MFLAGS)" in -*s*) ;; *) set -x;; esac; \
+		 ln -s $(srcdir)/$@ $@); \
+	else \
+		srcdir=`echo $@ | sed -e 's:[^/]*$$::' -e 's:[^/]*/:../:g'` && \
+		(case "$(MFLAGS)" in -*s*) ;; *) set -x;; esac; \
+		 ln -s $${srcdir}$(srcdir)/$@ $@); \
+	fi
+
+# install the binaries
+install: $(curry_LIBS) $($(debug)_LIBS)
+	$(INSTALL_DIR) $(DESTDIR)$(libdir)
+	$(INSTALL_DIR) $(DESTDIR)$(libdir)/curry
+	for f in $(curry_SRCS) $($(debug)_SRCS) $(curry_INTF) $($(debug)_INTF) $(curry_LIBS) $($(debug)_LIBS); do \
+		$(INSTALL_DATA) $$f $(DESTDIR)$(libdir)/curry; \
+	done
+	for a in $(DESTDIR)$(libdir)/curry/*.a; do $(RANLIB) $$a; done
+
+# build the distributions
+# NB distdir must be set by the caller
+distdir:
+	cp $(DISTFILES_PATH) $(distdir)
+bindistdir: $(BINDISTFILES)
+	cp $(BINDISTFILES) $(distdir)/lib
+	for a in $(distdir)/lib/*.a; do $(RANLIB) $$a; done
+
+# automatic reconfiguration
+$(top_srcdir)/configure: $(top_srcdir)/configure.in $(top_srcdir)/aclocal.m4
+	cd $(top_srcdir) && autoconf
+
+.PRECIOUS: Makefile
+Makefile: $(srcdir)/Makefile.in ../config.status
+	cd .. && ./config.status curry/Makefile
+	$(MAKE) $(MFLAGS) depend
+
+.PRECIOUS: ../config.status
+../config.status: $(top_srcdir)/configure
+	cd .. && ./config.status --recheck
+
+# clean up
+mostlyclean:
+	rm -f $(curry_CSRC) $(curry_INTF) $(curry_OBJS)
+	rm -f $(curry_DCSRC) $(curry_DOBJS)
+	rm -f $(debug_CSRC) $(debug_INTF) $(debug_OBJS)
+	rm -rf $(curry_OBJS:%.o=.%) $(curry_DOBJS:%.o=.%) $(debug_OBJS:%.o=.%)
+	rm -f $(curry_LIBS) $(debug_LIBS) core *.core
+clean: mostlyclean
+	for f in $(curry_prelude_SRCS) $(curry_stdlib_SRCS) $(debug_SRCS); do \
+		if test -h $$f; then rm $$f; fi; \
+	done
+distclean: clean
+	-rm -f Makefile .depend
+	-rm -f *~ a.out *.bak *.BAK TAGS
+maintainerclean: distclean
+
+# dependencies
+# NB This is a poor hack for computing the dependencies without cymake
+#    (which may not be available at the time when this rule in executed)
+depend: $(curry_SRCS) $($(debug)_SRCS)
+	(for f in $(curry_SRCS) $($(debug)_SRCS); do \
+		stem=`basename $$f .curry`; o="$$stem.c $$stem.d.c"; \
+		echo $$o : $$f; \
+		test $$f = Prelude.curry || echo $$o : Prelude.icurry; \
+		echo $$stem.d.c : DebugPrelude.icurry; \
+		sed -e '/^import/!d;s/import \([A-Za-z0-9_]*\).*/'"$$o : "'\1.icurry/' $(srcdir)/$$f; \
+	 done) > .depend
+
+# include computed dependencies
+include .depend
+
+# additional foreign header dependencies
+CError.o: $(srcdir)/CError.h
+Socket.o: $(srcdir)/Socket.h

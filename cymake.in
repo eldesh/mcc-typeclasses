@@ -1,0 +1,220 @@
+#! /bin/sh
+# @configure_input@
+#
+# Shell script for building Curry programs
+#
+# $Id: cymake.in 1906 2006-04-27 09:21:00Z wlux $
+#
+# Copyright (c) 2002-2006, Wolfgang Lux
+# See LICENSE for the full license.
+#
+
+
+# Configuration parameters
+cymake=`basename $0`
+version=@PACKAGE_VERSION@
+build="%BUILD_DATE%"
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+bindir=@bindir@
+libdir=@libdir@
+# DO NOT DELETE: Beginning of in-place configuration
+srcdir="@srcdir@"
+@in_place_config@
+# DO NOT DELETE: End of in-place configuration
+: ${CYC=$bindir/cyc}
+: ${CURRY_PATH=$libdir/curry}
+: ${CURRY_IMPORT_PATH=$CURRY_PATH}
+export CYC CURRY_PATH CURRY_IMPORT_PATH
+
+# Local variables
+echo=echo
+exec=
+verbose=
+cyc=$CYC
+cymk=$CURRY_PATH/cymk
+mkopts=
+cyopts=
+ldopts=
+goal=
+typeIt=
+output=
+clean=
+depend=
+target=
+imports=
+libs=
+files=
+temps=
+
+# Functions
+noecho ( ) { return 0; }
+
+get_source ( ) {
+  if test -z "$2"; then
+    stem=$1
+  else
+    stem=`expr "$1" : '\(.*\)'$2`
+  fi
+  for suffix in .lcurry .curry; do
+    if test -f "$stem$suffix"; then
+      echo "$stem$suffix"
+      return 0
+    fi
+  done
+  echo 1>&2 "$cymake: missing source file for $1"
+  exit 1
+}
+
+remove ( ) {
+  for f in "$@"; do
+    if test -f "$f"; then
+      $echo rm -f "$f"
+      $exec rm -f "$f"
+    fi
+  done
+}
+
+compile ( ) {
+  $echo $cyc $cyopts "$@"
+  $exec $cyc $cyopts "$@"
+}
+
+link ( ) {
+  if test -n "$goal"; then
+    $echo $cyc $cyopts $ldopts -e "$goal" -M "$target" "$@" $libs
+    $exec $cyc $cyopts $ldopts -e "$goal" -M "$target" "$@" $libs
+  elif test -n "$typeIt"; then
+    $echo $cyc $cyopts -T "$typeIt" -M "$target"
+    $exec $cyc $cyopts -T "$typeIt" -M "$target"
+  else
+    $echo $cyc $cyopts $ldopts -M "$target" "$@" $libs
+    $exec $cyc $cyopts $ldopts -M "$target" "$@" $libs
+  fi
+}
+
+# Option processing
+while test $# -gt 0; do
+  case $1 in
+    # Overall options
+    -M | --depend ) depend=$1;;
+    -[cCS] ) echo 1>&2 "$cymake: unsupported option $1"; exit 1;;
+    -a ) mkopts="$mkopts $1";;
+    -e ) goal=$2; shift;;
+    -e* ) goal=`expr "$1" : '-e\(.*\)'`;;
+    -T ) typeIt=$2; shift;;
+    -T* ) typeIt=`expr "$1" : '-T\(.*\)'`;;
+    -g | --debug ) mkopts="$mkopts $1"; cyopts="$cyopts $1";;
+    --clean ) clean=--clean;;
+    -o ) mkopts="$mkopts -o $2"; output="$2"; shift;;
+    -o* ) mkopts="$mkopts $1"; output=`expr "$1" : '-o\(.*\)'`;;
+    -n ) exec=echo;;
+    -v ) verbose=-v; echo=echo cyopts="$cyopts -v";;
+    -q ) echo=noecho;;
+
+    # Include files and imported modules
+    -i | -P ) cyopts="$cyopts -i$2"; imports="$imports $1 $2"; shift;;
+    -i* ) cyopts=$cyopts\ -i`expr "$1" : '-i\(.*\)'`; imports="$imports $1";;
+    -P* ) cyopts=$cyopts\ -i`expr "$1" : '-P\(.*\)'`; imports="$imports $1";;
+    
+    # Linker options
+    -ldopt-* | --ldopt-* | -ldopts-* | --ldopts-* ) ldopts="$ldopts $1";;
+    -ldopt | -ldopts | -ldopts | --ldopts ) ldopts="$ldopts $1 $2"; shift;;
+    -L ) ldopts="$ldopts -L$2"; shift;;
+    -L* ) ldopts="$ldopts $1";;
+    -l ) libs="$libs -l$2"; shift;;
+    -l* ) libs="$libs $1";;
+
+    # Pass all other flags to the Curry compiler
+    # NB some options require an argument keep this list in sync with cyc
+    -[DUIhkt] | -cc | -ccopts | --ccopts ) cyopts="$cyopts $1 $2"; shift;;
+    -* ) cyopts="$cyopts $1";;
+
+    +RTS )
+	shift
+	cyopts="$cyopts +RTS"
+	while test $# -gt 0 -a "$1" != "-RTS"; do
+	  cyopts="$cyopts $1";
+	  shift
+	done
+	cyopts="$cyopts -RTS";;
+
+    # Pass archive files and shared libraries to the linker
+    *.a | *.so | *.dylib | *.dll ) libs="$libs $1";;
+
+    # Save all files
+    * ) files="$files $1";;
+  esac
+  shift
+done
+if test -n "$depend" &&  test -n "$clean"; then
+  echo 1>&2 "$cymake: cannot specify -M and --clean together"
+  exit 1
+fi
+
+# Eventually display the compiler version
+test -n "$verbose" && echo 1>&2 "$cymake version $version (built on $build)"
+test "$exec" && verbose= echo=noecho
+
+# Check for input files
+if test -z "$files$goal$typeIt"; then
+  test -n "$verbose" && exit 0
+  echo 1>&2 "$cymake: no targets"
+  exit 1
+fi
+
+# Generate only dependencies if requested
+if test -n "$depend"; then
+  test -n "$verbose" && echo 1>&2 $cymk $depend $mkopts $imports $files
+  $exec $cymk $depend $mkopts $imports $files
+  exit $?
+fi
+
+# Remove build script upon exit
+trap 'rm -f /tmp/cymake$$' 0 1 2 3 15
+
+# Process all targets
+set -- $files
+if test -n "$output" -a $# -gt 1; then
+  echo 1>&2 "$cymake: cannot specify -o with multiple targets"
+  exit 1
+fi
+if test -n "$goal" -a $# -gt 1; then
+  echo 1>&2 "$cymake: cannot specify -e with multiple targets"
+  exit 1
+fi
+if test -n "$typeIt" -a $# -gt 1; then
+  echo 1>&2 "$cymake: cannot specify -T with multiple targets"
+  exit 1
+fi
+if test -n "$goal" -a -n "$typeIt"; then
+  echo 1>&2 "$cymake: conflicting options -e and -T specified"
+  exit 1
+fi
+
+
+if test $# -eq 0; then
+  test -n "$output" || output=a.out
+  if test -n "$clean"; then
+    remove $output
+  else
+    link -o $output
+  fi
+  exit $?
+fi
+
+for f in $files; do
+  case $f in
+    *.curry | *.lcurry ) target=$f;;
+    *.o ) target=`get_source "$f" .o` || exit $?;;
+    * ) target=`get_source "$f"` || exit $?;;
+  esac
+  test -n "$verbose" && echo 1>&2 $cymk $clean $mkopts $imports $f
+  $cymk $clean $mkopts $imports $f > /tmp/cymake$$
+
+  . /tmp/cymake$$
+  set +e
+done
+
+# done
+exit 0

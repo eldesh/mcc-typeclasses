@@ -1,0 +1,189 @@
+.\"Modified from man(1) of FreeBSD, the NetBSD mdoc.template, and mdoc.samples.
+.\"See Also:
+.\"man mdoc.samples for a complete listing of options
+.\"man mdoc for the short list of editing options
+.\"/usr/share/misc/mdoc.template
+.\"
+.\" $Id: cyi.1.in 1915 2006-05-07 14:48:36Z wlux $
+.\"
+.\" Copyright (c) 2004-2005, Wolfgang Lux
+.\" See LICENSE for the full license.
+.\"
+.Dd 17.11.05               \" DATE 
+.Dt cyi 1
+.Os
+.Sh NAME                 \" Section Header - required - don't modify 
+.Nm cyi
+.Nd An interactive interpreter for Curry.
+.Sh SYNOPSIS             \" Section Header - required - don't modify
+.Nm
+.Op Ar option No ...
+.Op Ar module
+.Sh DESCRIPTION          \" Section Header - required - don't modify
+.Nm
+is an interactive environment that allows evaluating and debugging
+Curry goals with respect to a Curry module loaded into the
+interpreter. At startup,
+.Nm
+reads and interprets commands from the file 
+.Pa .cyirc
+in the current directory if it exists, or from
+.Pa .cyirc
+in your home directory otherwise, and then loads either the first
+module specified on the command line or the Curry prelude.
+.Pp
+.Ss Goals
+A goal is a Curry expression optionally followed by a where-clause
+that can be used for providing local definitions for the goal. All
+free variables of the goal must be declared either in the where clause
+or by using a let expression as goal. The bindings of the free
+variables are displayed together with the normal form of the goal
+after successful evaluation unless the goal is of type
+.Li IO Ar t .
+.Pp
+.Ss Commands
+At the prompt of the interactive environment, the following commands
+can be entered:
+.Bl -tag -width -indent -compact
+.It Ar goal
+Evaluate
+.Ar goal
+in the context of the current module.
+.It Ic :^ Op Ar goal
+Evaluate
+.Ar goal
+in the context of the current module. If
+.Ar goal
+is omitted, the previous goal is evaluated again.
+.It Ic :debug Op Ar goal
+Invoke the debugger for
+.Ar goal .
+It may take some time to recompile the source modules with debugging
+information.
+If
+.Ar goal
+is omitted, the debugger is invoked for the previous goal.
+.It Ic :type Op Ar goal
+Print the type of
+.Ar goal
+instead of evaluating it. If
+.Ar goal
+is omitted, the type of the previous goal is shown.
+.It Ic :load Ar module
+Set the current evaluation context to
+.Ar module .
+This command will compile
+.Ar module
+and all modules it depends on. The module can be specified either by
+the name of its source file (ending in
+.Pa .lcurry
+or
+.Pa .curry )
+or a plain module name.
+.Nm
+displays the name of the current module in its prompt.
+.It Ic :load
+Reset the current evaluation context to the Curry prelude.
+.It Ic :reload
+Repeat the last load command.
+.It Ic :freshen
+Recompile the current module and all imported source files.
+.It Ic :clean
+Remove all compiled files for the current module and all imported
+source files.
+.It Ic :edit Ar file
+Invoke the editor for
+.Ar file .
+The default editor is
+.Pa /usr/bin/vi ,
+but this can be changed by setting one of the environment variables
+.Ev VISUAL
+and
+.Ev EDITOR
+to your preferred editor before starting
+.Nm .
+.It Ic :edit
+Edit the source file of the current module.
+.It Ic :set Ar option No ...
+Add
+.Ar option Ns No s
+to the list of compiler options.
+.It Ic :unset Ar word No ...
+Remove
+.Ar word Ns No s
+from the list of compiler options.
+.It Ic :cd Ar dir
+Change the current directory to
+.Ar dir .
+.It Ic :cd
+Print the current directory.
+.It Ic :! Ar command
+Execute the shell command
+.Ar command .
+.It Ic :version
+Display the compiler's version.
+.It Ic :help
+Show the list of supported commands.
+.It Ic :quit
+Quit
+.Nm .
+.El
+All commands, except for
+.Ic :cd
+and
+.Ic :clean ,
+may be abbreviated to their first letter.
+.Sh FILES
+.Bl -tag -width -indent -compact
+.It Pa .cyirc
+.It Pa ~/.cyirc
+Commands from these files are read and interpreted on startup. If both
+files exist, only
+.Pa .cyirc
+is used.
+.Pp
+.It Pa ~/.cyi_history
+The command line history is stored in file
+.Pa ~/.cyi_history .
+.El
+.Sh SEE ALSO 
+.Xr cyc 1 , 
+.Xr cymake 1
+.Sh BUGS
+.Nm
+is implemented as a shell script which invokes
+.Xr cymake 1
+and
+.Xr cyc 1
+for compiling modules and goals. Commands are read from the standard
+input using the shell's builtin
+.Ic read
+command. Some shells, e.g.
+.Pa /bin/sh
+on Solaris, cannot read raw input but apply backslash processing to
+the input. When
+.Nm
+is executed by such a shell, all backslash characters on the
+command line must be escaped by another backslash character; i.e., you
+have to enter
+.Li \(rs\(rsx -> x
+in a goal instead of
+.Li \(rsx -> x
+and
+.Li ord '\(rs\(rsn'
+instead of
+.Li ord '\(rsn' .
+In order to remind you of this limitation,
+.Nm
+displays the following warning at startup when it is appropriate.
+.Dl Warning: Backslashes on the command line must be escaped
+.Dl \& \& For instance, use \(rs\(rsx -> x for a lambda abstraction
+.Dl \& \& and '\(rs\(rsn' for the linefeed character.
+.Pp
+Command line editing and history require support from the
+.Ic read
+command of the shell, which executes the
+.Nm
+script. This is available only for Gnu Bash and Korn shells except for
+the public domain version. Command line editing also works for the Z
+shell, but without history.

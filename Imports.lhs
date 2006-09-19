@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 1867 2006-03-02 18:35:01Z wlux $
+% $Id: Imports.lhs 1969 2006-09-19 18:29:25Z wlux $
 %
-% Copyright (c) 2000-2005, Wolfgang Lux
+% Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Imports.lhs}
@@ -22,7 +22,7 @@ interfaces into the current module.
 
 \end{verbatim}
 When an interface is imported into a module, the compiler must respect
-the import specifications on the import declaration. If an import
+the import specifications in the import declaration. If an import
 specification is present, only those entities which are included in
 the specification or not hidden by it, respectively, are added to the
 global environments. If the qualified flag is present, only a
@@ -35,7 +35,7 @@ unqualified import are performed.
 >                 -> (PEnv,TCEnv,ValueEnv)
 > importInterface m q is (pEnv,tcEnv,tyEnv) i =
 >   (importEntities precs m q vs id i pEnv,
->    importEntities (types True) m q ts (importData vs) i tcEnv,
+>    importEntities types m q ts (importData vs) i tcEnv,
 >    importEntities values m q vs id i tyEnv)
 >   where ts = isVisible addType is
 >         vs = isVisible addValue is
@@ -52,7 +52,16 @@ unqualified import are performed.
 >                -> Interface -> TopEnv a -> TopEnv a
 > importEntities bind m q isVisible f (Interface m' _ ds) env =
 >   foldr (uncurry (importTopEnv q m)) env
->         [(x,f y) | (x,y) <- foldr (bind m') [] ds, isVisible x]
+>         [(x,f y) | (x,y) <- foldr (bind m') [] ds', isVisible x]
+>   where ds' = filter (not . isHiddenData) ds
+
+> isHiddenData :: IDecl -> Bool
+> isHiddenData (IInfixDecl _ _ _ _) = False
+> isHiddenData (HidingDataDecl _ _ _) = True 
+> isHiddenData (IDataDecl _ _ _ _) = False
+> isHiddenData (INewtypeDecl _ _ _ _) = False
+> isHiddenData (ITypeDecl _ _ _ _) = False
+> isHiddenData (IFunctionDecl _ _ _) = False
 
 > importData :: (Ident -> Bool) -> TypeInfo -> TypeInfo
 > importData isVisible (DataType tc n cs) =
@@ -68,24 +77,47 @@ unqualified import are performed.
 
 \end{verbatim}
 Importing an interface into another interface is somewhat simpler
-because all entities are imported into the environment. In addition,
-only a qualified import is necessary. Note that hidden data types are
-imported as well because they may be used in type expressions in an
-interface.
+because all entities are imported into the environments. In addition,
+only a qualified import is necessary. Only those entities that are
+actually defined in the module are imported. Since the compiler
+imports all used interfaces into other interfaces, entities defined in
+one module and re-exported by another module are made available by
+their defining modules. Furthermore, ignoring re-exported entities
+avoids a problem with the fact that the unqualified names of entities
+defined in an interface may be ambiguous if hidden data type
+declarations are taken into account. For instance, in the interface
+\begin{verbatim}
+  module M where {
+    import N;
+    hiding data N.T;
+    type T a = (a,N.T)
+  }
+\end{verbatim}
+the unqualified type identifier \verb|T| would be ambiguous if
+\verb|N.T| were not ignored.
 \begin{verbatim}
 
 > importInterfaceIntf :: (PEnv,TCEnv,ValueEnv) -> Interface
 >                     -> (PEnv,TCEnv,ValueEnv)
 > importInterfaceIntf (pEnv,tcEnv,tyEnv) i =
 >   (importEntitiesIntf precs i pEnv,
->    importEntitiesIntf (types False) i tcEnv,
+>    importEntitiesIntf types i tcEnv,
 >    importEntitiesIntf values i tyEnv)
 
 > importEntitiesIntf :: Entity a
 >                    => (ModuleIdent -> IDecl -> [I a] -> [I a])
 >                    -> Interface -> TopEnv a -> TopEnv a
 > importEntitiesIntf bind (Interface m _ ds) env =
->   foldr (uncurry (qualImportTopEnv m)) env (foldr (bind m) [] ds)
+>   foldr (uncurry (qualImportTopEnv m)) env
+>         (foldr (bind m) [] (filter (isJust . localIdent m . entity) ds))
+
+> entity :: IDecl -> QualIdent
+> entity (IInfixDecl _ _ _ op) = op
+> entity (HidingDataDecl _ tc _) = tc
+> entity (IDataDecl _ tc _ _) = tc
+> entity (INewtypeDecl _ tc _ _) = tc
+> entity (ITypeDecl _ tc _ _) = tc
+> entity (IFunctionDecl _ f _) = f
 
 \end{verbatim}
 The list of entities exported from a module is computed with the
@@ -97,17 +129,15 @@ following functions.
 >   qual op (PrecInfo (qualQualify m op) (OpPrec fix p))
 > precs _ _ = id
 
-> types :: Bool -> ModuleIdent -> IDecl -> [I TypeInfo] -> [I TypeInfo]
-> types exported m (HidingDataDecl _ tc tvs)
->   | exported = id
->   | otherwise = qual tc (typeCon DataType m tc tvs [])
-> types _ m (IDataDecl _ tc tvs cs) =
+> types :: ModuleIdent -> IDecl -> [I TypeInfo] -> [I TypeInfo]
+> types m (HidingDataDecl _ tc tvs) = qual tc (typeCon DataType m tc tvs [])
+> types m (IDataDecl _ tc tvs cs) =
 >   qual tc (typeCon DataType m tc tvs (map (fmap constr) cs))
-> types _ m (INewtypeDecl _ tc tvs nc) =
+> types m (INewtypeDecl _ tc tvs nc) =
 >   qual tc (typeCon RenamingType m tc tvs (nconstr nc))
-> types _ m (ITypeDecl _ tc tvs ty) =
+> types m (ITypeDecl _ tc tvs ty) =
 >   qual tc (typeCon AliasType m tc tvs (toType m tvs ty))
-> types _ _ _ = id
+> types _ _ = id
 
 > values :: ModuleIdent -> IDecl -> [I ValueInfo] -> [I ValueInfo]
 > values m (IDataDecl _ tc tvs cs) =

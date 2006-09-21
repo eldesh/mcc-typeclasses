@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryLexer.lhs 1973 2006-09-19 19:06:48Z wlux $
+% $Id: CurryLexer.lhs 1974 2006-09-21 09:25:16Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -39,9 +39,10 @@ In this section a lexer for Curry is implemented.
 >   -- virtual punctation (inserted by layout)
 >   | VSemicolon | VRightBrace
 >   -- reserved identifiers
->   | KW_case | KW_class | KW_data | KW_do | KW_else | KW_foreign | KW_free
->   | KW_if | KW_import | KW_in | KW_infix | KW_infixl | KW_infixr | KW_let
->   | KW_module | KW_newtype | KW_of | KW_then | KW_type | KW_where
+>   | KW_case | KW_class | KW_data | KW_do | KW_else | KW_foreign
+>   | KW_free | KW_if | KW_import | KW_in | KW_infix | KW_infixl
+>   | KW_infixr | KW_instance | KW_let | KW_module | KW_newtype
+>   | KW_of | KW_then | KW_type | KW_where
 >   -- reserved operators
 >   | At | Colon | DotDot | DoubleColon | Equals | Backslash | Bar
 >   | LeftArrow | RightArrow | Tilde
@@ -163,6 +164,7 @@ all tokens in their source representation.
 >   showsPrec _ (Token KW_infix _) = showString "`infix'"
 >   showsPrec _ (Token KW_infixl _) = showString "`infixl'"
 >   showsPrec _ (Token KW_infixr _) = showString "`infixr'"
+>   showsPrec _ (Token KW_instance _) = showString "`instance'"
 >   showsPrec _ (Token KW_let _) = showString "`let'"
 >   showsPrec _ (Token KW_module _) = showString "`module'"
 >   showsPrec _ (Token KW_newtype _) = showString "`newtype'"
@@ -209,26 +211,27 @@ pragmas.
 
 > reserved_ids, reserved_and_special_ids :: FM String Category
 > reserved_ids = fromListFM [
->     ("case",    KW_case),
->     ("class",   KW_class),
->     ("data",    KW_data),
->     ("do",      KW_do),
->     ("else",    KW_else),
->     ("foreign", KW_foreign),
->     ("free",    KW_free),
->     ("if",      KW_if),
->     ("import",  KW_import),
->     ("in",      KW_in),
->     ("infix",   KW_infix),
->     ("infixl",  KW_infixl),
->     ("infixr",  KW_infixr),
->     ("let",     KW_let),
->     ("module",  KW_module),
->     ("newtype", KW_newtype),
->     ("of",      KW_of),
->     ("then",    KW_then),
->     ("type",    KW_type),
->     ("where",   KW_where)
+>     ("case",     KW_case),
+>     ("class",    KW_class),
+>     ("data",     KW_data),
+>     ("do",       KW_do),
+>     ("else",     KW_else),
+>     ("foreign",  KW_foreign),
+>     ("free",     KW_free),
+>     ("if",       KW_if),
+>     ("import",   KW_import),
+>     ("in",       KW_in),
+>     ("infix",    KW_infix),
+>     ("infixl",   KW_infixl),
+>     ("infixr",   KW_infixr),
+>     ("instance", KW_instance),
+>     ("let",      KW_let),
+>     ("module",   KW_module),
+>     ("newtype",  KW_newtype),
+>     ("of",       KW_of),
+>     ("then",     KW_then),
+>     ("type",     KW_type),
+>     ("where",    KW_where)
 >   ]
 > reserved_and_special_ids = foldr (uncurry addToFM) reserved_ids [
 >     ("as",        Id_as),

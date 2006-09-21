@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 1973 2006-09-19 19:06:48Z wlux $
+% $Id: TypeSyntaxCheck.lhs 1974 2006-09-21 09:25:16Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -19,7 +19,9 @@ of a capitalization convention.
 > import CurryPP
 > import Error
 > import List
+> import Monad
 > import Pretty
+> import Set
 > import TopEnv
 
 \end{verbatim}
@@ -33,13 +35,14 @@ environment. The final environment is returned in order to be used
 later for checking the optional export list of the current module.
 \begin{verbatim}
 
-> typeSyntaxCheck :: ModuleIdent -> TCEnv -> [TopDecl]
->                 -> Error (TypeEnv,[TopDecl])
-> typeSyntaxCheck m tcEnv ds =
+> typeSyntaxCheck :: ModuleIdent -> TCEnv -> InstEnv -> [TopDecl]
+>                 -> Error (TypeEnv,InstEnv,[TopDecl])
+> typeSyntaxCheck m tcEnv iEnv ds =
 >   do
 >     reportDuplicates duplicateType repeatedType (map tident tds)
 >     ds' <- mapE (checkTopDecl env) ds
->     return (env,ds')
+>     iEnv' <- checkInstances env iEnv ds'
+>     return (env,iEnv',ds')
 >   where tds = filter isTypeDecl ds
 >         env = foldr (bindType m) (fmap typeKind tcEnv) tds
 
@@ -57,6 +60,7 @@ later for checking the optional export list of the current module.
 >   globalBindTopEnv m tc (Alias (qualifyWith m tc))
 > bindType m (ClassDecl _ cls _) =
 >   globalBindTopEnv m cls (Class (qualifyWith m cls))
+> bindType m (InstanceDecl _ _ _) = id
 > bindType _ (BlockDecl _) = id
 
 \end{verbatim}
@@ -80,6 +84,9 @@ signatures.
 >   do
 >     checkTypeLhs env p [tv]
 >     return (ClassDecl p cls tv)
+> checkTopDecl env (InstanceDecl p cls ty) =
+>   checkClass env p cls &&>
+>   liftE (InstanceDecl p cls) (checkSimpleType env p ty)
 > checkTopDecl env (BlockDecl d) = liftE BlockDecl (checkDecl env d)
 
 > checkDecl :: TypeEnv -> Decl -> Error Decl
@@ -96,7 +103,8 @@ signatures.
 > checkTypeLhs :: TypeEnv -> Position -> [Ident] -> Error ()
 > checkTypeLhs env p tvs =
 >   mapE_ (errorAt p . noVariable) (nub tcs) &&>
->   mapE_ (errorAt p . nonLinear . fst) (duplicates (filter (anonId /=) tvs'))
+>   mapE_ (errorAt p . nonLinear "left hand side of type declaration". fst)
+>         (duplicates (filter (anonId /=) tvs'))
 >   where (tcs,tvs') = partition isTypeConstr tvs
 >         isTypeConstr tv = not (null (lookupTopEnv tv env))
 
@@ -215,7 +223,7 @@ interpret the identifier as such.
 >             [Data _ _] -> return (ConstructorType tc)
 >             [Alias _] -> return (ConstructorType tc)
 >             [Class _] -> errorAt p (undefinedType tc)
->             rs -> errorAt p (ambiguousType rs tc))
+>             rs -> errorAt p (ambiguousIdent rs tc))
 >          (mapE (checkType env p) tys)
 > checkType env p (VariableType tv)
 >   | tv == anonId = return (VariableType tv)
@@ -227,6 +235,55 @@ interpret the identifier as such.
 > checkType env p (ArrowType ty1 ty2) =
 >   liftE2 ArrowType (checkType env p ty1) (checkType env p ty2)
 
+> checkSimpleType :: TypeEnv -> Position -> TypeExpr -> Error TypeExpr
+> checkSimpleType env p ty =
+>   do
+>     ty' <- checkType env p ty
+>     unless (isSimpleType ty' && not (isTypeSynonym env (root ty')) &&
+>             null (duplicates (filter (anonId /=) (fv ty'))))
+>            (errorAt p (notSimpleType ty'))
+>     return ty'
+
+> checkClass :: TypeEnv -> Position -> QualIdent -> Error ()
+> checkClass env p cls =
+>   case qualLookupTopEnv cls env of
+>     [] -> errorAt p (undefinedClass cls)
+>     [Data _ _] -> errorAt p (undefinedClass cls)
+>     [Alias _] -> errorAt p (undefinedClass cls)
+>     [Class _] -> return ()
+>     rs -> errorAt p (ambiguousIdent rs cls)
+
+\end{verbatim}
+The compiler reports an error when more than once instance is defined
+for a particular pair of a type class and type constructor. This
+includes duplicate instances defined in the current module as well as
+conflicts between locally defined instances and imported instances.
+\begin{verbatim}
+
+> checkInstances :: TypeEnv -> InstEnv -> [TopDecl] -> Error InstEnv
+> checkInstances tEnv iEnv ds =
+>   do
+>     sequenceE_ [errorAt p (duplicateInstance inst) | P p inst <- unique cts,
+>                                                      inst `elemSet` iEnv] &&>
+>       reportDuplicates duplicateInstance repeatedInstance cts
+>     return (foldr bindInstance iEnv cts)
+>   where cts = [P p (qualCT tEnv (CT cls (root ty)))
+>               | InstanceDecl p cls ty <- ds]
+>         unique [] = []
+>         unique (x:xs)
+>           | x `elem` xs = unique (filter (x /=) xs)
+>           | otherwise = x : unique xs
+
+> bindInstance :: P CT -> InstEnv -> InstEnv
+> bindInstance (P _ inst) iEnv = addToSet inst iEnv
+
+> qualCT :: TypeEnv -> CT -> CT
+> qualCT env (CT cls tc) = CT (qual env cls) (qual env tc)
+>   where qual env x =
+>           case qualLookupTopEnv x env of
+>             [y] -> origName y
+>             _ -> internalError "qualCT"
+
 \end{verbatim}
 Auxiliary definitions.
 \begin{verbatim}
@@ -236,7 +293,36 @@ Auxiliary definitions.
 > tident (NewtypeDecl p tc _ _) = P p tc
 > tident (TypeDecl p tc _ _) = P p tc
 > tident (ClassDecl p cls _) = P p cls
+> tident (InstanceDecl _ _ _) = internalError "tident"
 > tident (BlockDecl _) = internalError "tident"
+
+> isSimpleType :: TypeExpr -> Bool
+> isSimpleType (ConstructorType _ tys) = all isVariableType tys
+> isSimpleType (VariableType _) = False
+> isSimpleType (TupleType tys) = all isVariableType tys
+> isSimpleType (ListType ty) = isVariableType ty
+> isSimpleType (ArrowType ty1 ty2) = isVariableType ty1 && isVariableType ty2
+
+> isTypeSynonym :: TypeEnv -> QualIdent -> Bool
+> isTypeSynonym env tc =
+>   case qualLookupTopEnv tc env of
+>     [Data _ _] -> False
+>     [Alias _] -> True
+>     _ -> internalError "isTypeSynonym"
+
+> isVariableType :: TypeExpr -> Bool
+> isVariableType (ConstructorType _ _) = False
+> isVariableType (VariableType _) = True
+> isVariableType (TupleType _) = False
+> isVariableType (ListType _) = False
+> isVariableType (ArrowType _ _) = False
+
+> root :: TypeExpr -> QualIdent
+> root (ConstructorType tc _) = tc
+> root (VariableType _) = internalError "root"
+> root (TupleType tys) = qTupleId (length tys)
+> root (ListType _) = qListId
+> root (ArrowType _ _) = qArrowId
 
 \end{verbatim}
 Error messages.
@@ -251,22 +337,33 @@ Error messages.
 > undefinedType :: QualIdent -> String
 > undefinedType tc = "Undefined type " ++ qualName tc
 
-> ambiguousType :: [TypeKind] -> QualIdent -> String
-> ambiguousType rs tc = show $
->   text "Ambiguous identifier" <+> ppQIdent tc $$
+> undefinedClass :: QualIdent -> String
+> undefinedClass cls = "Undefined type class " ++ qualName cls
+
+> ambiguousIdent :: [TypeKind] -> QualIdent -> String
+> ambiguousIdent rs x = show $
+>   text "Ambiguous identifier" <+> ppQIdent x $$
 >   fsep (text "Could refer to:" :
 >               punctuate comma (map (ppQIdent . origName) rs))
 
 > duplicateType :: Ident -> String
-> duplicateType tc = name tc ++ " defined more than once"
+> duplicateType x = name x ++ " defined more than once"
 
 > repeatedType :: Ident -> String
-> repeatedType tc = "Redefinition of " ++ name tc
+> repeatedType x = "Redefinition of " ++ name x
 
-> nonLinear :: Ident -> String
-> nonLinear tv =
->   "Type variable " ++ name tv ++
->   " occurs more than once in left hand side of type declaration"
+> duplicateInstance :: CT -> String
+> duplicateInstance (CT cls tc) =
+>   "More than one " ++ qualName cls ++ " " ++ qualName tc ++
+>   " instance declaration"
+
+> repeatedInstance :: CT -> String
+> repeatedInstance (CT cls tc) =
+>   "Repeated " ++ qualName cls ++ " " ++ qualName tc ++ " instance declaration"
+
+> nonLinear :: String -> Ident -> String
+> nonLinear what tv =
+>   "Type variable " ++ name tv ++ " occurs more than once in " ++ what
 
 > noVariable :: Ident -> String
 > noVariable tv =
@@ -275,5 +372,11 @@ Error messages.
 
 > unboundVariable :: Ident -> String
 > unboundVariable tv = "Undefined type variable " ++ name tv
+
+> notSimpleType :: TypeExpr -> String
+> notSimpleType ty = show $
+>   vcat [text "Illegal instance type" <+> ppTypeExpr 0 ty,
+>         text "The instance type must be of the form (T a b c), where T is",
+>         text "not a type synonym and a, b, c are distinct type variables."]
 
 \end{verbatim}

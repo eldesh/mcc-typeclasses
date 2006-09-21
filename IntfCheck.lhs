@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 1973 2006-09-19 19:06:48Z wlux $
+% $Id: IntfCheck.lhs 1974 2006-09-21 09:25:16Z wlux $
 %
 % Copyright (c) 2000-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -97,6 +97,7 @@ interface module only. However, this has not been implemented yet.
 >   checkTypeInfo "type class" checkClass tcEnv p cls
 >   where checkClass (TypeClass cls') | cls == cls' = Just (return ())
 >         checkClass _ = Nothing
+> checkImport m _ _ _ (IInstanceDecl _ _ _) = return ()
 > checkImport m _ _ tyEnv (IFunctionDecl p f ty) =
 >   checkValueInfo "function" checkFun tyEnv p f
 >   where checkFun (Value f' (ForAll _ ty')) = f == f' && toType m [] ty == ty'

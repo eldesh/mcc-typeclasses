@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 1973 2006-09-19 19:06:48Z wlux $
+% $Id: Imports.lhs 1974 2006-09-21 09:25:16Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -27,15 +27,17 @@ specification is present, only those entities which are included in
 the specification or not hidden by it, respectively, are added to the
 global environments. If the qualified flag is present, only a
 qualified import is performed. Otherwise, both a qualified and an
-unqualified import are performed.
+unqualified import are performed. Regardless of the type of import,
+all instance declarations are always imported into the current module.
 \begin{verbatim}
 
 > importInterface :: ModuleIdent -> Bool -> Maybe ImportSpec
->                 -> (PEnv,TCEnv,ValueEnv) -> Interface
->                 -> (PEnv,TCEnv,ValueEnv)
-> importInterface m q is (pEnv,tcEnv,tyEnv) (Interface m' _ ds) =
+>                 -> (PEnv,TCEnv,InstEnv,ValueEnv) -> Interface
+>                 -> (PEnv,TCEnv,InstEnv,ValueEnv)
+> importInterface m q is (pEnv,tcEnv,iEnv,tyEnv) (Interface m' _ ds) =
 >   (importEntities precs m q vs id m' ds' pEnv,
 >    importEntities types m q ts (importData vs) m' ds' tcEnv,
+>    importInstances m ds' iEnv,
 >    importEntities values m q vs id m' ds' tyEnv)
 >   where ds' = filter (not . isHiddenData) ds
 >         ts = isVisible addType is
@@ -48,6 +50,7 @@ unqualified import are performed.
 > isHiddenData (INewtypeDecl _ _ _ _) = False
 > isHiddenData (ITypeDecl _ _ _ _) = False
 > isHiddenData (IClassDecl _ _ _) = False
+> isHiddenData (IInstanceDecl _ _ _) = False
 > isHiddenData (IFunctionDecl _ _ _) = False
 
 > isVisible :: (Import -> Set Ident -> Set Ident) -> Maybe ImportSpec
@@ -77,6 +80,16 @@ unqualified import are performed.
 >   | isVisible c = Just c
 >   | otherwise = Nothing
 
+> importInstances :: ModuleIdent -> [IDecl] -> InstEnv -> InstEnv
+> importInstances m ds iEnv =
+>   foldr addToSet iEnv [ctPair m cls ty | IInstanceDecl _ cls ty <- ds]
+>   where ctPair m cls ty = CT (qualQualify m cls) (root (toType m [] ty))
+>         root (TypeConstructor tc _) = tc
+>         root (TypeVariable _) = internalError "importInstances"
+>         root (TypeConstrained _ _) = internalError "importInstances"
+>         root (TypeArrow _ _) = qArrowId
+>         root (TypeSkolem _) = internalError "importInstances"
+
 \end{verbatim}
 Importing an interface into another interface is somewhat simpler
 because all entities are imported into the environments. In addition,
@@ -96,14 +109,18 @@ declarations are taken into account. For instance, in the interface
   }
 \end{verbatim}
 the unqualified type identifier \verb|T| would be ambiguous if
-\verb|N.T| were not ignored.
+\verb|N.T| were not ignored. Instance declarations are always included
+(by returning \verb|qualify anonId| from \verb|entity|) because there
+is no means to distinguish instances defined in a module from
+instances imported from another module.
 \begin{verbatim}
 
-> importInterfaceIntf :: (PEnv,TCEnv,ValueEnv) -> Interface
->                     -> (PEnv,TCEnv,ValueEnv)
-> importInterfaceIntf (pEnv,tcEnv,tyEnv) (Interface m _ ds) =
+> importInterfaceIntf :: (PEnv,TCEnv,InstEnv,ValueEnv) -> Interface
+>                     -> (PEnv,TCEnv,InstEnv,ValueEnv)
+> importInterfaceIntf (pEnv,tcEnv,iEnv,tyEnv) (Interface m _ ds) =
 >   (importEntitiesIntf precs m ds' pEnv,
 >    importEntitiesIntf types m ds' tcEnv,
+>    importInstances m ds' iEnv,
 >    importEntitiesIntf values m ds' tyEnv)
 >   where ds' = filter (isJust . localIdent m . entity) ds
 
@@ -114,6 +131,7 @@ the unqualified type identifier \verb|T| would be ambiguous if
 > entity (INewtypeDecl _ tc _ _) = tc
 > entity (ITypeDecl _ tc _ _) = tc
 > entity (IClassDecl _ cls _) = cls
+> entity (IInstanceDecl _ _ _) = qualify anonId
 > entity (IFunctionDecl _ f _) = f
 
 > importEntitiesIntf :: Entity a

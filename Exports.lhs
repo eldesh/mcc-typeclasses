@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 1973 2006-09-19 19:06:48Z wlux $
+% $Id: Exports.lhs 1974 2006-09-21 09:25:16Z wlux $
 %
-% Copyright (c) 2000-2005, Wolfgang Lux
+% Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Exports.lhs}
@@ -11,23 +11,39 @@ declarations from the list of exported types and values. If an entity
 is imported from another module, its name is qualified with the name
 of the module containing its definition. Furthermore, newtypes whose
 constructor is not exported are transformed into (abstract) data
-types.
+types. In principle, all instance declarations visible in the current
+module (whether defined locally or imported from another module) must
+be exported. However, there is no point in exporting local instance
+declarations which cannot be used in another module because
+\begin{enumerate}
+\item the instance is defined for a private class of the current
+  module, or
+\item the instance is defined for a private type of the current
+  module that furthermore does not occur in any of the interface's
+  type signatures.
+\end{enumerate}
 \begin{verbatim}
 
 > module Exports(exportInterface) where
 > import Base
+> import Maybe
 > import Set
 > import TopEnv
 > import TypeTrans
 
-> exportInterface :: ModuleIdent -> ExportSpec -> PEnv -> TCEnv -> ValueEnv
->                 -> Interface
-> exportInterface m (Exporting _ es) pEnv tcEnv tyEnv =
+> exportInterface :: ModuleIdent -> ExportSpec
+>                 -> PEnv -> TCEnv -> InstEnv -> ValueEnv -> Interface
+> exportInterface m (Exporting _ es) pEnv tcEnv iEnv tyEnv =
 >   Interface m imports (precs ++ hidden ++ ds)
 >   where imports = map (IImportDecl noPos) (usedModules ds)
 >         precs = foldr (infixDecl m pEnv) [] es
 >         hidden = map (hiddenTypeDecl m tcEnv) (hiddenTypes ds)
->         ds = foldr (typeDecl m tcEnv tyEnv) (foldr (funDecl m tyEnv) [] es) es
+>         ds = types ++ values ++ insts
+>         types = foldr (typeDecl m tcEnv tyEnv) [] es
+>         values = foldr (funDecl m tyEnv) [] es
+>         insts = foldr (instDecl m tcEnv ts) [] (toListSet iEnv)
+>         ts = [tc | ExportTypeWith tc _ <- es] ++
+>              map (qualQualify m) (hiddenTypes values)
 
 > infixDecl :: ModuleIdent -> PEnv -> Export -> [IDecl] -> [IDecl]
 > infixDecl m pEnv (Export f) ds = iInfixDecl m pEnv f ds
@@ -87,6 +103,16 @@ types.
 >   where ty = rawType (funType f tyEnv)
 > funDecl _ _ (ExportTypeWith _ _) ds = ds
 
+> instDecl :: ModuleIdent -> TCEnv -> [QualIdent] -> CT -> [IDecl] -> [IDecl]
+> instDecl m tcEnv ts (CT cls tc) ds
+>   | isJust (localIdent m cls) && cls `notElem` ts = ds
+>   | isJust (localIdent m tc) && not (isPrimTypeId tc) && tc `notElem` ts = ds
+>   | otherwise = IInstanceDecl noPos (qualUnqualify m cls) (fromType m ty) : ds
+>   where ty
+>           | tc == qArrowId = TypeArrow (tvs !! 0) (tvs !! 1)
+>           | otherwise = TypeConstructor tc (take (constrKind tc tcEnv) tvs)
+>         tvs = map TypeVariable [0..]
+
 \end{verbatim}
 The compiler determines the list of imported modules from the set of
 module qualifiers that are used in the interface. Careful readers
@@ -124,6 +150,7 @@ not module \texttt{B}.
 >   modules (INewtypeDecl _ tc _ nc) = modules tc . modules nc
 >   modules (ITypeDecl _ tc _ ty) = modules tc . modules ty
 >   modules (IClassDecl _ cls _) = modules cls
+>   modules (IInstanceDecl _ cls ty) = modules cls . modules ty
 >   modules (IFunctionDecl _ f ty) = modules f . modules ty
 
 > instance HasModule ConstrDecl where
@@ -167,6 +194,7 @@ compiler can check them without loading the imported modules.
 > definedType (INewtypeDecl _ tc _ _) tcs = tc : tcs
 > definedType (ITypeDecl _ tc _ _) tcs = tc : tcs
 > definedType (IClassDecl _ _ _) tcs = tcs
+> definedType (IInstanceDecl _ _ _) tcs = tcs
 > definedType (IFunctionDecl _ _ _)  tcs = tcs
 
 > class HasType a where
@@ -183,6 +211,7 @@ compiler can check them without loading the imported modules.
 >   usedTypes (INewtypeDecl _ _ _ nc) = usedTypes nc
 >   usedTypes (ITypeDecl _ _ _ ty) = usedTypes ty
 >   usedTypes (IClassDecl _ _ _) = id
+>   usedTypes (IInstanceDecl _ _ ty) = usedTypes ty
 >   usedTypes (IFunctionDecl _ _ ty) = usedTypes ty
 
 > instance HasType ConstrDecl where

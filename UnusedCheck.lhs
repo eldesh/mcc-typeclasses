@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 1973 2006-09-19 19:06:48Z wlux $
+% $Id: UnusedCheck.lhs 1974 2006-09-21 09:25:16Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -87,12 +87,14 @@ implemented by a traversal of the syntax tree.
 >   used _ (NewtypeDecl _ _ _ _) = id
 >   used _ (TypeDecl _ _ _ _) = id
 >   used _ (ClassDecl _ _ _) = id
+>   used _ (InstanceDecl _ _ _) = id
 >   used m (BlockDecl d) = used m d
 
 >   unused used p (DataDecl _ _ _ cs) = unused used p cs
 >   unused used p (NewtypeDecl _ _ _ nc) = unused used p nc
 >   unused _ _ (TypeDecl _ _ _ _) = id
 >   unused _ _ (ClassDecl _ _ _) = id
+>   unused _ _ (InstanceDecl _ _ _) = id
 >   unused used p (BlockDecl d) = unused used p d
 
 > instance SyntaxTree ConstrDecl where

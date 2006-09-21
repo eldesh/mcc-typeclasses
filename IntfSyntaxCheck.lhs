@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 1973 2006-09-19 19:06:48Z wlux $
+% $Id: IntfSyntaxCheck.lhs 1974 2006-09-21 09:25:16Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,18 +10,25 @@ Similar to Curry source files, some post-processing has to be applied
 to parsed interface files. In particular, the compiler must
 disambiguate nullary type constructors and type variables. In
 addition, the compiler also checks that all type constructor
-applications are saturated. Since interface files are closed -- i.e.,
-they include declarations of all entities which are defined in other
-modules -- the compiler can perform this check without reference to
-the global environments.
+applications are saturated. Since interface files are closed with
+respect to types -- i.e., they include declarations of all types which
+are defined in other modules and used in the interface -- the compiler
+can perform this check without reference to the global environments.
+Interfaces are \emph{not} closed with respect to type classes. This is
+not strictly necessary because even though type class, type
+constructor, and type variable identifiers share a common name space,
+type class identifiers can always be distinguished from type
+constructors and type variables syntactically.
 \begin{verbatim}
 
 > module IntfSyntaxCheck(intfSyntaxCheck) where
 > import Base
+> import CurryPP
 > import Error
 > import List
 > import Maybe
 > import Monad
+> import Pretty
 > import TopEnv
 
 > intfSyntaxCheck :: [IDecl] -> Error [IDecl]
@@ -43,6 +50,7 @@ The latter must not occur in type expressions in interfaces.
 > bindType (INewtypeDecl _ tc _ nc) = qualBindTopEnv tc (Data tc [nconstr nc])
 > bindType (ITypeDecl _ tc _ _) = qualBindTopEnv tc (Alias tc)
 > bindType (IClassDecl _ cls _) = qualBindTopEnv cls (Class cls)
+> bindType (IInstanceDecl _ _ _) = id
 > bindType (IFunctionDecl _ _ _) = id
 
 \end{verbatim}
@@ -68,6 +76,9 @@ during syntax checking of type expressions.
 >   do
 >     checkTypeLhs env p [tv]
 >     return (IClassDecl p cls tv)
+> checkIDecl env (IInstanceDecl p cls ty) =
+>   -- NB cls may be undefined
+>   liftE (IInstanceDecl p cls) (checkSimpleType env p ty)
 > checkIDecl env (IFunctionDecl p f ty) =
 >   liftE (IFunctionDecl p f) (checkType env p ty)
 
@@ -124,6 +135,15 @@ during syntax checking of type expressions.
 > checkType env p (ArrowType ty1 ty2) =
 >   liftE2 ArrowType (checkType env p ty1) (checkType env p ty2)
 
+> checkSimpleType :: TypeEnv -> Position -> TypeExpr -> Error TypeExpr
+> checkSimpleType env p ty =
+>   do
+>     ty' <- checkType env p ty
+>     unless (isSimpleType ty' && not (isTypeSynonym env (root ty')) &&
+>             null (duplicates (fv ty')))
+>            (errorAt p (notSimpleType ty'))
+>     return ty'
+
 \end{verbatim}
 \ToDo{Much of the above code could be shared with module
   \texttt{TypeSyntaxCheck}.}
@@ -134,6 +154,34 @@ Auxiliary functions.
 > liftMaybe :: Monad m => (a -> m b) -> Maybe a -> m (Maybe b)
 > liftMaybe f (Just x) = liftM Just (f x)
 > liftMaybe f Nothing = return Nothing
+
+> isSimpleType :: TypeExpr -> Bool
+> isSimpleType (ConstructorType _ tys) = all isVariableType tys
+> isSimpleType (VariableType _) = False
+> isSimpleType (TupleType tys) = all isVariableType tys
+> isSimpleType (ListType ty) = isVariableType ty
+> isSimpleType (ArrowType ty1 ty2) = isVariableType ty1 && isVariableType ty2
+
+> isTypeSynonym :: TypeEnv -> QualIdent -> Bool
+> isTypeSynonym env tc =
+>   case qualLookupTopEnv tc env of
+>     [Data _ _] -> False
+>     [Alias _] -> True
+>     _ -> internalError "isTypeSynonym"
+
+> isVariableType :: TypeExpr -> Bool
+> isVariableType (ConstructorType _ _) = False
+> isVariableType (VariableType _) = True
+> isVariableType (TupleType _) = False
+> isVariableType (ListType _) = False
+> isVariableType (ArrowType _ _) = False
+
+> root :: TypeExpr -> QualIdent
+> root (ConstructorType tc _) = tc
+> root (VariableType _) = internalError "root"
+> root (TupleType tys) = qTupleId (length tys)
+> root (ListType _) = qListId
+> root (ArrowType _ _) = qArrowId
 
 \end{verbatim}
 Error messages.
@@ -157,5 +205,11 @@ Error messages.
 
 > badTypeSynonym :: QualIdent -> String
 > badTypeSynonym tc = "Synonym type " ++ qualName tc ++ " in interface"
+
+> notSimpleType :: TypeExpr -> String
+> notSimpleType ty = show $
+>   vcat [text "Illegal instance type" <+> ppTypeExpr 0 ty,
+>         text "The instance type must be of the form (T a b c), where T is",
+>         text "not a type synonym and a, b, c are distinct type variables."]
 
 \end{verbatim}

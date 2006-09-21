@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 1973 2006-09-19 19:06:48Z wlux $
+% $Id: Base.lhs 1974 2006-09-21 09:25:16Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -36,7 +36,7 @@ imported directly or indirectly into the current module.
 > bindModule (Interface m is ds) = bindEnv m (Interface m is ds)
 
 \end{verbatim}
-\paragraph{Type constructors}
+\paragraph{Type constructors and type classes}
 For all defined types and type classes, the compiler must maintain
 kind information. At present, the compiler does not support higher
 order type classes. Therefore, its type language is first order and
@@ -242,6 +242,20 @@ used in order to check the export list of a module.
 >   origName (Var x) = x
 
 \end{verbatim}
+\paragraph{Instances}
+The compiler maintains information about defined instances in a set of
+$C$-$T$-pairs, which associatiat a type class identifier and a type
+constructor identifier. This simple representation is sufficient
+because instances cannot be hidden. Instance relationships are
+recorded only with the original names of the class and constructor
+involved.
+\begin{verbatim}
+
+> data CT = CT QualIdent QualIdent deriving (Eq,Ord)
+
+> type InstEnv = Set CT
+
+\end{verbatim}
 \paragraph{Operator precedences}
 In order to parse infix expressions correctly, the compiler must know
 the precedence and associativity of each operator. Operator
@@ -301,7 +315,10 @@ are not valid in Curry. The same is true for the -- potentially --
 infinite number of tuple types. The corresponding types are available
 in the environments \texttt{initTCEnv} and \texttt{initDCEnv}. In
 addition, the precedence of the infix list constructor is available in
-the environment \texttt{initPEnv}.
+the environment \texttt{initPEnv}. The initial instance environment is
+empty. The initial type constructor environment also includes a fake
+arrow type constructor, whose purpose is to allow defining instances
+for the type \verb|a -> b|.
 \begin{verbatim}
 
 > initPEnv :: PEnv
@@ -314,6 +331,9 @@ the environment \texttt{initPEnv}.
 >         predefTC (TypeConstructor tc tys) cs =
 >           predefTopEnv tc (DataType tc (length tys) (map (Just . fst) cs))
 
+> initIEnv :: InstEnv
+> initIEnv = zeroSet
+
 > initDCEnv :: ValueEnv
 > initDCEnv = foldr (uncurry predefDC) emptyDCEnv (concatMap snd predefTypes)
 >   where emptyDCEnv = emptyTopEnv (Just (map snd tuples))
@@ -322,12 +342,14 @@ the environment \texttt{initPEnv}.
 
 > predefTypes :: [(Type,[(Ident,Type)])]
 > predefTypes =
->   let a = typeVar 0 in [
+>   let a = typeVar 0; b = typeVar 1 in [
 >     (unitType,   [(unitId,unitType)]),
->     (listType a, [(nilId,nilType a), (consId,consType a)])
+>     (listType a, [(nilId,nilType a), (consId,consType a)]),
+>     (fakeArrowType a b, [])
 >   ]
 >   where nilType a = listType a
 >         consType a = TypeArrow a (TypeArrow (listType a) (listType a))
+>         fakeArrowType a b = TypeConstructor qArrowId [a,b]
 
 > tuples :: [(TypeInfo,ValueInfo)]
 > tuples = map tupleInfo [2..]
@@ -494,12 +516,15 @@ declarations because type constructors and type classes share a common
 name space.
 \begin{verbatim}
 
-> isTypeDecl, isBlockDecl :: TopDecl -> Bool
+> isTypeDecl, isInstanceDecl, isBlockDecl :: TopDecl -> Bool
 > isTypeDecl (DataDecl _ _ _ _) = True
 > isTypeDecl (NewtypeDecl _ _ _ _) = True
 > isTypeDecl (TypeDecl _ _ _ _) = True
 > isTypeDecl (ClassDecl _ _ _) = True
+> isTypeDecl (InstanceDecl _ _ _) = False
 > isTypeDecl (BlockDecl _) = False
+> isInstanceDecl (InstanceDecl _ _ _) = True
+> isInstanceDecl _ = False
 > isBlockDecl (BlockDecl _) = True
 > isBlockDecl _ = False
 

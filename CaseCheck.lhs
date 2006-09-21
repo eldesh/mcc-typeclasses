@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 1973 2006-09-19 19:06:48Z wlux $
+% $Id: CaseCheck.lhs 1974 2006-09-21 09:25:16Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -132,6 +132,7 @@ collect all defined identifiers.
 >   names _ (TypeDecl p tc tvs _) xs = typeNames p tc tvs ++ xs
 >   names _ (ClassDecl p cls tv) xs =
 >     D p TypeClassId cls : D p TypeVarId tv : xs
+>   names _ (InstanceDecl _ _ _) xs = xs
 >   names p (BlockDecl d) xs = names p d xs
 
 > typeNames :: Position -> Ident -> [Ident] -> [Definition]

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 1913 2006-05-07 13:44:36Z wlux $
+% $Id: Modules.lhs 1974 2006-09-21 09:25:16Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -110,8 +110,8 @@ declaration to the module.
 > checkModule :: ModuleEnv -> Module -> Error (TCEnv,ValueEnv,Module,Interface)
 > checkModule mEnv (Module m es is ds) =
 >   do
->     (pEnv,tcEnv,tyEnv) <- importModules mEnv is
->     (tEnv,ds') <- typeSyntaxCheck m tcEnv ds
+>     (pEnv,tcEnv,iEnv,tyEnv) <- importModules mEnv is
+>     (tEnv,iEnv',ds') <- typeSyntaxCheck m tcEnv iEnv ds
 >     (vEnv,ds'') <- syntaxCheck m tyEnv ds'
 >     es' <- checkExports m is tEnv vEnv es
 >     (pEnv',ds''') <- precCheck m pEnv $ rename ds''
@@ -120,7 +120,7 @@ declaration to the module.
 >     let (pEnv'',tcEnv'',tyEnv'') = qualifyEnv mEnv m pEnv' tcEnv' tyEnv'
 >     return (tcEnv'',tyEnv'',
 >             Module m (Just es') is (qual tyEnv' ds'''),
->             exportInterface m es' pEnv'' tcEnv'' tyEnv'')
+>             exportInterface m es' pEnv'' tcEnv'' iEnv' tyEnv'')
 
 > warnModule :: CaseMode -> [Warn] -> Module -> [String]
 > warnModule caseMode warn m =
@@ -162,7 +162,7 @@ declaration to the module.
 >   (foldr (uncurry (globalBindTopEnv m)) pEnv' (localBindings pEnv),
 >    foldr (uncurry (globalBindTopEnv m)) tcEnv' (localBindings tcEnv),
 >    foldr (uncurry (bindTopEnv m)) tyEnv' (localBindings tyEnv))
->   where (pEnv',tcEnv',tyEnv') =
+>   where (pEnv',tcEnv',_,tyEnv') =
 >           foldl importInterfaceIntf initEnvs (map snd (envToList mEnv))
 
 > ilImports :: ModuleEnv -> IL.Module -> [IL.Decl]
@@ -250,7 +250,7 @@ compilation of a goal is similar to that of a module.
 > checkGoal :: ModuleEnv -> [ImportDecl] -> Goal -> Error (TCEnv,ValueEnv,Goal)
 > checkGoal mEnv is g =
 >   do
->     (pEnv,tcEnv,tyEnv) <- importModules mEnv is
+>     (pEnv,tcEnv,iEnv,tyEnv) <- importModules mEnv is
 >     g' <- typeSyntaxCheckGoal tcEnv g >>=
 >           syntaxCheckGoal tyEnv >>=
 >           precCheckGoal pEnv . renameGoal
@@ -299,12 +299,13 @@ The function \texttt{importModules} brings the declarations of all
 imported modules into scope in the current module.
 \begin{verbatim}
 
-> importModules :: ModuleEnv -> [ImportDecl] -> Error (PEnv,TCEnv,ValueEnv)
+> importModules :: ModuleEnv -> [ImportDecl]
+>               -> Error (PEnv,TCEnv,InstEnv,ValueEnv)
 > importModules mEnv ds =
 >   do
 >     ds' <- mapE checkImportDecl ds
->     let (pEnv,tcEnv,tyEnv) = foldl importModule initEnvs ds'
->     return (pEnv,importUnifyData tcEnv,tyEnv)
+>     let (pEnv,tcEnv,iEnv,tyEnv) = foldl importModule initEnvs ds'
+>     return (pEnv,importUnifyData tcEnv,iEnv,tyEnv)
 >   where checkImportDecl (ImportDecl p m q asM is) =
 >           liftE (ImportDecl p m q asM)
 >                 (checkImports (moduleInterface m mEnv) is)
@@ -315,8 +316,8 @@ imported modules into scope in the current module.
 > moduleInterface m mEnv =
 >   fromMaybe (internalError "moduleInterface") (lookupEnv m mEnv)
 
-> initEnvs :: (PEnv,TCEnv,ValueEnv)
-> initEnvs = (initPEnv,initTCEnv,initDCEnv)
+> initEnvs :: (PEnv,TCEnv,InstEnv,ValueEnv)
+> initEnvs = (initPEnv,initTCEnv,initIEnv,initDCEnv)
 
 \end{verbatim}
 The prelude is imported implicitly into every module that does not
@@ -404,7 +405,7 @@ that are imported directly from that module.}
 >     ds' <- intfSyntaxCheck ds
 >     intfCheck m pEnv tcEnv tyEnv ds'
 >     return (Interface m is ds')
->   where (pEnv,tcEnv,tyEnv) = foldl importModule initEnvs is
+>   where (pEnv,tcEnv,_,tyEnv) = foldl importModule initEnvs is
 >         importModule envs (IImportDecl _ m) =
 >           importInterfaceIntf envs (moduleInterface m mEnv)
 

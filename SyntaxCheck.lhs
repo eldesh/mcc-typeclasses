@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 1973 2006-09-19 19:06:48Z wlux $
+% $Id: SyntaxCheck.lhs 1974 2006-09-21 09:25:16Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -503,6 +503,7 @@ Auxiliary definitions.
 > constrs (NewtypeDecl _ _ _ (NewConstrDecl p c _)) = [P p c]
 > constrs (TypeDecl _ _ _ _) = []
 > constrs (ClassDecl _ _ _) = []
+> constrs (InstanceDecl _ _ _) = []
 > constrs (BlockDecl _) = []
 
 > vars :: Decl -> [P Ident]

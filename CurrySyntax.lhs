@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 1973 2006-09-19 19:06:48Z wlux $
+% $Id: CurrySyntax.lhs 1974 2006-09-21 09:25:16Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -55,6 +55,7 @@ parsed representation of a Curry program.
 >   | NewtypeDecl Position Ident [Ident] NewConstrDecl
 >   | TypeDecl Position Ident [Ident] TypeExpr
 >   | ClassDecl Position Ident Ident
+>   | InstanceDecl Position QualIdent TypeExpr
 >   | BlockDecl Decl
 >   deriving (Eq,Show)
 
@@ -103,6 +104,7 @@ Interface declarations are restricted to type declarations and signatures.
 >   | INewtypeDecl Position QualIdent [Ident] NewConstrDecl
 >   | ITypeDecl Position QualIdent [Ident] TypeExpr
 >   | IClassDecl Position QualIdent Ident
+>   | IInstanceDecl Position QualIdent TypeExpr
 >   | IFunctionDecl Position QualIdent TypeExpr
 >   deriving (Eq,Show)
 

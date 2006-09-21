@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfEquiv.lhs 1973 2006-09-19 19:06:48Z wlux $
+% $Id: IntfEquiv.lhs 1974 2006-09-21 09:25:16Z wlux $
 %
 % Copyright (c) 2000-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -62,6 +62,8 @@ inadvertently mix up these cases.
 >   ITypeDecl _ tc1 tvs1 ty1 =~= ITypeDecl _ tc2 tvs2 ty2 =
 >     tc1 == tc2 && tvs1 == tvs2 && ty1 == ty2
 >   IClassDecl _ cls1 _ =~= IClassDecl _ cls2 _ = cls1 == cls2
+>   IInstanceDecl _ cls1 ty1 =~= IInstanceDecl _ cls2 ty2 =
+>     cls1 == cls2 && ty1 == ty2
 >   IFunctionDecl _ f1 ty1 =~= IFunctionDecl _ f2 ty2 = f1 == f2 && ty1 == ty2
 >   _ =~= _ = False
 
@@ -133,6 +135,7 @@ by function \texttt{fixInterface} and the associated type class
 >         tcs (INewtypeDecl _ tc _ _) tcs = tc : tcs
 >         tcs (ITypeDecl _ tc _ _) tcs = tc : tcs
 >         tcs (IClassDecl _ _ _) tcs = tcs
+>         tcs (IInstanceDecl _ _ _) tcs = tcs
 >         tcs (IFunctionDecl _ _ _) tcs = tcs
 
 \end{verbatim}

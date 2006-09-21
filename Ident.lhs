@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Ident.lhs 1885 2006-04-05 21:23:18Z wlux $
+% $Id: Ident.lhs 1974 2006-09-21 09:25:16Z wlux $
 %
 % Copyright (c) 1999-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -33,12 +33,12 @@ unqualified identifier.}
 >              unqualify,qualUnqualify,localIdent,splitQualIdent,
 >              emptyMIdent,preludeMIdent,debugPreludeMIdent,
 >              ptrMIdent,stablePtrMIdent,
->              anonId,unitId,boolId,charId,intId,floatId,listId,ioId,
+>              anonId,unitId,boolId,charId,intId,floatId,listId,arrowId,ioId,
 >              ptrId,funPtrId,stablePtrId,
 >              successId,trueId,falseId,nilId,consId,mainId,
 >              tupleId,isTupleId,tupleArity,selectorId,isSelectorId,
 >              minusId,fminusId,
->              qUnitId,qBoolId,qCharId,qIntId,qFloatId,qListId,qIOId,
+>              qUnitId,qBoolId,qCharId,qIntId,qFloatId,qListId,qArrowId,qIOId,
 >              qSuccessId,qPtrId,qFunPtrId,qStablePtrId,
 >              qTrueId,qFalseId,qNilId,qConsId,
 >              qTupleId,isQTupleId,qTupleArity,isQSelectorId) where
@@ -161,13 +161,15 @@ A few identifiers a predefined here.
 > anonId :: Ident
 > anonId = Ident "_" 0
 
-> unitId, boolId, charId, intId, floatId, listId, ioId, successId :: Ident
+> unitId, boolId, charId, intId, floatId :: Ident
+> listId, arrowId, ioId, successId :: Ident
 > unitId    = Ident "()" 0
 > boolId    = Ident "Bool" 0
 > charId    = Ident "Char" 0
 > intId     = Ident "Int" 0
 > floatId   = Ident "Float" 0
 > listId    = Ident "[]" 0
+> arrowId   = Ident "->" 0
 > ioId      = Ident "IO" 0
 > successId = Ident "Success" 0
 
@@ -208,11 +210,12 @@ A few identifiers a predefined here.
 > minusId = Ident "-" 0
 > fminusId = Ident "-." 0
 
-> qUnitId, qNilId, qConsId, qListId :: QualIdent
-> qUnitId = UnqualIdent unitId
-> qListId = UnqualIdent listId
-> qNilId  = UnqualIdent nilId
-> qConsId = UnqualIdent consId
+> qUnitId, qNilId, qConsId, qListId, qArrowId :: QualIdent
+> qUnitId  = UnqualIdent unitId
+> qListId  = UnqualIdent listId
+> qArrowId = UnqualIdent arrowId
+> qNilId   = UnqualIdent nilId
+> qConsId  = UnqualIdent consId
 
 > qBoolId, qCharId, qIntId, qFloatId, qSuccessId, qIOId :: QualIdent
 > qBoolId = QualIdent preludeMIdent boolId

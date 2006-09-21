@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 1973 2006-09-19 19:06:48Z wlux $
+% $Id: CurryParser.lhs 1974 2006-09-21 09:25:16Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -132,8 +132,8 @@ directory path to the module is ignored.
 \begin{verbatim}
 
 > topDecl :: Parser Token TopDecl a
-> topDecl = dataDecl <|> newtypeDecl <|> typeDecl <|> classDecl
->       <|> BlockDecl <$> blockDecl
+> topDecl = dataDecl <|> newtypeDecl <|> typeDecl
+>       <|> classDecl <|> instanceDecl <|> BlockDecl <$> blockDecl
 >   where blockDecl = infixDecl <|> functionDecl <|> foreignDecl
 >                 <|> trustAnnotation
 
@@ -182,6 +182,10 @@ directory path to the module is ignored.
 
 > classDecl :: Parser Token TopDecl a
 > classDecl = ClassDecl <$> position <*-> token KW_class <*> ident <*> ident
+
+> instanceDecl :: Parser Token TopDecl a
+> instanceDecl =
+>   InstanceDecl <$> position <*-> token KW_instance <*> qIdent <*> type2
 
 > infixDecl :: Parser Token Decl a
 > infixDecl = infixDeclLhs InfixDecl <*> funop `sepBy1` comma
@@ -282,7 +286,7 @@ directory path to the module is ignored.
 > intfDecl :: Parser Token IDecl a
 > intfDecl = iInfixDecl
 >        <|> iHidingDecl <|> iDataDecl <|> iNewtypeDecl <|> iTypeDecl
->        <|> iClassDecl <|> iFunctionDecl <\> token Id_hiding
+>        <|> iClassDecl <|> iInstanceDecl <|> iFunctionDecl <\> token Id_hiding
 
 > iInfixDecl :: Parser Token IDecl a
 > iInfixDecl = infixDeclLhs IInfixDecl <*> qfunop
@@ -315,6 +319,10 @@ directory path to the module is ignored.
 
 > iClassDecl :: Parser Token IDecl a
 > iClassDecl = IClassDecl <$> position <*-> token KW_class <*> qIdent <*> ident
+
+> iInstanceDecl :: Parser Token IDecl a
+> iInstanceDecl =
+>   IInstanceDecl <$> position <*-> token KW_instance <*> qIdent <*> type2
 
 > iFunctionDecl :: Parser Token IDecl a
 > iFunctionDecl = IFunctionDecl <$> position <*> qfun <*-> token DoubleColon

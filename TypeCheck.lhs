@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: TypeCheck.lhs 1976 2006-10-04 17:25:49Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -135,15 +135,54 @@ the signature.
 \end{verbatim}
 \paragraph{Type Inference}
 Before type checking a group of declarations, a dependency analysis is
-performed and the declaration group is eventually transformed into
-nested declaration groups which are checked separately. Within each
-declaration group, first the left hand sides of all declarations are
-typed introducing new bindings for their bound variables. Next, the
-right hand sides of the declarations are typed in the extended type
+performed and the declaration group is split into minimal, nested
+binding groups which are checked separately. Within each binding
+group, first the left hand sides of all declarations are typed
+introducing new bindings for their bound variables. Next, the right
+hand sides of the declarations are typed in the extended type
 environment and the inferred types are unified with the left hand side
 types. Finally, the types of all defined functions are generalized.
 The generalization step will also check that the type signatures given
 by the user match the inferred types.
+
+Since expressions can contain shared logical variables, one has to be
+careful when generalizing the types of local variables. For instance,
+if the types of local variables were always generalized, the unsound
+function
+\begin{verbatim}
+  bug = x =:= 1 & x =:= 'a' where x = unknown
+\end{verbatim}
+would be accepted because the type $\forall\alpha.\alpha$ would be
+assigned to \verb|x|.\footnote{The function \texttt{unknown = x where
+    x free} is defined in the Curry prelude and has type
+  $\forall\alpha.\alpha$.} In order to reject such unsound programs,
+the type checker does not generalize the types of local variables.
+Note that by this policy, some perfectly valid declarations like,
+e.g.,
+\begin{verbatim}
+  ok = (1:nil, 'a':nil) where nil = []
+\end{verbatim}
+are rejected. This could be avoided by adopting ML's value
+restriction~\cite{WrightFelleisen94:TypeSoundness,
+  Garrigue04:ValueRestriction}. However, in contrast to ML, the
+distinction between expansive and non-expansive expressions cannot be
+purely syntactic in Curry because it is possible to define nullary
+functions at the top-level. An expression $f$ would be expansive if
+$f$ is a nullary function and non-expansive otherwise.
+
+Within a group of mutually recursive declarations, all type variables
+that appear in the types of the variables defined in the group must
+not be generalized. Without this restriction, the compiler would
+accept the function
+\begin{verbatim}
+  illTyped = x=:=1 &> f True "Hello"
+    where (x:xs) = f True (repeat unknown)
+          f _ [] = []
+          f b (y:ys) = (if b then y else x) : f (not b) ys
+\end{verbatim}
+whose result is the ill-typed list \verb|['H',1,'l',1,'o']|,
+because \verb|f|'s type would incorrectly be generalized to
+$\forall\alpha.\texttt{Bool}\rightarrow[\alpha]\rightarrow[\alpha]$.
 \begin{verbatim}
 
 > tcDecls :: ModuleIdent -> TCEnv -> [Decl] -> TcState ()
@@ -162,9 +201,12 @@ by the user match the inferred types.
 >     tyEnv0 <- fetchSt
 >     tys <- mapM (tcDeclLhs m tcEnv sigs) ds
 >     zipWithM_ (tcDeclRhs m tcEnv) tys ds
+>     tyEnv <- fetchSt
 >     theta <- liftSt fetchSt
->     let lvs = fvEnv (subst theta tyEnv0)
->     zipWithM_ (genDecl m tcEnv sigs . gen lvs . subst theta) tys ds
+>     let tvss = map (typeVars . subst theta . rawType . flip varType tyEnv) vs
+>         fvs = foldr addToSet (fvEnv (subst theta tyEnv0)) (concat tvss)
+>     zipWithM_ (genDecl m tcEnv sigs . gen fvs . subst theta) tys ds
+>   where vs = [v | PatternDecl _ t _ <- ds, v <- bv t]
 
 > tcDeclLhs :: ModuleIdent -> TCEnv -> SigEnv -> Decl -> TcState Type
 > tcDeclLhs m tcEnv sigs (FunctionDecl p f _) = tcVariable m tcEnv sigs True p f
@@ -195,6 +237,28 @@ by the user match the inferred types.
 >     tys <- mapM (tcConstrTerm m tcEnv noSigs p) ts
 >     ty <- tcRhs m tcEnv rhs
 >     return (foldr TypeArrow ty tys)
+
+\end{verbatim}
+The code in \texttt{genDecl} below verifies that the inferred type for
+a function matches its declared type. Since the type inferred for the
+left hand side of a function or variable declaration is an instance of
+its declared type -- provided a type signature is given -- it can only
+be more specific. Therefore, if the inferred type does not match the
+type signature the declared type must be too general. No check is
+necessary for the variables in variable and other pattern declarations
+because the types of variables must be monomorphic, which is checked
+in \texttt{tcVariable} below.
+\begin{verbatim}
+
+> genDecl :: ModuleIdent -> TCEnv -> SigEnv -> TypeScheme -> Decl -> TcState ()
+> genDecl m tcEnv sigs sigma (FunctionDecl p f _) =
+>   case lookupEnv f sigs of
+>     Just sigTy
+>       | sigma == expandPolyType tcEnv sigTy -> return ()
+>       | otherwise -> errorAt p (typeSigTooGeneral m what sigTy sigma)
+>     Nothing -> updateSt_ (rebindFun m f sigma)
+>   where what = text "Function:" <+> ppIdent f
+> genDecl _ _ _ _ (PatternDecl _ _ _) = return ()
 
 \end{verbatim}
 Argument and result types of foreign functions using the
@@ -257,43 +321,6 @@ arbitrary type.
 > cBasicTypeId, cPointerTypeId :: [QualIdent]
 > cBasicTypeId = [qBoolId,qCharId,qIntId,qFloatId]
 > cPointerTypeId = [qPtrId,qFunPtrId]
-
-\end{verbatim}
-In Curry we cannot generalize the types of let-bound variables because
-they can refer to logic variables. Without this monomorphism
-restriction unsound code like
-\begin{verbatim}
-bug = x =:= 1 & x =:= 'a'
-  where x :: a
-        x = fresh
-fresh :: a
-fresh = x where x free
-\end{verbatim}
-could be written. Note that \texttt{fresh} has the polymorphic type
-$\forall\alpha.\alpha$. This is correct because \texttt{fresh} is a
-function and therefore returns a different variable at each
-invocation.
-
-The code in \texttt{genDecl} below also verifies that the inferred
-type for a function matches its declared type. Since the type inferred
-for the left hand side of a function or variable declaration is an
-instance of its declared type -- provided a type signature is given --
-it can only be more specific. Therefore, if the inferred type does not
-match the type signature the declared type must be too general. No
-check is necessary for the variables in variable and other pattern
-declarations because the types of variables must be monomorphic, which
-is checked in \texttt{tcVariable} below.
-\begin{verbatim}
-
-> genDecl :: ModuleIdent -> TCEnv -> SigEnv -> TypeScheme -> Decl -> TcState ()
-> genDecl m tcEnv sigs sigma (FunctionDecl p f _) =
->   case lookupEnv f sigs of
->     Just sigTy
->       | sigma == expandPolyType tcEnv sigTy -> return ()
->       | otherwise -> errorAt p (typeSigTooGeneral m what sigTy sigma)
->     Nothing -> updateSt_ (rebindFun m f sigma)
->   where what = text "Function:" <+> ppIdent f
-> genDecl _ _ _ _ (PatternDecl _ _ _) = return ()
 
 > tcLiteral :: ModuleIdent -> Literal -> TcState Type
 > tcLiteral _ (Char _) = return charType
@@ -757,13 +784,6 @@ here because we know that they are closed.
 \end{verbatim}
 Error functions.
 \begin{verbatim}
-
-> recursiveTypes :: [Ident] -> String
-> recursiveTypes [tc] = "Recursive type synonym " ++ name tc
-> recursiveTypes (tc:tcs) =
->   "Mutually recursive type synonyms " ++ name tc ++ types "" tcs
->   where types comma [tc] = comma ++ " and " ++ name tc
->         types _ (tc:tcs) = ", " ++ name tc ++ types "," tcs
 
 > polymorphicVar :: Ident -> String
 > polymorphicVar v = "Variable " ++ name v ++ " cannot have polymorphic type"

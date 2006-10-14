@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: IntfCheck.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 2000-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -100,7 +100,8 @@ interface module only. However, this has not been implemented yet.
 > checkImport m _ _ _ (IInstanceDecl _ _ _) = return ()
 > checkImport m _ _ tyEnv (IFunctionDecl p f ty) =
 >   checkValueInfo "function" checkFun tyEnv p f
->   where checkFun (Value f' (ForAll _ ty')) = f == f' && toType m [] ty == ty'
+>   where checkFun (Value f' (ForAll _ ty')) =
+>           f == f' && toQualType m [] ty == ty'
 >         checkFun _ = False
 
 > checkConstrImport :: ModuleIdent -> ValueEnv -> QualIdent -> [Ident]
@@ -108,14 +109,14 @@ interface module only. However, this has not been implemented yet.
 > checkConstrImport m tyEnv tc tvs (ConstrDecl p evs c tys) =
 >   checkValueInfo "data constructor" checkConstr tyEnv p qc
 >   where qc = qualifyLike tc c
->         checkConstr (DataConstructor c' (ForAll n' ty')) =
+>         checkConstr (DataConstructor c' (ForAll n' (QualType _ ty'))) =
 >           qc == c' && length (tvs ++ evs) == n' &&
 >           toTypes m tvs tys == arrowArgs ty'
 >         checkConstr _ = False
 > checkConstrImport m tyEnv tc tvs (ConOpDecl p evs ty1 op ty2) =
 >   checkValueInfo "data constructor" checkConstr tyEnv p qc
 >   where qc = qualifyLike tc op
->         checkConstr (DataConstructor c' (ForAll n' ty')) =
+>         checkConstr (DataConstructor c' (ForAll n' (QualType _ ty'))) =
 >           qc == c' && length (tvs ++ evs) == n' &&
 >           toTypes m tvs [ty1,ty2] == arrowArgs ty'
 >         checkConstr _ = False
@@ -125,7 +126,7 @@ interface module only. However, this has not been implemented yet.
 > checkNewConstrImport m tyEnv tc tvs (NewConstrDecl p c ty) =
 >   checkValueInfo "newtype constructor" checkNewConstr tyEnv p qc
 >   where qc = qualifyLike tc c
->         checkNewConstr (NewtypeConstructor c' (ForAll n' ty')) =
+>         checkNewConstr (NewtypeConstructor c' (ForAll n' (QualType _ ty'))) =
 >           qc == c' && length tvs == n' &&
 >           toType m tvs ty == head (arrowArgs ty')
 >         checkNewConstr _ = False

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: Imports.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -170,7 +170,7 @@ following functions.
 >   (newConstr m tc' tvs (constrType tc' tvs) nc :)
 >   where tc' = qualQualify m tc
 > values m (IFunctionDecl _ f ty) =
->   qual f (Value (qualQualify m f) (polyType (toType m [] ty)))
+>   qual f (Value (qualQualify m f) (typeScheme (toQualType m [] ty)))
 > values _ _ = id
 
 > dataConstr :: ModuleIdent -> QualIdent -> [Ident] -> TypeExpr -> ConstrDecl

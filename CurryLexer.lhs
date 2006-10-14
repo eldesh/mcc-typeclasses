@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryLexer.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: CurryLexer.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -45,7 +45,7 @@ In this section a lexer for Curry is implemented.
 >   | KW_of | KW_then | KW_type | KW_where
 >   -- reserved operators
 >   | At | Colon | DotDot | DoubleColon | Equals | Backslash | Bar
->   | LeftArrow | RightArrow | Tilde
+>   | LeftArrow | RightArrow | DoubleRightArrow | Tilde
 >   -- special identifiers
 >   | Id_as | Id_ccall | Id_forall | Id_hiding | Id_interface
 >   | Id_primitive | Id_qualified | Id_safe | Id_unsafe
@@ -147,6 +147,7 @@ all tokens in their source representation.
 >   showsPrec _ (Token Bar _) = showString "`|'"
 >   showsPrec _ (Token LeftArrow _) = showString "`<-'"
 >   showsPrec _ (Token RightArrow _) = showString "`->'"
+>   showsPrec _ (Token DoubleRightArrow _) = showString "`=>'"
 >   showsPrec _ (Token Tilde _) = showString "`~'"
 >   showsPrec _ (Token Sym_Dot _) = showString "operator `.'"
 >   showsPrec _ (Token Sym_Minus _) = showString "operator `-'"
@@ -201,6 +202,7 @@ pragmas.
 >     ("|",  Bar),
 >     ("<-", LeftArrow),
 >     ("->", RightArrow),
+>     ("=>", DoubleRightArrow),
 >     ("~",  Tilde)
 >   ]
 > reserved_and_special_ops = foldr (uncurry addToFM) reserved_ops [

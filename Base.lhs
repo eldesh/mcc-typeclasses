@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: Base.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -358,7 +358,7 @@ for the type \verb|a -> b|.
 >           (DataType c n [Just (unqualify c)],
 >            DataConstructor c (ForAll n (tupleConstrType (take n tvs))))
 >           where c = qTupleId n
->         tupleConstrType tys = foldr TypeArrow (tupleType tys) tys
+>         tupleConstrType tys = qualType (foldr TypeArrow (tupleType tys) tys)
 
 \end{verbatim}
 \paragraph{Free and bound variables}
@@ -475,6 +475,9 @@ variable, but always refers to a global function from the prelude.
 >   bv (ListPattern ts) = bv ts
 >   bv (AsPattern v t) = v : bv t
 >   bv (LazyPattern t) = bv t
+
+> instance Expr QualTypeExpr where
+>   fv (QualTypeExpr _ ty) = fv ty
 
 > instance Expr TypeExpr where
 >   fv (ConstructorType _ tys) = fv tys

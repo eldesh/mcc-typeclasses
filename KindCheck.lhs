@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: KindCheck.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -125,7 +125,7 @@ Kind checking is applied to all type expressions in the program.
 > checkTopDecl tcEnv (BlockDecl d) = checkDecl tcEnv d
 
 > checkDecl :: TCEnv -> Decl -> Error ()
-> checkDecl tcEnv (TypeSig p _ ty) = checkType tcEnv p ty
+> checkDecl tcEnv (TypeSig p _ ty) = checkQualType tcEnv p ty
 > checkDecl tcEnv (FunctionDecl _ _ eqs) = mapE_ (checkEquation tcEnv) eqs
 > checkDecl tcEnv (PatternDecl _ _ rhs) = checkRhs tcEnv rhs
 > checkDecl tcEnv (ForeignDecl p _ _ _ ty) = checkType tcEnv p ty
@@ -157,7 +157,8 @@ Kind checking is applied to all type expressions in the program.
 > checkExpr _ _ (Variable _) = return ()
 > checkExpr _ _ (Constructor _) = return ()
 > checkExpr tcEnv p (Paren e) = checkExpr tcEnv p e
-> checkExpr tcEnv p (Typed e ty) = checkExpr tcEnv p e &&> checkType tcEnv p ty
+> checkExpr tcEnv p (Typed e ty) =
+>   checkExpr tcEnv p e &&> checkQualType tcEnv p ty
 > checkExpr tcEnv p (Tuple es) = mapE_ (checkExpr tcEnv p) es
 > checkExpr tcEnv p (List es) = mapE_ (checkExpr tcEnv p) es
 > checkExpr tcEnv p (ListCompr e qs) =
@@ -193,6 +194,9 @@ Kind checking is applied to all type expressions in the program.
 
 > checkAlt :: TCEnv -> Alt -> Error ()
 > checkAlt tcEnv (Alt _ _ rhs) = checkRhs tcEnv rhs
+
+> checkQualType :: TCEnv -> Position -> QualTypeExpr -> Error ()
+> checkQualType tcEnv p (QualTypeExpr _ ty) = checkType tcEnv p ty
 
 > checkType :: TCEnv -> Position -> TypeExpr -> Error ()
 > checkType tcEnv p (ConstructorType tc tys) =

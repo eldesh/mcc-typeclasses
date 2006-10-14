@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 1977 2006-10-14 12:28:32Z wlux $
+% $Id: Types.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -43,17 +43,17 @@ as well, these variables must never be quantified.
 >   | TypeConstrained [Type] Int
 >   | TypeArrow Type Type
 >   | TypeSkolem Int
->   deriving (Eq,Show)
+>   deriving (Eq,Ord,Show)
 
 \end{verbatim}
-The function \texttt{isArrowType} checks whether a type
-$t = t_1 \rightarrow t_2 \rightarrow \dots \rightarrow t_{n+1}$
+The function \texttt{isArrowType} checks whether a type $\tau = \tau_1
+\rightarrow \dots \rightarrow \tau_n \rightarrow \tau_{n+1}$
 ($n\geq0$) is a function type, i.e., whether $n > 0$ . The function
 \texttt{arrowArity} returns the arity $n$ of a function type, the
 function \texttt{arrowArgs} returns the list of types
-\texttt{[$t_1$,$\dots$,$t_{n}$]}, \texttt{arrowBase} returns the
-type $t_{n+1}$, and \texttt{arrowUnapply} combines \texttt{arrowArgs}
-and \texttt{arrowBase} in one call.
+\texttt{[$\tau_1$,$\dots$,$\tau_{n}$]}, \texttt{arrowBase} returns the
+type $\tau_{n+1}$, and \texttt{arrowUnapply} combines
+\texttt{arrowArgs} and \texttt{arrowBase} in one call.
 \begin{verbatim}
 
 > isArrowType :: Type -> Bool
@@ -76,7 +76,7 @@ and \texttt{arrowBase} in one call.
 
 \end{verbatim}
 The methods \texttt{typeVars} and \texttt{typeSkolems} return a list
-of all type variables and skolem types occurring in a type $t$,
+of all type variables and skolem types occurring in a type $\tau$,
 respectively. Note that \texttt{TypeConstrained} variables are not
 included in the set of type variables because they cannot be
 generalized.
@@ -101,12 +101,64 @@ generalized.
 >           skolems (TypeSkolem k) sks = k : sks
 
 \end{verbatim}
-Type schemes $\forall\overline{\alpha} . \tau(\overline{\alpha})$
-introduce (universal) quantification of type variables in types. The
-universally quantified type variables in a type are assigned
-increasing indices starting at 0. Therefore, it is sufficient to
-record only the number of quantified type variables in the
-\texttt{ForAll} constructor.
+Qualified types represent types with class membership constraints. A
+qualified type $\emph{cx}\Rightarrow\tau$ consists of a plain type
+$\tau$ and a context \emph{cx}, which is a list of type predicates
+$C_i\,\tau_i$ that must be satisfied. A type predicate $C_i\,\tau_i$
+is satisfied if the type $\tau_i$ is an instance of class $C_i$. In
+general, the types $\tau_i$ are simple type variables, which are free
+in $\tau$. Type predicates where $\tau_i$ is not a simple type
+variable may occur in intermediate contexts computed during type
+inference. However, such predicates can be proved to be either
+satisfied or not, or they can be transformed into simpler predicates
+where all types are just type variables.
+
+The order of predicates in a qualified type does not matter. In order
+to define a canonical representation for qualified types, the compiler
+sorts the predicates in the contexts of function types. The
+non-standard \texttt{Ord} instance for type predicates sorts them
+according to their type (variable) first so that constraints that
+apply to the same type variable are grouped together.
+
+\ToDo{Consider using true sets for the contexts of qualified types.}
+\begin{verbatim}
+
+> data QualType = QualType Context Type deriving (Eq,Show)
+> type Context = [TypePred]
+> data TypePred = TypePred QualIdent Type deriving (Eq,Show)
+
+> instance Ord TypePred where
+>   TypePred cls1 ty1 `compare` TypePred cls2 ty2 =
+>     case ty1 `compare` ty2 of
+>       LT -> LT
+>       EQ -> cls1 `compare` cls2
+>       GT -> GT
+
+> qualType :: Type -> QualType
+> qualType ty = QualType [] ty
+
+> canonType :: QualType -> QualType
+> canonType (QualType cx ty) = QualType (sort cx) ty
+
+\end{verbatim}
+The free and skolem variables of a qualified type are computed from
+the plain type because the context of a qualified type must constrain
+only variables that are free in the type itself.
+\begin{verbatim}
+
+> instance IsType QualType where
+>   typeVars (QualType _ ty) = typeVars ty
+>   typeSkolems (QualType _ ty) = typeSkolems ty
+
+\end{verbatim}
+Type schemes $\forall\overline{\alpha} . \emph{cx} \Rightarrow \tau$
+introduce (universal) quantification of type variables in qualified
+types. The universally quantified type variables in a type are
+assigned increasing indices starting at 0. Therefore, it is sufficient
+to record only the number of quantified type variables in the
+\texttt{ForAll} constructor. The context \emph{cx} in a type scheme
+must contain only predicates of the form $C_i\,\alpha_i$ where each
+$\alpha_i$ is one of the universally quantified type variables.
 
 In general, type variables are assigned indices from left to right in
 the order of their occurrence in a type. However, a slightly different
@@ -132,7 +184,7 @@ universally quantified and the type variables with indices $n, \dots,
 m-1$ are existentially quantified.
 \begin{verbatim}
 
-> data TypeScheme = ForAll Int Type deriving (Eq,Show)
+> data TypeScheme = ForAll Int QualType deriving (Eq,Show)
 
 > instance IsType TypeScheme where
 >   typeVars (ForAll _ ty) = [tv | tv <- typeVars ty, tv < 0]
@@ -141,22 +193,31 @@ m-1$ are existentially quantified.
 \end{verbatim}
 The functions \texttt{monoType} and \texttt{polyType} translate a type
 $\tau$ into a monomorphic type scheme $\forall.\tau$ and a polymorphic
-type scheme $\forall\overline{\alpha}.\tau$ where $\overline{\alpha} =
-\emph{vars}(\tau)$, respectively. Note that \texttt{polyType} does not
-renumber the type variables in its argument type.
+type scheme $\forall\overline{\alpha}.\tau$, respectively, where
+$\overline{\alpha} = \emph{vars}(\tau)$. The function
+\texttt{typeScheme} translates a qualified type $\emph{cx} \Rightarrow
+\tau$ into a polymorphic type scheme $\forall\overline{\alpha}.
+\emph{cx} \Rightarrow \tau$. Note that neither \texttt{polyType} nor
+\texttt{typeScheme} renumber the type variables in their argument
+types.
 \begin{verbatim}
 
-> monoType, polyType :: Type -> TypeScheme
-> monoType ty = ForAll 0 ty
-> polyType ty = ForAll (maximum (-1 : typeVars ty) + 1) ty
+> monoType :: Type -> TypeScheme
+> monoType ty = ForAll 0 (qualType ty)
+
+> polyType :: Type -> TypeScheme
+> polyType ty = typeScheme (qualType ty)
+
+> typeScheme :: QualType -> TypeScheme
+> typeScheme ty = ForAll (maximum (-1 : typeVars ty) + 1) ty
 
 \end{verbatim}
-The function \texttt{rawType} strips the quantifier from a type
-scheme.
+The function \texttt{rawType} strips the quantifier and context from a
+type scheme.
 \begin{verbatim}
 
 > rawType :: TypeScheme -> Type
-> rawType (ForAll _ ty) = ty
+> rawType (ForAll _ (QualType _ ty)) = ty
 
 \end{verbatim}
 There are a few predefined types. Note that the identifiers of the

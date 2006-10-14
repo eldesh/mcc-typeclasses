@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: TypeSyntaxCheck.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -91,7 +91,7 @@ signatures.
 
 > checkDecl :: TypeEnv -> Decl -> Error Decl
 > checkDecl env (TypeSig p vs ty) =
->   liftE (TypeSig p vs) (checkType env p ty)
+>   liftE (TypeSig p vs) (checkQualType env p ty)
 > checkDecl env (FunctionDecl p f eqs) =
 >   liftE (FunctionDecl p f) (mapE (checkEquation env) eqs)
 > checkDecl env (PatternDecl p t rhs) =
@@ -102,7 +102,8 @@ signatures.
 
 > checkTypeLhs :: TypeEnv -> Position -> [Ident] -> Error ()
 > checkTypeLhs env p tvs =
->   mapE_ (errorAt p . noVariable) (nub tcs) &&>
+>   mapE_ (errorAt p . noVariable "left hand side of type declaration")
+>         (nub tcs) &&>
 >   mapE_ (errorAt p . nonLinear "left hand side of type declaration". fst)
 >         (duplicates (filter (anonId /=) tvs'))
 >   where (tcs,tvs') = partition isTypeConstr tvs
@@ -151,7 +152,7 @@ declaration groups.
 > checkExpr _ _ (Constructor c) = return (Constructor c)
 > checkExpr env p (Paren e) = liftE Paren (checkExpr env p e)
 > checkExpr env p (Typed e ty) =
->   liftE2 Typed (checkExpr env p e) (checkType env p ty)
+>   liftE2 Typed (checkExpr env p e) (checkQualType env p ty)
 > checkExpr env p (Tuple es) = liftE Tuple (mapE (checkExpr env p) es)
 > checkExpr env p (List es) = liftE List (mapE (checkExpr env p) es)
 > checkExpr env p (ListCompr e qs) =
@@ -211,6 +212,21 @@ interpret the identifier as such.
 >     mapE_ (errorAt p . unboundVariable)
 >           (nub (filter (\tv -> tv == anonId || tv `notElem` tvs) (fv ty')))
 >     return ty'
+
+> checkQualType :: TypeEnv -> Position -> QualTypeExpr -> Error QualTypeExpr
+> checkQualType env p (QualTypeExpr cx ty) =
+>   do
+>     ty' <- mapE_ (checkClassAssert env p) cx &&> checkType env p ty
+>     let tvs = fv ty'
+>     mapE_ (errorAt p . unboundVariable)
+>           (nub [tv | ClassAssert _ tv <- cx, tv `notElem` tvs])
+>     return (QualTypeExpr cx ty')
+
+> checkClassAssert :: TypeEnv -> Position -> ClassAssert -> Error ()
+> checkClassAssert env p (ClassAssert cls tv) =
+>   checkClass env p cls &&>
+>   unless (null (lookupTopEnv tv env))
+>          (errorAt p (noVariable "class assertion" tv))
 
 > checkType :: TypeEnv -> Position -> TypeExpr -> Error TypeExpr
 > checkType env p (ConstructorType tc tys) =
@@ -365,10 +381,9 @@ Error messages.
 > nonLinear what tv =
 >   "Type variable " ++ name tv ++ " occurs more than once in " ++ what
 
-> noVariable :: Ident -> String
-> noVariable tv =
->   "Type constructor or type class " ++ name tv ++
->   " used in left hand side of type declaration"
+> noVariable :: String -> Ident -> String
+> noVariable what tv =
+>   "Type constructor or type class " ++ name tv ++ " used in " ++ what
 
 > unboundVariable :: Ident -> String
 > unboundVariable tv = "Undefined type variable " ++ name tv

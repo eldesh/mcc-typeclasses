@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: CurrySyntax.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -67,7 +67,7 @@ parsed representation of a Curry program.
 
 > data Decl =
 >     InfixDecl Position Infix Int [Ident]
->   | TypeSig Position [Ident] TypeExpr
+>   | TypeSig Position [Ident] QualTypeExpr
 >   | FunctionDecl Position Ident [Equation]
 >   | ForeignDecl Position CallConv (Maybe String) Ident TypeExpr
 >   | PatternDecl Position ConstrTerm Rhs
@@ -105,13 +105,15 @@ Interface declarations are restricted to type declarations and signatures.
 >   | ITypeDecl Position QualIdent [Ident] TypeExpr
 >   | IClassDecl Position QualIdent Ident
 >   | IInstanceDecl Position QualIdent TypeExpr
->   | IFunctionDecl Position QualIdent TypeExpr
+>   | IFunctionDecl Position QualIdent QualTypeExpr
 >   deriving (Eq,Show)
 
 \end{verbatim}
 \paragraph{Types}
 \begin{verbatim}
 
+> data QualTypeExpr = QualTypeExpr [ClassAssert] TypeExpr deriving (Eq,Show)
+> data ClassAssert = ClassAssert QualIdent Ident deriving (Eq,Show)
 > data TypeExpr =
 >     ConstructorType QualIdent [TypeExpr]
 >   | VariableType Ident
@@ -183,7 +185,7 @@ the identifier of the \texttt{Int} literal for maintaining its type.
 >   | Variable QualIdent
 >   | Constructor QualIdent
 >   | Paren Expression
->   | Typed Expression TypeExpr
+>   | Typed Expression QualTypeExpr
 >   | Tuple [Expression]
 >   | List [Expression]
 >   | ListCompr Expression [Statement]

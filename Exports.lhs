@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: Exports.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -89,18 +89,18 @@ declarations which cannot be used in another module because
 >            -> Ident -> ConstrDecl
 > constrDecl m tyEnv tc n evs c =
 >   ConstrDecl noPos (take (n' - n) evs) c (map (fromType m) (arrowArgs ty))
->   where ForAll n' ty = conType (qualifyLike tc c) tyEnv
+>   where ForAll n' (QualType _ ty) = conType (qualifyLike tc c) tyEnv
 
 > newConstrDecl :: ModuleIdent -> ValueEnv -> QualIdent -> Ident
 >               -> NewConstrDecl
 > newConstrDecl m tyEnv tc c =
 >   NewConstrDecl noPos c (fromType m (head (arrowArgs ty)))
->   where ForAll _ ty = conType (qualifyLike tc c) tyEnv
+>   where ForAll _ (QualType _ ty) = conType (qualifyLike tc c) tyEnv
 
 > funDecl :: ModuleIdent -> ValueEnv -> Export -> [IDecl] -> [IDecl]
 > funDecl m tyEnv (Export f) ds =
->   IFunctionDecl noPos (qualUnqualify m f) (fromType m ty) : ds
->   where ty = rawType (funType f tyEnv)
+>   IFunctionDecl noPos (qualUnqualify m f) (fromQualType m ty) : ds
+>   where ForAll _ ty = funType f tyEnv
 > funDecl _ _ (ExportTypeWith _ _) ds = ds
 
 > instDecl :: ModuleIdent -> TCEnv -> [QualIdent] -> CT -> [IDecl] -> [IDecl]
@@ -159,6 +159,12 @@ not module \texttt{B}.
 
 > instance HasModule NewConstrDecl where
 >   modules (NewConstrDecl _ _ ty) = modules ty
+
+> instance HasModule QualTypeExpr where
+>   modules (QualTypeExpr cx ty) = modules cx . modules ty
+
+> instance HasModule ClassAssert where
+>   modules (ClassAssert cls _) = modules cls
 
 > instance HasModule TypeExpr where
 >   modules (ConstructorType tc tys) = modules tc . modules tys
@@ -220,6 +226,9 @@ compiler can check them without loading the imported modules.
 
 > instance HasType NewConstrDecl where
 >   usedTypes (NewConstrDecl _ _ ty) = usedTypes ty
+
+> instance HasType QualTypeExpr where
+>   usedTypes (QualTypeExpr _ ty) = usedTypes ty
 
 > instance HasType TypeExpr where
 >   usedTypes (ConstructorType tc tys) = (tc :) . usedTypes tys

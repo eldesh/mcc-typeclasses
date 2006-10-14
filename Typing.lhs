@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 1840 2006-01-19 19:31:41Z wlux $
+% $Id: Typing.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -78,6 +78,8 @@ make use of the annotation instead of recomputing its type. In order
 to do this, we must either ensure that the types are properly
 qualified and expanded or we need access to the type constructor
 environment.}
+
+\ToDo{Do not ignore contexts!}
 \begin{verbatim}
 
 > type TyState a = StateT TypeSubst (StateT Int Id) a
@@ -101,8 +103,9 @@ environment.}
 >   typeOf = computeType rhsType
 
 > computeType :: (ValueEnv -> a -> TyState Type) -> ValueEnv -> a -> Type
-> computeType f tyEnv x = normalize 0 (run doComputeType tyEnv)
->   where doComputeType =
+> computeType f tyEnv x = ty
+>   where QualType _ ty = normalize 0 (qualType (run doComputeType tyEnv))
+>         doComputeType =
 >           do
 >             ty <- f tyEnv x
 >             theta <- fetchSt
@@ -233,7 +236,7 @@ offsets here.
 >     return (expandAliasType tys ty)
 
 > instUniv :: TypeScheme -> TyState Type
-> instUniv (ForAll n ty) = instType n ty
+> instUniv (ForAll n (QualType _ ty)) = instType n ty
 
 \end{verbatim}
 When unifying two types, the non-generalized variables, i.e.,

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfEquiv.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: IntfEquiv.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 2000-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -112,6 +112,9 @@ by function \texttt{fixInterface} and the associated type class
 
 > instance FixInterface NewConstrDecl where
 >   fix tcs (NewConstrDecl p c ty) = NewConstrDecl p c (fix tcs ty)
+
+> instance FixInterface QualTypeExpr where
+>   fix tcs (QualTypeExpr cx ty) = QualTypeExpr cx (fix tcs ty)
 
 > instance FixInterface TypeExpr where
 >   fix tcs (ConstructorType tc tys)

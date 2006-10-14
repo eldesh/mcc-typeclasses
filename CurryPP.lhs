@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: CurryPP.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -97,11 +97,11 @@ Declarations
 
 > ppDecl :: Decl -> Doc
 > ppDecl (InfixDecl _ fix p ops) = ppPrec fix p <+> list (map ppInfixOp ops)
-> ppDecl (TypeSig _ fs ty) = ppIdentList fs <+> text "::" <+> ppTypeExpr 0 ty
+> ppDecl (TypeSig _ fs ty) = ppIdentList fs <+> text "::" <+> ppQualTypeExpr ty
 > ppDecl (FunctionDecl _ _ eqs) = vcat (map ppEquation eqs)
 > ppDecl (ForeignDecl p cc ie f ty) =
 >   sep [text "foreign import" <+> ppCallConv cc <+> maybePP (text . show) ie,
->        indent (ppDecl (TypeSig p [f] ty))]
+>        indent (ppDecl (TypeSig p [f] (QualTypeExpr [] ty)))]
 >   where ppCallConv CallConvPrimitive = text "primitive"
 >         ppCallConv CallConvCCall = text "ccall"
 > ppDecl (PatternDecl _ t rhs) = ppRule (ppConstrTerm 0 t) equals rhs
@@ -177,7 +177,8 @@ Interfaces
 > ppIDecl (IClassDecl _ cls tv) = ppITypeDeclLhs "class" cls [tv]
 > ppIDecl (IInstanceDecl _ cls ty) =
 >   text "instance" <+> ppQIdent cls <+> ppTypeExpr 2 ty
-> ppIDecl (IFunctionDecl _ f ty) = ppQIdent f <+> text "::" <+> ppTypeExpr 0 ty
+> ppIDecl (IFunctionDecl _ f ty) =
+>   ppQIdent f <+> text "::" <+> ppQualTypeExpr ty
 
 > ppITypeDeclLhs :: String -> QualIdent -> [Ident] -> Doc
 > ppITypeDeclLhs kw tc tvs = text kw <+> ppQIdent tc <+> hsep (map ppIdent tvs)
@@ -185,6 +186,17 @@ Interfaces
 \end{verbatim}
 Types
 \begin{verbatim}
+
+> ppQualTypeExpr :: QualTypeExpr -> Doc
+> ppQualTypeExpr (QualTypeExpr cx ty) = sep [ppContext cx,ppTypeExpr 0 ty]
+
+> ppContext :: [ClassAssert] -> Doc
+> ppContext [] = empty
+> ppContext [ca] = ppClassAssert ca <+> text "=>"
+> ppContext cas = parenList (map ppClassAssert cas) <+> text "=>"
+
+> ppClassAssert :: ClassAssert -> Doc
+> ppClassAssert (ClassAssert cls tv) = ppQIdent cls <+> ppIdent tv
 
 > ppTypeExpr :: Int -> TypeExpr -> Doc
 > ppTypeExpr p (ConstructorType tc tys) =
@@ -250,7 +262,7 @@ Expressions
 > ppExpr _ (Constructor c) = ppQIdent c
 > ppExpr _ (Paren e) = parens (ppExpr 0 e)
 > ppExpr p (Typed e ty) =
->   parenExp (p > 0) (ppExpr 0 e <+> text "::" <+> ppTypeExpr 0 ty)
+>   parenExp (p > 0) (ppExpr 0 e <+> text "::" <+> ppQualTypeExpr ty)
 > ppExpr _ (Tuple es) = parenList (map (ppExpr 0) es)
 > ppExpr _ (List es) = bracketList (map (ppExpr 0) es)
 > ppExpr _ (ListCompr e qs) =

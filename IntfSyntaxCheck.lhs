@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: IntfSyntaxCheck.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -80,11 +80,12 @@ during syntax checking of type expressions.
 >   -- NB cls may be undefined
 >   liftE (IInstanceDecl p cls) (checkSimpleType env p ty)
 > checkIDecl env (IFunctionDecl p f ty) =
->   liftE (IFunctionDecl p f) (checkType env p ty)
+>   liftE (IFunctionDecl p f) (checkQualType env p ty)
 
 > checkTypeLhs :: TypeEnv -> Position -> [Ident] -> Error ()
 > checkTypeLhs env p tvs =
->   mapE_ (errorAt p . noVariable) (nub tcs) &&>
+>   mapE_ (errorAt p . noVariable "left hand side of type declaration")
+>         (nub tcs) &&>
 >   mapE_ (errorAt p . nonLinear . fst) (duplicates tvs')
 >   where (tcs,tvs') = partition isTypeConstr tvs
 >         isTypeConstr tv = not (null (lookupTopEnv tv env))
@@ -115,6 +116,21 @@ during syntax checking of type expressions.
 >           (nub (filter (`notElem` tvs) (fv ty')))
 >     return ty'
 
+> checkQualType :: TypeEnv -> Position -> QualTypeExpr -> Error QualTypeExpr
+> checkQualType env p (QualTypeExpr cx ty) =
+>   do
+>     ty' <- mapE_ (checkClassAssert env p) cx &&> checkType env p ty
+>     let tvs = fv ty'
+>     mapE_ (errorAt p . unboundVariable)
+>           (nub [tv | ClassAssert _ tv <- cx, tv `notElem` tvs])
+>     return (QualTypeExpr cx ty')
+
+> checkClassAssert :: TypeEnv -> Position -> ClassAssert -> Error ()
+> checkClassAssert env p (ClassAssert cls tv) =
+>   checkClass env p cls &&>
+>   unless (null (lookupTopEnv tv env))
+>          (errorAt p (noVariable "class assertion" tv))
+
 > checkType :: TypeEnv -> Position -> TypeExpr -> Error TypeExpr
 > checkType env p (ConstructorType tc tys) =
 >   liftE2 ($)
@@ -143,6 +159,15 @@ during syntax checking of type expressions.
 >             null (duplicates (fv ty')))
 >            (errorAt p (notSimpleType ty'))
 >     return ty'
+
+> checkClass :: TypeEnv -> Position -> QualIdent -> Error ()
+> checkClass env p cls =
+>   case qualLookupTopEnv cls env of
+>     [] -> errorAt p (undefinedClass cls)
+>     [Data _ _] -> errorAt p (undefinedClass cls)
+>     [Alias _] -> errorAt p (undefinedClass cls)
+>     [Class _] -> return ()
+>     _ -> internalError "checkClass"
 
 \end{verbatim}
 \ToDo{Much of the above code could be shared with module
@@ -190,15 +215,17 @@ Error messages.
 > undefinedType :: QualIdent -> String
 > undefinedType tc = "Undefined type " ++ qualName tc
 
+> undefinedClass :: QualIdent -> String
+> undefinedClass cls = "Undefined type class " ++ qualName cls
+
 > nonLinear :: Ident -> String
 > nonLinear tv =
 >   "Type variable " ++ name tv ++
 >   " occurs more than once on left hand side of type declaration"
 
-> noVariable :: Ident -> String
-> noVariable tv =
->   "Type constructor or type class " ++ name tv ++
->   " used in left hand side of type declaration"
+> noVariable :: String -> Ident -> String
+> noVariable what tv =
+>   "Type constructor or type class " ++ name tv ++ " used in " ++ what
 
 > unboundVariable :: Ident -> String
 > unboundVariable tv = "Undefined type variable " ++ name tv

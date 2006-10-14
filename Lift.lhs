@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Lift.lhs 1875 2006-03-18 18:43:27Z wlux $
+% $Id: Lift.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -232,7 +232,8 @@ variables in order to avoid an inadvertent name capturing.
 >           globalBindFun m (liftIdent pre f) (genType ty) (unbindFun f tyEnv)
 >           where ty = foldr TypeArrow (rawType (varType f tyEnv)) tys
 >         genType ty =
->           ForAll (length tvs) (subst (foldr2 bindSubst idSubst tvs tvs') ty)
+>           ForAll (length tvs)
+>                  (qualType (subst (foldr2 bindSubst idSubst tvs tvs') ty))
 >           where tvs = nub (typeVars ty)
 >                 tvs' = map TypeVariable [0..]
 

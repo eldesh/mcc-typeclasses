@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: Renaming.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -127,7 +127,9 @@ syntax tree and renames all type and expression variables.
 >     env <- bindVars emptyEnv [tv]
 >     liftM (ClassDecl p cls) (renameVar env tv)
 > renameTopDecl (InstanceDecl p cls ty) =
->   liftM (InstanceDecl p cls) (renameTypeSig ty)
+>   do
+>     QualTypeExpr _ ty' <- renameTypeSig (QualTypeExpr [] ty)
+>     return (InstanceDecl p cls ty')
 > renameTopDecl (BlockDecl d) = liftM BlockDecl (renameDecl emptyEnv d)
 
 > renameConstrDecl :: RenameEnv -> ConstrDecl -> RenameState ConstrDecl
@@ -149,11 +151,19 @@ syntax tree and renames all type and expression variables.
 > renameNewConstrDecl env (NewConstrDecl p c ty) =
 >   liftM (NewConstrDecl p c) (renameType env ty)
 
-> renameTypeSig :: TypeExpr -> RenameState TypeExpr
+> renameTypeSig :: QualTypeExpr -> RenameState QualTypeExpr
 > renameTypeSig ty =
 >   do
 >     env' <- bindVars emptyEnv (fv ty)
->     renameType env' ty
+>     renameQualType env' ty
+
+> renameQualType :: RenameEnv -> QualTypeExpr -> RenameState QualTypeExpr
+> renameQualType env (QualTypeExpr cx ty) =
+>   liftM2 QualTypeExpr (mapM (renameClassAssert env) cx) (renameType env ty)
+
+> renameClassAssert :: RenameEnv -> ClassAssert -> RenameState ClassAssert
+> renameClassAssert env (ClassAssert cls tv) =
+>   liftM (ClassAssert cls) (renameVar env tv)
 
 > renameType :: RenameEnv -> TypeExpr -> RenameState TypeExpr
 > renameType env (ConstructorType tc tys) =
@@ -174,7 +184,10 @@ syntax tree and renames all type and expression variables.
 >     f' <- renameVar env f
 >     liftM (FunctionDecl p f') (mapM (renameEqn f' env) eqs)
 > renameDecl env (ForeignDecl p cc ie f ty) =
->   liftM2 (ForeignDecl p cc ie) (renameVar env f) (renameTypeSig ty)
+>   do
+>     f' <- renameVar env f
+>     QualTypeExpr _ ty' <- renameTypeSig (QualTypeExpr [] ty)
+>     return (ForeignDecl p cc ie f' ty')
 > renameDecl env (PatternDecl p t rhs) =
 >   liftM2 (PatternDecl p) (renameConstrTerm env t) (renameRhs env rhs)
 > renameDecl env (FreeDecl p vs) =

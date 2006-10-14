@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: Modules.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -116,7 +116,7 @@ declaration to the module.
 >     es' <- checkExports m is tEnv vEnv es
 >     (pEnv',ds''') <- precCheck m pEnv $ rename ds''
 >     tcEnv' <- kindCheck m tcEnv ds'''
->     tyEnv' <- typeCheck m tcEnv' tyEnv ds'''
+>     tyEnv' <- typeCheck m tcEnv' iEnv' tyEnv ds'''
 >     let (pEnv'',tcEnv'',tyEnv'') = qualifyEnv mEnv m pEnv' tcEnv' tyEnv'
 >     return (tcEnv'',tyEnv'',
 >             Module m (Just es') is (qual tyEnv' ds'''),
@@ -255,7 +255,7 @@ compilation of a goal is similar to that of a module.
 >           syntaxCheckGoal tyEnv >>=
 >           precCheckGoal pEnv . renameGoal
 >     tyEnv' <- kindCheckGoal tcEnv g' >>
->               typeCheckGoal tcEnv tyEnv g'
+>               typeCheckGoal tcEnv iEnv tyEnv g'
 >     let (_,tcEnv',tyEnv'') = qualifyEnv mEnv emptyMIdent pEnv tcEnv tyEnv'
 >     return (tcEnv',tyEnv'',qualGoal tyEnv' g')
 
@@ -504,7 +504,7 @@ from the type environment.
 >         ppInfo (c,NewtypeConstructor _ (ForAll _ ty)) =
 >           ppIDecl (mkDecl c ty) <+> text "-- newtype constructor"
 >         ppInfo (x,Value _ (ForAll _ ty)) = ppIDecl (mkDecl x ty)
->         mkDecl f ty = IFunctionDecl undefined (qualify f) (fromType m ty)
+>         mkDecl f ty = IFunctionDecl undefined (qualify f) (fromQualType m ty)
 
 \end{verbatim}
 Various filename extensions.

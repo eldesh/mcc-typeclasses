@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: CurryParser.lhs 1978 2006-10-14 15:50:45Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -181,11 +181,11 @@ directory path to the module is ignored.
 > newConstrDecl = NewConstrDecl <$> position <*> con <*> type2
 
 > classDecl :: Parser Token TopDecl a
-> classDecl = ClassDecl <$> position <*-> token KW_class <*> ident <*> ident
+> classDecl = ClassDecl <$> position <*-> token KW_class <*> tycls <*> tyvar
 
 > instanceDecl :: Parser Token TopDecl a
 > instanceDecl =
->   InstanceDecl <$> position <*-> token KW_instance <*> qIdent <*> type2
+>   InstanceDecl <$> position <*-> token KW_instance <*> qtycls <*> type2
 
 > infixDecl :: Parser Token Decl a
 > infixDecl = infixDeclLhs InfixDecl <*> funop `sepBy1` comma
@@ -224,7 +224,7 @@ directory path to the module is ignored.
 > patDecl t rhs p = PatternDecl p t rhs
 
 > funListDecl :: Parser Token ([Ident] -> Position -> Decl) a
-> funListDecl = typeSig <$-> token DoubleColon <*> type0
+> funListDecl = typeSig <$-> token DoubleColon <*> qualType
 >   where typeSig ty vs p = TypeSig p vs ty
 
 > valListDecl :: Parser Token ([Ident] -> Position -> Decl) a
@@ -294,7 +294,7 @@ directory path to the module is ignored.
 > iHidingDecl :: Parser Token IDecl a
 > iHidingDecl = position <*-> token Id_hiding <**> (dataDecl <|> funcDecl)
 >   where dataDecl = hiddenData <$-> token KW_data <*> qtycon <*> many tyvar
->         funcDecl = hidingFunc <$-> token DoubleColon <*> type0
+>         funcDecl = hidingFunc <$-> token DoubleColon <*> qualType
 >         hiddenData tc tvs p = HidingDataDecl p tc tvs
 >         hidingFunc ty p = IFunctionDecl p hidingId ty
 >         hidingId = qualify (mkIdent "hiding")
@@ -318,19 +318,31 @@ directory path to the module is ignored.
 > iTypeDeclLhs f kw = f <$> position <*-> token kw <*> qtycon <*> many tyvar
 
 > iClassDecl :: Parser Token IDecl a
-> iClassDecl = IClassDecl <$> position <*-> token KW_class <*> qIdent <*> ident
+> iClassDecl = IClassDecl <$> position <*-> token KW_class <*> qtycls <*> tyvar
 
 > iInstanceDecl :: Parser Token IDecl a
 > iInstanceDecl =
->   IInstanceDecl <$> position <*-> token KW_instance <*> qIdent <*> type2
+>   IInstanceDecl <$> position <*-> token KW_instance <*> qtycls <*> type2
 
 > iFunctionDecl :: Parser Token IDecl a
 > iFunctionDecl = IFunctionDecl <$> position <*> qfun <*-> token DoubleColon
->                               <*> type0
+>                               <*> qualType
 
 \end{verbatim}
 \paragraph{Types}
 \begin{verbatim}
+
+> qualType :: Parser Token QualTypeExpr a
+> qualType = QualTypeExpr <$> context <*-> token DoubleRightArrow <*> type0
+>       <|?> QualTypeExpr [] <$> type0
+
+> context :: Parser Token [ClassAssert] a
+> context = return <$> classAssert
+>       <|> parens (classAssert `sepBy1` comma)
+>     `opt` []
+
+> classAssert :: Parser Token ClassAssert a
+> classAssert = ClassAssert <$> qtycls <*> tyvar
 
 > type0 :: Parser Token TypeExpr a
 > type0 = type1 `chainr1` (ArrowType <$-> token RightArrow)
@@ -471,7 +483,7 @@ the left-hand side of a declaration.
 > condExpr eq = CondExpr <$> position <*-> bar <*> expr0 <*-> eq <*> expr
 
 > expr :: Parser Token Expression a
-> expr = expr0 <??> (flip Typed <$-> token DoubleColon <*> type0)
+> expr = expr0 <??> (flip Typed <$-> token DoubleColon <*> qualType)
 
 > expr0 :: Parser Token Expression a
 > expr0 = expr1 `chainr1` (flip InfixApply <$> infixOp)
@@ -508,7 +520,7 @@ the left-hand side of a declaration.
 >                     <|> (.) <$> (optType <.> tupleExpr)
 >         leftSectionOrExp = expr1 <**> (infixApp <$> infixOrTuple')
 >                      `opt` leftSection
->         optType = flip Typed <$-> token DoubleColon <*> type0
+>         optType = flip Typed <$-> token DoubleColon <*> qualType
 >             `opt` id
 >         tupleExpr = tuple <$> many1 (comma <-*> expr)
 >               `opt` Paren
@@ -627,12 +639,14 @@ prefix of a let expression.
 > string :: Parser Token String a
 > string = sval <$> token StringTok
 
-> tycon, tyvar :: Parser Token Ident a
+> tycon, tycls, tyvar :: Parser Token Ident a
 > tycon = conId
+> tycls = conId
 > tyvar = varId
 
-> qtycon :: Parser Token QualIdent a
+> qtycon,qtycls :: Parser Token QualIdent a
 > qtycon = qConId
+> qtycls = qConId
 
 > varId, funId, conId :: Parser Token Ident a
 > varId = ident

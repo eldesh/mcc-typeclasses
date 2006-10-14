@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 1790 2005-10-09 16:48:16Z wlux $
+% $Id: Types.lhs 1977 2006-10-14 12:28:32Z wlux $
 %
-% Copyright (c) 2002-2005, Wolfgang Lux
+% Copyright (c) 2002-2006, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Types.lhs}
@@ -75,36 +75,30 @@ and \texttt{arrowBase} in one call.
 > arrowUnapply ty = ([],ty)
 
 \end{verbatim}
-The functions \texttt{typeVars}, \texttt{typeConstrs},
-\texttt{typeSkolems} return a list of all type variables, type
-constructors, and skolems occurring in a type $t$, respectively. Note
-that \texttt{TypeConstrained} variables are not included in the set of
-type variables because they cannot be generalized.
+The methods \texttt{typeVars} and \texttt{typeSkolems} return a list
+of all type variables and skolem types occurring in a type $t$,
+respectively. Note that \texttt{TypeConstrained} variables are not
+included in the set of type variables because they cannot be
+generalized.
 \begin{verbatim}
 
-> typeVars :: Type -> [Int]
-> typeVars ty = vars ty []
->   where vars (TypeConstructor _ tys) tvs = foldr vars tvs tys
->         vars (TypeVariable tv) tvs = tv : tvs
->         vars (TypeConstrained _ _) tvs = tvs
->         vars (TypeArrow ty1 ty2) tvs = vars ty1 (vars ty2 tvs)
->         vars (TypeSkolem _) tvs = tvs
+> class IsType t where
+>   typeVars :: t -> [Int]
+>   typeSkolems :: t -> [Int]
 
-> typeConstrs :: Type -> [QualIdent]
-> typeConstrs ty = types ty []
->   where types (TypeConstructor tc tys) tcs = tc : foldr types tcs tys
->         types (TypeVariable _) tcs = tcs
->         types (TypeConstrained _ _) tcs = tcs
->         types (TypeArrow ty1 ty2) tcs = types ty1 (types ty2 tcs)
->         types (TypeSkolem _) tcs = tcs
-
-> typeSkolems :: Type -> [Int]
-> typeSkolems ty = skolems ty []
->   where skolems (TypeConstructor _ tys) sks = foldr skolems sks tys
->         skolems (TypeVariable _) sks = sks
->         skolems (TypeConstrained _ _) sks = sks
->         skolems (TypeArrow ty1 ty2) sks = skolems ty1 (skolems ty2 sks)
->         skolems (TypeSkolem k) sks = k : sks
+> instance IsType Type where
+>   typeVars ty = vars ty []
+>     where vars (TypeConstructor _ tys) tvs = foldr vars tvs tys
+>           vars (TypeVariable tv) tvs = tv : tvs
+>           vars (TypeConstrained _ _) tvs = tvs
+>           vars (TypeArrow ty1 ty2) tvs = vars ty1 (vars ty2 tvs)
+>           vars (TypeSkolem _) tvs = tvs
+>   typeSkolems ty = skolems ty []
+>     where skolems (TypeConstructor _ tys) sks = foldr skolems sks tys
+>           skolems (TypeVariable _) sks = sks
+>           skolems (TypeConstrained _ _) sks = sks
+>           skolems (TypeArrow ty1 ty2) sks = skolems ty1 (skolems ty2 sks)
+>           skolems (TypeSkolem k) sks = k : sks
 
 \end{verbatim}
 Type schemes $\forall\overline{\alpha} . \tau(\overline{\alpha})$
@@ -117,7 +111,7 @@ record only the number of quantified type variables in the
 In general, type variables are assigned indices from left to right in
 the order of their occurrence in a type. However, a slightly different
 scheme is used for types of data and newtype constructors. Here, the
-type variables occuring on the left hand side of a declaration are
+type variables occurring on the left hand side of a declaration are
 assigned indices $0, \dots, n-1$, where $n$ is the arity of the type
 constructor, regardless of the order of their occurrence in the type.
 Existentially quantified type variables that occur on the right hand
@@ -139,6 +133,10 @@ m-1$ are existentially quantified.
 \begin{verbatim}
 
 > data TypeScheme = ForAll Int Type deriving (Eq,Show)
+
+> instance IsType TypeScheme where
+>   typeVars (ForAll _ ty) = [tv | tv <- typeVars ty, tv < 0]
+>   typeSkolems (ForAll _ ty) = typeSkolems ty
 
 \end{verbatim}
 The functions \texttt{monoType} and \texttt{polyType} translate a type

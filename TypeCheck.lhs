@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 1976 2006-10-04 17:25:49Z wlux $
+% $Id: TypeCheck.lhs 1977 2006-10-14 12:28:32Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -203,7 +203,7 @@ $\forall\alpha.\texttt{Bool}\rightarrow[\alpha]\rightarrow[\alpha]$.
 >     zipWithM_ (tcDeclRhs m tcEnv) tys ds
 >     tyEnv <- fetchSt
 >     theta <- liftSt fetchSt
->     let tvss = map (typeVars . subst theta . rawType . flip varType tyEnv) vs
+>     let tvss = map (typeVars . subst theta . flip varType tyEnv) vs
 >         fvs = foldr addToSet (fvEnv (subst theta tyEnv0)) (concat tvss)
 >     zipWithM_ (genDecl m tcEnv sigs . gen fvs . subst theta) tys ds
 >   where vs = [v | PatternDecl _ t _ <- ds, v <- bv t]
@@ -277,11 +277,11 @@ arbitrary type.
 >                -> Maybe String -> Ident -> TypeExpr -> TcState ()
 > tcForeignFunct m tcEnv p cc ie f ty =
 >   do
->     checkForeignType cc ty'
+>     checkForeignType cc (rawType ty')
 >     updateSt_ (bindFun m f ty')
 >   where ty' = expandPolyType tcEnv ty
 >         checkForeignType CallConvPrimitive _ = return ()
->         checkForeignType CallConvCCall (ForAll _ ty)
+>         checkForeignType CallConvCCall ty
 >           | ie == Just "dynamic" = checkCDynCallType m p ty
 >           | maybe False ('&' `elem`) ie = checkCAddrType m p ty
 >           | otherwise = checkCCallType m p ty
@@ -368,8 +368,7 @@ arbitrary type.
 >     return (listType ty)
 >   where tcElem doc ty t =
 >           tcConstrTerm m tcEnv sigs p t >>=
->           unify p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t)
->                 m ty
+>           unify p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t) m ty
 > tcConstrTerm m tcEnv sigs p t@(AsPattern v t') =
 >   do
 >     ty <- tcConstrTerm m tcEnv sigs p (VariablePattern v)
@@ -424,9 +423,9 @@ arbitrary type.
 > tcExpr m tcEnv p (Typed e sig) =
 >   do
 >     tyEnv0 <- fetchSt
->     ty <- tcExpr m tcEnv p e
->     inst sigma' >>=
->       flip (unify p "explicitly typed expression" (ppExpr 0 e) m) ty
+>     ty <- inst sigma'
+>     tcExpr m tcEnv p e >>=
+>       unify p "explicitly typed expression" (ppExpr 0 e) m ty
 >     theta <- liftSt fetchSt
 >     let sigma = gen (fvEnv (subst theta tyEnv0)) (subst theta ty)
 >     unless (sigma == sigma')
@@ -521,8 +520,7 @@ arbitrary type.
 >   do
 >     (alpha,beta) <-
 >       tcExpr m tcEnv p (infixOp op) >>=
->       tcArrow p "left section" (ppExpr 0 e $-$ text "Operator:" <+> ppOp op)
->               m
+>       tcArrow p "left section" (ppExpr 0 e $-$ text "Operator:" <+> ppOp op) m
 >     tcExpr m tcEnv p e1 >>=
 >       unify p "left section" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1)
 >             m alpha
@@ -772,14 +770,13 @@ here because we know that they are closed.
 \begin{verbatim}
 
 > fvEnv :: ValueEnv -> Set Int
-> fvEnv tyEnv =
->   fromListSet [tv | ty <- localTypes tyEnv, tv <- typeVars ty, tv < 0]
+> fvEnv tyEnv = fromListSet (concatMap typeVars (localTypes tyEnv))
 
 > fsEnv :: ValueEnv -> Set Int
-> fsEnv tyEnv = unionSets (map (fromListSet . typeSkolems) (localTypes tyEnv))
+> fsEnv tyEnv = fromListSet (concatMap typeSkolems (localTypes tyEnv))
 
-> localTypes :: ValueEnv -> [Type]
-> localTypes tyEnv = [ty | (_,Value _ (ForAll _ ty)) <- localBindings tyEnv]
+> localTypes :: ValueEnv -> [TypeScheme]
+> localTypes tyEnv = [ty | (_,Value _ ty) <- localBindings tyEnv]
 
 \end{verbatim}
 Error functions.

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: Imports.lhs 1981 2006-10-23 22:42:43Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -86,7 +86,7 @@ all instance declarations are always imported into the current module.
 >   where ctPair m cls ty = CT (qualQualify m cls) (root (toType m [] ty))
 >         root (TypeConstructor tc _) = tc
 >         root (TypeVariable _) = internalError "importInstances"
->         root (TypeConstrained _ _) = internalError "importInstances"
+>         root (TypeGuard _) = internalError "importInstances"
 >         root (TypeArrow _ _) = qArrowId
 >         root (TypeSkolem _) = internalError "importInstances"
 

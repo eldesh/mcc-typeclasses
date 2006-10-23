@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 1980 2006-10-23 20:13:04Z wlux $
+% $Id: Typing.lhs 1981 2006-10-23 22:42:43Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -283,7 +283,7 @@ checker.
 >   | tv >= 0 = bindVar tv ty theta
 > unifyTypes (TypeConstructor tc1 tys1) (TypeConstructor tc2 tys2) theta
 >   | tc1 == tc2 = unifyTypeLists tys1 tys2 theta
-> unifyTypes (TypeConstrained tys1 tv1) (TypeConstrained tys2 tv2) theta
+> unifyTypes (TypeGuard tv1) (TypeGuard tv2) theta
 >   | tv1 == tv2 = theta
 > unifyTypes (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) theta =
 >   unifyTypeLists [ty11,ty12] [ty21,ty22] theta

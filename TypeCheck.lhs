@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 1980 2006-10-23 20:13:04Z wlux $
+% $Id: TypeCheck.lhs 1981 2006-10-23 22:42:43Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -469,7 +469,7 @@ arbitrary type.
 >     return (cx ++ concat cxs,ty)
 >   where guardType es
 >           | length es > 1 = return boolType
->           | otherwise = freshConstrained [successType,boolType]
+>           | otherwise = freshGuard
 
 > tcCondExpr :: ModuleIdent -> TCEnv -> Type -> Type -> CondExpr
 >            -> TcState Context
@@ -757,17 +757,19 @@ of~\cite{PeytonJones87:Book}).
 > unifyTypes m ty (TypeVariable tv)
 >   | tv `elem` typeVars ty = Left (recursiveType m tv ty)
 >   | otherwise = Right (bindSubst tv ty idSubst)
-> unifyTypes _ (TypeConstrained tys1 tv1) (TypeConstrained tys2 tv2)
+> unifyTypes _ (TypeGuard tv1) (TypeGuard tv2)
 >   | tv1 == tv2 = Right idSubst
->   | tys1 == tys2 = Right (bindSubst tv1 (TypeConstrained tys2 tv2) idSubst)
-> unifyTypes m (TypeConstrained tys tv) ty =
->   foldr (choose . unifyTypes m ty) (Left (incompatibleTypes m ty (head tys)))
->         tys
+>   | otherwise = Right (bindSubst tv1 (TypeGuard tv2) idSubst)
+> unifyTypes m (TypeGuard tv) ty =
+>   foldr (choose . unifyTypes m ty)
+>         (Left (incompatibleTypes m ty (head guardTypes)))
+>         guardTypes
 >   where choose (Left _) theta' = theta'
 >         choose (Right theta) _ = Right (bindSubst tv ty theta)
-> unifyTypes m ty (TypeConstrained tys tv) =
->   foldr (choose . unifyTypes m ty) (Left (incompatibleTypes m ty (head tys)))
->         tys
+> unifyTypes m ty (TypeGuard tv) =
+>   foldr (choose . unifyTypes m ty)
+>         (Left (incompatibleTypes m ty (head guardTypes)))
+>         guardTypes
 >   where choose (Left _) theta' = theta'
 >         choose (Right theta) _ = Right (bindSubst tv ty theta)
 > unifyTypes m (TypeConstructor tc1 tys1) (TypeConstructor tc2 tys2)
@@ -792,14 +794,13 @@ After performing a unification, the resulting substitution is applied
 to the current context and the resulting context is subject to a
 context reduction. This context reduction retains all predicates whose
 types are simple variables and for all other types checks whether an
-instance exists. A minor complication arises due to constrained types,
-which at present are used to implement overloading of numeric literals
-and guard expressions. The set of admissible types of a constrained
-type may be restricted by the current context after the context
-reduction and thus may cause a further extension of the current
-substitution.
+instance exists. A minor complication arises due to guard types, which
+are used to delay the type selection for guard expressions. Since the
+set of admissible types of a guard type may be restricted by the
+current context after the context reduction, this may cause a further
+extension of the current substitution.
 
-\ToDo{Replace constrained types by overloading with type classes.}
+\ToDo{Replace guard types by overloading with type classes.}
 \begin{verbatim}
 
 > reduceContext :: Position -> String -> Doc -> ModuleIdent
@@ -814,7 +815,7 @@ substitution.
 >     return cx1
 >   where isTypeVar (TypeConstructor _ _) = False
 >         isTypeVar (TypeVariable _) = True
->         isTypeVar (TypeConstrained _ _) = False
+>         isTypeVar (TypeGuard _) = False
 >         isTypeVar (TypeArrow _ _) = False
 >         isTypeVar (TypeSkolem _) = False
 
@@ -822,18 +823,15 @@ substitution.
 >               -> TypePred -> TcState ()
 > checkTypePred p what doc m iEnv (TypePred cls ty) =
 >   case ty of
->     TypeConstrained tys tv ->
->       case filter hasInstance tys of
+>     TypeGuard tv ->
+>       case filter hasInstance guardTypes of
 >         [] -> errorAt p (noInstance what doc m cls ty)
 >         [ty'] -> liftSt (updateSt_ (bindSubst tv ty'))
->         tys'
->           | length tys' /= length tys ->
->               freshConstrained tys' >>= liftSt . updateSt_ . bindSubst tv
->           | otherwise -> return ()
+>         _ -> return ()
 >     _ -> unless (hasInstance ty) (errorAt p (noInstance what doc m cls ty))
 >   where hasInstance (TypeConstructor tc _) = CT cls tc `elemSet` iEnv
 >         hasInstance (TypeVariable _) = True
->         hasInstance (TypeConstrained tys _) = any hasInstance tys
+>         hasInstance (TypeGuard _) = any hasInstance guardTypes
 >         hasInstance (TypeArrow _ _) = CT cls qArrowId `elemSet` iEnv
 >         hasInstance (TypeSkolem _) = False
 
@@ -878,8 +876,8 @@ We use negative offsets for fresh type variables.
 > freshTypeVar :: TcState Type
 > freshTypeVar = freshVar TypeVariable
 
-> freshConstrained :: [Type] -> TcState Type
-> freshConstrained tys = freshVar (TypeConstrained tys)
+> freshGuard :: TcState Type
+> freshGuard = freshVar TypeGuard
 
 > freshSkolem :: TcState Type
 > freshSkolem = fresh TypeSkolem

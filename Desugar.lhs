@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 1980 2006-10-23 20:13:04Z wlux $
+% $Id: Desugar.lhs 1981 2006-10-23 22:42:43Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -622,7 +622,7 @@ where the default alternative is redundant.
 >         allCases tcEnv tyEnv v ts = length cs == length ts
 >           where TypeConstructor tc _ = fixType (typeOf tyEnv v)
 >                 cs = constructors tc tcEnv
->         fixType (TypeConstrained (ty:_) _) = ty
+>         fixType (TypeGuard _) = head guardTypes
 >         fixType ty = ty
 
 > desugarAlt :: ModuleIdent -> ([Ident] -> [Ident]) -> [Ident]

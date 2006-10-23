@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSubst.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: TypeSubst.lhs 1981 2006-10-23 22:42:43Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -34,9 +34,9 @@ This module implements substitutions on types.
 >   subst sigma (TypeConstructor tc tys) =
 >     TypeConstructor tc (map (subst sigma) tys)
 >   subst sigma (TypeVariable tv) = substVar sigma tv
->   subst sigma (TypeConstrained tys tv) =
+>   subst sigma (TypeGuard tv) =
 >     case substVar sigma tv of
->       TypeVariable tv -> TypeConstrained tys tv
+>       TypeVariable tv -> TypeGuard tv
 >       ty -> ty
 >   subst sigma (TypeArrow ty1 ty2) =
 >     TypeArrow (subst sigma ty1) (subst sigma ty2)
@@ -83,7 +83,7 @@ respectively.
 >   expandAliasType tys (TypeVariable n)
 >     | n >= 0 = tys !! n
 >     | otherwise = TypeVariable n
->   expandAliasType _ (TypeConstrained tys n) = TypeConstrained tys n
+>   expandAliasType _ (TypeGuard n) = TypeGuard n
 >   expandAliasType tys (TypeArrow ty1 ty2) =
 >     TypeArrow (expandAliasType tys ty1) (expandAliasType tys ty2)
 >   expandAliasType _ (TypeSkolem k) = TypeSkolem k

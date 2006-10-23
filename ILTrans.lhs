@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 1979 2006-10-23 19:05:25Z wlux $
+% $Id: ILTrans.lhs 1981 2006-10-23 22:42:43Z wlux $
 %
 % Copyright (c) 1999-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -122,16 +122,16 @@ which are imported into the interface from another module.
 \end{verbatim}
 \paragraph{Types}
 The type representation in the intermediate language is the same as
-the internal representation except that it does not support
-constrained type variables and skolem types. The former are fixed and
-the latter are replaced by fresh type constructors.
+the internal representation except that it does not support guard type
+variables and skolem types. The former are fixed and the latter are
+replaced by fresh type constructors.
 \begin{verbatim}
 
 > translType :: Type -> IL.Type
 > translType (TypeConstructor tc tys) =
 >   IL.TypeConstructor tc (map translType tys)
 > translType (TypeVariable tv) = IL.TypeVariable tv
-> translType (TypeConstrained tys _) = translType (head tys)
+> translType (TypeGuard _) = translType (head guardTypes)
 > translType (TypeArrow ty1 ty2) =
 >   IL.TypeArrow (translType ty1) (translType ty2)
 > translType (TypeSkolem k) =

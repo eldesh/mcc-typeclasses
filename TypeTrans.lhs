@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: TypeTrans.lhs 1981 2006-10-23 22:42:43Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -87,8 +87,7 @@ indices independently in each type expression.
 >   TypeConstructor (if isPrimTypeId tc then tc else qualQualify m tc)
 >                   (map (qualifyType m) tys)
 > qualifyType _ (TypeVariable tv) = TypeVariable tv
-> qualifyType m (TypeConstrained tys tv) =
->   TypeConstrained (map (qualifyType m) tys) tv
+> qualifyType m (TypeGuard tv) = qualifyType m (head guardTypes)
 > qualifyType m (TypeArrow ty1 ty2) =
 >   TypeArrow (qualifyType m ty1) (qualifyType m ty2)
 > qualifyType _ (TypeSkolem k) = TypeSkolem k
@@ -125,7 +124,7 @@ constructors and type classes defined in the current module.
 > fromType' (TypeVariable tv) =
 >   VariableType (if tv >= 0 then nameSupply !! tv
 >                            else mkIdent ('_' : show (-tv)))
-> fromType' (TypeConstrained tys _) = fromType' (head tys)
+> fromType' (TypeGuard _) = fromType' (head guardTypes)
 > fromType' (TypeArrow ty1 ty2) = ArrowType (fromType' ty1) (fromType' ty2)
 > fromType' (TypeSkolem k) = VariableType (mkIdent ("_?" ++ show k))
 
@@ -141,8 +140,7 @@ constructors and type classes defined in the current module.
 > unqualifyType m (TypeConstructor tc tys) =
 >   TypeConstructor (qualUnqualify m tc) (map (unqualifyType m) tys)
 > unqualifyType _ (TypeVariable tv) = TypeVariable tv
-> unqualifyType m (TypeConstrained tys tv) =
->   TypeConstrained (map (unqualifyType m) tys) tv
+> unqualifyType _ (TypeGuard tv) = TypeGuard tv
 > unqualifyType m (TypeArrow ty1 ty2) =
 >   TypeArrow (unqualifyType m ty1) (unqualifyType m ty2)
 > unqualifyType m (TypeSkolem k) = TypeSkolem k
@@ -188,7 +186,7 @@ names.
 >     _ -> internalError ("expandType " ++ show tc)
 >   where tys' = map (expandType tcEnv) tys
 > expandType _ (TypeVariable tv) = TypeVariable tv
-> expandType _ (TypeConstrained tys tv) = TypeConstrained tys tv
+> expandType _ (TypeGuard tv) = TypeGuard tv
 > expandType tcEnv (TypeArrow ty1 ty2) =
 >   TypeArrow (expandType tcEnv ty1) (expandType tcEnv ty2)
 > expandType _ (TypeSkolem k) = TypeSkolem k

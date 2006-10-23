@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: Types.lhs 1981 2006-10-23 22:42:43Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -16,16 +16,15 @@ of types in the compiler.
 
 \end{verbatim}
 A type is either a type variable, an application of a type constructor
-to a list of arguments, or an arrow type. The \texttt{TypeConstrained}
-case is used for representing type variables that are restricted to a
-particular set of types. At present, this is used for typing guard
-expressions, which are restricted to be either of type \texttt{Bool}
-or of type \texttt{Success}, and integer literals, which are
-restricted to types \texttt{Int} and \texttt{Float}. If the type is
-not restricted, it defaults to the first type from the constraint
-list. The case \texttt{TypeSkolem} is used for handling skolem types,
-which result from matching data constructors with existentially
-quantified types.
+to a list of arguments, or an arrow type. The \texttt{TypeGuard} case
+is used for typing a guard expression in a equation with only a single
+guard, which can either have type \texttt{Bool} or \texttt{Success}.
+\texttt{TypeGuard} variables allow delaying the decision for a fixed
+type until the whole module has been checked. If the
+\texttt{TypeGuard} variable is still not restricted, it will be
+defaulted to type \texttt{Success}. The case \texttt{TypeSkolem} is
+used for handling skolem types, which result from matching data
+constructors with existentially quantified types.
 
 Type variables are represented with deBruijn style indices. Universally
 quantified type variables are assigned indices in the order of their
@@ -33,14 +32,14 @@ occurrence in the type from left to right. This leads to a canonical
 representation of types where $\alpha$-equivalence of two types
 coincides with equality of the representation.
 
-Note that even though \texttt{TypeConstrained} variables use indices
-as well, these variables must never be quantified.
+Note that even though \texttt{TypeGuard} variables use indices as
+well, these variables must never be quantified.
 \begin{verbatim}
 
 > data Type =
 >     TypeConstructor QualIdent [Type]
 >   | TypeVariable Int
->   | TypeConstrained [Type] Int
+>   | TypeGuard Int
 >   | TypeArrow Type Type
 >   | TypeSkolem Int
 >   deriving (Eq,Ord,Show)
@@ -77,9 +76,8 @@ type $\tau_{n+1}$, and \texttt{arrowUnapply} combines
 \end{verbatim}
 The methods \texttt{typeVars} and \texttt{typeSkolems} return a list
 of all type variables and skolem types occurring in a type $\tau$,
-respectively. Note that \texttt{TypeConstrained} variables are not
-included in the set of type variables because they cannot be
-generalized.
+respectively. Note that \texttt{TypeGuard} variables are not included
+in the set of type variables because they cannot be generalized.
 \begin{verbatim}
 
 > class IsType t where
@@ -90,13 +88,13 @@ generalized.
 >   typeVars ty = vars ty []
 >     where vars (TypeConstructor _ tys) tvs = foldr vars tvs tys
 >           vars (TypeVariable tv) tvs = tv : tvs
->           vars (TypeConstrained _ _) tvs = tvs
+>           vars (TypeGuard _) tvs = tvs
 >           vars (TypeArrow ty1 ty2) tvs = vars ty1 (vars ty2 tvs)
 >           vars (TypeSkolem _) tvs = tvs
 >   typeSkolems ty = skolems ty []
 >     where skolems (TypeConstructor _ tys) sks = foldr skolems sks tys
 >           skolems (TypeVariable _) sks = sks
->           skolems (TypeConstrained _ _) sks = sks
+>           skolems (TypeGuard _) sks = sks
 >           skolems (TypeArrow ty1 ty2) sks = skolems ty1 (skolems ty2 sks)
 >           skolems (TypeSkolem k) sks = k : sks
 
@@ -246,5 +244,15 @@ never be qualified with a module prefix.
 
 > typeVar :: Int -> Type
 > typeVar = TypeVariable
+
+\end{verbatim}
+The variable \texttt{guardTypes} maintains the list of types
+admissible for guard expressions. The first type of this list
+(\texttt{Success}), is used as default type if the guard's type cannot
+be determined otherwise.
+\begin{verbatim}
+
+> guardTypes :: [Type]
+> guardTypes = [successType,boolType]
 
 \end{verbatim}

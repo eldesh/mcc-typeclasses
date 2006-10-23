@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 1979 2006-10-23 19:05:25Z wlux $
+% $Id: Renaming.lhs 1980 2006-10-23 20:13:04Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -232,7 +232,7 @@ not rename this identifier in the same environment as its arguments.
 
 > renameConstrTerm :: RenameEnv -> ConstrTerm -> RenameState ConstrTerm
 > renameConstrTerm env (LiteralPattern l) = return (LiteralPattern l)
-> renameConstrTerm env (NegativePattern op l) = return (NegativePattern op l)
+> renameConstrTerm env (NegativePattern l) = return (NegativePattern l)
 > renameConstrTerm env (VariablePattern x) =
 >   liftM VariablePattern (renameVar env x)
 > renameConstrTerm env (ConstructorPattern c ts) =

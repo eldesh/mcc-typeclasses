@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: OverlapCheck.lhs 1979 2006-10-23 19:05:25Z wlux $
+% $Id: OverlapCheck.lhs 1980 2006-10-23 20:13:04Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -145,7 +145,7 @@ Unfortunately, the code has not been desugared yet.
 >   case l of
 >     String cs -> desugar (ListPattern (map (LiteralPattern . Char) cs))
 >     _ -> LiteralPattern l
-> desugar (NegativePattern _ l) = desugar (LiteralPattern (negateLit l))
+> desugar (NegativePattern l) = desugar (LiteralPattern (negateLit l))
 >   where negateLit (Int i) = Int (-i)
 >         negateLit (Float f) = Float (-f)
 > desugar (VariablePattern v) = VariablePattern anonId

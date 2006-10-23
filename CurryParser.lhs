@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 1979 2006-10-23 19:05:25Z wlux $
+% $Id: CurryParser.lhs 1980 2006-10-23 20:13:04Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -392,14 +392,14 @@ directory path to the module is ignored.
 > constrTerm1 :: Parser Token ConstrTerm a
 > constrTerm1 = varId <**> identPattern
 >           <|> constrPattern (qConId <\> varId)
->           <|> minus <**> negNum
->           <|> fminus <**> negFloat
+>           <|> minus <-*> negInt
+>           <|> fminus <-*> negFloat
 >           <|> leftParen <-*> parenPattern
 >           <|> constrTerm2 <\> qConId <\> leftParen
 >   where identPattern = optAsPattern
 >                    <|> conPattern <$> many1 constrTerm2
 >         constrPattern p = ConstructorPattern <$> p <*> many constrTerm2
->         parenPattern = minus <**> minusPattern negNum
+>         parenPattern = minus <**> minusPattern negInt
 >                    <|> fminus <**> minusPattern negFloat
 >                    <|> gconPattern
 >                    <|> funSym <\> minus <\> fminus <*-> rightParen
@@ -426,7 +426,7 @@ directory path to the module is ignored.
 
 > parenPattern :: Parser Token ConstrTerm a
 > parenPattern = leftParen <-*> parenPattern
->   where parenPattern = minus <**> minusPattern negNum
+>   where parenPattern = minus <**> minusPattern negInt
 >                    <|> fminus <**> minusPattern negFloat
 >                    <|> flip ConstructorPattern [] <$> gconId <*-> rightParen
 >                    <|> funSym <\> minus <\> fminus <*-> rightParen
@@ -449,9 +449,9 @@ the left-hand side of a declaration.
 > gconId :: Parser Token QualIdent a
 > gconId = colon <|> tupleCommas
 
-> negNum,negFloat :: Parser Token (Ident -> ConstrTerm) a
-> negNum = flip NegativePattern <$> (Int <$> int <|> Float <$> float)
-> negFloat = flip NegativePattern . Float <$> (fromIntegral <$> int <|> float)
+> negInt,negFloat :: Parser Token ConstrTerm a
+> negInt = NegativePattern . Int <$> int
+> negFloat = NegativePattern . Float <$> float
 
 > optAsPattern :: Parser Token (Ident -> ConstrTerm) a
 > optAsPattern = flip AsPattern <$-> token At <*> constrTerm2
@@ -467,9 +467,9 @@ the left-hand side of a declaration.
 >             `opt` ParenPattern
 >   where tuple ts t = TuplePattern (t:ts)
 
-> parenMinusPattern :: Parser Token (Ident -> ConstrTerm) a
+> parenMinusPattern :: Parser Token ConstrTerm a
 >                   -> Parser Token (Ident -> ConstrTerm) a
-> parenMinusPattern p = p <.> optInfixPattern <.> optTuplePattern
+> parenMinusPattern p = const <$> p <.> optInfixPattern <.> optTuplePattern
 
 > parenTuplePattern :: Parser Token ConstrTerm a
 > parenTuplePattern = constrTerm0 <**> optTuplePattern

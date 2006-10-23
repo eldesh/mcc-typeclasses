@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: Base.lhs 1980 2006-10-23 20:13:04Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -466,7 +466,7 @@ variable, but always refers to a global function from the prelude.
 
 > instance QuantExpr ConstrTerm where
 >   bv (LiteralPattern _) = []
->   bv (NegativePattern _ _) = []
+>   bv (NegativePattern _) = []
 >   bv (VariablePattern v) = [v | v /= anonId]
 >   bv (ConstructorPattern c ts) = bv ts
 >   bv (InfixPattern t1 op t2) = bv t1 ++ bv t2

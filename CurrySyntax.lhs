@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 1979 2006-10-23 19:05:25Z wlux $
+% $Id: CurrySyntax.lhs 1980 2006-10-23 20:13:04Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -161,7 +161,7 @@ Interface declarations are restricted to type declarations and signatures.
 
 > data ConstrTerm =
 >     LiteralPattern Literal
->   | NegativePattern Ident Literal
+>   | NegativePattern Literal
 >   | VariablePattern Ident
 >   | ConstructorPattern QualIdent [ConstrTerm]
 >   | InfixPattern ConstrTerm QualIdent ConstrTerm

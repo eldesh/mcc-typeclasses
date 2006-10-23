@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: SyntaxCheck.lhs 1980 2006-10-23 20:13:04Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -347,7 +347,7 @@ callbacks into Curry are not yet supported by the runtime system.
 
 > checkConstrTerm :: Position -> VarEnv -> ConstrTerm -> Error ConstrTerm
 > checkConstrTerm _ _ (LiteralPattern l) = return (LiteralPattern l)
-> checkConstrTerm _ _ (NegativePattern op l) = return (NegativePattern op l)
+> checkConstrTerm _ _ (NegativePattern l) = return (NegativePattern l)
 > checkConstrTerm p env (VariablePattern v)
 >   | v == anonId = return (VariablePattern v)
 >   | otherwise = checkConstrTerm p env (ConstructorPattern (qualify v) [])

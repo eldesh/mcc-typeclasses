@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 1979 2006-10-23 19:05:25Z wlux $
+% $Id: TypeCheck.lhs 1980 2006-10-23 20:13:04Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -408,7 +408,7 @@ arbitrary type.
 > tcConstrTerm :: ModuleIdent -> TCEnv -> SigEnv -> Position -> ConstrTerm
 >              -> TcState (Context,Type)
 > tcConstrTerm m _ _ _ (LiteralPattern l) = return (litType l)
-> tcConstrTerm m _ _ _ (NegativePattern _ l) = return (litType l)
+> tcConstrTerm m _ _ _ (NegativePattern l) = return (litType l)
 > tcConstrTerm m tcEnv sigs p (VariablePattern v) =
 >   tcVariable m tcEnv sigs False p v
 > tcConstrTerm m tcEnv sigs p t@(ConstructorPattern c ts) =
@@ -564,15 +564,14 @@ arbitrary type.
 >     return (cx ++ cx' ++ cx'',listType intType)
 > tcExpr m tcEnv p e@(UnaryMinus op e1) =
 >   do
->     ty <- opType op
 >     cx <-
 >       tcExpr m tcEnv p e1 >>=
 >       unify p "unary negation" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1)
 >             m ty
 >     return (cx,ty)
->   where opType op
->           | op == minusId = freshConstrained [intType,floatType]
->           | op == fminusId = return floatType
+>   where ty
+>           | op == minusId = intType
+>           | op == fminusId = floatType
 >           | otherwise = internalError ("tcExpr unary " ++ name op)
 > tcExpr m tcEnv p e@(Apply e1 e2) =
 >   do

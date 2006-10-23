@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: CaseCheck.lhs 1980 2006-10-23 20:13:04Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -173,7 +173,7 @@ collect all defined identifiers.
 
 > instance SyntaxTree ConstrTerm where
 >   names _ (LiteralPattern _) xs = xs
->   names _ (NegativePattern _ _) xs = xs
+>   names _ (NegativePattern _) xs = xs
 >   names p (VariablePattern v) xs
 >     | isAnonId v = xs
 >     | otherwise = D p VariableId v : xs

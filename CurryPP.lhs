@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 1979 2006-10-23 19:05:25Z wlux $
+% $Id: CurryPP.lhs 1980 2006-10-23 20:13:04Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -218,7 +218,9 @@ Literals
 > ppLiteral :: Literal -> Doc
 > ppLiteral (Char c) = text (show c)
 > ppLiteral (Int i) = int i
-> ppLiteral (Float f) = double f
+> ppLiteral (Float f)
+>   | f < 0.0 = ppInfixOp fminusId <> double (-f)
+>   | otherwise = double f
 > ppLiteral (String s) = text (show s)
 
 \end{verbatim}
@@ -232,8 +234,11 @@ Patterns
 >         isNegative (Int i) = i < 0
 >         isNegative (Float f) = f < 0.0
 >         isNegative (String _ ) = False
-> ppConstrTerm p (NegativePattern op l) =
->   parenExp (p > 1) (ppInfixOp op <> ppLiteral l)
+> ppConstrTerm p (NegativePattern l) =
+>   parenExp (p > 1) (ppInfixOp (negOp l) <> ppLiteral l)
+>   where negOp (Int _) = minusId
+>         negOp (Float _) = fminusId
+>         negOp _ = error "internal error: ppConstrTerm (NegativePattern)"
 > ppConstrTerm _ (VariablePattern v) = ppIdent v
 > ppConstrTerm p (ConstructorPattern c ts) =
 >   parenExp (p > 1 && not (null ts))

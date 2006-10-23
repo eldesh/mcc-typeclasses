@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: UnusedCheck.lhs 1980 2006-10-23 20:13:04Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -136,7 +136,7 @@ implemented by a traversal of the syntax tree.
 
 > instance SyntaxTree ConstrTerm where
 >   used _ (LiteralPattern _) = id
->   used _ (NegativePattern _ _) = id
+>   used _ (NegativePattern _) = id
 >   used m (VariablePattern _) = id
 >   used m (ConstructorPattern c ts) = used m c . used m ts
 >   used m (InfixPattern t1 op t2) = used m t1 . used m op . used m t2

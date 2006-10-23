@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 1979 2006-10-23 19:05:25Z wlux $
+% $Id: Typing.lhs 1980 2006-10-23 20:13:04Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -129,7 +129,7 @@ environment.}
 
 > argType :: ValueEnv -> ConstrTerm -> TyState Type
 > argType tyEnv (LiteralPattern l) = return (litType l)
-> argType tyEnv (NegativePattern _ l) = return (litType l)
+> argType tyEnv (NegativePattern l) = return (litType l)
 > argType tyEnv (VariablePattern v) = identType tyEnv v
 > argType tyEnv (ConstructorPattern c ts) =
 >   do

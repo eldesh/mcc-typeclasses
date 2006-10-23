@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 1842 2006-01-31 14:22:53Z wlux $
+% $Id: Qual.lhs 1980 2006-10-23 20:13:04Z wlux $
 %
 % Copyright (c) 2001-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -50,7 +50,7 @@ declarations groups as well as function arguments remain unchanged.
 
 > qualTerm :: ValueEnv -> ConstrTerm -> ConstrTerm
 > qualTerm _ (LiteralPattern l) = LiteralPattern l
-> qualTerm _ (NegativePattern op l) = NegativePattern op l
+> qualTerm _ (NegativePattern l) = NegativePattern l
 > qualTerm _ (VariablePattern v) = VariablePattern v
 > qualTerm tyEnv (ConstructorPattern c ts) =
 >   ConstructorPattern (qualIdent tyEnv c) (map (qualTerm tyEnv) ts)

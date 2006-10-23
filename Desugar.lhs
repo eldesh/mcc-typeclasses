@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 1979 2006-10-23 19:05:25Z wlux $
+% $Id: Desugar.lhs 1980 2006-10-23 20:13:04Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -291,7 +291,7 @@ with a local declaration for $v$.
 >   either (return . (,) ds . LiteralPattern)
 >          (desugarTerm m p ds . ListPattern . map LiteralPattern)
 >          (desugarLiteral l)
-> desugarTerm m p ds (NegativePattern _ l) =
+> desugarTerm m p ds (NegativePattern l) =
 >   desugarTerm m p ds (LiteralPattern (negateLiteral l))
 >   where negateLiteral (Int i) = Int (-i)
 >         negateLiteral (Float f) = Float (-f)

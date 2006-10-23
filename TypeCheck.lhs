@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: TypeCheck.lhs 1979 2006-10-23 19:05:25Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -383,15 +383,11 @@ arbitrary type.
 > cBasicTypeId = [qBoolId,qCharId,qIntId,qFloatId]
 > cPointerTypeId = [qPtrId,qFunPtrId]
 
-> tcLiteral :: ModuleIdent -> Literal -> TcState (Context,Type)
-> tcLiteral _ (Char _) = return ([],charType)
-> tcLiteral m (Int v _) =
->   do
->     ty <- freshConstrained [intType,floatType]
->     updateSt_ (bindFun m v (monoType ty))
->     return ([],ty)
-> tcLiteral _ (Float _) = return ([],floatType)
-> tcLiteral _ (String _) = return ([],stringType)
+> litType :: Literal -> (Context,Type)
+> litType (Char _) = ([],charType)
+> litType (Int _) = ([],intType)
+> litType (Float _) = ([],floatType)
+> litType (String _) = ([],stringType)
 
 > tcVariable :: ModuleIdent -> TCEnv -> SigEnv -> Bool -> Position
 >            -> Ident -> TcState (Context,Type)
@@ -411,8 +407,8 @@ arbitrary type.
 
 > tcConstrTerm :: ModuleIdent -> TCEnv -> SigEnv -> Position -> ConstrTerm
 >              -> TcState (Context,Type)
-> tcConstrTerm m tcEnv sigs p (LiteralPattern l) = tcLiteral m l
-> tcConstrTerm m tcEnv sigs p (NegativePattern _ l) = tcLiteral m l
+> tcConstrTerm m _ _ _ (LiteralPattern l) = return (litType l)
+> tcConstrTerm m _ _ _ (NegativePattern _ l) = return (litType l)
 > tcConstrTerm m tcEnv sigs p (VariablePattern v) =
 >   tcVariable m tcEnv sigs False p v
 > tcConstrTerm m tcEnv sigs p t@(ConstructorPattern c ts) =
@@ -486,7 +482,7 @@ arbitrary type.
 
 > tcExpr :: ModuleIdent -> TCEnv -> Position -> Expression
 >        -> TcState (Context,Type)
-> tcExpr m _ _ (Literal l) = tcLiteral m l
+> tcExpr _ _ _ (Literal l) = return (litType l)
 > tcExpr m tcEnv p (Variable v) = fetchSt >>= inst . funType v
 > tcExpr m tcEnv p (Constructor c) = fetchSt >>= inst . conType c
 > tcExpr m tcEnv p (Typed e sig) =

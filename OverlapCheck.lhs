@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: OverlapCheck.lhs 1913 2006-05-07 13:44:36Z wlux $
+% $Id: OverlapCheck.lhs 1979 2006-10-23 19:05:25Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -146,7 +146,7 @@ Unfortunately, the code has not been desugared yet.
 >     String cs -> desugar (ListPattern (map (LiteralPattern . Char) cs))
 >     _ -> LiteralPattern l
 > desugar (NegativePattern _ l) = desugar (LiteralPattern (negateLit l))
->   where negateLit (Int v i) = Int v (-i)
+>   where negateLit (Int i) = Int (-i)
 >         negateLit (Float f) = Float (-f)
 > desugar (VariablePattern v) = VariablePattern anonId
 > desugar (ConstructorPattern c ts) = ConstructorPattern c (map desugar ts)

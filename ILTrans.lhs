@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: ILTrans.lhs 1979 2006-10-23 19:05:25Z wlux $
 %
 % Copyright (c) 1999-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -222,7 +222,7 @@ position in the remaining arguments. If one is found,
 
 > translLiteral :: Literal -> IL.Literal
 > translLiteral (Char c) = IL.Char c
-> translLiteral (Int _ i) = IL.Int i
+> translLiteral (Int i) = IL.Int i
 > translLiteral (Float f) = IL.Float f
 > translLiteral _ = internalError "translLiteral"
 

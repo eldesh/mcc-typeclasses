@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: Renaming.lhs 1979 2006-10-23 19:05:25Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -230,17 +230,9 @@ not rename this identifier in the same environment as its arguments.
 >     es' <- mapM (renameCondExpr env') es
 >     return (GuardedRhs es' ds')
 
-> renameLiteral :: RenameEnv -> Literal -> RenameState Literal
-> renameLiteral _ (Char c) = return (Char c)
-> renameLiteral env (Int x i) = liftM (flip Int i) (renameVar env x)
-> renameLiteral _ (Float f) = return (Float f)
-> renameLiteral _ (String s) = return (String s)
-
 > renameConstrTerm :: RenameEnv -> ConstrTerm -> RenameState ConstrTerm
-> renameConstrTerm env (LiteralPattern l) =
->   liftM LiteralPattern (renameLiteral env l)
-> renameConstrTerm env (NegativePattern op l) =
->   liftM (NegativePattern op) (renameLiteral env l)
+> renameConstrTerm env (LiteralPattern l) = return (LiteralPattern l)
+> renameConstrTerm env (NegativePattern op l) = return (NegativePattern op l)
 > renameConstrTerm env (VariablePattern x) =
 >   liftM VariablePattern (renameVar env x)
 > renameConstrTerm env (ConstructorPattern c ts) =
@@ -264,7 +256,7 @@ not rename this identifier in the same environment as its arguments.
 >   liftM2 (CondExpr p) (renameExpr env g) (renameExpr env e)
 
 > renameExpr :: RenameEnv -> Expression -> RenameState Expression
-> renameExpr env (Literal l) = liftM Literal (renameLiteral env l)
+> renameExpr env (Literal l) = return (Literal l)
 > renameExpr env (Variable x) = liftM Variable (renameQual env x)
 > renameExpr _ (Constructor c) = return (Constructor c)
 > renameExpr env (Paren e) = liftM Paren (renameExpr env e)

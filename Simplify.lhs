@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 1875 2006-03-18 18:43:27Z wlux $
+% $Id: Simplify.lhs 1979 2006-10-23 19:05:25Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -347,9 +347,7 @@ form where all arguments of applications are variables.
 >   where expr p t (SimpleRhs _ e' _) = foldr Let e' (dss ++ bindPattern p e t)
 
 > matches :: ConstrTerm -> Either Literal (QualIdent,[Expression]) -> Bool
-> matches (LiteralPattern l1) (Left l2) = sameLiteral l1 l2
->   where sameLiteral (Int _ i1) (Int _ i2) = i1 == i2
->         sameLiteral l1 l2 = l1 == l2
+> matches (LiteralPattern l1) (Left l2) = l1 == l2
 > matches (ConstructorPattern c1 _) (Right (c2,_)) = c1 == c2
 > matches (VariablePattern _) _ = True
 > matches (AsPattern _ t) e = matches t e

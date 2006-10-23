@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: Typing.lhs 1979 2006-10-23 19:05:25Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -121,15 +121,15 @@ environment.}
 > identType :: ValueEnv -> Ident -> TyState Type
 > identType tyEnv x = instUniv (varType x tyEnv)
 
-> litType :: ValueEnv -> Literal -> TyState Type
-> litType _ (Char _) = return charType
-> litType tyEnv (Int v _) = identType tyEnv v
-> litType _ (Float _) = return floatType
-> litType _ (String _) = return stringType
+> litType :: Literal -> Type
+> litType (Char _) = charType
+> litType (Int _) = intType
+> litType (Float _) = floatType
+> litType (String _) = stringType
 
 > argType :: ValueEnv -> ConstrTerm -> TyState Type
-> argType tyEnv (LiteralPattern l) = litType tyEnv l
-> argType tyEnv (NegativePattern _ l) = litType tyEnv l
+> argType tyEnv (LiteralPattern l) = return (litType l)
+> argType tyEnv (NegativePattern _ l) = return (litType l)
 > argType tyEnv (VariablePattern v) = identType tyEnv v
 > argType tyEnv (ConstructorPattern c ts) =
 >   do
@@ -151,7 +151,7 @@ environment.}
 > argType tyEnv (LazyPattern t) = argType tyEnv t
 
 > exprType :: ValueEnv -> Expression -> TyState Type
-> exprType tyEnv (Literal l) = litType tyEnv l
+> exprType tyEnv (Literal l) = return (litType l)
 > exprType tyEnv (Variable v) = instUniv (funType v tyEnv)
 > exprType tyEnv (Constructor c) = instUniv (conType c tyEnv)
 > exprType tyEnv (Typed e _) = exprType tyEnv e

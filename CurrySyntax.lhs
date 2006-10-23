@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: CurrySyntax.lhs 1979 2006-10-23 19:05:25Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -145,16 +145,12 @@ Interface declarations are restricted to type declarations and signatures.
 >         flat (ApLhs lhs ts) ts' = flat lhs (ts ++ ts')
 
 \end{verbatim}
-\paragraph{Literals} The \texttt{Ident} argument of an \texttt{Int}
-literal is used for supporting ad-hoc polymorphism on integer
-numbers. An integer literal can be used either as an integer number or
-as a floating-point number depending on its context. The compiler uses
-the identifier of the \texttt{Int} literal for maintaining its type.
+\paragraph{Literals}
 \begin{verbatim}
 
 > data Literal =
 >     Char Char                         -- should be Int to handle Unicode
->   | Int Ident Int
+>   | Int Int
 >   | Float Double
 >   | String String                     -- should be [Int] to handle Unicode
 >   deriving (Eq,Show)

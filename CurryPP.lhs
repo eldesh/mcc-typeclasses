@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: CurryPP.lhs 1979 2006-10-23 19:05:25Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -217,7 +217,7 @@ Literals
 
 > ppLiteral :: Literal -> Doc
 > ppLiteral (Char c) = text (show c)
-> ppLiteral (Int _ i) = int i
+> ppLiteral (Int i) = int i
 > ppLiteral (Float f) = double f
 > ppLiteral (String s) = text (show s)
 
@@ -229,7 +229,7 @@ Patterns
 > ppConstrTerm p (LiteralPattern l) =
 >   parenExp (p > 1 && isNegative l) (ppLiteral l)
 >   where isNegative (Char _) = False
->         isNegative (Int _ i) = i < 0
+>         isNegative (Int i) = i < 0
 >         isNegative (Float f) = f < 0.0
 >         isNegative (String _ ) = False
 > ppConstrTerm p (NegativePattern op l) =

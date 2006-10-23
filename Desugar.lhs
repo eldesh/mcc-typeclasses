@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 1875 2006-03-18 18:43:27Z wlux $
+% $Id: Desugar.lhs 1979 2006-10-23 19:05:25Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -279,24 +279,21 @@ $t$ is a variable or an as-pattern are replaced by $t$ in combination
 with a local declaration for $v$.
 \begin{verbatim}
 
-> desugarLiteral :: Literal -> DesugarState (Either Literal [Literal])
-> desugarLiteral (Char c) = return (Left (Char c))
-> desugarLiteral (Int v i) = liftM (Left . fixType) fetchSt
->   where fixType tyEnv
->           | typeOf tyEnv v == floatType = Float (fromIntegral i) 
->           | otherwise = Int v i
-> desugarLiteral (Float f) = return (Left (Float f))
-> desugarLiteral (String cs) = return (Right (map Char cs))
+> desugarLiteral :: Literal -> Either Literal [Literal]
+> desugarLiteral (Char c) = Left (Char c)
+> desugarLiteral (Int i) = Left (Int i)
+> desugarLiteral (Float f) = Left (Float f)
+> desugarLiteral (String cs) = Right (map Char cs)
 
 > desugarTerm :: ModuleIdent -> Position -> [Decl] -> ConstrTerm
 >             -> DesugarState ([Decl],ConstrTerm)
 > desugarTerm m p ds (LiteralPattern l) =
->   desugarLiteral l >>=
 >   either (return . (,) ds . LiteralPattern)
 >          (desugarTerm m p ds . ListPattern . map LiteralPattern)
+>          (desugarLiteral l)
 > desugarTerm m p ds (NegativePattern _ l) =
 >   desugarTerm m p ds (LiteralPattern (negateLiteral l))
->   where negateLiteral (Int v i) = Int v (-i)
+>   where negateLiteral (Int i) = Int (-i)
 >         negateLiteral (Float f) = Float (-f)
 >         negateLiteral _ = internalError "negateLiteral"
 > desugarTerm _ _ ds (VariablePattern v) = return (ds,VariablePattern v)
@@ -377,8 +374,8 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 > desugarExpr :: ModuleIdent -> Position -> Expression
 >             -> DesugarState Expression
 > desugarExpr m p (Literal l) =
->   desugarLiteral l >>=
 >   either (return . Literal) (desugarExpr m p . List . map Literal)
+>          (desugarLiteral l)
 > desugarExpr _ _ (Variable v) = return (Variable v)
 > desugarExpr _ _ (Constructor c) = return (Constructor c)
 > desugarExpr m p (Paren e) = desugarExpr m p e
@@ -559,9 +556,7 @@ where the default alternative is redundant.
 > type Match = (Position,[ConstrTerm] -> [ConstrTerm],[ConstrTerm],Rhs)
 
 > pattern :: Ident -> ConstrTerm -> ConstrTerm
-> pattern v (LiteralPattern l) = AsPattern v (LiteralPattern (canon l))
->   where canon (Int _ i) = Int anonId i
->         canon l = l
+> pattern v (LiteralPattern l) = AsPattern v (LiteralPattern l)
 > pattern v (VariablePattern _) = VariablePattern v
 > pattern v (ConstructorPattern c ts) = AsPattern v (ConstructorPattern c ts')
 >   where ts' = zipWith (const . VariablePattern) (repeat anonId) ts
@@ -635,8 +630,7 @@ where the default alternative is redundant.
 > desugarAlt m prefix vs alts t =
 >   do
 >     vs' <- mapM (freshVar m "_#case") (arguments t')
->     liftM (caseAlt (pos (snd (head alts')))
->                    (renameArgs vs' (fixLiteralType t' t)))
+>     liftM (caseAlt (pos (snd (head alts'))) (renameArgs vs' t))
 >           (desugarCase m id (prefix (vs' ++ vs))
 >                        (map (expandArgs vs' . snd) alts'))
 >   where alts' = filter (matchedBy t . fst) alts
@@ -649,13 +643,6 @@ where the default alternative is redundant.
 >         expandPatternArgs vs t
 >           | isVarPattern t = map VariablePattern vs
 >           | otherwise = arguments t
-
-> fixLiteralType :: ConstrTerm -> ConstrTerm -> ConstrTerm
-> fixLiteralType (LiteralPattern (Int v _)) (LiteralPattern (Int _ i)) =
->   LiteralPattern (Int v i)
-> fixLiteralType (AsPattern _ t1) t2 = fixLiteralType t1 t2
-> fixLiteralType t1 (AsPattern v t2) = AsPattern v (fixLiteralType t1 t2)
-> fixLiteralType _ t = t
 
 > renameArgs :: [Ident] -> ConstrTerm -> ConstrTerm
 > renameArgs _ (LiteralPattern l) = LiteralPattern l

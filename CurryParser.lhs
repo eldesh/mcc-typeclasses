@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: CurryParser.lhs 1979 2006-10-23 19:05:25Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -378,7 +378,7 @@ directory path to the module is ignored.
 
 > literal :: Parser Token Literal a
 > literal = Char <$> char
->       <|> Int anonId <$> int
+>       <|> Int <$> int
 >       <|> Float <$> float
 >       <|> String <$> string
 
@@ -450,7 +450,7 @@ the left-hand side of a declaration.
 > gconId = colon <|> tupleCommas
 
 > negNum,negFloat :: Parser Token (Ident -> ConstrTerm) a
-> negNum = flip NegativePattern <$> (Int anonId <$> int <|> Float <$> float)
+> negNum = flip NegativePattern <$> (Int <$> int <|> Float <$> float)
 > negFloat = flip NegativePattern . Float <$> (fromIntegral <$> int <|> float)
 
 > optAsPattern :: Parser Token (Ident -> ConstrTerm) a

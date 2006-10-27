@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfEquiv.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: IntfEquiv.lhs 1983 2006-10-27 12:52:34Z wlux $
 %
 % Copyright (c) 2000-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -103,6 +103,7 @@ by function \texttt{fixInterface} and the associated type class
 >   fix tcs (INewtypeDecl p tc tvs nc) = INewtypeDecl p tc tvs (fix tcs nc)
 >   fix tcs (ITypeDecl p tc tvs ty) = ITypeDecl p tc tvs (fix tcs ty)
 >   fix tcs (IFunctionDecl p f ty) = IFunctionDecl p f (fix tcs ty)
+>   fix tcs (IInstanceDecl p cls ty) = IInstanceDecl p cls (fix tcs ty)
 >   fix _ d = d
 
 > instance FixInterface ConstrDecl where

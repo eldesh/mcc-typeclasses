@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: IntfSyntaxCheck.lhs 1982 2006-10-27 09:32:18Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -77,7 +77,7 @@ during syntax checking of type expressions.
 >     checkTypeLhs env p [tv]
 >     return (IClassDecl p cls tv)
 > checkIDecl env (IInstanceDecl p cls ty) =
->   -- NB cls may be undefined
+>   checkClass env p cls &&>
 >   liftE (IInstanceDecl p cls) (checkSimpleType env p ty)
 > checkIDecl env (IFunctionDecl p f ty) =
 >   liftE (IFunctionDecl p f) (checkQualType env p ty)
@@ -161,13 +161,16 @@ during syntax checking of type expressions.
 >     return ty'
 
 > checkClass :: TypeEnv -> Position -> QualIdent -> Error ()
-> checkClass env p cls =
+> checkClass env p cls = return () {-
+>   -- NB class checking disabled because interfaces are not closed with
+>   --    respect to class identifiers
 >   case qualLookupTopEnv cls env of
 >     [] -> errorAt p (undefinedClass cls)
 >     [Data _ _] -> errorAt p (undefinedClass cls)
 >     [Alias _] -> errorAt p (undefinedClass cls)
 >     [Class _] -> return ()
 >     _ -> internalError "checkClass"
+> -}
 
 \end{verbatim}
 \ToDo{Much of the above code could be shared with module

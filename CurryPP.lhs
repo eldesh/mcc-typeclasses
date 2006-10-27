@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 1980 2006-10-23 20:13:04Z wlux $
+% $Id: CurryPP.lhs 1984 2006-10-27 13:34:07Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -174,6 +174,8 @@ Interfaces
 >   sep [ppITypeDeclLhs "newtype" tc tvs <+> equals,indent (ppNewConstr nc)]
 > ppIDecl (ITypeDecl _ tc tvs ty) =
 >   sep [ppITypeDeclLhs "type" tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
+> ppIDecl (HidingClassDecl _ cls tv) =
+>   text "hiding" <+> ppITypeDeclLhs "class" cls [tv]
 > ppIDecl (IClassDecl _ cls tv) = ppITypeDeclLhs "class" cls [tv]
 > ppIDecl (IInstanceDecl _ cls ty) =
 >   text "instance" <+> ppQIdent cls <+> ppTypeExpr 2 ty

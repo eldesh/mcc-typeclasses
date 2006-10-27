@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 1982 2006-10-27 09:32:18Z wlux $
+% $Id: IntfSyntaxCheck.lhs 1984 2006-10-27 13:34:07Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,15 +10,10 @@ Similar to Curry source files, some post-processing has to be applied
 to parsed interface files. In particular, the compiler must
 disambiguate nullary type constructors and type variables. In
 addition, the compiler also checks that all type constructor
-applications are saturated. Since interface files are closed with
-respect to types -- i.e., they include declarations of all types which
-are defined in other modules and used in the interface -- the compiler
-can perform this check without reference to the global environments.
-Interfaces are \emph{not} closed with respect to type classes. This is
-not strictly necessary because even though type class, type
-constructor, and type variable identifiers share a common name space,
-type class identifiers can always be distinguished from type
-constructors and type variables syntactically.
+applications are saturated. Since interface files are closed -- i.e.,
+they include declarations of all types and classes which are defined
+in other modules and used in the interface -- the compiler can perform
+this check without reference to the global environments.
 \begin{verbatim}
 
 > module IntfSyntaxCheck(intfSyntaxCheck) where
@@ -49,6 +44,7 @@ The latter must not occur in type expressions in interfaces.
 >   qualBindTopEnv tc (Data tc (map constr (catMaybes cs)))
 > bindType (INewtypeDecl _ tc _ nc) = qualBindTopEnv tc (Data tc [nconstr nc])
 > bindType (ITypeDecl _ tc _ _) = qualBindTopEnv tc (Alias tc)
+> bindType (HidingClassDecl _ cls _) = qualBindTopEnv cls (Class cls)
 > bindType (IClassDecl _ cls _) = qualBindTopEnv cls (Class cls)
 > bindType (IInstanceDecl _ _ _) = id
 > bindType (IFunctionDecl _ _ _) = id
@@ -72,6 +68,10 @@ during syntax checking of type expressions.
 > checkIDecl env (ITypeDecl p tc tvs ty) =
 >   checkTypeLhs env p tvs &&>
 >   liftE (ITypeDecl p tc tvs) (checkClosedType env p tvs ty)
+> checkIDecl env (HidingClassDecl p cls tv) =
+>   do
+>     checkTypeLhs env p [tv]
+>     return (HidingClassDecl p cls tv)
 > checkIDecl env (IClassDecl p cls tv) =
 >   do
 >     checkTypeLhs env p [tv]
@@ -161,16 +161,13 @@ during syntax checking of type expressions.
 >     return ty'
 
 > checkClass :: TypeEnv -> Position -> QualIdent -> Error ()
-> checkClass env p cls = return () {-
->   -- NB class checking disabled because interfaces are not closed with
->   --    respect to class identifiers
+> checkClass env p cls =
 >   case qualLookupTopEnv cls env of
 >     [] -> errorAt p (undefinedClass cls)
 >     [Data _ _] -> errorAt p (undefinedClass cls)
 >     [Alias _] -> errorAt p (undefinedClass cls)
 >     [Class _] -> return ()
 >     _ -> internalError "checkClass"
-> -}
 
 \end{verbatim}
 \ToDo{Much of the above code could be shared with module

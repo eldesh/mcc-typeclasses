@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 1981 2006-10-23 22:42:43Z wlux $
+% $Id: Imports.lhs 1984 2006-10-27 13:34:07Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -39,19 +39,20 @@ all instance declarations are always imported into the current module.
 >    importEntities types m q ts (importData vs) m' ds' tcEnv,
 >    importInstances m ds' iEnv,
 >    importEntities values m q vs id m' ds' tyEnv)
->   where ds' = filter (not . isHiddenData) ds
+>   where ds' = filter (not . isHiddenDecl) ds
 >         ts = isVisible addType is
 >         vs = isVisible addValue is
 
-> isHiddenData :: IDecl -> Bool
-> isHiddenData (IInfixDecl _ _ _ _) = False
-> isHiddenData (HidingDataDecl _ _ _) = True 
-> isHiddenData (IDataDecl _ _ _ _) = False
-> isHiddenData (INewtypeDecl _ _ _ _) = False
-> isHiddenData (ITypeDecl _ _ _ _) = False
-> isHiddenData (IClassDecl _ _ _) = False
-> isHiddenData (IInstanceDecl _ _ _) = False
-> isHiddenData (IFunctionDecl _ _ _) = False
+> isHiddenDecl :: IDecl -> Bool
+> isHiddenDecl (IInfixDecl _ _ _ _) = False
+> isHiddenDecl (HidingDataDecl _ _ _) = True 
+> isHiddenDecl (IDataDecl _ _ _ _) = False
+> isHiddenDecl (INewtypeDecl _ _ _ _) = False
+> isHiddenDecl (ITypeDecl _ _ _ _) = False
+> isHiddenDecl (HidingClassDecl _ _ _) = True
+> isHiddenDecl (IClassDecl _ _ _) = False
+> isHiddenDecl (IInstanceDecl _ _ _) = False
+> isHiddenDecl (IFunctionDecl _ _ _) = False
 
 > isVisible :: (Import -> Set Ident -> Set Ident) -> Maybe ImportSpec
 >           -> Ident -> Bool
@@ -99,7 +100,7 @@ imports all used interfaces into other interfaces, entities defined in
 one module and re-exported by another module are made available by
 their defining modules. Furthermore, ignoring re-exported entities
 avoids a problem with the fact that the unqualified names of entities
-defined in an interface may be ambiguous if hidden data type
+defined in an interface may be ambiguous if hidden data type and class
 declarations are taken into account. For instance, in the interface
 \begin{verbatim}
   module M where {
@@ -130,6 +131,7 @@ instances imported from another module.
 > entity (IDataDecl _ tc _ _) = tc
 > entity (INewtypeDecl _ tc _ _) = tc
 > entity (ITypeDecl _ tc _ _) = tc
+> entity (HidingClassDecl _ cls _) = cls
 > entity (IClassDecl _ cls _) = cls
 > entity (IInstanceDecl _ _ _) = qualify anonId
 > entity (IFunctionDecl _ f _) = f
@@ -158,8 +160,8 @@ following functions.
 >   qual tc (typeCon RenamingType m tc tvs (nconstr nc))
 > types m (ITypeDecl _ tc tvs ty) =
 >   qual tc (typeCon AliasType m tc tvs (toType m tvs ty))
-> types m (IClassDecl _ cls tv) =
->   qual cls (TypeClass (qualQualify m cls))
+> types m (HidingClassDecl _ cls tv) = qual cls (TypeClass (qualQualify m cls))
+> types m (IClassDecl _ cls tv) = qual cls (TypeClass (qualQualify m cls))
 > types _ _ = id
 
 > values :: ModuleIdent -> IDecl -> [I ValueInfo] -> [I ValueInfo]

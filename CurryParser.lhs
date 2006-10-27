@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 1980 2006-10-23 20:13:04Z wlux $
+% $Id: CurryParser.lhs 1984 2006-10-27 13:34:07Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -292,10 +292,13 @@ directory path to the module is ignored.
 > iInfixDecl = infixDeclLhs IInfixDecl <*> qfunop
 
 > iHidingDecl :: Parser Token IDecl a
-> iHidingDecl = position <*-> token Id_hiding <**> (dataDecl <|> funcDecl)
+> iHidingDecl =
+>   position <*-> token Id_hiding <**> (dataDecl <|> classDecl <|> funcDecl)
 >   where dataDecl = hiddenData <$-> token KW_data <*> qtycon <*> many tyvar
+>         classDecl = hiddenClass <$-> token KW_class <*> qtycls <*> tyvar
 >         funcDecl = hidingFunc <$-> token DoubleColon <*> qualType
 >         hiddenData tc tvs p = HidingDataDecl p tc tvs
+>         hiddenClass cls tv p = HidingClassDecl p cls tv
 >         hidingFunc ty p = IFunctionDecl p hidingId ty
 >         hidingId = qualify (mkIdent "hiding")
 

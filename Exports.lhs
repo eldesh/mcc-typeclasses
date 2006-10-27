@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: Exports.lhs 1984 2006-10-27 13:34:07Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -178,16 +178,21 @@ not module \texttt{B}.
 
 \end{verbatim}
 After the interface declarations have been computed, the compiler adds
-hidden (data) type declarations to the interface for all types which
-were used in the interface but are not exported from it. This is
-necessary in order to distinguish type constructors and type
-variables. Furthermore, by including hidden types in interfaces the
-compiler can check them without loading the imported modules.
+hidden (data) type and class declarations to the interface for all
+types and classes which were used in the interface but are not
+exported from it. This is necessary in order to distinguish type
+constructors and type variables. Furthermore, by including hidden
+types and classes in interfaces the compiler can check them without
+loading the imported modules.
 \begin{verbatim}
 
 > hiddenTypeDecl :: ModuleIdent -> TCEnv -> QualIdent -> IDecl
-> hiddenTypeDecl m tcEnv tc = HidingDataDecl noPos tc (take n nameSupply)
->   where n = constrKind (qualQualify m tc) tcEnv
+> hiddenTypeDecl m tcEnv tc =
+>   case qualLookupTopEnv (qualQualify m tc) tcEnv of
+>     [DataType _ n _] -> HidingDataDecl noPos tc (take n nameSupply)
+>     [RenamingType _ n _] -> HidingDataDecl noPos tc (take n nameSupply)
+>     [TypeClass _] -> HidingClassDecl noPos tc (head nameSupply)
+>     _ -> internalError "hiddenTypeDecl"
 
 > hiddenTypes :: [IDecl] -> [QualIdent]
 > hiddenTypes ds =
@@ -199,7 +204,7 @@ compiler can check them without loading the imported modules.
 > definedType (IDataDecl _ tc _ _) tcs = tc : tcs
 > definedType (INewtypeDecl _ tc _ _) tcs = tc : tcs
 > definedType (ITypeDecl _ tc _ _) tcs = tc : tcs
-> definedType (IClassDecl _ _ _) tcs = tcs
+> definedType (IClassDecl _ cls _) tcs = cls : tcs
 > definedType (IInstanceDecl _ _ _) tcs = tcs
 > definedType (IFunctionDecl _ _ _)  tcs = tcs
 
@@ -217,7 +222,7 @@ compiler can check them without loading the imported modules.
 >   usedTypes (INewtypeDecl _ _ _ nc) = usedTypes nc
 >   usedTypes (ITypeDecl _ _ _ ty) = usedTypes ty
 >   usedTypes (IClassDecl _ _ _) = id
->   usedTypes (IInstanceDecl _ _ ty) = usedTypes ty
+>   usedTypes (IInstanceDecl _ cls ty) = (cls :) . usedTypes ty
 >   usedTypes (IFunctionDecl _ _ ty) = usedTypes ty
 
 > instance HasType ConstrDecl where
@@ -228,7 +233,10 @@ compiler can check them without loading the imported modules.
 >   usedTypes (NewConstrDecl _ _ ty) = usedTypes ty
 
 > instance HasType QualTypeExpr where
->   usedTypes (QualTypeExpr _ ty) = usedTypes ty
+>   usedTypes (QualTypeExpr cx ty) = usedTypes cx . usedTypes ty
+
+> instance HasType ClassAssert where
+>   usedTypes (ClassAssert cls _) = (cls :)
 
 > instance HasType TypeExpr where
 >   usedTypes (ConstructorType tc tys) = (tc :) . usedTypes tys

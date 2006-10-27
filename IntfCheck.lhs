@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: IntfCheck.lhs 1984 2006-10-27 13:34:07Z wlux $
 %
 % Copyright (c) 2000-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -93,6 +93,10 @@ interface module only. However, this has not been implemented yet.
 >           | tc == tc' && length tvs == n' && toType m tvs ty == ty' =
 >               Just (return ())
 >         checkType _ = Nothing
+> checkImport m _ tcEnv _ (HidingClassDecl p cls tv) =
+>   checkTypeInfo "hidden type class" checkClass tcEnv p cls
+>   where checkClass (TypeClass cls') | cls == cls' = Just (return ())
+>         checkClass _ = Nothing
 > checkImport m _ tcEnv _ (IClassDecl p cls tv) =
 >   checkTypeInfo "type class" checkClass tcEnv p cls
 >   where checkClass (TypeClass cls') | cls == cls' = Just (return ())

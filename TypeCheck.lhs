@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: TypeCheck.lhs 1987 2006-10-29 16:59:50Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -68,13 +68,13 @@ declarations.
 \begin{verbatim}
 
 > typeCheckGoal :: TCEnv -> InstEnv -> ValueEnv -> Goal a
->               -> Error (ValueEnv,Goal Type)
+>               -> Error (ValueEnv,Context,Goal Type)
 > typeCheckGoal tcEnv iEnv tyEnv g =
 >    run (do
->           g' <- tcGoal emptyMIdent tcEnv g
+>           (cx,g') <- tcGoal emptyMIdent tcEnv g
 >           tyEnv' <- fetchSt
 >           theta <- liftSt fetchSt
->           return (subst theta tyEnv',fmap (subst theta) g'))
+>           return (subst theta tyEnv',cx,fmap (subst theta) g'))
 >        iEnv
 >        tyEnv
 
@@ -290,16 +290,16 @@ general than the type signature.
 >     (cx',ty,rhs') <- tcRhs m tcEnv rhs
 >     return (cx ++ cx',foldr TypeArrow ty tys,Equation p lhs' rhs')
 
-> tcGoal :: ModuleIdent -> TCEnv -> Goal a -> TcState (Goal Type)
+> tcGoal :: ModuleIdent -> TCEnv -> Goal a -> TcState (Context,Goal Type)
 > tcGoal m tcEnv (Goal p e ds) =
 >   do
 >     tyEnv0 <- fetchSt
 >     alpha <- freshTypeVar
->     (_,SimpleRhs _ e' ds') <-
+>     (cx,SimpleRhs _ e' ds') <-
 >       tcRhs m tcEnv (SimpleRhs p e ds) >>=
 >       unifyDecl p "goal" (ppExpr 0 e) m tyEnv0 [] alpha
 >     checkSkolems p emptyMIdent (text "Goal:" <+> ppExpr 0 e) zeroSet alpha
->     return (Goal p e' ds')
+>     return (cx,Goal p e' ds')
 
 > unifyDecl :: Position -> String -> Doc -> ModuleIdent -> ValueEnv
 >           -> Context -> Type -> (Context,Type,a) -> TcState (Context,a)

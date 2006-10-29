@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: Modules.lhs 1987 2006-10-29 16:59:50Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -200,7 +200,7 @@ compilation of a goal is similar to that of a module.
 > compileGoal :: Options -> Maybe String -> Maybe FilePath -> ErrorT IO ()
 > compileGoal opts g fn =
 >   do
->     (mEnv,tcEnv,tyEnv,_,g') <- loadGoal paths cm ws g fn
+>     (mEnv,tcEnv,tyEnv,_,_,g') <- loadGoal paths cm ws g fn
 >     mEnv' <- importDebugPrelude paths dbg "" mEnv
 >     let (ccode,dumps) = transGoal dbg tr mEnv' tcEnv tyEnv g'
 >     liftErr $ mapM_ (doDump opts) dumps >>
@@ -214,19 +214,19 @@ compilation of a goal is similar to that of a module.
 > typeGoal :: Options -> String -> Maybe FilePath -> ErrorT IO ()
 > typeGoal opts g fn =
 >   do
->     (_,_,tyEnv,m,Goal _ e _) <-
+>     (_,_,tyEnv,m,cx,Goal _ e _) <-
 >       loadGoal (importPath opts) (caseMode opts) (warn opts) (Just g) fn
->     liftErr $ print (ppType m (typeOf e))
+>     liftErr $ print (ppQualType m (QualType cx (typeOf e)))
 
 > loadGoal :: [FilePath] -> CaseMode -> [Warn] -> Maybe String -> Maybe FilePath
->          -> ErrorT IO (ModuleEnv,TCEnv,ValueEnv,ModuleIdent,Goal Type)
+>          -> ErrorT IO (ModuleEnv,TCEnv,ValueEnv,ModuleIdent,Context,Goal Type)
 > loadGoal paths caseMode warn g fn =
 >   do
 >     (mEnv,m,is) <- loadGoalModule paths g fn
->     (tcEnv,tyEnv,g') <-
+>     (tcEnv,tyEnv,cx,g') <-
 >       okM $ maybe (return mainGoal) parseGoal g >>= checkGoal mEnv is
 >     liftErr $ mapM_ putErrLn $ warnGoal caseMode warn g'
->     return (mEnv,tcEnv,tyEnv,m,g')
+>     return (mEnv,tcEnv,tyEnv,m,cx,g')
 >   where mainGoal = Goal (first "") (Variable () (qualify mainId)) []
 
 > loadGoalModule :: [FilePath] -> Maybe String -> Maybe FilePath
@@ -249,17 +249,17 @@ compilation of a goal is similar to that of a module.
 >         m = preludeMIdent
 
 > checkGoal :: ModuleEnv -> [ImportDecl] -> Goal a
->           -> Error (TCEnv,ValueEnv,Goal Type)
+>           -> Error (TCEnv,ValueEnv,Context,Goal Type)
 > checkGoal mEnv is g =
 >   do
 >     (pEnv,tcEnv,iEnv,tyEnv) <- importModules mEnv is
 >     g' <- typeSyntaxCheckGoal tcEnv g >>=
 >           syntaxCheckGoal tyEnv >>=
 >           precCheckGoal pEnv . renameGoal
->     (tyEnv',g'') <- kindCheckGoal tcEnv g' >>
->                     typeCheckGoal tcEnv iEnv tyEnv g'
+>     (tyEnv',cx,g'') <- kindCheckGoal tcEnv g' >>
+>                        typeCheckGoal tcEnv iEnv tyEnv g'
 >     let (_,tcEnv',tyEnv'') = qualifyEnv mEnv emptyMIdent pEnv tcEnv tyEnv'
->     return (tcEnv',tyEnv'',qualGoal tyEnv' g'')
+>     return (tcEnv',tyEnv'',cx,qualGoal tyEnv' g'')
 
 > warnGoal :: CaseMode -> [Warn] -> Goal a -> [String]
 > warnGoal caseMode warn g =

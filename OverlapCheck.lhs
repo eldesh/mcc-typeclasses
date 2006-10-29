@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: OverlapCheck.lhs 1980 2006-10-23 20:13:04Z wlux $
+% $Id: OverlapCheck.lhs 1986 2006-10-29 16:45:56Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -16,12 +16,12 @@ corresponding functions.
 > import List
 > import Options
 
-> overlapCheck :: [Warn] -> Module -> [String]
+> overlapCheck :: [Warn] -> Module a -> [String]
 > overlapCheck v (Module m _ _ ds) =
 >   report v $ overlap noPosition [d | BlockDecl d <- ds] []
 >   where noPosition = error "noPosition"
 
-> overlapCheckGoal :: [Warn] -> Goal -> [String]
+> overlapCheckGoal :: [Warn] -> Goal a -> [String]
 > overlapCheckGoal v (Goal p e ds) = report v $ overlap p (SimpleRhs p e ds) []
 
 > report :: [Warn] -> [P Ident] -> [String]
@@ -44,30 +44,30 @@ are collected with a simple traversal of the syntax tree.
 > instance Syntax a => Syntax [a] where
 >   overlap p xs ys = foldr (overlap p) ys xs
 
-> instance Syntax Decl where
+> instance Syntax (Decl a) where
 >   overlap _ (FunctionDecl p f eqs) =
 >     ([P p f | isNonDet eqs] ++) . overlap p eqs
 >   overlap _ (PatternDecl p _ rhs) = overlap p rhs
 >   overlap _ _ = id
 
-> instance Syntax Equation where
+> instance Syntax (Equation a) where
 >   overlap _ (Equation p _ rhs) = overlap p rhs
 
-> instance Syntax Rhs where
+> instance Syntax (Rhs a) where
 >   overlap _ (SimpleRhs p e ds) = overlap p ds . overlap p e
 >   overlap p (GuardedRhs es ds) = overlap p ds . overlap p es
 
-> instance Syntax CondExpr where
+> instance Syntax (CondExpr a) where
 >   overlap _ (CondExpr p g e) = overlap p g . overlap p e
 
-> instance Syntax Expression where
->   overlap _ (Literal _) = id
->   overlap _ (Variable _) = id
->   overlap _ (Constructor _) = id
+> instance Syntax (Expression a) where
+>   overlap _ (Literal _ _) = id
+>   overlap _ (Variable _ _) = id
+>   overlap _ (Constructor _ _) = id
 >   overlap p (Paren e) = overlap p e
 >   overlap p (Typed e _) = overlap p e
 >   overlap p (Tuple es) = overlap p es
->   overlap p (List es) = overlap p es
+>   overlap p (List _ es) = overlap p es
 >   overlap p (ListCompr e qs) = overlap p qs . overlap p e
 >   overlap p (EnumFrom e) = overlap p e
 >   overlap p (EnumFromThen e1 e2) = overlap p e1 . overlap p e2
@@ -86,12 +86,12 @@ are collected with a simple traversal of the syntax tree.
 >     overlap p e1 . overlap p e2 . overlap p e3
 >   overlap p (Case e as) = overlap p e . overlap p as
 
-> instance Syntax Statement where
+> instance Syntax (Statement a) where
 >   overlap p (StmtExpr e) = overlap p e
 >   overlap p (StmtBind _ e) = overlap p e
 >   overlap p (StmtDecl ds) = overlap p ds
 
-> instance Syntax Alt where
+> instance Syntax (Alt a) where
 >   overlap _ (Alt p _ rhs) = overlap p rhs
 
 \end{verbatim}
@@ -101,63 +101,63 @@ algorithm implemented in module \texttt{ILTrans} (see
 Sect.~\ref{sec:il-trans}).
 \begin{verbatim}
 
-> isNonDet :: [Equation] -> Bool
+> isNonDet :: [Equation a] -> Bool
 > isNonDet eqs =
 >   isOverlap [map desugar (snd (flatLhs lhs)) | Equation _ lhs _ <- eqs]
 
-> isOverlap :: [[ConstrTerm]] -> Bool
+> isOverlap :: [[ConstrTerm ()]] -> Bool
 > isOverlap (ts:tss) =
 >   not (null tss) &&
 >   case matchInductive (ts:tss) of
 >      [] -> True
 >      tss:_ -> any isOverlap tss
 
-> matchInductive :: [[ConstrTerm]] -> [[[[ConstrTerm]]]]
+> matchInductive :: [[ConstrTerm ()]] -> [[[[ConstrTerm ()]]]]
 > matchInductive =
 >   map groupRules . filter isInductive . transpose . map (matches id)
 >   where isInductive = all (not . isVariablePattern . fst)
 
-> groupRules :: [(ConstrTerm,[ConstrTerm])] -> [[[ConstrTerm]]]
+> groupRules :: [(ConstrTerm (),[ConstrTerm ()])] -> [[[ConstrTerm ()]]]
 > groupRules [] = []
 > groupRules ((t,ts):tss) = (ts:map snd same) : groupRules tss
 >   where (same,other) = partition ((t ==) . fst) tss
 
-> matches :: ([ConstrTerm] -> [ConstrTerm]) -> [ConstrTerm]
->         -> [(ConstrTerm,[ConstrTerm])]
+> matches :: ([ConstrTerm a] -> [ConstrTerm a]) -> [ConstrTerm a]
+>         -> [(ConstrTerm a,[ConstrTerm a])]
 > matches _ [] = []
 > matches f (t:ts) = (t',f (ts' ++ ts)) : matches (f . (t:)) ts
 >   where (t',ts') = match t
->         match (ConstructorPattern c ts) = (ConstructorPattern c [],ts)
->         match (LiteralPattern l) = (LiteralPattern l,[])
->         match (VariablePattern v) = (VariablePattern v,[])
+>         match (ConstructorPattern a c ts) = (ConstructorPattern a c [],ts)
+>         match (LiteralPattern a l) = (LiteralPattern a l,[])
+>         match (VariablePattern a v) = (VariablePattern a v,[])
 
-> isVariablePattern :: ConstrTerm -> Bool
-> isVariablePattern (LiteralPattern _) = False
-> isVariablePattern (ConstructorPattern _ _) = False
-> isVariablePattern (VariablePattern _) = True
+> isVariablePattern :: ConstrTerm a -> Bool
+> isVariablePattern (LiteralPattern _ _) = False
+> isVariablePattern (ConstructorPattern _ _ _) = False
+> isVariablePattern (VariablePattern _ _) = True
 
 \end{verbatim}
 Unfortunately, the code has not been desugared yet.
 \begin{verbatim}
 
-> desugar :: ConstrTerm -> ConstrTerm
-> desugar (LiteralPattern l) =
+> desugar :: ConstrTerm a -> ConstrTerm ()
+> desugar (LiteralPattern a l) =
 >   case l of
->     String cs -> desugar (ListPattern (map (LiteralPattern . Char) cs))
->     _ -> LiteralPattern l
-> desugar (NegativePattern l) = desugar (LiteralPattern (negateLit l))
+>     String cs -> desugar (ListPattern a (map (LiteralPattern a . Char) cs))
+>     _ -> LiteralPattern () l
+> desugar (NegativePattern a l) = desugar (LiteralPattern a (negateLit l))
 >   where negateLit (Int i) = Int (-i)
 >         negateLit (Float f) = Float (-f)
-> desugar (VariablePattern v) = VariablePattern anonId
-> desugar (ConstructorPattern c ts) = ConstructorPattern c (map desugar ts)
-> desugar (InfixPattern t1 op t2) = desugar (ConstructorPattern op [t1,t2])
+> desugar (VariablePattern _ v) = VariablePattern () anonId
+> desugar (ConstructorPattern _ c ts) = ConstructorPattern () c (map desugar ts)
+> desugar (InfixPattern a t1 op t2) = desugar (ConstructorPattern a op [t1,t2])
 > desugar (ParenPattern t) = desugar t
-> desugar (TuplePattern ts) = desugar (ConstructorPattern c ts)
+> desugar (TuplePattern ts) = desugar (ConstructorPattern undefined c ts)
 >   where c = qTupleId (length ts)
-> desugar (ListPattern ts) = desugar (foldr cons nil ts)
->   where nil = ConstructorPattern qNilId []
->         cons t1 t2 = ConstructorPattern qConsId [t1,t2]
+> desugar (ListPattern a ts) = desugar (foldr cons nil ts)
+>   where nil = ConstructorPattern a qNilId []
+>         cons t1 t2 = ConstructorPattern a qConsId [t1,t2]
 > desugar (AsPattern _ t) = desugar t
-> desugar (LazyPattern _) = VariablePattern anonId
+> desugar (LazyPattern t) = VariablePattern () anonId
 
 \end{verbatim}

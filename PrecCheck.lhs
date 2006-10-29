@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 1980 2006-10-23 20:13:04Z wlux $
+% $Id: PrecCheck.lhs 1986 2006-10-29 16:45:56Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -25,7 +25,7 @@ optimization, we ignore all fixity declarations that assign the
 default precedence to an operator.
 \begin{verbatim}
 
-> bindPrecs :: ModuleIdent -> [Decl] -> PEnv -> PEnv
+> bindPrecs :: ModuleIdent -> [Decl a] -> PEnv -> PEnv
 > bindPrecs m ds pEnv = foldr bindPrec pEnv ds
 >   where bindPrec (InfixDecl _ fix pr ops) pEnv
 >           | p == defaultP = pEnv
@@ -46,35 +46,35 @@ associativities. The top-level precedence environment is returned
 because it is used for constructing the module's interface.
 \begin{verbatim}
 
-> precCheck :: ModuleIdent -> PEnv -> [TopDecl] -> Error (PEnv,[TopDecl])
+> precCheck :: ModuleIdent -> PEnv -> [TopDecl a] -> Error (PEnv,[TopDecl a])
 > precCheck m pEnv ds =
 >   do
 >     ds' <- mapE (checkTopDecl m pEnv') ds
 >     return (pEnv',ds')
 >   where pEnv' = bindPrecs m [d | BlockDecl d <- ds] pEnv
 
-> precCheckGoal :: PEnv -> Goal -> Error Goal
+> precCheckGoal :: PEnv -> Goal a -> Error (Goal a)
 > precCheckGoal pEnv (Goal p e ds) =
 >   liftE2 (Goal p) (checkExpr m p pEnv' e) (mapE (checkDecl m pEnv') ds)
 >   where m = emptyMIdent
 >         pEnv' = bindPrecs m ds pEnv
 
-> checkTopDecl :: ModuleIdent -> PEnv -> TopDecl -> Error TopDecl
+> checkTopDecl :: ModuleIdent -> PEnv -> TopDecl a -> Error (TopDecl a)
 > checkTopDecl m pEnv (BlockDecl d) = liftE BlockDecl (checkDecl m pEnv d)
 > checkTopDecl _ _ d = return d
 
-> checkDecl :: ModuleIdent -> PEnv -> Decl -> Error Decl
+> checkDecl :: ModuleIdent -> PEnv -> Decl a -> Error (Decl a)
 > checkDecl m pEnv (FunctionDecl p f eqs) =
 >   liftE (FunctionDecl p f) (mapE (checkEqn m pEnv) eqs)
 > checkDecl m pEnv (PatternDecl p t rhs) =
 >   liftE2 (PatternDecl p) (checkConstrTerm p pEnv t) (checkRhs m pEnv rhs)
 > checkDecl _ _ d = return d
 
-> checkEqn :: ModuleIdent -> PEnv -> Equation -> Error Equation
+> checkEqn :: ModuleIdent -> PEnv -> Equation a -> Error (Equation a)
 > checkEqn m pEnv (Equation p lhs rhs) =
 >   liftE2 (Equation p) (checkLhs p pEnv lhs) (checkRhs m pEnv rhs)
 
-> checkLhs :: Position -> PEnv -> Lhs -> Error Lhs
+> checkLhs :: Position -> PEnv -> Lhs a -> Error (Lhs a)
 > checkLhs p pEnv (FunLhs f ts) =
 >   liftE (FunLhs f) (mapE (checkConstrTerm p pEnv) ts)
 > checkLhs p pEnv (OpLhs t1 op t2) =
@@ -90,29 +90,29 @@ because it is used for constructing the module's interface.
 > checkLhs p pEnv (ApLhs lhs ts) =
 >   liftE2 ApLhs (checkLhs p pEnv lhs) (mapE (checkConstrTerm p pEnv) ts)
 
-> checkConstrTerm :: Position -> PEnv -> ConstrTerm -> Error ConstrTerm
-> checkConstrTerm _ _ (LiteralPattern l) = return (LiteralPattern l)
-> checkConstrTerm _ _ (NegativePattern l) = return (NegativePattern l)
-> checkConstrTerm _ _ (VariablePattern v) = return (VariablePattern v)
-> checkConstrTerm p pEnv (ConstructorPattern c ts) =
->   liftE (ConstructorPattern c) (mapE (checkConstrTerm p pEnv) ts)
-> checkConstrTerm p pEnv (InfixPattern t1 op t2) =
+> checkConstrTerm :: Position -> PEnv -> ConstrTerm a -> Error (ConstrTerm a)
+> checkConstrTerm _ _ (LiteralPattern a l) = return (LiteralPattern a l)
+> checkConstrTerm _ _ (NegativePattern a l) = return (NegativePattern a l)
+> checkConstrTerm _ _ (VariablePattern a v) = return (VariablePattern a v)
+> checkConstrTerm p pEnv (ConstructorPattern a c ts) =
+>   liftE (ConstructorPattern a c) (mapE (checkConstrTerm p pEnv) ts)
+> checkConstrTerm p pEnv (InfixPattern a t1 op t2) =
 >   do
 >     (t1',t2') <-
 >       liftE (,) (checkConstrTerm p pEnv t1) &&& checkConstrTerm p pEnv t2
->     fixPrecT p pEnv t1' op t2'
+>     fixPrecT p pEnv a t1' op t2'
 > checkConstrTerm p pEnv (ParenPattern t) =
 >   liftE ParenPattern (checkConstrTerm p pEnv t)
 > checkConstrTerm p pEnv (TuplePattern ts) =
 >   liftE TuplePattern (mapE (checkConstrTerm p pEnv) ts)
-> checkConstrTerm p pEnv (ListPattern ts) =
->   liftE ListPattern (mapE (checkConstrTerm p pEnv) ts)
+> checkConstrTerm p pEnv (ListPattern a ts) =
+>   liftE (ListPattern a) (mapE (checkConstrTerm p pEnv) ts)
 > checkConstrTerm p pEnv (AsPattern v t) =
 >   liftE (AsPattern v) (checkConstrTerm p pEnv t)
 > checkConstrTerm p pEnv (LazyPattern t) =
 >   liftE LazyPattern (checkConstrTerm p pEnv t)
 
-> checkRhs :: ModuleIdent -> PEnv -> Rhs -> Error Rhs
+> checkRhs :: ModuleIdent -> PEnv -> Rhs a -> Error (Rhs a)
 > checkRhs m pEnv (SimpleRhs p e ds) =
 >   liftE2 (SimpleRhs p) (checkExpr m p pEnv' e) (mapE (checkDecl m pEnv') ds)
 >   where pEnv' = bindPrecs m ds pEnv
@@ -122,18 +122,19 @@ because it is used for constructing the module's interface.
 >          (mapE (checkDecl m pEnv') ds)
 >   where pEnv' = bindPrecs m ds pEnv
 
-> checkCondExpr :: ModuleIdent -> PEnv -> CondExpr -> Error CondExpr
+> checkCondExpr :: ModuleIdent -> PEnv -> CondExpr a -> Error (CondExpr a)
 > checkCondExpr m pEnv (CondExpr p g e) =
 >   liftE2 (CondExpr p) (checkExpr m p pEnv g) (checkExpr m p pEnv e)
 
-> checkExpr :: ModuleIdent -> Position -> PEnv -> Expression -> Error Expression
-> checkExpr _ _ _ (Literal l) = return (Literal l)
-> checkExpr _ _ _ (Variable v) = return (Variable v)
-> checkExpr _ _ _ (Constructor c) = return (Constructor c)
+> checkExpr :: ModuleIdent -> Position -> PEnv -> Expression a
+>           -> Error (Expression a)
+> checkExpr _ _ _ (Literal a l) = return (Literal a l)
+> checkExpr _ _ _ (Variable a v) = return (Variable a v)
+> checkExpr _ _ _ (Constructor a c) = return (Constructor a c)
 > checkExpr m p pEnv (Paren e) = liftE Paren (checkExpr m p pEnv e)
 > checkExpr m p pEnv (Typed e ty) = liftE (flip Typed ty) (checkExpr m p pEnv e)
 > checkExpr m p pEnv (Tuple es) = liftE Tuple (mapE (checkExpr m p pEnv) es)
-> checkExpr m p pEnv (List es) = liftE List (mapE (checkExpr m p pEnv) es)
+> checkExpr m p pEnv (List a es) = liftE (List a) (mapE (checkExpr m p pEnv) es)
 > checkExpr m p pEnv (ListCompr e qs) =
 >   liftE2 ListCompr (checkExpr m p pEnv' e) (mapE (checkStmt m p pEnv') qs)
 >   where pEnv' = bindPrecs m [d | StmtDecl ds <- qs, d <- ds] pEnv
@@ -181,13 +182,14 @@ because it is used for constructing the module's interface.
 > checkExpr m p pEnv (Case e alts) =
 >   liftE2 Case (checkExpr m p pEnv e) (mapE (checkAlt m pEnv) alts)
 
-> checkStmt :: ModuleIdent -> Position -> PEnv -> Statement -> Error Statement
+> checkStmt :: ModuleIdent -> Position -> PEnv -> Statement a
+>           -> Error (Statement a)
 > checkStmt m p pEnv (StmtExpr e) = liftE StmtExpr (checkExpr m p pEnv e)
 > checkStmt m _ pEnv (StmtDecl ds) = liftE StmtDecl (mapE (checkDecl m pEnv) ds)
 > checkStmt m p pEnv (StmtBind t e) =
 >   liftE2 StmtBind (checkConstrTerm p pEnv t) (checkExpr m p pEnv e)
 
-> checkAlt :: ModuleIdent -> PEnv -> Alt -> Error Alt
+> checkAlt :: ModuleIdent -> PEnv -> Alt a -> Error (Alt a)
 > checkAlt m pEnv (Alt p t rhs) =
 >   liftE2 (Alt p) (checkConstrTerm p pEnv t) (checkRhs m pEnv rhs)
 
@@ -213,8 +215,8 @@ argument. Note that both arguments already have been checked before
 \texttt{fixPrec} is called.
 \begin{verbatim}
 
-> fixPrec :: Position -> PEnv -> Expression -> InfixOp -> Expression
->         -> Error Expression
+> fixPrec :: Position -> PEnv -> Expression a -> InfixOp a -> Expression a
+>         -> Error (Expression a)
 > fixPrec p pEnv (UnaryMinus uop e1) op e2
 >   | pr < 6 || pr == 6 && fix == InfixL =
 >       fixRPrec p pEnv (UnaryMinus uop e1) op e2
@@ -223,8 +225,8 @@ argument. Note that both arguments already have been checked before
 >   where OpPrec fix pr = opPrec op pEnv
 > fixPrec p pEnv e1 op e2 = fixRPrec p pEnv e1 op e2
 
-> fixUPrec :: Position -> PEnv -> Ident -> Expression -> InfixOp -> Expression
->          -> Error Expression
+> fixUPrec :: Position -> PEnv -> Ident -> Expression a -> InfixOp a
+>          -> Expression a -> Error (Expression a)
 > fixUPrec p pEnv _ _ op (UnaryMinus uop _) =
 >   errorAt p $ ambiguousParse "operator" (opName op) (qualify uop)
 > fixUPrec p pEnv uop e1 op1 (InfixApply e2 op2 e3)
@@ -239,8 +241,8 @@ argument. Note that both arguments already have been checked before
 >         OpPrec fix2 pr2 = opPrec op2 pEnv
 > fixUPrec _ _ uop e1 op e2 = return (UnaryMinus uop (InfixApply e1 op e2))
 
-> fixRPrec :: Position -> PEnv -> Expression -> InfixOp -> Expression
->          -> Error Expression
+> fixRPrec :: Position -> PEnv -> Expression a -> InfixOp a -> Expression a
+>          -> Error (Expression a)
 > fixRPrec p pEnv e1 op (UnaryMinus uop e2)
 >   | pr < 6 = return (InfixApply e1 op (UnaryMinus uop e2))
 >   | otherwise =
@@ -269,7 +271,7 @@ associative for a left section and right associative for a right
 section, respectively.
 \begin{verbatim}
 
-> checkLSection :: Position -> PEnv -> InfixOp -> Expression -> Error ()
+> checkLSection :: Position -> PEnv -> InfixOp a -> Expression a -> Error ()
 > checkLSection p pEnv op (UnaryMinus uop _)
 >   | pr < 6 || pr == 6 && fix == InfixL = return ()
 >   | otherwise = errorAt p $ ambiguousParse "unary" (qualify uop) (opName op)
@@ -282,7 +284,7 @@ section, respectively.
 >         OpPrec fix2 pr2 = opPrec op2 pEnv
 > checkLSection _ _ _ _ = return ()
 
-> checkRSection :: Position -> PEnv -> InfixOp -> Expression -> Error ()
+> checkRSection :: Position -> PEnv -> InfixOp a -> Expression a -> Error ()
 > checkRSection p pEnv op (UnaryMinus uop _)
 >   | pr < 6 = return ()
 >   | otherwise = errorAt p $ ambiguousParse "unary" (qualify uop) (opName op)
@@ -308,31 +310,31 @@ literals. In that case, the operator's precedence must be lower than
 that of unary negation.
 \begin{verbatim}
 
-> fixPrecT :: Position -> PEnv -> ConstrTerm -> QualIdent -> ConstrTerm
->          -> Error ConstrTerm
-> fixPrecT p pEnv t1@(NegativePattern l) op t2
->   | pr < 6 || pr == 6 && fix == InfixL = fixRPrecT p pEnv t1 op t2
+> fixPrecT :: Position -> PEnv -> a -> ConstrTerm a -> QualIdent -> ConstrTerm a
+>          -> Error (ConstrTerm a)
+> fixPrecT p pEnv a t1@(NegativePattern _ l) op t2
+>   | pr < 6 || pr == 6 && fix == InfixL = fixRPrecT p pEnv a t1 op t2
 >   | otherwise = errorAt p $ invalidParse "unary" (negOp l) op
 >   where OpPrec fix pr = prec op pEnv
-> fixPrecT p pEnv t1 op t2 = fixRPrecT p pEnv t1 op t2
+> fixPrecT p pEnv a t1 op t2 = fixRPrecT p pEnv a t1 op t2
 
-> fixRPrecT :: Position -> PEnv -> ConstrTerm -> QualIdent -> ConstrTerm
->           -> Error ConstrTerm
-> fixRPrecT p pEnv t1 op t2@(NegativePattern l)
->   | pr < 6 = return (InfixPattern t1 op t2)
+> fixRPrecT :: Position -> PEnv -> a -> ConstrTerm a -> QualIdent
+>           -> ConstrTerm a -> Error (ConstrTerm a)
+> fixRPrecT p pEnv a t1 op t2@(NegativePattern _ l)
+>   | pr < 6 = return (InfixPattern a t1 op t2)
 >   | otherwise = errorAt p $ invalidParse "unary" (negOp l) op
 >   where OpPrec _ pr = prec op pEnv
-> fixRPrecT p pEnv t1 op1 (InfixPattern t2 op2 t3)
+> fixRPrecT p pEnv a1 t1 op1 (InfixPattern a2 t2 op2 t3)
 >   | pr1 < pr2 || pr1 == pr2 && fix1 == InfixR && fix2 == InfixR =
->       return (InfixPattern t1 op1 (InfixPattern t2 op2 t3))
+>       return (InfixPattern a1 t1 op1 (InfixPattern a2 t2 op2 t3))
 >   | pr1 > pr2 || pr1 == pr2 && fix1 == InfixL && fix2 == InfixL =
 >       do
->         t' <- fixPrecT p pEnv t1 op1 t2
->         return (InfixPattern t' op2 t3)
+>         t' <- fixPrecT p pEnv a2 t1 op1 t2
+>         return (InfixPattern a1 t' op2 t3)
 >   | otherwise = errorAt p $ ambiguousParse "operator" op1 op2
 >   where OpPrec fix1 pr1 = prec op1 pEnv
 >         OpPrec fix2 pr2 = prec op2 pEnv
-> fixRPrecT _ _ t1 op t2 = return (InfixPattern t1 op t2)
+> fixRPrecT _ _ a t1 op t2 = return (InfixPattern a t1 op t2)
 
 > negOp :: Literal -> Ident
 > negOp (Int _) = minusId
@@ -346,24 +348,24 @@ patterns they must bind more tightly than the operator, otherwise the
 left-hand side of the declaration is invalid.
 \begin{verbatim}
 
-> checkOpL :: Position -> PEnv -> Ident -> ConstrTerm -> Error ()
-> checkOpL p pEnv op (NegativePattern l)
+> checkOpL :: Position -> PEnv -> Ident -> ConstrTerm a -> Error ()
+> checkOpL p pEnv op (NegativePattern _ l)
 >   | pr < 6 || pr == 6 && fix == InfixL = return ()
 >   | otherwise = errorAt p $ invalidParse "unary" (negOp l) (qualify op)
 >   where OpPrec fix pr = prec (qualify op) pEnv
-> checkOpL p pEnv op1 (InfixPattern _ op2 _)
+> checkOpL p pEnv op1 (InfixPattern _ _ op2 _)
 >   | pr1 < pr2 || pr1 == pr2 && fix1 == InfixL && fix2 == InfixL = return ()
 >   | otherwise = errorAt p $ invalidParse "operator" op1 op2
 >   where OpPrec fix1 pr1 = prec (qualify op1) pEnv
 >         OpPrec fix2 pr2 = prec op2 pEnv
 > checkOpL _ _ _ _ = return ()
 
-> checkOpR :: Position -> PEnv -> Ident -> ConstrTerm -> Error ()
-> checkOpR p pEnv op (NegativePattern l)
+> checkOpR :: Position -> PEnv -> Ident -> ConstrTerm a -> Error ()
+> checkOpR p pEnv op (NegativePattern _ l)
 >   | pr < 6 = return ()
 >   | otherwise = errorAt p $ invalidParse "unary" (negOp l) (qualify op)
 >   where OpPrec _ pr = prec (qualify op) pEnv
-> checkOpR p pEnv op1 (InfixPattern _ op2 _)
+> checkOpR p pEnv op1 (InfixPattern _ _ op2 _)
 >   | pr1 < pr2 || pr1 == pr2 && fix1 == InfixR && fix2 == InfixR = return ()
 >   | otherwise = errorAt p $ invalidParse "operator" op1 op2
 >   where OpPrec fix1 pr1 = prec (qualify op1) pEnv
@@ -379,7 +381,7 @@ checking the root of an operator definition that shadows an imported
 definition.
 \begin{verbatim}
 
-> opPrec :: InfixOp -> PEnv -> OpPrec
+> opPrec :: InfixOp a -> PEnv -> OpPrec
 > opPrec op = prec (opName op)
 
 > prec :: QualIdent -> PEnv -> OpPrec

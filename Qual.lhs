@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 1980 2006-10-23 20:13:04Z wlux $
+% $Id: Qual.lhs 1986 2006-10-29 16:45:56Z wlux $
 %
 % Copyright (c) 2001-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -19,67 +19,67 @@ declarations groups as well as function arguments remain unchanged.
 > import Base
 > import TopEnv
 
-> qual :: ValueEnv -> [TopDecl] -> [TopDecl]
+> qual :: ValueEnv -> [TopDecl a] -> [TopDecl a]
 > qual tyEnv ds = map (qualTopDecl tyEnv) ds
 
-> qualGoal :: ValueEnv -> Goal -> Goal
+> qualGoal :: ValueEnv -> Goal a -> Goal a
 > qualGoal tyEnv (Goal p e ds) =
 >   Goal p (qualExpr tyEnv e) (map (qualDecl tyEnv) ds)
 
-> qualTopDecl :: ValueEnv -> TopDecl -> TopDecl
+> qualTopDecl :: ValueEnv -> TopDecl a -> TopDecl a
 > qualTopDecl tyEnv (BlockDecl d) = BlockDecl (qualDecl tyEnv d)
 > qualTopDecl _ d = d
 
-> qualDecl :: ValueEnv -> Decl -> Decl
+> qualDecl :: ValueEnv -> Decl a -> Decl a
 > qualDecl tyEnv (FunctionDecl p f eqs) =
 >   FunctionDecl p f (map (qualEqn tyEnv) eqs)
 > qualDecl tyEnv (PatternDecl p t rhs) =
 >   PatternDecl p (qualTerm tyEnv t) (qualRhs tyEnv rhs)
 > qualDecl _ d = d
 
-> qualEqn :: ValueEnv -> Equation -> Equation
+> qualEqn :: ValueEnv -> Equation a -> Equation a
 > qualEqn tyEnv (Equation p lhs rhs) =
 >   Equation p (qualLhs tyEnv lhs) (qualRhs tyEnv rhs)
 
-> qualLhs :: ValueEnv -> Lhs -> Lhs
+> qualLhs :: ValueEnv -> Lhs a -> Lhs a
 > qualLhs tyEnv (FunLhs f ts) = FunLhs f (map (qualTerm tyEnv) ts)
 > qualLhs tyEnv (OpLhs t1 op t2) =
 >   OpLhs (qualTerm tyEnv t1) op (qualTerm tyEnv t2)
 > qualLhs tyEnv (ApLhs lhs ts) =
 >   ApLhs (qualLhs tyEnv lhs) (map (qualTerm tyEnv) ts)
 
-> qualTerm :: ValueEnv -> ConstrTerm -> ConstrTerm
-> qualTerm _ (LiteralPattern l) = LiteralPattern l
-> qualTerm _ (NegativePattern l) = NegativePattern l
-> qualTerm _ (VariablePattern v) = VariablePattern v
-> qualTerm tyEnv (ConstructorPattern c ts) =
->   ConstructorPattern (qualIdent tyEnv c) (map (qualTerm tyEnv) ts)
-> qualTerm tyEnv (InfixPattern t1 op t2) =
->   InfixPattern (qualTerm tyEnv t1) (qualIdent tyEnv op) (qualTerm tyEnv t2)
+> qualTerm :: ValueEnv -> ConstrTerm a -> ConstrTerm a
+> qualTerm _ (LiteralPattern a l) = LiteralPattern a l
+> qualTerm _ (NegativePattern a l) = NegativePattern a l
+> qualTerm _ (VariablePattern a v) = VariablePattern a v
+> qualTerm tyEnv (ConstructorPattern a c ts) =
+>   ConstructorPattern a (qualIdent tyEnv c) (map (qualTerm tyEnv) ts)
+> qualTerm tyEnv (InfixPattern a t1 op t2) =
+>   InfixPattern a (qualTerm tyEnv t1) (qualIdent tyEnv op) (qualTerm tyEnv t2)
 > qualTerm tyEnv (ParenPattern t) = ParenPattern (qualTerm tyEnv t)
 > qualTerm tyEnv (TuplePattern ts) = TuplePattern (map (qualTerm tyEnv) ts)
-> qualTerm tyEnv (ListPattern ts) = ListPattern (map (qualTerm tyEnv) ts)
+> qualTerm tyEnv (ListPattern a ts) = ListPattern a (map (qualTerm tyEnv) ts)
 > qualTerm tyEnv (AsPattern v t) = AsPattern v (qualTerm tyEnv t)
 > qualTerm tyEnv (LazyPattern t) = LazyPattern (qualTerm tyEnv t)
 
-> qualRhs :: ValueEnv -> Rhs -> Rhs
+> qualRhs :: ValueEnv -> Rhs a -> Rhs a
 > qualRhs tyEnv (SimpleRhs p e ds) =
 >   SimpleRhs p (qualExpr tyEnv e) (map (qualDecl tyEnv) ds) 
 > qualRhs tyEnv (GuardedRhs es ds) =
 >   GuardedRhs (map (qualCondExpr tyEnv) es) (map (qualDecl tyEnv) ds)
 
-> qualCondExpr :: ValueEnv -> CondExpr -> CondExpr
+> qualCondExpr :: ValueEnv -> CondExpr a -> CondExpr a
 > qualCondExpr tyEnv (CondExpr p g e) =
 >   CondExpr p (qualExpr tyEnv g) (qualExpr tyEnv e)
 
-> qualExpr :: ValueEnv -> Expression -> Expression
-> qualExpr _ (Literal l) = Literal l
-> qualExpr tyEnv (Variable v) = Variable (qualIdent tyEnv v)
-> qualExpr tyEnv (Constructor c) = Constructor (qualIdent tyEnv c)
+> qualExpr :: ValueEnv -> Expression a -> Expression a
+> qualExpr _ (Literal a l) = Literal a l
+> qualExpr tyEnv (Variable a v) = Variable a (qualIdent tyEnv v)
+> qualExpr tyEnv (Constructor a c) = Constructor a (qualIdent tyEnv c)
 > qualExpr tyEnv (Paren e) = Paren (qualExpr tyEnv e)
 > qualExpr tyEnv (Typed e ty) = Typed (qualExpr tyEnv e) ty
 > qualExpr tyEnv (Tuple es) = Tuple (map (qualExpr tyEnv) es)
-> qualExpr tyEnv (List es) = List (map (qualExpr tyEnv) es)
+> qualExpr tyEnv (List a es) = List a (map (qualExpr tyEnv) es)
 > qualExpr tyEnv (ListCompr e qs) =
 >   ListCompr (qualExpr tyEnv e) (map (qualStmt tyEnv) qs)
 > qualExpr tyEnv (EnumFrom e) = EnumFrom (qualExpr tyEnv e)
@@ -106,18 +106,18 @@ declarations groups as well as function arguments remain unchanged.
 > qualExpr tyEnv (Case e alts) =
 >   Case (qualExpr tyEnv e) (map (qualAlt tyEnv) alts)
 
-> qualStmt :: ValueEnv -> Statement -> Statement
+> qualStmt :: ValueEnv -> Statement a -> Statement a
 > qualStmt tyEnv (StmtExpr e) = StmtExpr (qualExpr tyEnv e)
 > qualStmt tyEnv (StmtBind t e) =
 >   StmtBind (qualTerm tyEnv t) (qualExpr tyEnv e)
 > qualStmt tyEnv (StmtDecl ds) = StmtDecl (map (qualDecl tyEnv) ds)
 
-> qualAlt :: ValueEnv -> Alt -> Alt
+> qualAlt :: ValueEnv -> Alt a -> Alt a
 > qualAlt tyEnv (Alt p t rhs) = Alt p (qualTerm tyEnv t) (qualRhs tyEnv rhs)
 
-> qualOp :: ValueEnv -> InfixOp -> InfixOp
-> qualOp tyEnv (InfixOp op) = InfixOp (qualIdent tyEnv op)
-> qualOp tyEnv (InfixConstr op) = InfixConstr (qualIdent tyEnv op)
+> qualOp :: ValueEnv -> InfixOp a -> InfixOp a
+> qualOp tyEnv (InfixOp a op) = InfixOp a (qualIdent tyEnv op)
+> qualOp tyEnv (InfixConstr a op) = InfixConstr a (qualIdent tyEnv op)
 
 > qualIdent :: ValueEnv -> QualIdent -> QualIdent
 > qualIdent tyEnv x

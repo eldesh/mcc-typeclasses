@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 1980 2006-10-23 20:13:04Z wlux $
+% $Id: CaseCheck.lhs 1986 2006-10-29 16:45:56Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -53,10 +53,10 @@ them to start with an upper case letter.
 
 > data Definition = D Position Category Ident
 
-> caseCheck :: CaseMode -> Module -> [String]
+> caseCheck :: CaseMode -> Module a -> [String]
 > caseCheck cm m = check cm (definitions m)
 
-> caseCheckGoal :: CaseMode -> Goal -> [String]
+> caseCheckGoal :: CaseMode -> Goal a -> [String]
 > caseCheckGoal cm g = check cm (goalDefinitions g)
 
 > check :: CaseMode -> [Definition] -> [String]
@@ -113,11 +113,11 @@ The usual traversal of the syntax tree is necessary in order to
 collect all defined identifiers.
 \begin{verbatim}
 
-> definitions :: Module -> [Definition]
+> definitions :: Module a -> [Definition]
 > definitions (Module _ _ _ ds) = names noPosition ds []
 >   where noPosition = error "noPosition"
 
-> goalDefinitions :: Goal -> [Definition]
+> goalDefinitions :: Goal a -> [Definition]
 > goalDefinitions (Goal p e ds) = names p ds (names p e [])
 
 > class SyntaxTree a where
@@ -126,7 +126,7 @@ collect all defined identifiers.
 > instance SyntaxTree a => SyntaxTree [a] where
 >   names p xs ys = foldr (names p) ys xs
 
-> instance SyntaxTree TopDecl where
+> instance SyntaxTree (TopDecl a) where
 >   names _ (DataDecl p tc tvs cs) xs = typeNames p tc tvs ++ names p cs xs
 >   names _ (NewtypeDecl p tc tvs nc) xs = typeNames p tc tvs ++ names p nc xs
 >   names _ (TypeDecl p tc tvs _) xs = typeNames p tc tvs ++ xs
@@ -150,7 +150,7 @@ collect all defined identifiers.
 > constrNames p evs c =
 >   D p DataConstrId c : map (D p TypeVarId) (filter (not . isAnonId) evs)
 
-> instance SyntaxTree Decl where
+> instance SyntaxTree (Decl a) where
 >   names _ (InfixDecl _ _ _ _) xs = xs
 >   names _ (TypeSig _ _ _) xs = xs
 >   names _ (FunctionDecl p f eqs) xs = D p FunctionId f : names p eqs xs
@@ -159,43 +159,43 @@ collect all defined identifiers.
 >   names _ (FreeDecl p vs) xs = map (D p VariableId) vs ++ xs
 >   names _ (TrustAnnot _ _ _) xs = xs
 
-> instance SyntaxTree Equation where
+> instance SyntaxTree (Equation a) where
 >   names _ (Equation p lhs rhs) = names p lhs . names p rhs
 
-> instance SyntaxTree Lhs where
+> instance SyntaxTree (Lhs a) where
 >   names p (FunLhs _ ts) = names p ts
 >   names p (OpLhs t1 _ t2) = names p t1 . names p t2
 >   names p (ApLhs lhs ts) = names p lhs . names p ts
 
-> instance SyntaxTree Rhs where
+> instance SyntaxTree (Rhs a) where
 >   names _ (SimpleRhs p e ds) = names p ds . names p e
 >   names p (GuardedRhs es ds) = names p ds . names p es
 
-> instance SyntaxTree ConstrTerm where
->   names _ (LiteralPattern _) xs = xs
->   names _ (NegativePattern _) xs = xs
->   names p (VariablePattern v) xs
+> instance SyntaxTree (ConstrTerm a) where
+>   names _ (LiteralPattern _ _) xs = xs
+>   names _ (NegativePattern _ _) xs = xs
+>   names p (VariablePattern _ v) xs
 >     | isAnonId v = xs
 >     | otherwise = D p VariableId v : xs
->   names p (ConstructorPattern _ ts) xs = names p ts xs
->   names p (InfixPattern t1 _ t2) xs = names p t1 (names p t2 xs)
+>   names p (ConstructorPattern _ _ ts) xs = names p ts xs
+>   names p (InfixPattern _ t1 _ t2) xs = names p t1 (names p t2 xs)
 >   names p (ParenPattern t) xs = names p t xs
 >   names p (TuplePattern ts) xs = names p ts xs
->   names p (ListPattern ts) xs = names p ts xs
+>   names p (ListPattern _ ts) xs = names p ts xs
 >   names p (AsPattern v t) xs = D p VariableId v : names p t xs
 >   names p (LazyPattern t) xs = names p t xs
 
-> instance SyntaxTree CondExpr where
+> instance SyntaxTree (CondExpr a) where
 >   names _ (CondExpr p g e) = names p g . names p e
 
-> instance SyntaxTree Expression where
->   names _ (Literal _) = id
->   names _ (Variable _) = id
->   names _ (Constructor _) = id
+> instance SyntaxTree (Expression a) where
+>   names _ (Literal _ _) = id
+>   names _ (Variable _ _) = id
+>   names _ (Constructor _ _) = id
 >   names p (Paren e) = names p e
 >   names p (Typed e _) = names p e
 >   names p (Tuple es) = names p es
->   names p (List es) = names p es
+>   names p (List _ es) = names p es
 >   names p (ListCompr e sts) = names p sts . names p e
 >   names p (EnumFrom e) = names p e
 >   names p (EnumFromThen e1 e2) = names p e1 . names p e2
@@ -212,12 +212,12 @@ collect all defined identifiers.
 >   names p (IfThenElse e1 e2 e3) = names p e1 . names p e2 . names p e3
 >   names p (Case e as) = names p e . names p as
 
-> instance SyntaxTree Statement where
+> instance SyntaxTree (Statement a) where
 >   names p (StmtExpr e) = names p e
 >   names p (StmtDecl ds) = names p ds
 >   names p (StmtBind t e) = names p t . names p e
 
-> instance SyntaxTree Alt where
+> instance SyntaxTree (Alt a) where
 >   names _ (Alt p t rhs) = names p t . names p rhs
 
 > isAnonId :: Ident -> Bool

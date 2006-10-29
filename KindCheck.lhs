@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: KindCheck.lhs 1986 2006-10-29 16:45:56Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -32,7 +32,7 @@ recursive type synonyms, which are not allowed in Curry and could lead
 to non-termination during their expansion.
 \begin{verbatim}
 
-> kindCheck :: ModuleIdent -> TCEnv -> [TopDecl] -> Error TCEnv
+> kindCheck :: ModuleIdent -> TCEnv -> [TopDecl a] -> Error TCEnv
 > kindCheck m tcEnv ds =
 >   do
 >     checkSynonynms m tds
@@ -46,7 +46,7 @@ Kind checking of a goal is simpler because there are no type
 declarations.
 \begin{verbatim}
 
-> kindCheckGoal :: TCEnv -> Goal -> Error ()
+> kindCheckGoal :: TCEnv -> Goal a -> Error ()
 > kindCheckGoal tcEnv (Goal p e ds) =
 >   checkExpr tcEnv p e &&> mapE_ (checkDecl tcEnv) ds
 
@@ -61,11 +61,11 @@ environment so that we do not need to pass the declarations to this
 function in any particular order.
 \begin{verbatim}
 
-> bindTypes :: ModuleIdent -> [TopDecl] -> TCEnv -> TCEnv
+> bindTypes :: ModuleIdent -> [TopDecl a] -> TCEnv -> TCEnv
 > bindTypes m ds tcEnv = tcEnv'
 >   where tcEnv' = foldr (bindTC m tcEnv') tcEnv ds
 
-> bindTC :: ModuleIdent -> TCEnv -> TopDecl -> TCEnv -> TCEnv
+> bindTC :: ModuleIdent -> TCEnv -> TopDecl a -> TCEnv -> TCEnv
 > bindTC m tcEnv (DataDecl _ tc tvs cs) =
 >   globalBindTopEnv m tc (typeCon DataType m tc tvs (map (Just . constr) cs))
 > bindTC m tcEnv (NewtypeDecl _ tc tvs (NewConstrDecl _ c _)) =
@@ -78,7 +78,7 @@ function in any particular order.
 > bindTC _ _ (InstanceDecl _ _ _) = id
 > bindTC _ _ (BlockDecl _) = id
 
-> checkSynonynms :: ModuleIdent -> [TopDecl] -> Error ()
+> checkSynonynms :: ModuleIdent -> [TopDecl a] -> Error ()
 > checkSynonynms m = mapE_ (typeDecl m) . scc bound free
 >   where bound (DataDecl _ tc _ _) = [tc]
 >         bound (NewtypeDecl _ tc _ _) = [tc]
@@ -93,7 +93,7 @@ function in any particular order.
 >         free (InstanceDecl _ _ _) = []
 >         free (BlockDecl _) = []
 
-> typeDecl :: ModuleIdent -> [TopDecl] -> Error ()
+> typeDecl :: ModuleIdent -> [TopDecl a] -> Error ()
 > typeDecl _ [] = internalError "typeDecl"
 > typeDecl _ [DataDecl _ _ _ _] = return ()
 > typeDecl _ [NewtypeDecl _ _ _ _] = return ()
@@ -116,7 +116,7 @@ function in any particular order.
 Kind checking is applied to all type expressions in the program.
 \begin{verbatim}
 
-> checkTopDecl :: TCEnv -> TopDecl -> Error ()
+> checkTopDecl :: TCEnv -> TopDecl a -> Error ()
 > checkTopDecl tcEnv (DataDecl _ _ _ cs) = mapE_ (checkConstrDecl tcEnv) cs
 > checkTopDecl tcEnv (NewtypeDecl _ _ _ nc) = checkNewConstrDecl tcEnv nc
 > checkTopDecl tcEnv (TypeDecl p _ _ ty) = checkType tcEnv p ty
@@ -124,7 +124,7 @@ Kind checking is applied to all type expressions in the program.
 > checkTopDecl tcEnv (InstanceDecl p _ ty) = checkType tcEnv p ty
 > checkTopDecl tcEnv (BlockDecl d) = checkDecl tcEnv d
 
-> checkDecl :: TCEnv -> Decl -> Error ()
+> checkDecl :: TCEnv -> Decl a -> Error ()
 > checkDecl tcEnv (TypeSig p _ ty) = checkQualType tcEnv p ty
 > checkDecl tcEnv (FunctionDecl _ _ eqs) = mapE_ (checkEquation tcEnv) eqs
 > checkDecl tcEnv (PatternDecl _ _ rhs) = checkRhs tcEnv rhs
@@ -139,28 +139,28 @@ Kind checking is applied to all type expressions in the program.
 > checkNewConstrDecl :: TCEnv -> NewConstrDecl -> Error ()
 > checkNewConstrDecl tcEnv (NewConstrDecl p _ ty) = checkType tcEnv p ty
 
-> checkEquation :: TCEnv -> Equation -> Error ()
+> checkEquation :: TCEnv -> Equation a -> Error ()
 > checkEquation tcEnv (Equation _ _ rhs) = checkRhs tcEnv rhs
 
-> checkRhs :: TCEnv -> Rhs -> Error ()
+> checkRhs :: TCEnv -> Rhs a -> Error ()
 > checkRhs tcEnv (SimpleRhs p e ds) =
 >   checkExpr tcEnv p e &&> mapE_ (checkDecl tcEnv) ds
 > checkRhs tcEnv (GuardedRhs es ds) =
 >   mapE_ (checkCondExpr tcEnv) es &&> mapE_ (checkDecl tcEnv) ds
 
-> checkCondExpr :: TCEnv -> CondExpr -> Error ()
+> checkCondExpr :: TCEnv -> CondExpr a -> Error ()
 > checkCondExpr tcEnv (CondExpr p g e) =
 >   checkExpr tcEnv p g &&> checkExpr tcEnv p e
 
-> checkExpr :: TCEnv -> Position -> Expression -> Error ()
-> checkExpr _ _ (Literal _) = return ()
-> checkExpr _ _ (Variable _) = return ()
-> checkExpr _ _ (Constructor _) = return ()
+> checkExpr :: TCEnv -> Position -> Expression a -> Error ()
+> checkExpr _ _ (Literal _ _) = return ()
+> checkExpr _ _ (Variable _ _) = return ()
+> checkExpr _ _ (Constructor _ _) = return ()
 > checkExpr tcEnv p (Paren e) = checkExpr tcEnv p e
 > checkExpr tcEnv p (Typed e ty) =
 >   checkExpr tcEnv p e &&> checkQualType tcEnv p ty
 > checkExpr tcEnv p (Tuple es) = mapE_ (checkExpr tcEnv p) es
-> checkExpr tcEnv p (List es) = mapE_ (checkExpr tcEnv p) es
+> checkExpr tcEnv p (List _ es) = mapE_ (checkExpr tcEnv p) es
 > checkExpr tcEnv p (ListCompr e qs) =
 >   checkExpr tcEnv p e &&> mapE_ (checkStmt tcEnv p) qs
 > checkExpr tcEnv p (EnumFrom e) = checkExpr tcEnv p e
@@ -187,12 +187,12 @@ Kind checking is applied to all type expressions in the program.
 > checkExpr tcEnv p (Case e alts) =
 >   checkExpr tcEnv p e &&> mapE_ (checkAlt tcEnv) alts
 
-> checkStmt :: TCEnv -> Position -> Statement -> Error ()
+> checkStmt :: TCEnv -> Position -> Statement a -> Error ()
 > checkStmt tcEnv p (StmtExpr e) = checkExpr tcEnv p e
 > checkStmt tcEnv p (StmtBind _ e) = checkExpr tcEnv p e
 > checkStmt tcEnv _ (StmtDecl ds) = mapE_ (checkDecl tcEnv) ds
 
-> checkAlt :: TCEnv -> Alt -> Error ()
+> checkAlt :: TCEnv -> Alt a -> Error ()
 > checkAlt tcEnv (Alt _ _ rhs) = checkRhs tcEnv rhs
 
 > checkQualType :: TCEnv -> Position -> QualTypeExpr -> Error ()

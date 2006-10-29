@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Lift.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: Lift.lhs 1986 2006-10-29 16:45:56Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -29,9 +29,10 @@ lifted to the top-level.
 > import SCC
 > import Set
 > import Subst
+> import Typing
 > import Utils
 
-> lift :: ValueEnv -> TrustEnv -> Module -> (Module,ValueEnv,TrustEnv)
+> lift :: ValueEnv -> TrustEnv -> Module Type -> (Module Type,ValueEnv,TrustEnv)
 > lift tyEnv trEnv (Module m es is ds) =
 >   (Module m es is (concatMap liftTopDecl ds'),tyEnv',trEnv')
 >   where (ds',tyEnv',trEnv') =
@@ -54,10 +55,10 @@ variables.
 \begin{verbatim}
 
 > type AbstractState a = StateT ValueEnv (StateT TrustEnv Id) a
-> type AbstractEnv = Env Ident Expression
+> type AbstractEnv = Env Ident (Expression Type)
 
-> abstractModule :: ModuleIdent -> [TopDecl]
->                -> AbstractState ([TopDecl],ValueEnv,TrustEnv)
+> abstractModule :: ModuleIdent -> [TopDecl Type]
+>                -> AbstractState ([TopDecl Type],ValueEnv,TrustEnv)
 > abstractModule m ds =
 >   do
 >     ds' <- mapM (abstractTopDecl m) ds
@@ -65,27 +66,27 @@ variables.
 >     trEnv' <- liftSt fetchSt
 >     return (ds',tyEnv',trEnv')
 
-> abstractTopDecl :: ModuleIdent -> TopDecl -> AbstractState TopDecl
+> abstractTopDecl :: ModuleIdent -> TopDecl Type -> AbstractState (TopDecl Type)
 > abstractTopDecl m (BlockDecl d) =
 >   liftM BlockDecl (abstractDecl m "" [] emptyEnv d)
 > abstractTopDecl _ d = return d
 
-> abstractDecl :: ModuleIdent -> String -> [Ident] -> AbstractEnv -> Decl
->              -> AbstractState Decl
+> abstractDecl :: ModuleIdent -> String -> [Ident] -> AbstractEnv -> Decl Type
+>              -> AbstractState (Decl Type)
 > abstractDecl m _ lvs env (FunctionDecl p f eqs) =
 >   liftM (FunctionDecl p f) (mapM (abstractEquation m lvs env) eqs)
 > abstractDecl m pre lvs env (PatternDecl p t rhs) =
 >   liftM (PatternDecl p t) (abstractRhs m pre lvs env rhs)
 > abstractDecl _ _ _ _ d = return d
 
-> abstractEquation :: ModuleIdent -> [Ident] -> AbstractEnv -> Equation
->                  -> AbstractState Equation
+> abstractEquation :: ModuleIdent -> [Ident] -> AbstractEnv -> Equation Type
+>                  -> AbstractState (Equation Type)
 > abstractEquation m lvs env (Equation p lhs@(FunLhs f ts) rhs) =
 >   liftM (Equation p lhs)
 >         (abstractRhs m (name f ++ ".") (lvs ++ bv ts) env rhs)
 
-> abstractRhs :: ModuleIdent -> String -> [Ident] -> AbstractEnv -> Rhs
->             -> AbstractState Rhs
+> abstractRhs :: ModuleIdent -> String -> [Ident] -> AbstractEnv -> Rhs Type
+>             -> AbstractState (Rhs Type)
 > abstractRhs m pre lvs env (SimpleRhs p e _) =
 >   liftM (flip (SimpleRhs p) []) (abstractExpr m pre lvs env e)
 
@@ -167,48 +168,52 @@ is no need for reordering.
 \begin{verbatim}
 
 > abstractDeclGroup :: ModuleIdent -> String -> [Ident] -> AbstractEnv
->                   -> [Decl] -> Expression -> AbstractState Expression
+>                   -> [Decl Type] -> Expression Type
+>                   -> AbstractState (Expression Type)
 > abstractDeclGroup m pre lvs env ds e =
 >   abstractFunDecls m pre (lvs ++ bv vds) env (scc bv (qfv m) fds) vds e
 >   where (fds,vds) = partition isFunDecl ds
 
 > abstractFunDecls :: ModuleIdent -> String -> [Ident] -> AbstractEnv
->                  -> [[Decl]] -> [Decl] -> Expression
->                  -> AbstractState Expression
+>                  -> [[Decl Type]] -> [Decl Type] -> Expression Type
+>                  -> AbstractState (Expression Type)
 > abstractFunDecls m pre lvs env [] vds e =
 >   do
 >     vds' <- mapM (abstractDecl m pre lvs env) vds
 >     e' <- abstractExpr m pre lvs env e
 >     return (Let vds' e')
 > abstractFunDecls m pre lvs env (fds:fdss) vds e =
->   case fds of
->     [FunctionDecl _ f [Equation _ (FunLhs _ ts) (SimpleRhs _ e' _)]]
->       | all isVarPattern ts && isFunction e'' &&
->         fvs' ++ [mkVar v | VariablePattern v <- ts] == es ->
->           abstractFunDecls m pre lvs env' fdss vds e
->       where (e'',es) = unapply e' []
->             fvs' = map mkVar fvs
->             env' = bindEnv f (apply e'' fvs') env
->     _ ->
->       do
->         fs' <- liftM (\tyEnv -> filter (not . isLifted tyEnv) fs) fetchSt
->         -- update type environment
->         updateSt_ (abstractFunTypes m pre fvs fs')
->         -- update trust annotation environment
->         liftSt (updateSt_ (abstractFunAnnots m pre fs'))
->         fds' <- mapM (abstractFunDecl m pre fvs lvs env')
->                      [d | d <- fds, any (`elem` fs') (bv d)]
->         e' <- abstractFunDecls m pre lvs env' fdss vds e
->         return (Let fds' e')
+>   do
+>     tyEnv <- fetchSt
+>     let tys = map (rawType . flip varType tyEnv) fvs
+>     case fds of
+>       [FunctionDecl _ f [Equation _ (FunLhs _ ts) (SimpleRhs _ e' _)]]
+>         | all isVarPattern ts && isFunction e'' &&
+>             fvs' ++ [mkVar ty v | VariablePattern ty v <- ts] == es ->
+>             abstractFunDecls m pre lvs env' fdss vds e
+>         where (e'',es) = unapply e' []
+>               fvs' = zipWith mkVar tys fvs
+>               env' = bindEnv f (apply e'' fvs') env
+>       _ ->
+>         do
+>           -- update type environment
+>           updateSt_ (abstractFunTypes m pre fvs fs')
+>           -- update trust annotation environment
+>           liftSt (updateSt_ (abstractFunAnnots m pre fs'))
+>           fds' <- mapM (abstractFunDecl m pre (zip tys fvs) lvs env')
+>                        [d | d <- fds, any (`elem` fs') (bv d)]
+>           e' <- abstractFunDecls m pre lvs env' fdss vds e
+>           return (Let fds' e')
+>         where fs' = filter (not . isLifted tyEnv) fs
+>               env' = foldr (bindF (zipWith mkVar tys fvs)) env fs
 >   where fs = bv fds
 >         fvs = filter (`elem` lvs) (toListSet fvsRhs)
->         env' = foldr (bindF (map mkVar fvs)) env fs
->         fvsRhs = unionSets
->           [fromListSet (maybe [v] (qfv m) (lookupEnv v env)) | v <- qfv m fds]
->         bindF fvs f = bindEnv f (apply (mkFun m pre f) fvs)
+>         fvsRhs = fromListSet $
+>           concat [maybe [v] (qfv m) (lookupEnv v env) | v <- qfv m fds]
+>         bindF fvs f = bindEnv f (apply (mkFun m pre undefined f) fvs)
 >         isLifted tyEnv f = null (lookupTopEnv f tyEnv)
->         isFunction (Variable v) = v `notElem` map qualify lvs
->         isFunction (Constructor c) = True
+>         isFunction (Variable _ v) = v `notElem` map qualify lvs
+>         isFunction (Constructor _ c) = True
 >         isFunction _ = False
 
 \end{verbatim}
@@ -245,24 +250,30 @@ variables in order to avoid an inadvertent name capturing.
 >             Just ev -> bindEnv (liftIdent pre f) ev (unbindEnv f env)
 >             Nothing -> env
 
-> abstractFunDecl :: ModuleIdent -> String -> [Ident] -> [Ident]
->                 -> AbstractEnv -> Decl -> AbstractState Decl
+> abstractFunDecl :: ModuleIdent -> String -> [(Type,Ident)] -> [Ident]
+>                 -> AbstractEnv -> Decl Type -> AbstractState (Decl Type)
 > abstractFunDecl m pre fvs lvs env (FunctionDecl p f eqs) =
 >   abstractDecl m pre lvs env (FunctionDecl p f' (map (addVars f') eqs))
 >   where f' = liftIdent pre f
 >         addVars f (Equation p (FunLhs _ ts) rhs) =
->           Equation p (FunLhs f (map VariablePattern fvs ++ ts)) rhs
+>           Equation p (FunLhs f (map (uncurry VariablePattern) fvs ++ ts)) rhs
 > abstractFunDecl m pre _ lvs env (ForeignDecl p cc ie f ty) =
 >   return (ForeignDecl p cc ie (liftIdent pre f) ty)
 
 > abstractExpr :: ModuleIdent -> String -> [Ident] -> AbstractEnv
->              -> Expression -> AbstractState Expression
-> abstractExpr _ _ _ _ (Literal l) = return (Literal l)
-> abstractExpr m pre lvs env (Variable v)
->   | isQualified v = return (Variable v)
->   | otherwise = maybe (return (Variable v)) (abstractExpr m pre lvs env)
->                       (lookupEnv (unqualify v) env)
-> abstractExpr _ _ _ _ (Constructor c) = return (Constructor c)
+>              -> Expression Type -> AbstractState (Expression Type)
+> abstractExpr _ _ _ _ (Literal ty l) = return (Literal ty l)
+> abstractExpr m pre lvs env (Variable ty v)
+>   | isQualified v = return (Variable ty v)
+>   | otherwise =
+>       maybe (return (Variable ty v)) (abstractExpr m pre lvs env . fixType ty)
+>             (lookupEnv (unqualify v) env)
+>   where fixType ty (Variable _ v) = Variable ty v
+>         fixType ty (Constructor _ c) = Constructor ty c
+>         fixType ty (Apply e1 e2) =
+>           Apply (fixType (typeOf e2 `TypeArrow` ty) e1) e2
+>         fixType _ _ = internalError "fixType"
+> abstractExpr _ _ _ _ (Constructor ty c) = return (Constructor ty c)
 > abstractExpr m pre lvs env (Apply e1 e2) =
 >   do
 >     e1' <- abstractExpr m pre lvs env e1
@@ -276,13 +287,13 @@ variables in order to avoid an inadvertent name capturing.
 >     return (Case e' alts')
 > abstractExpr m _ _ _ _ = internalError "abstractExpr"
 
-> abstractAlt :: ModuleIdent -> String -> [Ident] -> AbstractEnv -> Alt
->             -> AbstractState Alt
+> abstractAlt :: ModuleIdent -> String -> [Ident] -> AbstractEnv -> Alt Type
+>             -> AbstractState (Alt Type)
 > abstractAlt m pre lvs env (Alt p t rhs) =
 >   liftM (Alt p t) (abstractRhs m pre (lvs ++ bv t) env rhs)
 
 > abstractCondExpr :: ModuleIdent -> String -> [Ident] -> AbstractEnv
->                  -> CondExpr -> AbstractState CondExpr
+>                  -> CondExpr Type -> AbstractState (CondExpr Type)
 > abstractCondExpr m pre lvs env (CondExpr p g e) =
 >   do
 >     g' <- abstractExpr m pre lvs env g
@@ -295,37 +306,37 @@ After the abstraction pass, all local function declarations are lifted
 to the top-level.
 \begin{verbatim}
 
-> liftTopDecl :: TopDecl -> [TopDecl]
+> liftTopDecl :: TopDecl a -> [TopDecl a]
 > liftTopDecl (BlockDecl d) = map BlockDecl (liftFunDecl d)
 > liftTopDecl d = [d]
 
-> liftFunDecl :: Decl -> [Decl]
+> liftFunDecl :: Decl a -> [Decl a]
 > liftFunDecl (FunctionDecl p f eqs) = (FunctionDecl p f eqs' : concat dss')
 >   where (eqs',dss') = unzip (map liftEquation eqs)
 > liftFunDecl d = [d]
 
-> liftVarDecl :: Decl -> (Decl,[Decl])
+> liftVarDecl :: Decl a -> (Decl a,[Decl a])
 > liftVarDecl (PatternDecl p t rhs) = (PatternDecl p t rhs',ds')
 >   where (rhs',ds') = liftRhs rhs
 > liftVarDecl (FreeDecl p vs) = (FreeDecl p vs,[])
 
-> liftEquation :: Equation -> (Equation,[Decl])
+> liftEquation :: Equation a -> (Equation a,[Decl a])
 > liftEquation (Equation p lhs rhs) = (Equation p lhs rhs',ds')
 >   where (rhs',ds') = liftRhs rhs
 
-> liftRhs :: Rhs -> (Rhs,[Decl])
+> liftRhs :: Rhs a -> (Rhs a,[Decl a])
 > liftRhs (SimpleRhs p e _) = (SimpleRhs p e' [],ds')
 >   where (e',ds') = liftExpr e
 
-> liftDeclGroup :: [Decl] -> ([Decl],[Decl])
+> liftDeclGroup :: [Decl a] -> ([Decl a],[Decl a])
 > liftDeclGroup ds = (vds',concat (map liftFunDecl fds ++ dss'))
 >   where (fds,vds) = partition isFunDecl ds
 >         (vds',dss') = unzip (map liftVarDecl vds)
 
-> liftExpr :: Expression -> (Expression,[Decl])
-> liftExpr (Literal l) = (Literal l,[])
-> liftExpr (Variable v) = (Variable v,[])
-> liftExpr (Constructor c) = (Constructor c,[])
+> liftExpr :: Expression a -> (Expression a,[Decl a])
+> liftExpr (Literal a l) = (Literal a l,[])
+> liftExpr (Variable a v) = (Variable a v,[])
+> liftExpr (Constructor a c) = (Constructor a c,[])
 > liftExpr (Apply e1 e2) = (Apply e1' e2',ds' ++ ds'')
 >   where (e1',ds') = liftExpr e1
 >         (e2',ds'') = liftExpr e2
@@ -338,11 +349,11 @@ to the top-level.
 >         (alts',dss') = unzip (map liftAlt alts)
 > liftExpr _ = internalError "liftExpr"
 
-> liftAlt :: Alt -> (Alt,[Decl])
+> liftAlt :: Alt a -> (Alt a,[Decl a])
 > liftAlt (Alt p t rhs) = (Alt p t rhs',ds')
 >   where (rhs',ds') = liftRhs rhs
 
-> liftCondExpr :: CondExpr -> (CondExpr,[Decl])
+> liftCondExpr :: CondExpr a -> (CondExpr a,[Decl a])
 > liftCondExpr (CondExpr p g e) = (CondExpr p g' e',ds' ++ ds'')
 >   where (g',ds') = liftExpr g
 >         (e',ds'') = liftExpr e
@@ -351,30 +362,30 @@ to the top-level.
 \paragraph{Auxiliary definitions}
 \begin{verbatim}
 
-> isFunDecl :: Decl -> Bool
+> isFunDecl :: Decl a -> Bool
 > isFunDecl (FunctionDecl _ _ _) = True
 > isFunDecl (ForeignDecl _ _ _ _ _) = True
 > isFunDecl _ = False
 
-> isVarPattern :: ConstrTerm -> Bool
-> isVarPattern (LiteralPattern _) = False
-> isVarPattern (VariablePattern _) = True
-> isVarPattern (ConstructorPattern _ _) = False
+> isVarPattern :: ConstrTerm a -> Bool
+> isVarPattern (LiteralPattern _ _) = False
+> isVarPattern (VariablePattern _ _) = True
+> isVarPattern (ConstructorPattern _ _ _) = False
 > isVarPattern (AsPattern _ t) = isVarPattern t
 
-> mkFun :: ModuleIdent -> String -> Ident -> Expression
-> mkFun m pre f = Variable (qualifyWith m (liftIdent pre f))
+> mkFun :: ModuleIdent -> String -> a -> Ident -> Expression a
+> mkFun m pre ty f = Variable ty (qualifyWith m (liftIdent pre f))
 
-> mkVar :: Ident -> Expression
-> mkVar v = Variable (qualify v)
+> mkVar :: a -> Ident -> Expression a
+> mkVar ty v = Variable ty (qualify v)
 
-> apply :: Expression -> [Expression] -> Expression
+> apply :: Expression a -> [Expression a] -> Expression a
 > apply = foldl Apply
 
-> unapply :: Expression -> [Expression] -> (Expression,[Expression])
-> unapply (Literal l) es = (Literal l,es)
-> unapply (Variable v) es = (Variable v,es)
-> unapply (Constructor c) es = (Constructor c,es)
+> unapply :: Expression a -> [Expression a] -> (Expression a,[Expression a])
+> unapply (Literal a l) es = (Literal a l,es)
+> unapply (Variable a v) es = (Variable a v,es)
+> unapply (Constructor a c) es = (Constructor a c,es)
 > unapply (Apply e1 e2) es = unapply e1 (e2:es)
 > unapply (Let ds e) es = (Let ds e,es)
 > unapply (Case e alts) es = (Case e alts,es)

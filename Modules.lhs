@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: Modules.lhs 1986 2006-10-29 16:45:56Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -87,9 +87,9 @@ declaration to the module.
 >         cm = caseMode opts
 >         ws = warn opts
 
-> loadModule :: (Module -> Module) -> [FilePath] -> CaseMode -> [Warn]
+> loadModule :: (Module () -> Module ()) -> [FilePath] -> CaseMode -> [Warn]
 >            -> FilePath
->            -> ErrorT IO (ModuleEnv,TCEnv,ValueEnv,Module,Interface)
+>            -> ErrorT IO (ModuleEnv,TCEnv,ValueEnv,Module Type,Interface)
 > loadModule f paths caseMode warn fn =
 >   do
 >     m <- liftM f $ liftErr (readFile fn) >>= okM . parseModule fn
@@ -98,16 +98,17 @@ declaration to the module.
 >     liftErr $ mapM_ putErrLn $ warnModule caseMode warn m'
 >     return (bindModule intf mEnv,tcEnv,tyEnv,m',intf)
 
-> parseModule :: FilePath -> String -> Error Module
+> parseModule :: FilePath -> String -> Error (Module ())
 > parseModule fn s =
 >   unlitLiterate fn s >>= liftM (importPrelude fn) . parseSource fn
 
-> loadInterfaces :: [FilePath] -> Module -> ErrorT IO ModuleEnv
+> loadInterfaces :: [FilePath] -> Module a -> ErrorT IO ModuleEnv
 > loadInterfaces paths (Module m _ is _) =
 >   foldM (loadInterface paths [m]) emptyEnv
 >         [P p m | ImportDecl p m _ _ _ <- is]
 
-> checkModule :: ModuleEnv -> Module -> Error (TCEnv,ValueEnv,Module,Interface)
+> checkModule :: ModuleEnv -> Module a
+>             -> Error (TCEnv,ValueEnv,Module Type,Interface)
 > checkModule mEnv (Module m es is ds) =
 >   do
 >     (pEnv,tcEnv,iEnv,tyEnv) <- importModules mEnv is
@@ -116,19 +117,19 @@ declaration to the module.
 >     es' <- checkExports m is tEnv vEnv es
 >     (pEnv',ds''') <- precCheck m pEnv $ rename ds''
 >     tcEnv' <- kindCheck m tcEnv ds'''
->     tyEnv' <- typeCheck m tcEnv' iEnv' tyEnv ds'''
+>     (tyEnv',ds'''') <- typeCheck m tcEnv' iEnv' tyEnv ds'''
 >     let (pEnv'',tcEnv'',tyEnv'') = qualifyEnv mEnv m pEnv' tcEnv' tyEnv'
 >     return (tcEnv'',tyEnv'',
->             Module m (Just es') is (qual tyEnv' ds'''),
+>             Module m (Just es') is (qual tyEnv' ds''''),
 >             exportInterface m es' pEnv'' tcEnv'' iEnv' tyEnv'')
 
-> warnModule :: CaseMode -> [Warn] -> Module -> [String]
+> warnModule :: CaseMode -> [Warn] -> Module a -> [String]
 > warnModule caseMode warn m =
 >   caseCheck caseMode m ++ unusedCheck warn m ++
 >   shadowCheck warn m ++ overlapCheck warn m
 
 > transModule :: Bool -> Bool -> Trust -> ModuleEnv -> TCEnv -> ValueEnv
->             -> Module -> (Either CFile [CFile],[(Dump,Doc)])
+>             -> Module Type -> (Either CFile [CFile],[(Dump,Doc)])
 > transModule split debug tr mEnv tcEnv tyEnv (Module m es is ds) =
 >   (ccode,dumps)
 >   where trEnv = trustEnv tr ds
@@ -215,10 +216,10 @@ compilation of a goal is similar to that of a module.
 >   do
 >     (_,_,tyEnv,m,Goal _ e _) <-
 >       loadGoal (importPath opts) (caseMode opts) (warn opts) (Just g) fn
->     liftErr $ print (ppType m (typeOf tyEnv e))
+>     liftErr $ print (ppType m (typeOf e))
 
 > loadGoal :: [FilePath] -> CaseMode -> [Warn] -> Maybe String -> Maybe FilePath
->          -> ErrorT IO (ModuleEnv,TCEnv,ValueEnv,ModuleIdent,Goal)
+>          -> ErrorT IO (ModuleEnv,TCEnv,ValueEnv,ModuleIdent,Goal Type)
 > loadGoal paths caseMode warn g fn =
 >   do
 >     (mEnv,m,is) <- loadGoalModule paths g fn
@@ -226,7 +227,7 @@ compilation of a goal is similar to that of a module.
 >       okM $ maybe (return mainGoal) parseGoal g >>= checkGoal mEnv is
 >     liftErr $ mapM_ putErrLn $ warnGoal caseMode warn g'
 >     return (mEnv,tcEnv,tyEnv,m,g')
->   where mainGoal = Goal (first "") (Variable (qualify mainId)) []
+>   where mainGoal = Goal (first "") (Variable () (qualify mainId)) []
 
 > loadGoalModule :: [FilePath] -> Maybe String -> Maybe FilePath
 >                -> ErrorT IO (ModuleEnv,ModuleIdent,[ImportDecl])
@@ -247,24 +248,25 @@ compilation of a goal is similar to that of a module.
 >   where p = first ""
 >         m = preludeMIdent
 
-> checkGoal :: ModuleEnv -> [ImportDecl] -> Goal -> Error (TCEnv,ValueEnv,Goal)
+> checkGoal :: ModuleEnv -> [ImportDecl] -> Goal a
+>           -> Error (TCEnv,ValueEnv,Goal Type)
 > checkGoal mEnv is g =
 >   do
 >     (pEnv,tcEnv,iEnv,tyEnv) <- importModules mEnv is
 >     g' <- typeSyntaxCheckGoal tcEnv g >>=
 >           syntaxCheckGoal tyEnv >>=
 >           precCheckGoal pEnv . renameGoal
->     tyEnv' <- kindCheckGoal tcEnv g' >>
->               typeCheckGoal tcEnv iEnv tyEnv g'
+>     (tyEnv',g'') <- kindCheckGoal tcEnv g' >>
+>                     typeCheckGoal tcEnv iEnv tyEnv g'
 >     let (_,tcEnv',tyEnv'') = qualifyEnv mEnv emptyMIdent pEnv tcEnv tyEnv'
->     return (tcEnv',tyEnv'',qualGoal tyEnv' g')
+>     return (tcEnv',tyEnv'',qualGoal tyEnv' g'')
 
-> warnGoal :: CaseMode -> [Warn] -> Goal -> [String]
+> warnGoal :: CaseMode -> [Warn] -> Goal a -> [String]
 > warnGoal caseMode warn g =
 >   caseCheckGoal caseMode g ++ unusedCheckGoal warn g ++
 >   shadowCheckGoal warn g ++ overlapCheckGoal warn g
 
-> transGoal :: Bool -> Trust -> ModuleEnv -> TCEnv -> ValueEnv -> Goal
+> transGoal :: Bool -> Trust -> ModuleEnv -> TCEnv -> ValueEnv -> Goal Type
 >           -> (CFile,[(Dump,Doc)])
 > transGoal debug tr mEnv tcEnv tyEnv g = (mergeCFile ccode ccode',dumps)
 >   where m = emptyMIdent
@@ -325,7 +327,7 @@ import the prelude explicitly with an import declaration. Obviously,
 no import declaration is added to the prelude itself.
 \begin{verbatim}
 
-> importPrelude :: FilePath -> Module -> Module
+> importPrelude :: FilePath -> Module a -> Module a
 > importPrelude fn (Module m es is ds) = Module m es is' ds
 >   where is'
 >           | preludeMIdent `elem` (m : [m | ImportDecl _ m _ _ _ <- is]) = is

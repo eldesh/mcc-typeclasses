@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 1980 2006-10-23 20:13:04Z wlux $
+% $Id: UnusedCheck.lhs 1986 2006-10-29 16:45:56Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -24,12 +24,12 @@ then check for unused variables in the code and report warnings for
 them according to the compiler options.
 \begin{verbatim}
 
-> unusedCheck :: [Warn] -> Module -> [String]
+> unusedCheck :: [Warn] -> Module a -> [String]
 > unusedCheck us (Module m (Just (Exporting _ es)) _ ds) =
 >   reportUnused us $ unused (used m es (used m ds zeroSet)) noPosition ds []
 >   where noPosition = error "noPosition"
 
-> unusedCheckGoal :: [Warn] -> Goal -> [String]
+> unusedCheckGoal :: [Warn] -> Goal a -> [String]
 > unusedCheckGoal us (Goal p e ds) =
 >   reportUnused us $ unused (used emptyMIdent g' zeroSet) p g' []
 >   where g' = SimpleRhs p e ds
@@ -82,7 +82,7 @@ implemented by a traversal of the syntax tree.
 >   used m (ExportTypeWith tc cs) = used m (map (qualifyLike tc) cs)
 >   unused _ _ _ = id
 
-> instance SyntaxTree TopDecl where
+> instance SyntaxTree (TopDecl a) where
 >   used _ (DataDecl _ _ _ _) = id
 >   used _ (NewtypeDecl _ _ _ _) = id
 >   used _ (TypeDecl _ _ _ _) = id
@@ -106,7 +106,7 @@ implemented by a traversal of the syntax tree.
 >   used _ _ = id
 >   unused used _ (NewConstrDecl p c _) = unusedVars Data used p [c]
 
-> instance SyntaxTree Decl where
+> instance SyntaxTree (Decl a) where
 >   used m (FunctionDecl _ _ eqs) = used m eqs
 >   used m (PatternDecl _ t rhs) = used m t . used m rhs
 >   used _ _ = id
@@ -114,7 +114,7 @@ implemented by a traversal of the syntax tree.
 >   unused used _ (FunctionDecl p f eqs) =
 >     unusedVars Decl used p [f] . unused used p eqs
 >   unused used _ (ForeignDecl p _ _ f _) = unusedVars Decl used p [f]
->   unused used _ (PatternDecl p (VariablePattern v) rhs)
+>   unused used _ (PatternDecl p (VariablePattern _ v) rhs)
 >     | isAnonId v = ([Pattern p] ++)
 >     | otherwise = unusedVars Decl used p [v]
 >   unused used _ (PatternDecl p t rhs) =
@@ -124,48 +124,48 @@ implemented by a traversal of the syntax tree.
 >   unused used _ (FreeDecl p xs) = unusedVars Decl used p xs
 >   unused _ _ _ = id
 
-> instance SyntaxTree Equation where
+> instance SyntaxTree (Equation a) where
 >   used m (Equation _ lhs rhs) = used m lhs . used m rhs
 >   unused used _ (Equation p lhs rhs) = unused used p lhs . unused used p rhs
 
-> instance SyntaxTree Lhs where
+> instance SyntaxTree (Lhs a) where
 >   used m (FunLhs _ ts) = used m ts
 >   used m (OpLhs t1 _ t2) = used m t1 . used m t2
 >   used m (ApLhs lhs ts) = used m lhs . used m ts
 >   unused used p lhs = unusedVars Var used p (filter (not . isAnonId) (bv lhs))
 
-> instance SyntaxTree ConstrTerm where
->   used _ (LiteralPattern _) = id
->   used _ (NegativePattern _) = id
->   used m (VariablePattern _) = id
->   used m (ConstructorPattern c ts) = used m c . used m ts
->   used m (InfixPattern t1 op t2) = used m t1 . used m op . used m t2
+> instance SyntaxTree (ConstrTerm a) where
+>   used _ (LiteralPattern _ _) = id
+>   used _ (NegativePattern _ _) = id
+>   used _ (VariablePattern _ _) = id
+>   used m (ConstructorPattern _ c ts) = used m c . used m ts
+>   used m (InfixPattern _ t1 op t2) = used m t1 . used m op . used m t2
 >   used m (ParenPattern t) = used m t
 >   used m (TuplePattern ts) = used m ts
->   used m (ListPattern ts) = used m ts
+>   used m (ListPattern _ ts) = used m ts
 >   used m (AsPattern _ t) = used m t
 >   used m (LazyPattern t) = used m t
 >
 >   unused used p t = unusedVars Var used p (filter (not . isAnonId) (bv t))
 
-> instance SyntaxTree Rhs where
+> instance SyntaxTree (Rhs a) where
 >   used m (SimpleRhs _ e ds) = used m ds . used m e
 >   used m (GuardedRhs es ds) = used m ds . used m es
 >   unused used _ (SimpleRhs p e ds) = unused used p ds . unused used p e
 >   unused used p (GuardedRhs es ds) = unused used p ds . unused used p es
 
-> instance SyntaxTree CondExpr where
+> instance SyntaxTree (CondExpr a) where
 >   used m (CondExpr _ g e) = used m g . used m e
 >   unused used _ (CondExpr p g e) = unused used p g . unused used p e
 
-> instance SyntaxTree Expression where
->   used _ (Literal _) = id
->   used m (Variable x) = used m x
->   used m (Constructor c) = used m c
+> instance SyntaxTree (Expression a) where
+>   used _ (Literal _ _) = id
+>   used m (Variable _ x) = used m x
+>   used m (Constructor _ c) = used m c
 >   used m (Paren e) = used m e
 >   used m (Typed e _) = used m e
 >   used m (Tuple es) = used m es
->   used m (List es) = used m es
+>   used m (List _ es) = used m es
 >   used m (ListCompr e qs) = used m qs . used m e
 >   used m (EnumFrom e) = used m e
 >   used m (EnumFromThen e1 e2) = used m e1 . used m e2
@@ -182,13 +182,13 @@ implemented by a traversal of the syntax tree.
 >   used m (IfThenElse e1 e2 e3) = used m e1 . used m e2 . used m e3
 >   used m (Case e as) = used m e . used m as
 >
->   unused _ _ (Literal _) = id
->   unused _ _ (Variable _) = id
->   unused _ _ (Constructor _) = id
+>   unused _ _ (Literal _ _) = id
+>   unused _ _ (Variable _ _) = id
+>   unused _ _ (Constructor _ _) = id
 >   unused used p (Paren e) = unused used p e
 >   unused used p (Typed e _) = unused used p e
 >   unused used p (Tuple es) = unused used p es
->   unused used p (List es) = unused used p es
+>   unused used p (List _ es) = unused used p es
 >   unused used p (ListCompr e qs) = unused used p qs . unused used p e
 >   unused used p (EnumFrom e) = unused used p e
 >   unused used p (EnumFromThen e1 e2) = unused used p e1 . unused used p e2
@@ -207,7 +207,7 @@ implemented by a traversal of the syntax tree.
 >     unused used p e1 . unused used p e2 . unused used p e3
 >   unused used p (Case e as) = unused used p e . unused used p as
 
-> instance SyntaxTree Statement where
+> instance SyntaxTree (Statement a) where
 >   used m (StmtExpr e) = used m e
 >   used m (StmtBind t e) = used m t . used m e
 >   used m (StmtDecl ds) = used m ds
@@ -215,7 +215,7 @@ implemented by a traversal of the syntax tree.
 >   unused used p (StmtBind t e) = unused used p t . unused used p e
 >   unused used p (StmtDecl ds) = unused used p ds
 
-> instance SyntaxTree Alt where
+> instance SyntaxTree (Alt a) where
 >   used m (Alt _ t rhs) = used m t . used m rhs
 >   unused used _ (Alt p t rhs) = unused used p t . unused used p rhs
 

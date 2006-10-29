@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Trust.lhs 1849 2006-02-07 14:17:31Z wlux $
+% $Id: Trust.lhs 1986 2006-10-29 16:45:56Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -39,10 +39,10 @@ the local functions \texttt{h} and \texttt{i} are trusted, but
 \texttt{g} is not.
 \begin{verbatim}
 
-> trustEnv :: Trust -> [TopDecl] -> TrustEnv
+> trustEnv :: Trust -> [TopDecl a] -> TrustEnv
 > trustEnv tr ds = trust tr [d | BlockDecl d <- ds] emptyEnv
 
-> trustEnvGoal :: Trust -> Goal -> TrustEnv
+> trustEnvGoal :: Trust -> Goal a -> TrustEnv
 > trustEnvGoal tr (Goal _ e ds) = trust tr e (trust tr ds emptyEnv)
 
 > class SyntaxTree a where
@@ -54,7 +54,7 @@ the local functions \texttt{h} and \texttt{i} are trusted, but
 > instance SyntaxTree a => SyntaxTree [a] where
 >   trust = trustList
 
-> instance SyntaxTree Decl where
+> instance SyntaxTree (Decl a) where
 >   trust tr (FunctionDecl _ f eqs) env =
 >     case lookupEnv f env of
 >       Just tr' -> trust tr' eqs env
@@ -68,24 +68,24 @@ the local functions \texttt{h} and \texttt{i} are trusted, but
 >             foldr ($) env
 >                   [bindEnv f tr | TrustAnnot _ tr (Just fs) <- ds, f <- fs]
 
-> instance SyntaxTree Equation where
+> instance SyntaxTree (Equation a) where
 >   trust tr (Equation _ _ rhs) = trust tr rhs
 
-> instance SyntaxTree Rhs where
+> instance SyntaxTree (Rhs a) where
 >   trust tr (SimpleRhs _ e ds) = trust tr e . trust tr ds
 >   trust tr (GuardedRhs es ds) = trust tr es . trust tr ds
 
-> instance SyntaxTree CondExpr where
+> instance SyntaxTree (CondExpr a) where
 >   trust tr (CondExpr _ g e) = trust tr g . trust tr e
 
-> instance SyntaxTree Expression where
->   trust _ (Literal _) = id
->   trust _ (Variable _) = id
->   trust _ (Constructor _) = id
+> instance SyntaxTree (Expression a) where
+>   trust _ (Literal _ _) = id
+>   trust _ (Variable _ _) = id
+>   trust _ (Constructor _ _) = id
 >   trust tr (Paren e) = trust tr e
 >   trust tr (Typed e _) = trust tr e
 >   trust tr (Tuple es) = trust tr es
->   trust tr (List es) = trust tr es
+>   trust tr (List _ es) = trust tr es
 >   trust tr (ListCompr e qs) = trust tr e . trust tr qs
 >   trust tr (EnumFrom e) = trust tr e
 >   trust tr (EnumFromThen e1 e2) = trust tr e1 . trust tr e2
@@ -102,12 +102,12 @@ the local functions \texttt{h} and \texttt{i} are trusted, but
 >   trust tr (IfThenElse e1 e2 e3) = trust tr e1 . trust tr e2 . trust tr e3
 >   trust tr (Case e as) = trust tr e . trust tr as
 
-> instance SyntaxTree Statement where
+> instance SyntaxTree (Statement a) where
 >   trust tr (StmtExpr e) = trust tr e
 >   trust tr (StmtDecl ds) = trust tr ds
 >   trust tr (StmtBind _ e) = trust tr e
 
-> instance SyntaxTree Alt where
+> instance SyntaxTree (Alt a) where
 >   trust tr (Alt _ _ rhs) = trust tr rhs
 
 \end{verbatim}

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 1981 2006-10-23 22:42:43Z wlux $
+% $Id: ILTrans.lhs 1986 2006-10-29 16:45:56Z wlux $
 %
 % Copyright (c) 1999-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -38,11 +38,11 @@ include any alias types. On the other hand, we introduce new type
 synonyms in place of newtype declarations (see Sect.~\ref{sec:IL}).
 \begin{verbatim}
 
-> ilTrans :: ValueEnv -> Module -> IL.Module
+> ilTrans :: ValueEnv -> Module a -> IL.Module
 > ilTrans tyEnv (Module m _ _ ds) = IL.Module m (imports m ds') ds'
 >   where ds' = concatMap (translTopDecl m tyEnv) ds
 
-> translTopDecl :: ModuleIdent -> ValueEnv -> TopDecl -> [IL.Decl]
+> translTopDecl :: ModuleIdent -> ValueEnv -> TopDecl a -> [IL.Decl]
 > translTopDecl m tyEnv (DataDecl _ tc tvs cs) = [translData m tyEnv tc tvs cs]
 > translTopDecl m tyEnv (NewtypeDecl _ tc tvs nc) =
 >   translNewtype m tyEnv tc tvs nc
@@ -51,7 +51,7 @@ synonyms in place of newtype declarations (see Sect.~\ref{sec:IL}).
 > translTopDecl _ _ (InstanceDecl _ _ _) = []
 > translTopDecl m tyEnv (BlockDecl d) = translDecl m tyEnv d
 
-> translDecl :: ModuleIdent -> ValueEnv -> Decl -> [IL.Decl]
+> translDecl :: ModuleIdent -> ValueEnv -> Decl a -> [IL.Decl]
 > translDecl m tyEnv (FunctionDecl _ f eqs) = [translFunction m tyEnv f eqs]
 > translDecl m tyEnv (ForeignDecl _ cc ie f _) =
 >   [translForeign m tyEnv f cc (fromJust ie)]
@@ -163,7 +163,7 @@ computed for its first argument.
 
 > type RenameEnv = Env Ident Ident
 
-> translFunction :: ModuleIdent -> ValueEnv -> Ident -> [Equation] -> IL.Decl
+> translFunction :: ModuleIdent -> ValueEnv -> Ident -> [Equation a] -> IL.Decl
 > translFunction m tyEnv f eqs =
 >   IL.FunctionDecl (qualifyWith m f) vs (translType ty)
 >                   (match IL.Flex vs (map (translEquation tyEnv vs vs'') eqs))
@@ -171,18 +171,18 @@ computed for its first argument.
 >         vs = if isSelectorId f then translArgs eqs vs' else vs'
 >         (vs',vs'') = splitAt (arrowArity ty) (argNames (mkIdent ""))
 
-> translArgs :: [Equation] -> [Ident] -> [Ident]
+> translArgs :: [Equation a] -> [Ident] -> [Ident]
 > translArgs [Equation _ (FunLhs _ (t:ts)) _] (v:_) =
 >   v : map (translArg (bindRenameEnv v t emptyEnv)) ts
->   where translArg env (VariablePattern v) = fromJust (lookupEnv v env)
+>   where translArg env (VariablePattern _ v) = fromJust (lookupEnv v env)
 
-> translEquation :: ValueEnv -> [Ident] -> [Ident] -> Equation
+> translEquation :: ValueEnv -> [Ident] -> [Ident] -> Equation a
 >                -> ([NestedTerm],IL.Expression)
 > translEquation tyEnv vs vs' (Equation _ (FunLhs _ ts) rhs) =
 >   (zipWith translTerm vs ts,
 >    translRhs tyEnv vs' (foldr2 bindRenameEnv emptyEnv vs ts) rhs)
 
-> translRhs :: ValueEnv -> [Ident] -> RenameEnv -> Rhs -> IL.Expression
+> translRhs :: ValueEnv -> [Ident] -> RenameEnv -> Rhs a -> IL.Expression
 > translRhs tyEnv vs env (SimpleRhs _ e _) = translExpr tyEnv vs env e
 
 \end{verbatim}
@@ -226,21 +226,21 @@ position in the remaining arguments. If one is found,
 > translLiteral (Float f) = IL.Float f
 > translLiteral _ = internalError "translLiteral"
 
-> translTerm :: Ident -> ConstrTerm -> NestedTerm
-> translTerm _ (LiteralPattern l) =
+> translTerm :: Ident -> ConstrTerm a -> NestedTerm
+> translTerm _ (LiteralPattern _ l) =
 >   NestedTerm (IL.LiteralPattern (translLiteral l)) []
-> translTerm v (VariablePattern _) = NestedTerm (IL.VariablePattern v) []
-> translTerm v (ConstructorPattern c ts) =
+> translTerm v (VariablePattern _ _) = NestedTerm (IL.VariablePattern v) []
+> translTerm v (ConstructorPattern _ c ts) =
 >   NestedTerm (IL.ConstructorPattern c (zipWith const vs ts))
 >              (zipWith translTerm vs ts)
 >   where vs = argNames v
 > translTerm v (AsPattern _ t) = translTerm v t
 > translTerm _ _ = internalError "translTerm"
 
-> bindRenameEnv :: Ident -> ConstrTerm -> RenameEnv -> RenameEnv
-> bindRenameEnv _ (LiteralPattern _) env = env
-> bindRenameEnv v (VariablePattern v') env = bindEnv v' v env
-> bindRenameEnv v (ConstructorPattern _ ts) env =
+> bindRenameEnv :: Ident -> ConstrTerm a -> RenameEnv -> RenameEnv
+> bindRenameEnv _ (LiteralPattern _ _) env = env
+> bindRenameEnv v (VariablePattern _ v') env = bindEnv v' v env
+> bindRenameEnv v (ConstructorPattern _ _ ts) env =
 >   foldr2 bindRenameEnv env (argNames v) ts
 > bindRenameEnv v (AsPattern v' t) env = bindEnv v' v (bindRenameEnv v t env)
 > bindRenameEnv _ _ env = internalError "bindRenameEnv"
@@ -322,21 +322,22 @@ desugaring, but $\eta$-expansion and optimization may introduce
 further possibilities for this transformation.
 \begin{verbatim}
 
-> translExpr :: ValueEnv -> [Ident] -> RenameEnv -> Expression -> IL.Expression
-> translExpr _ _ _ (Literal l) = IL.Literal (translLiteral l)
-> translExpr tyEnv _ env (Variable v) =
+> translExpr :: ValueEnv -> [Ident] -> RenameEnv -> Expression a
+>            -> IL.Expression
+> translExpr _ _ _ (Literal _ l) = IL.Literal (translLiteral l)
+> translExpr tyEnv _ env (Variable _ v) =
 >   case lookupVar v env of
 >     Just v' -> IL.Variable v'
 >     Nothing -> IL.Function v (arrowArity (rawType (funType v tyEnv)))
 >   where lookupVar v env
 >           | isQualified v = Nothing
 >           | otherwise = lookupEnv (unqualify v) env
-> translExpr tyEnv _ _ (Constructor c)
+> translExpr tyEnv _ _ (Constructor _ c)
 >   | isNewtypeConstr tyEnv c = IL.Function c 1
 >   | otherwise = IL.Constructor c (arrowArity (rawType (conType c tyEnv)))
 > translExpr tyEnv vs env (Apply e1 e2) =
 >   case e1 of
->     Constructor c | isNewtypeConstr tyEnv c -> translExpr tyEnv vs env e2
+>     Constructor _ c | isNewtypeConstr tyEnv c -> translExpr tyEnv vs env e2
 >     _ -> IL.Apply (translExpr tyEnv vs env e1) (translExpr tyEnv vs env e2)
 > translExpr tyEnv vs env (Let ds e) =
 >   case ds of
@@ -347,7 +348,7 @@ further possibilities for this transformation.
 >   where e' = translExpr tyEnv vs env' e
 >         env' = foldr2 bindEnv env bvs bvs
 >         bvs = bv ds
->         translBinding env (PatternDecl _ (VariablePattern v) rhs) =
+>         translBinding env (PatternDecl _ (VariablePattern _ v) rhs) =
 >           IL.Binding v (translRhs tyEnv vs env rhs)
 > translExpr tyEnv (v:vs) env (Case e alts) =
 >   caseExpr (translExpr tyEnv vs env e) (map (translAlt tyEnv vs env v) alts)
@@ -357,7 +358,7 @@ further possibilities for this transformation.
 >           | otherwise = IL.Case IL.Rigid e alts
 > translExpr _ _ _ _ = internalError "translExpr"
 
-> translAlt :: ValueEnv -> [Ident] -> RenameEnv -> Ident -> Alt -> IL.Alt
+> translAlt :: ValueEnv -> [Ident] -> RenameEnv -> Ident -> Alt a -> IL.Alt
 > translAlt tyEnv vs env v (Alt _ t rhs) =
 >   IL.Alt (pattern (translTerm v t))
 >          (translRhs tyEnv vs (bindRenameEnv v t env) rhs)

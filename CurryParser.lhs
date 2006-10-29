@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 1984 2006-10-27 13:34:07Z wlux $
+% $Id: CurryParser.lhs 1986 2006-10-29 16:45:56Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -27,10 +27,10 @@ combinators described in appendix~\ref{sec:ll-parsecomb}.
 \paragraph{Modules}
 \begin{verbatim}
 
-> parseSource :: FilePath -> String -> Error Module
+> parseSource :: FilePath -> String -> Error (Module ())
 > parseSource fn = applyParser (parseModule fn) lexer fn
 
-> parseHeader :: FilePath -> String -> Error Module
+> parseHeader :: FilePath -> String -> Error (Module ())
 > parseHeader fn = prefixParser (moduleHeader fn <*->
 >                               (leftBrace `opt` undefined) <*>
 >                                many (importDecl <*-> many semicolon) <*>
@@ -38,11 +38,11 @@ combinators described in appendix~\ref{sec:ll-parsecomb}.
 >                               lexer
 >                               fn
 
-> parseModule :: FilePath -> Parser Token Module a
+> parseModule :: FilePath -> Parser Token (Module ()) a
 > parseModule fn = uncurry <$> moduleHeader fn <*> layout moduleDecls
 
 > moduleHeader :: FilePath
->              -> Parser Token ([ImportDecl] -> [TopDecl] -> Module) a
+>              -> Parser Token ([ImportDecl] -> [TopDecl ()] -> Module ()) a
 > moduleHeader fn = Module <$-> token KW_module
 >                          <*> (mIdent <?> "module name expected")
 >                          <*> (Just <$> exportSpec `opt` Nothing)
@@ -59,7 +59,7 @@ combinators described in appendix~\ref{sec:ll-parsecomb}.
 >   where spec = ExportTypeAll <$-> token DotDot
 >            <|> flip ExportTypeWith <$> con `sepBy` comma
 
-> moduleDecls :: Parser Token ([ImportDecl],[TopDecl]) a
+> moduleDecls :: Parser Token ([ImportDecl],[TopDecl ()]) a
 > moduleDecls = impDecl <$> importDecl
 >                       <*> (semicolon <-*> moduleDecls `opt` ([],[]))
 >           <|> (,) [] <$> topDecl `sepBy` semicolon
@@ -121,41 +121,40 @@ directory path to the module is ignored.
 \paragraph{Goals}
 \begin{verbatim}
 
-> parseGoal :: String -> Error Goal
+> parseGoal :: String -> Error (Goal ())
 > parseGoal s = applyParser goal lexer "" s
 
-> goal :: Parser Token Goal a
+> goal :: Parser Token (Goal ()) a
 > goal = Goal <$> position <*> expr <*> localDefs
 
 \end{verbatim}
 \paragraph{Declarations}
 \begin{verbatim}
 
-> topDecl :: Parser Token TopDecl a
+> topDecl :: Parser Token (TopDecl ()) a
 > topDecl = dataDecl <|> newtypeDecl <|> typeDecl
 >       <|> classDecl <|> instanceDecl <|> BlockDecl <$> blockDecl
 >   where blockDecl = infixDecl <|> functionDecl <|> foreignDecl
 >                 <|> trustAnnotation
 
-> localDefs :: Parser Token [Decl] a
+> localDefs :: Parser Token [Decl ()] a
 > localDefs = token KW_where <-*> layout valueDecls
 >       `opt` []
 
-> valueDecls :: Parser Token [Decl] a
+> valueDecls :: Parser Token [Decl ()] a
 > valueDecls = localDecl `sepBy` semicolon
 >   where localDecl = infixDecl <|> valueDecl <|> foreignDecl
 >                 <|> trustAnnotation
 
-> dataDecl :: Parser Token TopDecl a
+> dataDecl :: Parser Token (TopDecl ()) a
 > dataDecl = typeDeclLhs DataDecl KW_data <*> constrs
 >   where constrs = equals <-*> constrDecl `sepBy1` bar
 >             `opt` []
 
-> newtypeDecl :: Parser Token TopDecl a
-> newtypeDecl =
->   typeDeclLhs NewtypeDecl KW_newtype <*-> equals <*> newConstrDecl
+> newtypeDecl :: Parser Token (TopDecl ()) a
+> newtypeDecl = typeDeclLhs NewtypeDecl KW_newtype <*-> equals <*> newConstrDecl
 
-> typeDecl :: Parser Token TopDecl a
+> typeDecl :: Parser Token (TopDecl ()) a
 > typeDecl = typeDeclLhs TypeDecl KW_type <*-> equals <*> type0
 
 > typeDeclLhs :: (Position -> Ident -> [Ident] -> a) -> Category
@@ -180,58 +179,58 @@ directory path to the module is ignored.
 > newConstrDecl :: Parser Token NewConstrDecl a
 > newConstrDecl = NewConstrDecl <$> position <*> con <*> type2
 
-> classDecl :: Parser Token TopDecl a
+> classDecl :: Parser Token (TopDecl ()) a
 > classDecl = ClassDecl <$> position <*-> token KW_class <*> tycls <*> tyvar
 
-> instanceDecl :: Parser Token TopDecl a
+> instanceDecl :: Parser Token (TopDecl ()) a
 > instanceDecl =
 >   InstanceDecl <$> position <*-> token KW_instance <*> qtycls <*> type2
 
-> infixDecl :: Parser Token Decl a
+> infixDecl :: Parser Token (Decl ()) a
 > infixDecl = infixDeclLhs InfixDecl <*> funop `sepBy1` comma
 
 > infixDeclLhs :: (Position -> Infix -> Int -> a) -> Parser Token a b
 > infixDeclLhs f = f <$> position <*> tokenOps infixKW <*> int
 >   where infixKW = [(KW_infix,Infix),(KW_infixl,InfixL),(KW_infixr,InfixR)]
 
-> functionDecl :: Parser Token Decl a
+> functionDecl :: Parser Token (Decl ()) a
 > functionDecl = position <**> decl
 >   where decl = fun `sepBy1` comma <**> funListDecl
 >           <|?> funDecl <$> lhs <*> declRhs
 >         lhs = (\f -> (f,FunLhs f [])) <$> fun
 >          <|?> funLhs
 
-> valueDecl :: Parser Token Decl a
+> valueDecl :: Parser Token (Decl ()) a
 > valueDecl = position <**> decl
 >   where decl = var `sepBy1` comma <**> valListDecl
 >           <|?> valDecl <$> constrTerm0 <*> declRhs
 >           <|?> funDecl <$> curriedLhs <*> declRhs
->         valDecl (ConstructorPattern c ts)
+>         valDecl (ConstructorPattern _ c ts)
 >           | not (isConstrId c) = funDecl (f,FunLhs f ts)
 >           where f = unqualify c
 >         valDecl t = opDecl id t
->         opDecl f (InfixPattern t1 op t2)
->           | isConstrId op = opDecl (f . InfixPattern t1 op) t2
+>         opDecl f (InfixPattern _ t1 op t2)
+>           | isConstrId op = opDecl (f . InfixPattern () t1 op) t2
 >           | otherwise = funDecl (op',OpLhs (f t1) op' t2)
 >           where op' = unqualify op
 >         opDecl f t = patDecl (f t)
 >         isConstrId c = c == qConsId || isQualified c || isQTupleId c
 
-> funDecl :: (Ident,Lhs) -> Rhs -> Position -> Decl
+> funDecl :: (Ident,Lhs a) -> Rhs a -> Position -> Decl a
 > funDecl (f,lhs) rhs p = FunctionDecl p f [Equation p lhs rhs]
 
-> patDecl :: ConstrTerm -> Rhs -> Position -> Decl
+> patDecl :: ConstrTerm a -> Rhs a -> Position -> Decl a
 > patDecl t rhs p = PatternDecl p t rhs
 
-> funListDecl :: Parser Token ([Ident] -> Position -> Decl) a
+> funListDecl :: Parser Token ([Ident] -> Position -> Decl ()) a
 > funListDecl = typeSig <$-> token DoubleColon <*> qualType
 >   where typeSig ty vs p = TypeSig p vs ty
 
-> valListDecl :: Parser Token ([Ident] -> Position -> Decl) a
+> valListDecl :: Parser Token ([Ident] -> Position -> Decl ()) a
 > valListDecl = funListDecl
 >           <|> flip FreeDecl <$-> token KW_free
 
-> funLhs :: Parser Token (Ident,Lhs) a
+> funLhs :: Parser Token (Ident,Lhs ()) a
 > funLhs = funLhs <$> fun <*> many1 constrTerm2
 >     <|?> flip ($ id) <$> constrTerm1 <*> opLhs'
 >     <|?> curriedLhs
@@ -243,21 +242,21 @@ directory path to the module is ignored.
 >                            <*> opLhs'
 >         funLhs f ts = (f,FunLhs f ts)
 >         opLhs op t2 f t1 = (op,OpLhs (f t1) op t2)
->         infixPat op t2 f g t1 = f (g . InfixPattern t1 op) t2
+>         infixPat op t2 f g t1 = f (g . InfixPattern () t1 op) t2
 
-> curriedLhs :: Parser Token (Ident,Lhs) a
+> curriedLhs :: Parser Token (Ident,Lhs ()) a
 > curriedLhs = apLhs <$> parens funLhs <*> many1 constrTerm2
 >   where apLhs (f,lhs) ts = (f,ApLhs lhs ts)
 
-> declRhs :: Parser Token Rhs a
+> declRhs :: Parser Token (Rhs ()) a
 > declRhs = rhs equals
 
-> rhs :: Parser Token a b -> Parser Token Rhs b
+> rhs :: Parser Token a b -> Parser Token (Rhs ()) b
 > rhs eq = rhsExpr <*> localDefs
 >   where rhsExpr = SimpleRhs <$-> eq <*> position <*> expr
 >               <|> GuardedRhs <$> many1 (condExpr eq)
 
-> foreignDecl :: Parser Token Decl a
+> foreignDecl :: Parser Token (Decl ()) a
 > foreignDecl =
 >   mkDecl <$> position <*-> token KW_foreign <*-> token KW_import
 >          <*> callConv <*> safeEntity <*-> token DoubleColon <*> type0
@@ -270,7 +269,7 @@ directory path to the module is ignored.
 >         safety = tokens [Id_safe,Id_unsafe]
 >         safetyId x = (Nothing,mkIdent (sval x))
 
-> trustAnnotation :: Parser Token Decl a
+> trustAnnotation :: Parser Token (Decl ()) a
 > trustAnnotation =
 >   TrustAnnot <$> position <*> tokenOps pragmaKW <*> funList
 >              <*-> token PragmaEnd
@@ -389,10 +388,10 @@ directory path to the module is ignored.
 \paragraph{Patterns}
 \begin{verbatim}
 
-> constrTerm0 :: Parser Token ConstrTerm a
-> constrTerm0 = constrTerm1 `chainr1` (flip InfixPattern <$> gconop)
+> constrTerm0 :: Parser Token (ConstrTerm ()) a
+> constrTerm0 = constrTerm1 `chainr1` (flip (InfixPattern ()) <$> gconop)
 
-> constrTerm1 :: Parser Token ConstrTerm a
+> constrTerm1 :: Parser Token (ConstrTerm ()) a
 > constrTerm1 = varId <**> identPattern
 >           <|> constrPattern (qConId <\> varId)
 >           <|> minus <-*> negInt
@@ -401,7 +400,7 @@ directory path to the module is ignored.
 >           <|> constrTerm2 <\> qConId <\> leftParen
 >   where identPattern = optAsPattern
 >                    <|> conPattern <$> many1 constrTerm2
->         constrPattern p = ConstructorPattern <$> p <*> many constrTerm2
+>         constrPattern p = ConstructorPattern () <$> p <*> many constrTerm2
 >         parenPattern = minus <**> minusPattern negInt
 >                    <|> fminus <**> minusPattern negFloat
 >                    <|> gconPattern
@@ -411,37 +410,38 @@ directory path to the module is ignored.
 >         minusPattern p = rightParen <-*> identPattern
 >                      <|> parenMinusPattern p <*-> rightParen
 >         gconPattern = constrPattern (gconId <*-> rightParen)
->         conPattern ts = flip ConstructorPattern ts . qualify
+>         conPattern ts = flip (ConstructorPattern ()) ts . qualify
 
-> constrTerm2 :: Parser Token ConstrTerm a
+> constrTerm2 :: Parser Token (ConstrTerm ()) a
 > constrTerm2 = literalPattern <|> anonPattern <|> identPattern
 >           <|> parenPattern <|> listPattern <|> lazyPattern
 
-> literalPattern :: Parser Token ConstrTerm a
-> literalPattern = LiteralPattern <$> literal
+> literalPattern :: Parser Token (ConstrTerm ()) a
+> literalPattern = LiteralPattern () <$> literal
 
-> anonPattern :: Parser Token ConstrTerm a
-> anonPattern = VariablePattern anonId <$-> token Underscore
+> anonPattern :: Parser Token (ConstrTerm ()) a
+> anonPattern = VariablePattern () anonId <$-> token Underscore
 
-> identPattern :: Parser Token ConstrTerm a
+> identPattern :: Parser Token (ConstrTerm ()) a
 > identPattern = varId <**> optAsPattern
->            <|> flip ConstructorPattern [] <$> qConId <\> varId
+>            <|> flip (ConstructorPattern ()) [] <$> qConId <\> varId
 
-> parenPattern :: Parser Token ConstrTerm a
+> parenPattern :: Parser Token (ConstrTerm ()) a
 > parenPattern = leftParen <-*> parenPattern
 >   where parenPattern = minus <**> minusPattern negInt
 >                    <|> fminus <**> minusPattern negFloat
->                    <|> flip ConstructorPattern [] <$> gconId <*-> rightParen
+>                    <|> flip (ConstructorPattern ()) [] <$> gconId
+>                                                        <*-> rightParen
 >                    <|> funSym <\> minus <\> fminus <*-> rightParen
 >                                                    <**> optAsPattern
 >                    <|> parenTuplePattern <\> minus <\> fminus <*-> rightParen
 >         minusPattern p = rightParen <-*> optAsPattern
 >                      <|> parenMinusPattern p <*-> rightParen
 
-> listPattern :: Parser Token ConstrTerm a
-> listPattern = ListPattern <$> brackets (constrTerm0 `sepBy` comma)
+> listPattern :: Parser Token (ConstrTerm ()) a
+> listPattern = ListPattern () <$> brackets (constrTerm0 `sepBy` comma)
 
-> lazyPattern :: Parser Token ConstrTerm a
+> lazyPattern :: Parser Token (ConstrTerm ()) a
 > lazyPattern = LazyPattern <$-> token Tilde <*> constrTerm2
 
 \end{verbatim}
@@ -452,71 +452,71 @@ the left-hand side of a declaration.
 > gconId :: Parser Token QualIdent a
 > gconId = colon <|> tupleCommas
 
-> negInt,negFloat :: Parser Token ConstrTerm a
-> negInt = NegativePattern . Int <$> int
-> negFloat = NegativePattern . Float <$> float
+> negInt,negFloat :: Parser Token (ConstrTerm ()) a
+> negInt = NegativePattern () . Int <$> int
+> negFloat = NegativePattern () . Float <$> float
 
-> optAsPattern :: Parser Token (Ident -> ConstrTerm) a
+> optAsPattern :: Parser Token (Ident -> ConstrTerm ()) a
 > optAsPattern = flip AsPattern <$-> token At <*> constrTerm2
->          `opt` VariablePattern
+>          `opt` VariablePattern ()
 
-> optInfixPattern :: Parser Token (ConstrTerm -> ConstrTerm) a
+> optInfixPattern :: Parser Token (ConstrTerm () -> ConstrTerm ()) a
 > optInfixPattern = infixPat <$> gconop <*> constrTerm0
 >             `opt` id
->   where infixPat op t2 t1 = InfixPattern t1 op t2
+>   where infixPat op t2 t1 = InfixPattern () t1 op t2
 
-> optTuplePattern :: Parser Token (ConstrTerm -> ConstrTerm) a
+> optTuplePattern :: Parser Token (ConstrTerm () -> ConstrTerm ()) a
 > optTuplePattern = tuple <$> many1 (comma <-*> constrTerm0)
 >             `opt` ParenPattern
 >   where tuple ts t = TuplePattern (t:ts)
 
-> parenMinusPattern :: Parser Token ConstrTerm a
->                   -> Parser Token (Ident -> ConstrTerm) a
+> parenMinusPattern :: Parser Token (ConstrTerm ()) a
+>                   -> Parser Token (Ident -> ConstrTerm ()) a
 > parenMinusPattern p = const <$> p <.> optInfixPattern <.> optTuplePattern
 
-> parenTuplePattern :: Parser Token ConstrTerm a
+> parenTuplePattern :: Parser Token (ConstrTerm ()) a
 > parenTuplePattern = constrTerm0 <**> optTuplePattern
->               `opt` ConstructorPattern qUnitId []
+>               `opt` ConstructorPattern () qUnitId []
 
 \end{verbatim}
 \paragraph{Expressions}
 \begin{verbatim}
 
-> condExpr :: Parser Token a b -> Parser Token CondExpr b
+> condExpr :: Parser Token a b -> Parser Token (CondExpr ()) b
 > condExpr eq = CondExpr <$> position <*-> bar <*> expr0 <*-> eq <*> expr
 
-> expr :: Parser Token Expression a
+> expr :: Parser Token (Expression ()) a
 > expr = expr0 <??> (flip Typed <$-> token DoubleColon <*> qualType)
 
-> expr0 :: Parser Token Expression a
+> expr0 :: Parser Token (Expression ()) a
 > expr0 = expr1 `chainr1` (flip InfixApply <$> infixOp)
 
-> expr1 :: Parser Token Expression a
+> expr1 :: Parser Token (Expression ()) a
 > expr1 = UnaryMinus <$> (minus <|> fminus) <*> expr2
 >     <|> expr2
 
-> expr2 :: Parser Token Expression a
+> expr2 :: Parser Token (Expression ()) a
 > expr2 = lambdaExpr <|> letExpr <|> doExpr <|> ifExpr <|> caseExpr
 >     <|> foldl1 Apply <$> many1 expr3
 
-> expr3 :: Parser Token Expression a
+> expr3 :: Parser Token (Expression ()) a
 > expr3 = constant <|> variable <|> parenExpr <|> listExpr
 
-> constant :: Parser Token Expression a
-> constant = Literal <$> literal
+> constant :: Parser Token (Expression ()) a
+> constant = Literal () <$> literal
 
-> variable :: Parser Token Expression a
-> variable = Variable <$> qFunId
+> variable :: Parser Token (Expression ()) a
+> variable = Variable () <$> qFunId
 
-> parenExpr :: Parser Token Expression a
+> parenExpr :: Parser Token (Expression ()) a
 > parenExpr = parens pExpr
 >   where pExpr = (minus <|> fminus) <**> minusOrTuple
->             <|> Constructor <$> tupleCommas
+>             <|> Constructor () <$> tupleCommas
 >             <|> leftSectionOrTuple <\> minus <\> fminus
 >             <|> opOrRightSection <\> minus <\> fminus
->           `opt` Constructor qUnitId
+>           `opt` Constructor () qUnitId
 >         minusOrTuple = flip UnaryMinus <$> expr1 <.> infixOrTuple
->                  `opt` Variable . qualify
+>                  `opt` Variable () . qualify
 >         leftSectionOrTuple = expr1 <**> infixOrTuple
 >         infixOrTuple = ($ id) <$> infixOrTuple'
 >         infixOrTuple' = infixOp <**> leftSectionOrExp
@@ -527,58 +527,58 @@ the left-hand side of a declaration.
 >             `opt` id
 >         tupleExpr = tuple <$> many1 (comma <-*> expr)
 >               `opt` Paren
->         opOrRightSection = qFunSym <**> optRightSection
->                        <|> colon <**> optCRightSection
+>         opOrRightSection = qFunSym <**> optRightSection InfixOp Variable
+>                        <|> colon <**> optRightSection InfixConstr Constructor
 >                        <|> infixOp <\> colon <\> qFunSym <**> rightSection
->         optRightSection = (. InfixOp) <$> rightSection `opt` Variable
->         optCRightSection = (. InfixConstr) <$> rightSection `opt` Constructor
+>         optRightSection op var = (. op ()) <$> rightSection `opt` var ()
 >         rightSection = flip RightSection <$> expr0
 >         infixApp f e2 op g e1 = f (g . InfixApply e1 op) e2
 >         leftSection op f e = LeftSection (f e) op
 >         tuple es e = Tuple (e:es)
 
-> infixOp :: Parser Token InfixOp a
-> infixOp = InfixOp <$> qfunop
->       <|> InfixConstr <$> colon
+> infixOp :: Parser Token (InfixOp ()) a
+> infixOp = InfixOp () <$> qfunop
+>       <|> InfixConstr () <$> colon
 
-> listExpr :: Parser Token Expression a
-> listExpr = brackets (elements `opt` List [])
+> listExpr :: Parser Token (Expression ()) a
+> listExpr = brackets (elements `opt` List () [])
 >   where elements = expr <**> rest
 >         rest = comprehension
 >            <|> enumeration (flip EnumFromTo) EnumFrom
 >            <|> comma <-*> expr <**>
 >                (enumeration (flip3 EnumFromThenTo) (flip EnumFromThen)
->                <|> (\es e2 e1 -> List (e1:e2:es)) <$> many (comma <-*> expr))
->          `opt` (\e -> List [e])
+>                <|> (\es e2 e1 -> List () (e1:e2:es)) <$>
+>                    many (comma <-*> expr))
+>          `opt` (\e -> List () [e])
 >         comprehension = flip ListCompr <$-> bar <*> quals
 >         enumeration enumTo enum =
 >           token DotDot <-*> (enumTo <$> expr `opt` enum)
 >         flip3 f x y z = f z y x
 
-> lambdaExpr :: Parser Token Expression a
+> lambdaExpr :: Parser Token (Expression ()) a
 > lambdaExpr = Lambda <$-> token Backslash <*> many1 constrTerm2
 >                     <*-> (token RightArrow <?> "-> expected") <*> expr
 
-> letExpr :: Parser Token Expression a
+> letExpr :: Parser Token (Expression ()) a
 > letExpr = Let <$-> token KW_let <*> layout valueDecls
 >               <*-> (token KW_in <?> "in expected") <*> expr
 
-> doExpr :: Parser Token Expression a
+> doExpr :: Parser Token (Expression ()) a
 > doExpr = uncurry Do <$-> token KW_do <*> layout stmts
 
-> ifExpr :: Parser Token Expression a
+> ifExpr :: Parser Token (Expression ()) a
 > ifExpr = IfThenElse <$-> token KW_if <*> expr
 >                     <*-> (token KW_then <?> "then expected") <*> expr
 >                     <*-> (token KW_else <?> "else expected") <*> expr
 
-> caseExpr :: Parser Token Expression a
+> caseExpr :: Parser Token (Expression ()) a
 > caseExpr = Case <$-> token KW_case <*> expr
 >                 <*-> (token KW_of <?> "of expected") <*> layout alts
 
-> alts :: Parser Token [Alt] a
+> alts :: Parser Token [Alt ()] a
 > alts = alt `sepBy1` semicolon
 
-> alt :: Parser Token Alt a
+> alt :: Parser Token (Alt ()) a
 > alt = Alt <$> position <*> constrTerm0
 >           <*> rhs (token RightArrow <?> "-> expected")
 
@@ -593,32 +593,34 @@ addition, we have to be prepared that the sequence
 prefix of a let expression.
 \begin{verbatim}
 
-> stmts :: Parser Token ([Statement],Expression) a
+> stmts :: Parser Token ([Statement ()],Expression ()) a
 > stmts = stmt reqStmts optStmts
 
-> reqStmts :: Parser Token (Statement -> ([Statement],Expression)) a
+> reqStmts :: Parser Token (Statement () -> ([Statement ()],Expression ())) a
 > reqStmts = (\(sts,e) st -> (st : sts,e)) <$-> semicolon <*> stmts
 
-> optStmts :: Parser Token (Expression -> ([Statement],Expression)) a
+> optStmts :: Parser Token (Expression () -> ([Statement ()],Expression ())) a
 > optStmts = succeed StmtExpr <.> reqStmts
 >      `opt` (,) []
 
-> quals :: Parser Token [Statement] a
+> quals :: Parser Token [Statement ()] a
 > quals = stmt (succeed id) (succeed StmtExpr) `sepBy1` comma
 
-> stmt :: Parser Token (Statement -> a) b -> Parser Token (Expression -> a) b
+> stmt :: Parser Token (Statement () -> a) b
+>      -> Parser Token (Expression () -> a) b
 >      -> Parser Token a b
 > stmt stmtCont exprCont = letStmt stmtCont exprCont
 >                      <|> exprOrBindStmt stmtCont exprCont
 
-> letStmt :: Parser Token (Statement -> a) b -> Parser Token (Expression -> a) b
+> letStmt :: Parser Token (Statement () -> a) b
+>         -> Parser Token (Expression () -> a) b
 >         -> Parser Token a b
 > letStmt stmtCont exprCont = token KW_let <-*> layout valueDecls <**> optExpr
 >   where optExpr = flip Let <$-> token KW_in <*> expr <.> exprCont
 >               <|> succeed StmtDecl <.> stmtCont
 
-> exprOrBindStmt :: Parser Token (Statement -> a) b
->                -> Parser Token (Expression -> a) b
+> exprOrBindStmt :: Parser Token (Statement () -> a) b
+>                -> Parser Token (Expression () -> a) b
 >                -> Parser Token a b
 > exprOrBindStmt stmtCont exprCont =
 >        StmtBind <$> constrTerm0 <*-> leftArrow <*> expr <**> stmtCont

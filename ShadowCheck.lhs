@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 1913 2006-05-07 13:44:36Z wlux $
+% $Id: ShadowCheck.lhs 1986 2006-10-29 16:45:56Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -17,12 +17,12 @@ definitions which shadow a declaration from an outer scope.
 
 > infixl 1 &&&, >>>
 
-> shadowCheck :: [Warn] -> Module -> [String]
+> shadowCheck :: [Warn] -> Module a -> [String]
 > shadowCheck v (Module m _ _ ds) =
 >   report v $ shadow noPosition [d | BlockDecl d <- ds] (const []) zeroSet
 >   where noPosition = error "noPosition"
 
-> shadowCheckGoal :: [Warn] -> Goal -> [String]
+> shadowCheckGoal :: [Warn] -> Goal a -> [String]
 > shadowCheckGoal v (Goal p e ds) =
 >   report v $ shadow p (SimpleRhs p e ds) (const []) zeroSet
 
@@ -73,7 +73,7 @@ traversal of the syntax tree.
 > instance SyntaxTree a => SyntaxTree [a] where
 >   shadow p = shadowGroup p
 
-> instance SyntaxTree Decl where
+> instance SyntaxTree (Decl a) where
 >   shadow _ (FunctionDecl p _ eqs) = shadow p eqs
 >   shadow _ (PatternDecl p _ rhs) = shadow p rhs
 >   shadow _ _ = id
@@ -81,30 +81,30 @@ traversal of the syntax tree.
 >   shadowGroup p ds =
 >     bindVars (concatMap vars ds) >>> foldr ((&&&) . shadow p) id ds
 
-> instance SyntaxTree Equation where
+> instance SyntaxTree (Equation a) where
 >   shadow _ (Equation p lhs rhs) = shadow p lhs >>> shadow p rhs
 
-> instance SyntaxTree Lhs where
+> instance SyntaxTree (Lhs a) where
 >   shadow p lhs = bindVars (map (P p) (filter (not . isAnonId) (bv lhs)))
 
-> instance SyntaxTree ConstrTerm where
+> instance SyntaxTree (ConstrTerm a) where
 >   shadow p t = bindVars (map (P p) (filter (not . isAnonId) (bv t)))
 
-> instance SyntaxTree Rhs where
+> instance SyntaxTree (Rhs a) where
 >   shadow _ (SimpleRhs p e ds) = shadow p ds >>> shadow p e
 >   shadow p (GuardedRhs es ds) = shadow p ds >>> shadow p es
 
-> instance SyntaxTree CondExpr where
+> instance SyntaxTree (CondExpr a) where
 >   shadow _ (CondExpr p g e) = shadow p g &&& shadow p e
 
-> instance SyntaxTree Expression where
->   shadow _ (Literal _) = id
->   shadow _ (Variable _) = id
->   shadow _ (Constructor _) = id
+> instance SyntaxTree (Expression a) where
+>   shadow _ (Literal _ _) = id
+>   shadow _ (Variable _ _) = id
+>   shadow _ (Constructor _ _) = id
 >   shadow p (Paren e) = shadow p e
 >   shadow p (Typed e _) = shadow p e
 >   shadow p (Tuple es) = shadow p es
->   shadow p (List es) = shadow p es
+>   shadow p (List _ es) = shadow p es
 >   shadow p (ListCompr e qs) = shadow p qs >>> shadow p e
 >   shadow p (EnumFrom e) = shadow p e
 >   shadow p (EnumFromThen e1 e2) = shadow p e1 &&& shadow p e2
@@ -123,14 +123,14 @@ traversal of the syntax tree.
 >     shadow p e1 &&& shadow p e2 &&& shadow p e3
 >   shadow p (Case e as) = shadow p e &&& shadow p as
 
-> instance SyntaxTree Statement where
+> instance SyntaxTree (Statement a) where
 >   shadow p (StmtExpr e) = shadow p e
 >   shadow p (StmtBind t e) = shadow p e &&& shadow p t
 >   shadow p (StmtDecl ds) = shadow p ds
 
 >   shadowGroup p = foldr ((>>>) . shadow p) id
 
-> instance SyntaxTree Alt where
+> instance SyntaxTree (Alt a) where
 >   shadow _ (Alt p t rhs) = shadow p t >>> shadow p rhs
 
 \end{verbatim}
@@ -138,7 +138,7 @@ The function \texttt{vars} returns the bound variables of a list of
 declarations together with their positions.
 \begin{verbatim}
 
-> vars :: Decl -> [P Ident]
+> vars :: Decl a -> [P Ident]
 > vars (FunctionDecl p f _) = [P p f]
 > vars (PatternDecl p t _) = map (P p) (filter (not . isAnonId) (bv t))
 > vars (ForeignDecl p _ _ f _) = [P p f]

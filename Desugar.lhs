@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 1981 2006-10-23 22:42:43Z wlux $
+% $Id: Desugar.lhs 1986 2006-10-29 16:45:56Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -107,11 +107,12 @@ as it allows pattern and free variable declarations at the top-level
 of a module.
 \begin{verbatim}
 
-> desugar :: TCEnv -> ValueEnv -> Module -> (Module,ValueEnv)
+> desugar :: TCEnv -> ValueEnv -> Module Type -> (Module Type,ValueEnv)
 > desugar tcEnv tyEnv (Module m es is ds) = (Module m es is ds',tyEnv')
 >   where (ds',tyEnv') = run (desugarModule m ds) tcEnv (bindSuccess tyEnv)
 
-> desugarModule :: ModuleIdent -> [TopDecl] -> DesugarState ([TopDecl],ValueEnv)
+> desugarModule :: ModuleIdent -> [TopDecl Type]
+>               -> DesugarState ([TopDecl Type],ValueEnv)
 > desugarModule m ds =
 >   do
 >     vds' <- desugarDeclGroup m [d | BlockDecl d <- vds]
@@ -151,21 +152,21 @@ if it really has a functional type.
 hack is no longer needed.}
 \begin{verbatim}
 
-> desugarGoal :: Bool -> TCEnv -> ValueEnv -> ModuleIdent -> Ident -> Goal
->             -> (Maybe [Ident],Module,ValueEnv)
+> desugarGoal :: Bool -> TCEnv -> ValueEnv -> ModuleIdent -> Ident -> Goal Type
+>             -> (Maybe [Ident],Module Type,ValueEnv)
 > desugarGoal debug tcEnv tyEnv m g (Goal p e ds)
 >   | debug || isIO ty =
 >       desugarGoalIO tcEnv (bindSuccess tyEnv) p m g (Let ds e)
 >         (if debug && arrowArity ty > 0 then typeVar 0 else ty)
 >   | otherwise = desugarGoal' tcEnv (bindSuccess tyEnv) p m g vs e' ty
->   where ty = typeOf tyEnv e
+>   where ty = typeOf e
 >         (vs,e') = liftGoalVars (if null ds then e else Let ds e)
 >         isIO (TypeConstructor tc [_]) = tc == qIOId
 >         isIO _ = False
 
 > desugarGoalIO :: TCEnv -> ValueEnv -> Position -> ModuleIdent
->               -> Ident -> Expression -> Type
->               -> (Maybe [Ident],Module,ValueEnv)
+>               -> Ident -> Expression Type -> Type
+>               -> (Maybe [Ident],Module Type,ValueEnv)
 > desugarGoalIO tcEnv tyEnv p m g e ty =
 >   (Nothing,
 >    Module m Nothing [] [goalDecl p g [] e'],
@@ -173,29 +174,34 @@ hack is no longer needed.}
 >   where (e',tyEnv') = run (desugarGoalExpr m e) tcEnv tyEnv
 
 > desugarGoal' :: TCEnv -> ValueEnv -> Position -> ModuleIdent
->              -> Ident -> [Ident] -> Expression -> Type
->              -> (Maybe [Ident],Module,ValueEnv)
+>              -> Ident -> [Ident] -> Expression Type -> Type
+>              -> (Maybe [Ident],Module Type,ValueEnv)
 > desugarGoal' tcEnv tyEnv p m g vs e ty =
 >   (Just vs',
->    Module m Nothing [] [goalDecl p g (v0:vs') (apply prelUnif [mkVar v0,e'])],
+>    Module m Nothing []
+>           [goalDecl p g (zip (ty:tys') (v0:vs'))
+>                     (apply (prelUnif ty) [mkVar ty v0,e'])],
 >    bindFun m v0 (monoType ty) (bindFun m g (polyType ty') tyEnv'))
 >   where (e',tyEnv') = run (desugarGoalExpr m e) tcEnv tyEnv
 >         v0 = anonId
 >         vs' = filter (`elem` qfv m e') vs
->         ty' = TypeArrow ty (foldr (TypeArrow . typeOf tyEnv) successType vs')
+>         tys' = map (rawType . flip varType tyEnv) vs'
+>         ty' = foldr TypeArrow successType (ty:tys')
 
-> goalDecl :: Position -> Ident -> [Ident] -> Expression -> TopDecl
-> goalDecl p g vs e = BlockDecl (funDecl p g (map VariablePattern vs) e)
+> goalDecl :: Position -> Ident -> [(Type,Ident)] -> Expression Type
+>          -> TopDecl Type
+> goalDecl p g vs e =
+>   BlockDecl (funDecl p g (map (uncurry VariablePattern) vs) e)
 
-> desugarGoalExpr :: ModuleIdent -> Expression
->                 -> DesugarState (Expression,ValueEnv)
+> desugarGoalExpr :: ModuleIdent -> Expression Type
+>                 -> DesugarState (Expression Type,ValueEnv)
 > desugarGoalExpr m e =
 >   do
 >     e' <- desugarExpr m (first "") e
 >     tyEnv' <- fetchSt
 >     return (e',tyEnv')
 
-> liftGoalVars :: Expression -> ([Ident],Expression)
+> liftGoalVars :: Expression Type -> ([Ident],Expression Type)
 > liftGoalVars (Let ds e) = (concat [vs | FreeDecl _ vs <- vds],Let ds' e)
 >   where (vds,ds') = partition isFreeDecl ds
 > liftGoalVars e = ([],e)
@@ -207,13 +213,13 @@ the left hand sides are desugared. Due to lazy patterns this may add
 further declarations to the group that must be desugared as well.
 \begin{verbatim}
 
-> desugarDeclGroup :: ModuleIdent -> [Decl] -> DesugarState [Decl]
+> desugarDeclGroup :: ModuleIdent -> [Decl Type] -> DesugarState [Decl Type]
 > desugarDeclGroup m ds =
 >   do
 >     dss' <- mapM (desugarDeclLhs m) (filter isValueDecl ds)
 >     mapM (desugarDeclRhs m) (concat dss')
 
-> desugarDeclLhs :: ModuleIdent -> Decl -> DesugarState [Decl]
+> desugarDeclLhs :: ModuleIdent -> Decl Type -> DesugarState [Decl Type]
 > desugarDeclLhs m (PatternDecl p t rhs) =
 >   do
 >     (ds',t') <- desugarTerm m p [] t
@@ -231,11 +237,9 @@ convention is expanded to always include the kind of the declaration
 imported function.
 \begin{verbatim}
 
-> desugarDeclRhs :: ModuleIdent -> Decl -> DesugarState Decl
+> desugarDeclRhs :: ModuleIdent -> Decl Type -> DesugarState (Decl Type)
 > desugarDeclRhs m (FunctionDecl p f eqs) =
->   do
->     ty <- liftM (flip typeOf f) fetchSt
->     liftM (FunctionDecl p f) (mapM (desugarEquation m (arrowArgs ty)) eqs)
+>   liftM (FunctionDecl p f) (mapM (desugarEquation m) eqs)
 > desugarDeclRhs _ (ForeignDecl p cc ie f ty) =
 >   return (ForeignDecl p cc (desugarImpEnt cc ie) f ty)
 >   where desugarImpEnt CallConvPrimitive ie = ie `mplus` Just (name f)
@@ -259,15 +263,17 @@ imported function.
 >   liftM (PatternDecl p t) (desugarRhs m p rhs)
 > desugarDeclRhs _ (FreeDecl p vs) = return (FreeDecl p vs)
 
-> desugarEquation :: ModuleIdent -> [Type] -> Equation -> DesugarState Equation
-> desugarEquation m tys (Equation p lhs rhs) =
+> desugarEquation :: ModuleIdent -> Equation Type
+>                 -> DesugarState (Equation Type)
+> desugarEquation m (Equation p lhs rhs) =
 >   do
->     vs <- mapM (freshIdent m "_#eta" . monoType) (drop (length ts) tys)
+>     vs <- mapM (freshIdent m "_#eta" . monoType) tys
 >     (ds',ts') <- mapAccumM (desugarTerm m p) [] ts
 >     rhs' <- desugarRhs m p (addDecls ds' rhs)
->     return (Equation p (FunLhs f (ts' ++ map VariablePattern vs))
->                      (applyRhs rhs' (map mkVar vs)))
+>     return (Equation p (FunLhs f (ts' ++ zipWith VariablePattern tys vs))
+>                      (applyRhs rhs' (zipWith mkVar tys vs)))
 >   where (f,ts) = flatLhs lhs
+>         tys = arrowArgs (typeOf rhs)
 >         applyRhs (SimpleRhs p e _) vs = SimpleRhs p (apply e vs) []
 
 \end{verbatim}
@@ -279,64 +285,67 @@ $t$ is a variable or an as-pattern are replaced by $t$ in combination
 with a local declaration for $v$.
 \begin{verbatim}
 
-> desugarLiteral :: Literal -> Either Literal [Literal]
+> desugarLiteral :: Literal -> Either Literal [(Type,Literal)]
 > desugarLiteral (Char c) = Left (Char c)
 > desugarLiteral (Int i) = Left (Int i)
 > desugarLiteral (Float f) = Left (Float f)
-> desugarLiteral (String cs) = Right (map Char cs)
+> desugarLiteral (String cs) = Right [(charType,Char c) | c <- cs]
 
-> desugarTerm :: ModuleIdent -> Position -> [Decl] -> ConstrTerm
->             -> DesugarState ([Decl],ConstrTerm)
-> desugarTerm m p ds (LiteralPattern l) =
->   either (return . (,) ds . LiteralPattern)
->          (desugarTerm m p ds . ListPattern . map LiteralPattern)
+> desugarTerm :: ModuleIdent -> Position -> [Decl Type] -> ConstrTerm Type
+>             -> DesugarState ([Decl Type],ConstrTerm Type)
+> desugarTerm m p ds (LiteralPattern ty l) =
+>   either (return . (,) ds . LiteralPattern ty)
+>          (desugarTerm m p ds . ListPattern ty . map (uncurry LiteralPattern))
 >          (desugarLiteral l)
-> desugarTerm m p ds (NegativePattern l) =
->   desugarTerm m p ds (LiteralPattern (negateLiteral l))
+> desugarTerm m p ds (NegativePattern ty l) =
+>   desugarTerm m p ds (LiteralPattern ty (negateLiteral l))
 >   where negateLiteral (Int i) = Int (-i)
 >         negateLiteral (Float f) = Float (-f)
 >         negateLiteral _ = internalError "negateLiteral"
-> desugarTerm _ _ ds (VariablePattern v) = return (ds,VariablePattern v)
-> desugarTerm m p ds (ConstructorPattern c [t]) =
+> desugarTerm _ _ ds (VariablePattern ty v) = return (ds,VariablePattern ty v)
+> desugarTerm m p ds (ConstructorPattern ty c [t]) =
 >   do
 >     tyEnv <- fetchSt
->     liftM (if isNewtypeConstr tyEnv c then id else apSnd (constrPat c))
+>     liftM (if isNewtypeConstr tyEnv c then id else apSnd (constrPat ty c))
 >           (desugarTerm m p ds t)
->   where constrPat c t = ConstructorPattern c [t]
-> desugarTerm m p ds (ConstructorPattern c ts) =
->   liftM (apSnd (ConstructorPattern c)) (mapAccumM (desugarTerm m p) ds ts)
-> desugarTerm m p ds (InfixPattern t1 op t2) =
->   desugarTerm m p ds (ConstructorPattern op [t1,t2])
+>   where constrPat ty c t = ConstructorPattern ty c [t]
+> desugarTerm m p ds (ConstructorPattern ty c ts) =
+>   liftM (apSnd (ConstructorPattern ty c)) (mapAccumM (desugarTerm m p) ds ts)
+> desugarTerm m p ds (InfixPattern ty t1 op t2) =
+>   desugarTerm m p ds (ConstructorPattern ty op [t1,t2])
 > desugarTerm m p ds (ParenPattern t) = desugarTerm m p ds t
 > desugarTerm m p ds (TuplePattern ts) =
->   desugarTerm m p ds (ConstructorPattern (qTupleId (length ts)) ts)
-> desugarTerm m p ds (ListPattern ts) =
+>   desugarTerm m p ds
+>     (ConstructorPattern (tupleType (map typeOf ts)) (qTupleId (length ts)) ts)
+> desugarTerm m p ds (ListPattern ty ts) =
 >   liftM (apSnd (foldr cons nil)) (mapAccumM (desugarTerm m p) ds ts)
->   where nil = ConstructorPattern qNilId []
->         cons t ts = ConstructorPattern qConsId [t,ts]
+>   where nil = ConstructorPattern ty qNilId []
+>         cons t ts = ConstructorPattern ty qConsId [t,ts]
 > desugarTerm m p ds (AsPattern v t) =
 >   liftM (desugarAs p v) (desugarTerm m p ds t)
 > desugarTerm m p ds (LazyPattern t) = desugarLazy m p ds t
 
-> desugarAs :: Position -> Ident -> ([Decl],ConstrTerm) -> ([Decl],ConstrTerm)
+> desugarAs :: Position -> Ident -> ([Decl Type],ConstrTerm Type)
+>           -> ([Decl Type],ConstrTerm Type)
 > desugarAs p v (ds,t) =
 >  case t of
->    VariablePattern v' -> (varDecl p v (mkVar v') : ds,t)
->    AsPattern v' _ -> (varDecl p v (mkVar v') : ds,t)
+>    VariablePattern ty v' -> (varDecl p ty v (mkVar ty v') : ds,t)
+>    AsPattern v' t' -> (varDecl p ty v (mkVar ty v') : ds,t)
+>      where ty = typeOf t'
 >    _ -> (ds,AsPattern v t)
 
-> desugarLazy :: ModuleIdent -> Position -> [Decl] -> ConstrTerm
->             -> DesugarState ([Decl],ConstrTerm)
+> desugarLazy :: ModuleIdent -> Position -> [Decl Type] -> ConstrTerm Type
+>             -> DesugarState ([Decl Type],ConstrTerm Type)
 > desugarLazy m p ds t =
 >   case t of
->     VariablePattern _ -> return (ds,t)
+>     VariablePattern _ _ -> return (ds,t)
 >     ParenPattern t' -> desugarLazy m p ds t'
 >     AsPattern v t' -> liftM (desugarAs p v) (desugarLazy m p ds t')
 >     LazyPattern t' -> desugarLazy m p ds t'
 >     _ ->
 >       do
->         v' <- freshVar m "_#lazy" t
->         return (patDecl p t (mkVar v') : ds,VariablePattern v')
+>         (ty,v') <- freshVar m "_#lazy" t
+>         return (patDecl p t (mkVar ty v') : ds,VariablePattern ty v')
 
 \end{verbatim}
 A list of boolean guards is expanded into a nested if-then-else
@@ -348,66 +357,70 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 \texttt{Success} if it is not restricted by the guard expression.
 \begin{verbatim}
 
-> desugarRhs :: ModuleIdent -> Position -> Rhs -> DesugarState Rhs
+> desugarRhs :: ModuleIdent -> Position -> Rhs Type -> DesugarState (Rhs Type)
 > desugarRhs m p rhs =
 >   do
->     tyEnv <- fetchSt
->     e' <- desugarExpr m p (expandRhs tyEnv prelFailed rhs)
+>     e' <- desugarExpr m p (expandRhs (prelFailed (typeOf rhs)) rhs)
 >     return (SimpleRhs p e' [])
 
-> expandRhs :: ValueEnv -> Expression -> Rhs -> Expression
-> expandRhs tyEnv _ (SimpleRhs _ e ds) = Let ds e
-> expandRhs tyEnv e0 (GuardedRhs es ds) = Let ds (expandGuards tyEnv e0 es)
+> expandRhs :: Expression Type -> Rhs Type -> Expression Type
+> expandRhs _ (SimpleRhs _ e ds) = Let ds e
+> expandRhs e0 (GuardedRhs es ds) = Let ds (expandGuards e0 es)
 
-> expandGuards :: ValueEnv -> Expression -> [CondExpr] -> Expression
-> expandGuards tyEnv e0 es
->   | booleanGuards tyEnv es = foldr mkIfThenElse e0 es
+> expandGuards :: Expression Type -> [CondExpr Type] -> Expression Type
+> expandGuards e0 es
+>   | booleanGuards es = foldr mkIfThenElse e0 es
 >   | otherwise = mkCase es
 >   where mkIfThenElse (CondExpr _ g e) = IfThenElse g e
 >         mkCase [CondExpr p g e] = Case g [caseAlt p successPattern e]
 
-> booleanGuards :: ValueEnv -> [CondExpr] -> Bool
-> booleanGuards _ [] = False
-> booleanGuards tyEnv (CondExpr _ g _ : es) =
->   not (null es) || typeOf tyEnv g == boolType
+> booleanGuards :: [CondExpr Type] -> Bool
+> booleanGuards [] = False
+> booleanGuards (CondExpr _ g _ : es) = not (null es) || typeOf g == boolType
 
-> desugarExpr :: ModuleIdent -> Position -> Expression
->             -> DesugarState Expression
-> desugarExpr m p (Literal l) =
->   either (return . Literal) (desugarExpr m p . List . map Literal)
+> desugarExpr :: ModuleIdent -> Position -> Expression Type
+>             -> DesugarState (Expression Type)
+> desugarExpr m p (Literal ty l) =
+>   either (return . Literal ty)
+>          (desugarExpr m p . List ty . map (uncurry Literal))
 >          (desugarLiteral l)
-> desugarExpr _ _ (Variable v) = return (Variable v)
-> desugarExpr _ _ (Constructor c) = return (Constructor c)
+> desugarExpr _ _ (Variable ty v) = return (Variable ty v)
+> desugarExpr _ _ (Constructor ty c) = return (Constructor ty c)
 > desugarExpr m p (Paren e) = desugarExpr m p e
 > desugarExpr m p (Typed e _) = desugarExpr m p e
 > desugarExpr m p (Tuple es) =
->   liftM (apply (Constructor (qTupleId (length es))))
+>   liftM (apply (Constructor (foldr TypeArrow (tupleType tys) tys)
+>                             (qTupleId (length es))))
 >         (mapM (desugarExpr m p) es)
-> desugarExpr m p (List es) = liftM (foldr cons nil) (mapM (desugarExpr m p) es)
->   where nil = Constructor qNilId
->         cons = Apply . Apply (Constructor qConsId)
-> desugarExpr m p (ListCompr e []) = desugarExpr m p (List [e])
+>   where tys = map typeOf es
+> desugarExpr m p (List ty es) =
+>   liftM (foldr cons nil) (mapM (desugarExpr m p) es)
+>   where nil = Constructor ty qNilId
+>         cons = Apply . Apply (Constructor (consType (elemType ty)) qConsId)
+> desugarExpr m p (ListCompr e []) =
+>   desugarExpr m p (List (listType (typeOf e)) [e])
 > desugarExpr m p (ListCompr e (q:qs)) = desugarQual m p q (ListCompr e qs)
-> desugarExpr m p (EnumFrom e) = liftM (Apply prelEnumFrom) (desugarExpr m p e)
+> desugarExpr m p (EnumFrom e) =
+>   liftM (Apply (prelEnumFrom (typeOf e))) (desugarExpr m p e)
 > desugarExpr m p (EnumFromThen e1 e2) =
->   liftM (apply prelEnumFromThen) (mapM (desugarExpr m p) [e1,e2])
+>   liftM (apply (prelEnumFromThen (typeOf e1)))
+>         (mapM (desugarExpr m p) [e1,e2])
 > desugarExpr m p (EnumFromTo e1 e2) =
->   liftM (apply prelEnumFromTo) (mapM (desugarExpr m p) [e1,e2])
+>   liftM (apply (prelEnumFromTo (typeOf e1))) (mapM (desugarExpr m p) [e1,e2])
 > desugarExpr m p (EnumFromThenTo e1 e2 e3) =
->   liftM (apply prelEnumFromThenTo) (mapM (desugarExpr m p) [e1,e2,e3])
+>   liftM (apply (prelEnumFromThen (typeOf e1)))
+>         (mapM (desugarExpr m p) [e1,e2,e3])
 > desugarExpr m p (UnaryMinus op e) =
->   do
->     tyEnv <- fetchSt
->     liftM (Apply (unaryMinus op (typeOf tyEnv e))) (desugarExpr m p e)
+>   liftM (Apply (unaryMinus op (typeOf e))) (desugarExpr m p e)
 >   where unaryMinus op ty
 >           | op == minusId =
 >               if ty == floatType then prelNegateFloat else prelNegate
 >           | op == fminusId = prelNegateFloat
 >           | otherwise = internalError "unaryMinus"
-> desugarExpr m p (Apply (Constructor c) e) =
+> desugarExpr m p (Apply (Constructor ty c) e) =
 >   do
 >     tyEnv <- fetchSt
->     liftM (if isNewtypeConstr tyEnv c then id else (Apply (Constructor c)))
+>     liftM (if isNewtypeConstr tyEnv c then id else (Apply (Constructor ty c)))
 >           (desugarExpr m p e)
 > desugarExpr m p (Apply e1 e2) =
 >   do
@@ -429,19 +442,24 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 >   do
 >     op' <- desugarExpr m p (infixOp op)
 >     e' <- desugarExpr m p e
->     return (Apply (Apply prelFlip op') e')
+>     return (Apply (Apply (prelFlip ty1 ty2 ty3) op') e')
+>   where TypeArrow ty1 (TypeArrow ty2 ty3) = typeOf (infixOp op)
 > desugarExpr m p (Lambda ts e) =
 >   do
->     f <- freshFun m "_#lambda" (Lambda ts e)
->     desugarExpr m p (Let [funDecl p f ts e] (mkVar f))
+>     (ty,f) <- freshVar m "_#lambda" (Lambda ts e)
+>     desugarExpr m p (Let [funDecl p f ts e] (mkVar ty f))
 > desugarExpr m p (Let ds e) =
 >   do
 >     ds' <- desugarDeclGroup m ds
 >     e' <- desugarExpr m p e
 >     return (if null ds' then e' else Let ds' e')
 > desugarExpr m p (Do sts e) = desugarExpr m p (foldr desugarStmt e sts)
->   where desugarStmt (StmtExpr e) e' = apply prelBind_ [e,e']
->         desugarStmt (StmtBind t e) e' = apply prelBind [e,Lambda [t] e']
+>   where desugarStmt (StmtExpr e) e' =
+>           apply (prelBind_ (ioResType (typeOf e)) (ioResType (typeOf e')))
+>                 [e,e']
+>         desugarStmt (StmtBind t e) e' =
+>           apply (prelBind (typeOf t) (ioResType (typeOf e')))
+>                 [e,Lambda [t] e']
 >         desugarStmt (StmtDecl ds) e' = Let ds e'
 > desugarExpr m p (IfThenElse e1 e2 e3) =
 >   do
@@ -451,16 +469,16 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 >     return (Case e1' [caseAlt p truePattern e2',caseAlt p falsePattern e3'])
 > desugarExpr m p (Case e alts) =
 >   do
->     v <- freshVar m "_#case" (head ts)
+>     v <- freshVar m "_#case" e
 >     e' <- desugarExpr m p e
 >     liftM (mkCase m v e') 
 >           (mapM (liftM fromAlt . desugarAltLhs m) alts >>=
->            desugarCase m id [v])
+>            desugarCase m (typeOf (Case e alts)) id [v])
 >   where ts = [t | Alt p t rhs <- alts]
 >         fromAlt (Alt p t rhs) = (p,id,[t],rhs)
->         mkCase m v e (Case e' alts)
->           | mkVar v == e' && v `notElem` qfv m alts = Case e alts
->         mkCase _ v e e' = Let [varDecl p v e] e'
+>         mkCase m (_,v) e (Case e' alts)
+>           | mkVar (typeOf e') v == e' && v `notElem` qfv m alts = Case e alts
+>         mkCase _ (ty,v) e e' = Let [varDecl p ty v e] e'
 
 \end{verbatim}
 Case expressions with nested patterns are transformed into nested case
@@ -553,85 +571,85 @@ alternatives. Thus, the example is effectively transformed into
 where the default alternative is redundant.
 \begin{verbatim}
 
-> type Match = (Position,[ConstrTerm] -> [ConstrTerm],[ConstrTerm],Rhs)
+> type Match a =
+>   (Position,[ConstrTerm a] -> [ConstrTerm a],[ConstrTerm a],Rhs a)
 
-> pattern :: Ident -> ConstrTerm -> ConstrTerm
-> pattern v (LiteralPattern l) = AsPattern v (LiteralPattern l)
-> pattern v (VariablePattern _) = VariablePattern v
-> pattern v (ConstructorPattern c ts) = AsPattern v (ConstructorPattern c ts')
->   where ts' = zipWith (const . VariablePattern) (repeat anonId) ts
+> pattern :: (Type,Ident) -> ConstrTerm Type -> ConstrTerm Type
+> pattern (ty,v) (LiteralPattern _ l) = AsPattern v (LiteralPattern ty l)
+> pattern (ty,v) (VariablePattern _ _) = VariablePattern ty v
+> pattern (ty,v) (ConstructorPattern _ c ts) =
+>   AsPattern v (ConstructorPattern ty c ts')
+>   where ts' = zipWith (VariablePattern . typeOf) ts (repeat anonId)
 > pattern v (AsPattern _ t) = pattern v t
 
-> arguments :: ConstrTerm -> [ConstrTerm]
-> arguments (LiteralPattern _) = []
-> arguments (VariablePattern _) = []
-> arguments (ConstructorPattern _ ts) = ts
+> arguments :: ConstrTerm Type -> [ConstrTerm Type]
+> arguments (LiteralPattern _ _) = []
+> arguments (VariablePattern _ _) = []
+> arguments (ConstructorPattern _ _ ts) = ts
 > arguments (AsPattern _ t) = arguments t
 
-> bindVars :: Position -> Ident -> ConstrTerm -> Rhs -> Rhs
-> bindVars _ _ (LiteralPattern _) = id
-> bindVars p v (VariablePattern v')
->   | v /= v' = addDecls [varDecl p v' (mkVar v)]
+> bindVars :: Position -> (Type,Ident) -> ConstrTerm Type -> Rhs Type
+>          -> Rhs Type
+> bindVars _ _ (LiteralPattern _ _) = id
+> bindVars p (ty,v) (VariablePattern ty' v')
+>   | v /= v' = addDecls [varDecl p ty' v' (mkVar ty v)]
 >   | otherwise = id
-> bindVars _ _ (ConstructorPattern _ _) = id
-> bindVars p v (AsPattern v' t) =
->   addDecls [varDecl p v' (mkVar v)] . bindVars p v t
+> bindVars _ _ (ConstructorPattern _ _ _) = id
+> bindVars p (ty,v) (AsPattern v' t) =
+>   addDecls [varDecl p ty v' (mkVar ty v)] . bindVars p (ty,v) t
 
-> desugarAltLhs :: ModuleIdent -> Alt -> DesugarState Alt
+> desugarAltLhs :: ModuleIdent -> Alt Type -> DesugarState (Alt Type)
 > desugarAltLhs m (Alt p t rhs) =
 >   do
 >     (ds',t') <- desugarTerm m p [] t
 >     return (Alt p t' (addDecls ds' rhs))
 
-> desugarAltRhs :: ModuleIdent -> Alt -> Expression -> DesugarState Expression
-> desugarAltRhs m (Alt p _ rhs) e0 =
->   do
->     tyEnv <- fetchSt
->     desugarExpr m p (expandRhs tyEnv e0 rhs)
+> desugarAltRhs :: ModuleIdent -> Alt Type -> Expression Type
+>               -> DesugarState (Expression Type)
+> desugarAltRhs m (Alt p _ rhs) e0 = desugarExpr m p (expandRhs e0 rhs)
 
-> desugarCase :: ModuleIdent -> ([Ident] -> [Ident]) -> [Ident] -> [Match]
->             -> DesugarState Expression
-> desugarCase _ _ _ [] = return prelFailed
-> desugarCase m prefix [] (alt : alts) =
->   desugarCase m id vs (map resetArgs alts) >>=
+> desugarCase :: ModuleIdent -> Type -> ([(Type,Ident)] -> [(Type,Ident)])
+>             -> [(Type,Ident)] -> [Match Type]
+>             -> DesugarState (Expression Type)
+> desugarCase _ ty _ _ [] = return (prelFailed ty)
+> desugarCase m ty prefix [] (alt : alts) =
+>   desugarCase m ty id vs (map resetArgs alts) >>=
 >   desugarAltRhs m (toAlt vs alt)
 >   where vs = prefix []
 >         resetArgs (p,prefix,ts,rhs) = (p,id,prefix ts,rhs)
 >         toAlt vs (p,prefix,_,rhs) =
->           Alt p (VariablePattern anonId)
+>           Alt p (VariablePattern (TypeVariable 0) anonId)
 >               (foldr2 (bindVars p) rhs vs (prefix []))
-> desugarCase m prefix (v:vs) alts
+> desugarCase m ty prefix (v:vs) alts
 >   | isVarPattern (fst (head alts')) =
 >       if all isVarPattern (map fst (tail alts')) then
->         desugarCase m prefix vs (map dropArg alts)
+>         desugarCase m ty prefix vs (map dropArg alts)
 >       else
->         desugarCase m (prefix . (v:)) vs (map skipArg alts)
+>         desugarCase m ty (prefix . (v:)) vs (map skipArg alts)
 >   | otherwise =
 >       do
 >         tcEnv <- liftSt envRt
 >         tyEnv <- fetchSt
->         liftM (Case (mkVar v))
->               (mapM (desugarAlt m prefix vs alts')
->                     (if allCases tcEnv tyEnv v ts then ts else ts ++ ts'))
+>         liftM (Case (uncurry mkVar v))
+>               (mapM (desugarAlt m ty prefix vs alts')
+>                     (if allCases tcEnv v ts then ts else ts ++ ts'))
 >   where alts' = map tagAlt alts
 >         (ts',ts) = partition isVarPattern (nub (map fst alts'))
 >         tagAlt (p,prefix,t:ts,rhs) =
 >           (pattern v t,(p,prefix,t:ts,bindVars p v t rhs))
 >         skipArg (p,prefix,t:ts,rhs) = (p,prefix . (t:),ts,rhs)
 >         dropArg (p,prefix,t:ts,rhs) = (p,prefix,ts,bindVars p v t rhs)
->         allCases tcEnv tyEnv v ts = length cs == length ts
->           where TypeConstructor tc _ = fixType (typeOf tyEnv v)
->                 cs = constructors tc tcEnv
->         fixType (TypeGuard _) = head guardTypes
->         fixType ty = ty
+>         allCases tcEnv (TypeConstructor tc _,v) ts = length cs == length ts
+>           where cs = constructors tc tcEnv
 
-> desugarAlt :: ModuleIdent -> ([Ident] -> [Ident]) -> [Ident]
->            -> [(ConstrTerm,Match)] -> ConstrTerm -> DesugarState Alt
-> desugarAlt m prefix vs alts t =
+> desugarAlt :: ModuleIdent -> Type -> ([(Type,Ident)] -> [(Type,Ident)])
+>            -> [(Type,Ident)] -> [(ConstrTerm Type,Match Type)]
+>            -> ConstrTerm Type -> DesugarState (Alt Type)
+> desugarAlt m ty prefix vs alts t =
 >   do
 >     vs' <- mapM (freshVar m "_#case") (arguments t')
 >     liftM (caseAlt (pos (snd (head alts'))) (renameArgs vs' t))
->           (desugarCase m id (prefix (vs' ++ vs))
+>           (desugarCase m ty id (prefix (vs' ++ vs))
 >                        (map (expandArgs vs' . snd) alts'))
 >   where alts' = filter (matchedBy t . fst) alts
 >         t' = matchedArg (snd (head (filter ((t ==) . fst) alts')))
@@ -641,14 +659,14 @@ where the default alternative is redundant.
 >         expandArgs vs (p,prefix,t:ts,rhs) =
 >           (p,id,prefix (expandPatternArgs vs t ++ ts),rhs)
 >         expandPatternArgs vs t
->           | isVarPattern t = map VariablePattern vs
+>           | isVarPattern t = map (uncurry VariablePattern) vs
 >           | otherwise = arguments t
 
-> renameArgs :: [Ident] -> ConstrTerm -> ConstrTerm
-> renameArgs _ (LiteralPattern l) = LiteralPattern l
-> renameArgs _ (VariablePattern v) = VariablePattern v
-> renameArgs vs (ConstructorPattern c _) =
->   ConstructorPattern c (map VariablePattern vs)
+> renameArgs :: [(Type,Ident)] -> ConstrTerm Type -> ConstrTerm Type
+> renameArgs _ (LiteralPattern ty l) = LiteralPattern ty l
+> renameArgs _ (VariablePattern ty v) = VariablePattern ty v
+> renameArgs vs (ConstructorPattern ty c _) =
+>   ConstructorPattern ty c (map (uncurry VariablePattern) vs)
 > renameArgs vs (AsPattern v t) = AsPattern v (renameArgs vs t)
 
 \end{verbatim}
@@ -681,26 +699,32 @@ instead of \texttt{(++)} and \texttt{map} in place of
 \texttt{concatMap}, respectively.
 \begin{verbatim}
 
-> desugarQual :: ModuleIdent -> Position -> Statement -> Expression
->             -> DesugarState Expression
-> desugarQual m p (StmtExpr b) e = desugarExpr m p (IfThenElse b e (List []))
+> desugarQual :: ModuleIdent -> Position -> Statement Type -> Expression Type
+>             -> DesugarState (Expression Type)
+> desugarQual m p (StmtExpr b) e =
+>   desugarExpr m p (IfThenElse b e (List (typeOf e) []))
 > desugarQual m p (StmtBind t l) e
 >   | isVarPattern t = desugarExpr m p (qualExpr t e l)
 >   | otherwise =
 >       do
 >         tyEnv <- fetchSt
->         v <- freshVar m "_#var" t
->         l' <- freshVar m "_#var" e
->         desugarExpr m p (apply prelFoldr [foldFunct v l' e,List [],l])
->   where qualExpr v (ListCompr e []) l = apply prelMap [Lambda [v] e,l]
->         qualExpr v e l = apply prelConcatMap [Lambda [v] e,l]
->         foldFunct v l e =
->           Lambda (map VariablePattern [v,l])
->             (Case (mkVar v)
->                   [caseAlt p t (append e (mkVar l)),
->                    caseAlt p (VariablePattern v) (mkVar l)])
->         append (ListCompr e []) l = apply (Constructor qConsId) [e,l]
->         append e l = apply prelAppend [e,l]
+>         (ty,v) <- freshVar m "_#var" t
+>         (ty',l') <- freshVar m "_#var" e
+>         desugarExpr m p
+>           (apply (prelFoldr ty ty') [foldFunct ty v ty' l' e,List ty' [],l])
+>   where qualExpr v (ListCompr e []) l =
+>           apply (prelMap (typeOf v) (typeOf e)) [Lambda [v] e,l]
+>         qualExpr v e l =
+>           apply (prelConcatMap (typeOf v) (elemType (typeOf e)))
+>                 [Lambda [v] e,l]
+>         foldFunct ty v ty' l e =
+>           Lambda [VariablePattern ty v,VariablePattern ty' l]
+>             (Case (mkVar ty v)
+>                   [caseAlt p t (append ty' e (mkVar ty' l)),
+>                    caseAlt p (VariablePattern ty v) (mkVar ty' l)])
+>         append ty (ListCompr e []) l =
+>           apply (Constructor (consType (elemType ty)) qConsId) [e,l]
+>         append ty e l = apply (prelAppend (elemType ty)) [e,l]
 > desugarQual m p (StmtDecl ds) e = desugarExpr m p (Let ds e)
 
 \end{verbatim}
@@ -715,77 +739,85 @@ Generation of fresh names
 >     return x
 >   where mkName pre n = mkIdent (pre ++ show n)
 
-> freshVar :: Typeable a => ModuleIdent -> String -> a -> DesugarState Ident
-> freshVar m prefix x =
->   do
->     tyEnv <- fetchSt
->     freshIdent m prefix (monoType (typeOf tyEnv x))
-
-> freshFun :: Typeable a => ModuleIdent -> String -> a -> DesugarState Ident
-> freshFun m prefix x =
->   do
->     tyEnv <- fetchSt
->     freshIdent m prefix (polyType (typeOf tyEnv x))
+> freshVar :: Typeable a => ModuleIdent -> String -> a
+>          -> DesugarState (Type,Ident)
+> freshVar m prefix x = liftM ((,) ty) (freshIdent m prefix (monoType ty))
+>   where ty = typeOf x
 
 \end{verbatim}
 Prelude entities
 \begin{verbatim}
 
-> prelUnif = Variable $ preludeIdent "=:="
-> prelBind = Variable $ preludeIdent ">>="
-> prelBind_ = Variable $ preludeIdent ">>"
-> prelFlip = Variable $ preludeIdent "flip"
-> prelEnumFrom = Variable $ preludeIdent "enumFrom"
-> prelEnumFromTo = Variable $ preludeIdent "enumFromTo"
-> prelEnumFromThen = Variable $ preludeIdent "enumFromThen"
-> prelEnumFromThenTo = Variable $ preludeIdent "enumFromThenTo"
-> prelFailed = Variable $ preludeIdent "failed"
-> prelMap = Variable $ preludeIdent "map"
-> prelFoldr = Variable $ preludeIdent "foldr"
-> prelAppend = Variable $ preludeIdent "++"
-> prelConcatMap = Variable $ preludeIdent "concatMap"
-> prelNegate = Variable $ preludeIdent "negate"
-> prelNegateFloat = Variable $ preludeIdent "negateFloat"
+> prelUnif a = preludeFun [a,a] successType "=:="
+> prelBind a b = preludeFun [ioType a,a `TypeArrow` ioType b] (ioType b) ">>="
+> prelBind_ a b = preludeFun [ioType a,ioType b] (ioType b) ">>"
+> prelFlip a b c = preludeFun [a `TypeArrow` (b `TypeArrow` c),b,a] c "flip"
+> prelEnumFrom a = preludeFun [a] (listType a) "enumFrom"
+> prelEnumFromTo a = preludeFun [a,a] (listType a) "enumFromTo"
+> prelEnumFromThen a = preludeFun [a,a] (listType a) "enumFromThen"
+> prelEnumFromThenTo a = preludeFun [a,a,a] (listType a) "enumFromThenTo"
+> prelFailed a = preludeFun [] a "failed"
+> prelMap a b = preludeFun [a `TypeArrow` b,listType a] (listType b) "map"
+> prelFoldr a b =
+>   preludeFun [a `TypeArrow` (b `TypeArrow` b),b,listType a] b "foldr"
+> prelAppend a = preludeFun [listType a,listType a] (listType a) "++"
+> prelConcatMap a b =
+>   preludeFun [a `TypeArrow` listType b] (listType a `TypeArrow` listType b)
+>              "concatMap"
+> prelNegate = preludeFun [intType] intType "negate"
+> prelNegateFloat = preludeFun [floatType] floatType "negateFloat"
 
-> truePattern = ConstructorPattern qTrueId []
-> falsePattern = ConstructorPattern qFalseId []
-> successPattern = ConstructorPattern (qualify successId) []
+> preludeFun :: [Type] -> Type -> String -> Expression Type
+> preludeFun tys ty f =
+>   Variable (foldr TypeArrow ty tys) (qualifyWith preludeMIdent (mkIdent f))
 
-> preludeIdent :: String -> QualIdent
-> preludeIdent = qualifyWith preludeMIdent . mkIdent
+> truePattern = ConstructorPattern boolType qTrueId []
+> falsePattern = ConstructorPattern boolType qFalseId []
+> successPattern = ConstructorPattern successType (qualify successId) []
 
 \end{verbatim}
 Auxiliary definitions
 \begin{verbatim}
 
-> isVarPattern :: ConstrTerm -> Bool
-> isVarPattern (VariablePattern _) = True
+> isVarPattern :: ConstrTerm a -> Bool
+> isVarPattern (VariablePattern _ _) = True
 > isVarPattern (ParenPattern t) = isVarPattern t
 > isVarPattern (AsPattern _ t) = isVarPattern t
 > isVarPattern (LazyPattern _) = True
 > isVarPattern _ = False
 
-> funDecl :: Position -> Ident -> [ConstrTerm] -> Expression -> Decl
+> funDecl :: Position -> Ident -> [ConstrTerm a] -> Expression a -> Decl a
 > funDecl p f ts e =
 >   FunctionDecl p f [Equation p (FunLhs f ts) (SimpleRhs p e [])]
 
-> patDecl :: Position -> ConstrTerm -> Expression -> Decl
+> patDecl :: Position -> ConstrTerm a -> Expression a -> Decl a
 > patDecl p t e = PatternDecl p t (SimpleRhs p e [])
 
-> varDecl :: Position -> Ident -> Expression -> Decl
-> varDecl p = patDecl p . VariablePattern
+> varDecl :: Position -> a -> Ident -> Expression a -> Decl a
+> varDecl p ty v e = patDecl p (VariablePattern ty v) e
 
-> addDecls :: [Decl] -> Rhs -> Rhs
+> addDecls :: [Decl a] -> Rhs a -> Rhs a
 > addDecls ds (SimpleRhs p e ds') = SimpleRhs p e (ds ++ ds')
 > addDecls ds (GuardedRhs es ds') = GuardedRhs es (ds ++ ds')
 
-> caseAlt :: Position -> ConstrTerm -> Expression -> Alt
+> caseAlt :: Position -> ConstrTerm a -> Expression a -> Alt a
 > caseAlt p t e = Alt p t (SimpleRhs p e [])
 
-> apply :: Expression -> [Expression] -> Expression
+> apply :: Expression a -> [Expression a] -> Expression a
 > apply = foldl Apply
 
-> mkVar :: Ident -> Expression
-> mkVar = Variable . qualify
+> mkVar :: a -> Ident -> Expression a
+> mkVar ty = Variable ty . qualify
+
+> consType :: Type -> Type
+> consType a = TypeArrow a (TypeArrow (listType a) (listType a))
+
+> elemType :: Type -> Type
+> elemType (TypeConstructor tc [ty]) | tc == qListId = ty
+> elemType ty = internalError ("elemType " ++ show ty)
+
+> ioResType :: Type -> Type
+> ioResType (TypeConstructor tc [ty]) | tc == qIOId = ty
+> ioResType ty = internalError ("ioResType " ++ show ty)
 
 \end{verbatim}

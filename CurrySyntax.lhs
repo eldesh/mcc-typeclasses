@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 1984 2006-10-27 13:34:07Z wlux $
+% $Id: CurrySyntax.lhs 1986 2006-10-29 16:45:56Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -18,8 +18,8 @@ parsed representation of a Curry program.
 \paragraph{Modules}
 \begin{verbatim}
 
-> data Module =
->   Module ModuleIdent (Maybe ExportSpec) [ImportDecl] [TopDecl]
+> data Module a =
+>   Module ModuleIdent (Maybe ExportSpec) [ImportDecl] [TopDecl a]
 >   deriving (Eq,Show)
 
 > data ExportSpec = Exporting Position [Export] deriving (Eq,Show)
@@ -50,13 +50,13 @@ parsed representation of a Curry program.
 \paragraph{Module declarations}
 \begin{verbatim}
 
-> data TopDecl =
+> data TopDecl a =
 >     DataDecl Position Ident [Ident] [ConstrDecl]
 >   | NewtypeDecl Position Ident [Ident] NewConstrDecl
 >   | TypeDecl Position Ident [Ident] TypeExpr
 >   | ClassDecl Position Ident Ident
 >   | InstanceDecl Position QualIdent TypeExpr
->   | BlockDecl Decl
+>   | BlockDecl (Decl a)
 >   deriving (Eq,Show)
 
 > data ConstrDecl =
@@ -65,12 +65,12 @@ parsed representation of a Curry program.
 >   deriving (Eq,Show)
 > data NewConstrDecl = NewConstrDecl Position Ident TypeExpr deriving (Eq,Show)
 
-> data Decl =
+> data Decl a =
 >     InfixDecl Position Infix Int [Ident]
 >   | TypeSig Position [Ident] QualTypeExpr
->   | FunctionDecl Position Ident [Equation]
+>   | FunctionDecl Position Ident [Equation a]
 >   | ForeignDecl Position CallConv (Maybe String) Ident TypeExpr
->   | PatternDecl Position ConstrTerm Rhs
+>   | PatternDecl Position (ConstrTerm a) (Rhs a)
 >   | FreeDecl Position [Ident]
 >   | TrustAnnot Position Trust (Maybe [Ident])
 >   deriving (Eq,Show)
@@ -127,19 +127,21 @@ Interface declarations are restricted to type declarations and signatures.
 \paragraph{Functions}
 \begin{verbatim}
 
-> data Equation = Equation Position Lhs Rhs deriving (Eq,Show)
-> data Lhs =
->     FunLhs Ident [ConstrTerm]
->   | OpLhs ConstrTerm Ident ConstrTerm
->   | ApLhs Lhs [ConstrTerm]
+> data Equation a = Equation Position (Lhs a) (Rhs a) deriving (Eq,Show)
+> data Lhs a =
+>     FunLhs Ident [ConstrTerm a]
+>   | OpLhs (ConstrTerm a) Ident (ConstrTerm a)
+>   | ApLhs (Lhs a) [ConstrTerm a]
 >   deriving (Eq,Show)
-> data Rhs =
->     SimpleRhs Position Expression [Decl]
->   | GuardedRhs [CondExpr] [Decl]
+> data Rhs a =
+>     SimpleRhs Position (Expression a) [Decl a]
+>   | GuardedRhs [CondExpr a] [Decl a]
 >   deriving (Eq,Show)
-> data CondExpr = CondExpr Position Expression Expression deriving (Eq,Show)
+> data CondExpr a =
+>   CondExpr Position (Expression a) (Expression a)
+>   deriving (Eq,Show)
 
-> flatLhs :: Lhs -> (Ident,[ConstrTerm])
+> flatLhs :: Lhs a -> (Ident,[ConstrTerm a])
 > flatLhs lhs = flat lhs []
 >   where flat (FunLhs f ts) ts' = (f,ts ++ ts')
 >         flat (OpLhs t1 op t2) ts = (op,t1:t2:ts)
@@ -160,67 +162,165 @@ Interface declarations are restricted to type declarations and signatures.
 \paragraph{Patterns}
 \begin{verbatim}
 
-> data ConstrTerm =
->     LiteralPattern Literal
->   | NegativePattern Literal
->   | VariablePattern Ident
->   | ConstructorPattern QualIdent [ConstrTerm]
->   | InfixPattern ConstrTerm QualIdent ConstrTerm
->   | ParenPattern ConstrTerm
->   | TuplePattern [ConstrTerm]
->   | ListPattern [ConstrTerm]
->   | AsPattern Ident ConstrTerm
->   | LazyPattern ConstrTerm
+> data ConstrTerm a =
+>     LiteralPattern a Literal
+>   | NegativePattern a Literal
+>   | VariablePattern a Ident
+>   | ConstructorPattern a QualIdent [ConstrTerm a]
+>   | InfixPattern a (ConstrTerm a) QualIdent (ConstrTerm a)
+>   | ParenPattern (ConstrTerm a)
+>   | TuplePattern [ConstrTerm a]
+>   | ListPattern a [ConstrTerm a]
+>   | AsPattern Ident (ConstrTerm a)
+>   | LazyPattern (ConstrTerm a)
 >   deriving (Eq,Show)
 
 \end{verbatim}
 \paragraph{Expressions}
 \begin{verbatim}
 
-> data Expression =
->     Literal Literal
->   | Variable QualIdent
->   | Constructor QualIdent
->   | Paren Expression
->   | Typed Expression QualTypeExpr
->   | Tuple [Expression]
->   | List [Expression]
->   | ListCompr Expression [Statement]
->   | EnumFrom Expression
->   | EnumFromThen Expression Expression
->   | EnumFromTo Expression Expression
->   | EnumFromThenTo Expression Expression Expression
->   | UnaryMinus Ident Expression
->   | Apply Expression Expression
->   | InfixApply Expression InfixOp Expression
->   | LeftSection Expression InfixOp
->   | RightSection InfixOp Expression
->   | Lambda [ConstrTerm] Expression
->   | Let [Decl] Expression
->   | Do [Statement] Expression
->   | IfThenElse Expression Expression Expression
->   | Case Expression [Alt]
+> data Expression a =
+>     Literal a Literal
+>   | Variable a QualIdent
+>   | Constructor a QualIdent
+>   | Paren (Expression a)
+>   | Typed (Expression a) QualTypeExpr
+>   | Tuple [Expression a]
+>   | List a [Expression a]
+>   | ListCompr (Expression a) [Statement a]
+>   | EnumFrom (Expression a)
+>   | EnumFromThen (Expression a) (Expression a)
+>   | EnumFromTo (Expression a) (Expression a)
+>   | EnumFromThenTo (Expression a) (Expression a) (Expression a)
+>   | UnaryMinus Ident (Expression a)
+>   | Apply (Expression a) (Expression a)
+>   | InfixApply (Expression a) (InfixOp a) (Expression a)
+>   | LeftSection (Expression a) (InfixOp a)
+>   | RightSection (InfixOp a) (Expression a)
+>   | Lambda [ConstrTerm a] (Expression a)
+>   | Let [Decl a] (Expression a)
+>   | Do [Statement a] (Expression a)
+>   | IfThenElse (Expression a) (Expression a) (Expression a)
+>   | Case (Expression a) [Alt a]
 >   deriving (Eq,Show)
 
-> data InfixOp = InfixOp QualIdent | InfixConstr QualIdent deriving (Eq,Show)
-
-> data Statement =
->     StmtExpr Expression
->   | StmtDecl [Decl]
->   | StmtBind ConstrTerm Expression
+> data InfixOp a =
+>     InfixOp a QualIdent
+>   | InfixConstr a QualIdent
 >   deriving (Eq,Show)
 
-> data Alt = Alt Position ConstrTerm Rhs deriving (Eq,Show)
+> data Statement a =
+>     StmtExpr (Expression a)
+>   | StmtDecl [Decl a]
+>   | StmtBind (ConstrTerm a) (Expression a)
+>   deriving (Eq,Show)
 
-> opName :: InfixOp -> QualIdent
-> opName (InfixOp op) = op
-> opName (InfixConstr c) = c
+> data Alt a = Alt Position (ConstrTerm a) (Rhs a) deriving (Eq,Show)
+
+> opName :: InfixOp a -> QualIdent
+> opName (InfixOp _ op) = op
+> opName (InfixConstr _ c) = c
 
 \end{verbatim}
 \paragraph{Goals}
 A goal is equivalent to an unconditional right hand side of an equation.
 \begin{verbatim}
 
-> data Goal = Goal Position Expression [Decl] deriving (Eq,Show)
+> data Goal a = Goal Position (Expression a) [Decl a] deriving (Eq,Show)
+
+\end{verbatim}
+The abstract syntax tree is a functor with respect to the attributes.
+\begin{verbatim}
+
+> instance Functor Module where
+>   fmap f (Module m es is ds) = Module m es is (map (fmap f) ds)
+
+> instance Functor TopDecl where
+>   fmap _ (DataDecl p tc tvs cs) = DataDecl p tc tvs cs
+>   fmap _ (NewtypeDecl p tc tvs nc) = NewtypeDecl p tc tvs nc
+>   fmap _ (TypeDecl p tc tvs ty) = TypeDecl p tc tvs ty
+>   fmap _ (ClassDecl p cls tv) = ClassDecl p cls tv
+>   fmap _ (InstanceDecl p cls ty) = InstanceDecl p cls ty
+>   fmap f (BlockDecl d) = BlockDecl (fmap f d)
+
+> instance Functor Decl where
+>   fmap _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops
+>   fmap _ (TypeSig p fs ty) = TypeSig p fs ty
+>   fmap f (FunctionDecl p f' eqs) = FunctionDecl p f' (map (fmap f) eqs)
+>   fmap _ (ForeignDecl p cc ie f ty) = ForeignDecl p cc ie f ty
+>   fmap f (PatternDecl p t rhs) = PatternDecl p (fmap f t) (fmap f rhs)
+>   fmap _ (FreeDecl p vs) = FreeDecl p vs
+>   fmap _ (TrustAnnot p tr fs) = TrustAnnot p tr fs
+
+> instance Functor Equation where
+>   fmap f (Equation p lhs rhs) = Equation p (fmap f lhs) (fmap f rhs)
+
+> instance Functor Lhs where
+>   fmap f (FunLhs f' ts) = FunLhs f' (map (fmap f) ts)
+>   fmap f (OpLhs t1 op t2) = OpLhs (fmap f t1) op (fmap f t2)
+>   fmap f (ApLhs lhs ts) = ApLhs (fmap f lhs) (map (fmap f) ts)
+
+> instance Functor Rhs where
+>   fmap f (SimpleRhs p e ds) = SimpleRhs p (fmap f e) (map (fmap f) ds)
+>   fmap f (GuardedRhs es ds) = GuardedRhs (map (fmap f) es) (map (fmap f) ds)
+
+> instance Functor CondExpr where
+>   fmap f (CondExpr p g e) = CondExpr p (fmap f g) (fmap f e)
+
+> instance Functor ConstrTerm where
+>   fmap f (LiteralPattern a l) = LiteralPattern (f a) l
+>   fmap f (NegativePattern a l) = NegativePattern (f a) l
+>   fmap f (VariablePattern a v) = VariablePattern (f a) v
+>   fmap f (ConstructorPattern a c ts) =
+>     ConstructorPattern (f a) c (map (fmap f) ts)
+>   fmap f (InfixPattern a t1 op t2) =
+>     InfixPattern (f a) (fmap f t1) op (fmap f t2)
+>   fmap f (ParenPattern t) = ParenPattern (fmap f t)
+>   fmap f (TuplePattern ts) = TuplePattern (map (fmap f) ts)
+>   fmap f (ListPattern a ts) = ListPattern (f a) (map (fmap f) ts)
+>   fmap f (AsPattern v t) = AsPattern v (fmap f t)
+>   fmap f (LazyPattern t) = LazyPattern (fmap f t)
+
+> instance Functor Expression where
+>   fmap f (Literal a l) = Literal (f a) l
+>   fmap f (Variable a v) = Variable (f a) v
+>   fmap f (Constructor a c) = Constructor (f a) c
+>   fmap f (Paren e) = Paren (fmap f e)
+>   fmap f (Typed e ty) = Typed (fmap f e) ty
+>   fmap f (Tuple es) = Tuple (map (fmap f) es)
+>   fmap f (List a es) = List (f a) (map (fmap f) es)
+>   fmap f (ListCompr e qs) = ListCompr (fmap f e) (map (fmap f) qs)
+>   fmap f (EnumFrom e) = EnumFrom (fmap f e)
+>   fmap f (EnumFromThen e1 e2) = EnumFromThen (fmap f e1) (fmap f e2)
+>   fmap f (EnumFromTo e1 e2) = EnumFromTo (fmap f e1) (fmap f e2)
+>   fmap f (EnumFromThenTo e1 e2 e3) =
+>     EnumFromThenTo (fmap f e1) (fmap f e2) (fmap f e3)
+>   fmap f (UnaryMinus op e) = UnaryMinus op (fmap f e)
+>   fmap f (Apply e1 e2) = Apply (fmap f e1) (fmap f e2)
+>   fmap f (InfixApply e1 op e2) =
+>     InfixApply (fmap f e1) (fmap f op) (fmap f e2)
+>   fmap f (LeftSection e op) = LeftSection (fmap f e) (fmap f op)
+>   fmap f (RightSection op e) = RightSection (fmap f op) (fmap f e)
+>   fmap f (Lambda ts e) = Lambda (map (fmap f) ts) (fmap f e)
+>   fmap f (Let ds e) = Let (map (fmap f) ds) (fmap f e)
+>   fmap f (Do sts e) = Do (map (fmap f) sts) (fmap f e)
+>   fmap f (IfThenElse e1 e2 e3) =
+>     IfThenElse (fmap f e1) (fmap f e2) (fmap f e3)
+>   fmap f (Case e as) = Case (fmap f e) (map (fmap f) as)
+
+> instance Functor InfixOp where
+>   fmap f (InfixOp a op) = InfixOp (f a) op
+>   fmap f (InfixConstr a op) = InfixConstr (f a) op
+
+> instance Functor Statement where
+>   fmap f (StmtExpr e) = StmtExpr (fmap f e)
+>   fmap f (StmtDecl ds) = StmtDecl (map (fmap f) ds)
+>   fmap f (StmtBind t e) = StmtBind (fmap f t) (fmap f e)
+
+> instance Functor Alt where
+>   fmap f (Alt p t rhs) = Alt p (fmap f t) (fmap f rhs)
+
+> instance Functor Goal where
+>   fmap f (Goal p e ds) = Goal p (fmap f e) (map (fmap f) ds)
 
 \end{verbatim}

@@ -1,129 +1,181 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: Qual.lhs 1989 2006-10-30 16:29:59Z wlux $
 %
-% Copyright (c) 2001-2005, Wolfgang Lux
+% Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Qual.lhs}
 \section{Proper Qualification}
 After checking the module and before starting the translation into the
-intermediate language, the compiler properly qualifies all
-constructors and (global) functions occurring in a pattern or
-expression such that their module prefix matches the module of their
-definition. This is done also for functions and constructors declared
-in the current module. Only functions and variables declared in local
-declarations groups as well as function arguments remain unchanged.
+intermediate language, the compiler properly qualifies all (type)
+constructors and functions occurring in (type) expressions and
+patterns so that their module prefix matches the module of their
+definition. This is done also for functions and (type) constructors
+declared in the current module. The names of local variables and
+functions remain unchanged.
 \begin{verbatim}
 
-> module Qual(qual,qualGoal) where
+> module Qual(Qual(..)) where
 > import Base
 > import TopEnv
 
-> qual :: ValueEnv -> [TopDecl a] -> [TopDecl a]
-> qual tyEnv ds = map (qualTopDecl tyEnv) ds
+> class Qual a where
+>   qual :: TCEnv -> ValueEnv -> a -> a
 
-> qualGoal :: ValueEnv -> Goal a -> Goal a
-> qualGoal tyEnv (Goal p e ds) =
->   Goal p (qualExpr tyEnv e) (map (qualDecl tyEnv) ds)
+> instance Qual a => Qual [a] where
+>   qual tcEnv tyEnv = map (qual tcEnv tyEnv)
 
-> qualTopDecl :: ValueEnv -> TopDecl a -> TopDecl a
-> qualTopDecl tyEnv (BlockDecl d) = BlockDecl (qualDecl tyEnv d)
-> qualTopDecl _ d = d
+> instance Qual (Goal a) where
+>   qual tcEnv tyEnv (Goal p e ds) =
+>     Goal p (qual tcEnv tyEnv e) (qual tcEnv tyEnv ds)
 
-> qualDecl :: ValueEnv -> Decl a -> Decl a
-> qualDecl tyEnv (FunctionDecl p f eqs) =
->   FunctionDecl p f (map (qualEqn tyEnv) eqs)
-> qualDecl tyEnv (PatternDecl p t rhs) =
->   PatternDecl p (qualTerm tyEnv t) (qualRhs tyEnv rhs)
-> qualDecl _ d = d
+> instance Qual (TopDecl a) where
+>   qual tcEnv tyEnv (DataDecl p tc tvs cs) =
+>     DataDecl p tc tvs (qual tcEnv tyEnv cs)
+>   qual tcEnv tyEnv (NewtypeDecl p tc tvs nc) =
+>     NewtypeDecl p tc tvs (qual tcEnv tyEnv nc)
+>   qual tcEnv tyEnv (TypeDecl p tc tvs ty) =
+>     TypeDecl p tc tvs (qual tcEnv tyEnv ty)
+>   qual _ _ (ClassDecl p cls tv) = ClassDecl p cls tv
+>   qual tcEnv tyEnv (InstanceDecl p cls ty) =
+>     InstanceDecl p (qualIdent tcEnv cls) (qual tcEnv tyEnv ty)
+>   qual tcEnv tyEnv (BlockDecl d) = BlockDecl (qual tcEnv tyEnv d)
 
-> qualEqn :: ValueEnv -> Equation a -> Equation a
-> qualEqn tyEnv (Equation p lhs rhs) =
->   Equation p (qualLhs tyEnv lhs) (qualRhs tyEnv rhs)
+> instance Qual ConstrDecl where
+>   qual tcEnv tyEnv (ConstrDecl p evs c tys) =
+>     ConstrDecl p evs c (qual tcEnv tyEnv tys)
+>   qual tcEnv tyEnv (ConOpDecl p evs ty1 op ty2) =
+>     ConOpDecl p evs (qual tcEnv tyEnv ty1) op (qual tcEnv tyEnv ty2)
 
-> qualLhs :: ValueEnv -> Lhs a -> Lhs a
-> qualLhs tyEnv (FunLhs f ts) = FunLhs f (map (qualTerm tyEnv) ts)
-> qualLhs tyEnv (OpLhs t1 op t2) =
->   OpLhs (qualTerm tyEnv t1) op (qualTerm tyEnv t2)
-> qualLhs tyEnv (ApLhs lhs ts) =
->   ApLhs (qualLhs tyEnv lhs) (map (qualTerm tyEnv) ts)
+> instance Qual NewConstrDecl where
+>   qual tcEnv tyEnv (NewConstrDecl p c ty) =
+>     NewConstrDecl p c (qual tcEnv tyEnv ty)
 
-> qualTerm :: ValueEnv -> ConstrTerm a -> ConstrTerm a
-> qualTerm _ (LiteralPattern a l) = LiteralPattern a l
-> qualTerm _ (NegativePattern a l) = NegativePattern a l
-> qualTerm _ (VariablePattern a v) = VariablePattern a v
-> qualTerm tyEnv (ConstructorPattern a c ts) =
->   ConstructorPattern a (qualIdent tyEnv c) (map (qualTerm tyEnv) ts)
-> qualTerm tyEnv (InfixPattern a t1 op t2) =
->   InfixPattern a (qualTerm tyEnv t1) (qualIdent tyEnv op) (qualTerm tyEnv t2)
-> qualTerm tyEnv (ParenPattern t) = ParenPattern (qualTerm tyEnv t)
-> qualTerm tyEnv (TuplePattern ts) = TuplePattern (map (qualTerm tyEnv) ts)
-> qualTerm tyEnv (ListPattern a ts) = ListPattern a (map (qualTerm tyEnv) ts)
-> qualTerm tyEnv (AsPattern v t) = AsPattern v (qualTerm tyEnv t)
-> qualTerm tyEnv (LazyPattern t) = LazyPattern (qualTerm tyEnv t)
+> instance Qual QualTypeExpr where
+>   qual tcEnv tyEnv (QualTypeExpr cx ty) =
+>     QualTypeExpr (qual tcEnv tyEnv cx) (qual tcEnv tyEnv ty)
 
-> qualRhs :: ValueEnv -> Rhs a -> Rhs a
-> qualRhs tyEnv (SimpleRhs p e ds) =
->   SimpleRhs p (qualExpr tyEnv e) (map (qualDecl tyEnv) ds) 
-> qualRhs tyEnv (GuardedRhs es ds) =
->   GuardedRhs (map (qualCondExpr tyEnv) es) (map (qualDecl tyEnv) ds)
+> instance Qual ClassAssert where
+>   qual tcEnv _ (ClassAssert cls tv) = ClassAssert (qualIdent tcEnv cls) tv
 
-> qualCondExpr :: ValueEnv -> CondExpr a -> CondExpr a
-> qualCondExpr tyEnv (CondExpr p g e) =
->   CondExpr p (qualExpr tyEnv g) (qualExpr tyEnv e)
+> instance Qual TypeExpr where
+>   qual tcEnv tyEnv (ConstructorType c tys) =
+>     ConstructorType (qualIdent tcEnv c) (qual tcEnv tyEnv tys)
+>   qual _ _ (VariableType tv) = VariableType tv
+>   qual tcEnv tyEnv (TupleType tys) = TupleType (qual tcEnv tyEnv tys)
+>   qual tcEnv tyEnv (ListType ty) = ListType (qual tcEnv tyEnv ty)
+>   qual tcEnv tyEnv (ArrowType ty1 ty2) =
+>     ArrowType (qual tcEnv tyEnv ty1) (qual tcEnv tyEnv ty2)
 
-> qualExpr :: ValueEnv -> Expression a -> Expression a
-> qualExpr _ (Literal a l) = Literal a l
-> qualExpr tyEnv (Variable a v) = Variable a (qualIdent tyEnv v)
-> qualExpr tyEnv (Constructor a c) = Constructor a (qualIdent tyEnv c)
-> qualExpr tyEnv (Paren e) = Paren (qualExpr tyEnv e)
-> qualExpr tyEnv (Typed e ty) = Typed (qualExpr tyEnv e) ty
-> qualExpr tyEnv (Tuple es) = Tuple (map (qualExpr tyEnv) es)
-> qualExpr tyEnv (List a es) = List a (map (qualExpr tyEnv) es)
-> qualExpr tyEnv (ListCompr e qs) =
->   ListCompr (qualExpr tyEnv e) (map (qualStmt tyEnv) qs)
-> qualExpr tyEnv (EnumFrom e) = EnumFrom (qualExpr tyEnv e)
-> qualExpr tyEnv (EnumFromThen e1 e2) =
->   EnumFromThen (qualExpr tyEnv e1) (qualExpr tyEnv e2)
-> qualExpr tyEnv (EnumFromTo e1 e2) =
->   EnumFromTo (qualExpr tyEnv e1) (qualExpr tyEnv e2)
-> qualExpr tyEnv (EnumFromThenTo e1 e2 e3) =
->   EnumFromThenTo (qualExpr tyEnv e1) (qualExpr tyEnv e2) (qualExpr tyEnv e3)
-> qualExpr tyEnv (UnaryMinus op e) = UnaryMinus op (qualExpr tyEnv e)
-> qualExpr tyEnv (Apply e1 e2) = Apply (qualExpr tyEnv e1) (qualExpr tyEnv e2)
-> qualExpr tyEnv (InfixApply e1 op e2) =
->   InfixApply (qualExpr tyEnv e1) (qualOp tyEnv op) (qualExpr tyEnv e2)
-> qualExpr tyEnv (LeftSection e op) =
->   LeftSection (qualExpr tyEnv e) (qualOp tyEnv op)
-> qualExpr tyEnv (RightSection op e) =
->   RightSection (qualOp tyEnv op) (qualExpr tyEnv e)
-> qualExpr tyEnv (Lambda ts e) =
->   Lambda (map (qualTerm tyEnv) ts) (qualExpr tyEnv e)
-> qualExpr tyEnv (Let ds e) = Let (map (qualDecl tyEnv) ds) (qualExpr tyEnv e)
-> qualExpr tyEnv (Do sts e) = Do (map (qualStmt tyEnv) sts) (qualExpr tyEnv e)
-> qualExpr tyEnv (IfThenElse e1 e2 e3) =
->   IfThenElse (qualExpr tyEnv e1) (qualExpr tyEnv e2) (qualExpr tyEnv e3)
-> qualExpr tyEnv (Case e alts) =
->   Case (qualExpr tyEnv e) (map (qualAlt tyEnv) alts)
+> instance Qual (Decl a) where
+>   qual _ _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops
+>   qual tcEnv tyEnv (TypeSig p fs ty) = TypeSig p fs (qual tcEnv tyEnv ty)
+>   qual tcEnv tyEnv (FunctionDecl p f eqs) =
+>     FunctionDecl p f (qual tcEnv tyEnv eqs)
+>   qual tcEnv tyEnv (ForeignDecl p cc ie f ty) =
+>     ForeignDecl p cc ie f (qual tcEnv tyEnv ty)
+>   qual tcEnv tyEnv (PatternDecl p t rhs) =
+>     PatternDecl p (qual tcEnv tyEnv t) (qual tcEnv tyEnv rhs)
+>   qual _ _ (FreeDecl p vs) = (FreeDecl p vs)
+>   qual _ _ (TrustAnnot p tr fs) = (TrustAnnot p tr fs)
 
-> qualStmt :: ValueEnv -> Statement a -> Statement a
-> qualStmt tyEnv (StmtExpr e) = StmtExpr (qualExpr tyEnv e)
-> qualStmt tyEnv (StmtBind t e) =
->   StmtBind (qualTerm tyEnv t) (qualExpr tyEnv e)
-> qualStmt tyEnv (StmtDecl ds) = StmtDecl (map (qualDecl tyEnv) ds)
+> instance Qual (Equation a) where
+>   qual tcEnv tyEnv (Equation p lhs rhs) =
+>     Equation p (qual tcEnv tyEnv lhs) (qual tcEnv tyEnv rhs)
 
-> qualAlt :: ValueEnv -> Alt a -> Alt a
-> qualAlt tyEnv (Alt p t rhs) = Alt p (qualTerm tyEnv t) (qualRhs tyEnv rhs)
+> instance Qual (Lhs a) where
+>   qual tcEnv tyEnv (FunLhs f ts) = FunLhs f (qual tcEnv tyEnv ts)
+>   qual tcEnv tyEnv (OpLhs t1 op t2) =
+>     OpLhs (qual tcEnv tyEnv t1) op (qual tcEnv tyEnv t2)
+>   qual tcEnv tyEnv (ApLhs lhs ts) =
+>     ApLhs (qual tcEnv tyEnv lhs) (qual tcEnv tyEnv ts)
 
-> qualOp :: ValueEnv -> InfixOp a -> InfixOp a
-> qualOp tyEnv (InfixOp a op) = InfixOp a (qualIdent tyEnv op)
-> qualOp tyEnv (InfixConstr a op) = InfixConstr a (qualIdent tyEnv op)
+> instance Qual (ConstrTerm a) where
+>   qual _ _ (LiteralPattern a l) = LiteralPattern a l
+>   qual _ _ (NegativePattern a l) = NegativePattern a l
+>   qual _ _ (VariablePattern a v) = VariablePattern a v
+>   qual tcEnv tyEnv (ConstructorPattern a c ts) =
+>     ConstructorPattern a (qualIdent tyEnv c) (qual tcEnv tyEnv ts)
+>   qual tcEnv tyEnv (InfixPattern a t1 op t2) =
+>     InfixPattern a (qual tcEnv tyEnv t1)
+>                  (qualIdent tyEnv op)
+>                  (qual tcEnv tyEnv t2)
+>   qual tcEnv tyEnv (ParenPattern t) = ParenPattern (qual tcEnv tyEnv t)
+>   qual tcEnv tyEnv (TuplePattern ts) = TuplePattern (qual tcEnv tyEnv ts)
+>   qual tcEnv tyEnv (ListPattern a ts) = ListPattern a (qual tcEnv tyEnv ts)
+>   qual tcEnv tyEnv (AsPattern v t) = AsPattern v (qual tcEnv tyEnv t)
+>   qual tcEnv tyEnv (LazyPattern t) = LazyPattern (qual tcEnv tyEnv t)
 
-> qualIdent :: ValueEnv -> QualIdent -> QualIdent
-> qualIdent tyEnv x
+> instance Qual (Rhs a) where
+>   qual tcEnv tyEnv (SimpleRhs p e ds) =
+>     SimpleRhs p (qual tcEnv tyEnv e) (qual tcEnv tyEnv ds) 
+>   qual tcEnv tyEnv (GuardedRhs es ds) =
+>     GuardedRhs (qual tcEnv tyEnv es) (qual tcEnv tyEnv ds)
+
+> instance Qual (CondExpr a) where
+>   qual tcEnv tyEnv (CondExpr p g e) =
+>     CondExpr p (qual tcEnv tyEnv g) (qual tcEnv tyEnv e)
+
+> instance Qual (Expression a) where
+>   qual _ _ (Literal a l) = Literal a l
+>   qual tcEnv tyEnv (Variable a v) = Variable a (qualIdent tyEnv v)
+>   qual tcEnv tyEnv (Constructor a c) = Constructor a (qualIdent tyEnv c)
+>   qual tcEnv tyEnv (Paren e) = Paren (qual tcEnv tyEnv e)
+>   qual tcEnv tyEnv (Typed e ty) = Typed (qual tcEnv tyEnv e) ty
+>   qual tcEnv tyEnv (Tuple es) = Tuple (qual tcEnv tyEnv es)
+>   qual tcEnv tyEnv (List a es) = List a (qual tcEnv tyEnv es)
+>   qual tcEnv tyEnv (ListCompr e qs) =
+>     ListCompr (qual tcEnv tyEnv e) (qual tcEnv tyEnv qs)
+>   qual tcEnv tyEnv (EnumFrom e) = EnumFrom (qual tcEnv tyEnv e)
+>   qual tcEnv tyEnv (EnumFromThen e1 e2) =
+>     EnumFromThen (qual tcEnv tyEnv e1) (qual tcEnv tyEnv e2)
+>   qual tcEnv tyEnv (EnumFromTo e1 e2) =
+>     EnumFromTo (qual tcEnv tyEnv e1) (qual tcEnv tyEnv e2)
+>   qual tcEnv tyEnv (EnumFromThenTo e1 e2 e3) =
+>     EnumFromThenTo (qual tcEnv tyEnv e1)
+>                    (qual tcEnv tyEnv e2)
+>                    (qual tcEnv tyEnv e3)
+>   qual tcEnv tyEnv (UnaryMinus op e) = UnaryMinus op (qual tcEnv tyEnv e)
+>   qual tcEnv tyEnv (Apply e1 e2) =
+>     Apply (qual tcEnv tyEnv e1) (qual tcEnv tyEnv e2)
+>   qual tcEnv tyEnv (InfixApply e1 op e2) =
+>     InfixApply (qual tcEnv tyEnv e1)
+>                (qual tcEnv tyEnv op)
+>                (qual tcEnv tyEnv e2)
+>   qual tcEnv tyEnv (LeftSection e op) =
+>     LeftSection (qual tcEnv tyEnv e) (qual tcEnv tyEnv op)
+>   qual tcEnv tyEnv (RightSection op e) =
+>     RightSection (qual tcEnv tyEnv op) (qual tcEnv tyEnv e)
+>   qual tcEnv tyEnv (Lambda ts e) =
+>     Lambda (qual tcEnv tyEnv ts) (qual tcEnv tyEnv e)
+>   qual tcEnv tyEnv (Let ds e) = Let (qual tcEnv tyEnv ds) (qual tcEnv tyEnv e)
+>   qual tcEnv tyEnv (Do sts e) = Do (qual tcEnv tyEnv sts) (qual tcEnv tyEnv e)
+>   qual tcEnv tyEnv (IfThenElse e1 e2 e3) =
+>     IfThenElse (qual tcEnv tyEnv e1)
+>                (qual tcEnv tyEnv e2)
+>                (qual tcEnv tyEnv e3)
+>   qual tcEnv tyEnv (Case e alts) =
+>     Case (qual tcEnv tyEnv e) (qual tcEnv tyEnv alts)
+
+> instance Qual (Statement a) where
+>   qual tcEnv tyEnv (StmtExpr e) = StmtExpr (qual tcEnv tyEnv e)
+>   qual tcEnv tyEnv (StmtBind t e) =
+>     StmtBind (qual tcEnv tyEnv t) (qual tcEnv tyEnv e)
+>   qual tcEnv tyEnv (StmtDecl ds) = StmtDecl (qual tcEnv tyEnv ds)
+
+> instance Qual (Alt a) where
+>   qual tcEnv tyEnv (Alt p t rhs) =
+>     Alt p (qual tcEnv tyEnv t) (qual tcEnv tyEnv rhs)
+
+> instance Qual (InfixOp a) where
+>   qual tcEnv tyEnv (InfixOp a op) = InfixOp a (qualIdent tyEnv op)
+>   qual tcEnv tyEnv (InfixConstr a op) = InfixConstr a (qualIdent tyEnv op)
+
+> qualIdent :: Entity a => TopEnv a -> QualIdent -> QualIdent
+> qualIdent env x
 >   | isRenamed (unqualify x) = x
 >   | otherwise =
->       case qualLookupTopEnv x tyEnv of
+>       case qualLookupTopEnv x env of
 >         [y] -> origName y
 >         _ -> internalError ("qualIdent: " ++ show x)
 

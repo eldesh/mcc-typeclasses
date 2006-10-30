@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 1987 2006-10-29 16:59:50Z wlux $
+% $Id: Modules.lhs 1989 2006-10-30 16:29:59Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -31,7 +31,7 @@ This module controls the compilation of modules.
 > import Imports(importInterface,importInterfaceIntf,importUnifyData)
 > import Exports(exportInterface)
 > import Trust(trustEnv,trustEnvGoal)
-> import Qual(qual,qualGoal)
+> import Qual(Qual(..))
 > import Desugar(desugar,desugarGoal)
 > import Simplify(simplify)
 > import Lift(lift)
@@ -120,7 +120,7 @@ declaration to the module.
 >     (tyEnv',ds'''') <- typeCheck m tcEnv' iEnv' tyEnv ds'''
 >     let (pEnv'',tcEnv'',tyEnv'') = qualifyEnv mEnv m pEnv' tcEnv' tyEnv'
 >     return (tcEnv'',tyEnv'',
->             Module m (Just es') is (qual tyEnv' ds''''),
+>             Module m (Just es') is (qual tcEnv' tyEnv' ds''''),
 >             exportInterface m es' pEnv'' tcEnv'' iEnv' tyEnv'')
 
 > warnModule :: CaseMode -> [Warn] -> Module a -> [String]
@@ -259,7 +259,7 @@ compilation of a goal is similar to that of a module.
 >     (tyEnv',cx,g'') <- kindCheckGoal tcEnv g' >>
 >                        typeCheckGoal tcEnv iEnv tyEnv g'
 >     let (_,tcEnv',tyEnv'') = qualifyEnv mEnv emptyMIdent pEnv tcEnv tyEnv'
->     return (tcEnv',tyEnv'',cx,qualGoal tyEnv' g'')
+>     return (tcEnv',tyEnv'',cx,qual tcEnv' tyEnv' g'')
 
 > warnGoal :: CaseMode -> [Warn] -> Goal a -> [String]
 > warnGoal caseMode warn g =

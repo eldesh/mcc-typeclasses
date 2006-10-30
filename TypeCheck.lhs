@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 1987 2006-10-29 16:59:50Z wlux $
+% $Id: TypeCheck.lhs 1988 2006-10-30 16:08:59Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -57,7 +57,8 @@ current module into the type environment.
 >          theta <- liftSt fetchSt
 >          return (subst theta tyEnv',
 >                  map (fmap undefined) tds ++
->                  map (BlockDecl . fmap (subst theta)) vds'))
+>                  map (BlockDecl . fmap (subst theta)) vds' ++
+>                  [InstanceDecl p cls ty | InstanceDecl p cls ty <- vds]))
 >       iEnv
 >       (foldr (bindConstrs m tcEnv) tyEnv tds)
 >   where (tds,vds) = partition isTypeDecl ds

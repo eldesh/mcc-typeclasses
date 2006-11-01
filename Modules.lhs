@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 1989 2006-10-30 16:29:59Z wlux $
+% $Id: Modules.lhs 1991 2006-11-01 18:15:48Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -32,6 +32,7 @@ This module controls the compilation of modules.
 > import Exports(exportInterface)
 > import Trust(trustEnv,trustEnvGoal)
 > import Qual(Qual(..))
+> import DictTrans(dictTransModule,dictTransInterface,dictTransGoal)
 > import Desugar(desugar,desugarGoal)
 > import Simplify(simplify)
 > import Lift(lift)
@@ -74,9 +75,9 @@ declaration to the module.
 > compileModule :: Options -> FilePath -> ErrorT IO ()
 > compileModule opts fn =
 >   do
->     (mEnv,tcEnv,tyEnv,m,intf) <- loadModule id paths cm ws fn
+>     (mEnv,tcEnv,iEnv,tyEnv,m,intf) <- loadModule id paths cm ws fn
 >     mEnv' <- importDebugPrelude paths dbg fn mEnv
->     let (ccode,dumps) = transModule split dbg tr mEnv' tcEnv tyEnv m
+>     let (ccode,dumps) = transModule split dbg tr mEnv' tcEnv iEnv tyEnv m
 >     liftErr $ mapM_ (doDump opts) dumps >>
 >               unless (noInterface opts) (updateInterface fn intf) >>
 >               writeCode (output opts) fn ccode
@@ -89,14 +90,15 @@ declaration to the module.
 
 > loadModule :: (Module () -> Module ()) -> [FilePath] -> CaseMode -> [Warn]
 >            -> FilePath
->            -> ErrorT IO (ModuleEnv,TCEnv,ValueEnv,Module Type,Interface)
+>            -> ErrorT IO (ModuleEnv,TCEnv,InstEnv,ValueEnv,
+>                          Module Type,Interface)
 > loadModule f paths caseMode warn fn =
 >   do
 >     m <- liftM f $ liftErr (readFile fn) >>= okM . parseModule fn
 >     mEnv <- loadInterfaces paths m
->     (tcEnv,tyEnv,m',intf) <- okM $ checkModule mEnv m
+>     (tcEnv,iEnv,tyEnv,m',intf) <- okM $ checkModule mEnv m
 >     liftErr $ mapM_ putErrLn $ warnModule caseMode warn m'
->     return (bindModule intf mEnv,tcEnv,tyEnv,m',intf)
+>     return (bindModule intf mEnv,tcEnv,iEnv,tyEnv,m',intf)
 
 > parseModule :: FilePath -> String -> Error (Module ())
 > parseModule fn s =
@@ -108,7 +110,7 @@ declaration to the module.
 >         [P p m | ImportDecl p m _ _ _ <- is]
 
 > checkModule :: ModuleEnv -> Module a
->             -> Error (TCEnv,ValueEnv,Module Type,Interface)
+>             -> Error (TCEnv,InstEnv,ValueEnv,Module Type,Interface)
 > checkModule mEnv (Module m es is ds) =
 >   do
 >     (pEnv,tcEnv,iEnv,tyEnv) <- importModules mEnv is
@@ -119,7 +121,7 @@ declaration to the module.
 >     tcEnv' <- kindCheck m tcEnv ds'''
 >     (tyEnv',ds'''') <- typeCheck m tcEnv' iEnv' tyEnv ds'''
 >     let (pEnv'',tcEnv'',tyEnv'') = qualifyEnv mEnv m pEnv' tcEnv' tyEnv'
->     return (tcEnv'',tyEnv'',
+>     return (tcEnv'',iEnv',tyEnv'',
 >             Module m (Just es') is (qual tcEnv' tyEnv' ds''''),
 >             exportInterface m es' pEnv'' tcEnv'' iEnv' tyEnv'')
 
@@ -128,27 +130,32 @@ declaration to the module.
 >   caseCheck caseMode m ++ unusedCheck warn m ++
 >   shadowCheck warn m ++ overlapCheck warn m
 
-> transModule :: Bool -> Bool -> Trust -> ModuleEnv -> TCEnv -> ValueEnv
->             -> Module Type -> (Either CFile [CFile],[(Dump,Doc)])
-> transModule split debug tr mEnv tcEnv tyEnv (Module m es is ds) =
+> transModule :: Bool -> Bool -> Trust -> ModuleEnv
+>             -> TCEnv -> InstEnv -> ValueEnv -> Module Type
+>             -> (Either CFile [CFile],[(Dump,Doc)])
+> transModule split debug tr mEnv tcEnv iEnv tyEnv (Module m es is ds) =
 >   (ccode,dumps)
 >   where trEnv = trustEnv tr ds
->         (desugared,tyEnv') = desugar tcEnv tyEnv (Module m es is ds)
->         (simplified,tyEnv'') = simplify tyEnv' desugared
->         (lifted,tyEnv''',trEnv') = lift tyEnv'' trEnv simplified
->         il = ilTrans tyEnv''' lifted
+>         mEnv' = fmap dictTransInterface mEnv
+>         (tcEnv',tyEnv',dict) =
+>           dictTransModule tcEnv iEnv tyEnv (Module m es is ds)
+>         (desugared,tyEnv'') = desugar tcEnv' tyEnv' dict
+>         (simplified,tyEnv''') = simplify tyEnv'' desugared
+>         (lifted,tyEnv'''',trEnv') = lift tyEnv''' trEnv simplified
+>         il = ilTrans tyEnv'''' lifted
 >         ilDbg
 >           | debug = dTransform (trustedFun trEnv') il
 >           | otherwise = il
 >         ilNormal = liftProg ilDbg
 >         cam = camCompile ilNormal
->         imports = camCompileData (ilImports mEnv ilNormal)
+>         imports = camCompileData (ilImports mEnv' ilNormal)
 >         ccode
 >           | split = Right (genSplitModule imports cam)
 >           | otherwise = Left (genModule imports cam)
 >         dumps =
 >           [(DumpRenamed,ppModule (Module m es is ds)),
 >            (DumpTypes,ppTypes m (localBindings tyEnv)),
+>            (DumpDict, ppModule dict),
 >            (DumpDesugared,ppModule desugared),
 >            (DumpSimplified,ppModule simplified),
 >            (DumpLifted,ppModule lifted),
@@ -200,9 +207,9 @@ compilation of a goal is similar to that of a module.
 > compileGoal :: Options -> Maybe String -> Maybe FilePath -> ErrorT IO ()
 > compileGoal opts g fn =
 >   do
->     (mEnv,tcEnv,tyEnv,_,_,g') <- loadGoal paths cm ws g fn
+>     (mEnv,tcEnv,iEnv,tyEnv,_,_,g') <- loadGoal paths cm ws g fn
 >     mEnv' <- importDebugPrelude paths dbg "" mEnv
->     let (ccode,dumps) = transGoal dbg tr mEnv' tcEnv tyEnv g'
+>     let (ccode,dumps) = transGoal dbg tr mEnv' tcEnv iEnv tyEnv g'
 >     liftErr $ mapM_ (doDump opts) dumps >>
 >               writeGoalCode (output opts) ccode
 >   where paths = importPath opts
@@ -214,26 +221,27 @@ compilation of a goal is similar to that of a module.
 > typeGoal :: Options -> String -> Maybe FilePath -> ErrorT IO ()
 > typeGoal opts g fn =
 >   do
->     (_,_,tyEnv,m,cx,Goal _ e _) <-
+>     (_,_,_,tyEnv,m,cx,Goal _ e _) <-
 >       loadGoal (importPath opts) (caseMode opts) (warn opts) (Just g) fn
 >     liftErr $ print (ppQualType m (QualType cx (typeOf e)))
 
 > loadGoal :: [FilePath] -> CaseMode -> [Warn] -> Maybe String -> Maybe FilePath
->          -> ErrorT IO (ModuleEnv,TCEnv,ValueEnv,ModuleIdent,Context,Goal Type)
+>          -> ErrorT IO (ModuleEnv,TCEnv,InstEnv,ValueEnv,
+>                        ModuleIdent,Context,Goal Type)
 > loadGoal paths caseMode warn g fn =
 >   do
 >     (mEnv,m,is) <- loadGoalModule paths g fn
->     (tcEnv,tyEnv,cx,g') <-
+>     (tcEnv,iEnv,tyEnv,cx,g') <-
 >       okM $ maybe (return mainGoal) parseGoal g >>= checkGoal mEnv is
 >     liftErr $ mapM_ putErrLn $ warnGoal caseMode warn g'
->     return (mEnv,tcEnv,tyEnv,m,cx,g')
+>     return (mEnv,tcEnv,iEnv,tyEnv,m,cx,g')
 >   where mainGoal = Goal (first "") (Variable () (qualify mainId)) []
 
 > loadGoalModule :: [FilePath] -> Maybe String -> Maybe FilePath
 >                -> ErrorT IO (ModuleEnv,ModuleIdent,[ImportDecl])
 > loadGoalModule paths (Just _) (Just fn) =
 >   do
->     (mEnv,_,_,Module m _ is _,_) <-
+>     (mEnv,_,_,_,Module m _ is _,_) <-
 >       loadModule transparent paths FreeMode [] fn
 >     return (mEnv,m,is ++ [importDecl (first "") m])
 >   where transparent (Module m _ is ds) = Module m Nothing is ds
@@ -249,7 +257,7 @@ compilation of a goal is similar to that of a module.
 >         m = preludeMIdent
 
 > checkGoal :: ModuleEnv -> [ImportDecl] -> Goal a
->           -> Error (TCEnv,ValueEnv,Context,Goal Type)
+>           -> Error (TCEnv,InstEnv,ValueEnv,Context,Goal Type)
 > checkGoal mEnv is g =
 >   do
 >     (pEnv,tcEnv,iEnv,tyEnv) <- importModules mEnv is
@@ -259,35 +267,38 @@ compilation of a goal is similar to that of a module.
 >     (tyEnv',cx,g'') <- kindCheckGoal tcEnv g' >>
 >                        typeCheckGoal tcEnv iEnv tyEnv g'
 >     let (_,tcEnv',tyEnv'') = qualifyEnv mEnv emptyMIdent pEnv tcEnv tyEnv'
->     return (tcEnv',tyEnv'',cx,qual tcEnv' tyEnv' g'')
+>     return (tcEnv',iEnv,tyEnv'',cx,qual tcEnv' tyEnv' g'')
 
 > warnGoal :: CaseMode -> [Warn] -> Goal a -> [String]
 > warnGoal caseMode warn g =
 >   caseCheckGoal caseMode g ++ unusedCheckGoal warn g ++
 >   shadowCheckGoal warn g ++ overlapCheckGoal warn g
 
-> transGoal :: Bool -> Trust -> ModuleEnv -> TCEnv -> ValueEnv -> Goal Type
->           -> (CFile,[(Dump,Doc)])
-> transGoal debug tr mEnv tcEnv tyEnv g = (mergeCFile ccode ccode',dumps)
+> transGoal :: Bool -> Trust -> ModuleEnv -> TCEnv -> InstEnv -> ValueEnv
+>           -> Goal Type -> (CFile,[(Dump,Doc)])
+> transGoal debug tr mEnv tcEnv iEnv tyEnv g = (mergeCFile ccode ccode',dumps)
 >   where m = emptyMIdent
 >         goalId = mainId
 >         qGoalId = qualifyWith m goalId
 >         trEnv = bindEnv goalId Suspect (trustEnvGoal tr g)
->         (vs,desugared,tyEnv') = desugarGoal debug tcEnv tyEnv m goalId g
->         (simplified,tyEnv'') = simplify tyEnv' desugared
->         (lifted,tyEnv''',trEnv') = lift tyEnv'' trEnv simplified
->         il = ilTrans tyEnv''' lifted
+>         mEnv' = fmap dictTransInterface mEnv
+>         (tcEnv',tyEnv',dict) = dictTransGoal tcEnv iEnv tyEnv m g
+>         (vs,desugared,tyEnv'') = desugarGoal debug tcEnv' tyEnv' m goalId dict
+>         (simplified,tyEnv''') = simplify tyEnv'' desugared
+>         (lifted,tyEnv'''',trEnv') = lift tyEnv''' trEnv simplified
+>         il = ilTrans tyEnv'''' lifted
 >         ilDbg
 >           | debug = dAddMain goalId (dTransform (trustedFun trEnv') il)
 >           | otherwise = il
 >         ilNormal = liftProg ilDbg
 >         cam = camCompile ilNormal
->         imports = camCompileData (ilImports mEnv ilNormal)
+>         imports = camCompileData (ilImports mEnv' ilNormal)
 >         ccode = genModule imports cam
 >         ccode' = genMain (fun qGoalId) (fmap (map name) vs)
 >         dumps =
 >           [(DumpRenamed,ppGoal g),
 >            (DumpTypes,ppTypes m (localBindings tyEnv)),
+>            (DumpDict,ppGoal dict),
 >            (DumpDesugared,ppModule desugared),
 >            (DumpSimplified,ppModule simplified),
 >            (DumpLifted,ppModule lifted),
@@ -486,6 +497,7 @@ standard output.
 > dumpHeader :: Dump -> String
 > dumpHeader DumpRenamed = "Module after renaming"
 > dumpHeader DumpTypes = "Types"
+> dumpHeader DumpDict = "Source code with dictionaries"
 > dumpHeader DumpDesugared = "Source code after desugaring"
 > dumpHeader DumpSimplified = "Source code after simplification"
 > dumpHeader DumpLifted = "Source code after lifting"

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TopEnv.lhs 1842 2006-01-31 14:22:53Z wlux $
+% $Id: TopEnv.lhs 1991 2006-11-01 18:15:48Z wlux $
 %
-% Copyright (c) 1999-2005, Wolfgang Lux
+% Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TopEnv.lhs}
@@ -40,7 +40,7 @@ imported.
 >               bindTopEnv, globalBindTopEnv, localBindTopEnv, qualBindTopEnv,
 >               rebindTopEnv, globalRebindTopEnv, localRebindTopEnv,
 >               qualRebindTopEnv, localUnbindTopEnv,
->               lookupTopEnv, qualLookupTopEnv,
+>               lookupTopEnv, qualLookupTopEnv, allEntities,
 >               allImports, moduleImports, localBindings) where
 > import Env
 > import Ident
@@ -189,15 +189,20 @@ introduce bindings for both global and local definitions.
 >   maybe [] (\ys -> [ys !! (qTupleArity x - 2) | isQTupleId x]) tup
 
 \end{verbatim}
-The function \texttt{allImports} returns a list of the names and
-values of all entities in an environment that were imported from
-another module. The functions \texttt{localBindings} and
+The function \texttt{allEntities} returns a list of all entities bound
+in an environment. The function \texttt{allImports} returns a list of
+the names and values of all entities in an environment that were
+imported from another module. The functions \texttt{localBindings} and
 \texttt{moduleImports} return the list of entities defined in the
 current module and imported from a particular module, respectively.
 Since a name can be defined only once at the top-level of a module and
 imports of the same entity are merged, the result lists of both
 functions will contain no duplicates.
 \begin{verbatim}
+
+> allEntities :: TopEnv a -> [a]
+> allEntities (TopEnv _ env) =
+>   [y | (x,ys) <- envToList env, isQualified x, (_,y) <- ys]
 
 > allImports :: TopEnv a -> [(QualIdent,a)]
 > allImports (TopEnv _ env) =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: Base.lhs 1990 2006-11-01 09:34:36Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -251,7 +251,7 @@ recorded only with the original names of the class and constructor
 involved.
 \begin{verbatim}
 
-> data CT = CT QualIdent QualIdent deriving (Eq,Ord)
+> data CT = CT QualIdent QualIdent deriving (Eq,Ord,Show)
 
 > type InstEnv = Set CT
 

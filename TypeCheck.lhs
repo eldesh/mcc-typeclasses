@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 1988 2006-10-30 16:08:59Z wlux $
+% $Id: TypeCheck.lhs 1994 2006-11-08 12:48:39Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -56,12 +56,15 @@ current module into the type environment.
 >          tyEnv' <- fetchSt
 >          theta <- liftSt fetchSt
 >          return (subst theta tyEnv',
->                  map (fmap undefined) tds ++
+>                  map untyped tds ++
 >                  map (BlockDecl . fmap (subst theta)) vds' ++
 >                  [InstanceDecl p cls ty | InstanceDecl p cls ty <- vds]))
 >       iEnv
 >       (foldr (bindConstrs m tcEnv) tyEnv tds)
 >   where (tds,vds) = partition isTypeDecl ds
+
+> untyped :: Functor f => f a -> f Type
+> untyped = fmap (internalError "untyped")
 
 \end{verbatim}
 Type checking of a goal is simpler because there are no type
@@ -219,7 +222,7 @@ general than the type signature.
 >     (cx,dss') <-
 >       mapAccumM (tcDeclGroup m tcEnv (foldr bindTypeSigs noSigs ods)) []
 >                 (scc bv (qfv m) vds)
->     return (cx,concat dss')
+>     return (cx,map untyped ods ++ concat dss')
 >   where (vds,ods) = partition isValueDecl ds
 
 > tcDeclGroup :: ModuleIdent -> TCEnv -> SigEnv -> Context -> [Decl a]

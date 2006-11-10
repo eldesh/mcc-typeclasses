@@ -1,12 +1,12 @@
--- $Id: Numeric.curry 1996 2006-11-10 20:05:36Z wlux $
+-- $Id: Numeric.curry 1997 2006-11-10 20:45:06Z wlux $
 --
--- Copyright (c) 2003-2005, Wolfgang Lux
+-- Copyright (c) 2003-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module Numeric(showSigned, showIntAtBase, showInt, showOct, showHex,
-               readSigned, readSignedInt, readInt, readDec, readOct, readHex,
+               readSigned, readInt, readDec, readOct, readHex,
 	       showEFloat, showFFloat, showGFloat, showFloat, 
-               readSignedFloat, readFloat, lexDigits) where
+               readFloat, lexDigits) where
 import Char
 
 {- Missing Haskell Prelude definitions -}
@@ -37,15 +37,12 @@ showHex :: Int -> ShowS
 showHex = showIntAtBase 16 intToDigit
 
 
-readSignedInt :: ReadS Int -> ReadS Int
-readSignedInt = readSigned (0 -)
-
-readSigned :: (a -> a) -> ReadS a -> ReadS a
-readSigned negate r cs =
+readSigned :: Num a => ReadS a -> ReadS a
+readSigned r cs =
   case dropSpace cs of
     [] -> []
     (c:cs')
-      | c == '(' -> [(n,cs''') | (n,cs'') <- readSigned negate r cs',
+      | c == '(' -> [(n,cs''') | (n,cs'') <- readSigned r cs',
                                  cs''' <- case dropSpace cs'' of
 			                    (')':cs) -> [cs]
 					    _ -> []]
@@ -86,9 +83,6 @@ showGFloat d f
 showFloat :: Float -> ShowS
 showFloat = showGFloat Nothing
 
-
-readSignedFloat :: ReadS Float -> ReadS Float
-readSignedFloat = readSigned (0.0 -)
 
 readFloat :: ReadS Float
 readFloat r = [(convert ds (k - d),t) | (ds,d,s) <- lexFix r,

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: DictTrans.lhs 1997 2006-11-10 20:45:06Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -454,8 +454,8 @@ the concrete type at which $f$ is used in the application.
 >            (dictTrans m tyEnv dictEnv e1)
 >            (dictTrans m tyEnv dictEnv e2)
 >            (dictTrans m tyEnv dictEnv e3)
->   dictTrans m tyEnv dictEnv (UnaryMinus op e) =
->     liftM (UnaryMinus op) (dictTrans m tyEnv dictEnv e)
+>   dictTrans m tyEnv dictEnv (UnaryMinus _ e) =
+>     dictTrans m tyEnv dictEnv (apply (prelNegate (typeOf e)) [e])
 >   dictTrans m tyEnv dictEnv (Apply e1 e2) =
 >     liftM2 Apply
 >            (dictTrans m tyEnv dictEnv e1)
@@ -656,6 +656,10 @@ Prelude entities.
 >   Variable (opType a b c `TypeArrow` opType b a c)
 >            (qualifyWith preludeMIdent (mkIdent "flip"))
 >   where opType a b c = a `TypeArrow` (b `TypeArrow` c)
+
+> prelNegate :: Type -> Expression Type
+> prelNegate a =
+>   Variable (a `TypeArrow` a) (qualifyWith preludeMIdent (mkIdent "negate"))
 
 > prelUndefined :: Type -> Expression Type
 > prelUndefined a = Variable a (qualifyWith preludeMIdent (mkIdent "undefined"))

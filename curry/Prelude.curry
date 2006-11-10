@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 1996 2006-11-10 20:05:36Z wlux $
+-- $Id: Prelude.curry 1997 2006-11-10 20:45:06Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -478,12 +478,17 @@ showParen False x = x
 --- Operations supported by all numeric data types
 --- NB Temporarily defines fromInt instead of fromIntegral because MCC
 ---    does not yet support arbitrary precision integers.
----    Negate, abs and signum are currently missing.
+---    Negate is temporarily a polymorphic function until default method
+---    implementations are supported.
+---    Abs and signum are currently missing.
 class Num a where
   (+) :: a -> a -> a
   (-) :: a -> a -> a
   (*) :: a -> a -> a
   fromInt :: Int -> a
+
+negate :: Num a => a -> a
+negate n = fromInt 0 - n
 
 -- Types of primitive arithmetic functions and predicates
 -- NB quot, rem, div, and mod must satisfy the following laws
@@ -508,9 +513,6 @@ foreign import ccall "prims.h primRemInt" rem :: Int -> Int -> Int
 foreign import ccall "prims.h primDivInt" div :: Int -> Int -> Int
 foreign import ccall "prims.h primModInt" mod :: Int -> Int -> Int
 
-negate :: Int -> Int
-negate n = 0 - n
-
 data Float
 
 instance Num Float where
@@ -524,9 +526,6 @@ instance Num Float where
     where foreign import ccall "prims.h" primFloat  :: Int -> Float
 
 foreign import ccall "prims.h primDivFloat" (/) :: Float -> Float -> Float
-
-negateFloat :: Float -> Float
-negateFloat f = 0.0 - f
 
 -- conversions
 foreign import ccall "prims.h primTrunc" truncateFloat :: Float -> Int

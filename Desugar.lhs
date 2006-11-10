@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: Desugar.lhs 1997 2006-11-10 20:45:06Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -410,13 +410,8 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 > desugarExpr m p (EnumFromThenTo e1 e2 e3) =
 >   liftM (apply (prelEnumFromThen (typeOf e1)))
 >         (mapM (desugarExpr m p) [e1,e2,e3])
-> desugarExpr m p (UnaryMinus op e) =
->   liftM (Apply (unaryMinus op (typeOf e))) (desugarExpr m p e)
->   where unaryMinus op ty
->           | op == minusId =
->               if ty == floatType then prelNegateFloat else prelNegate
->           | op == fminusId = prelNegateFloat
->           | otherwise = internalError "unaryMinus"
+> desugarExpr m p (UnaryMinus _ e) =
+>   liftM (Apply (prelNegate (typeOf e))) (desugarExpr m p e)
 > desugarExpr m p (Apply (Constructor ty c) e) =
 >   do
 >     tyEnv <- fetchSt
@@ -764,8 +759,7 @@ Prelude entities
 > prelConcatMap a b =
 >   preludeFun [a `TypeArrow` listType b] (listType a `TypeArrow` listType b)
 >              "concatMap"
-> prelNegate = preludeFun [intType] intType "negate"
-> prelNegateFloat = preludeFun [floatType] floatType "negateFloat"
+> prelNegate a = preludeFun [a] a "negate"
 
 > preludeFun :: [Type] -> Type -> String -> Expression Type
 > preludeFun tys ty f =

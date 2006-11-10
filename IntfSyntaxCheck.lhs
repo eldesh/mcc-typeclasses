@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 1984 2006-10-27 13:34:07Z wlux $
+% $Id: IntfSyntaxCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -44,8 +44,9 @@ The latter must not occur in type expressions in interfaces.
 >   qualBindTopEnv tc (Data tc (map constr (catMaybes cs)))
 > bindType (INewtypeDecl _ tc _ nc) = qualBindTopEnv tc (Data tc [nconstr nc])
 > bindType (ITypeDecl _ tc _ _) = qualBindTopEnv tc (Alias tc)
-> bindType (HidingClassDecl _ cls _) = qualBindTopEnv cls (Class cls)
-> bindType (IClassDecl _ cls _) = qualBindTopEnv cls (Class cls)
+> bindType (HidingClassDecl _ cls _) = qualBindTopEnv cls (Class cls [])
+> bindType (IClassDecl _ cls _ ds) =
+>   qualBindTopEnv cls (Class cls (map imethod (catMaybes ds)))
 > bindType (IInstanceDecl _ _ _) = id
 > bindType (IFunctionDecl _ _ _) = id
 
@@ -72,10 +73,9 @@ during syntax checking of type expressions.
 >   do
 >     checkTypeLhs env p [tv]
 >     return (HidingClassDecl p cls tv)
-> checkIDecl env (IClassDecl p cls tv) =
->   do
->     checkTypeLhs env p [tv]
->     return (IClassDecl p cls tv)
+> checkIDecl env (IClassDecl p cls tv ds) =
+>   checkTypeLhs env p [tv] &&>
+>   liftE (IClassDecl p cls tv) (mapE (liftMaybe (checkIMethodDecl env tv)) ds)
 > checkIDecl env (IInstanceDecl p cls ty) =
 >   checkClass env p cls &&>
 >   liftE (IInstanceDecl p cls) (checkSimpleType env p ty)
@@ -106,6 +106,15 @@ during syntax checking of type expressions.
 >                    -> Error NewConstrDecl
 > checkNewConstrDecl env tvs (NewConstrDecl p c ty) =
 >   liftE (NewConstrDecl p c) (checkClosedType env p tvs ty)
+
+> checkIMethodDecl :: TypeEnv -> Ident -> IMethodDecl -> Error IMethodDecl
+> checkIMethodDecl env tv (IMethodDecl p f ty) =
+>   do
+>     ty' <- checkType env p ty
+>     let tvs = fv ty'
+>     unless (tv `elem` tvs) (errorAt p (ambiguousType tv)) &&>
+>       mapE_ (errorAt p . polymorphicMethod) (nub (filter (tv /=) tvs))
+>     return (IMethodDecl p f ty')
 
 > checkClosedType :: TypeEnv -> Position -> [Ident] -> TypeExpr
 >                 -> Error TypeExpr
@@ -141,7 +150,7 @@ during syntax checking of type expressions.
 >               | otherwise -> errorAt p (undefinedType tc)
 >             [Data _ _] -> return (ConstructorType tc)
 >             [Alias _] -> errorAt p (badTypeSynonym tc)
->             [Class _] -> errorAt p (undefinedType tc)
+>             [Class _ _] -> errorAt p (undefinedType tc)
 >             _ -> internalError "checkType")
 >          (mapE (checkType env p) tys)
 > checkType env p (VariableType tv) =
@@ -166,7 +175,7 @@ during syntax checking of type expressions.
 >     [] -> errorAt p (undefinedClass cls)
 >     [Data _ _] -> errorAt p (undefinedClass cls)
 >     [Alias _] -> errorAt p (undefinedClass cls)
->     [Class _] -> return ()
+>     [Class _ _] -> return ()
 >     _ -> internalError "checkClass"
 
 \end{verbatim}
@@ -232,6 +241,15 @@ Error messages.
 
 > badTypeSynonym :: QualIdent -> String
 > badTypeSynonym tc = "Synonym type " ++ qualName tc ++ " in interface"
+
+> ambiguousType :: Ident -> String
+> ambiguousType tv =
+>   "Method type does not mention type variable " ++ name tv
+
+> polymorphicMethod :: Ident -> String
+> polymorphicMethod tv =
+>   "Free type variable " ++ name tv ++ " in method type\n" ++
+>   "(Implementation restriction: Polymorphic methods are not yet supported)"
 
 > notSimpleType :: TypeExpr -> String
 > notSimpleType ty = show $

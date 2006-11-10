@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfEquiv.lhs 1984 2006-10-27 13:34:07Z wlux $
+% $Id: IntfEquiv.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 2000-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -62,7 +62,8 @@ inadvertently mix up these cases.
 >   ITypeDecl _ tc1 tvs1 ty1 =~= ITypeDecl _ tc2 tvs2 ty2 =
 >     tc1 == tc2 && tvs1 == tvs2 && ty1 == ty2
 >   HidingClassDecl _ cls1 _ =~= HidingClassDecl _ cls2 _ = cls1 == cls2
->   IClassDecl _ cls1 _ =~= IClassDecl _ cls2 _ = cls1 == cls2
+>   IClassDecl _ cls1 _ ds1 =~= IClassDecl _ cls2 _ ds2 =
+>     cls1 == cls2 && ds1 `eqvList` ds2
 >   IInstanceDecl _ cls1 ty1 =~= IInstanceDecl _ cls2 ty2 =
 >     cls1 == cls2 && ty1 == ty2
 >   IFunctionDecl _ f1 ty1 =~= IFunctionDecl _ f2 ty2 = f1 == f2 && ty1 == ty2
@@ -77,6 +78,9 @@ inadvertently mix up these cases.
 
 > instance IntfEquiv NewConstrDecl where
 >   NewConstrDecl _ c1 ty1 =~= NewConstrDecl _ c2 ty2 = c1 == c2 && ty1 == ty2
+
+> instance IntfEquiv IMethodDecl where
+>   IMethodDecl _ f1 ty1 =~= IMethodDecl _ f2 ty2 = f1 == f2 && ty1 == ty2
 
 \end{verbatim}
 If we check for a change in the interface, we do not need to check the
@@ -100,12 +104,15 @@ by function \texttt{fixInterface} and the associated type class
 >   fix tcs = map (fix tcs)
 
 > instance FixInterface IDecl where
+>   fix tcs (IInfixDecl p fix pr op) = IInfixDecl p fix pr op
+>   fix tcs (HidingDataDecl p tc tvs) = HidingDataDecl p tc tvs
 >   fix tcs (IDataDecl p tc tvs cs) = IDataDecl p tc tvs (fix tcs cs)
 >   fix tcs (INewtypeDecl p tc tvs nc) = INewtypeDecl p tc tvs (fix tcs nc)
 >   fix tcs (ITypeDecl p tc tvs ty) = ITypeDecl p tc tvs (fix tcs ty)
->   fix tcs (IFunctionDecl p f ty) = IFunctionDecl p f (fix tcs ty)
+>   fix tcs (HidingClassDecl p cls tv) = HidingClassDecl p cls tv
+>   fix tcs (IClassDecl p cls tv ds) = IClassDecl p cls tv (fix tcs ds)
 >   fix tcs (IInstanceDecl p cls ty) = IInstanceDecl p cls (fix tcs ty)
->   fix _ d = d
+>   fix tcs (IFunctionDecl p f ty) = IFunctionDecl p f (fix tcs ty)
 
 > instance FixInterface ConstrDecl where
 >   fix tcs (ConstrDecl p evs c tys) = ConstrDecl p evs c (fix tcs tys)
@@ -114,6 +121,9 @@ by function \texttt{fixInterface} and the associated type class
 
 > instance FixInterface NewConstrDecl where
 >   fix tcs (NewConstrDecl p c ty) = NewConstrDecl p c (fix tcs ty)
+
+> instance FixInterface IMethodDecl where
+>   fix tcs (IMethodDecl p f ty) = IMethodDecl p f (fix tcs ty)
 
 > instance FixInterface QualTypeExpr where
 >   fix tcs (QualTypeExpr cx ty) = QualTypeExpr cx (fix tcs ty)
@@ -140,7 +150,7 @@ by function \texttt{fixInterface} and the associated type class
 >         tcs (INewtypeDecl _ tc _ _) tcs = tc : tcs
 >         tcs (ITypeDecl _ tc _ _) tcs = tc : tcs
 >         tcs (HidingClassDecl _ _ _) tcs = tcs
->         tcs (IClassDecl _ _ _) tcs = tcs
+>         tcs (IClassDecl _ _ _ _) tcs = tcs
 >         tcs (IInstanceDecl _ _ _) tcs = tcs
 >         tcs (IFunctionDecl _ _ _) tcs = tcs
 

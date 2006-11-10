@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: SyntaxCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -23,6 +23,7 @@ single definition.
 > import Error
 > import List
 > import Maybe
+> import TopEnv
 > import NestEnv
 > import Pretty
 > import Utils
@@ -35,12 +36,12 @@ the current module are entered into this environment. Finally, all
 declarations are checked within the resulting environment.
 \begin{verbatim}
 
-> syntaxCheck :: ModuleIdent -> ValueEnv -> [TopDecl a]
+> syntaxCheck :: ModuleIdent -> TypeEnv -> ValueEnv -> [TopDecl a]
 >             -> Error (FunEnv,[TopDecl a])
-> syntaxCheck m tyEnv ds =
+> syntaxCheck m tEnv tyEnv ds =
 >   do
 >     reportDuplicates duplicateData repeatedData cs
->     (env',ds') <- checkTopDecls m cs env ds
+>     (env',ds') <- checkTopDecls m tEnv cs env ds
 >     return (toplevelEnv env',ds')
 >   where env = foldr (bindConstr m) (globalEnv (fmap valueKind tyEnv)) cs
 >         cs = concatMap constrs ds
@@ -72,16 +73,21 @@ Unfortunately, this means that we cannot use \texttt{checkLocalDecls}
 in order to check the global declaration group.
 \begin{verbatim}
 
-> checkTopDecls :: ModuleIdent -> [P Ident] -> VarEnv -> [TopDecl a]
+> checkTopDecls :: ModuleIdent -> TypeEnv -> [P Ident] -> VarEnv -> [TopDecl a]
 >               -> Error (VarEnv,[TopDecl a])
-> checkTopDecls m cs env ds =
+> checkTopDecls m tEnv cs env ds =
 >   do
 >     ds' <- liftE joinTopEquations (mapE (checkTopDeclLhs env) ds)
->     env' <- checkDeclVars (bindFunc m) cs env [d | BlockDecl d <- ds']
->     ds'' <- mapE (checkTopDeclRhs env') ds'
+>     env' <- checkDeclVars (bindFunc m) cs (concatMap mthds ds') env
+>                           [d | BlockDecl d <- ds']
+>     ds'' <- mapE (checkTopDeclRhs tEnv env') ds'
 >     return (env',ds'')
 
 > checkTopDeclLhs :: VarEnv -> TopDecl a -> Error (TopDecl a)
+> checkTopDeclLhs env (ClassDecl p cls tv ds) =
+>   do
+>     mapE_ (checkMethodSig env) ds
+>     return (ClassDecl p cls tv ds)
 > checkTopDeclLhs env (BlockDecl d) = liftE BlockDecl (checkDeclLhs True env d)
 > checkTopDeclLhs _ d = return d
 
@@ -94,9 +100,11 @@ in order to check the global declaration group.
 >   | otherwise = d : joinTopEquations ds
 >   where (ds',ds'') = span isBlockDecl ds
 
-> checkTopDeclRhs :: VarEnv -> TopDecl a -> Error (TopDecl a)
-> checkTopDeclRhs env (BlockDecl d) = liftE BlockDecl (checkDeclRhs env d)
-> checkTopDeclRhs _ d = return d
+> checkTopDeclRhs :: TypeEnv -> VarEnv -> TopDecl a -> Error (TopDecl a)
+> checkTopDeclRhs tEnv env (InstanceDecl p cls ty ds) =
+>   liftE (InstanceDecl p cls ty) (checkInstDecls tEnv env p cls ds)
+> checkTopDeclRhs _ env (BlockDecl d) = liftE BlockDecl (checkDeclRhs env d)
+> checkTopDeclRhs _ _ d = return d
 
 \end{verbatim}
 A goal is checked like the right hand side of a pattern declaration.
@@ -132,10 +140,13 @@ top-level.
 > checkLocalDecls env ds =
 >   do
 >     ds' <- liftE joinEquations (mapE (checkDeclLhs False env') ds)
->     env'' <- checkDeclVars bindVar [] env' ds'
+>     env'' <- checkDeclVars bindVar [] [] env' ds'
 >     ds'' <- mapE (checkDeclRhs env'') ds'
 >     return (env'',ds'')
 >   where env' = nestEnv env
+
+> checkMethodSig :: VarEnv -> MethodSig -> Error ()
+> checkMethodSig env (MethodSig p fs _) = checkVars "type signature" p env fs
 
 > checkDeclLhs :: Bool -> VarEnv -> Decl a -> Error (Decl a)
 > checkDeclLhs _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
@@ -208,20 +219,20 @@ top-level.
 > checkVars what p env vs =
 >   mapE_ (errorAt p . nonVariable what) (nub (filter (isDataConstr env) vs))
 
-> checkDeclVars :: (P Ident -> VarEnv -> VarEnv) -> [P Ident] -> VarEnv
->               -> [Decl a] -> Error VarEnv
-> checkDeclVars bindVar cs env ds =
+> checkDeclVars :: (P Ident -> VarEnv -> VarEnv) -> [P Ident] -> [P Ident]
+>               -> VarEnv -> [Decl a] -> Error VarEnv
+> checkDeclVars bindVar cs fs env ds =
 >   reportDuplicates duplicatePrecedence repeatedPrecedence ops &&>
->   reportDuplicates duplicateDefinition repeatedDefinition bvs &&>
+>   reportDuplicates duplicateDefinition repeatedDefinition (fs ++ bvs) &&>
 >   reportDuplicates duplicateTypeSig repeatedTypeSig tys &&>
 >   reportDuplicates (const duplicateDefaultTrustAnnot)
 >                    (const repeatedDefaultTrustAnnot)
 >                    [P p () | TrustAnnot p _ Nothing <- ds] &&>
 >   reportDuplicates duplicateTrustAnnot repeatedTrustAnnot trs &&>
 >   mapE_ (\(P p v) -> errorAt p (noBody v))
->         (filter (`notElem` cs ++ bvs) ops ++
+>         (filter (`notElem` cs ++ fs ++ bvs) ops ++
 >          filter (`notElem` bvs) (tys ++ trs)) &&>
->   return (foldr bindVar env (nub bvs))
+>   return (foldr bindVar env (nub (fs ++ bvs)))
 >   where bvs = concatMap vars (filter isValueDecl ds)
 >         tys = concatMap vars (filter isTypeSig ds)
 >         trs = concatMap vars (filter isTrustAnnot ds)
@@ -263,6 +274,41 @@ top-level.
 >     (env',lhs') <- checkLhs p env lhs
 >     rhs' <- checkRhs env' rhs
 >     return (Equation p lhs' rhs')
+
+\end{verbatim}
+The method declarations in an instance declaration are checked like
+any other declaration group except that the declared methods are not
+added to the variable name environment. Instead, the compiler checks
+that the declared methods are members of the specified class. Note
+that the method names are required to be in scope, but the name under
+which a method is in scope is immaterial (cf.\ Sect.~4.3.2 of the
+revised Haskell'98 report~\cite{PeytonJones03:Haskell}).
+\begin{verbatim}
+
+> checkInstDecls :: TypeEnv -> VarEnv -> Position -> QualIdent -> [MethodDecl a]
+>                -> Error [MethodDecl a]
+> checkInstDecls tEnv env p cls ds =
+>   do
+>     ds' <-
+>       liftE (map methodDecl . joinEquations) (mapE (checkInstDeclLhs env) ds)
+>     checkInstMethods cls (map (P p) (classMthds cls tEnv)) ds'
+>     mapE (checkInstDeclRhs env) ds'
+>   where methodDecl (FunctionDecl p f eqs) = MethodDecl p f eqs
+>         methodDecl _ = internalError "methodDecl"
+
+> checkInstDeclLhs :: VarEnv -> MethodDecl a -> Error (Decl a)
+> checkInstDeclLhs env (MethodDecl p f eqs) = checkEquationLhs True env p eqs
+
+> checkInstMethods :: QualIdent -> [P Ident] -> [MethodDecl a] -> Error ()
+> checkInstMethods cls fs ds' =
+>   reportDuplicates duplicateDefinition repeatedDefinition fs' &&>
+>   mapE_ (\(P p f) -> errorAt p (undefinedMethod cls f))
+>         (filter (`notElem` fs) fs')
+>   where fs' = [P p f | MethodDecl p f _ <- ds']
+
+> checkInstDeclRhs env (MethodDecl p f eqs) =
+>   checkArity p f eqs &&>
+>   liftE (MethodDecl p f) (mapE (checkEquation env) eqs)
 
 \end{verbatim}
 The syntax checker examines the optional import specification of
@@ -511,9 +557,17 @@ Auxiliary definitions.
 >         constr (ConOpDecl p _ _ op _) = P p op
 > constrs (NewtypeDecl _ _ _ (NewConstrDecl p c _)) = [P p c]
 > constrs (TypeDecl _ _ _ _) = []
-> constrs (ClassDecl _ _ _) = []
-> constrs (InstanceDecl _ _ _) = []
+> constrs (ClassDecl _ _ _ _) = []
+> constrs (InstanceDecl _ _ _ _) = []
 > constrs (BlockDecl _) = []
+
+> mthds :: TopDecl a -> [P Ident]
+> mthds (DataDecl _ _ _ _) = []
+> mthds (NewtypeDecl _ _ _ _) = []
+> mthds (TypeDecl _ _ _ _) = []
+> mthds (ClassDecl _ _ _ ds) = [P p f | MethodSig p fs _ <- ds, f <- fs]
+> mthds (InstanceDecl _ _ _ _) = []
+> mthds (BlockDecl _) = []
 
 > vars :: Decl a -> [P Ident]
 > vars (InfixDecl p _ _ ops) = map (P p) ops
@@ -550,6 +604,12 @@ name.
 > isConstr (Constr _) = True
 > isConstr (Var _) = False
 
+> classMthds :: QualIdent -> TypeEnv -> [Ident]
+> classMthds cls tEnv =
+>   case qualLookupTopEnv cls tEnv of
+>     [Class _ fs] -> fs
+>     _ -> internalError "classMthds"
+
 \end{verbatim}
 Error messages.
 \begin{verbatim}
@@ -565,6 +625,9 @@ Error messages.
 
 > undefinedData :: QualIdent -> String
 > undefinedData c = "Undefined data constructor " ++ qualName c
+
+> undefinedMethod :: QualIdent -> Ident -> String
+> undefinedMethod cls f = name f ++ " is not a method of class " ++ qualName cls
 
 > ambiguousIdent :: [ValueKind] -> QualIdent -> String
 > ambiguousIdent rs

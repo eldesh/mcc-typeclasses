@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: TypeSyntaxCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -58,9 +58,9 @@ later for checking the optional export list of the current module.
 >   globalBindTopEnv m tc (Data (qualifyWith m tc) [nconstr nc])
 > bindType m (TypeDecl _ tc _ _) =
 >   globalBindTopEnv m tc (Alias (qualifyWith m tc))
-> bindType m (ClassDecl _ cls _) =
->   globalBindTopEnv m cls (Class (qualifyWith m cls))
-> bindType m (InstanceDecl _ _ _) = id
+> bindType m (ClassDecl _ cls _ ds) =
+>   globalBindTopEnv m cls (Class (qualifyWith m cls) (concatMap methods ds))
+> bindType m (InstanceDecl _ _ _ _) = id
 > bindType _ (BlockDecl _) = id
 
 \end{verbatim}
@@ -80,14 +80,29 @@ signatures.
 > checkTopDecl env (TypeDecl p tc tvs ty) =
 >   checkTypeLhs env p tvs &&>
 >   liftE (TypeDecl p tc tvs) (checkClosedType env p tvs ty)
-> checkTopDecl env (ClassDecl p cls tv) =
+> checkTopDecl env (ClassDecl p cls tv ds) =
 >   do
 >     checkTypeLhs env p [tv]
->     return (ClassDecl p cls tv)
-> checkTopDecl env (InstanceDecl p cls ty) =
+>     liftE (ClassDecl p cls tv) (mapE (checkMethodSig env tv) ds)
+> checkTopDecl env (InstanceDecl p cls ty ds) =
 >   checkClass env p cls &&>
->   liftE (InstanceDecl p cls) (checkSimpleType env p ty)
+>   liftE2 (InstanceDecl p cls)
+>          (checkSimpleType env p ty)
+>          (mapE (checkMethodDecl env) ds)
 > checkTopDecl env (BlockDecl d) = liftE BlockDecl (checkDecl env d)
+
+> checkMethodSig :: TypeEnv -> Ident -> MethodSig -> Error MethodSig
+> checkMethodSig env tv (MethodSig p fs ty) =
+>   do
+>     ty' <- checkType env p ty
+>     let tvs = fv ty'
+>     unless (tv `elem` tvs) (errorAt p (ambiguousType tv)) &&>
+>       mapE_ (errorAt p . polymorphicMethod) (nub (filter (tv /=) tvs))
+>     return (MethodSig p fs ty')
+
+> checkMethodDecl :: TypeEnv -> MethodDecl a -> Error (MethodDecl a)
+> checkMethodDecl env (MethodDecl p f eqs) =
+>   liftE (MethodDecl p f) (mapE (checkEquation env) eqs)
 
 > checkDecl :: TypeEnv -> Decl a -> Error (Decl a)
 > checkDecl env (TypeSig p vs ty) =
@@ -238,7 +253,7 @@ interpret the identifier as such.
 >               | otherwise -> errorAt p (undefinedType tc)
 >             [Data _ _] -> return (ConstructorType tc)
 >             [Alias _] -> return (ConstructorType tc)
->             [Class _] -> errorAt p (undefinedType tc)
+>             [Class _ _] -> errorAt p (undefinedType tc)
 >             rs -> errorAt p (ambiguousIdent rs tc))
 >          (mapE (checkType env p) tys)
 > checkType env p (VariableType tv)
@@ -266,7 +281,7 @@ interpret the identifier as such.
 >     [] -> errorAt p (undefinedClass cls)
 >     [Data _ _] -> errorAt p (undefinedClass cls)
 >     [Alias _] -> errorAt p (undefinedClass cls)
->     [Class _] -> return ()
+>     [Class _ _] -> return ()
 >     rs -> errorAt p (ambiguousIdent rs cls)
 
 \end{verbatim}
@@ -284,7 +299,7 @@ conflicts between locally defined instances and imported instances.
 >       reportDuplicates duplicateInstance repeatedInstance cts
 >     return (foldr bindInstance iEnv cts)
 >   where cts = [P p (qualCT tEnv (CT cls (root ty)))
->               | InstanceDecl p cls ty <- ds]
+>               | InstanceDecl p cls ty _ <- ds]
 >         unique [] = []
 >         unique (x:xs)
 >           | x `elem` xs = unique (filter (x /=) xs)
@@ -308,8 +323,8 @@ Auxiliary definitions.
 > tident (DataDecl p tc _ _) = P p tc
 > tident (NewtypeDecl p tc _ _) = P p tc
 > tident (TypeDecl p tc _ _) = P p tc
-> tident (ClassDecl p cls _) = P p cls
-> tident (InstanceDecl _ _ _) = internalError "tident"
+> tident (ClassDecl p cls _ _) = P p cls
+> tident (InstanceDecl _ _ _ _) = internalError "tident"
 > tident (BlockDecl _) = internalError "tident"
 
 > isSimpleType :: TypeExpr -> Bool
@@ -387,6 +402,15 @@ Error messages.
 
 > unboundVariable :: Ident -> String
 > unboundVariable tv = "Undefined type variable " ++ name tv
+
+> ambiguousType :: Ident -> String
+> ambiguousType tv =
+>   "Method type does not mention type variable " ++ name tv
+
+> polymorphicMethod :: Ident -> String
+> polymorphicMethod tv =
+>   "Free type variable " ++ name tv ++ " in method type\n" ++
+>   "(Implementation restriction: Polymorphic methods are not yet supported)"
 
 > notSimpleType :: TypeExpr -> String
 > notSimpleType ty = show $

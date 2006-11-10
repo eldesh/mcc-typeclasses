@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 1994 2006-11-08 12:48:39Z wlux $
+% $Id: TypeCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -53,14 +53,14 @@ current module into the type environment.
 >   run (do
 >          (cx,vds') <- tcDecls m tcEnv [d | BlockDecl d <- vds]
 >          unless (null cx) (internalError ("typeCheck " ++ show cx))
+>          ids' <- mapM (tcInstDecl m tcEnv) (filter isInstanceDecl vds)
 >          tyEnv' <- fetchSt
 >          theta <- liftSt fetchSt
 >          return (subst theta tyEnv',
 >                  map untyped tds ++
->                  map (BlockDecl . fmap (subst theta)) vds' ++
->                  [InstanceDecl p cls ty | InstanceDecl p cls ty <- vds]))
+>                  map (fmap (subst theta)) (map BlockDecl vds' ++ ids')))
 >       iEnv
->       (foldr (bindConstrs m tcEnv) tyEnv tds)
+>       (foldr (bindTypeValues m tcEnv) tyEnv tds)
 >   where (tds,vds) = partition isTypeDecl ds
 
 > untyped :: Functor f => f a -> f Type
@@ -96,30 +96,35 @@ instance environment is passed around using a reader monad.
 > run m iEnv tyEnv = callSt (callRt (callSt (callSt m tyEnv) idSubst) iEnv) 1
 
 \end{verbatim}
-\paragraph{Defining Data Constructors}
-First, the types of all data and newtype constructors are entered into
-the type environment. All type synonyms occurring in their types are
-expanded. We cannot use \texttt{expandPolyType} for expanding the type
-of a data or newtype constructor in function \texttt{bindConstr}
-because of the different normalization scheme used for constructor
-types and also because the name of the type could be ambiguous.
+\paragraph{Defining Data Constructors and Methods}
+First, the types of all data and newtype constructors as well as those
+of all type class methods are entered into the type environment. All
+type synonyms occurring in their types are expanded. We cannot use
+\texttt{expandPolyType} for expanding the type of a data or newtype
+constructor in function \texttt{bindConstr} because of the different
+normalization scheme used for constructor types and also because the
+name of the type may be ambiguous. We also cannot use
+\texttt{expandPolyType} for expanding the type signature of a method
+in function \texttt{bindMethods} because the name of the class may be
+ambiguous.
 \begin{verbatim}
 
-> bindConstrs :: ModuleIdent -> TCEnv -> TopDecl a -> ValueEnv -> ValueEnv
-> bindConstrs m tcEnv (DataDecl _ tc tvs cs) tyEnv = foldr bind tyEnv cs
+> bindTypeValues :: ModuleIdent -> TCEnv -> TopDecl a -> ValueEnv -> ValueEnv
+> bindTypeValues m tcEnv (DataDecl _ tc tvs cs) tyEnv = foldr bind tyEnv cs
 >   where ty0 = constrType m tc tvs
 >         bind (ConstrDecl _ _ c tys) =
 >           bindConstr DataConstructor m tcEnv tvs c tys ty0
 >         bind (ConOpDecl _ _ ty1 op ty2) =
 >           bindConstr DataConstructor m tcEnv tvs op [ty1,ty2] ty0
-> bindConstrs m tcEnv (NewtypeDecl _ tc tvs nc) tyEnv = bind nc tyEnv
+> bindTypeValues m tcEnv (NewtypeDecl _ tc tvs nc) tyEnv = bind nc tyEnv
 >   where ty0 = constrType m tc tvs
 >         bind (NewConstrDecl _ c ty) =
 >           bindConstr NewtypeConstructor m tcEnv tvs c [ty] ty0
-> bindConstrs _ _ (TypeDecl _ _ _ _) tyEnv = tyEnv
-> bindConstrs _ _ (ClassDecl _ _ _) tyEnv = tyEnv
-> bindConstrs _ _ (InstanceDecl _ _ _) tyEnv = tyEnv
-> bindConstrs _ _ (BlockDecl _) tyEnv = tyEnv
+> bindTypeValues _ _ (TypeDecl _ _ _ _) tyEnv = tyEnv
+> bindTypeValues m tcEnv (ClassDecl _ cls tv ds) tyEnv = foldr bind tyEnv ds
+>   where bind (MethodSig _ fs ty) = bindMethods m tcEnv cls tv fs ty
+> bindTypeValues _ _ (InstanceDecl _ _ _ _) tyEnv = tyEnv
+> bindTypeValues _ _ (BlockDecl _) tyEnv = tyEnv
 
 > bindConstr :: (QualIdent -> TypeScheme -> ValueInfo) -> ModuleIdent
 >            -> TCEnv -> [Ident] -> Ident -> [TypeExpr] -> Type
@@ -128,6 +133,16 @@ types and also because the name of the type could be ambiguous.
 >   globalBindTopEnv m c (f (qualifyWith m c) ty')
 >   where ty' = typeScheme $ normalize (length tvs) $
 >               qualType (foldr TypeArrow ty0 (expandMonoTypes tcEnv tvs tys))
+
+> bindMethods :: ModuleIdent -> TCEnv -> Ident -> Ident -> [Ident] -> TypeExpr
+>             -> ValueEnv -> ValueEnv
+> bindMethods m tcEnv cls tv fs ty tyEnv = foldr (bindMethod m ty') tyEnv fs
+>   where cx = [TypePred (qualifyWith m cls) (TypeVariable 0)]
+>         ty' = typeScheme $ normalize 0 $
+>               QualType cx (expandMonoType tcEnv [tv] ty)
+
+> bindMethod :: ModuleIdent -> TypeScheme -> Ident -> ValueEnv -> ValueEnv
+> bindMethod m ty f = globalBindTopEnv m f (Value (qualifyWith m f) ty)
 
 > constrType :: ModuleIdent -> Ident -> [Ident] -> Type
 > constrType m tc tvs =
@@ -151,7 +166,7 @@ the signature.
 > bindTypeSigs _ env = env
         
 \end{verbatim}
-\paragraph{Type Inference}
+\paragraph{Declaration Groups}
 Before type checking a group of declarations, a dependency analysis is
 performed and the declaration group is split into minimal, nested
 binding groups which are checked separately. Within each binding
@@ -348,6 +363,87 @@ in \texttt{tcVariable} below.
 >   ty == sigTy && all (`elem` sigCx) cx
 
 \end{verbatim}
+\paragraph{Instance declarations}
+When checking instance declarations, the type expected for each method
+is determined by the method's type signature with the type class
+variable being substituted by the instance type. It is important for
+the dictionary transformation (see Sect.~\ref{sec:dict-trans}) that
+the free type variables of the instance type are instantiated
+consistently when inferring the types of the method implementations.
+For that reason, the instance type is instantiated in
+\texttt{tcInstDecl} rather than having the instance type's type
+variables instantiated along with a method's type scheme in
+\texttt{tcMethodDeclLhs}. On the other hand, when checking that a
+method's inferred type is general enough in \texttt{genMethodDecl},
+the type checker must substitute the uninstantiated instance type in
+the method's type signature.
+\begin{verbatim}
+
+> tcInstDecl :: ModuleIdent -> TCEnv -> TopDecl a -> TcState (TopDecl Type)
+> tcInstDecl m tcEnv (InstanceDecl p cls ty ds) =
+>   do
+>     ty'' <- liftM snd (inst ty')
+>     liftM (InstanceDecl p cls ty)
+>           (mapM (tcMethodDecl m tcEnv cls (rawType ty') ty'') ds)
+>   where ty' = expandPolyType tcEnv (QualTypeExpr [] ty)
+
+> tcMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> Type -> Type
+>              -> MethodDecl a -> TcState (MethodDecl Type)
+> tcMethodDecl m tcEnv cls instTy instTy' d =
+>   do
+>     ty <- liftM snd $ tcMethodDeclLhs cls instTy' d
+>     (cx,d') <- tcMethodDeclRhs m tcEnv ty d
+>     genMethodDecl m cls instTy cx ty d
+>     return d'
+
+> tcMethodDeclLhs :: QualIdent -> Type -> MethodDecl a -> TcState (Context,Type)
+> tcMethodDeclLhs cls ty (MethodDecl _ f _) =
+>   tcMethod cls ty f >>= inst . typeScheme
+
+> tcMethodDeclRhs :: ModuleIdent -> TCEnv -> Type -> MethodDecl a
+>                 -> TcState (Context,MethodDecl Type)
+> tcMethodDeclRhs m tcEnv ty d@(MethodDecl p f eqs) =
+>   do
+>     tyEnv0 <- fetchSt
+>     theta <- liftSt fetchSt
+>     (cxs,eqs') <- liftM unzip $
+>       mapM (tcEquation m tcEnv (fsEnv (subst theta tyEnv0)) ty f) eqs
+>     reduceContext p "method declaration" (ppMethodDecl d) m (concat cxs)
+>                   (MethodDecl p f eqs')
+
+> genMethodDecl :: ModuleIdent -> QualIdent -> Type -> Context -> Type
+>               -> MethodDecl a -> TcState ()
+> genMethodDecl m cls instTy cx ty (MethodDecl p f _) =
+>   do
+>     methTy <- tcMethod cls instTy f
+>     theta <- liftSt fetchSt
+>     let sigma = gen zeroSet cx (subst theta ty)
+>     unless (sigma `matchesTypeSig` typeScheme methTy)
+>            (errorAt p (methodSigTooGeneral m what methTy sigma))
+>   where what = text "Method" <+> ppIdent f
+
+\end{verbatim}
+The function \texttt{tcMethod} returns the type of a type class method
+for a particular instance of its class. We can simply discard the
+context of the method's type recorded in the type environment (using
+\texttt{rawType}) because this context is trivially satisfied by the
+instance declaration.
+
+\ToDo{In order to fix the method name visibility issue, either record
+  the types of all methods in the type constructor environment or
+  qualify all identifiers properly before invoking the type checker.}
+\begin{verbatim}
+
+> tcMethod :: QualIdent -> Type -> Ident -> TcState QualType
+> tcMethod cls ty f =
+>   -- FIXME: The method f may not be in scope with same module qualifier
+>   --        as its class cls and it may be ambiguous
+>   liftM (instMethodType ty . rawType . funType (qualifyLike cls f)) fetchSt
+>   where instMethodType instTy methTy =
+>           normalize 0 (QualType [] (expandAliasType [instTy] (methTy)))
+
+\end{verbatim}
+\paragraph{Foreign Functions}
 Argument and result types of foreign functions using the
 \texttt{ccall} calling convention are restricted to the basic types
 \texttt{Bool}, \texttt{Char}, \texttt{Int}, \texttt{Float},
@@ -408,6 +504,10 @@ arbitrary type.
 > cBasicTypeId, cPointerTypeId :: [QualIdent]
 > cBasicTypeId = [qBoolId,qCharId,qIntId,qFloatId]
 > cPointerTypeId = [qPtrId,qFunPtrId]
+
+\end{verbatim}
+\paragraph{Patterns and Expressions}
+\begin{verbatim}
 
 > litType :: Literal -> (Context,Type)
 > litType (Char _) = ([],charType)
@@ -1052,6 +1152,12 @@ Error functions.
 >   vcat [text "Type signature too general", what,
 >         text "Inferred type:" <+> ppTypeScheme m sigma,
 >         text "Type signature:" <+> ppQualTypeExpr ty]
+
+> methodSigTooGeneral :: ModuleIdent -> Doc -> QualType -> TypeScheme -> String
+> methodSigTooGeneral m what ty sigma = show $
+>   vcat [text "Method type not general enough", what,
+>         text "Inferred type:" <+> ppTypeScheme m sigma,
+>         text "Expected type:" <+> ppQualType m ty]
 
 > wrongArity :: QualIdent -> Int -> Int -> String
 > wrongArity c arity argc = show $

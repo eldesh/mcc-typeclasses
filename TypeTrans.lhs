@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 1981 2006-10-23 22:42:43Z wlux $
+% $Id: TypeTrans.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -174,7 +174,7 @@ names.
 > expandTypePred :: TCEnv -> TypePred -> TypePred
 > expandTypePred tcEnv (TypePred cls ty) =
 >   case qualLookupTopEnv cls tcEnv of
->     [TypeClass cls'] -> TypePred cls' (expandType tcEnv ty)
+>     [TypeClass cls' _] -> TypePred cls' (expandType tcEnv ty)
 >     _ -> internalError ("expandTypePred " ++ show cls)
 
 > expandType :: TCEnv -> Type -> Type

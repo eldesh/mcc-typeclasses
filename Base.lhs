@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 1990 2006-11-01 09:34:36Z wlux $
+% $Id: Base.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -43,11 +43,12 @@ order type classes. Therefore, its type language is first order and
 the only information that must be recorded is the arity of each type.
 For algebraic data types and renaming types, the compiler also records
 all data constructors belonging to that type, for alias types the
-expanded right hand side type expression is saved. Type classes are
-recorded in the type constructor environment because they share a
-common name space. Since only single parameter type classes are
-supported and instance types must have kind $\ast$, no additional
-information besides the original name is recorded for type classes.
+expanded right hand side type expression is saved, and for type
+classes the names of the type class methods are saved. No kind
+information is saved for type classes because only single parameter
+type classes are supported and instance types must have kind $\ast$.
+Type classes are recorded in the type constructor environment because
+type constructors and type classes share a common name space.
 
 Importing and exporting algebraic data types and renaming types is
 complicated by the fact that the constructors of the type may be
@@ -56,7 +57,9 @@ of abstract data types. An abstract type is always represented as a
 data type without constructors in the interface regardless of whether
 it is defined as a data type or as a renaming type. When only some
 constructors of a data type are hidden, those constructors are
-replaced by underscores in the interface.
+replaced by underscores in the interface. Similarly, it is possible to
+hide some or all methods of a type class. The hidden methods are
+replaced by underscores as well.
 \begin{verbatim}
 
 > type TCEnv = TopEnv TypeInfo
@@ -64,14 +67,14 @@ replaced by underscores in the interface.
 > data TypeInfo = DataType QualIdent Int [Maybe Ident]
 >               | RenamingType QualIdent Int Ident
 >               | AliasType QualIdent Int Type
->               | TypeClass QualIdent
+>               | TypeClass QualIdent [Maybe Ident]
 >               deriving Show
 
 > instance Entity TypeInfo where
 >   origName (DataType tc _ _) = tc
 >   origName (RenamingType tc _ _) = tc
 >   origName (AliasType tc _ _) = tc
->   origName (TypeClass cls) = cls
+>   origName (TypeClass cls _) = cls
 >   merge (DataType tc1 n cs1) (DataType tc2 _ cs2)
 >     | tc1 == tc2 = Just (DataType tc1 n (mergeData cs1 cs2))
 >     where mergeData cs1 cs2
@@ -86,8 +89,8 @@ replaced by underscores in the interface.
 >     | tc1 == tc2 = Just (RenamingType tc1 n nc)
 >   merge (AliasType tc1 n ty) (AliasType tc2 _ _)
 >     | tc1 == tc2 = Just (AliasType tc1 n ty)
->   merge (TypeClass cls1) (TypeClass cls2)
->     | cls1 == cls2 = Just (TypeClass cls1)
+>   merge (TypeClass cls1 fs1) (TypeClass cls2 fs2)
+>     | cls1 == cls2 = Just (TypeClass cls1 (zipWith mplus fs1 fs2))
 >   merge _ _ = Nothing
 
 \end{verbatim}
@@ -113,15 +116,21 @@ therefore should not fail.
 >     [DataType _ _ cs] -> cs
 >     [RenamingType _ _ c] -> [Just c]
 >     [AliasType _ _ _] -> []
->     [TypeClass _] -> []
 >     _ -> internalError ("constructors " ++ show tc)
+
+> classMethods :: QualIdent -> TCEnv -> [Maybe Ident]
+> classMethods cls clsEnv =
+>   case qualLookupTopEnv cls clsEnv of
+>     [TypeClass _ fs] -> fs
+>     _ -> internalError ("classMethods " ++ show cls)
 
 \end{verbatim}
 A simpler environment is used for checking the syntax of type
 expressions, where only the original names and the data constructors
-associated with each type are needed. Since synonym types are treated
-differently in import and export lists, we distinguish data and
-renaming types on one side and synonym types on the other side.
+or methods associated with each type and type class, respectively, are
+needed. Since synonym types are treated differently in import and
+export lists, we distinguish data and renaming types on one side and
+synonym types on the other side.
 \begin{verbatim}
 
 > type TypeEnv = TopEnv TypeKind
@@ -129,19 +138,19 @@ renaming types on one side and synonym types on the other side.
 > data TypeKind =
 >     Data QualIdent [Ident]
 >   | Alias QualIdent
->   | Class QualIdent
+>   | Class QualIdent [Ident]
 >   deriving (Eq,Show)
 
 > typeKind :: TypeInfo -> TypeKind
 > typeKind (DataType tc _ cs) = Data tc (catMaybes cs)
 > typeKind (RenamingType tc _ c) = Data tc [c]
 > typeKind (AliasType tc _ _) = Alias tc
-> typeKind (TypeClass cls) = Class cls
+> typeKind (TypeClass cls fs) = Class cls (catMaybes fs)
 
 > instance Entity TypeKind where
 >   origName (Data tc _) = tc
 >   origName (Alias tc) = tc
->   origName (Class cls) = cls
+>   origName (Class cls _) = cls
 
 \end{verbatim}
 \paragraph{Function and constructor types}
@@ -244,7 +253,7 @@ used in order to check the export list of a module.
 \end{verbatim}
 \paragraph{Instances}
 The compiler maintains information about defined instances in a set of
-$C$-$T$-pairs, which associatiat a type class identifier and a type
+$C$-$T$-pairs, which associate a type class identifier and a type
 constructor identifier. This simple representation is sufficient
 because instances cannot be hidden. Instance relationships are
 recorded only with the original names of the class and constructor
@@ -522,10 +531,10 @@ name space.
 > isTypeDecl (DataDecl _ _ _ _) = True
 > isTypeDecl (NewtypeDecl _ _ _ _) = True
 > isTypeDecl (TypeDecl _ _ _ _) = True
-> isTypeDecl (ClassDecl _ _ _) = True
-> isTypeDecl (InstanceDecl _ _ _) = False
+> isTypeDecl (ClassDecl _ _ _ _) = True
+> isTypeDecl (InstanceDecl _ _ _ _) = False
 > isTypeDecl (BlockDecl _) = False
-> isInstanceDecl (InstanceDecl _ _ _) = True
+> isInstanceDecl (InstanceDecl _ _ _ _) = True
 > isInstanceDecl _ = False
 > isBlockDecl (BlockDecl _) = True
 > isBlockDecl _ = False

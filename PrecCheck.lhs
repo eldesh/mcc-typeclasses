@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: PrecCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -60,8 +60,14 @@ because it is used for constructing the module's interface.
 >         pEnv' = bindPrecs m ds pEnv
 
 > checkTopDecl :: ModuleIdent -> PEnv -> TopDecl a -> Error (TopDecl a)
+> checkTopDecl m pEnv (InstanceDecl p cls ty ds) =
+>   liftE (InstanceDecl p cls ty) (mapE (checkMethodDecl m pEnv) ds)
 > checkTopDecl m pEnv (BlockDecl d) = liftE BlockDecl (checkDecl m pEnv d)
 > checkTopDecl _ _ d = return d
+
+> checkMethodDecl :: ModuleIdent -> PEnv -> MethodDecl a -> Error (MethodDecl a)
+> checkMethodDecl m pEnv (MethodDecl p f eqs) =
+>   liftE (MethodDecl p f) (mapE (checkEqn m pEnv) eqs)
 
 > checkDecl :: ModuleIdent -> PEnv -> Decl a -> Error (Decl a)
 > checkDecl m pEnv (FunctionDecl p f eqs) =

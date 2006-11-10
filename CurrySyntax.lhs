@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: CurrySyntax.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -54,8 +54,8 @@ parsed representation of a Curry program.
 >     DataDecl Position Ident [Ident] [ConstrDecl]
 >   | NewtypeDecl Position Ident [Ident] NewConstrDecl
 >   | TypeDecl Position Ident [Ident] TypeExpr
->   | ClassDecl Position Ident Ident
->   | InstanceDecl Position QualIdent TypeExpr
+>   | ClassDecl Position Ident Ident [MethodSig]
+>   | InstanceDecl Position QualIdent TypeExpr [MethodDecl a]
 >   | BlockDecl (Decl a)
 >   deriving (Eq,Show)
 
@@ -65,6 +65,8 @@ parsed representation of a Curry program.
 >   deriving (Eq,Show)
 > data NewConstrDecl = NewConstrDecl Position Ident TypeExpr deriving (Eq,Show)
 
+> data MethodSig = MethodSig Position [Ident] TypeExpr deriving (Eq,Show)
+> data MethodDecl a = MethodDecl Position Ident [Equation a] deriving (Eq,Show)
 > data Decl a =
 >     InfixDecl Position Infix Int [Ident]
 >   | TypeSig Position [Ident] QualTypeExpr
@@ -86,6 +88,9 @@ parsed representation of a Curry program.
 > nconstr :: NewConstrDecl -> Ident
 > nconstr (NewConstrDecl _ c _) = c
 
+> methods :: MethodSig -> [Ident]
+> methods (MethodSig _ fs _) = fs
+
 \end{verbatim}
 \paragraph{Module interfaces}
 Interface declarations are restricted to type declarations and signatures.
@@ -104,10 +109,15 @@ Interface declarations are restricted to type declarations and signatures.
 >   | INewtypeDecl Position QualIdent [Ident] NewConstrDecl
 >   | ITypeDecl Position QualIdent [Ident] TypeExpr
 >   | HidingClassDecl Position QualIdent Ident
->   | IClassDecl Position QualIdent Ident
+>   | IClassDecl Position QualIdent Ident [Maybe IMethodDecl]
 >   | IInstanceDecl Position QualIdent TypeExpr
 >   | IFunctionDecl Position QualIdent QualTypeExpr
 >   deriving (Eq,Show)
+
+> data IMethodDecl = IMethodDecl Position Ident TypeExpr deriving (Eq,Show)
+
+> imethod :: IMethodDecl -> Ident
+> imethod (IMethodDecl _ f _) = f
 
 \end{verbatim}
 \paragraph{Types}
@@ -239,9 +249,12 @@ The abstract syntax tree is a functor with respect to the attributes.
 >   fmap _ (DataDecl p tc tvs cs) = DataDecl p tc tvs cs
 >   fmap _ (NewtypeDecl p tc tvs nc) = NewtypeDecl p tc tvs nc
 >   fmap _ (TypeDecl p tc tvs ty) = TypeDecl p tc tvs ty
->   fmap _ (ClassDecl p cls tv) = ClassDecl p cls tv
->   fmap _ (InstanceDecl p cls ty) = InstanceDecl p cls ty
+>   fmap f (ClassDecl p cls tv ds) = ClassDecl p cls tv ds
+>   fmap f (InstanceDecl p cls ty ds) = InstanceDecl p cls ty (map (fmap f) ds)
 >   fmap f (BlockDecl d) = BlockDecl (fmap f d)
+
+> instance Functor MethodDecl where
+>   fmap f (MethodDecl p f' eqs) = MethodDecl p f' (map (fmap f) eqs)
 
 > instance Functor Decl where
 >   fmap _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops

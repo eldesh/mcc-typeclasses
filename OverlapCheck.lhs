@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: OverlapCheck.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: OverlapCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -17,8 +17,7 @@ corresponding functions.
 > import Options
 
 > overlapCheck :: [Warn] -> Module a -> [String]
-> overlapCheck v (Module m _ _ ds) =
->   report v $ overlap noPosition [d | BlockDecl d <- ds] []
+> overlapCheck v (Module m _ _ ds) = report v $ overlap noPosition ds []
 >   where noPosition = error "noPosition"
 
 > overlapCheckGoal :: [Warn] -> Goal a -> [String]
@@ -43,6 +42,14 @@ are collected with a simple traversal of the syntax tree.
 
 > instance Syntax a => Syntax [a] where
 >   overlap p xs ys = foldr (overlap p) ys xs
+
+> instance Syntax (TopDecl a) where
+>   overlap _ (InstanceDecl p _ _ ds) = overlap p ds 
+>   overlap p (BlockDecl d) = overlap p d
+>   overlap _ _ = id
+
+> instance Syntax (MethodDecl a) where
+>   overlap _ (MethodDecl p f eqs) = ([P p f | isNonDet eqs] ++) . overlap p eqs
 
 > instance Syntax (Decl a) where
 >   overlap _ (FunctionDecl p f eqs) =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: Renaming.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -122,14 +122,16 @@ syntax tree and renames all type and expression variables.
 >   do
 >     env <- bindVars emptyEnv tvs
 >     liftM2 (TypeDecl p tc) (mapM (renameVar env) tvs) (renameType env ty)
-> renameTopDecl (ClassDecl p cls tv) =
+> renameTopDecl (ClassDecl p cls tv ds) =
 >   do
 >     env <- bindVars emptyEnv [tv]
->     liftM (ClassDecl p cls) (renameVar env tv)
-> renameTopDecl (InstanceDecl p cls ty) =
+>     liftM2 (ClassDecl p cls)
+>            (renameVar env tv)
+>            (mapM (renameMethodSig tv env) ds)
+> renameTopDecl (InstanceDecl p cls ty ds) =
 >   do
 >     QualTypeExpr _ ty' <- renameTypeSig (QualTypeExpr [] ty)
->     return (InstanceDecl p cls ty')
+>     liftM (InstanceDecl p cls ty') (mapM renameMethodDecl ds)
 > renameTopDecl (BlockDecl d) = liftM BlockDecl (renameDecl emptyEnv d)
 
 > renameConstrDecl :: RenameEnv -> ConstrDecl -> RenameState ConstrDecl
@@ -150,6 +152,16 @@ syntax tree and renames all type and expression variables.
 > renameNewConstrDecl :: RenameEnv -> NewConstrDecl -> RenameState NewConstrDecl
 > renameNewConstrDecl env (NewConstrDecl p c ty) =
 >   liftM (NewConstrDecl p c) (renameType env ty)
+
+> renameMethodSig :: Ident -> RenameEnv -> MethodSig -> RenameState MethodSig
+> renameMethodSig tv env (MethodSig p fs ty) =
+>   do
+>     env <- bindVars env (filter (tv /=) (fv ty))
+>     liftM (MethodSig p fs) (renameType env ty)
+
+> renameMethodDecl :: MethodDecl a -> RenameState (MethodDecl a)
+> renameMethodDecl (MethodDecl p f eqs) =
+>   liftM (MethodDecl p f) (mapM (renameEqn f emptyEnv) eqs)
 
 > renameTypeSig :: QualTypeExpr -> RenameState QualTypeExpr
 > renameTypeSig ty =

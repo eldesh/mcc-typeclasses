@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: ShadowCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -19,7 +19,7 @@ definitions which shadow a declaration from an outer scope.
 
 > shadowCheck :: [Warn] -> Module a -> [String]
 > shadowCheck v (Module m _ _ ds) =
->   report v $ shadow noPosition [d | BlockDecl d <- ds] (const []) zeroSet
+>   report v $ shadow noPosition ds (const []) zeroSet
 >   where noPosition = error "noPosition"
 
 > shadowCheckGoal :: [Warn] -> Goal a -> [String]
@@ -72,6 +72,17 @@ traversal of the syntax tree.
 
 > instance SyntaxTree a => SyntaxTree [a] where
 >   shadow p = shadowGroup p
+
+> instance SyntaxTree (TopDecl a) where
+>   shadow _ (InstanceDecl p _ _ ds) = shadow p ds
+>   shadow p (BlockDecl d) = shadow p d
+>   shadow _ _ = id
+
+>   shadowGroup p ds =
+>     bindVars (concatMap funs ds) >>> foldr ((&&&) . shadow p) id ds
+
+> instance SyntaxTree (MethodDecl a) where
+>   shadow _ (MethodDecl p _ eqs) = shadow p eqs
 
 > instance SyntaxTree (Decl a) where
 >   shadow _ (FunctionDecl p _ eqs) = shadow p eqs
@@ -134,9 +145,16 @@ traversal of the syntax tree.
 >   shadow _ (Alt p t rhs) = shadow p t >>> shadow p rhs
 
 \end{verbatim}
-The function \texttt{vars} returns the bound variables of a list of
-declarations together with their positions.
+The function \texttt{funs} returns the bound function or methods of a
+top-level declaration together with their positions and the function
+\texttt{vars} returns the bound variables of a declaration together
+with their positions.
 \begin{verbatim}
+
+> funs :: TopDecl a -> [P Ident]
+> funs (ClassDecl _ _ _ ds) = [P p f | MethodSig p fs _ <- ds, f <- fs]
+> funs (BlockDecl d) = vars d
+> funs _ = []
 
 > vars :: Decl a -> [P Ident]
 > vars (FunctionDecl p f _) = [P p f]

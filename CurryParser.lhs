@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: CurryParser.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -180,11 +180,29 @@ directory path to the module is ignored.
 > newConstrDecl = NewConstrDecl <$> position <*> con <*> type2
 
 > classDecl :: Parser Token (TopDecl ()) a
-> classDecl = ClassDecl <$> position <*-> token KW_class <*> tycls <*> tyvar
+> classDecl =
+>   ClassDecl <$> position <*-> token KW_class <*> tycls <*> tyvar
+>             <*> methodDefs
+>   where methodDefs = token KW_where <-*> layout (methodSig `sepBy` semicolon)
+>                `opt` []
 
 > instanceDecl :: Parser Token (TopDecl ()) a
 > instanceDecl =
 >   InstanceDecl <$> position <*-> token KW_instance <*> qtycls <*> type2
+>                <*> methodDefs
+>   where methodDefs = token KW_where <-*> layout (methodDecl `sepBy` semicolon)
+>                `opt` []
+
+> methodSig :: Parser Token MethodSig a
+> methodSig =
+>   MethodSig <$> position <*> var `sepBy1` comma
+>             <*-> token DoubleColon <*> type0
+
+> methodDecl :: Parser Token (MethodDecl ()) a
+> methodDecl = methodDecl <$> position <*> lhs <*> declRhs
+>   where lhs = (\f -> (f,FunLhs f [])) <$> fun
+>          <|?> funLhs
+>         methodDecl p (f,lhs) rhs = MethodDecl p f [Equation p lhs rhs]
 
 > infixDecl :: Parser Token (Decl ()) a
 > infixDecl = infixDeclLhs InfixDecl <*> funop `sepBy1` comma
@@ -320,15 +338,25 @@ directory path to the module is ignored.
 > iTypeDeclLhs f kw = f <$> position <*-> token kw <*> qtycon <*> many tyvar
 
 > iClassDecl :: Parser Token IDecl a
-> iClassDecl = IClassDecl <$> position <*-> token KW_class <*> qtycls <*> tyvar
+> iClassDecl =
+>   IClassDecl <$> position <*-> token KW_class <*> qtycls <*> tyvar
+>              <*> methodDefs
+>   where methodDefs = token KW_where <-*> braces (methodDecl `sepBy` semicolon)
+>                `opt` []
+>         methodDecl = Just <$> iMethodDecl
+>                  <|> Nothing <$-> token Underscore
 
 > iInstanceDecl :: Parser Token IDecl a
 > iInstanceDecl =
 >   IInstanceDecl <$> position <*-> token KW_instance <*> qtycls <*> type2
 
 > iFunctionDecl :: Parser Token IDecl a
-> iFunctionDecl = IFunctionDecl <$> position <*> qfun <*-> token DoubleColon
->                               <*> qualType
+> iFunctionDecl =
+>   IFunctionDecl <$> position <*> qfun <*-> token DoubleColon <*> qualType
+
+> iMethodDecl :: Parser Token IMethodDecl a
+> iMethodDecl =
+>   IMethodDecl <$> position <*> fun <*-> token DoubleColon <*> type0
 
 \end{verbatim}
 \paragraph{Types}

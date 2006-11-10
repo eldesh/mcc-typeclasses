@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ImportSyntaxCheck.lhs 1973 2006-09-19 19:06:48Z wlux $
+% $Id: ImportSyntaxCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -40,13 +40,16 @@ declarations.
 > bindType m (INewtypeDecl _ tc _ nc) =
 >   bindUnqual tc (Data (qualQualify m tc) [nconstr nc])
 > bindType m (ITypeDecl _ tc _ _) = bindUnqual tc (Alias (qualQualify m tc))
-> bindType m (IClassDecl _ cls _) = bindUnqual cls (Class (qualQualify m cls))
+> bindType m (IClassDecl _ cls _ ds) =
+>   bindUnqual cls (Class (qualQualify m cls) (map imethod (catMaybes ds)))
 > bindType _ _ = id
 
 > bindValue :: ModuleIdent -> IDecl -> ExpFunEnv -> ExpFunEnv
 > bindValue m (IDataDecl _ tc _ cs) =
 >   flip (foldr (bindConstr (qualQualify m tc))) (catMaybes cs)
 > bindValue m (INewtypeDecl _ tc _ nc) = bindNewConstr (qualQualify m tc) nc
+> bindValue m (IClassDecl _ cls _ ds) =
+>   flip (foldr (bindMethod (qualQualify m cls))) (catMaybes ds)
 > bindValue m (IFunctionDecl _ f _) = bindUnqual f (Var (qualQualify m f))
 > bindValue _ _ = id
 
@@ -56,6 +59,9 @@ declarations.
 
 > bindNewConstr :: QualIdent -> NewConstrDecl -> ExpFunEnv -> ExpFunEnv
 > bindNewConstr tc (NewConstrDecl _ c _) = bindEnv c (Constr (qualifyLike tc c))
+
+> bindMethod :: QualIdent -> IMethodDecl -> ExpFunEnv -> ExpFunEnv
+> bindMethod cls (IMethodDecl _ f _) = bindEnv f (Var (qualifyLike cls f))
 
 > bindUnqual :: QualIdent -> a -> Env Ident a -> Env Ident a
 > bindUnqual x = bindEnv (unqualify x)
@@ -101,15 +107,15 @@ data constructors are added.
 > expandImport :: Position -> ModuleIdent -> ExpTypeEnv -> ExpFunEnv -> Import
 >              -> Error [Import]
 > expandImport p m tEnv vEnv (Import x) = expandThing p m tEnv vEnv x
-> expandImport p m tEnv vEnv (ImportTypeWith tc cs) =
->   expandTypeWith p m tEnv tc cs
+> expandImport p m tEnv vEnv (ImportTypeWith tc xs) =
+>   expandTypeWith p m tEnv tc xs
 > expandImport p m tEnv vEnv (ImportTypeAll tc) = expandTypeAll p m tEnv tc
 
 > expandHiding :: Position -> ModuleIdent -> ExpTypeEnv -> ExpFunEnv -> Import
 >              -> Error [Import]
 > expandHiding p m tEnv vEnv (Import x) = expandHide p m tEnv vEnv x
-> expandHiding p m tEnv vEnv (ImportTypeWith tc cs) =
->   expandTypeWith p m tEnv tc cs
+> expandHiding p m tEnv vEnv (ImportTypeWith tc xs) =
+>   expandTypeWith p m tEnv tc xs
 > expandHiding p m tEnv vEnv (ImportTypeAll tc) = expandTypeAll p m tEnv tc
 
 > expandThing :: Position -> ModuleIdent -> ExpTypeEnv -> ExpFunEnv -> Ident
@@ -144,28 +150,28 @@ data constructors are added.
 
 > expandTypeWith :: Position -> ModuleIdent -> ExpTypeEnv -> Ident -> [Ident]
 >                -> Error [Import]
-> expandTypeWith p m tEnv tc cs =
+> expandTypeWith p m tEnv tc xs =
 >   do
->     (isType,cs'') <- elements p m tEnv tc
+>     (isType,xs'') <- members p m tEnv tc
 >     mapE_ (errorAt p . undefinedElement isType m tc)
->           (filter (`notElem` cs'') cs')
->     return [ImportTypeWith tc cs']
->   where cs' = nub cs
+>           (filter (`notElem` xs'') xs')
+>     return [ImportTypeWith tc xs']
+>   where xs' = nub xs
 
 > expandTypeAll :: Position -> ModuleIdent -> ExpTypeEnv -> Ident
 >               -> Error [Import]
 > expandTypeAll p m tEnv tc =
 >   do
->     (_,cs) <- elements p m tEnv tc
->     return [ImportTypeWith tc cs]
+>     (_,xs) <- members p m tEnv tc
+>     return [ImportTypeWith tc xs]
 
-> elements :: Position -> ModuleIdent -> ExpTypeEnv -> Ident
+> members :: Position -> ModuleIdent -> ExpTypeEnv -> Ident
 >          -> Error (Bool,[Ident])
-> elements p m tEnv tc =
+> members p m tEnv tc =
 >   case lookupEnv tc tEnv of
 >     Just (Data _ cs) -> return (True,cs)
 >     Just (Alias _) -> return (True,[])
->     Just (Class _) -> return (False,[])
+>     Just (Class _ fs) -> return (False,fs)
 >     Nothing -> errorAt p (undefinedEntity m tc)
 
 \end{verbatim}

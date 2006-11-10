@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ExportSyntaxCheck.lhs 1973 2006-09-19 19:06:48Z wlux $
+% $Id: ExportSyntaxCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -25,7 +25,7 @@ entities.
 > checkExports :: ModuleIdent -> [ImportDecl] -> TypeEnv -> FunEnv
 >              -> Maybe ExportSpec -> Error ExportSpec
 > checkExports m is tEnv fEnv =
->   maybe (return (Exporting noPos (expandLocalModule tEnv fEnv)))
+>   maybe (return (nubExports (Exporting noPos (expandLocalModule tEnv fEnv))))
 >         (\es -> do
 >                   es' <- liftE nubExports (expandSpecs ms m tEnv fEnv es)
 >                   checkInterface es'
@@ -38,7 +38,7 @@ entities.
 >   mapE_ (errorAt p . ambiguousExport . fst)
 >         (duplicates [unqualify tc | ExportTypeWith tc _ <- es]) &&>
 >   mapE_ (errorAt p . ambiguousExport . fst)
->         (duplicates ([c | ExportTypeWith _ cs <- es, c <- cs] ++
+>         (duplicates ([c | ExportTypeWith _ xs <- es, c <- xs] ++
 >                      [unqualify f | Export f <- es]))
 
 \end{verbatim}
@@ -63,7 +63,7 @@ export a type constructor \texttt{x} \emph{and} a global function
 > expandExport :: Position -> Set ModuleIdent -> ModuleIdent -> TypeEnv
 >              -> FunEnv -> Export -> Error [Export]
 > expandExport p _ _ tEnv fEnv (Export x) = expandThing p tEnv fEnv x
-> expandExport p _ _ tEnv _ (ExportTypeWith tc cs) = expandTypeWith p tEnv tc cs
+> expandExport p _ _ tEnv _ (ExportTypeWith tc xs) = expandTypeWith p tEnv tc xs
 > expandExport p _ _ tEnv _ (ExportTypeAll tc) = expandTypeAll p tEnv tc
 > expandExport p ms m tEnv fEnv (ExportModule m')
 >   | m == m' =
@@ -79,7 +79,7 @@ export a type constructor \texttt{x} \emph{and} a global function
 >     [t] -> expandThing' p fEnv tc (Just [exportType (abstract t)])
 >       where abstract (Data tc _) = Data tc []
 >             abstract (Alias tc) = Alias tc
->             abstract (Class cls) = Class cls
+>             abstract (Class cls _) = Class cls []
 >     _ -> errorAt p (ambiguousName tc)
 
 > expandThing' :: Position -> FunEnv -> QualIdent -> Maybe [Export]
@@ -93,27 +93,27 @@ export a type constructor \texttt{x} \emph{and} a global function
 
 > expandTypeWith :: Position -> TypeEnv -> QualIdent -> [Ident]
 >                -> Error [Export]
-> expandTypeWith p tEnv tc cs =
+> expandTypeWith p tEnv tc xs =
 >   do
->     (isType,tc',cs'') <- elements p tEnv tc
+>     (isType,tc',xs'') <- members p tEnv tc
 >     mapE_ (errorAt p . undefinedElement isType tc)
->           (filter (`notElem` cs'') cs')
->     return [ExportTypeWith tc' cs']
->   where cs' = nub cs
+>           (filter (`notElem` xs'') xs')
+>     return [ExportTypeWith tc' xs']
+>   where xs' = nub xs
 
 > expandTypeAll :: Position -> TypeEnv -> QualIdent -> Error [Export]
 > expandTypeAll p tEnv tc =
 >   do
->     (_,tc',cs) <- elements p tEnv tc
->     return [ExportTypeWith tc' cs]
+>     (_,tc',xs) <- members p tEnv tc
+>     return [ExportTypeWith tc' xs]
 
-> elements :: Position -> TypeEnv -> QualIdent -> Error (Bool,QualIdent,[Ident])
-> elements p tEnv tc =
+> members :: Position -> TypeEnv -> QualIdent -> Error (Bool,QualIdent,[Ident])
+> members p tEnv tc =
 >   case qualLookupTopEnv tc tEnv of
 >     [] -> errorAt p (undefinedEntity tc)
 >     [Data tc cs] -> return (True,tc,cs)
 >     [Alias tc] -> return (True,tc,[])
->     [Class cls] -> return (False,cls,[])
+>     [Class cls fs] -> return (False,cls,fs)
 >     _ -> errorAt p (ambiguousName tc)
 
 > expandLocalModule :: TypeEnv -> FunEnv -> [Export]
@@ -129,26 +129,40 @@ export a type constructor \texttt{x} \emph{and} a global function
 > exportType :: TypeKind -> Export
 > exportType (Data tc cs) = ExportTypeWith tc cs
 > exportType (Alias tc) = ExportTypeWith tc []
-> exportType (Class cls) = ExportTypeWith cls []
+> exportType (Class cls fs) = ExportTypeWith cls fs
 
 \end{verbatim}
 The expanded list of exported entities may contain duplicates. These
-are removed by the function \texttt{nubExports}.
+are removed by the function \texttt{nubExports}. As a special case, if
+a method is exported explicitly and along with its class, i.e., if
+both $f$ and $C(\dots f \dots)$ appear in the export list, the
+explicit export is removed. This ensures that the compiler generates
+exactly the same interface file for the two equivalent modules
+\texttt{module M((==), Eq((==))) where \lb \rb} and \texttt{module
+  M(Eq((==))) where \lb \rb} and furthermore prevents the compiler
+from reporting an ambiguous export.
 \begin{verbatim}
 
 > nubExports :: ExportSpec -> ExportSpec
-> nubExports (Exporting p es) = Exporting p $
->   [ExportTypeWith tc cs | (tc,cs) <- toListFM (foldr addType zeroFM es)] ++
->   [Export f | f <- toListSet (foldr addFun zeroSet es)]
+> nubExports (Exporting p es) = Exporting p (ts ++ vs)
+>   where ts = [ExportTypeWith tc xs | (tc,xs) <- types es]
+>         fs = [qualifyLike tc x | ExportTypeWith tc xs <- ts, x <- xs]
+>         vs = [Export f | f <- values es, f `notElem` fs]
+
+> types :: [Export] -> [(QualIdent,[Ident])]
+> types = toListFM . foldr addType zeroFM
 
 > addType :: Export -> FM QualIdent [Ident] -> FM QualIdent [Ident]
 > addType (Export _) tcs = tcs
-> addType (ExportTypeWith tc cs) tcs =
->   addToFM tc (cs `union` fromMaybe [] (lookupFM tc tcs)) tcs
+> addType (ExportTypeWith tc xs) tcs =
+>   addToFM tc (xs `union` fromMaybe [] (lookupFM tc tcs)) tcs
 
-> addFun :: Export -> Set QualIdent -> Set QualIdent
-> addFun (Export f) fs = f `addToSet` fs
-> addFun (ExportTypeWith _ _) fs = fs
+> values :: [Export] -> [QualIdent]
+> values = toListSet . foldr addValue zeroSet
+
+> addValue :: Export -> Set QualIdent -> Set QualIdent
+> addValue (Export f) fs = f `addToSet` fs
+> addValue (ExportTypeWith _ _) fs = fs
 
 \end{verbatim}
 Error messages.

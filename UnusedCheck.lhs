@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: UnusedCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -40,6 +40,7 @@ them according to the compiler options.
 > data Undef =
 >     Data Position Ident
 >   | Decl Position Ident
+>   | Meth Position Ident
 >   | Var Position Ident
 >   | Pattern Position
 >   deriving (Eq,Show)
@@ -50,12 +51,14 @@ them according to the compiler options.
 >   | otherwise = filter warn vs
 >   where warn (Data _ _) = WarnUnusedData `elem` us
 >         warn (Decl _ _) = WarnUnusedDecl `elem` us
+>         warn (Meth _ _) = WarnUnusedDecl `elem` us
 >         warn (Var _ _) = WarnUnusedVar `elem` us
 >         warn (Pattern _) = WarnUnusedDecl `elem` us
 
 > format :: Undef -> String
 > format (Data p c) = atP p ("Warning: unused data constructor " ++ name c)
 > format (Decl p x) = atP p ("Warning: unused variable " ++ name x)
+> format (Meth p f) = atP p ("Warning: unused method " ++ name f)
 > format (Var p x) = atP p ("Warning: unused variable " ++ name x)
 > format (Pattern p) = atP p "Warning: unused pattern declaration"
 
@@ -79,22 +82,23 @@ implemented by a traversal of the syntax tree.
 
 > instance SyntaxTree Export where
 >   used m (Export x) = used m x
->   used m (ExportTypeWith tc cs) = used m (map (qualifyLike tc) cs)
+>   used m (ExportTypeWith tc xs) = used m (map (qualifyLike tc) xs)
 >   unused _ _ _ = id
 
 > instance SyntaxTree (TopDecl a) where
 >   used _ (DataDecl _ _ _ _) = id
 >   used _ (NewtypeDecl _ _ _ _) = id
 >   used _ (TypeDecl _ _ _ _) = id
->   used _ (ClassDecl _ _ _) = id
->   used _ (InstanceDecl _ _ _) = id
+>   used m (ClassDecl _ _ _ ds) = used m ds
+>   used m (InstanceDecl _ cls _ ds) =
+>     used m [qualifyLike cls f | MethodDecl _ f _ <- ds] . used m ds
 >   used m (BlockDecl d) = used m d
 
 >   unused used p (DataDecl _ _ _ cs) = unused used p cs
 >   unused used p (NewtypeDecl _ _ _ nc) = unused used p nc
 >   unused _ _ (TypeDecl _ _ _ _) = id
->   unused _ _ (ClassDecl _ _ _) = id
->   unused _ _ (InstanceDecl _ _ _) = id
+>   unused used _ (ClassDecl p _ _ ds) = unused used p ds
+>   unused used _ (InstanceDecl p _ _ ds) = unused used p ds
 >   unused used p (BlockDecl d) = unused used p d
 
 > instance SyntaxTree ConstrDecl where
@@ -105,6 +109,14 @@ implemented by a traversal of the syntax tree.
 > instance SyntaxTree NewConstrDecl where
 >   used _ _ = id
 >   unused used _ (NewConstrDecl p c _) = unusedVars Data used p [c]
+
+> instance SyntaxTree MethodSig where
+>   used _ _ = id
+>   unused used _ (MethodSig p fs _) = unusedVars Meth used p fs
+
+> instance SyntaxTree (MethodDecl a) where
+>   used m (MethodDecl _ _ eqs) = used m eqs
+>   unused used _ (MethodDecl p _ eqs) = unused used p eqs
 
 > instance SyntaxTree (Decl a) where
 >   used m (FunctionDecl _ _ eqs) = used m eqs

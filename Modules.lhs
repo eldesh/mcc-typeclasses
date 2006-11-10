@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 1991 2006-11-01 18:15:48Z wlux $
+% $Id: Modules.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -115,7 +115,7 @@ declaration to the module.
 >   do
 >     (pEnv,tcEnv,iEnv,tyEnv) <- importModules mEnv is
 >     (tEnv,iEnv',ds') <- typeSyntaxCheck m tcEnv iEnv ds
->     (vEnv,ds'') <- syntaxCheck m tyEnv ds'
+>     (vEnv,ds'') <- syntaxCheck m tEnv tyEnv ds'
 >     es' <- checkExports m is tEnv vEnv es
 >     (pEnv',ds''') <- precCheck m pEnv $ rename ds''
 >     tcEnv' <- kindCheck m tcEnv ds'''

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 1984 2006-10-27 13:34:07Z wlux $
+% $Id: IntfCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 2000-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -73,14 +73,11 @@ interface module only. However, this has not been implemented yet.
 >   where checkData (DataType tc' n' cs')
 >           | tc == tc' && length tvs == n' &&
 >             (null cs || length cs == length cs') &&
->             and (zipWith isVisible cs cs') =
+>             and (zipWith (isVisible constr) cs cs') =
 >               Just (mapM_ (checkConstrImport m tyEnv tc tvs) (catMaybes cs))
 >         checkData (RenamingType tc' n' _)
 >           | tc == tc' && length tvs == n' && null cs = Just (return ())
 >         checkData _ = Nothing
->         isVisible (Just c) (Just c') = constr c == c'
->         isVisible (Just _) Nothing = False
->         isVisible Nothing _ = True
 > checkImport m _ tcEnv tyEnv (INewtypeDecl p tc tvs nc) =
 >   checkTypeInfo "newtype" checkNewtype tcEnv p tc
 >   where checkNewtype (RenamingType tc' n' nc')
@@ -95,11 +92,14 @@ interface module only. However, this has not been implemented yet.
 >         checkType _ = Nothing
 > checkImport m _ tcEnv _ (HidingClassDecl p cls tv) =
 >   checkTypeInfo "hidden type class" checkClass tcEnv p cls
->   where checkClass (TypeClass cls') | cls == cls' = Just (return ())
+>   where checkClass (TypeClass cls' _) | cls == cls' = Just (return ())
 >         checkClass _ = Nothing
-> checkImport m _ tcEnv _ (IClassDecl p cls tv) =
+> checkImport m _ tcEnv tyEnv (IClassDecl p cls tv ds) =
 >   checkTypeInfo "type class" checkClass tcEnv p cls
->   where checkClass (TypeClass cls') | cls == cls' = Just (return ())
+>   where checkClass (TypeClass cls' fs')
+>           | cls == cls' && length ds == length fs' &&
+>             and (zipWith (isVisible imethod) ds fs') =
+>               Just (mapM_ (checkMethodImport m tyEnv cls tv) (catMaybes ds))
 >         checkClass _ = Nothing
 > checkImport m _ _ _ (IInstanceDecl _ _ _) = return ()
 > checkImport m _ _ tyEnv (IFunctionDecl p f ty) =
@@ -134,6 +134,16 @@ interface module only. However, this has not been implemented yet.
 >           qc == c' && length tvs == n' &&
 >           toType m tvs ty == head (arrowArgs ty')
 >         checkNewConstr _ = False
+
+> checkMethodImport :: ModuleIdent -> ValueEnv -> QualIdent -> Ident
+>                   -> IMethodDecl -> Error ()
+> checkMethodImport m tyEnv cls tv (IMethodDecl p f ty) =
+>   checkValueInfo "method" checkMethod tyEnv p qf
+>   where qf = qualifyLike cls f
+>         checkMethod (Value f' (ForAll _ ty')) =
+>           qf == f' &&
+>           toQualType m [] (QualTypeExpr [ClassAssert cls tv] ty) == ty'
+>         checkMethod _ = False
 
 > checkPrecInfo :: (PrecInfo -> Bool) -> PEnv -> Position
 >               -> QualIdent -> Error ()
@@ -170,6 +180,11 @@ interface module only. However, this has not been implemented yet.
 >   case splitQualIdent x of
 >     (Just m,x') -> f m x'
 >     (Nothing,_) -> return ()
+
+> isVisible :: (a -> Ident) -> Maybe a -> Maybe Ident -> Bool
+> isVisible f (Just d) (Just x) = f d == x
+> isVisible _ (Just _) Nothing = False
+> isVisible _ Nothing _ = True
 
 \end{verbatim}
 Error messages.

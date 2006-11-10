@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 1989 2006-10-30 16:29:59Z wlux $
+% $Id: Qual.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -36,9 +36,12 @@ functions remain unchanged.
 >     NewtypeDecl p tc tvs (qual tcEnv tyEnv nc)
 >   qual tcEnv tyEnv (TypeDecl p tc tvs ty) =
 >     TypeDecl p tc tvs (qual tcEnv tyEnv ty)
->   qual _ _ (ClassDecl p cls tv) = ClassDecl p cls tv
->   qual tcEnv tyEnv (InstanceDecl p cls ty) =
->     InstanceDecl p (qualIdent tcEnv cls) (qual tcEnv tyEnv ty)
+>   qual tcEnv tyEnv (ClassDecl p cls tv ds) =
+>     ClassDecl p cls tv (qual tcEnv tyEnv ds)
+>   qual tcEnv tyEnv (InstanceDecl p cls ty ds) =
+>     InstanceDecl p (qualIdent tcEnv cls)
+>                  (qual tcEnv tyEnv ty)
+>                  (qual tcEnv tyEnv ds)
 >   qual tcEnv tyEnv (BlockDecl d) = BlockDecl (qual tcEnv tyEnv d)
 
 > instance Qual ConstrDecl where
@@ -66,6 +69,13 @@ functions remain unchanged.
 >   qual tcEnv tyEnv (ListType ty) = ListType (qual tcEnv tyEnv ty)
 >   qual tcEnv tyEnv (ArrowType ty1 ty2) =
 >     ArrowType (qual tcEnv tyEnv ty1) (qual tcEnv tyEnv ty2)
+
+> instance Qual MethodSig where
+>   qual tcEnv tyEnv (MethodSig p fs ty) = MethodSig p fs (qual tcEnv tyEnv ty)
+
+> instance Qual (MethodDecl a) where
+>   qual tcEnv tyEnv (MethodDecl p f eqs) =
+>     MethodDecl p f (qual tcEnv tyEnv eqs)
 
 > instance Qual (Decl a) where
 >   qual _ _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops

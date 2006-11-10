@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: CurryPP.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -70,9 +70,11 @@ Declarations
 >   sep [ppTypeDeclLhs "newtype" tc tvs <+> equals,indent (ppNewConstr nc)]
 > ppTopDecl (TypeDecl _ tc tvs ty) =
 >   sep [ppTypeDeclLhs "type" tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
-> ppTopDecl (ClassDecl _ cls tv) = ppTypeDeclLhs "class" cls [tv]
-> ppTopDecl (InstanceDecl _ cls ty) =
->   text "instance" <+> ppQIdent cls <+> ppTypeExpr 2 ty
+> ppTopDecl (ClassDecl _ cls tv ds) =
+>   ppClassInstDecl (ppTypeDeclLhs "class" cls [tv]) (map ppMethodSig ds)
+> ppTopDecl (InstanceDecl _ cls ty ds) =
+>   ppClassInstDecl (text "instance" <+> ppQIdent cls <+> ppTypeExpr 2 ty)
+>                   (map ppMethodDecl ds)
 > ppTopDecl (BlockDecl d) = ppDecl d
 
 > ppTypeDeclLhs :: String -> Ident -> [Ident] -> Doc
@@ -91,6 +93,17 @@ Declarations
 
 > ppNewConstr :: NewConstrDecl -> Doc
 > ppNewConstr (NewConstrDecl _ c ty) = ppIdent c <+> ppTypeExpr 2 ty
+
+> ppClassInstDecl :: Doc -> [Doc] -> Doc
+> ppClassInstDecl head ds
+>   | null ds = head
+>   | otherwise = head <+> text "where" $$ indent (vcat ds)
+
+> ppMethodSig :: MethodSig -> Doc
+> ppMethodSig (MethodSig p fs ty) = ppDecl (TypeSig p fs (QualTypeExpr [] ty))
+
+> ppMethodDecl :: MethodDecl a -> Doc
+> ppMethodDecl (MethodDecl p f eqs) = ppDecl (FunctionDecl p f eqs)
 
 > ppBlock :: [Decl a] -> Doc
 > ppBlock = vcat . map ppDecl
@@ -147,9 +160,8 @@ Interfaces
 
 > ppInterface :: Interface -> Doc
 > ppInterface (Interface m is ds) =
->   text "interface" <+> ppModuleIdent m <+> text "where" <+> lbrace $$
->   vcat (punctuate semi (map ppIImportDecl is ++ map ppIDecl ds)) $$
->   rbrace
+>   ppIBlock (text "interface" <+> ppModuleIdent m)
+>            (map ppIImportDecl is ++ map ppIDecl ds)
 >   where ppModuleIdent m
 >           | isMIdent m = ppMIdent m
 >           | otherwise = text (show (moduleName m))
@@ -175,8 +187,9 @@ Interfaces
 > ppIDecl (ITypeDecl _ tc tvs ty) =
 >   sep [ppITypeDeclLhs "type" tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
 > ppIDecl (HidingClassDecl _ cls tv) =
->   text "hiding" <+> ppITypeDeclLhs "class" cls [tv]
-> ppIDecl (IClassDecl _ cls tv) = ppITypeDeclLhs "class" cls [tv]
+>   text "hiding" <+> ppIClassDecl (ppITypeDeclLhs "class" cls [tv]) []
+> ppIDecl (IClassDecl _ cls tv ds) =
+>   ppIClassDecl (ppITypeDeclLhs "class" cls [tv]) ds
 > ppIDecl (IInstanceDecl _ cls ty) =
 >   text "instance" <+> ppQIdent cls <+> ppTypeExpr 2 ty
 > ppIDecl (IFunctionDecl _ f ty) =
@@ -184,6 +197,21 @@ Interfaces
 
 > ppITypeDeclLhs :: String -> QualIdent -> [Ident] -> Doc
 > ppITypeDeclLhs kw tc tvs = text kw <+> ppQIdent tc <+> hsep (map ppIdent tvs)
+
+> ppIClassDecl :: Doc -> [Maybe IMethodDecl] -> Doc
+> ppIClassDecl head ds
+>   | null ds = head
+>   | otherwise = ppIBlock head (map (maybe (text "_") ppIMethodDecl) ds)
+
+> ppIMethodDecl :: IMethodDecl -> Doc
+> ppIMethodDecl (IMethodDecl p f ty) =
+>   ppIDecl (IFunctionDecl p (qualify f) (QualTypeExpr [] ty))
+
+> ppIBlock :: Doc -> [Doc] -> Doc
+> ppIBlock prefix ds =
+>   prefix <+> text "where" <+> lbrace $$
+>   vcat (punctuate semi ds) $$
+>   rbrace
 
 \end{verbatim}
 Types

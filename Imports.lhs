@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 1984 2006-10-27 13:34:07Z wlux $
+% $Id: Imports.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -36,7 +36,7 @@ all instance declarations are always imported into the current module.
 >                 -> (PEnv,TCEnv,InstEnv,ValueEnv)
 > importInterface m q is (pEnv,tcEnv,iEnv,tyEnv) (Interface m' _ ds) =
 >   (importEntities precs m q vs id m' ds' pEnv,
->    importEntities types m q ts (importData vs) m' ds' tcEnv,
+>    importEntities types m q ts (importMembers vs) m' ds' tcEnv,
 >    importInstances m ds' iEnv,
 >    importEntities values m q vs id m' ds' tyEnv)
 >   where ds' = filter (not . isHiddenDecl) ds
@@ -50,7 +50,7 @@ all instance declarations are always imported into the current module.
 > isHiddenDecl (INewtypeDecl _ _ _ _) = False
 > isHiddenDecl (ITypeDecl _ _ _ _) = False
 > isHiddenDecl (HidingClassDecl _ _ _) = True
-> isHiddenDecl (IClassDecl _ _ _) = False
+> isHiddenDecl (IClassDecl _ _ _ _) = False
 > isHiddenDecl (IInstanceDecl _ _ _) = False
 > isHiddenDecl (IFunctionDecl _ _ _) = False
 
@@ -68,16 +68,17 @@ all instance declarations are always imported into the current module.
 >   foldr (uncurry (importTopEnv q m)) env
 >         [(x,f y) | (x,y) <- foldr (bind m') [] ds, isVisible x]
 
-> importData :: (Ident -> Bool) -> TypeInfo -> TypeInfo
-> importData isVisible (DataType tc n cs) =
->   DataType tc n (map (>>= importConstr isVisible) cs)
-> importData isVisible (RenamingType tc n nc) =
->   maybe (DataType tc n []) (RenamingType tc n) (importConstr isVisible nc)
-> importData isVisible (AliasType tc n ty) = AliasType tc n ty
-> importData isVisible (TypeClass cls) = TypeClass cls
+> importMembers :: (Ident -> Bool) -> TypeInfo -> TypeInfo
+> importMembers isVisible (DataType tc n cs) =
+>   DataType tc n (map (>>= importMember isVisible) cs)
+> importMembers isVisible (RenamingType tc n nc) =
+>   maybe (DataType tc n []) (RenamingType tc n) (importMember isVisible nc)
+> importMembers isVisible (AliasType tc n ty) = AliasType tc n ty
+> importMembers isVisible (TypeClass cls fs) =
+>   TypeClass cls (map (>>= importMember isVisible) fs)
 
-> importConstr :: (Ident -> Bool) -> Ident -> Maybe Ident
-> importConstr isVisible c
+> importMember :: (Ident -> Bool) -> Ident -> Maybe Ident
+> importMember isVisible c
 >   | isVisible c = Just c
 >   | otherwise = Nothing
 
@@ -132,7 +133,7 @@ instances imported from another module.
 > entity (INewtypeDecl _ tc _ _) = tc
 > entity (ITypeDecl _ tc _ _) = tc
 > entity (HidingClassDecl _ cls _) = cls
-> entity (IClassDecl _ cls _) = cls
+> entity (IClassDecl _ cls _ _) = cls
 > entity (IInstanceDecl _ _ _) = qualify anonId
 > entity (IFunctionDecl _ f _) = f
 
@@ -160,8 +161,10 @@ following functions.
 >   qual tc (typeCon RenamingType m tc tvs (nconstr nc))
 > types m (ITypeDecl _ tc tvs ty) =
 >   qual tc (typeCon AliasType m tc tvs (toType m tvs ty))
-> types m (HidingClassDecl _ cls tv) = qual cls (TypeClass (qualQualify m cls))
-> types m (IClassDecl _ cls tv) = qual cls (TypeClass (qualQualify m cls))
+> types m (HidingClassDecl _ cls tv) =
+>   qual cls (TypeClass (qualQualify m cls) [])
+> types m (IClassDecl _ cls tv fs) =
+>   qual cls (TypeClass (qualQualify m cls) (map (fmap imethod) fs))
 > types _ _ = id
 
 > values :: ModuleIdent -> IDecl -> [I ValueInfo] -> [I ValueInfo]
@@ -173,6 +176,9 @@ following functions.
 >   where tc' = qualQualify m tc
 > values m (IFunctionDecl _ f ty) =
 >   qual f (Value (qualQualify m f) (typeScheme (toQualType m [] ty)))
+> values m (IClassDecl _ cls tv ds) =
+>   (map (classMethod m cls' [ClassAssert cls' tv]) (catMaybes ds) ++)
+>   where cls' = qualQualify m cls
 > values _ _ = id
 
 > dataConstr :: ModuleIdent -> QualIdent -> [Ident] -> TypeExpr -> ConstrDecl
@@ -186,6 +192,11 @@ following functions.
 >           -> I ValueInfo
 > newConstr m tc tvs ty0 (NewConstrDecl _ c ty1) =
 >   (c,con NewtypeConstructor m tc tvs c (ArrowType ty1 ty0))
+
+> classMethod :: ModuleIdent -> QualIdent -> [ClassAssert] -> IMethodDecl 
+>             -> I ValueInfo
+> classMethod m cls cx (IMethodDecl _ f ty) =
+>   (f,Value (qualifyLike cls f) (methodType m cx ty))
 
 > qual :: QualIdent -> a -> [I a] -> [I a]
 > qual x y = ((unqualify x,y) :)
@@ -214,7 +225,7 @@ Auxiliary functions:
 
 > addValue :: Import -> Set Ident -> Set Ident
 > addValue (Import f) fs = addToSet f fs
-> addValue (ImportTypeWith _ cs) fs = foldr addToSet fs cs
+> addValue (ImportTypeWith _ xs) fs = foldr addToSet fs xs
 > addValue (ImportTypeAll _) _ = internalError "addValue"
 
 > typeCon :: (QualIdent -> Int -> a) -> ModuleIdent -> QualIdent -> [Ident] -> a
@@ -226,5 +237,8 @@ Auxiliary functions:
 
 > constrType :: QualIdent -> [Ident] -> TypeExpr
 > constrType tc tvs = ConstructorType tc (map VariableType tvs)
+
+> methodType :: ModuleIdent -> [ClassAssert] -> TypeExpr -> TypeScheme
+> methodType m cx ty = typeScheme (toQualType m [] (QualTypeExpr cx ty))
 
 \end{verbatim}

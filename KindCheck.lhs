@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: KindCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -68,14 +68,14 @@ function in any particular order.
 > bindTC :: ModuleIdent -> TCEnv -> TopDecl a -> TCEnv -> TCEnv
 > bindTC m tcEnv (DataDecl _ tc tvs cs) =
 >   globalBindTopEnv m tc (typeCon DataType m tc tvs (map (Just . constr) cs))
-> bindTC m tcEnv (NewtypeDecl _ tc tvs (NewConstrDecl _ c _)) =
->   globalBindTopEnv m tc (typeCon RenamingType m tc tvs c)
+> bindTC m tcEnv (NewtypeDecl _ tc tvs nc) =
+>   globalBindTopEnv m tc (typeCon RenamingType m tc tvs (nconstr nc))
 > bindTC m tcEnv (TypeDecl _ tc tvs ty) =
 >   globalBindTopEnv m tc
 >                    (typeCon AliasType m tc tvs (expandMonoType tcEnv tvs ty))
-> bindTC m tcEnv (ClassDecl _ cls _) =
->   globalBindTopEnv m cls (TypeClass (qualifyWith m cls))
-> bindTC _ _ (InstanceDecl _ _ _) = id
+> bindTC m tcEnv (ClassDecl _ cls _ ds) =
+>   globalBindTopEnv m cls (typeClass m cls (map Just (concatMap methods ds)))
+> bindTC _ _ (InstanceDecl _ _ _ _) = id
 > bindTC _ _ (BlockDecl _) = id
 
 > checkSynonynms :: ModuleIdent -> [TopDecl a] -> Error ()
@@ -83,14 +83,14 @@ function in any particular order.
 >   where bound (DataDecl _ tc _ _) = [tc]
 >         bound (NewtypeDecl _ tc _ _) = [tc]
 >         bound (TypeDecl _ tc _ _) = [tc]
->         bound (ClassDecl _ _ _) = []
->         bound (InstanceDecl _ _ _) = []
+>         bound (ClassDecl _ _ _ _) = []
+>         bound (InstanceDecl _ _ _ _) = []
 >         bound (BlockDecl _) = []
 >         free (DataDecl _ _ _ _) = []
 >         free (NewtypeDecl _ _ _ _) = []
 >         free (TypeDecl _ _ _ ty) = ft m ty []
->         free (ClassDecl _ _ _) = []
->         free (InstanceDecl _ _ _) = []
+>         free (ClassDecl _ _ _ _) = []
+>         free (InstanceDecl _ _ _ _) = []
 >         free (BlockDecl _) = []
 
 > typeDecl :: ModuleIdent -> [TopDecl a] -> Error ()
@@ -102,7 +102,7 @@ function in any particular order.
 >   | otherwise = return ()
 > typeDecl _ (TypeDecl p tc _ _ : ds) =
 >   errorAt p (recursiveTypes (tc : [tc' | TypeDecl _ tc' _ _ <- ds]))
-> typeDecl _ [ClassDecl _ _ _] = return ()
+> typeDecl _ [ClassDecl _ _ _ _] = return ()
 
 > ft :: ModuleIdent -> TypeExpr -> [Ident] -> [Ident]
 > ft m (ConstructorType tc tys) tcs =
@@ -120,9 +120,16 @@ Kind checking is applied to all type expressions in the program.
 > checkTopDecl tcEnv (DataDecl _ _ _ cs) = mapE_ (checkConstrDecl tcEnv) cs
 > checkTopDecl tcEnv (NewtypeDecl _ _ _ nc) = checkNewConstrDecl tcEnv nc
 > checkTopDecl tcEnv (TypeDecl p _ _ ty) = checkType tcEnv p ty
-> checkTopDecl _ (ClassDecl _ _ _) = return ()
-> checkTopDecl tcEnv (InstanceDecl p _ ty) = checkType tcEnv p ty
+> checkTopDecl tcEnv (ClassDecl _ _ _ ds) = mapE_ (checkMethodSig tcEnv) ds
+> checkTopDecl tcEnv (InstanceDecl p _ ty ds) =
+>   checkType tcEnv p ty &&> mapE_ (checkMethodDecl tcEnv) ds
 > checkTopDecl tcEnv (BlockDecl d) = checkDecl tcEnv d
+
+> checkMethodSig :: TCEnv -> MethodSig -> Error ()
+> checkMethodSig tcEnv (MethodSig p _ ty) = checkType tcEnv p ty
+
+> checkMethodDecl :: TCEnv -> MethodDecl a -> Error ()
+> checkMethodDecl tcEnv (MethodDecl _ _ eqs) = mapE_ (checkEquation tcEnv) eqs
 
 > checkDecl :: TCEnv -> Decl a -> Error ()
 > checkDecl tcEnv (TypeSig p _ ty) = checkQualType tcEnv p ty
@@ -216,6 +223,9 @@ Auxiliary functions.
 
 > typeCon :: (QualIdent -> Int -> a) -> ModuleIdent -> Ident -> [Ident] -> a
 > typeCon f m tc tvs = f (qualifyWith m tc) (length tvs)
+
+> typeClass :: ModuleIdent -> Ident -> [Maybe Ident] -> TypeInfo
+> typeClass m cls = TypeClass (qualifyWith m cls)
 
 \end{verbatim}
 Error messages.

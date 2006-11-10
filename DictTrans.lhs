@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 1997 2006-11-10 20:45:06Z wlux $
+% $Id: DictTrans.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -454,7 +454,7 @@ the concrete type at which $f$ is used in the application.
 >            (dictTrans m tyEnv dictEnv e1)
 >            (dictTrans m tyEnv dictEnv e2)
 >            (dictTrans m tyEnv dictEnv e3)
->   dictTrans m tyEnv dictEnv (UnaryMinus _ e) =
+>   dictTrans m tyEnv dictEnv (UnaryMinus e) =
 >     dictTrans m tyEnv dictEnv (apply (prelNegate (typeOf e)) [e])
 >   dictTrans m tyEnv dictEnv (Apply e1 e2) =
 >     liftM2 Apply

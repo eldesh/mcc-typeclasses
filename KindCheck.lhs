@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: KindCheck.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -177,7 +177,7 @@ Kind checking is applied to all type expressions in the program.
 >   checkExpr tcEnv p e1 &&> checkExpr tcEnv p e2
 > checkExpr tcEnv p (EnumFromThenTo e1 e2 e3) =
 >   checkExpr tcEnv p e1 &&> checkExpr tcEnv p e2 &&> checkExpr tcEnv p e3
-> checkExpr tcEnv p (UnaryMinus _ e) = checkExpr tcEnv p e
+> checkExpr tcEnv p (UnaryMinus e) = checkExpr tcEnv p e
 > checkExpr tcEnv p (Apply e1 e2) =
 >   checkExpr tcEnv p e1 &&> checkExpr tcEnv p e2
 > checkExpr tcEnv p (InfixApply e1 _ e2) =

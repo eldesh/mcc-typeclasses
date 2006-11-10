@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: Base.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -385,9 +385,7 @@ The \texttt{Decl} instance of \texttt{QualExpr} returns all free
 variables on the right hand side, regardless of whether they are bound
 on the left hand side. This is more convenient because declarations are
 usually processed in a declaration group where the set of free
-variables cannot be computed independently for each declaration. Also
-note that the operator in a unary minus expression is not a free
-variable, but always refers to a global function from the prelude.
+variables cannot be computed independently for each declaration.
 \begin{verbatim}
 
 > class Expr e where
@@ -442,7 +440,7 @@ variable, but always refers to a global function from the prelude.
 >   qfv m (EnumFromThen e1 e2) = qfv m e1 ++ qfv m e2
 >   qfv m (EnumFromTo e1 e2) = qfv m e1 ++ qfv m e2
 >   qfv m (EnumFromThenTo e1 e2 e3) = qfv m e1 ++ qfv m e2 ++ qfv m e3
->   qfv m (UnaryMinus _ e) = qfv m e
+>   qfv m (UnaryMinus e) = qfv m e
 >   qfv m (Apply e1 e2) = qfv m e1 ++ qfv m e2
 >   qfv m (InfixApply e1 op e2) = qfv m op ++ qfv m e1 ++ qfv m e2
 >   qfv m (LeftSection e op) = qfv m op ++ qfv m e

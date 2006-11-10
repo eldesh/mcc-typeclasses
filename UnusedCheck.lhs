@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: UnusedCheck.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -183,7 +183,7 @@ implemented by a traversal of the syntax tree.
 >   used m (EnumFromThen e1 e2) = used m e1 . used m e2
 >   used m (EnumFromTo e1 e2) = used m e1 . used m e2
 >   used m (EnumFromThenTo e1 e2 e3) = used m e1 . used m e2 . used m e3
->   used m (UnaryMinus _ e) = used m e
+>   used m (UnaryMinus e) = used m e
 >   used m (Apply e1 e2) = used m e1 . used m e2
 >   used m (InfixApply e1 op e2) = used m e1 . used m (opName op) . used m e2
 >   used m (LeftSection e op) = used m e . used m (opName op)
@@ -207,7 +207,7 @@ implemented by a traversal of the syntax tree.
 >   unused used p (EnumFromTo e1 e2) = unused used p e1 . unused used p e2
 >   unused used p (EnumFromThenTo e1 e2 e3) =
 >     unused used p e1 . unused used p e2 . unused used p e3
->   unused used p (UnaryMinus _ e) = unused used p e
+>   unused used p (UnaryMinus e) = unused used p e
 >   unused used p (Apply e1 e2) = unused used p e1 . unused used p e2
 >   unused used p (InfixApply e1 _ e2) = unused used p e1 . unused used p e2
 >   unused used p (LeftSection e _) = unused used p e

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 1997 2006-11-10 20:45:06Z wlux $
+% $Id: Desugar.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -410,7 +410,7 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 > desugarExpr m p (EnumFromThenTo e1 e2 e3) =
 >   liftM (apply (prelEnumFromThen (typeOf e1)))
 >         (mapM (desugarExpr m p) [e1,e2,e3])
-> desugarExpr m p (UnaryMinus _ e) =
+> desugarExpr m p (UnaryMinus e) =
 >   liftM (Apply (prelNegate (typeOf e))) (desugarExpr m p e)
 > desugarExpr m p (Apply (Constructor ty c) e) =
 >   do

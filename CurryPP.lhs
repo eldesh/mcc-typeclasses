@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 1998 2006-11-10 21:26:18Z wlux $
+% $Id: CurryPP.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -305,7 +305,7 @@ Expressions
 > ppExpr _ (EnumFromThenTo e1 e2 e3) =
 >   brackets (ppExpr 0 e1 <> comma <+> ppExpr 0 e2
 >               <+> text ".." <+> ppExpr 0 e3)
-> ppExpr p (UnaryMinus op e) = parenExp (p > 1) (ppInfixOp op <> ppExpr 1 e)
+> ppExpr p (UnaryMinus e) = parenExp (p > 1) (ppInfixOp minusId <> ppExpr 1 e)
 > ppExpr p (Apply e1 e2) =
 >   parenExp (p > 1) (sep [ppExpr 1 e1,indent (ppExpr 2 e2)])
 > ppExpr p (InfixApply e1 op e2) =

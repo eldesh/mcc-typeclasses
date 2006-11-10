@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: Renaming.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -292,7 +292,7 @@ not rename this identifier in the same environment as its arguments.
 >          (renameExpr env e1)
 >          (renameExpr env e2)
 >          (renameExpr env e3)
-> renameExpr env (UnaryMinus op e) = liftM (UnaryMinus op) (renameExpr env e)
+> renameExpr env (UnaryMinus e) = liftM UnaryMinus (renameExpr env e)
 > renameExpr env (Apply e1 e2) =
 >   liftM2 Apply (renameExpr env e1) (renameExpr env e2)
 > renameExpr env (InfixApply e1 op e2) =

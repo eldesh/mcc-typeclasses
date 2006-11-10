@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 1998 2006-11-10 21:26:18Z wlux $
+% $Id: CurryParser.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -513,7 +513,7 @@ the left-hand side of a declaration.
 > expr0 = expr1 `chainr1` (flip InfixApply <$> infixOp)
 
 > expr1 :: Parser Token (Expression ()) a
-> expr1 = UnaryMinus <$> minus <*> expr2
+> expr1 = UnaryMinus <$-> minus <*> expr2
 >     <|> expr2
 
 > expr2 :: Parser Token (Expression ()) a
@@ -536,7 +536,7 @@ the left-hand side of a declaration.
 >             <|> leftSectionOrTuple <\> minus
 >             <|> opOrRightSection <\> minus
 >           `opt` Constructor () qUnitId
->         minusOrTuple = flip UnaryMinus <$> expr1 <.> infixOrTuple
+>         minusOrTuple = const . UnaryMinus <$> expr1 <.> infixOrTuple
 >                  `opt` Variable () . qualify
 >         leftSectionOrTuple = expr1 <**> infixOrTuple
 >         infixOrTuple = ($ id) <$> infixOrTuple'

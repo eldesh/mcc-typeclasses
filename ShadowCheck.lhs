@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: ShadowCheck.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -122,7 +122,7 @@ traversal of the syntax tree.
 >   shadow p (EnumFromTo e1 e2) = shadow p e1 &&& shadow p e2
 >   shadow p (EnumFromThenTo e1 e2 e3) =
 >     shadow p e1 &&& shadow p e2 &&& shadow p e3
->   shadow p (UnaryMinus _ e) = shadow p e
+>   shadow p (UnaryMinus e) = shadow p e
 >   shadow p (Apply e1 e2) = shadow p e1 &&& shadow p e2
 >   shadow p (InfixApply e1 _ e2) = shadow p e1 &&& shadow p e2
 >   shadow p (LeftSection e _) = shadow p e

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: TypeSyntaxCheck.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -182,7 +182,7 @@ declaration groups.
 >          (checkExpr env p e1)
 >          (checkExpr env p e2)
 >          (checkExpr env p e3)
-> checkExpr env p (UnaryMinus op e) = liftE (UnaryMinus op) (checkExpr env p e)
+> checkExpr env p (UnaryMinus e) = liftE UnaryMinus (checkExpr env p e)
 > checkExpr env p (Apply e1 e2) =
 >   liftE2 Apply (checkExpr env p e1) (checkExpr env p e2)
 > checkExpr env p (InfixApply e1 op e2) =

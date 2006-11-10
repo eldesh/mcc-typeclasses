@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: OverlapCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: OverlapCheck.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -81,7 +81,7 @@ are collected with a simple traversal of the syntax tree.
 >   overlap p (EnumFromTo e1 e2) = overlap p e1 . overlap p e2
 >   overlap p (EnumFromThenTo e1 e2 e3) =
 >     overlap p e1 . overlap p e2 . overlap p e3
->   overlap p (UnaryMinus _ e) = overlap p e
+>   overlap p (UnaryMinus e) = overlap p e
 >   overlap p (Apply e1 e2) = overlap p e1 . overlap p e2
 >   overlap p (InfixApply e1 _ e2) = overlap p e1 . overlap p e2
 >   overlap p (LeftSection e _) = overlap p e

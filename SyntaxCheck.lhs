@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: SyntaxCheck.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -478,7 +478,7 @@ callbacks into Curry are not yet supported by the runtime system.
 >          (checkExpr p env e1)
 >          (checkExpr p env e2)
 >          (checkExpr p env e3)
-> checkExpr p env (UnaryMinus op e) = liftE (UnaryMinus op) (checkExpr p env e)
+> checkExpr p env (UnaryMinus e) = liftE UnaryMinus (checkExpr p env e)
 > checkExpr p env (Apply e1 e2) =
 >   liftE2 Apply (checkExpr p env e1) (checkExpr p env e2)
 > checkExpr p env (InfixApply e1 op e2) =

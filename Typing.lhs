@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: Typing.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -68,7 +68,7 @@ perform any (non-trivial) unifications.
 > exprType (EnumFromThen e _) = listType (exprType e)
 > exprType (EnumFromTo e _) = listType (exprType e)
 > exprType (EnumFromThenTo e _ _) = listType (exprType e)
-> exprType (UnaryMinus _ e) = exprType e
+> exprType (UnaryMinus e) = exprType e
 > exprType (Apply f e) =
 >   case exprType f of
 >     TypeArrow ty1 ty2 | ty1 == exprType e -> ty2

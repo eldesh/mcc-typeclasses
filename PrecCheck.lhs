@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 1998 2006-11-10 21:26:18Z wlux $
+% $Id: PrecCheck.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -154,8 +154,7 @@ because it is used for constructing the module's interface.
 >          (checkExpr m p pEnv e1)
 >          (checkExpr m p pEnv e2)
 >          (checkExpr m p pEnv e3)
-> checkExpr m p pEnv (UnaryMinus op e) =
->   liftE (UnaryMinus op) (checkExpr m p pEnv e)
+> checkExpr m p pEnv (UnaryMinus e) = liftE UnaryMinus (checkExpr m p pEnv e)
 > checkExpr m p pEnv (Apply e1 e2) =
 >   liftE2 Apply (checkExpr m p pEnv e1) (checkExpr m p pEnv e2)
 > checkExpr m p pEnv (InfixApply e1 op e2) =
@@ -223,36 +222,37 @@ argument. Note that both arguments already have been checked before
 
 > fixPrec :: Position -> PEnv -> Expression a -> InfixOp a -> Expression a
 >         -> Error (Expression a)
-> fixPrec p pEnv (UnaryMinus uop e1) op e2
->   | pr < 6 || pr == 6 && fix == InfixL =
->       fixRPrec p pEnv (UnaryMinus uop e1) op e2
->   | pr > 6 = fixUPrec p pEnv uop e1 op e2
->   | otherwise = errorAt p $ ambiguousParse "unary" (qualify uop) (opName op)
+> fixPrec p pEnv (UnaryMinus e1) op e2
+>   | pr < 6 || pr == 6 && fix == InfixL = fixRPrec p pEnv (UnaryMinus e1) op e2
+>   | pr > 6 = fixUPrec p pEnv e1 op e2
+>   | otherwise =
+>       errorAt p $ ambiguousParse "unary" (qualify minusId) (opName op)
 >   where OpPrec fix pr = opPrec op pEnv
 > fixPrec p pEnv e1 op e2 = fixRPrec p pEnv e1 op e2
 
-> fixUPrec :: Position -> PEnv -> Ident -> Expression a -> InfixOp a
->          -> Expression a -> Error (Expression a)
-> fixUPrec p pEnv _ _ op (UnaryMinus uop _) =
->   errorAt p $ ambiguousParse "operator" (opName op) (qualify uop)
-> fixUPrec p pEnv uop e1 op1 (InfixApply e2 op2 e3)
+> fixUPrec :: Position -> PEnv -> Expression a -> InfixOp a -> Expression a
+>          -> Error (Expression a)
+> fixUPrec p pEnv _ op (UnaryMinus _) =
+>   errorAt p $ ambiguousParse "operator" (opName op) (qualify minusId)
+> fixUPrec p pEnv e1 op1 (InfixApply e2 op2 e3)
 >   | pr2 < 6 || pr2 == 6 && fix2 == InfixL =
 >       do
->         e' <- fixUPrec p pEnv uop e1 op1 e2
+>         e' <- fixUPrec p pEnv e1 op1 e2
 >         return (InfixApply e' op2 e3)
 >   | pr2 > 6 =
->       liftE (UnaryMinus uop) (fixRPrec p pEnv e1 op1 (InfixApply e2 op2 e3))
->   | otherwise = errorAt p $ ambiguousParse "unary" (qualify uop) (opName op2)
+>       liftE UnaryMinus (fixRPrec p pEnv e1 op1 (InfixApply e2 op2 e3))
+>   | otherwise =
+>       errorAt p $ ambiguousParse "unary" (qualify minusId) (opName op2)
 >   where OpPrec fix1 pr1 = opPrec op1 pEnv
 >         OpPrec fix2 pr2 = opPrec op2 pEnv
-> fixUPrec _ _ uop e1 op e2 = return (UnaryMinus uop (InfixApply e1 op e2))
+> fixUPrec _ _ e1 op e2 = return (UnaryMinus (InfixApply e1 op e2))
 
 > fixRPrec :: Position -> PEnv -> Expression a -> InfixOp a -> Expression a
 >          -> Error (Expression a)
-> fixRPrec p pEnv e1 op (UnaryMinus uop e2)
->   | pr < 6 = return (InfixApply e1 op (UnaryMinus uop e2))
+> fixRPrec p pEnv e1 op (UnaryMinus e2)
+>   | pr < 6 = return (InfixApply e1 op (UnaryMinus e2))
 >   | otherwise =
->       errorAt p $ ambiguousParse "operator" (opName op) (qualify uop)
+>       errorAt p $ ambiguousParse "operator" (opName op) (qualify minusId)
 >   where OpPrec _ pr = opPrec op pEnv
 > fixRPrec p pEnv e1 op1 (InfixApply e2 op2 e3)
 >   | pr1 < pr2 || pr1 == pr2 && fix1 == InfixR && fix2 == InfixR =
@@ -278,9 +278,10 @@ section, respectively.
 \begin{verbatim}
 
 > checkLSection :: Position -> PEnv -> InfixOp a -> Expression a -> Error ()
-> checkLSection p pEnv op (UnaryMinus uop _)
+> checkLSection p pEnv op (UnaryMinus _)
 >   | pr < 6 || pr == 6 && fix == InfixL = return ()
->   | otherwise = errorAt p $ ambiguousParse "unary" (qualify uop) (opName op)
+>   | otherwise =
+>       errorAt p $ ambiguousParse "unary" (qualify minusId) (opName op)
 >   where OpPrec fix pr = opPrec op pEnv
 > checkLSection p pEnv op1 (InfixApply _ op2 _)
 >   | pr1 < pr2 || pr1 == pr2 && fix1 == InfixL && fix2 == InfixL = return ()
@@ -291,9 +292,10 @@ section, respectively.
 > checkLSection _ _ _ _ = return ()
 
 > checkRSection :: Position -> PEnv -> InfixOp a -> Expression a -> Error ()
-> checkRSection p pEnv op (UnaryMinus uop _)
+> checkRSection p pEnv op (UnaryMinus _)
 >   | pr < 6 = return ()
->   | otherwise = errorAt p $ ambiguousParse "unary" (qualify uop) (opName op)
+>   | otherwise =
+>       errorAt p $ ambiguousParse "unary" (qualify minusId) (opName op)
 >   where OpPrec _ pr = opPrec op pEnv
 > checkRSection p pEnv op1 (InfixApply _ op2 _)
 >   | pr1 < pr2 || pr1 == pr2 && fix1 == InfixR && fix2 == InfixR = return ()

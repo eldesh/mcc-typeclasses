@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: Qual.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -145,7 +145,7 @@ functions remain unchanged.
 >     EnumFromThenTo (qual tcEnv tyEnv e1)
 >                    (qual tcEnv tyEnv e2)
 >                    (qual tcEnv tyEnv e3)
->   qual tcEnv tyEnv (UnaryMinus op e) = UnaryMinus op (qual tcEnv tyEnv e)
+>   qual tcEnv tyEnv (UnaryMinus e) = UnaryMinus (qual tcEnv tyEnv e)
 >   qual tcEnv tyEnv (Apply e1 e2) =
 >     Apply (qual tcEnv tyEnv e1) (qual tcEnv tyEnv e2)
 >   qual tcEnv tyEnv (InfixApply e1 op e2) =

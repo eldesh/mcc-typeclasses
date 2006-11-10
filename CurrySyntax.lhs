@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: CurrySyntax.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -202,7 +202,7 @@ Interface declarations are restricted to type declarations and signatures.
 >   | EnumFromThen (Expression a) (Expression a)
 >   | EnumFromTo (Expression a) (Expression a)
 >   | EnumFromThenTo (Expression a) (Expression a) (Expression a)
->   | UnaryMinus Ident (Expression a)
+>   | UnaryMinus (Expression a)
 >   | Apply (Expression a) (Expression a)
 >   | InfixApply (Expression a) (InfixOp a) (Expression a)
 >   | LeftSection (Expression a) (InfixOp a)
@@ -308,7 +308,7 @@ The abstract syntax tree is a functor with respect to the attributes.
 >   fmap f (EnumFromTo e1 e2) = EnumFromTo (fmap f e1) (fmap f e2)
 >   fmap f (EnumFromThenTo e1 e2 e3) =
 >     EnumFromThenTo (fmap f e1) (fmap f e2) (fmap f e3)
->   fmap f (UnaryMinus op e) = UnaryMinus op (fmap f e)
+>   fmap f (UnaryMinus e) = UnaryMinus (fmap f e)
 >   fmap f (Apply e1 e2) = Apply (fmap f e1) (fmap f e2)
 >   fmap f (InfixApply e1 op e2) =
 >     InfixApply (fmap f e1) (fmap f op) (fmap f e2)

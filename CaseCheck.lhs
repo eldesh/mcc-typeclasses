@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: CaseCheck.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -218,7 +218,7 @@ collect all defined identifiers.
 >   names p (EnumFromThen e1 e2) = names p e1 . names p e2
 >   names p (EnumFromTo e1 e2) = names p e1 . names p e2
 >   names p (EnumFromThenTo e1 e2 e3) = names p e1 . names p e2 . names p e3
->   names p (UnaryMinus _ e) = names p e
+>   names p (UnaryMinus e) = names p e
 >   names p (Apply e1 e2) = names p e1 . names p e2
 >   names p (InfixApply e1 _ e2) = names p e1 . names p e2
 >   names p (LeftSection e _) = names p e

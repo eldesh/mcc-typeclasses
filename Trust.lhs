@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Trust.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: Trust.lhs 1999 2006-11-10 21:53:29Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -91,7 +91,7 @@ the local functions \texttt{h} and \texttt{i} are trusted, but
 >   trust tr (EnumFromThen e1 e2) = trust tr e1 . trust tr e2
 >   trust tr (EnumFromTo e1 e2) = trust tr e1 . trust tr e2
 >   trust tr (EnumFromThenTo e1 e2 e3) = trust tr e1 . trust tr e2 . trust tr e3
->   trust tr (UnaryMinus _ e) = trust tr e
+>   trust tr (UnaryMinus e) = trust tr e
 >   trust tr (Apply e1 e2) = trust tr e1 . trust tr e2
 >   trust tr (InfixApply e1 _ e2) = trust tr e1 . trust tr e2
 >   trust tr (LeftSection e _) = trust tr e

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryLexer.lhs 1978 2006-10-14 15:50:45Z wlux $
+% $Id: CurryLexer.lhs 1998 2006-11-10 21:26:18Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -52,7 +52,7 @@ In this section a lexer for Curry is implemented.
 >   -- pragmas
 >   | PragmaBegin Pragma | PragmaEnd
 >   -- special operators
->   | Sym_Dot | Sym_Minus | Sym_MinusDot
+>   | Sym_Dot | Sym_Minus
 >   -- end-of-file token
 >   | EOF
 >   deriving (Eq,Ord)
@@ -151,7 +151,6 @@ all tokens in their source representation.
 >   showsPrec _ (Token Tilde _) = showString "`~'"
 >   showsPrec _ (Token Sym_Dot _) = showString "operator `.'"
 >   showsPrec _ (Token Sym_Minus _) = showString "operator `-'"
->   showsPrec _ (Token Sym_MinusDot _) = showString "operator `-.'"
 >   showsPrec _ (Token KW_case _) = showString "`case'"
 >   showsPrec _ (Token KW_class _) = showString "`class'"
 >   showsPrec _ (Token KW_data _) = showString "`data'"
@@ -207,8 +206,7 @@ pragmas.
 >   ]
 > reserved_and_special_ops = foldr (uncurry addToFM) reserved_ops [
 >     (".",  Sym_Dot),
->     ("-",  Sym_Minus),
->     ("-.", Sym_MinusDot)
+>     ("-",  Sym_Minus)
 >   ]
 
 > reserved_ids, reserved_and_special_ids :: FM String Category

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: CurryParser.lhs 1998 2006-11-10 21:26:18Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -422,21 +422,18 @@ directory path to the module is ignored.
 > constrTerm1 :: Parser Token (ConstrTerm ()) a
 > constrTerm1 = varId <**> identPattern
 >           <|> constrPattern (qConId <\> varId)
->           <|> minus <-*> negInt
->           <|> fminus <-*> negFloat
+>           <|> minus <-*> negLit
 >           <|> leftParen <-*> parenPattern
 >           <|> constrTerm2 <\> qConId <\> leftParen
 >   where identPattern = optAsPattern
 >                    <|> conPattern <$> many1 constrTerm2
 >         constrPattern p = ConstructorPattern () <$> p <*> many constrTerm2
->         parenPattern = minus <**> minusPattern negInt
->                    <|> fminus <**> minusPattern negFloat
+>         parenPattern = minus <**> minusPattern
 >                    <|> gconPattern
->                    <|> funSym <\> minus <\> fminus <*-> rightParen
->                                                    <**> identPattern
->                    <|> parenTuplePattern <\> minus <\> fminus <*-> rightParen
->         minusPattern p = rightParen <-*> identPattern
->                      <|> parenMinusPattern p <*-> rightParen
+>                    <|> funSym <\> minus <*-> rightParen <**> identPattern
+>                    <|> parenTuplePattern <\> minus <*-> rightParen
+>         minusPattern = rightParen <-*> identPattern
+>                    <|> parenMinusPattern <*-> rightParen
 >         gconPattern = constrPattern (gconId <*-> rightParen)
 >         conPattern ts = flip (ConstructorPattern ()) ts . qualify
 
@@ -456,15 +453,13 @@ directory path to the module is ignored.
 
 > parenPattern :: Parser Token (ConstrTerm ()) a
 > parenPattern = leftParen <-*> parenPattern
->   where parenPattern = minus <**> minusPattern negInt
->                    <|> fminus <**> minusPattern negFloat
+>   where parenPattern = minus <**> minusPattern
 >                    <|> flip (ConstructorPattern ()) [] <$> gconId
 >                                                        <*-> rightParen
->                    <|> funSym <\> minus <\> fminus <*-> rightParen
->                                                    <**> optAsPattern
->                    <|> parenTuplePattern <\> minus <\> fminus <*-> rightParen
->         minusPattern p = rightParen <-*> optAsPattern
->                      <|> parenMinusPattern p <*-> rightParen
+>                    <|> funSym <\> minus <*-> rightParen <**> optAsPattern
+>                    <|> parenTuplePattern <\> minus <*-> rightParen
+>         minusPattern = rightParen <-*> optAsPattern
+>                    <|> parenMinusPattern <*-> rightParen
 
 > listPattern :: Parser Token (ConstrTerm ()) a
 > listPattern = ListPattern () <$> brackets (constrTerm0 `sepBy` comma)
@@ -480,9 +475,8 @@ the left-hand side of a declaration.
 > gconId :: Parser Token QualIdent a
 > gconId = colon <|> tupleCommas
 
-> negInt,negFloat :: Parser Token (ConstrTerm ()) a
-> negInt = NegativePattern () . Int <$> int
-> negFloat = NegativePattern () . Float <$> float
+> negLit :: Parser Token (ConstrTerm ()) a
+> negLit = NegativePattern () <$> (Int <$> int <|> Float <$> float)
 
 > optAsPattern :: Parser Token (Ident -> ConstrTerm ()) a
 > optAsPattern = flip AsPattern <$-> token At <*> constrTerm2
@@ -498,9 +492,8 @@ the left-hand side of a declaration.
 >             `opt` ParenPattern
 >   where tuple ts t = TuplePattern (t:ts)
 
-> parenMinusPattern :: Parser Token (ConstrTerm ()) a
->                   -> Parser Token (Ident -> ConstrTerm ()) a
-> parenMinusPattern p = const <$> p <.> optInfixPattern <.> optTuplePattern
+> parenMinusPattern :: Parser Token (Ident -> ConstrTerm ()) a
+> parenMinusPattern = const <$> negLit <.> optInfixPattern <.> optTuplePattern
 
 > parenTuplePattern :: Parser Token (ConstrTerm ()) a
 > parenTuplePattern = constrTerm0 <**> optTuplePattern
@@ -520,7 +513,7 @@ the left-hand side of a declaration.
 > expr0 = expr1 `chainr1` (flip InfixApply <$> infixOp)
 
 > expr1 :: Parser Token (Expression ()) a
-> expr1 = UnaryMinus <$> (minus <|> fminus) <*> expr2
+> expr1 = UnaryMinus <$> minus <*> expr2
 >     <|> expr2
 
 > expr2 :: Parser Token (Expression ()) a
@@ -538,10 +531,10 @@ the left-hand side of a declaration.
 
 > parenExpr :: Parser Token (Expression ()) a
 > parenExpr = parens pExpr
->   where pExpr = (minus <|> fminus) <**> minusOrTuple
+>   where pExpr = minus <**> minusOrTuple
 >             <|> Constructor () <$> tupleCommas
->             <|> leftSectionOrTuple <\> minus <\> fminus
->             <|> opOrRightSection <\> minus <\> fminus
+>             <|> leftSectionOrTuple <\> minus
+>             <|> opOrRightSection <\> minus
 >           `opt` Constructor () qUnitId
 >         minusOrTuple = flip UnaryMinus <$> expr1 <.> infixOrTuple
 >                  `opt` Variable () . qualify
@@ -720,7 +713,7 @@ prefix of a let expression.
 > specialIdents, specialSyms :: [Category]
 > specialIdents = [Id_as,Id_ccall,Id_forall,Id_hiding,Id_interface,
 >                  Id_primitive,Id_qualified,Id_safe,Id_unsafe]
-> specialSyms = [Sym_Dot,Sym_Minus,Sym_MinusDot]
+> specialSyms = [Sym_Dot,Sym_Minus]
 
 > ident :: Parser Token Ident a
 > ident = mkIdent . sval <$> tokens (Id : specialIdents)
@@ -745,9 +738,6 @@ prefix of a let expression.
 
 > minus :: Parser Token Ident a
 > minus = minusId <$-> token Sym_Minus
-
-> fminus :: Parser Token Ident a
-> fminus = fminusId <$-> token Sym_MinusDot
 
 > tupleCommas :: Parser Token QualIdent a
 > tupleCommas = qTupleId . (1 + ) . length <$> many1 comma

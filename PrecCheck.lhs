@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: PrecCheck.lhs 1998 2006-11-10 21:26:18Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -318,17 +318,17 @@ that of unary negation.
 
 > fixPrecT :: Position -> PEnv -> a -> ConstrTerm a -> QualIdent -> ConstrTerm a
 >          -> Error (ConstrTerm a)
-> fixPrecT p pEnv a t1@(NegativePattern _ l) op t2
+> fixPrecT p pEnv a t1@(NegativePattern _ _) op t2
 >   | pr < 6 || pr == 6 && fix == InfixL = fixRPrecT p pEnv a t1 op t2
->   | otherwise = errorAt p $ invalidParse "unary" (negOp l) op
+>   | otherwise = errorAt p $ invalidParse "unary" minusId op
 >   where OpPrec fix pr = prec op pEnv
 > fixPrecT p pEnv a t1 op t2 = fixRPrecT p pEnv a t1 op t2
 
 > fixRPrecT :: Position -> PEnv -> a -> ConstrTerm a -> QualIdent
 >           -> ConstrTerm a -> Error (ConstrTerm a)
-> fixRPrecT p pEnv a t1 op t2@(NegativePattern _ l)
+> fixRPrecT p pEnv a t1 op t2@(NegativePattern _ _)
 >   | pr < 6 = return (InfixPattern a t1 op t2)
->   | otherwise = errorAt p $ invalidParse "unary" (negOp l) op
+>   | otherwise = errorAt p $ invalidParse "unary" minusId op
 >   where OpPrec _ pr = prec op pEnv
 > fixRPrecT p pEnv a1 t1 op1 (InfixPattern a2 t2 op2 t3)
 >   | pr1 < pr2 || pr1 == pr2 && fix1 == InfixR && fix2 == InfixR =
@@ -342,11 +342,6 @@ that of unary negation.
 >         OpPrec fix2 pr2 = prec op2 pEnv
 > fixRPrecT _ _ a t1 op t2 = return (InfixPattern a t1 op t2)
 
-> negOp :: Literal -> Ident
-> negOp (Int _) = minusId
-> negOp (Float _) = fminusId
-> negOp _ = internalError "negOp"
-
 \end{verbatim}
 The functions \texttt{checkOpL} and \texttt{checkOpR} check the left
 and right arguments of an operator declaration. If they are infix
@@ -355,9 +350,9 @@ left-hand side of the declaration is invalid.
 \begin{verbatim}
 
 > checkOpL :: Position -> PEnv -> Ident -> ConstrTerm a -> Error ()
-> checkOpL p pEnv op (NegativePattern _ l)
+> checkOpL p pEnv op (NegativePattern _ _)
 >   | pr < 6 || pr == 6 && fix == InfixL = return ()
->   | otherwise = errorAt p $ invalidParse "unary" (negOp l) (qualify op)
+>   | otherwise = errorAt p $ invalidParse "unary" minusId (qualify op)
 >   where OpPrec fix pr = prec (qualify op) pEnv
 > checkOpL p pEnv op1 (InfixPattern _ _ op2 _)
 >   | pr1 < pr2 || pr1 == pr2 && fix1 == InfixL && fix2 == InfixL = return ()
@@ -367,9 +362,9 @@ left-hand side of the declaration is invalid.
 > checkOpL _ _ _ _ = return ()
 
 > checkOpR :: Position -> PEnv -> Ident -> ConstrTerm a -> Error ()
-> checkOpR p pEnv op (NegativePattern _ l)
+> checkOpR p pEnv op (NegativePattern _ _)
 >   | pr < 6 = return ()
->   | otherwise = errorAt p $ invalidParse "unary" (negOp l) (qualify op)
+>   | otherwise = errorAt p $ invalidParse "unary" minusId (qualify op)
 >   where OpPrec _ pr = prec (qualify op) pEnv
 > checkOpR p pEnv op1 (InfixPattern _ _ op2 _)
 >   | pr1 < pr2 || pr1 == pr2 && fix1 == InfixR && fix2 == InfixR = return ()

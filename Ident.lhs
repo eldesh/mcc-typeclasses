@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Ident.lhs 1974 2006-09-21 09:25:16Z wlux $
+% $Id: Ident.lhs 1998 2006-11-10 21:26:18Z wlux $
 %
-% Copyright (c) 1999-2005, Wolfgang Lux
+% Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Ident.lhs}
@@ -34,12 +34,12 @@ unqualified identifier.}
 >              emptyMIdent,preludeMIdent,debugPreludeMIdent,
 >              ptrMIdent,stablePtrMIdent,
 >              anonId,unitId,boolId,charId,intId,floatId,listId,arrowId,ioId,
->              ptrId,funPtrId,stablePtrId,
+>              numId,ptrId,funPtrId,stablePtrId,
 >              successId,trueId,falseId,nilId,consId,mainId,
 >              tupleId,isTupleId,tupleArity,selectorId,isSelectorId,
->              minusId,fminusId,
+>              minusId,
 >              qUnitId,qBoolId,qCharId,qIntId,qFloatId,qListId,qArrowId,qIOId,
->              qSuccessId,qPtrId,qFunPtrId,qStablePtrId,
+>              qSuccessId,qNumId,qPtrId,qFunPtrId,qStablePtrId,
 >              qTrueId,qFalseId,qNilId,qConsId,
 >              qTupleId,isQTupleId,qTupleArity,isQSelectorId) where
 > import Char
@@ -173,6 +173,9 @@ A few identifiers a predefined here.
 > ioId      = Ident "IO" 0
 > successId = Ident "Success" 0
 
+> numId :: Ident
+> numId = Ident "Num" 0
+
 > ptrId, funPtrId, stablePtrId :: Ident
 > ptrId       = Ident "Ptr" 0
 > funPtrId    = Ident "FunPtr" 0
@@ -205,10 +208,9 @@ A few identifiers a predefined here.
 > isSelectorId :: Ident -> Bool
 > isSelectorId x = any ("_#sel" `isPrefixOf`) (tails (name x))
 
-> mainId, minusId, fminusId :: Ident
+> mainId, minusId :: Ident
 > mainId = Ident "main" 0
 > minusId = Ident "-" 0
-> fminusId = Ident "-." 0
 
 > qUnitId, qNilId, qConsId, qListId, qArrowId :: QualIdent
 > qUnitId  = UnqualIdent unitId
@@ -224,6 +226,9 @@ A few identifiers a predefined here.
 > qFloatId = QualIdent preludeMIdent floatId
 > qSuccessId = QualIdent preludeMIdent successId
 > qIOId = QualIdent preludeMIdent ioId
+
+> qNumId :: QualIdent
+> qNumId = QualIdent preludeMIdent numId
 
 > qPtrId, qFunPtrId, qStablePtrId :: QualIdent
 > qPtrId = QualIdent ptrMIdent ptrId

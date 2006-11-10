@@ -1,4 +1,4 @@
--- $Id: Numeric.curry 1997 2006-11-10 20:45:06Z wlux $
+-- $Id: Numeric.curry 1998 2006-11-10 21:26:18Z wlux $
 --
 -- Copyright (c) 2003-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -46,7 +46,7 @@ readSigned r cs =
                                  cs''' <- case dropSpace cs'' of
 			                    (')':cs) -> [cs]
 					    _ -> []]
-      | c == '-' -> [(negate n,cs'') | (n,cs'') <- r (dropSpace cs')]
+      | c == '-' -> [(-n,cs'') | (n,cs'') <- r (dropSpace cs')]
       | otherwise -> r (c:cs')
   where dropSpace = dropWhile isSpace
 
@@ -78,7 +78,7 @@ showGFloat :: Maybe Int -> Float -> ShowS
 showGFloat d f
   | f' >= 0.1 && f' < 1.0e7 = showFFloat d f
   | otherwise = showEFloat d f
-  where f' = if f < 0.0 then -. f else f
+  where f' = if f < 0.0 then -f else f
         
 showFloat :: Float -> ShowS
 showFloat = showGFloat Nothing

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: TypeCheck.lhs 1998 2006-11-10 21:26:18Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -737,15 +737,12 @@ arbitrary type.
 >     return (cx ++ cx' ++ cx'',listType intType,EnumFromThenTo e1' e2' e3')
 > tcExpr m tcEnv p e@(UnaryMinus op e1) =
 >   do
+>     ty <- freshTypeVar
 >     (cx,e1') <-
 >       tcExpr m tcEnv p e1 >>=
 >       unify p "unary negation" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1)
 >             m ty
->     return (cx,ty,UnaryMinus op e1')
->   where ty
->           | op == minusId = intType
->           | op == fminusId = floatType
->           | otherwise = internalError ("tcExpr unary " ++ name op)
+>     return (TypePred qNumId ty : cx,ty,UnaryMinus op e1')
 > tcExpr m tcEnv p e@(Apply e1 e2) =
 >   do
 >     (cx,alpha,beta,e1') <-

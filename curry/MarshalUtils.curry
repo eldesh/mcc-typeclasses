@@ -1,17 +1,17 @@
--- $Id: MarshalUtils.curry 1744 2005-08-23 16:17:12Z wlux $
+-- $Id: MarshalUtils.curry 1996 2006-11-10 20:05:36Z wlux $
 --
--- Copyright (c) 2005, Wolfgang Lux
+-- Copyright (c) 2005-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module MarshalUtils where
 import Ptr
 import Monad
 
-fromBool :: Bool -> Int
-fromBool b = if b then 1 else 0
+fromBool :: Num a => Bool -> a
+fromBool b = fromInt (if b then 1 else 0)
 
-toBool :: Int -> Bool
-toBool x = x /= 0
+toBool :: Num a => a -> Bool
+toBool x = x /= fromInt 0
 
 maybeNew :: (a -> IO (Ptr a))
    -> (Maybe a -> IO (Ptr a))

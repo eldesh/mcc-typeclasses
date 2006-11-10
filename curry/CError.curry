@@ -1,4 +1,4 @@
--- $Id: CError.curry 1904 2006-04-23 17:44:42Z wlux $
+-- $Id: CError.curry 1996 2006-11-10 20:05:36Z wlux $
 --
 -- Copyright (c) 2005, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -274,17 +274,17 @@ throwErrnoIfRetry_ f loc m =
     if e == eINTR then throwErrnoIfRetry_ f loc m else throwErrno loc
   else return ()
 
-throwErrnoIfMinus1 :: String -> IO Int -> IO Int
-throwErrnoIfMinus1 = throwErrnoIf (-1 ==)
+throwErrnoIfMinus1 :: Num a => String -> IO a -> IO a
+throwErrnoIfMinus1 = throwErrnoIf (fromInt (-1) ==)
 
-throwErrnoIfMinus1_ :: String -> IO Int -> IO ()
-throwErrnoIfMinus1_ = throwErrnoIf_ (-1 ==)
+throwErrnoIfMinus1_ :: Num a => String -> IO a -> IO ()
+throwErrnoIfMinus1_ = throwErrnoIf_ (fromInt (-1) ==)
 
-throwErrnoIfMinus1Retry :: String -> IO Int -> IO Int
-throwErrnoIfMinus1Retry = throwErrnoIfRetry (-1 ==)
+throwErrnoIfMinus1Retry :: Num a => String -> IO a -> IO a
+throwErrnoIfMinus1Retry = throwErrnoIfRetry (fromInt (-1) ==)
 
-throwErrnoIfMinus1Retry_ :: String -> IO Int -> IO ()
-throwErrnoIfMinus1Retry_ = throwErrnoIfRetry_ (-1 ==)
+throwErrnoIfMinus1Retry_ :: Num a => String -> IO a -> IO ()
+throwErrnoIfMinus1Retry_ = throwErrnoIfRetry_ (fromInt (-1) ==)
 
 throwErrnoIfNull :: String -> IO (Ptr a) -> IO (Ptr a)
 throwErrnoIfNull = throwErrnoIf (nullPtr ==)

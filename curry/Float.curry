@@ -1,4 +1,4 @@
--- $Id: Float.curry 1881 2006-04-03 09:21:01Z wlux $
+-- $Id: Float.curry 1996 2006-11-10 20:05:36Z wlux $
 --
 -- Copyright (c) 2004, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -8,7 +8,12 @@ module Float((+.), (-.), (*.), (/.), (^), (^^), (**), (<.), (>.), (<=.), (>=.),
 	     sin, cos, tan, asin, acos, atan, atan2, sinh, cosh, tanh) where
 infixl 8 ^, ^^, **
 
--- (+.), (-.), (*.), (/.) re-exported from Prelude for compatibility with PAKCS
+-- (+.), (-.), (*.), (/.) float operators for compatibility with PAKCS
+(+.), (-.), (*.), (/.) :: Float -> Float -> Float
+(+.) = (+)
+(-.) = (-)
+(*.) = (*)
+(/.) = (/)
 -- (<.), (>.), (<=.) (>=.) ordering relations of floats
 (<.), (>.), (<=.), (>=.) :: Float -> Float -> Bool
 (<.) = (<)
@@ -22,7 +27,7 @@ pi = 3.14159265358979323846
 
 --- Convert an integer to a floating point number
 i2f :: Int -> Float
-i2f = floatFromInt
+i2f = fromInt
 
 --- Convert a floating point number to an integer always rounding towards 0
 truncate :: Float -> Int
@@ -36,21 +41,21 @@ round = roundFloat
 (^) :: Float -> Int -> Float
 x ^ n
   | n > 0 = f x (n - 1) x
-  | n == 0 = 1
+  | n == 0 = 1.0
   where f x n y
           | n == 0 = y
           | otherwise = g x n y
         g x n y =
-          if n `rem` 2 == 0 then g (x *. x) (n `quot` 2) y
-                            else f x (n - 1) (x *. y)
+          if n `rem` 2 == 0 then g (x * x) (n `quot` 2) y
+                            else f x (n - 1) (x * y)
 
 --- x^^n computes the nth power of x, n may be negative
 (^^) :: Float -> Int -> Float
-x ^^ n = if n >= 0 then x ^ n else 1 /. x ^ (-n)
+x ^^ n = if n >= 0 then x ^ n else 1.0 / x ^ (-n)
 
 --- Power
 (**) :: Float -> Float -> Float
-x ** y = exp (log x *. y)
+x ** y = exp (log x * y)
 
 --- Square root
 foreign import ccall "math.h" sqrt :: Float -> Float
@@ -82,7 +87,7 @@ foreign import ccall "math.h" acos :: Float -> Float
 --- Arc tangent
 foreign import ccall "math.h" atan :: Float -> Float
 
---- (atan2 y x) computes the principal value of atan (y/.x) using the signs of
+--- (atan2 y x) computes the principal value of atan (y/x) using the signs of
 --- both arguments in order to determine the quadrant the result is in
 --- it is useful for converting rectangular coordinates into polar coordinates
 foreign import ccall "math.h" atan2 :: Float -> Float -> Float

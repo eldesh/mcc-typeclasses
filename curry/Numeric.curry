@@ -1,4 +1,4 @@
--- $Id: Numeric.curry 1877 2006-04-03 08:01:16Z wlux $
+-- $Id: Numeric.curry 1996 2006-11-10 20:05:36Z wlux $
 --
 -- Copyright (c) 2003-2005, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -88,13 +88,13 @@ showFloat = showGFloat Nothing
 
 
 readSignedFloat :: ReadS Float -> ReadS Float
-readSignedFloat = readSigned (0 -.)
+readSignedFloat = readSigned (0.0 -)
 
 readFloat :: ReadS Float
 readFloat r = [(convert ds (k - d),t) | (ds,d,s) <- lexFix r,
                                         (k,t) <- readExp s] ++
-              [(0/.0,t) | t <- match "NaN" r] ++
-              [(1/.0,t) | t <- match "Infinity" r]
+              [(0.0/0.0,t) | t <- match "NaN" r] ++
+              [(1.0/0.0,t) | t <- match "Infinity" r]
   where lexFix r = [(ds ++ ds',length ds',t) | (ds,s) <- lexDigits r,
                                                (ds',t) <- lexFrac s]
         lexFrac "" = [("","")]

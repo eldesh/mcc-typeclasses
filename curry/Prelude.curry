@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 1877 2006-04-03 08:01:16Z wlux $
+-- $Id: Prelude.curry 1996 2006-11-10 20:05:36Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -8,8 +8,8 @@ module Prelude where
 
 infixl 9 !!
 infixr 9 .
-infixl 7 *, `quot`, `rem`, `div`, `mod`, *., /.
-infixl 6 +, -, +., -.
+infixl 7 *, /, `quot`, `rem`, `div`, `mod`
+infixl 6 +, -
 --++ infixr 5 :
 infixr 5 ++
 infix  4 =:=, =/=, ==, /=, <, >, <=, >=
@@ -473,17 +473,36 @@ showParen :: Bool -> ShowS -> ShowS
 showParen True x = showChar '(' . x . showChar ')'
 showParen False x = x
 
+
+--- Standard numeric types and classes
+--- Operations supported by all numeric data types
+--- NB Temporarily defines fromInt instead of fromIntegral because MCC
+---    does not yet support arbitrary precision integers.
+---    Negate, abs and signum are currently missing.
+class Num a where
+  (+) :: a -> a -> a
+  (-) :: a -> a -> a
+  (*) :: a -> a -> a
+  fromInt :: Int -> a
+
 -- Types of primitive arithmetic functions and predicates
--- NB quot,rem and div,mod are compatible with Haskell, i.e.
+-- NB quot, rem, div, and mod must satisfy the following laws
 --    N `quot` M + N `rem` M = N
 --    N `div`  M + N `mod` M = N
 --    the result of quot is truncated towards zero and the result
---    of quot is truncated towards negative infinity
+--    of div is truncated towards negative infinity
 
 data Int
-foreign import ccall "prims.h primAddInt" (+) :: Int -> Int -> Int
-foreign import ccall "prims.h primSubInt" (-) :: Int -> Int -> Int
-foreign import ccall "prims.h primMulInt" (*) :: Int -> Int -> Int
+
+instance Num Int where
+  (+) = primAddInt
+    where foreign import ccall "prims.h" primAddInt :: Int -> Int -> Int
+  (-) = primSubInt
+    where foreign import ccall "prims.h" primSubInt :: Int -> Int -> Int
+  (*) = primMulInt
+    where foreign import ccall "prims.h" primMulInt :: Int -> Int -> Int
+  fromInt n = n
+
 foreign import ccall "prims.h primQuotInt" quot :: Int -> Int -> Int
 foreign import ccall "prims.h primRemInt" rem :: Int -> Int -> Int
 foreign import ccall "prims.h primDivInt" div :: Int -> Int -> Int
@@ -493,16 +512,23 @@ negate :: Int -> Int
 negate n = 0 - n
 
 data Float
-foreign import ccall "prims.h primAddFloat" (+.) :: Float -> Float -> Float
-foreign import ccall "prims.h primSubFloat" (-.) :: Float -> Float -> Float
-foreign import ccall "prims.h primMulFloat" (*.) :: Float -> Float -> Float
-foreign import ccall "prims.h primDivFloat" (/.) :: Float -> Float -> Float
+
+instance Num Float where
+  (+) = primAddFloat
+    where foreign import ccall "prims.h" primAddFloat :: Float -> Float -> Float
+  (-) = primSubFloat
+    where foreign import ccall "prims.h" primSubFloat :: Float -> Float -> Float
+  (*) = primMulFloat
+    where foreign import ccall "prims.h" primMulFloat :: Float -> Float -> Float
+  fromInt = primFloat
+    where foreign import ccall "prims.h" primFloat  :: Int -> Float
+
+foreign import ccall "prims.h primDivFloat" (/) :: Float -> Float -> Float
 
 negateFloat :: Float -> Float
-negateFloat f = 0.0 -. f
+negateFloat f = 0.0 - f
 
 -- conversions
-foreign import ccall "prims.h primFloat" floatFromInt  :: Int -> Float
 foreign import ccall "prims.h primTrunc" truncateFloat :: Float -> Int
 foreign import ccall "prims.h primRound" roundFloat    :: Float -> Int
 

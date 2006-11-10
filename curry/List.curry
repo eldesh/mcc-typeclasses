@@ -51,9 +51,9 @@ cycle :: [a] -> [a]
 cycle xs | not (null xs) = cycle' xs
   where cycle' xs = xs ++ cycle' xs
 
-sum, product :: [Int] -> Int
-sum = foldr (+) 0
-product = foldr (*) 1
+sum, product :: Num a => [a] -> a
+sum = foldr (+) (fromInt 0)
+product = foldr (*) (fromInt 1)
 
 maximum, minimum :: [a] -> a
 maximum xs = foldr1 max xs

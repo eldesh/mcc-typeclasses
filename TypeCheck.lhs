@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 1999 2006-11-10 21:53:29Z wlux $
+% $Id: TypeCheck.lhs 2000 2006-11-11 16:21:14Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -507,13 +507,24 @@ arbitrary type.
 
 \end{verbatim}
 \paragraph{Patterns and Expressions}
+Note that overloaded literals are not supported in patterns.
+
+\ToDo{Do not fix the type of integer literals in patterns prematurely.
+  Even though we cannot handle overloaded literals in patterns, the
+  compiler should accept the expression \texttt{(\char`\\ 0}
+  $\rightarrow$ \texttt{success)} \texttt{::} \texttt{Float}
+  $\rightarrow$ \texttt{Success} just like it accepts
+  \texttt{(\char`\\ \_} $\rightarrow$ \texttt{0)} \texttt{::}
+  \texttt{a} $\rightarrow$ \texttt{Float}.}
 \begin{verbatim}
 
-> litType :: Literal -> (Context,Type)
-> litType (Char _) = ([],charType)
-> litType (Int _) = ([],intType)
-> litType (Float _) = ([],floatType)
-> litType (String _) = ([],stringType)
+> tcLiteral :: Bool -> Literal -> TcState (Context,Type)
+> tcLiteral _ (Char _) = return ([],charType)
+> tcLiteral poly (Int _)
+>   | poly = freshNumType
+>   | otherwise = return ([],intType)
+> tcLiteral _ (Float _) = return ([],floatType)
+> tcLiteral _ (String _) = return ([],stringType)
 
 > tcVariable :: ModuleIdent -> TCEnv -> SigEnv -> Bool -> Position
 >            -> Ident -> TcState (Context,Type)
@@ -552,11 +563,13 @@ arbitrary type.
 > tcConstrTerm :: ModuleIdent -> TCEnv -> SigEnv -> Position -> ConstrTerm a
 >              -> TcState (Context,Type,ConstrTerm Type)
 > tcConstrTerm m _ _ _ (LiteralPattern _ l) =
->   return (cx,ty,LiteralPattern ty l)
->   where (cx,ty) = litType l
+>   do
+>     (cx,ty) <- tcLiteral False l
+>     return (cx,ty,LiteralPattern ty l)
 > tcConstrTerm m _ _ _ (NegativePattern _ l) =
->   return (cx,ty,NegativePattern ty l)
->   where (cx,ty) = litType l
+>   do
+>     (cx,ty) <- tcLiteral False l
+>     return (cx,ty,NegativePattern ty l)
 > tcConstrTerm m tcEnv sigs p (VariablePattern _ v) =
 >   do
 >     (cx,ty) <- tcVariable m tcEnv sigs False p v
@@ -645,8 +658,10 @@ arbitrary type.
 
 > tcExpr :: ModuleIdent -> TCEnv -> Position -> Expression a
 >        -> TcState (Context,Type,Expression Type)
-> tcExpr _ _ _ (Literal _ l) = return (cx,ty,Literal ty l)
->   where (cx,ty) = litType l
+> tcExpr _ _ _ (Literal _ l) =
+>   do
+>     (cx,ty) <- tcLiteral True l
+>     return (cx,ty,Literal ty l)
 > tcExpr m tcEnv p (Variable _ v) =
 >   do
 >     (cx,ty) <- fetchSt >>= inst . funType v
@@ -737,12 +752,12 @@ arbitrary type.
 >     return (cx ++ cx' ++ cx'',listType intType,EnumFromThenTo e1' e2' e3')
 > tcExpr m tcEnv p e@(UnaryMinus e1) =
 >   do
->     ty <- freshTypeVar
->     (cx,e1') <-
+>     (cx,ty) <- freshNumType
+>     (cx',e1') <-
 >       tcExpr m tcEnv p e1 >>=
 >       unify p "unary negation" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1)
 >             m ty
->     return (TypePred qNumId ty : cx,ty,UnaryMinus e1')
+>     return (cx ++ cx',ty,UnaryMinus e1')
 > tcExpr m tcEnv p e@(Apply e1 e2) =
 >   do
 >     (cx,alpha,beta,e1') <-
@@ -1069,6 +1084,12 @@ We use negative offsets for fresh type variables.
 
 > freshTypeVar :: TcState Type
 > freshTypeVar = freshVar TypeVariable
+
+> freshNumType :: TcState (Context,Type)
+> freshNumType =
+>   do
+>     tv <- freshTypeVar
+>     return ([TypePred qNumId tv],tv)
 
 > freshGuard :: TcState Type
 > freshGuard = freshVar TypeGuard

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 1999 2006-11-10 21:53:29Z wlux $
+% $Id: DictTrans.lhs 2000 2006-11-11 16:21:14Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -418,8 +418,19 @@ $\vartheta$ is the most general unifier between $f$'s type $\tau$ and
 the concrete type at which $f$ is used in the application.
 \begin{verbatim}
 
+> transLiteral :: ModuleIdent -> ValueEnv -> DictEnv -> Type -> Literal
+>              -> DictState (Expression Type)
+> transLiteral _ _ _ ty (Char c) = return (Literal ty (Char c))
+> transLiteral m tyEnv dictEnv ty (Int i)
+>   | ty == intType = return (Literal ty (Int i))
+>   | ty == floatType = return (Literal ty (Float (fromIntegral i)))
+>   | otherwise = dictTrans m tyEnv dictEnv
+>                           (apply (prelFromInt ty) [Literal intType (Int i)])
+> transLiteral _ _ _ ty (Float f) = return (Literal ty (Float f))
+> transLiteral _ _ _ ty (String cs) = return (Literal ty (String cs))
+
 > instance DictTrans Expression where
->   dictTrans _ _ _ (Literal ty l) = return (Literal ty l)
+>   dictTrans m tyEnv dictEnv (Literal ty l) = transLiteral m tyEnv dictEnv ty l
 >   dictTrans m tyEnv dictEnv (Variable ty v) =
 >     return (apply (Variable ty' v) xs)
 >     where ty' = foldr (TypeArrow . typeOf) ty xs
@@ -660,6 +671,11 @@ Prelude entities.
 > prelNegate :: Type -> Expression Type
 > prelNegate a =
 >   Variable (a `TypeArrow` a) (qualifyWith preludeMIdent (mkIdent "negate"))
+
+> prelFromInt :: Type -> Expression Type
+> prelFromInt a =
+>   Variable (intType `TypeArrow` a)
+>            (qualifyWith preludeMIdent (mkIdent "fromInt"))
 
 > prelUndefined :: Type -> Expression Type
 > prelUndefined a = Variable a (qualifyWith preludeMIdent (mkIdent "undefined"))

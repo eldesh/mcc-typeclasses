@@ -1,4 +1,4 @@
--- $Id: NameSupply.curry 1882 2006-04-03 11:04:54Z wlux $
+-- $Id: NameSupply.curry 2000 2006-11-11 16:21:14Z wlux $
 --
 -- Copyright (c) 2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -21,7 +21,8 @@ initialNameSupply :: IO NameSupply
 initialNameSupply =
   do
     r <- newIORef 0
-    let getName r =
+    let getName :: IORef Name -> IO Name
+        getName r =
           do
             n <- readIORef r
             writeIORef r (n + 1)

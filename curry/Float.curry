@@ -1,4 +1,4 @@
--- $Id: Float.curry 1996 2006-11-10 20:05:36Z wlux $
+-- $Id: Float.curry 2000 2006-11-11 16:21:14Z wlux $
 --
 -- Copyright (c) 2004, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -41,7 +41,7 @@ round = roundFloat
 (^) :: Float -> Int -> Float
 x ^ n
   | n > 0 = f x (n - 1) x
-  | n == 0 = 1.0
+  | n == 0 = 1
   where f x n y
           | n == 0 = y
           | otherwise = g x n y
@@ -51,7 +51,7 @@ x ^ n
 
 --- x^^n computes the nth power of x, n may be negative
 (^^) :: Float -> Int -> Float
-x ^^ n = if n >= 0 then x ^ n else 1.0 / x ^ (-n)
+x ^^ n = if n >= 0 then x ^ n else 1 / x ^ (-n)
 
 --- Power
 (**) :: Float -> Float -> Float

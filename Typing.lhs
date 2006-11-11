@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 1999 2006-11-10 21:53:29Z wlux $
+% $Id: Typing.lhs 2000 2006-11-11 16:21:14Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -25,9 +25,6 @@ perform any (non-trivial) unifications.
 > instance Typeable Type where
 >   typeOf = id
 
-> instance Typeable Literal where
->   typeOf = litType
-
 > instance Typeable a => Typeable (ConstrTerm a) where
 >   typeOf = argType
 
@@ -36,12 +33,6 @@ perform any (non-trivial) unifications.
 
 > instance Typeable a => Typeable (Rhs a) where
 >   typeOf = rhsType
-
-> litType :: Literal -> Type
-> litType (Char _) = charType
-> litType (Int _) = intType
-> litType (Float _) = floatType
-> litType (String _) = stringType
 
 > argType :: Typeable a => ConstrTerm a -> Type
 > argType (LiteralPattern a _) = typeOf a

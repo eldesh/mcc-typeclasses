@@ -1,4 +1,4 @@
--- $Id: MarshalUtils.curry 1996 2006-11-10 20:05:36Z wlux $
+-- $Id: MarshalUtils.curry 2000 2006-11-11 16:21:14Z wlux $
 --
 -- Copyright (c) 2005-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -8,10 +8,10 @@ import Ptr
 import Monad
 
 fromBool :: Num a => Bool -> a
-fromBool b = fromInt (if b then 1 else 0)
+fromBool b = if b then 1 else 0
 
 toBool :: Num a => a -> Bool
-toBool x = x /= fromInt 0
+toBool x = x /= 0
 
 maybeNew :: (a -> IO (Ptr a))
    -> (Maybe a -> IO (Ptr a))

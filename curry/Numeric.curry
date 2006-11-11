@@ -1,4 +1,4 @@
--- $Id: Numeric.curry 1998 2006-11-10 21:26:18Z wlux $
+-- $Id: Numeric.curry 2000 2006-11-11 16:21:14Z wlux $
 --
 -- Copyright (c) 2003-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -78,7 +78,7 @@ showGFloat :: Maybe Int -> Float -> ShowS
 showGFloat d f
   | f' >= 0.1 && f' < 1.0e7 = showFFloat d f
   | otherwise = showEFloat d f
-  where f' = if f < 0.0 then -f else f
+  where f' = if f < 0 then -f else f
         
 showFloat :: Float -> ShowS
 showFloat = showGFloat Nothing
@@ -87,8 +87,8 @@ showFloat = showGFloat Nothing
 readFloat :: ReadS Float
 readFloat r = [(convert ds (k - d),t) | (ds,d,s) <- lexFix r,
                                         (k,t) <- readExp s] ++
-              [(0.0/0.0,t) | t <- match "NaN" r] ++
-              [(1.0/0.0,t) | t <- match "Infinity" r]
+              [(0/0,t) | t <- match "NaN" r] ++
+              [(1/0,t) | t <- match "Infinity" r]
   where lexFix r = [(ds ++ ds',length ds',t) | (ds,s) <- lexDigits r,
                                                (ds',t) <- lexFrac s]
         lexFrac "" = [("","")]

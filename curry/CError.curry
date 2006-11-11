@@ -1,4 +1,4 @@
--- $Id: CError.curry 1996 2006-11-10 20:05:36Z wlux $
+-- $Id: CError.curry 2000 2006-11-11 16:21:14Z wlux $
 --
 -- Copyright (c) 2005, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -275,16 +275,16 @@ throwErrnoIfRetry_ f loc m =
   else return ()
 
 throwErrnoIfMinus1 :: Num a => String -> IO a -> IO a
-throwErrnoIfMinus1 = throwErrnoIf (fromInt (-1) ==)
+throwErrnoIfMinus1 = throwErrnoIf (-1 ==)
 
 throwErrnoIfMinus1_ :: Num a => String -> IO a -> IO ()
-throwErrnoIfMinus1_ = throwErrnoIf_ (fromInt (-1) ==)
+throwErrnoIfMinus1_ = throwErrnoIf_ (-1 ==)
 
 throwErrnoIfMinus1Retry :: Num a => String -> IO a -> IO a
-throwErrnoIfMinus1Retry = throwErrnoIfRetry (fromInt (-1) ==)
+throwErrnoIfMinus1Retry = throwErrnoIfRetry (-1 ==)
 
 throwErrnoIfMinus1Retry_ :: Num a => String -> IO a -> IO ()
-throwErrnoIfMinus1Retry_ = throwErrnoIfRetry_ (fromInt (-1) ==)
+throwErrnoIfMinus1Retry_ = throwErrnoIfRetry_ (-1 ==)
 
 throwErrnoIfNull :: String -> IO (Ptr a) -> IO (Ptr a)
 throwErrnoIfNull = throwErrnoIf (nullPtr ==)

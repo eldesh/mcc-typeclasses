@@ -1,4 +1,4 @@
--- $Id: Integer.curry 1901 2006-04-19 18:16:24Z wlux $
+-- $Id: Integer.curry 2000 2006-11-11 16:21:14Z wlux $
 --
 -- Copyright (c) 2004-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -33,7 +33,8 @@ isqrt n | n >= 0 = truncate (sqrt (i2f n))
 --- (factorial n) returns the factorial of n
 factorial :: Int -> Int
 factorial n = fact 1 n
-  where fact f n = if n <= 1 then f else fact (f * n) (n - 1)
+  where fact :: Int -> Int -> Int
+        fact f n = if n <= 1 then f else fact (f * n) (n - 1)
 
 --- (binomial n m) returns n*(n-1)*...*(n-m+1)/m*(m-1)*...*1
 --- Fails if m <= 0 or n <= m

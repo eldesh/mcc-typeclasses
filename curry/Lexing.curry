@@ -1,10 +1,10 @@
--- $Id: Lexing.curry 1883 2006-04-03 12:50:41Z wlux $
+-- $Id: Lexing.curry 2000 2006-11-11 16:21:14Z wlux $
 
 -- Implementation of lexing combinators based on
 -- Manuel M.T. Chakravarty. Lazy Lexing is Fast. In:
 -- Proc. FLOPS '99, LNCS 1772, pp. 68--84
 
-module Lexing(Position, Regexp, Lexer, LexerState, Action, Meta, OneToken,
+module Lexing(Position(..), Regexp, Lexer, LexerState, Action, Meta, OneToken,
 	      epsilon, char, (+>), (>|<), (>||<), star, plus, quest,
 	      alt, string, lexaction, lexmeta, ident, ctrlLexer,
 	      execLexer, lexOne) where
@@ -16,7 +16,7 @@ infixl 3 +>
 infixl 2 >|<, >||<
 
 -- Types
-type Position	  = (String, Int, Int)
+newtype Position  = P (String, Int, Int)
 type LexerState s = (String, Position, s)
 
 type Regexp s t	  = Lexer s t -> Lexer s t
@@ -95,9 +95,9 @@ ctrlLexer = char '\n' `lexmeta` newline
        >||< char '\r' `lexmeta` newline
        >||< char '\f' `lexmeta` formfeed
        >||< char '\t' `lexmeta` tab
-  where newline  (fname, row, _  ) s = ((fname, row + 1, 1), s, Nothing)
-	formfeed (fname, row, col) s = ((fname, row, col + 1), s, Nothing)
-	tab      (fname, row, col) s = ((fname, row, col + 8 - col `mod` 8), s, Nothing)
+  where newline  (P (fname, row, _  )) s = (P (fname, row + 1, 1), s, Nothing)
+	formfeed (P (fname, row, col)) s = (P (fname, row, col + 1), s, Nothing)
+	tab      (P (fname, row, col)) s = (P (fname, row, col + 8 - col `mod` 8), s, Nothing)
 
 
 -- Lexing
@@ -128,9 +128,9 @@ lexOne l state = collect l state id (error "Lexical error!")
       where (pos', s', l') = f (advancePos pos (lexeme "")) s
 
 advancePos = foldr advance
-  where advance c (fname, row, col) =
+  where advance c (P (fname, row, col)) =
           case c of
-            '\n' -> (fname, row + 1, 1)
-            '\r' -> (fname, row + 1, 1)
-            '\t' -> (fname, row, col + 8 - col `mod` 8)
-            _    -> (fname, row, col + 1)
+            '\n' -> P (fname, row + 1, 1)
+            '\r' -> P (fname, row + 1, 1)
+            '\t' -> P (fname, row, col + 8 - col `mod` 8)
+            _    -> P (fname, row, col + 1)

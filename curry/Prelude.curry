@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 1997 2006-11-10 20:45:06Z wlux $
+-- $Id: Prelude.curry 2000 2006-11-11 16:21:14Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -230,7 +230,8 @@ null (_:_)      = False
 --- Computes the length of a list.
 length          :: [a] -> Int
 length		= count 0
-  where count n []     = n
+  where count :: Int -> [a] -> Int
+        count n []     = n
   	count n (_:xs) = n' `seq` count n' xs where n' = n + 1
 
 --- List index (subscript) operator, head has index 0
@@ -488,7 +489,7 @@ class Num a where
   fromInt :: Int -> a
 
 negate :: Num a => a -> a
-negate n = fromInt 0 - n
+negate n = 0 - n
 
 -- Types of primitive arithmetic functions and predicates
 -- NB quot, rem, div, and mod must satisfy the following laws

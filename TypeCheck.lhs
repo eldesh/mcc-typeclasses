@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2000 2006-11-11 16:21:14Z wlux $
+% $Id: TypeCheck.lhs 2001 2006-11-11 17:15:53Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -68,14 +68,16 @@ current module into the type environment.
 
 \end{verbatim}
 Type checking of a goal is simpler because there are no type
-declarations.
+declarations. Depending on whether we only compute the type of a goal
+or a going to generate code for the goal, the compiler will allow a
+non-empty context for the goal's type or not.
 \begin{verbatim}
 
-> typeCheckGoal :: TCEnv -> InstEnv -> ValueEnv -> Goal a
+> typeCheckGoal :: Bool -> TCEnv -> InstEnv -> ValueEnv -> Goal a
 >               -> Error (ValueEnv,Context,Goal Type)
-> typeCheckGoal tcEnv iEnv tyEnv g =
+> typeCheckGoal forEval tcEnv iEnv tyEnv g =
 >    run (do
->           (cx,g') <- tcGoal emptyMIdent tcEnv g
+>           (cx,g') <- tcGoal forEval emptyMIdent tcEnv g
 >           tyEnv' <- fetchSt
 >           theta <- liftSt fetchSt
 >           return (subst theta tyEnv',cx,fmap (subst theta) g'))
@@ -309,8 +311,9 @@ general than the type signature.
 >     (cx',ty,rhs') <- tcRhs m tcEnv rhs
 >     return (cx ++ cx',foldr TypeArrow ty tys,Equation p lhs' rhs')
 
-> tcGoal :: ModuleIdent -> TCEnv -> Goal a -> TcState (Context,Goal Type)
-> tcGoal m tcEnv (Goal p e ds) =
+> tcGoal :: Bool -> ModuleIdent -> TCEnv -> Goal a
+>        -> TcState (Context,Goal Type)
+> tcGoal forEval m tcEnv (Goal p e ds) =
 >   do
 >     tyEnv0 <- fetchSt
 >     alpha <- freshTypeVar
@@ -318,7 +321,16 @@ general than the type signature.
 >       tcRhs m tcEnv (SimpleRhs p e ds) >>=
 >       unifyDecl p "goal" (ppExpr 0 e) m tyEnv0 [] alpha
 >     checkSkolems p emptyMIdent (text "Goal:" <+> ppExpr 0 e) zeroSet alpha
+>     checkGoalContext forEval p "goal" (ppExpr 0 e) m cx alpha
 >     return (cx,Goal p e' ds')
+
+> checkGoalContext :: Bool -> Position -> String -> Doc -> ModuleIdent
+>                  -> Context -> Type -> TcState ()
+> checkGoalContext forEval p what doc m cx ty =
+>   when (forEval && not (null tvs))
+>        (liftSt fetchSt >>= \theta ->
+>         errorAt p (ambiguousType what doc m (nub tvs) cx (subst theta ty)))
+>   where tvs = [ty | TypePred _ ty <- cx]
 
 > unifyDecl :: Position -> String -> Doc -> ModuleIdent -> ValueEnv
 >           -> Context -> Type -> (Context,Type,a) -> TcState (Context,a)

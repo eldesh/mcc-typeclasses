@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2001 2006-11-11 17:15:53Z wlux $
+% $Id: Modules.lhs 2004 2006-11-12 16:19:26Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -125,7 +125,7 @@ declaration to the module.
 >             Module m (Just es') is (qual tcEnv' tyEnv' ds''''),
 >             exportInterface m es' pEnv'' tcEnv'' iEnv' tyEnv'')
 
-> warnModule :: CaseMode -> [Warn] -> Module a -> [String]
+> warnModule :: CaseMode -> [Warn] -> Module Type -> [String]
 > warnModule caseMode warn m =
 >   caseCheck caseMode m ++ unusedCheck warn m ++
 >   shadowCheck warn m ++ overlapCheck warn m
@@ -270,7 +270,7 @@ compilation of a goal is similar to that of a module.
 >     let (_,tcEnv',tyEnv'') = qualifyEnv mEnv emptyMIdent pEnv tcEnv tyEnv'
 >     return (tcEnv',iEnv,tyEnv'',cx,qual tcEnv' tyEnv' g'')
 
-> warnGoal :: CaseMode -> [Warn] -> Goal a -> [String]
+> warnGoal :: CaseMode -> [Warn] -> Goal Type -> [String]
 > warnGoal caseMode warn g =
 >   caseCheckGoal caseMode g ++ unusedCheckGoal warn g ++
 >   shadowCheckGoal warn g ++ overlapCheckGoal warn g

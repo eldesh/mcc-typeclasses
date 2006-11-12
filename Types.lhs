@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 2003 2006-11-12 14:34:01Z wlux $
+% $Id: Types.lhs 2004 2006-11-12 16:19:26Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -20,10 +20,12 @@ to a list of arguments, or an arrow type. The \texttt{TypeConstrained}
 case is used for representing type variables that are restricted to a
 particular set of types. At present, this is used for typing guard
 expressions, which are restricted to be either of type \texttt{Bool}
-or of type \texttt{Success}. If the type is not restricted, it
-defaults to the first type from the constraint list. The case
-\texttt{TypeSkolem} is used for handling skolem types, which result
-from matching data constructors with existentially quantified types.
+or of type \texttt{Success}, and integer literals in patterns, which
+are restricted to types \texttt{Int} and \texttt{Float}. If the type
+is not restricted, it defaults to the first type from the constraint
+list. The case \texttt{TypeSkolem} is used for handling skolem types,
+which result from matching data constructors with existentially
+quantified types.
 
 Type variables are represented with deBruijn style indices. Universally
 quantified type variables are assigned indices in the order of their

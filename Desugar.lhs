@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 1999 2006-11-10 21:53:29Z wlux $
+% $Id: Desugar.lhs 2004 2006-11-12 16:19:26Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -285,18 +285,23 @@ $t$ is a variable or an as-pattern are replaced by $t$ in combination
 with a local declaration for $v$.
 \begin{verbatim}
 
-> desugarLiteral :: Literal -> Either Literal [(Type,Literal)]
-> desugarLiteral (Char c) = Left (Char c)
-> desugarLiteral (Int i) = Left (Int i)
-> desugarLiteral (Float f) = Left (Float f)
-> desugarLiteral (String cs) = Right [(charType,Char c) | c <- cs]
+> desugarLiteral :: Type -> Literal -> Either Literal [(Type,Literal)]
+> desugarLiteral _ (Char c) = Left (Char c)
+> desugarLiteral ty (Int i) = Left (fixLiteral ty i)
+>   where fixLiteral (TypeConstrained tys _) = fixLiteral (head tys)
+>         fixLiteral ty
+>           | ty == intType = Int
+>           | ty == floatType = Float . fromIntegral
+>           | otherwise = internalError "desugarLiteral"
+> desugarLiteral _ (Float f) = Left (Float f)
+> desugarLiteral _ (String cs) = Right [(charType,Char c) | c <- cs]
 
 > desugarTerm :: ModuleIdent -> Position -> [Decl Type] -> ConstrTerm Type
 >             -> DesugarState ([Decl Type],ConstrTerm Type)
 > desugarTerm m p ds (LiteralPattern ty l) =
 >   either (return . (,) ds . LiteralPattern ty)
 >          (desugarTerm m p ds . ListPattern ty . map (uncurry LiteralPattern))
->          (desugarLiteral l)
+>          (desugarLiteral ty l)
 > desugarTerm m p ds (NegativePattern ty l) =
 >   desugarTerm m p ds (LiteralPattern ty (negateLiteral l))
 >   where negateLiteral (Int i) = Int (-i)
@@ -383,7 +388,7 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 > desugarExpr m p (Literal ty l) =
 >   either (return . Literal ty)
 >          (desugarExpr m p . List ty . map (uncurry Literal))
->          (desugarLiteral l)
+>          (desugarLiteral ty l)
 > desugarExpr _ _ (Variable ty v) = return (Variable ty v)
 > desugarExpr _ _ (Constructor ty c) = return (Constructor ty c)
 > desugarExpr m p (Paren e) = desugarExpr m p e
@@ -634,8 +639,10 @@ where the default alternative is redundant.
 >           (pattern v t,(p,prefix,t:ts,bindVars p v t rhs))
 >         skipArg (p,prefix,t:ts,rhs) = (p,prefix . (t:),ts,rhs)
 >         dropArg (p,prefix,t:ts,rhs) = (p,prefix,ts,bindVars p v t rhs)
->         allCases tcEnv (TypeConstructor tc _,v) ts = length cs == length ts
->           where cs = constructors tc tcEnv
+>         allCases tcEnv (ty,v) ts = length cs == length ts
+>           where cs = constructors (root ty) tcEnv
+>                 root (TypeConstructor tc _) = tc
+>                 root (TypeConstrained tys _) = root (head tys)
 
 > desugarAlt :: ModuleIdent -> Type -> ([(Type,Ident)] -> [(Type,Ident)])
 >            -> [(Type,Ident)] -> [(ConstrTerm Type,Match Type)]

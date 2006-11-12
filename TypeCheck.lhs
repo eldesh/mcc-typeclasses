@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2003 2006-11-12 14:34:01Z wlux $
+% $Id: TypeCheck.lhs 2004 2006-11-12 16:19:26Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -526,7 +526,7 @@ Note that overloaded literals are not supported in patterns.
 > tcLiteral _ (Char _) = return ([],charType)
 > tcLiteral poly (Int _)
 >   | poly = freshNumType
->   | otherwise = return ([],intType)
+>   | otherwise = liftM ((,) []) (freshConstrained numTypes)
 > tcLiteral _ (Float _) = return ([],floatType)
 > tcLiteral _ (String _) = return ([],stringType)
 
@@ -1007,11 +1007,10 @@ context reduction. This context reduction retains all predicates whose
 types are simple variables and for all other types checks whether an
 instance exists. A minor complication arises due to constrained types,
 which at present are used to implement overloading of guard
-expressions. The set of admissible types of a constrained type may be
-restricted by the current context after the context reduction and thus
-may cause a further extension of the current substitution.
-
-\ToDo{Replace constrained types by overloading with type classes.}
+expressions and of numeric literals in patterns. The set of admissible
+types of a constrained type may be restricted by the current context
+after the context reduction and thus may cause a further extension of
+the current substitution.
 \begin{verbatim}
 
 > reduceContext :: Position -> String -> Doc -> ModuleIdent

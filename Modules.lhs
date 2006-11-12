@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2004 2006-11-12 16:19:26Z wlux $
+% $Id: Modules.lhs 2005 2006-11-12 16:32:37Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -268,7 +268,7 @@ compilation of a goal is similar to that of a module.
 >     (tyEnv',cx,g'') <- kindCheckGoal tcEnv g' >>
 >                        typeCheckGoal forEval tcEnv iEnv tyEnv g'
 >     let (_,tcEnv',tyEnv'') = qualifyEnv mEnv emptyMIdent pEnv tcEnv tyEnv'
->     return (tcEnv',iEnv,tyEnv'',cx,qual tcEnv' tyEnv' g'')
+>     return (tcEnv',iEnv,tyEnv'',cx,qual tcEnv tyEnv' g'')
 
 > warnGoal :: CaseMode -> [Warn] -> Goal Type -> [String]
 > warnGoal caseMode warn g =

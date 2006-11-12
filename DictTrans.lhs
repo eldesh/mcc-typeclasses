@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2000 2006-11-11 16:21:14Z wlux $
+% $Id: DictTrans.lhs 2003 2006-11-12 14:34:01Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -544,7 +544,7 @@ instantiated to exactly the same type.\footnote{If newtype
 >   | tv >= 0 = bindSubst tv ty
 > match (TypeVariable tv1) (TypeVariable tv2)
 >   | tv1 == tv2 = id
-> match (TypeGuard tv1) (TypeGuard tv2)
+> match (TypeConstrained _ tv1) (TypeConstrained _ tv2)
 >   | tv1 == tv2 = id
 > match (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) =
 >   matchTypes [ty11,ty12] [ty21,ty22]

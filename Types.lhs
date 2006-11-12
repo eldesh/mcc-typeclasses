@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 1981 2006-10-23 22:42:43Z wlux $
+% $Id: Types.lhs 2002 2006-11-12 13:13:08Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -254,5 +254,13 @@ be determined otherwise.
 
 > guardTypes :: [Type]
 > guardTypes = [successType,boolType]
+
+\end{verbatim}
+The variable \texttt{numTypes} maintains the list of types admissible
+for ambiguous numeric expressions.
+\begin{verbatim}
+
+> numTypes :: [Type]
+> numTypes = [intType,floatType]
 
 \end{verbatim}

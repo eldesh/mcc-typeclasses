@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2001 2006-11-11 17:15:53Z wlux $
+% $Id: TypeCheck.lhs 2002 2006-11-12 13:13:08Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -321,16 +321,8 @@ general than the type signature.
 >       tcRhs m tcEnv (SimpleRhs p e ds) >>=
 >       unifyDecl p "goal" (ppExpr 0 e) m tyEnv0 [] alpha
 >     checkSkolems p emptyMIdent (text "Goal:" <+> ppExpr 0 e) zeroSet alpha
->     checkGoalContext forEval p "goal" (ppExpr 0 e) m cx alpha
+>     when forEval (applyDefaults p "goal" (ppExpr 0 e) m cx alpha)
 >     return (cx,Goal p e' ds')
-
-> checkGoalContext :: Bool -> Position -> String -> Doc -> ModuleIdent
->                  -> Context -> Type -> TcState ()
-> checkGoalContext forEval p what doc m cx ty =
->   when (forEval && not (null tvs))
->        (liftSt fetchSt >>= \theta ->
->         errorAt p (ambiguousType what doc m (nub tvs) cx (subst theta ty)))
->   where tvs = [ty | TypePred _ ty <- cx]
 
 > unifyDecl :: Position -> String -> Doc -> ModuleIdent -> ValueEnv
 >           -> Context -> Type -> (Context,Type,a) -> TcState (Context,a)
@@ -340,9 +332,9 @@ general than the type signature.
 >     theta <- liftSt fetchSt
 >     let ty = subst theta tyLhs
 >         fvs = foldr addToSet (fvEnv (subst theta tyEnv0)) (typeVars ty)
->         tvs = [ty | TypePred _ ty <- snd (splitContext fvs cx)]
->     unless (null tvs) (errorAt p (ambiguousType what doc m (nub tvs) cx ty))
->     return (cx,x)
+>         (gcx,lcx) = splitContext fvs cx
+>     applyDefaults p what doc m lcx ty
+>     return (gcx,x)
 
 \end{verbatim}
 The code in \texttt{genDecl} below verifies that the inferred type for
@@ -1030,10 +1022,12 @@ extension of the current substitution.
 >   do
 >     iEnv <- liftSt (liftSt envRt)
 >     theta <- liftSt fetchSt
->     let cx' = nub (map (subst theta) cx)
->         (cx1,cx2) = partition (\(TypePred _ ty) -> isTypeVar ty) cx'
+>     let (cx1,cx2) = partitionContext (subst theta cx)
 >     mapM_ (checkTypePred p what doc m iEnv) cx2
 >     return (cx1,x)
+
+> partitionContext :: Context -> (Context,Context)
+> partitionContext cx = partition (\(TypePred _ ty) -> isTypeVar ty) (nub cx)
 >   where isTypeVar (TypeConstructor _ _) = False
 >         isTypeVar (TypeVariable _) = True
 >         isTypeVar (TypeGuard _) = False
@@ -1045,16 +1039,80 @@ extension of the current substitution.
 > checkTypePred p what doc m iEnv (TypePred cls ty) =
 >   case ty of
 >     TypeGuard tv ->
->       case filter hasInstance guardTypes of
+>       case filter (hasInstance iEnv cls) guardTypes of
 >         [] -> errorAt p (noInstance what doc m cls ty)
 >         [ty'] -> liftSt (updateSt_ (bindSubst tv ty'))
 >         _ -> return ()
->     _ -> unless (hasInstance ty) (errorAt p (noInstance what doc m cls ty))
->   where hasInstance (TypeConstructor tc _) = CT cls tc `elemSet` iEnv
->         hasInstance (TypeVariable _) = True
->         hasInstance (TypeGuard _) = any hasInstance guardTypes
->         hasInstance (TypeArrow _ _) = CT cls qArrowId `elemSet` iEnv
->         hasInstance (TypeSkolem _) = False
+>     _ -> unless (hasInstance iEnv cls ty)
+>                 (errorAt p (noInstance what doc m cls ty))
+
+> hasInstance :: InstEnv -> QualIdent -> Type -> Bool
+> hasInstance iEnv cls (TypeConstructor tc _) = CT cls tc `elemSet` iEnv
+> hasInstance _ _ (TypeVariable _) = True
+> hasInstance iEnv cls (TypeGuard _) =
+>   any (hasInstance iEnv cls) guardTypes
+> hasInstance iEnv cls (TypeArrow _ _) = CT cls qArrowId `elemSet` iEnv
+> hasInstance _ _ (TypeSkolem _) = False
+
+\end{verbatim}
+When a constrained type variable that is not free in the type
+environment disappears from the current type, the type becomes
+ambiguous. For instance, the type of the expression
+\begin{verbatim}
+  let x = read "" in show x
+\end{verbatim}
+is ambiguous assuming that \texttt{read} and \texttt{show} have types
+\begin{verbatim}
+  read :: Read a => String -> a
+  show :: Show a => a -> String
+\end{verbatim}
+because the compiler cannot determine which \texttt{Read} and
+\texttt{Show} instances to use.
+
+In the case of expressions with an ambiguous numeric type, i.e., a
+type that must be an instance of the \texttt{Num} class, the compiler
+tries to resolve the ambiguity by choosing the first type from the set
+$\left\{ \texttt{Int}, \texttt{Float} \right\}$ that satisfies all
+constraints for the ambiguous type variable. An error is reported if
+no such type exists.
+
+This is similar to Haskell's default rules, except that the user can
+specify the set of types used for resolving ambiguous numeric types
+with a default declaration. Furthermore, Haskell resolves ambiguous
+types only if all classes involved are defined in the Haskell Prelude
+or a standard library (cf.\ Sect.~4.3.4 of the revised Haskell'98
+report~\cite{PeytonJones03:Haskell}).
+
+\ToDo{Support default declarations.}
+\begin{verbatim}
+
+> applyDefaults :: Position -> String -> Doc -> ModuleIdent -> Context
+>               -> Type -> TcState ()
+> applyDefaults p what doc m cx ty =
+>   do
+>     iEnv <- liftSt (liftSt envRt)
+>     liftSt (updateSt_ (compose (foldr (bindDefault iEnv) idSubst tpss)))
+>     theta <- liftSt fetchSt
+>     let cx' = fst (partitionContext (subst theta cx))
+>         ty' = subst theta ty
+>     unless (null cx') (errorAt p (ambiguousType what doc m cx' ty'))
+>   where tpss = groupBy sameType (sort cx)
+>         sameType (TypePred _ ty1) (TypePred _ ty2) = ty1 == ty2
+
+> bindDefault :: InstEnv -> [TypePred] -> TypeSubst -> TypeSubst
+> bindDefault iEnv tps =
+>   case defaultType iEnv tps of
+>     Just ty -> bindSubst (head [tv | TypePred _ (TypeVariable tv) <- tps]) ty
+>     Nothing -> id
+
+> defaultType :: InstEnv -> [TypePred] -> Maybe Type
+> defaultType iEnv tps
+>   | qNumId `elem` clss =
+>       case [ty | ty <- numTypes, all (flip (hasInstance iEnv) ty) clss] of
+>         [] -> Nothing
+>         ty:_ -> Just ty
+>   | otherwise = Nothing
+>   where clss = [cls | TypePred cls _ <- tps]
 
 \end{verbatim}
 The function \texttt{splitContext} splits a context
@@ -1234,14 +1292,14 @@ Error functions.
 >        nest 2 (text "and" <+> ppType m ty2),
 >        text "are incompatible"]
 
-> ambiguousType :: String -> Doc -> ModuleIdent -> [Type] -> Context -> Type
->               -> String
-> ambiguousType what doc m tvs cx ty = show $
+> ambiguousType :: String -> Doc -> ModuleIdent -> Context -> Type -> String
+> ambiguousType what doc m cx ty = show $
 >   vcat [text "Ambiguous type variable" <> plural tvs <+>
 >           list (map (ppType m) tvs) <+> text "in type",
 >         ppQualType m (canonType (QualType cx ty)),
 >         text "inferred for" <+> text what, doc]
->   where plural (_:xs) = if null xs then empty else char 's'
+>   where tvs = nub [ty | TypePred _ ty <- cx]
+>         plural (_:xs) = if null xs then empty else char 's'
 >         list [x] = x
 >         list [x1,x2] = x1 <+> text "and" <+> x2
 >         list xs = hsep (map (<> comma) (init xs)) <+> text "and" <+> last xs

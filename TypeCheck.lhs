@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2004 2006-11-12 16:19:26Z wlux $
+% $Id: TypeCheck.lhs 2008 2006-11-14 22:20:47Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1020,7 +1020,8 @@ the current substitution.
 >     iEnv <- liftSt (liftSt envRt)
 >     theta <- liftSt fetchSt
 >     let (cx1,cx2) = partitionContext (subst theta cx)
->     mapM_ (checkTypePred p what doc m iEnv) cx2
+>     theta' <- foldM (checkTypePred p what doc m iEnv) idSubst cx2
+>     liftSt (updateSt_ (compose theta'))
 >     return (cx1,x)
 
 > partitionContext :: Context -> (Context,Context)
@@ -1032,16 +1033,19 @@ the current substitution.
 >         isTypeVar (TypeSkolem _) = False
 
 > checkTypePred :: Position -> String -> Doc -> ModuleIdent -> InstEnv
->               -> TypePred -> TcState ()
-> checkTypePred p what doc m iEnv (TypePred cls ty) =
->   case ty of
+>               -> TypeSubst -> TypePred -> TcState TypeSubst
+> checkTypePred p what doc m iEnv theta (TypePred cls ty) =
+>   case subst theta ty of
 >     TypeConstrained tys tv ->
 >       case filter (hasInstance iEnv cls) tys of
 >         [] -> errorAt p (noInstance what doc m cls ty)
->         [ty'] -> liftSt (updateSt_ (bindSubst tv ty'))
->         _ -> return ()
->     _ -> unless (hasInstance iEnv cls ty)
->                 (errorAt p (noInstance what doc m cls ty))
+>         [ty'] -> return (bindSubst tv ty' theta)
+>         _ -> return theta
+>     ty' ->
+>       do
+>         unless (hasInstance iEnv cls ty')
+>                (errorAt p (noInstance what doc m cls ty'))
+>         return theta
 
 > hasInstance :: InstEnv -> QualIdent -> Type -> Bool
 > hasInstance iEnv cls (TypeConstructor tc _) = CT cls tc `elemSet` iEnv

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 1999 2006-11-10 21:53:29Z wlux $
+% $Id: Base.lhs 2010 2006-11-15 18:22:59Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -252,17 +252,32 @@ used in order to check the export list of a module.
 
 \end{verbatim}
 \paragraph{Instances}
-The compiler maintains information about defined instances in a set of
-$C$-$T$-pairs, which associate a type class identifier and a type
-constructor identifier. This simple representation is sufficient
-because instances cannot be hidden. Instance relationships are
-recorded only with the original names of the class and constructor
-involved.
+The compiler maintains information about defined instances in an
+environment that maps $C$-$T$-pairs, which associate a type class
+identifier and a type constructor identifier, onto the context of the
+corresponding instance declaration. A flat environment is sufficient
+because instances are visible globally and cannot be hidden. Instance
+relationships are recorded only with the original names of the class
+and type constructor involved.
 \begin{verbatim}
 
 > data CT = CT QualIdent QualIdent deriving (Eq,Ord,Show)
 
-> type InstEnv = Set CT
+> type InstEnv = Env CT Context
+
+\end{verbatim}
+When checking for duplicate instance declarations, the compiler simply
+uses a set of $C$-$T$ pairs, which is derived from the instance
+environment by ignoring the instance contexts.
+
+\ToDo{Augment the \texttt{Env} module by a function which returns the
+  domain of an environment as a set.}
+\begin{verbatim}
+
+> type InstSet = Set CT
+
+> instSet :: InstEnv -> InstSet
+> instSet = fromListSet . map fst . envToList
 
 \end{verbatim}
 \paragraph{Operator precedences}
@@ -341,7 +356,7 @@ for the type \verb|a -> b|.
 >           predefTopEnv tc (DataType tc (length tys) (map (Just . fst) cs))
 
 > initIEnv :: InstEnv
-> initIEnv = zeroSet
+> initIEnv = emptyEnv
 
 > initDCEnv :: ValueEnv
 > initDCEnv = foldr (uncurry predefDC) emptyDCEnv (concatMap snd predefTypes)
@@ -530,9 +545,9 @@ name space.
 > isTypeDecl (NewtypeDecl _ _ _ _) = True
 > isTypeDecl (TypeDecl _ _ _ _) = True
 > isTypeDecl (ClassDecl _ _ _ _) = True
-> isTypeDecl (InstanceDecl _ _ _ _) = False
+> isTypeDecl (InstanceDecl _ _ _ _ _) = False
 > isTypeDecl (BlockDecl _) = False
-> isInstanceDecl (InstanceDecl _ _ _ _) = True
+> isInstanceDecl (InstanceDecl _ _ _ _ _) = True
 > isInstanceDecl _ = False
 > isBlockDecl (BlockDecl _) = True
 > isBlockDecl _ = False

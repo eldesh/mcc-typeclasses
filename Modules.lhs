@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2005 2006-11-12 16:32:37Z wlux $
+% $Id: Modules.lhs 2010 2006-11-15 18:22:59Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -114,12 +114,12 @@ declaration to the module.
 > checkModule mEnv (Module m es is ds) =
 >   do
 >     (pEnv,tcEnv,iEnv,tyEnv) <- importModules mEnv is
->     (tEnv,iEnv',ds') <- typeSyntaxCheck m tcEnv iEnv ds
+>     (tEnv,ds') <- typeSyntaxCheck m tcEnv iEnv ds
 >     (vEnv,ds'') <- syntaxCheck m tEnv tyEnv ds'
 >     es' <- checkExports m is tEnv vEnv es
 >     (pEnv',ds''') <- precCheck m pEnv $ rename ds''
 >     tcEnv' <- kindCheck m tcEnv ds'''
->     (tyEnv',ds'''') <- typeCheck m tcEnv' iEnv' tyEnv ds'''
+>     (iEnv',tyEnv',ds'''') <- typeCheck m tcEnv' iEnv tyEnv ds'''
 >     let (pEnv'',tcEnv'',tyEnv'') = qualifyEnv mEnv m pEnv' tcEnv' tyEnv'
 >     return (tcEnv'',iEnv',tyEnv'',
 >             Module m (Just es') is (qual tcEnv' tyEnv' ds''''),

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: IntfCheck.lhs 2010 2006-11-15 18:22:59Z wlux $
 %
 % Copyright (c) 2000-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -101,7 +101,7 @@ interface module only. However, this has not been implemented yet.
 >             and (zipWith (isVisible imethod) ds fs') =
 >               Just (mapM_ (checkMethodImport m tyEnv cls tv) (catMaybes ds))
 >         checkClass _ = Nothing
-> checkImport m _ _ _ (IInstanceDecl _ _ _) = return ()
+> checkImport m _ _ _ (IInstanceDecl _ _ _ _) = return ()
 > checkImport m _ _ tyEnv (IFunctionDecl p f ty) =
 >   checkValueInfo "function" checkFun tyEnv p f
 >   where checkFun (Value f' (ForAll _ ty')) =

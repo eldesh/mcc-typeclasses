@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2008 2006-11-14 22:20:47Z wlux $
+% $Id: TypeCheck.lhs 2010 2006-11-15 18:22:59Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -48,20 +48,23 @@ current module into the type environment.
 \begin{verbatim}
 
 > typeCheck :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv -> [TopDecl a]
->           -> Error (ValueEnv,[TopDecl Type])
+>           -> Error (InstEnv,ValueEnv,[TopDecl Type])
 > typeCheck m tcEnv iEnv tyEnv ds =
 >   run (do
 >          (cx,vds') <- tcDecls m tcEnv [d | BlockDecl d <- vds]
 >          unless (null cx) (internalError ("typeCheck " ++ show cx))
->          ids' <- mapM (tcInstDecl m tcEnv) (filter isInstanceDecl vds)
+>          ids' <- mapM (tcInstDecl m tcEnv) ids
 >          tyEnv' <- fetchSt
 >          theta <- liftSt fetchSt
->          return (subst theta tyEnv',
+>          return (iEnv',
+>                  subst theta tyEnv',
 >                  map untyped tds ++
 >                  map (fmap (subst theta)) (map BlockDecl vds' ++ ids')))
->       iEnv
+>       iEnv'
 >       (foldr (bindTypeValues m tcEnv) tyEnv tds)
 >   where (tds,vds) = partition isTypeDecl ds
+>         ids = filter isInstanceDecl vds
+>         iEnv' = foldr (bindInstance tcEnv) iEnv ids
 
 > untyped :: Functor f => f a -> f Type
 > untyped = fmap (internalError "untyped")
@@ -125,7 +128,7 @@ ambiguous.
 > bindTypeValues _ _ (TypeDecl _ _ _ _) tyEnv = tyEnv
 > bindTypeValues m tcEnv (ClassDecl _ cls tv ds) tyEnv = foldr bind tyEnv ds
 >   where bind (MethodSig _ fs ty) = bindMethods m tcEnv cls tv fs ty
-> bindTypeValues _ _ (InstanceDecl _ _ _ _) tyEnv = tyEnv
+> bindTypeValues _ _ (InstanceDecl _ _ _ _ _) tyEnv = tyEnv
 > bindTypeValues _ _ (BlockDecl _) tyEnv = tyEnv
 
 > bindConstr :: (QualIdent -> TypeScheme -> ValueInfo) -> ModuleIdent
@@ -149,6 +152,27 @@ ambiguous.
 > constrType :: ModuleIdent -> Ident -> [Ident] -> Type
 > constrType m tc tvs =
 >   TypeConstructor (qualifyWith m tc) (map TypeVariable [0..length tvs-1])
+
+\end{verbatim}
+\paragraph{Defining Instances}
+The type checker also extends the interface environment with the
+instance declarations from the current module.
+\begin{verbatim}
+
+> bindInstance :: TCEnv -> TopDecl a -> InstEnv -> InstEnv
+> bindInstance tcEnv (InstanceDecl p cx cls ty _) =
+>   bindEnv (CT cls' (root ty')) cx'
+>   where cls' =
+>           case qualLookupTopEnv cls tcEnv of
+>             [TypeClass cls' _] -> cls'
+>             _ -> internalError "bindInstance"
+>         ForAll _ (QualType cx' ty') =
+>           expandPolyType tcEnv (QualTypeExpr cx ty)
+>         root (TypeConstructor tc _) = tc
+>         root (TypeVariable _) = internalError "bindInstance"
+>         root (TypeConstrained _ _) = internalError "bindInstance"
+>         root (TypeArrow _ _) = qArrowId
+>         root (TypeSkolem _) = internalError "bindInstance"
 
 \end{verbatim}
 \paragraph{Type Signatures}
@@ -369,29 +393,28 @@ in \texttt{tcVariable} below.
 \end{verbatim}
 \paragraph{Instance declarations}
 When checking instance declarations, the type expected for each method
-is determined by the method's type signature with the type class
-variable being substituted by the instance type. It is important for
-the dictionary transformation (see Sect.~\ref{sec:dict-trans}) that
-the free type variables of the instance type are instantiated
-consistently when inferring the types of the method implementations.
-For that reason, the instance type is instantiated in
-\texttt{tcInstDecl} rather than having the instance type's type
-variables instantiated along with a method's type scheme in
-\texttt{tcMethodDeclLhs}. On the other hand, when checking that a
-method's inferred type is general enough in \texttt{genMethodDecl},
-the type checker must substitute the uninstantiated instance type in
-the method's type signature.
+is determined by the method's type signature with the instance type
+being substituted for the type class variable. It is important for the
+dictionary transformation (see Sect.~\ref{sec:dict-trans}) that the
+free type variables of the instance type are instantiated consistently
+when inferring the types of the method implementations.  For that
+reason, the instance type is instantiated in \texttt{tcInstDecl}
+rather than having the instance type's type variables instantiated
+along with a method's type scheme in \texttt{tcMethodDeclLhs}. On the
+other hand, when checking that a method's inferred type is general
+enough in \texttt{genMethodDecl}, the type checker must substitute the
+uninstantiated instance type in the method's type signature.
 \begin{verbatim}
 
 > tcInstDecl :: ModuleIdent -> TCEnv -> TopDecl a -> TcState (TopDecl Type)
-> tcInstDecl m tcEnv (InstanceDecl p cls ty ds) =
+> tcInstDecl m tcEnv (InstanceDecl p cx cls ty ds) =
 >   do
 >     ty'' <- liftM snd (inst ty')
->     liftM (InstanceDecl p cls ty)
->           (mapM (tcMethodDecl m tcEnv cls (rawType ty') ty'') ds)
->   where ty' = expandPolyType tcEnv (QualTypeExpr [] ty)
+>     liftM (InstanceDecl p cx cls ty)
+>           (mapM (tcMethodDecl m tcEnv cls ty' ty'') ds)
+>   where ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
 
-> tcMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> Type -> Type
+> tcMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> TypeScheme -> Type
 >              -> MethodDecl a -> TcState (MethodDecl Type)
 > tcMethodDecl m tcEnv cls instTy instTy' d =
 >   do
@@ -402,7 +425,7 @@ the method's type signature.
 
 > tcMethodDeclLhs :: QualIdent -> Type -> MethodDecl a -> TcState (Context,Type)
 > tcMethodDeclLhs cls ty (MethodDecl _ f _) =
->   tcMethod cls ty f >>= inst . typeScheme
+>   tcMethod cls (QualType [] ty) f >>= inst . typeScheme
 
 > tcMethodDeclRhs :: ModuleIdent -> TCEnv -> Type -> MethodDecl a
 >                 -> TcState (Context,MethodDecl Type)
@@ -415,9 +438,9 @@ the method's type signature.
 >     reduceContext p "method declaration" (ppMethodDecl d) m (concat cxs)
 >                   (MethodDecl p f eqs')
 
-> genMethodDecl :: ModuleIdent -> QualIdent -> Type -> Context -> Type
+> genMethodDecl :: ModuleIdent -> QualIdent -> TypeScheme -> Context -> Type
 >               -> MethodDecl a -> TcState ()
-> genMethodDecl m cls instTy cx ty (MethodDecl p f _) =
+> genMethodDecl m cls (ForAll _ instTy) cx ty (MethodDecl p f _) =
 >   do
 >     methTy <- tcMethod cls instTy f
 >     theta <- liftSt fetchSt
@@ -438,13 +461,13 @@ instance declaration.
   qualify all identifiers properly before invoking the type checker.}
 \begin{verbatim}
 
-> tcMethod :: QualIdent -> Type -> Ident -> TcState QualType
+> tcMethod :: QualIdent -> QualType -> Ident -> TcState QualType
 > tcMethod cls ty f =
 >   -- FIXME: The method f may not be in scope with same module qualifier
 >   --        as its class cls and it may be ambiguous
 >   liftM (instMethodType ty . rawType . funType (qualifyLike cls f)) fetchSt
->   where instMethodType instTy methTy =
->           normalize 0 (QualType [] (expandAliasType [instTy] (methTy)))
+>   where instMethodType (QualType cx ty) =
+>           normalize 0 . QualType cx . expandAliasType [ty]
 
 \end{verbatim}
 \paragraph{Foreign Functions}
@@ -1019,10 +1042,26 @@ the current substitution.
 >   do
 >     iEnv <- liftSt (liftSt envRt)
 >     theta <- liftSt fetchSt
->     let (cx1,cx2) = partitionContext (subst theta cx)
->     theta' <- foldM (checkTypePred p what doc m iEnv) idSubst cx2
+>     let (cx1,cx2) = partitionContext (reduceTypePreds iEnv (subst theta cx))
+>     theta' <- foldM (reportMissingInstance p what doc m iEnv) idSubst cx2
 >     liftSt (updateSt_ (compose theta'))
 >     return (cx1,x)
+
+> reduceTypePreds :: InstEnv -> Context -> Context
+> reduceTypePreds iEnv = concatMap (reduceTypePred iEnv)
+
+> reduceTypePred :: InstEnv -> TypePred -> Context
+> reduceTypePred iEnv (TypePred cls ty) =
+>   maybe [TypePred cls ty] (reduceTypePreds iEnv) (instContext iEnv cls ty)
+
+> instContext :: InstEnv -> QualIdent -> Type -> Maybe Context
+> instContext iEnv cls (TypeConstructor tc tys) =
+>   fmap (map (expandAliasType tys)) (lookupEnv (CT cls tc) iEnv)
+> instContext _ _ (TypeVariable _) = Nothing
+> instContext _ _ (TypeConstrained _ _) = Nothing
+> instContext iEnv cls (TypeArrow ty1 ty2) =
+>   fmap (map (expandAliasType [ty1,ty2])) (lookupEnv (CT cls qArrowId) iEnv)
+> instContext _ _ (TypeSkolem _) = Nothing
 
 > partitionContext :: Context -> (Context,Context)
 > partitionContext cx = partition (\(TypePred _ ty) -> isTypeVar ty) (nub cx)
@@ -1032,27 +1071,19 @@ the current substitution.
 >         isTypeVar (TypeArrow _ _) = False
 >         isTypeVar (TypeSkolem _) = False
 
-> checkTypePred :: Position -> String -> Doc -> ModuleIdent -> InstEnv
->               -> TypeSubst -> TypePred -> TcState TypeSubst
-> checkTypePred p what doc m iEnv theta (TypePred cls ty) =
+> reportMissingInstance :: Position -> String -> Doc -> ModuleIdent -> InstEnv
+>                       -> TypeSubst -> TypePred -> TcState TypeSubst
+> reportMissingInstance p what doc m iEnv theta (TypePred cls ty) =
 >   case subst theta ty of
 >     TypeConstrained tys tv ->
 >       case filter (hasInstance iEnv cls) tys of
 >         [] -> errorAt p (noInstance what doc m cls ty)
 >         [ty'] -> return (bindSubst tv ty' theta)
 >         _ -> return theta
->     ty' ->
->       do
->         unless (hasInstance iEnv cls ty')
->                (errorAt p (noInstance what doc m cls ty'))
->         return theta
+>     ty' -> errorAt p (noInstance what doc m cls ty')
 
 > hasInstance :: InstEnv -> QualIdent -> Type -> Bool
-> hasInstance iEnv cls (TypeConstructor tc _) = CT cls tc `elemSet` iEnv
-> hasInstance _ _ (TypeVariable _) = True
-> hasInstance iEnv cls (TypeConstrained tys _) = any (hasInstance iEnv cls) tys
-> hasInstance iEnv cls (TypeArrow _ _) = CT cls qArrowId `elemSet` iEnv
-> hasInstance _ _ (TypeSkolem _) = False
+> hasInstance iEnv cls ty = maybe False (const True) (instContext iEnv cls ty)
 
 \end{verbatim}
 When a constrained type variable that is not free in the type

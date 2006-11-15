@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 1999 2006-11-10 21:53:29Z wlux $
+% $Id: CurryPP.lhs 2010 2006-11-15 18:22:59Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -72,9 +72,10 @@ Declarations
 >   sep [ppTypeDeclLhs "type" tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
 > ppTopDecl (ClassDecl _ cls tv ds) =
 >   ppClassInstDecl (ppTypeDeclLhs "class" cls [tv]) (map ppMethodSig ds)
-> ppTopDecl (InstanceDecl _ cls ty ds) =
->   ppClassInstDecl (text "instance" <+> ppQIdent cls <+> ppTypeExpr 2 ty)
->                   (map ppMethodDecl ds)
+> ppTopDecl (InstanceDecl _ cx cls ty ds) =
+>   ppClassInstDecl
+>     (text "instance" <+> sep [ppContext cx,ppQIdent cls <+> ppTypeExpr 2 ty])
+>     (map ppMethodDecl ds)
 > ppTopDecl (BlockDecl d) = ppDecl d
 
 > ppTypeDeclLhs :: String -> Ident -> [Ident] -> Doc
@@ -190,8 +191,8 @@ Interfaces
 >   text "hiding" <+> ppIClassDecl (ppITypeDeclLhs "class" cls [tv]) []
 > ppIDecl (IClassDecl _ cls tv ds) =
 >   ppIClassDecl (ppITypeDeclLhs "class" cls [tv]) ds
-> ppIDecl (IInstanceDecl _ cls ty) =
->   text "instance" <+> ppQIdent cls <+> ppTypeExpr 2 ty
+> ppIDecl (IInstanceDecl _ cx cls ty) =
+>   text "instance" <+> sep [ppContext cx,ppQIdent cls <+> ppTypeExpr 2 ty]
 > ppIDecl (IFunctionDecl _ f ty) =
 >   ppQIdent f <+> text "::" <+> ppQualTypeExpr ty
 

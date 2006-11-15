@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2009 2006-11-15 10:52:07Z wlux $
+% $Id: Imports.lhs 2010 2006-11-15 18:22:59Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -12,6 +12,7 @@ interfaces into the current module.
 
 > module Imports(importInterface,importInterfaceIntf,importUnifyData) where
 > import Base
+> import Env
 > import Maybe
 > import Map
 > import Set
@@ -51,7 +52,7 @@ all instance declarations are always imported into the current module.
 > isHiddenDecl (ITypeDecl _ _ _ _) = False
 > isHiddenDecl (HidingClassDecl _ _ _) = True
 > isHiddenDecl (IClassDecl _ _ _ _) = False
-> isHiddenDecl (IInstanceDecl _ _ _) = False
+> isHiddenDecl (IInstanceDecl _ _ _ _) = False
 > isHiddenDecl (IFunctionDecl _ _ _) = False
 
 > isVisible :: (Import -> Set Ident -> Set Ident) -> Maybe ImportSpec
@@ -83,14 +84,18 @@ all instance declarations are always imported into the current module.
 >   | otherwise = Nothing
 
 > importInstances :: ModuleIdent -> [IDecl] -> InstEnv -> InstEnv
-> importInstances m ds iEnv =
->   foldr addToSet iEnv [ctPair m cls ty | IInstanceDecl _ cls ty <- ds]
->   where ctPair m cls ty = CT (qualQualify m cls) (root (toType m [] ty))
+> importInstances m ds iEnv = foldr (bindInstance m) iEnv ds
+
+> bindInstance :: ModuleIdent -> IDecl -> InstEnv -> InstEnv
+> bindInstance m (IInstanceDecl _ cx cls ty) =
+>   bindEnv (CT (qualQualify m cls) (root ty')) cx'
+>   where QualType cx' ty' = toQualType m [] (QualTypeExpr cx ty)
 >         root (TypeConstructor tc _) = tc
 >         root (TypeVariable _) = internalError "importInstances"
 >         root (TypeConstrained _ _) = internalError "importInstances"
 >         root (TypeArrow _ _) = qArrowId
 >         root (TypeSkolem _) = internalError "importInstances"
+> bindInstance _ _ = id
 
 \end{verbatim}
 Importing an interface into another interface is somewhat simpler
@@ -134,7 +139,7 @@ instances imported from another module.
 > entity (ITypeDecl _ tc _ _) = tc
 > entity (HidingClassDecl _ cls _) = cls
 > entity (IClassDecl _ cls _ _) = cls
-> entity (IInstanceDecl _ _ _) = qualify anonId
+> entity (IInstanceDecl _ _ _ _) = qualify anonId
 > entity (IFunctionDecl _ f _) = f
 
 > importEntitiesIntf :: Entity a

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: Exports.lhs 2010 2006-11-15 18:22:59Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -26,6 +26,7 @@ declarations which cannot be used in another module because
 
 > module Exports(exportInterface) where
 > import Base
+> import Env
 > import Maybe
 > import Set
 > import TopEnv
@@ -41,7 +42,7 @@ declarations which cannot be used in another module because
 >         ds = types ++ values ++ insts
 >         types = foldr (typeDecl m tcEnv tyEnv) [] es
 >         values = foldr (funDecl m tyEnv) [] es
->         insts = foldr (instDecl m tcEnv ts) [] (toListSet iEnv)
+>         insts = foldr (uncurry (instDecl m tcEnv ts)) [] (envToList iEnv)
 >         ts = [tc | ExportTypeWith tc _ <- es] ++
 >              map (qualQualify m) (hiddenTypes values)
 
@@ -108,12 +109,14 @@ declarations which cannot be used in another module because
 >   where ForAll _ ty = funType f tyEnv
 > funDecl _ _ (ExportTypeWith _ _) ds = ds
 
-> instDecl :: ModuleIdent -> TCEnv -> [QualIdent] -> CT -> [IDecl] -> [IDecl]
-> instDecl m tcEnv ts (CT cls tc) ds
+> instDecl :: ModuleIdent -> TCEnv -> [QualIdent] -> CT -> Context -> [IDecl]
+>          -> [IDecl]
+> instDecl m tcEnv ts (CT cls tc) cx ds
 >   | isJust (localIdent m cls) && cls `notElem` ts = ds
 >   | isJust (localIdent m tc) && not (isPrimTypeId tc) && tc `notElem` ts = ds
->   | otherwise = IInstanceDecl noPos (qualUnqualify m cls) (fromType m ty) : ds
->   where ty
+>   | otherwise = IInstanceDecl noPos cx' (qualUnqualify m cls) ty' : ds
+>   where QualTypeExpr cx' ty' = fromQualType m (QualType cx ty)
+>         ty
 >           | tc == qArrowId = TypeArrow (tvs !! 0) (tvs !! 1)
 >           | otherwise = TypeConstructor tc (take (constrKind tc tcEnv) tvs)
 >         tvs = map TypeVariable [0..]
@@ -155,7 +158,7 @@ not module \texttt{B}.
 >   modules (INewtypeDecl _ tc _ nc) = modules tc . modules nc
 >   modules (ITypeDecl _ tc _ ty) = modules tc . modules ty
 >   modules (IClassDecl _ cls _ ds) = modules cls . modules ds
->   modules (IInstanceDecl _ cls ty) = modules cls . modules ty
+>   modules (IInstanceDecl _ cx cls ty) = modules cx . modules cls . modules ty
 >   modules (IFunctionDecl _ f ty) = modules f . modules ty
 
 > instance HasModule ConstrDecl where
@@ -213,7 +216,7 @@ loading the imported modules.
 > definedType (INewtypeDecl _ tc _ _) tcs = tc : tcs
 > definedType (ITypeDecl _ tc _ _) tcs = tc : tcs
 > definedType (IClassDecl _ cls _ _) tcs = cls : tcs
-> definedType (IInstanceDecl _ _ _) tcs = tcs
+> definedType (IInstanceDecl _ _ _ _) tcs = tcs
 > definedType (IFunctionDecl _ _ _)  tcs = tcs
 
 > class HasType a where
@@ -230,7 +233,8 @@ loading the imported modules.
 >   usedTypes (INewtypeDecl _ _ _ nc) = usedTypes nc
 >   usedTypes (ITypeDecl _ _ _ ty) = usedTypes ty
 >   usedTypes (IClassDecl _ _ _ ds) = usedTypes ds
->   usedTypes (IInstanceDecl _ cls ty) = (cls :) . usedTypes ty
+>   usedTypes (IInstanceDecl _ cx cls ty) =
+>     usedTypes cx . (cls :) . usedTypes ty
 >   usedTypes (IFunctionDecl _ _ ty) = usedTypes ty
 
 > instance HasType ConstrDecl where

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 1999 2006-11-10 21:53:29Z wlux $
+% $Id: SyntaxCheck.lhs 2010 2006-11-15 18:22:59Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -101,8 +101,8 @@ in order to check the global declaration group.
 >   where (ds',ds'') = span isBlockDecl ds
 
 > checkTopDeclRhs :: TypeEnv -> VarEnv -> TopDecl a -> Error (TopDecl a)
-> checkTopDeclRhs tEnv env (InstanceDecl p cls ty ds) =
->   liftE (InstanceDecl p cls ty) (checkInstDecls tEnv env p cls ds)
+> checkTopDeclRhs tEnv env (InstanceDecl p cx cls ty ds) =
+>   liftE (InstanceDecl p cx cls ty) (checkInstDecls tEnv env p cls ds)
 > checkTopDeclRhs _ env (BlockDecl d) = liftE BlockDecl (checkDeclRhs env d)
 > checkTopDeclRhs _ _ d = return d
 
@@ -558,7 +558,7 @@ Auxiliary definitions.
 > constrs (NewtypeDecl _ _ _ (NewConstrDecl p c _)) = [P p c]
 > constrs (TypeDecl _ _ _ _) = []
 > constrs (ClassDecl _ _ _ _) = []
-> constrs (InstanceDecl _ _ _ _) = []
+> constrs (InstanceDecl _ _ _ _ _) = []
 > constrs (BlockDecl _) = []
 
 > mthds :: TopDecl a -> [P Ident]
@@ -566,7 +566,7 @@ Auxiliary definitions.
 > mthds (NewtypeDecl _ _ _ _) = []
 > mthds (TypeDecl _ _ _ _) = []
 > mthds (ClassDecl _ _ _ ds) = [P p f | MethodSig p fs _ <- ds, f <- fs]
-> mthds (InstanceDecl _ _ _ _) = []
+> mthds (InstanceDecl _ _ _ _ _) = []
 > mthds (BlockDecl _) = []
 
 > vars :: Decl a -> [P Ident]

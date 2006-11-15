@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2006 2006-11-13 08:19:13Z wlux $
+% $Id: CurryParser.lhs 2010 2006-11-15 18:22:59Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -188,10 +188,14 @@ directory path to the module is ignored.
 
 > instanceDecl :: Parser Token (TopDecl ()) a
 > instanceDecl =
->   InstanceDecl <$> position <*-> token KW_instance <*> qtycls <*> type2
->                <*> methodDefs
+>   instDecl <$> position <*-> token KW_instance <*> instHead <*> methodDefs
 >   where methodDefs = token KW_where <-*> layout (methodDecl `sepBy` semicolon)
 >                `opt` []
+>         instDecl p (cx,cls,ty) = InstanceDecl p cx cls ty
+
+> instHead :: Parser Token ([ClassAssert],QualIdent,TypeExpr) a
+> instHead = (,,) <$> context <*-> token DoubleRightArrow <*> qtycls <*> type2
+>       <|?> (,,) [] <$> qtycls <*> type2
 
 > methodSig :: Parser Token MethodSig a
 > methodSig =
@@ -347,8 +351,8 @@ directory path to the module is ignored.
 >                  <|> Nothing <$-> token Underscore
 
 > iInstanceDecl :: Parser Token IDecl a
-> iInstanceDecl =
->   IInstanceDecl <$> position <*-> token KW_instance <*> qtycls <*> type2
+> iInstanceDecl = instDecl <$> position <*-> token KW_instance <*> instHead
+>   where instDecl p (cx,cls,ty) = IInstanceDecl p cx cls ty
 
 > iFunctionDecl :: Parser Token IDecl a
 > iFunctionDecl =

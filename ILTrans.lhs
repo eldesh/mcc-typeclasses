@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2003 2006-11-12 14:34:01Z wlux $
+% $Id: ILTrans.lhs 2010 2006-11-15 18:22:59Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -49,7 +49,7 @@ synonyms in place of newtype declarations (see Sect.~\ref{sec:IL}).
 >   translNewtype m tyEnv tc tvs nc
 > translTopDecl _ _ (TypeDecl _ _ _ _) = []
 > translTopDecl _ _ (ClassDecl _ _ _ _) = []
-> translTopDecl _ _ (InstanceDecl _ _ _ _) = []
+> translTopDecl _ _ (InstanceDecl _ _ _ _ _) = []
 > translTopDecl m tyEnv (BlockDecl d) = translDecl m tyEnv d
 
 > translDecl :: ModuleIdent -> ValueEnv -> Decl a -> [IL.Decl]

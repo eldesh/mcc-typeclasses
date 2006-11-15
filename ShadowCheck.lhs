@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 1999 2006-11-10 21:53:29Z wlux $
+% $Id: ShadowCheck.lhs 2010 2006-11-15 18:22:59Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -74,7 +74,7 @@ traversal of the syntax tree.
 >   shadow p = shadowGroup p
 
 > instance SyntaxTree (TopDecl a) where
->   shadow _ (InstanceDecl p _ _ ds) = shadow p ds
+>   shadow _ (InstanceDecl p _ _ _ ds) = shadow p ds
 >   shadow p (BlockDecl d) = shadow p d
 >   shadow _ _ = id
 

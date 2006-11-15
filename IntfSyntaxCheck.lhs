@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2010 2006-11-15 18:22:59Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -47,7 +47,7 @@ The latter must not occur in type expressions in interfaces.
 > bindType (HidingClassDecl _ cls _) = qualBindTopEnv cls (Class cls [])
 > bindType (IClassDecl _ cls _ ds) =
 >   qualBindTopEnv cls (Class cls (map imethod (catMaybes ds)))
-> bindType (IInstanceDecl _ _ _) = id
+> bindType (IInstanceDecl _ _ _ _) = id
 > bindType (IFunctionDecl _ _ _) = id
 
 \end{verbatim}
@@ -76,9 +76,9 @@ during syntax checking of type expressions.
 > checkIDecl env (IClassDecl p cls tv ds) =
 >   checkTypeLhs env p [tv] &&>
 >   liftE (IClassDecl p cls tv) (mapE (liftMaybe (checkIMethodDecl env tv)) ds)
-> checkIDecl env (IInstanceDecl p cls ty) =
+> checkIDecl env (IInstanceDecl p cx cls ty) =
 >   checkClass env p cls &&>
->   liftE (IInstanceDecl p cls) (checkSimpleType env p ty)
+>   liftE (IInstanceDecl p cx cls) (checkInstType env p cx ty)
 > checkIDecl env (IFunctionDecl p f ty) =
 >   liftE (IFunctionDecl p f) (checkQualType env p ty)
 
@@ -125,6 +125,16 @@ during syntax checking of type expressions.
 >           (nub (filter (`notElem` tvs) (fv ty')))
 >     return ty'
 
+> checkInstType :: TypeEnv -> Position -> [ClassAssert] -> TypeExpr
+>               -> Error TypeExpr
+> checkInstType env p cx ty =
+>   do
+>     QualTypeExpr _ ty' <- checkQualType env p (QualTypeExpr cx ty)
+>     unless (isSimpleType ty' && not (isTypeSynonym env (root ty')) &&
+>             null (duplicates (fv ty')))
+>            (errorAt p (notSimpleType ty'))
+>     return ty'
+
 > checkQualType :: TypeEnv -> Position -> QualTypeExpr -> Error QualTypeExpr
 > checkQualType env p (QualTypeExpr cx ty) =
 >   do
@@ -159,15 +169,6 @@ during syntax checking of type expressions.
 > checkType env p (ListType ty) = liftE ListType (checkType env p ty)
 > checkType env p (ArrowType ty1 ty2) =
 >   liftE2 ArrowType (checkType env p ty1) (checkType env p ty2)
-
-> checkSimpleType :: TypeEnv -> Position -> TypeExpr -> Error TypeExpr
-> checkSimpleType env p ty =
->   do
->     ty' <- checkType env p ty
->     unless (isSimpleType ty' && not (isTypeSynonym env (root ty')) &&
->             null (duplicates (fv ty')))
->            (errorAt p (notSimpleType ty'))
->     return ty'
 
 > checkClass :: TypeEnv -> Position -> QualIdent -> Error ()
 > checkClass env p cls =

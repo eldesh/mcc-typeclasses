@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 1999 2006-11-10 21:53:29Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2010 2006-11-15 18:22:59Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -36,13 +36,13 @@ later for checking the optional export list of the current module.
 \begin{verbatim}
 
 > typeSyntaxCheck :: ModuleIdent -> TCEnv -> InstEnv -> [TopDecl a]
->                 -> Error (TypeEnv,InstEnv,[TopDecl a])
+>                 -> Error (TypeEnv,[TopDecl a])
 > typeSyntaxCheck m tcEnv iEnv ds =
 >   do
 >     reportDuplicates duplicateType repeatedType (map tident tds)
 >     ds' <- mapE (checkTopDecl env) ds
->     iEnv' <- checkInstances env iEnv ds'
->     return (env,iEnv',ds')
+>     checkInstances env (instSet iEnv) ds'
+>     return (env,ds')
 >   where tds = filter isTypeDecl ds
 >         env = foldr (bindType m) (fmap typeKind tcEnv) tds
 
@@ -60,7 +60,7 @@ later for checking the optional export list of the current module.
 >   globalBindTopEnv m tc (Alias (qualifyWith m tc))
 > bindType m (ClassDecl _ cls _ ds) =
 >   globalBindTopEnv m cls (Class (qualifyWith m cls) (concatMap methods ds))
-> bindType m (InstanceDecl _ _ _ _) = id
+> bindType m (InstanceDecl _ _ _ _ _) = id
 > bindType _ (BlockDecl _) = id
 
 \end{verbatim}
@@ -84,10 +84,10 @@ signatures.
 >   do
 >     checkTypeLhs env p [tv]
 >     liftE (ClassDecl p cls tv) (mapE (checkMethodSig env tv) ds)
-> checkTopDecl env (InstanceDecl p cls ty ds) =
+> checkTopDecl env (InstanceDecl p cx cls ty ds) =
 >   checkClass env p cls &&>
->   liftE2 (InstanceDecl p cls)
->          (checkSimpleType env p ty)
+>   liftE2 (InstanceDecl p cx cls)
+>          (checkInstType env p cx ty)
 >          (mapE (checkMethodDecl env) ds)
 > checkTopDecl env (BlockDecl d) = liftE BlockDecl (checkDecl env d)
 
@@ -228,6 +228,16 @@ interpret the identifier as such.
 >           (nub (filter (\tv -> tv == anonId || tv `notElem` tvs) (fv ty')))
 >     return ty'
 
+> checkInstType :: TypeEnv -> Position -> [ClassAssert] -> TypeExpr
+>               -> Error TypeExpr
+> checkInstType env p cx ty =
+>   do
+>     QualTypeExpr _ ty' <- checkQualType env p (QualTypeExpr cx ty)
+>     unless (isSimpleType ty' && not (isTypeSynonym env (root ty')) &&
+>             null (duplicates (filter (anonId /=) (fv ty'))))
+>            (errorAt p (notSimpleType ty'))
+>     return ty'
+
 > checkQualType :: TypeEnv -> Position -> QualTypeExpr -> Error QualTypeExpr
 > checkQualType env p (QualTypeExpr cx ty) =
 >   do
@@ -266,15 +276,6 @@ interpret the identifier as such.
 > checkType env p (ArrowType ty1 ty2) =
 >   liftE2 ArrowType (checkType env p ty1) (checkType env p ty2)
 
-> checkSimpleType :: TypeEnv -> Position -> TypeExpr -> Error TypeExpr
-> checkSimpleType env p ty =
->   do
->     ty' <- checkType env p ty
->     unless (isSimpleType ty' && not (isTypeSynonym env (root ty')) &&
->             null (duplicates (filter (anonId /=) (fv ty'))))
->            (errorAt p (notSimpleType ty'))
->     return ty'
-
 > checkClass :: TypeEnv -> Position -> QualIdent -> Error ()
 > checkClass env p cls =
 >   case qualLookupTopEnv cls env of
@@ -291,21 +292,21 @@ includes duplicate instances defined in the current module as well as
 conflicts between locally defined instances and imported instances.
 \begin{verbatim}
 
-> checkInstances :: TypeEnv -> InstEnv -> [TopDecl a] -> Error InstEnv
+> checkInstances :: TypeEnv -> InstSet -> [TopDecl a] -> Error ()
 > checkInstances tEnv iEnv ds =
 >   do
 >     sequenceE_ [errorAt p (duplicateInstance inst) | P p inst <- unique cts,
 >                                                      inst `elemSet` iEnv] &&>
 >       reportDuplicates duplicateInstance repeatedInstance cts
->     return (foldr bindInstance iEnv cts)
+>     return ()
 >   where cts = [P p (qualCT tEnv (CT cls (root ty)))
->               | InstanceDecl p cls ty _ <- ds]
+>               | InstanceDecl p _ cls ty _ <- ds]
 >         unique [] = []
 >         unique (x:xs)
 >           | x `elem` xs = unique (filter (x /=) xs)
 >           | otherwise = x : unique xs
 
-> bindInstance :: P CT -> InstEnv -> InstEnv
+> bindInstance :: P CT -> InstSet -> InstSet
 > bindInstance (P _ inst) iEnv = addToSet inst iEnv
 
 > qualCT :: TypeEnv -> CT -> CT
@@ -324,7 +325,7 @@ Auxiliary definitions.
 > tident (NewtypeDecl p tc _ _) = P p tc
 > tident (TypeDecl p tc _ _) = P p tc
 > tident (ClassDecl p cls _ _) = P p cls
-> tident (InstanceDecl _ _ _ _) = internalError "tident"
+> tident (InstanceDecl _ _ _ _ _) = internalError "tident"
 > tident (BlockDecl _) = internalError "tident"
 
 > isSimpleType :: TypeExpr -> Bool

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 1999 2006-11-10 21:53:29Z wlux $
+% $Id: CurrySyntax.lhs 2010 2006-11-15 18:22:59Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -55,7 +55,7 @@ parsed representation of a Curry program.
 >   | NewtypeDecl Position Ident [Ident] NewConstrDecl
 >   | TypeDecl Position Ident [Ident] TypeExpr
 >   | ClassDecl Position Ident Ident [MethodSig]
->   | InstanceDecl Position QualIdent TypeExpr [MethodDecl a]
+>   | InstanceDecl Position [ClassAssert] QualIdent TypeExpr [MethodDecl a]
 >   | BlockDecl (Decl a)
 >   deriving (Eq,Show)
 
@@ -110,7 +110,7 @@ Interface declarations are restricted to type declarations and signatures.
 >   | ITypeDecl Position QualIdent [Ident] TypeExpr
 >   | HidingClassDecl Position QualIdent Ident
 >   | IClassDecl Position QualIdent Ident [Maybe IMethodDecl]
->   | IInstanceDecl Position QualIdent TypeExpr
+>   | IInstanceDecl Position [ClassAssert] QualIdent TypeExpr
 >   | IFunctionDecl Position QualIdent QualTypeExpr
 >   deriving (Eq,Show)
 
@@ -250,7 +250,8 @@ The abstract syntax tree is a functor with respect to the attributes.
 >   fmap _ (NewtypeDecl p tc tvs nc) = NewtypeDecl p tc tvs nc
 >   fmap _ (TypeDecl p tc tvs ty) = TypeDecl p tc tvs ty
 >   fmap f (ClassDecl p cls tv ds) = ClassDecl p cls tv ds
->   fmap f (InstanceDecl p cls ty ds) = InstanceDecl p cls ty (map (fmap f) ds)
+>   fmap f (InstanceDecl p cx cls ty ds) =
+>     InstanceDecl p cx cls ty (map (fmap f) ds)
 >   fmap f (BlockDecl d) = BlockDecl (fmap f d)
 
 > instance Functor MethodDecl where

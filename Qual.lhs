@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 1999 2006-11-10 21:53:29Z wlux $
+% $Id: Qual.lhs 2010 2006-11-15 18:22:59Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -38,8 +38,9 @@ functions remain unchanged.
 >     TypeDecl p tc tvs (qual tcEnv tyEnv ty)
 >   qual tcEnv tyEnv (ClassDecl p cls tv ds) =
 >     ClassDecl p cls tv (qual tcEnv tyEnv ds)
->   qual tcEnv tyEnv (InstanceDecl p cls ty ds) =
->     InstanceDecl p (qualIdent tcEnv cls)
+>   qual tcEnv tyEnv (InstanceDecl p cx cls ty ds) =
+>     InstanceDecl p (qual tcEnv tyEnv cx)
+>                  (qualIdent tcEnv cls)
 >                  (qual tcEnv tyEnv ty)
 >                  (qual tcEnv tyEnv ds)
 >   qual tcEnv tyEnv (BlockDecl d) = BlockDecl (qual tcEnv tyEnv d)

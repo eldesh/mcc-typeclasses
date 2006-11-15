@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2003 2006-11-12 14:34:01Z wlux $
+% $Id: Imports.lhs 2009 2006-11-15 10:52:07Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -37,7 +37,7 @@ all instance declarations are always imported into the current module.
 > importInterface m q is (pEnv,tcEnv,iEnv,tyEnv) (Interface m' _ ds) =
 >   (importEntities precs m q vs id m' ds' pEnv,
 >    importEntities types m q ts (importMembers vs) m' ds' tcEnv,
->    importInstances m ds' iEnv,
+>    importInstances m' ds' iEnv,
 >    importEntities values m q vs id m' ds' tyEnv)
 >   where ds' = filter (not . isHiddenDecl) ds
 >         ts = isVisible addType is

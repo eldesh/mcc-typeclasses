@@ -1,4 +1,4 @@
--- $Id: ForeignPtr.curry 1744 2005-08-23 16:17:12Z wlux $
+-- $Id: ForeignPtr.curry 2011 2006-11-16 12:17:25Z wlux $
 --
 -- Copyright (c) 2005, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -11,6 +11,9 @@ type FinalizerPtr a        = FunPtr (           Ptr a -> IO ())
 type FinalizerEnvPtr env a = FunPtr (Ptr env -> Ptr a -> IO ())
 
 data ForeignPtr a
+
+instance Eq (ForeignPtr a) where
+  p1 == p2 = unsafeForeignPtrToPtr p1 == unsafeForeignPtrToPtr p2
 
 foreign import primitive "newForeignPtr"
         newForeignPtr_ :: Ptr a -> IO (ForeignPtr a)

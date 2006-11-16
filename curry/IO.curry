@@ -14,11 +14,43 @@ module IO(Handle, HandlePosn, IOMode(..), BufferMode(..), SeekMode(..),
 	  readFile, writeFile, appendFile) where
 
 data Handle
+instance Eq Handle where
+  (==) = primEqHandle
+    where foreign import primitive primEqHandle :: Handle -> Handle -> Bool
+
 data HandlePosn	= HandlePosn Handle Int
+instance Eq HandlePosn where
+  p1 == p2 =
+    case (p1,p2) of
+      (HandlePosn h1 n1,HandlePosn h2 n2) -> h1 == h2 && n1 == n2
 
 data IOMode = ReadMode | WriteMode | AppendMode | ReadWriteMode
+instance Eq IOMode where
+  m1 == m2 =
+    case (m1,m2) of
+      (ReadMode,ReadMode) -> True
+      (WriteMode,WriteMode) -> True
+      (AppendMode,AppendMode) -> True
+      (ReadWriteMode,ReadWriteMode) -> True
+      _ -> False
+
 data BufferMode = NoBuffering | LineBuffering | BlockBuffering (Maybe Int)
+instance Eq BufferMode where
+  m1 == m2 =
+    case (m1,m2) of
+      (NoBuffering,NoBuffering) -> True
+      (LineBuffering,LineBuffering) -> True
+      (BlockBuffering n1,BlockBuffering n2) -> n1 == n2
+      _ -> False
+
 data SeekMode = AbsoluteSeek | RelativeSeek | SeekFromEnd
+instance Eq SeekMode where
+  m1 == m2 =
+    case (m1,m2) of
+      (AbsoluteSeek,AbsoluteSeek) -> True
+      (RelativeSeek,RelativeSeek) -> True
+      (SeekFromEnd,SeekFromEnd) -> True
+      _ -> False
 
 --- Predefined handles for standard input, output, and error
 foreign import primitive stdin  :: Handle

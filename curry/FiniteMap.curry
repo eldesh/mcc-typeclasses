@@ -4,16 +4,16 @@
 -- See ../LICENSE for the full license.
 
 module FiniteMap(FM, nullFM, zeroFM, unitFM, addToFM, deleteFromFM,
-                 lookupFM, fromListFM, toListFM, eqFM, neqFM,
+                 lookupFM, fromListFM, toListFM,
                  showFM, showsFM, mapFM) where
-import List
-
-infix 4 `eqFM`,`neqFM`
 
 data FM a b =
     Empty
   | Node2 (FM a b) (a,b) (FM a b)
   | Node3 (FM a b) (a,b) (FM a b) (a,b) (FM a b)
+
+instance (Eq a, Eq b) => Eq (FM a b) where
+  xys1 == xys2 = toListFM xys1 == toListFM xys2
 
 nullFM :: FM a b -> Bool
 nullFM Empty             = True
@@ -142,10 +142,6 @@ toListFM = flip elems []
   where elems Empty xs = xs
         elems (Node2 a x b) xs = elems a (x : elems b xs)
         elems (Node3 a x b y c) xs = elems a (x : elems b (y : elems c xs))
-
-eqFM, neqFM :: FM a b -> FM a b -> Bool
-xys1 `eqFM` xys2 = toListFM xys1 == toListFM xys2
-xys1 `neqFM` xys2 = not (xys1 `eqFM` xys2)
 
 showFM :: FM a b -> String
 showFM xys = showsFM xys ""

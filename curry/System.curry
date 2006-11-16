@@ -1,4 +1,4 @@
--- $Id: System.curry 1744 2005-08-23 16:17:12Z wlux $
+-- $Id: System.curry 2011 2006-11-16 12:17:25Z wlux $
 --
 -- Copyright (c) 2002-2005, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -13,6 +13,12 @@ import CError
 import MarshalError
 
 data ExitCode = ExitSuccess | ExitFailure Int
+instance Eq ExitCode where
+  e1 == e2 =
+    case (e1,e2) of
+      (ExitSuccess,ExitSuccess) -> True
+      (ExitFailure n1,ExitFailure n2) -> True
+      _ -> False
 
 foreign import ccall curry_argc :: IO Int
 foreign import ccall curry_argv :: IO (Ptr CString)

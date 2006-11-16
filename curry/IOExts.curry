@@ -1,4 +1,4 @@
--- $Id: IOExts.curry 1902 2006-04-22 18:13:50Z wlux $
+-- $Id: IOExts.curry 2011 2006-11-16 12:17:25Z wlux $
 --
 -- Copyright (c) 2004-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -21,6 +21,9 @@ foreign import primitive fixIO :: (a -> IO a) -> IO a
 
 -- mutable references
 data IORef a
+instance Eq (IORef a) where
+  (==) = primEqIORef
+    where foreign import primitive primEqIORef :: IORef a -> IORef a -> Bool
 
 foreign import primitive newIORef :: a -> IO (IORef a)
 foreign import primitive readIORef :: IORef a -> IO a
@@ -31,6 +34,10 @@ modifyIORef r f = readIORef r >>= \x -> writeIORef r (f x)
 
 -- mutable arrays
 data IOArray a = IOArray (Int,Int) (IOVector a)
+instance Eq (IOArray a) where
+  a1 == a2 =
+    case (a1,a2) of
+      (IOArray b1 v1,IOArray b2 v2) -> b1 == b2 && v1 == v2
 
 newIOArray :: (Int,Int) -> a -> IO (IOArray a)
 newIOArray b x =

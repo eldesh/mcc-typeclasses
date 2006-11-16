@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: vector.nw 1910 2006-05-01 09:37:16Z wlux $
+% $Id: vector.nw 2011 2006-11-16 12:17:25Z wlux $
 %
 % Copyright (c) 2002-2005, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -34,6 +34,43 @@ static NodeInfo vector_info = { VECTOR_KIND, 0, 0, 0, "(,)", eval_whnf, 0, 0 };
 static const struct vector_node empty = {
     &vector_info, vector_node_size(0), { 0 }
 };
+
+@ 
+Two vector nodes are considered equal, if they are physically the
+same.
+
+<<refs.c>>=
+DECLARE_CONST(__Prelude__False);
+DECLARE_CONST(__Prelude__True);
+
+#define Prelude_False CONST(__Prelude__False)
+#define Prelude_True  CONST(__Prelude__True)
+
+DECLARE_ENTRYPOINT(__primEqIOVector);
+DECLARE_LABEL(__primEqIOVector_1);
+
+FUNCTION(__primEqIOVector)
+{
+    Node *aux;
+    EXPORT_LABEL(__primEqIOVector)
+ ENTRY_LABEL(__primEqIOVector)
+    EVAL_RIGID_VECTOR(__primEqIOVector);
+    aux	  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = aux;
+    GOTO(__primEqIOVector_1);
+}
+
+static
+FUNCTION(__primEqIOVector_1)
+{
+    Node *r;
+ ENTRY_LABEL(__primEqIOVector_1)
+    EVAL_RIGID_VECTOR(__primEqIOVector);
+    r	= sp[1] == sp[0] ? Prelude_True : Prelude_False;
+    sp += 2;
+    RETURN(r);
+}
 
 @ 
 The action [[newIOVector]] allocates a new vector with a specified

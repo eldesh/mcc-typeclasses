@@ -1,4 +1,4 @@
--- $Id: Ports.curry 1880 2006-04-03 09:11:31Z wlux $
+-- $Id: Ports.curry 2011 2006-11-16 12:17:25Z wlux $
 --
 -- Copyright (c) 2004-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -17,6 +17,10 @@ import Unsafe
 -- Local ports
 
 newtype Port a = Port (IORef [a])
+
+instance Eq (Port a) where
+  Port p1 == Port p2 = p1 == p2
+
 
 openPort :: Port a -> [a] -> Success
 openPort (Port r) ms = r =:= unsafePerformIO (newIORef ms)
@@ -42,6 +46,15 @@ data SP_Msg = SP_Put String
             | SP_GetChar Char
             | SP_EOF Bool
             | SP_Close
+
+instance Eq SP_Msg where
+  m1 == m2 =
+    case (m1,m2) of
+      (SP_Put s1,SP_Put s2) -> s1 == s2
+      (SP_GetLine s1,SP_GetLine s2) -> s1 == s2
+      (SP_GetChar c1,SP_GetChar c2) -> c1 == c2
+      (SP_EOF b1,SP_EOF b2) -> b1 == b2
+      (SP_Close,SP_Close) -> True
 
 openProcessPort :: String -> IO (Port SP_Msg)
 openProcessPort cmd =

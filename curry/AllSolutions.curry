@@ -1,4 +1,4 @@
--- $Id: AllSolutions.curry 1878 2006-04-03 09:06:10Z wlux $
+-- $Id: AllSolutions.curry 2011 2006-11-16 12:17:25Z wlux $
 --
 -- Copyright (c) 2004, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -11,6 +11,14 @@ import Maybe
 import Monad
 
 data SearchTree a = Fail | Val a | Or [SearchTree a]
+
+instance Eq a => Eq (SearchTree a) where
+  t1 == t2 =
+    case (t1,t2) of
+      (Fail,Fail) -> True
+      (Val x,Val y) -> x == y
+      (Or ts1,Or ts2) -> ts1 == ts2
+      _ -> False
 
 foreign import primitive encapsulate :: a -> IO (a -> Success)
 

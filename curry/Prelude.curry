@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2000 2006-11-11 16:21:14Z wlux $
+-- $Id: Prelude.curry 2011 2006-11-16 12:17:25Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -108,9 +108,27 @@ foreign import primitive "failed" undefined :: a
 foreign import primitive failed :: a
 
 
+-- Standard classes
+class Eq a where
+  -- NB (/=) is temporarily an overloaded function until default method
+  --    implementations are supported.
+  (==) :: a -> a -> Bool
+--(/=) :: a -> a -> Bool
+
+(/=) :: Eq a => a -> a -> Bool
+(/=) x y = not (x == y)
+
+
 -- Boolean values
 -- already defined as builtin, since it is required for if-then-else
 data Bool = False | True
+instance Eq Bool where
+  x == y =
+    case (x,y) of
+      (False,False) -> True
+      (False,True) -> False
+      (True,False) -> False
+      (True,True) -> True
 
 --- Sequential conjunction on Booleans.
 (&&)            :: Bool -> Bool -> Bool
@@ -139,16 +157,15 @@ otherwise       :: Bool
 otherwise       = True
 
 
---- Equality on finite ground data terms
-foreign import primitive (==) :: a -> a -> Bool
-
---- Disequality
-(/=) :: a -> a -> Bool
-(/=) x y = not (x == y)
-
-
 -- Ordering
 data Ordering = LT | EQ | GT
+instance Eq Ordering where
+  x == y =
+    case (x,y) of
+      (LT,LT) -> True
+      (EQ,EQ) -> True
+      (GT,GT) -> True
+      _ -> False
 
 --- Comparison of arbitrary ground data terms.
 --- Data constructors are compared in the order of their definition
@@ -183,6 +200,10 @@ min x y = if x <= y then x else y
 -- Pairs
 
 --++ data (a,b) = (a,b)
+instance (Eq a,Eq b) => Eq (a,b) where
+  x == y =
+    case (x,y) of
+      ((x1,x2),(y1,y2)) -> x1 == y1 && x2 == y2
 
 --- Selects the first component of a pair.
 fst             :: (a,b) -> a
@@ -193,13 +214,49 @@ snd             :: (a,b) -> b
 snd (_,y)       = y
 
 
+-- Triples and other tuples
+instance (Eq a,Eq b,Eq c) => Eq (a,b,c) where
+  x == y =
+    case (x,y) of
+      ((x1,x2,x3),(y1,y2,y3)) -> x1 == y1 && x2 == y2 && x3 == y3
+instance (Eq a,Eq b,Eq c,Eq d) => Eq (a,b,c,d) where
+  x == y =
+    case (x,y) of
+      ((x1,x2,x3,x4),(y1,y2,y3,y4)) ->
+         x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4
+instance (Eq a,Eq b,Eq c,Eq d,Eq e) => Eq (a,b,c,d,e) where
+  x == y =
+    case (x,y) of
+      ((x1,x2,x3,x4,x5),(y1,y2,y3,y4,y5)) ->
+         x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5
+instance (Eq a,Eq b,Eq c,Eq d,Eq e,Eq f) => Eq (a,b,c,d,e,f) where
+  x == y =
+    case (x,y) of
+      ((x1,x2,x3,x4,x5,x6),(y1,y2,y3,y4,y5,y6)) ->
+         x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5 && x6 == y6
+instance (Eq a,Eq b,Eq c,Eq d,Eq e,Eq f,Eq g) => Eq (a,b,c,d,e,f,g) where
+  x == y =
+    case (x,y) of
+      ((x1,x2,x3,x4,x5,x6,x7),(y1,y2,y3,y4,y5,y6,y7)) ->
+         x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 &&
+	 x5 == y5 && x6 == y6 && x7 == y7
+
+
 -- Unit type
 --++ data () = ()
+instance Eq () where
+  x == y = case (x,y) of ((),()) -> True
 
 
 -- Lists
 
 --++ data [a] = [] | a : [a]
+instance Eq a => Eq [a] where
+  x == y =
+    case (x,y) of
+      ([],[]) -> True
+      (x1:xs,y1:ys) -> x1 == y1 && xs == ys
+      _ -> False
 
 --- Evaluates the argument to spine form and returns it.
 --- Suspends until the result is bound to a non-variable spine.
@@ -394,15 +451,15 @@ all        :: (a -> Bool) -> [a] -> Bool
 all p xs   = and (map p xs)
 
 --- Element of a list?
-elem       :: a -> [a] -> Bool
+elem       :: Eq a => a -> [a] -> Bool
 elem x     = any (x==)
 
 --- Not element of a list?
-notElem    :: a -> [a] -> Bool
+notElem    :: Eq a => a -> [a] -> Bool
 notElem x  = all (x/=)
 
 --- Looks up a key in an association list
-lookup		     :: a -> [(a,b)] -> Maybe b
+lookup		     :: Eq a => a -> [(a,b)] -> Maybe b
 lookup x []	     = Nothing
 lookup x ((y,z):yzs) = if x == y then Just z else lookup x yzs
 
@@ -412,6 +469,9 @@ lookup x ((y,z):yzs) = if x == y then Just z else lookup x yzs
 
 -- Characters
 data Char
+instance Eq Char where
+  (==) = primEqChar
+    where foreign import ccall "prims.h" primEqChar :: Char -> Char -> Bool
 
 --- Converts a characters into its ASCII value.
 foreign import ccall "prims.h primOrd" ord :: Char -> Int
@@ -497,8 +557,10 @@ negate n = 0 - n
 --    N `div`  M + N `mod` M = N
 --    the result of quot is truncated towards zero and the result
 --    of div is truncated towards negative infinity
-
 data Int
+instance Eq Int where
+  (==) = primEqInt
+    where foreign import ccall "prims.h" primEqInt :: Int -> Int -> Bool
 
 instance Num Int where
   (+) = primAddInt
@@ -515,6 +577,9 @@ foreign import ccall "prims.h primDivInt" div :: Int -> Int -> Int
 foreign import ccall "prims.h primModInt" mod :: Int -> Int -> Int
 
 data Float
+instance Eq Float where
+  (==) = primEqFloat
+    where foreign import ccall "prims.h" primEqFloat :: Float -> Float -> Bool
 
 instance Num Float where
   (+) = primAddFloat
@@ -574,6 +639,12 @@ c1 &> c2 | c1 = c2
 -- Maybe type
 
 data Maybe a = Nothing | Just a
+instance Eq a => Eq (Maybe a) where
+  x == y =
+    case (x,y) of
+      (Nothing,Nothing) -> True
+      (Just x1,Just y1) -> x1 == y1
+      _ -> False
 
 maybe		   :: b -> (a -> b) -> Maybe a -> b
 maybe z _ Nothing  = z
@@ -583,6 +654,12 @@ maybe _ f (Just x) = f x
 -- Either type
 
 data Either a b = Left a | Right b
+instance (Eq a,Eq b) => Eq (Either a b) where
+  x == y =
+    case (x,y) of
+      (Left x1,Left y1) -> x1 == y1
+      (Right x2,Right y2) -> x2 == y2
+      _ -> False
 
 either		     :: (a -> c) -> (b -> c) -> Either a b -> c
 either f _ (Left x)  = f x

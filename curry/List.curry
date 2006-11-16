@@ -61,10 +61,10 @@ minimum xs = foldr1 min xs
 
 {- end of supposed Prelude functions -}
 
-elemIndex :: a -> [a] -> Maybe Int
+elemIndex :: Eq a => a -> [a] -> Maybe Int
 elemIndex x = findIndex (x ==)
 
-elemIndices :: a -> [a] -> [Int]
+elemIndices :: Eq a => a -> [a] -> [Int]
 elemIndices x = findIndices (x ==)
 
 find :: (a -> Bool) -> [a] -> Maybe a
@@ -77,33 +77,33 @@ findIndex p xs = listToMaybe (findIndices p xs)
 findIndices :: (a -> Bool) -> [a] -> [Int]
 findIndices p xs = [i | (i,x) <- zip [0..] xs, p x]
 
-nub :: [a] -> [a]
+nub :: Eq a => [a] -> [a]
 nub = nubBy (==)
 
 nubBy :: (a -> a -> Bool) -> [a] -> [a]
 nubBy _ [] = []
 nubBy p (x:xs) = x : nubBy p (filter (not . p x) xs)
 
-delete :: a -> [a] -> [a]
+delete :: Eq a => a -> [a] -> [a]
 delete = deleteBy (==)
 
 deleteBy :: (a -> a -> Bool) -> a -> [a] -> [a]
 deleteBy p x []     = []
 deleteBy p x (y:ys) = if p x y then ys else y : deleteBy p x ys
 
-(\\) :: [a] -> [a] -> [a]
+(\\) :: Eq a => [a] -> [a] -> [a]
 (\\) = deleteFirstsBy (==)
 
 deleteFirstsBy :: (a -> a -> Bool) -> [a] -> [a] -> [a]
 deleteFirstsBy p xs ys = foldr (deleteBy p) ys xs
 
-union :: [a] -> [a] -> [a]
+union :: Eq a => [a] -> [a] -> [a]
 union = unionBy (==)
 
 unionBy :: (a -> a -> Bool) -> [a] -> [a] -> [a]
 unionBy p xs ys = xs ++ deleteFirstsBy p xs ys
 
-intersect :: [a] -> [a] -> [a]
+intersect :: Eq a => [a] -> [a] -> [a]
 intersect = intersectBy (==)
 
 intersectBy :: (a -> a -> Bool) -> [a] -> [a] -> [a]
@@ -126,7 +126,7 @@ partition p xs = foldr (select p) ([],[]) xs
   where select p x rest = if p x then ((x:ys),zs) else (ys,(x:zs))
 	  where (ys,zs) = rest
 
-group :: [a] -> [[a]]
+group :: Eq a => [a] -> [[a]]
 group = groupBy (==)
 
 groupBy :: (a -> a -> Bool) -> [a] -> [[a]]
@@ -142,12 +142,12 @@ tails :: [a] -> [[a]]
 tails []         = [[]]
 tails xs@(_:xs') = xs : tails xs'
 
-isPrefixOf :: [a] -> [a] -> Bool
+isPrefixOf :: Eq a => [a] -> [a] -> Bool
 isPrefixOf []     _      = True
 isPrefixOf (_:_)  []     = False
 isPrefixOf (x:xs) (y:ys) = x == y && isPrefixOf xs ys
 
-isSuffixOf :: [a] -> [a] -> Bool
+isSuffixOf :: Eq a => [a] -> [a] -> Bool
 isSuffixOf xs ys = isPrefixOf (reverse xs) (reverse ys)
 
 mapAccumL :: (a -> b -> (a,c)) -> a -> [b] -> (a,[c])

@@ -3,25 +3,23 @@
 -- Copyright (c) 2002-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
-module Set(Set, eqSet,neqSet, showSet,showsSet,
+module Set(Set, showSet,showsSet,
            nullSet, zeroSet, unitSet, addToSet, deleteFromSet,
 	   elemSet, notElemSet, subsetSet, fromListSet, toListSet,
 	   unionSet, unionSets, intersectionSet, diffSet, symDiffSet,
 	   mapSet, domainFM) where
-import List
 import Maybe
 import FiniteMap
 
 infixl 8 `addToSet`, `deleteFromSet`
 infixl 7 `unionSet`, `intersectionSet`
 infixl 6 `diffSet`, `symDiffSet`
-infix  4 `eqSet`, `neqSet`, `subsetSet`, `elemSet`, `notElemSet`
+infix  4 `subsetSet`, `elemSet`, `notElemSet`
 
 newtype Set a = Set (FM a ())
 
-eqSet, neqSet :: Set a -> Set a -> Bool
-xs `eqSet` ys = toListSet xs == toListSet ys
-xs `neqSet` ys = not (xs `eqSet` ys)
+instance Eq a => Eq (Set a) where
+  xs == ys = toListSet xs == toListSet ys
 
 showSet :: Set a -> String
 showSet set = showsSet set ""

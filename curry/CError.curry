@@ -1,4 +1,4 @@
--- $Id: CError.curry 2000 2006-11-11 16:21:14Z wlux $
+-- $Id: CError.curry 2011 2006-11-16 12:17:25Z wlux $
 --
 -- Copyright (c) 2005, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -33,6 +33,8 @@ import IO
 import Unsafe
 
 newtype Errno = Errno CInt
+instance Eq Errno where
+  Errno e1 == Errno e2 = e1 == e2
 
 eOK = Errno 0
 e2BIG = Errno e2BIG
@@ -274,16 +276,16 @@ throwErrnoIfRetry_ f loc m =
     if e == eINTR then throwErrnoIfRetry_ f loc m else throwErrno loc
   else return ()
 
-throwErrnoIfMinus1 :: Num a => String -> IO a -> IO a
+throwErrnoIfMinus1 :: (Eq a,Num a) => String -> IO a -> IO a
 throwErrnoIfMinus1 = throwErrnoIf (-1 ==)
 
-throwErrnoIfMinus1_ :: Num a => String -> IO a -> IO ()
+throwErrnoIfMinus1_ :: (Eq a,Num a) => String -> IO a -> IO ()
 throwErrnoIfMinus1_ = throwErrnoIf_ (-1 ==)
 
-throwErrnoIfMinus1Retry :: Num a => String -> IO a -> IO a
+throwErrnoIfMinus1Retry :: (Eq a,Num a) => String -> IO a -> IO a
 throwErrnoIfMinus1Retry = throwErrnoIfRetry (-1 ==)
 
-throwErrnoIfMinus1Retry_ :: Num a => String -> IO a -> IO ()
+throwErrnoIfMinus1Retry_ :: (Eq a,Num a) => String -> IO a -> IO ()
 throwErrnoIfMinus1Retry_ = throwErrnoIfRetry_ (-1 ==)
 
 throwErrnoIfNull :: String -> IO (Ptr a) -> IO (Ptr a)

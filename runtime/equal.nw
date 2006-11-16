@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: equal.nw 1872 2006-03-16 10:11:43Z wlux $
+% $Id: equal.nw 2011 2006-11-16 12:17:25Z wlux $
 %
 % Copyright (c) 2001-2004, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -8,7 +8,11 @@
 The primitive function [[(==)]] implements strict equality for ground
 terms. It returns [[True]], if both arguments evaluate to equal terms,
 and [[False]] otherwise. Both arguments are evaluated only as far as
-necessary in order to determine (in)equality.
+necessary in order to determine (in)equality. This primitive operation
+is used only for evaluating equality and disequality constraints
+between data terms with existentially quantified types.
+
+\ToDo{Get rid of this primitive.}
 
 <<equal.h>>=
 DECLARE_ENTRYPOINT(___61__61_);

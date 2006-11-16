@@ -1,4 +1,4 @@
--- $Id: Lexing.curry 2000 2006-11-11 16:21:14Z wlux $
+-- $Id: Lexing.curry 2011 2006-11-16 12:17:25Z wlux $
 
 -- Implementation of lexing combinators based on
 -- Manuel M.T. Chakravarty. Lazy Lexing is Fast. In:
@@ -28,6 +28,8 @@ type Meta s t = Position -> s -> (Position, s, Maybe (Lexer s t))
 
 data LexAction s t = Action (Action t) | Meta (Meta s t) | NoAction
 
+instance Eq Position where
+  P p1 == P p2 = p1 == p2
 
 -- Regular Expressions
 
@@ -79,10 +81,11 @@ State a cls >||< State a' cls' =
       | otherwise = (c,foldr1 f (l : map snd cls1)) : accum f cls2
       where (cls1,cls2) = partition (\(c',_) -> c == c') cls
 
-    joinActions a a'
-      | a  == NoAction = a'
-      | a' == NoAction = a
-      | otherwise = error "Lexers: Ambiguous action!"
+    joinActions a a' =
+      case (a,a') of
+        (NoAction,_) -> a'
+        (_,NoAction) -> a
+        _ -> error "Lexers: Ambiguous action!"
 
 
 -- Meta Actions

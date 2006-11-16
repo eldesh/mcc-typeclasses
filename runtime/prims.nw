@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: prims.nw 1901 2006-04-19 18:16:24Z wlux $
+% $Id: prims.nw 2011 2006-11-16 12:17:25Z wlux $
 %
 % Copyright (c) 2004-2005, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -8,7 +8,17 @@
 This file provides the definitions of a few arithmetic primitives and
 related functions. Many of these functions are so simple that they are
 defined as macros in order to avoid the cost of an additional function
-call. The primitives for the operators \texttt{div}, \texttt{mod},
+call.
+
+We start with equality tests for the basic types.
+
+<<prims.h>>=
+#define primEqChar(x,y)  (x == y)
+#define primEqInt(x,y)   (x == y)
+#define primEqFloat(x,y) (x == y)
+
+@ 
+The primitives for the operators \texttt{div}, \texttt{mod},
 \texttt{quot}, and \texttt{rem} are implemented as in Haskell, i.e.,
 \begin{displaymath}
   \begin{array}{r@{\null+\null}c@{\null=\null}l}
@@ -231,6 +241,7 @@ support arithmetic operations on [[void]] pointers.
 
 <<prims.h>>=
 #define primNullPtr()		0
+#define primEqPtr(x,y)		(x == y)
 #define primCastPtr(x)		(x)
 #define primPlusPtr(x,y)	((char *)x + y)
 #define primMinusPtr(x,y)	((char *)x - (char *)y)

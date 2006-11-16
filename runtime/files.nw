@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 1902 2006-04-22 18:13:50Z wlux $
+% $Id: files.nw 2011 2006-11-16 12:17:25Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -141,6 +141,43 @@ finalize_process(Node *node)
     finalize_file(node);
     if ( proc->pid )
 	waitpid(proc->pid, &proc->status, WNOHANG);
+}
+
+@ 
+Two file \verb|Handle|s are considered equal, if they are physically
+the same.
+
+<<files.c>>=
+DECLARE_CONST(__Prelude__False);
+DECLARE_CONST(__Prelude__True);
+
+#define Prelude_False CONST(__Prelude__False)
+#define Prelude_True  CONST(__Prelude__True)
+
+DECLARE_ENTRYPOINT(__primEqHandle);
+DECLARE_LABEL(__primEqHandle_1);
+
+FUNCTION(__primEqHandle)
+{
+    Node *aux;
+    EXPORT_LABEL(__primEqHandle)
+ ENTRY_LABEL(__primEqHandle)
+    EVAL_RIGID_FILE(__primEqHandle);
+    aux	  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = aux;
+    GOTO(__primEqHandle_1);
+}
+
+static
+FUNCTION(__primEqHandle_1)
+{
+    Node *r;
+ ENTRY_LABEL(__primEqHandle_1)
+    EVAL_RIGID_FILE(__primEqHandle);
+    r	= sp[1] == sp[0] ? Prelude_True : Prelude_False;
+    sp += 2;
+    RETURN(r);
 }
 
 @ 
@@ -420,12 +457,6 @@ apply to a file handle. Note that for a semi-closed handle neither
 [[hIsOpen]] nor [[hIsClosed]] returns \texttt{True}.
 
 <<files.c>>=
-DECLARE_CONST(__Prelude__False);
-DECLARE_CONST(__Prelude__True);
-
-#define Prelude_False CONST(__Prelude__False)
-#define Prelude_True  CONST(__Prelude__True)
-
 DECLARE_ENTRYPOINT(__hIsOpen);
 DECLARE_ENTRYPOINT(__hIsClosed);
 DECLARE_ENTRYPOINT(__hIsReadable);

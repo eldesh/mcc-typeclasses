@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: refs.nw 1865 2006-03-01 22:30:38Z wlux $
+% $Id: refs.nw 2011 2006-11-16 12:17:25Z wlux $
 %
 % Copyright (c) 2004, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -36,6 +36,43 @@ typedef struct ioref_node {
 static NodeInfo ioref_info = {
     ABSTRACT_KIND, 0, closure_node_size(1), 0, "<IORef>", eval_whnf, 0, 0
 };
+
+@ 
+Two mutable references are considered equal, if they are physically
+the same.
+
+<<refs.c>>=
+DECLARE_CONST(__Prelude__False);
+DECLARE_CONST(__Prelude__True);
+
+#define Prelude_False CONST(__Prelude__False)
+#define Prelude_True  CONST(__Prelude__True)
+
+DECLARE_ENTRYPOINT(__primEqIORef);
+DECLARE_LABEL(__primEqIORef_1);
+
+FUNCTION(__primEqIORef)
+{
+    Node *aux;
+    EXPORT_LABEL(__primEqIORef)
+ ENTRY_LABEL(__primEqIORef)
+    EVAL_RIGID_IOREF(__primEqIORef);
+    aux	  = sp[0];
+    sp[0] = sp[1];
+    sp[1] = aux;
+    GOTO(__primEqIORef_1);
+}
+
+static
+FUNCTION(__primEqIORef_1)
+{
+    Node *r;
+ ENTRY_LABEL(__primEqIORef_1)
+    EVAL_RIGID_IOREF(__primEqIORef);
+    r	= sp[1] == sp[0] ? Prelude_True : Prelude_False;
+    sp += 2;
+    RETURN(r);
+}
 
 @ 
 The function [[newIORef]] creates a new [[IORef]] and initializes it

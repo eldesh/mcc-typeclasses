@@ -55,7 +55,7 @@ sum, product :: Num a => [a] -> a
 sum = foldr (+) 0
 product = foldr (*) 1
 
-maximum, minimum :: [a] -> a
+maximum, minimum :: Ord a => [a] -> a
 maximum xs = foldr1 max xs
 minimum xs = foldr1 min xs
 
@@ -168,7 +168,7 @@ unfoldr f z =
     Nothing -> []
     Just (x,z) -> x : unfoldr f z
 
-sort :: [a] -> [a]
+sort :: Ord a => [a] -> [a]
 sort = sortBy compare
 
 sortBy :: (a -> a -> Ordering) -> [a] -> [a]
@@ -193,7 +193,7 @@ sortBy cmp xs = sort (split xs)
 	    _  -> x : merge2 xs (y:ys)
 
 
-insert :: a -> [a] -> [a]
+insert :: Ord a => a -> [a] -> [a]
 insert = insertBy compare
 
 insertBy :: (a -> a -> Ordering) -> a -> [a] -> [a]

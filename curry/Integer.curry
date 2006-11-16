@@ -1,4 +1,4 @@
--- $Id: Integer.curry 2000 2006-11-11 16:21:14Z wlux $
+-- $Id: Integer.curry 2013 2006-11-16 14:10:51Z wlux $
 --
 -- Copyright (c) 2004-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -46,19 +46,19 @@ abs :: Int -> Int
 abs n = if n >= 0 then n else -n
 
 --- (max3 m n o) returns the maximum of m, n, and o
-max3 :: a -> a -> a -> a
+max3 :: Ord a => a -> a -> a -> a
 max3 m n o = max (max m n) o
 
 --- (min3 m n o) returns the maximum of m, n, and o
-min3 :: a -> a -> a -> a
+min3 :: Ord a => a -> a -> a -> a
 min3 m n o = min (min m n) o
 
 --- (maxlist l) returns the maximum integer from the list l
-maxlist :: [a] -> a
+maxlist :: Ord a => [a] -> a
 maxlist = foldr1 max
 
 --- (minlist l) returns the minimum integer from the list l
-minlist :: [a] -> a
+minlist :: Ord a => [a] -> a
 minlist = foldr1 min
 
 --- (bitTrunc m n) returns the m least significant bits of n

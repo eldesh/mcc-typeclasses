@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: prims.nw 2011 2006-11-16 12:17:25Z wlux $
+% $Id: prims.nw 2013 2006-11-16 14:10:51Z wlux $
 %
 % Copyright (c) 2004-2005, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -10,12 +10,19 @@ related functions. Many of these functions are so simple that they are
 defined as macros in order to avoid the cost of an additional function
 call.
 
-We start with equality tests for the basic types.
+We start with equality tests for the basic types. The compare
+primitives are supposed to return results $-1$, $0$, and $1$ depending
+on whether the first argument is smaller than, equal to, or greater
+than the second, respectively.
 
 <<prims.h>>=
 #define primEqChar(x,y)  (x == y)
 #define primEqInt(x,y)   (x == y)
 #define primEqFloat(x,y) (x == y)
+
+#define primCmpChar(x,y)  (x < y ? -1 : x > y ? 1 : 0)
+#define primCmpInt(x,y)   (x < y ? -1 : x > y ? 1 : 0)
+#define primCmpFloat(x,y) (x < y ? -1 : x > y ? 1 : 0)
 
 @ 
 The primitives for the operators \texttt{div}, \texttt{mod},
@@ -242,6 +249,7 @@ support arithmetic operations on [[void]] pointers.
 <<prims.h>>=
 #define primNullPtr()		0
 #define primEqPtr(x,y)		(x == y)
+#define primCmpPtr(x,y)         (x < y ? -1 : x > y ? 1 : 0)
 #define primCastPtr(x)		(x)
 #define primPlusPtr(x,y)	((char *)x + y)
 #define primMinusPtr(x,y)	((char *)x - (char *)y)

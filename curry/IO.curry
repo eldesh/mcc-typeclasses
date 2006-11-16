@@ -33,6 +33,19 @@ instance Eq IOMode where
       (AppendMode,AppendMode) -> True
       (ReadWriteMode,ReadWriteMode) -> True
       _ -> False
+instance Ord IOMode where
+  m1 `compare` m2 =
+    case (m1,m2) of
+      (ReadMode,ReadMode) -> EQ
+      (ReadMode,_)        -> LT
+      (WriteMode,ReadMode)  -> GT
+      (WriteMode,WriteMode) -> EQ
+      (WriteMode,_)         -> LT
+      (AppendMode,ReadWriteMode) -> LT
+      (AppendMode,AppendMode)    -> EQ
+      (AppendMode,_)             -> GT
+      (ReadWriteMode,ReadWriteMode) -> EQ
+      (ReadWriteMode,_)             -> GT
 
 data BufferMode = NoBuffering | LineBuffering | BlockBuffering (Maybe Int)
 instance Eq BufferMode where
@@ -42,6 +55,16 @@ instance Eq BufferMode where
       (LineBuffering,LineBuffering) -> True
       (BlockBuffering n1,BlockBuffering n2) -> n1 == n2
       _ -> False
+instance Ord BufferMode where
+  m1 `compare` m2 =
+    case (m1,m2) of
+      (NoBuffering,NoBuffering) -> EQ
+      (NoBuffering,_)           -> LT
+      (LineBuffering,NoBuffering)      -> GT
+      (LineBuffering,LineBuffering)    -> EQ
+      (LineBuffering,BlockBuffering _) -> LT
+      (BlockBuffering n1,BlockBuffering n2) -> n1 `compare` n2
+      (BlockBuffering _,_)                  -> GT
 
 data SeekMode = AbsoluteSeek | RelativeSeek | SeekFromEnd
 instance Eq SeekMode where
@@ -51,6 +74,16 @@ instance Eq SeekMode where
       (RelativeSeek,RelativeSeek) -> True
       (SeekFromEnd,SeekFromEnd) -> True
       _ -> False
+instance Ord SeekMode where
+  m1 `compare` m2 =
+    case (m1,m2) of
+      (AbsoluteSeek,AbsoluteSeek) -> EQ
+      (AbsoluteSeek,_)            -> LT
+      (RelativeSeek,AbsoluteSeek) -> GT
+      (RelativeSeek,RelativeSeek) -> EQ
+      (RelativeSeek,SeekFromEnd)  -> LT
+      (SeekFromEnd,SeekFromEnd)   -> EQ
+      (SeekFromEnd,_)             -> GT
 
 --- Predefined handles for standard input, output, and error
 foreign import primitive stdin  :: Handle

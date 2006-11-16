@@ -1,4 +1,4 @@
--- $Id: Lexing.curry 2011 2006-11-16 12:17:25Z wlux $
+-- $Id: Lexing.curry 2013 2006-11-16 14:10:51Z wlux $
 
 -- Implementation of lexing combinators based on
 -- Manuel M.T. Chakravarty. Lazy Lexing is Fast. In:
@@ -30,6 +30,8 @@ data LexAction s t = Action (Action t) | Meta (Meta s t) | NoAction
 
 instance Eq Position where
   P p1 == P p2 = p1 == p2
+instance Ord Position where
+  P p1 `compare` P p2 = p1 `compare` p2
 
 -- Regular Expressions
 

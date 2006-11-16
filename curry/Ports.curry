@@ -1,4 +1,4 @@
--- $Id: Ports.curry 2011 2006-11-16 12:17:25Z wlux $
+-- $Id: Ports.curry 2013 2006-11-16 14:10:51Z wlux $
 --
 -- Copyright (c) 2004-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -55,6 +55,23 @@ instance Eq SP_Msg where
       (SP_GetChar c1,SP_GetChar c2) -> c1 == c2
       (SP_EOF b1,SP_EOF b2) -> b1 == b2
       (SP_Close,SP_Close) -> True
+instance Ord SP_Msg where
+  m1 `compare` m2 =
+    case (m1,m2) of
+      (SP_Put s1,SP_Put s2) -> s1  `compare` s2
+      (SP_Put _,_)          -> LT
+      (SP_GetLine _,SP_Put _)       -> GT
+      (SP_GetLine s1,SP_GetLine s2) -> s1 `compare` s2
+      (SP_GetLine _,_)              -> LT
+      (SP_GetChar _,SP_Put _)       -> GT
+      (SP_GetChar _,SP_GetLine _)   -> GT
+      (SP_GetChar c1,SP_GetChar c2) -> c1 `compare` c2
+      (SP_GetChar _,_)              -> LT
+      (SP_EOF _,SP_Close)   -> LT
+      (SP_EOF b1,SP_EOF b2) -> b1 `compare` b2
+      (SP_EOF _,_)          -> GT
+      (SP_Close,SP_Close) -> EQ
+      (SP_Close,_)        -> GT
 
 openProcessPort :: String -> IO (Port SP_Msg)
 openProcessPort cmd =

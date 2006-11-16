@@ -13,6 +13,8 @@ data Array a = Array (Int,Int) (IOVector a)
 
 instance Eq a => Eq (Array a) where
   a1 == a2 = assocs a1 == assocs a2
+instance Ord a => Ord (Array a) where
+  a1 `compare` a2 = assocs a1 `compare` assocs a2
 
 array      :: (Int,Int) -> [(Int,a)] -> Array a
 array b ixs = unsafePerformIO initArray

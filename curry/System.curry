@@ -1,4 +1,4 @@
--- $Id: System.curry 2012 2006-11-16 13:34:41Z wlux $
+-- $Id: System.curry 2013 2006-11-16 14:10:51Z wlux $
 --
 -- Copyright (c) 2002-2005, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -19,6 +19,13 @@ instance Eq ExitCode where
       (ExitSuccess,ExitSuccess) -> True
       (ExitFailure n1,ExitFailure n2) -> n1 == n2
       _ -> False
+instance Ord ExitCode where
+  e1 `compare` e2 =
+    case (e1,e2) of
+      (ExitSuccess,ExitSuccess) -> EQ
+      (ExitSuccess,ExitFailure _) -> LT
+      (ExitFailure _,ExitSuccess) -> GT
+      (ExitFailure n1,ExitFailure n2) -> n1 `compare` n2
 
 foreign import ccall curry_argc :: IO Int
 foreign import ccall curry_argv :: IO (Ptr CString)

@@ -26,16 +26,16 @@ zeroFM = Empty
 unitFM :: a -> b -> FM a b
 unitFM x y = Node2 Empty (x,y) Empty
 
-addToFM :: a -> b -> FM a b -> FM a b
+addToFM :: Ord a => a -> b -> FM a b -> FM a b
 addToFM x y xys =
   case insertNode x y xys of
     Left xys' -> xys'
     Right (l,x,r) -> Node2 l x r
 
-fromListFM :: [(a,b)] -> FM a b
+fromListFM :: Ord a => [(a,b)] -> FM a b
 fromListFM = foldr (uncurry addToFM) zeroFM
 
-insertNode :: a -> b -> FM a b
+insertNode :: Ord a => a -> b -> FM a b
            -> Either (FM a b) ((FM a b),(a,b),(FM a b))
 insertNode k x Empty = Right (Empty,(k,x),Empty)
 insertNode k x (Node2 a y b) = Left (insertNode2 k x a y b)
@@ -64,13 +64,13 @@ insertNode k x (Node3 a y b z c) =
         balanceR a x b y (Left c) = Left (Node3 a x b y c)
         balanceR a x b y (Right (c,z,d)) = Right (Node2 a x b,y,Node2 c z d)
 
-compareKey :: a -> (a,b) -> Ordering
+compareKey :: Ord a => a -> (a,b) -> Ordering
 compareKey k1 (k2,_) = compare k1 k2
 
-deleteFromFM :: a -> FM a b -> FM a b
+deleteFromFM :: Ord a => a -> FM a b -> FM a b
 deleteFromFM x xys = snd (deleteNode x xys)
 
-deleteNode :: a -> FM a b -> (Bool,FM a b)
+deleteNode :: Ord a => a -> FM a b -> (Bool,FM a b)
 deleteNode _ Empty = (False,Empty)
 deleteNode x (Node2 a y b) =
   case compareKey x y of
@@ -124,7 +124,7 @@ findMin (Node3 a x _ _ _)
   | nullFM a = x
   | otherwise = findMin a
 
-lookupFM :: a -> FM a b -> Maybe b
+lookupFM :: Ord a => a -> FM a b -> Maybe b
 lookupFM _ Empty = Nothing
 lookupFM x (Node2 a y b) =
   case compareKey x y of

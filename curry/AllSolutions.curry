@@ -1,4 +1,4 @@
--- $Id: AllSolutions.curry 2011 2006-11-16 12:17:25Z wlux $
+-- $Id: AllSolutions.curry 2013 2006-11-16 14:10:51Z wlux $
 --
 -- Copyright (c) 2004, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -19,6 +19,16 @@ instance Eq a => Eq (SearchTree a) where
       (Val x,Val y) -> x == y
       (Or ts1,Or ts2) -> ts1 == ts2
       _ -> False
+instance Ord a => Ord (SearchTree a) where
+  t1 `compare` t2 =
+    case (t1,t2) of
+      (Fail,Fail) -> EQ
+      (Fail,_)    -> LT
+      (Val _,Fail)  -> GT
+      (Val x,Val y) -> x `compare` y
+      (Val _,Or _)  -> LT
+      (Or ts1,Or ts2) -> ts1 `compare` ts2
+      (Or _,_)        -> GT
 
 foreign import primitive encapsulate :: a -> IO (a -> Success)
 

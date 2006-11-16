@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2011 2006-11-16 12:17:25Z wlux $
+-- $Id: Prelude.curry 2013 2006-11-16 14:10:51Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -119,6 +119,24 @@ class Eq a where
 (/=) x y = not (x == y)
 
 
+class Ord a where
+  -- NB (<), (<=), (>=), (>), min, and max are temporarily overloaded
+  --    functions until default method implementations are supported
+  compare              :: a -> a -> Ordering
+--(<), (<=), (>=), (>) :: a -> a -> Bool
+--min, max             :: a -> a -> a
+
+(<), (<=), (>=), (>) :: Ord a => a -> a -> Bool
+x <= y = case compare x y of GT -> False; _ -> True
+x < y  = case compare x y of LT -> True; _ -> False
+x > y  = case compare x y of GT -> True; _ -> False
+x >= y = case compare x y of LT -> False; _ -> True
+
+min, max :: Ord a => a -> a -> a
+max x y = if x >= y then x else y
+min x y = if x <= y then x else y
+
+
 -- Boolean values
 -- already defined as builtin, since it is required for if-then-else
 data Bool = False | True
@@ -129,6 +147,13 @@ instance Eq Bool where
       (False,True) -> False
       (True,False) -> False
       (True,True) -> True
+instance Ord Bool where
+  x `compare` y =
+    case (x,y) of
+      (False,False) -> EQ
+      (False,True) -> LT
+      (True,False) -> GT
+      (True,True) -> EQ
 
 --- Sequential conjunction on Booleans.
 (&&)            :: Bool -> Bool -> Bool
@@ -166,35 +191,16 @@ instance Eq Ordering where
       (EQ,EQ) -> True
       (GT,GT) -> True
       _ -> False
-
---- Comparison of arbitrary ground data terms.
---- Data constructors are compared in the order of their definition
---- in the datatype decalrations and recursively in the arguments.
-foreign import primitive compare :: a -> a -> Ordering
-
---- Less-than on ground data terms
-(<) :: a -> a -> Bool
-x < y = case compare x y of LT -> True; _ -> False
-
---- Greater-than on ground data terms
-(>) :: a -> a -> Bool
-x > y = case compare x y of GT -> True; _ -> False
-
---- Less-or-equal on ground data terms
-(<=) :: a -> a -> Bool
-x <= y = not (x > y)
-
---- Greater-or-equal on ground data terms
-(>=) :: a -> a -> Bool
-x >= y = not (x < y)
-
---- Maximum of ground data terms
-max :: a -> a -> a
-max x y = if x >= y then x else y
-
---- Minimum of ground data terms
-min :: a -> a -> a
-min x y = if x <= y then x else y
+instance Ord Ordering where
+  x `compare` y =
+    case (x,y) of
+      (LT,LT) -> EQ
+      (LT,_)  -> LT
+      (EQ,LT) -> GT
+      (EQ,EQ) -> EQ
+      (EQ,GT) -> LT
+      (GT,GT) -> EQ
+      (GT,_)  -> GT
 
  
 -- Pairs
@@ -204,6 +210,14 @@ instance (Eq a,Eq b) => Eq (a,b) where
   x == y =
     case (x,y) of
       ((x1,x2),(y1,y2)) -> x1 == y1 && x2 == y2
+instance (Ord a,Ord b) => Ord (a,b) where
+  x `compare` y =
+    case (x,y) of
+      ((x1,x2),(y1,y2)) ->
+        case x1 `compare` y1 of
+	  LT -> LT
+	  EQ -> x2 `compare` y2
+	  GT -> GT
 
 --- Selects the first component of a pair.
 fst             :: (a,b) -> a
@@ -219,33 +233,139 @@ instance (Eq a,Eq b,Eq c) => Eq (a,b,c) where
   x == y =
     case (x,y) of
       ((x1,x2,x3),(y1,y2,y3)) -> x1 == y1 && x2 == y2 && x3 == y3
+instance (Ord a,Ord b,Ord c) => Ord (a,b,c) where
+  x `compare` y =
+    case (x,y) of
+      ((x1,x2,x3),(y1,y2,y3)) ->
+        case x1 `compare` y1 of
+	  LT -> LT
+	  EQ ->
+	    case x2 `compare` y2 of
+	      LT -> LT
+	      EQ -> x3 `compare` y3
+	      GT -> GT
+	  GT -> GT
+
 instance (Eq a,Eq b,Eq c,Eq d) => Eq (a,b,c,d) where
   x == y =
     case (x,y) of
       ((x1,x2,x3,x4),(y1,y2,y3,y4)) ->
          x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4
+instance (Ord a,Ord b,Ord c,Ord d) => Ord (a,b,c,d) where
+  x `compare` y =
+    case (x,y) of
+      ((x1,x2,x3,x4),(y1,y2,y3,y4)) ->
+        case x1 `compare` y1 of
+	  LT -> LT
+	  EQ ->
+	    case x2 `compare` y2 of
+	      LT -> LT
+	      EQ ->
+	        case x3 `compare` y3 of
+		  LT -> LT
+		  EQ -> x4 `compare` y4
+		  GT -> GT
+	      GT -> GT
+	  GT -> GT
+
 instance (Eq a,Eq b,Eq c,Eq d,Eq e) => Eq (a,b,c,d,e) where
   x == y =
     case (x,y) of
       ((x1,x2,x3,x4,x5),(y1,y2,y3,y4,y5)) ->
          x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5
+instance (Ord a,Ord b,Ord c,Ord d,Ord e) => Ord (a,b,c,d,e) where
+  x `compare` y =
+    case (x,y) of
+      ((x1,x2,x3,x4,x5),(y1,y2,y3,y4,y5)) ->
+        case x1 `compare` y1 of
+	  LT -> LT
+	  EQ ->
+	    case x2 `compare` y2 of
+	      LT -> LT
+	      EQ ->
+	        case x3 `compare` y3 of
+		  LT -> LT
+		  EQ ->
+		    case x4 `compare` y4 of
+		      LT -> LT
+		      EQ -> x5 `compare` y5
+		      GT -> GT
+		  GT -> GT
+	      GT -> GT
+	  GT -> GT
+
 instance (Eq a,Eq b,Eq c,Eq d,Eq e,Eq f) => Eq (a,b,c,d,e,f) where
   x == y =
     case (x,y) of
       ((x1,x2,x3,x4,x5,x6),(y1,y2,y3,y4,y5,y6)) ->
          x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5 && x6 == y6
+instance (Ord a,Ord b,Ord c,Ord d,Ord e,Ord f) => Ord (a,b,c,d,e,f) where
+  x `compare` y =
+    case (x,y) of
+      ((x1,x2,x3,x4,x5,x6),(y1,y2,y3,y4,y5,y6)) ->
+        case x1 `compare` y1 of
+	  LT -> LT
+	  EQ ->
+	    case x2 `compare` y2 of
+	      LT -> LT
+	      EQ ->
+	        case x3 `compare` y3 of
+		  LT -> LT
+		  EQ ->
+		    case x4 `compare` y4 of
+		      LT -> LT
+		      EQ ->
+		        case x5 `compare` y5 of
+			  LT -> LT
+			  EQ -> x6 `compare` y6
+			  GT -> GT
+		      GT -> GT
+		  GT -> GT
+	      GT -> GT
+	  GT -> GT
+
 instance (Eq a,Eq b,Eq c,Eq d,Eq e,Eq f,Eq g) => Eq (a,b,c,d,e,f,g) where
   x == y =
     case (x,y) of
       ((x1,x2,x3,x4,x5,x6,x7),(y1,y2,y3,y4,y5,y6,y7)) ->
          x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 &&
 	 x5 == y5 && x6 == y6 && x7 == y7
+instance (Ord a,Ord b,Ord c,Ord d,Ord e,Ord f,Ord g) => Ord (a,b,c,d,e,f,g) where
+  x `compare` y =
+    case (x,y) of
+      ((x1,x2,x3,x4,x5,x6,x7),(y1,y2,y3,y4,y5,y6,y7)) ->
+        case x1 `compare` y1 of
+	  LT -> LT
+	  EQ ->
+	    case x2 `compare` y2 of
+	      LT -> LT
+	      EQ ->
+	        case x3 `compare` y3 of
+		  LT -> LT
+		  EQ ->
+		    case x4 `compare` y4 of
+		      LT -> LT
+		      EQ ->
+		        case x5 `compare` y5 of
+			  LT -> LT
+			  EQ ->
+			    case x6 `compare` y6 of
+			      LT -> LT
+			      EQ -> x7 `compare` y7
+			      GT -> GT
+			  GT -> GT
+		      GT -> GT
+		  GT -> GT
+	      GT -> GT
+	  GT -> GT
 
 
 -- Unit type
 --++ data () = ()
 instance Eq () where
   x == y = case (x,y) of ((),()) -> True
+instance Ord () where
+  x `compare` y = case (x,y) of ((),()) -> EQ
 
 
 -- Lists
@@ -257,6 +377,17 @@ instance Eq a => Eq [a] where
       ([],[]) -> True
       (x1:xs,y1:ys) -> x1 == y1 && xs == ys
       _ -> False
+instance Ord a => Ord [a] where
+  x `compare` y =
+    case (x,y) of
+      ([],[]) -> EQ
+      ([],_:_) -> LT
+      (_:_,[]) -> GT
+      (x1:xs,y1:ys) ->
+        case x1 `compare` y1 of
+	  LT -> LT
+	  EQ -> xs `compare` ys
+	  GT -> GT
 
 --- Evaluates the argument to spine form and returns it.
 --- Suspends until the result is bound to a non-variable spine.
@@ -472,6 +603,13 @@ data Char
 instance Eq Char where
   (==) = primEqChar
     where foreign import ccall "prims.h" primEqChar :: Char -> Char -> Bool
+instance Ord Char where
+  x `compare` y =
+    case x `primCmpChar` y of
+      -1 -> LT
+      0  -> EQ
+      1  -> GT
+    where foreign import ccall "prims.h" primCmpChar :: Char -> Char -> Int
 
 --- Converts a characters into its ASCII value.
 foreign import ccall "prims.h primOrd" ord :: Char -> Int
@@ -561,6 +699,13 @@ data Int
 instance Eq Int where
   (==) = primEqInt
     where foreign import ccall "prims.h" primEqInt :: Int -> Int -> Bool
+instance Ord Int where
+  x `compare` y =
+    case x `primCmpInt` y of
+      -1 -> LT
+      0  -> EQ
+      1  -> GT
+    where foreign import ccall "prims.h" primCmpInt :: Int -> Int -> Int
 
 instance Num Int where
   (+) = primAddInt
@@ -580,6 +725,13 @@ data Float
 instance Eq Float where
   (==) = primEqFloat
     where foreign import ccall "prims.h" primEqFloat :: Float -> Float -> Bool
+instance Ord Float where
+  x `compare` y =
+    case x `primCmpFloat` y of
+      -1 -> LT
+      0  -> EQ
+      1  -> GT
+    where foreign import ccall "prims.h" primCmpFloat :: Float -> Float -> Int
 
 instance Num Float where
   (+) = primAddFloat
@@ -645,6 +797,13 @@ instance Eq a => Eq (Maybe a) where
       (Nothing,Nothing) -> True
       (Just x1,Just y1) -> x1 == y1
       _ -> False
+instance Ord a => Ord (Maybe a) where
+  x `compare` y =
+    case (x,y) of
+      (Nothing,Nothing) -> EQ
+      (Nothing,Just _)  -> LT
+      (Just _,Nothing)  -> GT
+      (Just x1,Just y1) -> x1 `compare` y1
 
 maybe		   :: b -> (a -> b) -> Maybe a -> b
 maybe z _ Nothing  = z
@@ -660,6 +819,13 @@ instance (Eq a,Eq b) => Eq (Either a b) where
       (Left x1,Left y1) -> x1 == y1
       (Right x2,Right y2) -> x2 == y2
       _ -> False
+instance (Ord a,Ord b) => Ord (Either a b) where
+  x `compare` y =
+    case (x,y) of
+      (Left x1,Left y1)   -> x1 `compare` y1
+      (Left _,Right _)    -> LT
+      (Right _,Left _)    -> GT
+      (Right x2,Right y2) -> x2 `compare` y2
 
 either		     :: (a -> c) -> (b -> c) -> Either a b -> c
 either f _ (Left x)  = f x

@@ -20,6 +20,8 @@ newtype Set a = Set (FM a ())
 
 instance Eq a => Eq (Set a) where
   xs == ys = toListSet xs == toListSet ys
+instance Ord a => Ord (Set a) where
+  xs `compare` ys = toListSet xs `compare` toListSet ys
 
 showSet :: Set a -> String
 showSet set = showsSet set ""
@@ -41,44 +43,44 @@ zeroSet = Set zeroFM
 unitSet :: a -> Set a
 unitSet x = Set (unitFM x ())
 
-addToSet :: a -> Set a -> Set a
+addToSet :: Ord a => a -> Set a -> Set a
 addToSet x (Set xs) = Set (addToFM x () xs)
 
-deleteFromSet :: a -> Set a -> Set a
+deleteFromSet :: Ord a => a -> Set a -> Set a
 deleteFromSet x (Set xs) = Set (deleteFromFM x xs)
 
-elemSet :: a -> Set a -> Bool
+elemSet :: Ord a => a -> Set a -> Bool
 elemSet x (Set xs) = isJust (lookupFM x xs)
 
-notElemSet :: a -> Set a -> Bool
+notElemSet :: Ord a => a -> Set a -> Bool
 notElemSet x set = not (elemSet x set)
 
-subsetSet :: Set a -> Set a -> Bool
+subsetSet :: Ord a => Set a -> Set a -> Bool
 subsetSet xs ys = all (`elemSet` ys) (toListSet xs)
 
-fromListSet :: [a] -> Set a
+fromListSet :: Ord a => [a] -> Set a
 fromListSet = foldr addToSet zeroSet
 
 toListSet :: Set a -> [a]
 toListSet (Set xs) = map fst (toListFM xs)
 
-unionSet :: Set a -> Set a -> Set a
+unionSet :: Ord a => Set a -> Set a -> Set a
 unionSet xs ys = foldr addToSet xs (toListSet ys)
 
-unionSets :: [Set a] -> Set a
+unionSets :: Ord a => [Set a] -> Set a
 unionSets = foldr unionSet zeroSet
 
-intersectionSet :: Set a -> Set a -> Set a
+intersectionSet :: Ord a => Set a -> Set a -> Set a
 intersectionSet xs ys =
   foldr addToSet zeroSet [y | y <- toListSet ys, y `elemSet` xs]
 
-diffSet :: Set a -> Set a -> Set a
+diffSet :: Ord a => Set a -> Set a -> Set a
 diffSet xs ys = foldr deleteFromSet xs (toListSet ys)
 
-symDiffSet :: Set a -> Set a -> Set a
+symDiffSet :: Ord a => Set a -> Set a -> Set a
 symDiffSet xs ys = unionSet (diffSet xs ys) (diffSet ys xs)
 
-mapSet :: (a -> b) -> Set a -> Set b
+mapSet :: Ord b => (a -> b) -> Set a -> Set b
 mapSet f xs = fromListSet (map f (toListSet xs))
 
 domainFM :: FM a b -> Set a

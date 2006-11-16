@@ -1,4 +1,4 @@
--- $Id: System.curry 2011 2006-11-16 12:17:25Z wlux $
+-- $Id: System.curry 2012 2006-11-16 13:34:41Z wlux $
 --
 -- Copyright (c) 2002-2005, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -17,7 +17,7 @@ instance Eq ExitCode where
   e1 == e2 =
     case (e1,e2) of
       (ExitSuccess,ExitSuccess) -> True
-      (ExitFailure n1,ExitFailure n2) -> True
+      (ExitFailure n1,ExitFailure n2) -> n1 == n2
       _ -> False
 
 foreign import ccall curry_argc :: IO Int

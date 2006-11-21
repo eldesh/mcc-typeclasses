@@ -1,4 +1,4 @@
--- $Id: MarshalUtils.curry 2011 2006-11-16 12:17:25Z wlux $
+-- $Id: MarshalUtils.curry 2017 2006-11-21 11:21:49Z wlux $
 --
 -- Copyright (c) 2005-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -10,7 +10,7 @@ import Monad
 fromBool :: Num a => Bool -> a
 fromBool b = if b then 1 else 0
 
-toBool :: (Eq a,Num a) => a -> Bool
+toBool :: Num a => a -> Bool
 toBool x = x /= 0
 
 maybeNew :: (a -> IO (Ptr a))

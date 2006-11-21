@@ -1,4 +1,4 @@
--- $Id: CError.curry 2011 2006-11-16 12:17:25Z wlux $
+-- $Id: CError.curry 2017 2006-11-21 11:21:49Z wlux $
 --
 -- Copyright (c) 2005, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -276,16 +276,16 @@ throwErrnoIfRetry_ f loc m =
     if e == eINTR then throwErrnoIfRetry_ f loc m else throwErrno loc
   else return ()
 
-throwErrnoIfMinus1 :: (Eq a,Num a) => String -> IO a -> IO a
+throwErrnoIfMinus1 :: Num a => String -> IO a -> IO a
 throwErrnoIfMinus1 = throwErrnoIf (-1 ==)
 
-throwErrnoIfMinus1_ :: (Eq a,Num a) => String -> IO a -> IO ()
+throwErrnoIfMinus1_ :: Num a => String -> IO a -> IO ()
 throwErrnoIfMinus1_ = throwErrnoIf_ (-1 ==)
 
-throwErrnoIfMinus1Retry :: (Eq a,Num a) => String -> IO a -> IO a
+throwErrnoIfMinus1Retry :: Num a => String -> IO a -> IO a
 throwErrnoIfMinus1Retry = throwErrnoIfRetry (-1 ==)
 
-throwErrnoIfMinus1Retry_ :: (Eq a,Num a) => String -> IO a -> IO ()
+throwErrnoIfMinus1Retry_ :: Num a => String -> IO a -> IO ()
 throwErrnoIfMinus1Retry_ = throwErrnoIfRetry_ (-1 ==)
 
 throwErrnoIfNull :: String -> IO (Ptr a) -> IO (Ptr a)

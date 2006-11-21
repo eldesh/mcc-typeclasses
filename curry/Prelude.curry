@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2013 2006-11-16 14:10:51Z wlux $
+-- $Id: Prelude.curry 2017 2006-11-21 11:21:49Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -119,7 +119,7 @@ class Eq a where
 (/=) x y = not (x == y)
 
 
-class Ord a where
+class Eq a => Ord a where
   -- NB (<), (<=), (>=), (>), min, and max are temporarily overloaded
   --    functions until default method implementations are supported
   compare              :: a -> a -> Ordering
@@ -680,7 +680,7 @@ showParen False x = x
 ---    Negate is temporarily a polymorphic function until default method
 ---    implementations are supported.
 ---    Abs and signum are currently missing.
-class Num a where
+class Eq a => Num a where
   (+) :: a -> a -> a
   (-) :: a -> a -> a
   (*) :: a -> a -> a

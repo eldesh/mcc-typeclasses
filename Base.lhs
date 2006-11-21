@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: Base.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -44,11 +44,20 @@ the only information that must be recorded is the arity of each type.
 For algebraic data types and renaming types, the compiler also records
 all data constructors belonging to that type, for alias types the
 expanded right hand side type expression is saved, and for type
-classes the names of the type class methods are saved. No kind
-information is saved for type classes because only single parameter
-type classes are supported and instance types must have kind $\ast$.
-Type classes are recorded in the type constructor environment because
-type constructors and type classes share a common name space.
+classes the names of their super classes and the type class methods
+are saved. No kind information is saved for type classes because only
+single parameter type classes are supported and instance types must
+have kind $\ast$. The list of super classes contains all direct and
+indirect super classes and is always sorted by the names of the super
+classes. Including \emph{all} super classes is necessary because
+looking up indirect super classes in the type constructor environment
+may be impossible for the names of the super classes may be ambiguous
+or not in scope at all. Type classes are recorded in the type
+constructor environment because type constructors and type classes
+share a common name space.
+
+\ToDo{Might also sort methods of a type class because their order is
+  not relevant.}
 
 Importing and exporting algebraic data types and renaming types is
 complicated by the fact that the constructors of the type may be
@@ -67,14 +76,14 @@ replaced by underscores as well.
 > data TypeInfo = DataType QualIdent Int [Maybe Ident]
 >               | RenamingType QualIdent Int Ident
 >               | AliasType QualIdent Int Type
->               | TypeClass QualIdent [Maybe Ident]
+>               | TypeClass QualIdent [QualIdent] [Maybe Ident]
 >               deriving Show
 
 > instance Entity TypeInfo where
 >   origName (DataType tc _ _) = tc
 >   origName (RenamingType tc _ _) = tc
 >   origName (AliasType tc _ _) = tc
->   origName (TypeClass cls _) = cls
+>   origName (TypeClass cls _ _) = cls
 >   merge (DataType tc1 n cs1) (DataType tc2 _ cs2)
 >     | tc1 == tc2 = Just (DataType tc1 n (mergeData cs1 cs2))
 >     where mergeData cs1 cs2
@@ -89,8 +98,8 @@ replaced by underscores as well.
 >     | tc1 == tc2 = Just (RenamingType tc1 n nc)
 >   merge (AliasType tc1 n ty) (AliasType tc2 _ _)
 >     | tc1 == tc2 = Just (AliasType tc1 n ty)
->   merge (TypeClass cls1 fs1) (TypeClass cls2 fs2)
->     | cls1 == cls2 = Just (TypeClass cls1 (zipWith mplus fs1 fs2))
+>   merge (TypeClass cls1 clss fs1) (TypeClass cls2 _ fs2)
+>     | cls1 == cls2 = Just (TypeClass cls1 clss (zipWith mplus fs1 fs2))
 >   merge _ _ = Nothing
 
 \end{verbatim}
@@ -118,10 +127,16 @@ therefore should not fail.
 >     [AliasType _ _ _] -> []
 >     _ -> internalError ("constructors " ++ show tc)
 
+> superClasses :: QualIdent -> TCEnv -> [QualIdent]
+> superClasses cls clsEnv =
+>   case qualLookupTopEnv cls clsEnv of
+>     [TypeClass _ clss _] -> clss
+>     _ -> internalError ("superClasses " ++ show cls)
+
 > classMethods :: QualIdent -> TCEnv -> [Maybe Ident]
 > classMethods cls clsEnv =
 >   case qualLookupTopEnv cls clsEnv of
->     [TypeClass _ fs] -> fs
+>     [TypeClass _ _ fs] -> fs
 >     _ -> internalError ("classMethods " ++ show cls)
 
 \end{verbatim}
@@ -145,7 +160,7 @@ synonym types on the other side.
 > typeKind (DataType tc _ cs) = Data tc (catMaybes cs)
 > typeKind (RenamingType tc _ c) = Data tc [c]
 > typeKind (AliasType tc _ _) = Alias tc
-> typeKind (TypeClass cls fs) = Class cls (catMaybes fs)
+> typeKind (TypeClass cls _ fs) = Class cls (catMaybes fs)
 
 > instance Entity TypeKind where
 >   origName (Data tc _) = tc
@@ -540,13 +555,15 @@ declarations because type constructors and type classes share a common
 name space.
 \begin{verbatim}
 
-> isTypeDecl, isInstanceDecl, isBlockDecl :: TopDecl a -> Bool
+> isTypeDecl, isClassDecl, isInstanceDecl, isBlockDecl :: TopDecl a -> Bool
 > isTypeDecl (DataDecl _ _ _ _) = True
 > isTypeDecl (NewtypeDecl _ _ _ _) = True
 > isTypeDecl (TypeDecl _ _ _ _) = True
-> isTypeDecl (ClassDecl _ _ _ _) = True
+> isTypeDecl (ClassDecl _ _ _ _ _) = True {-sic!-}
 > isTypeDecl (InstanceDecl _ _ _ _ _) = False
 > isTypeDecl (BlockDecl _) = False
+> isClassDecl (ClassDecl _ _ _ _ _) = True
+> isClassDecl _ = False
 > isInstanceDecl (InstanceDecl _ _ _ _ _) = True
 > isInstanceDecl _ = False
 > isBlockDecl (BlockDecl _) = True

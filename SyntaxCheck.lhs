@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: SyntaxCheck.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -84,10 +84,10 @@ in order to check the global declaration group.
 >     return (env',ds'')
 
 > checkTopDeclLhs :: VarEnv -> TopDecl a -> Error (TopDecl a)
-> checkTopDeclLhs env (ClassDecl p cls tv ds) =
+> checkTopDeclLhs env (ClassDecl p cx cls tv ds) =
 >   do
 >     mapE_ (checkMethodSig env) ds
->     return (ClassDecl p cls tv ds)
+>     return (ClassDecl p cx cls tv ds)
 > checkTopDeclLhs env (BlockDecl d) = liftE BlockDecl (checkDeclLhs True env d)
 > checkTopDeclLhs _ d = return d
 
@@ -557,7 +557,7 @@ Auxiliary definitions.
 >         constr (ConOpDecl p _ _ op _) = P p op
 > constrs (NewtypeDecl _ _ _ (NewConstrDecl p c _)) = [P p c]
 > constrs (TypeDecl _ _ _ _) = []
-> constrs (ClassDecl _ _ _ _) = []
+> constrs (ClassDecl _ _ _ _ _) = []
 > constrs (InstanceDecl _ _ _ _ _) = []
 > constrs (BlockDecl _) = []
 
@@ -565,7 +565,7 @@ Auxiliary definitions.
 > mthds (DataDecl _ _ _ _) = []
 > mthds (NewtypeDecl _ _ _ _) = []
 > mthds (TypeDecl _ _ _ _) = []
-> mthds (ClassDecl _ _ _ ds) = [P p f | MethodSig p fs _ <- ds, f <- fs]
+> mthds (ClassDecl _ _ _ _ ds) = [P p f | MethodSig p fs _ <- ds, f <- fs]
 > mthds (InstanceDecl _ _ _ _ _) = []
 > mthds (BlockDecl _) = []
 

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: CurryParser.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -180,22 +180,25 @@ directory path to the module is ignored.
 > newConstrDecl = NewConstrDecl <$> position <*> con <*> type2
 
 > classDecl :: Parser Token (TopDecl ()) a
-> classDecl =
->   ClassDecl <$> position <*-> token KW_class <*> tycls <*> tyvar
->             <*> methodDefs
->   where methodDefs = token KW_where <-*> layout (methodSig `sepBy` semicolon)
->                `opt` []
+> classDecl = classInstDecl ClassDecl KW_class tycls tyvar methodSig
 
 > instanceDecl :: Parser Token (TopDecl ()) a
-> instanceDecl =
->   instDecl <$> position <*-> token KW_instance <*> instHead <*> methodDefs
->   where methodDefs = token KW_where <-*> layout (methodDecl `sepBy` semicolon)
->                `opt` []
->         instDecl p (cx,cls,ty) = InstanceDecl p cx cls ty
+> instanceDecl = classInstDecl InstanceDecl KW_instance qtycls type2 methodDecl
 
-> instHead :: Parser Token ([ClassAssert],QualIdent,TypeExpr) a
-> instHead = (,,) <$> context <*-> token DoubleRightArrow <*> qtycls <*> type2
->       <|?> (,,) [] <$> qtycls <*> type2
+> classInstDecl :: (Position -> [ClassAssert] -> a -> b -> [c] -> TopDecl ())
+>               -> Category -> Parser Token a d -> Parser Token b d
+>               -> Parser Token c d -> Parser Token (TopDecl ()) d
+> classInstDecl f kw cls ty d =
+>   f' <$> position <*> classInstHead kw cls ty <*> methodDefs d
+>   where methodDefs d = token KW_where <-*> layout (d `sepBy` semicolon)
+>                  `opt` []
+>         f' p = uncurry (uncurry . f p)
+
+> classInstHead :: Category -> Parser Token a c -> Parser Token b c
+>               -> Parser Token ([ClassAssert],(a,b)) c
+> classInstHead kw cls ty = token kw <-*> withContext (,) ((,) <$> cls <*> ty)
+>   -- NB Don't try to ``optimize'' this into withContext (,,) cls <*> ty
+>   --    as this will yield a parse error if the context is omitted
 
 > methodSig :: Parser Token MethodSig a
 > methodSig =
@@ -316,19 +319,21 @@ directory path to the module is ignored.
 > iHidingDecl =
 >   position <*-> token Id_hiding <**> (dataDecl <|> classDecl <|> funcDecl)
 >   where dataDecl = hiddenData <$-> token KW_data <*> qtycon <*> many tyvar
->         classDecl = hiddenClass <$-> token KW_class <*> qtycls <*> tyvar
+>         classDecl = hiddenClass <$> classInstHead KW_class qtycls tyvar
 >         funcDecl = hidingFunc <$-> token DoubleColon <*> qualType
 >         hiddenData tc tvs p = HidingDataDecl p tc tvs
->         hiddenClass cls tv p = HidingClassDecl p cls tv
+>         hiddenClass (cx,(cls,tv)) p = HidingClassDecl p cx cls tv
 >         hidingFunc ty p = IFunctionDecl p hidingId ty
 >         hidingId = qualify (mkIdent "hiding")
 
 > iDataDecl :: Parser Token IDecl a
 > iDataDecl = iTypeDeclLhs IDataDecl KW_data <*> constrs
->   where constrs = equals <-*> iConstrDecl `sepBy1` bar
+>   where constrs = equals <-*> maybeHidden constrDecl `sepBy1` bar
 >             `opt` []
->         iConstrDecl = Just <$> constrDecl <\> token Underscore
->                   <|> Nothing <$-> token Underscore
+
+> maybeHidden :: Parser Token a b -> Parser Token (Maybe a) b
+> maybeHidden p = Just <$> p <\> token Underscore
+>             <|> Nothing <$-> token Underscore
 
 > iNewtypeDecl :: Parser Token IDecl a
 > iNewtypeDecl =
@@ -342,17 +347,18 @@ directory path to the module is ignored.
 > iTypeDeclLhs f kw = f <$> position <*-> token kw <*> qtycon <*> many tyvar
 
 > iClassDecl :: Parser Token IDecl a
-> iClassDecl =
->   IClassDecl <$> position <*-> token KW_class <*> qtycls <*> tyvar
->              <*> methodDefs
+> iClassDecl = iClassInstDecl IClassDecl KW_class qtycls tyvar <*> methodDefs
 >   where methodDefs = token KW_where <-*> braces (methodDecl `sepBy` semicolon)
 >                `opt` []
->         methodDecl = Just <$> iMethodDecl
->                  <|> Nothing <$-> token Underscore
+>         methodDecl = maybeHidden iMethodDecl 
 
 > iInstanceDecl :: Parser Token IDecl a
-> iInstanceDecl = instDecl <$> position <*-> token KW_instance <*> instHead
->   where instDecl p (cx,cls,ty) = IInstanceDecl p cx cls ty
+> iInstanceDecl = iClassInstDecl IInstanceDecl KW_instance qtycls type2
+
+> iClassInstDecl :: (Position -> [ClassAssert] -> a -> b -> c) -> Category
+>                -> Parser Token a d -> Parser Token b d -> Parser Token c d
+> iClassInstDecl f kw cls ty = f' <$> position <*> classInstHead kw cls ty
+>   where f' p = uncurry (uncurry . f p)
 
 > iFunctionDecl :: Parser Token IDecl a
 > iFunctionDecl =
@@ -367,8 +373,12 @@ directory path to the module is ignored.
 \begin{verbatim}
 
 > qualType :: Parser Token QualTypeExpr a
-> qualType = QualTypeExpr <$> context <*-> token DoubleRightArrow <*> type0
->       <|?> QualTypeExpr [] <$> type0
+> qualType = withContext QualTypeExpr type0
+
+> withContext :: ([ClassAssert] -> a -> b) -> Parser Token a c
+>             -> Parser Token b c
+> withContext f p = f <$> context <*-> token DoubleRightArrow <*> p
+>              <|?> f [] <$> p
 
 > context :: Parser Token [ClassAssert] a
 > context = return <$> classAssert

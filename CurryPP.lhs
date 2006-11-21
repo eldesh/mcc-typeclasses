@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: CurryPP.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -70,12 +70,11 @@ Declarations
 >   sep [ppTypeDeclLhs "newtype" tc tvs <+> equals,indent (ppNewConstr nc)]
 > ppTopDecl (TypeDecl _ tc tvs ty) =
 >   sep [ppTypeDeclLhs "type" tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
-> ppTopDecl (ClassDecl _ cls tv ds) =
->   ppClassInstDecl (ppTypeDeclLhs "class" cls [tv]) (map ppMethodSig ds)
+> ppTopDecl (ClassDecl _ cx cls tv ds) =
+>   ppClassInstDecl (ppClassInstHead "class" cx (qualify cls) (VariableType tv))
+>                   (map ppMethodSig ds)
 > ppTopDecl (InstanceDecl _ cx cls ty ds) =
->   ppClassInstDecl
->     (text "instance" <+> sep [ppContext cx,ppQIdent cls <+> ppTypeExpr 2 ty])
->     (map ppMethodDecl ds)
+>   ppClassInstDecl (ppClassInstHead "instance" cx cls ty) (map ppMethodDecl ds)
 > ppTopDecl (BlockDecl d) = ppDecl d
 
 > ppTypeDeclLhs :: String -> Ident -> [Ident] -> Doc
@@ -94,6 +93,10 @@ Declarations
 
 > ppNewConstr :: NewConstrDecl -> Doc
 > ppNewConstr (NewConstrDecl _ c ty) = ppIdent c <+> ppTypeExpr 2 ty
+
+> ppClassInstHead :: String -> [ClassAssert] -> QualIdent -> TypeExpr -> Doc
+> ppClassInstHead kw cx cls ty =
+>   text kw <+> sep [ppContext cx,ppQIdent cls <+> ppTypeExpr 2 ty]
 
 > ppClassInstDecl :: Doc -> [Doc] -> Doc
 > ppClassInstDecl head ds
@@ -187,12 +190,11 @@ Interfaces
 >   sep [ppITypeDeclLhs "newtype" tc tvs <+> equals,indent (ppNewConstr nc)]
 > ppIDecl (ITypeDecl _ tc tvs ty) =
 >   sep [ppITypeDeclLhs "type" tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
-> ppIDecl (HidingClassDecl _ cls tv) =
->   text "hiding" <+> ppIClassDecl (ppITypeDeclLhs "class" cls [tv]) []
-> ppIDecl (IClassDecl _ cls tv ds) =
->   ppIClassDecl (ppITypeDeclLhs "class" cls [tv]) ds
-> ppIDecl (IInstanceDecl _ cx cls ty) =
->   text "instance" <+> sep [ppContext cx,ppQIdent cls <+> ppTypeExpr 2 ty]
+> ppIDecl (HidingClassDecl p cx cls tv) =
+>   text "hiding" <+> ppIDecl (IClassDecl p cx cls tv [])
+> ppIDecl (IClassDecl _ cx cls tv ds) =
+>   ppIClassDecl (ppClassInstHead "class" cx cls (VariableType tv)) ds
+> ppIDecl (IInstanceDecl _ cx cls ty) = ppClassInstHead "instance" cx cls ty
 > ppIDecl (IFunctionDecl _ f ty) =
 >   ppQIdent f <+> text "::" <+> ppQualTypeExpr ty
 

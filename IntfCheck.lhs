@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: IntfCheck.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 2000-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -90,16 +90,22 @@ interface module only. However, this has not been implemented yet.
 >           | tc == tc' && length tvs == n' && toType m tvs ty == ty' =
 >               Just (return ())
 >         checkType _ = Nothing
-> checkImport m _ tcEnv _ (HidingClassDecl p cls tv) =
+> checkImport m _ tcEnv _ (HidingClassDecl p cx cls tv) =
 >   checkTypeInfo "hidden type class" checkClass tcEnv p cls
->   where checkClass (TypeClass cls' _) | cls == cls' = Just (return ())
+>   where checkClass (TypeClass cls' clss' _)
+>           | cls == cls' &&
+>             [qualQualify m cls | ClassAssert cls _ <- cx] == clss' =
+>             Just (return ())
 >         checkClass _ = Nothing
-> checkImport m _ tcEnv tyEnv (IClassDecl p cls tv ds) =
+> checkImport m _ tcEnv tyEnv (IClassDecl p cx cls tv ds) =
 >   checkTypeInfo "type class" checkClass tcEnv p cls
->   where checkClass (TypeClass cls' fs')
->           | cls == cls' && length ds == length fs' &&
+>   where checkClass (TypeClass cls' clss' fs')
+>           | cls == cls' &&
+>             [qualQualify m cls | ClassAssert cls _ <- cx] == clss' &&
+>             length ds == length fs' &&
 >             and (zipWith (isVisible imethod) ds fs') =
->               Just (mapM_ (checkMethodImport m tyEnv cls tv) (catMaybes ds))
+>               Just (mapM_ (checkMethodImport m tyEnv cls cx') (catMaybes ds))
+>           where cx' = ClassAssert cls tv : cx
 >         checkClass _ = Nothing
 > checkImport m _ _ _ (IInstanceDecl _ _ _ _) = return ()
 > checkImport m _ _ tyEnv (IFunctionDecl p f ty) =
@@ -135,14 +141,13 @@ interface module only. However, this has not been implemented yet.
 >           toType m tvs ty == head (arrowArgs ty')
 >         checkNewConstr _ = False
 
-> checkMethodImport :: ModuleIdent -> ValueEnv -> QualIdent -> Ident
+> checkMethodImport :: ModuleIdent -> ValueEnv -> QualIdent -> [ClassAssert]
 >                   -> IMethodDecl -> Error ()
-> checkMethodImport m tyEnv cls tv (IMethodDecl p f ty) =
+> checkMethodImport m tyEnv cls cx (IMethodDecl p f ty) =
 >   checkValueInfo "method" checkMethod tyEnv p qf
 >   where qf = qualifyLike cls f
 >         checkMethod (Value f' (ForAll _ ty')) =
->           qf == f' &&
->           toQualType m [] (QualTypeExpr [ClassAssert cls tv] ty) == ty'
+>           qf == f' && toQualType m [] (QualTypeExpr cx ty) == ty'
 >         checkMethod _ = False
 
 > checkPrecInfo :: (PrecInfo -> Bool) -> PEnv -> Position

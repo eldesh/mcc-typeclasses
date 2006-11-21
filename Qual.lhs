@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: Qual.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -36,8 +36,8 @@ functions remain unchanged.
 >     NewtypeDecl p tc tvs (qual tcEnv tyEnv nc)
 >   qual tcEnv tyEnv (TypeDecl p tc tvs ty) =
 >     TypeDecl p tc tvs (qual tcEnv tyEnv ty)
->   qual tcEnv tyEnv (ClassDecl p cls tv ds) =
->     ClassDecl p cls tv (qual tcEnv tyEnv ds)
+>   qual tcEnv tyEnv (ClassDecl p cx cls tv ds) =
+>     ClassDecl p (qual tcEnv tyEnv cx) cls tv (qual tcEnv tyEnv ds)
 >   qual tcEnv tyEnv (InstanceDecl p cx cls ty ds) =
 >     InstanceDecl p (qual tcEnv tyEnv cx)
 >                  (qualIdent tcEnv cls)

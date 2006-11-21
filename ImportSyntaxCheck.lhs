@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ImportSyntaxCheck.lhs 1995 2006-11-10 14:27:14Z wlux $
+% $Id: ImportSyntaxCheck.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -40,7 +40,7 @@ declarations.
 > bindType m (INewtypeDecl _ tc _ nc) =
 >   bindUnqual tc (Data (qualQualify m tc) [nconstr nc])
 > bindType m (ITypeDecl _ tc _ _) = bindUnqual tc (Alias (qualQualify m tc))
-> bindType m (IClassDecl _ cls _ ds) =
+> bindType m (IClassDecl _ _ cls _ ds) =
 >   bindUnqual cls (Class (qualQualify m cls) (map imethod (catMaybes ds)))
 > bindType _ _ = id
 
@@ -48,7 +48,7 @@ declarations.
 > bindValue m (IDataDecl _ tc _ cs) =
 >   flip (foldr (bindConstr (qualQualify m tc))) (catMaybes cs)
 > bindValue m (INewtypeDecl _ tc _ nc) = bindNewConstr (qualQualify m tc) nc
-> bindValue m (IClassDecl _ cls _ ds) =
+> bindValue m (IClassDecl _ _ cls _ ds) =
 >   flip (foldr (bindMethod (qualQualify m cls))) (catMaybes ds)
 > bindValue m (IFunctionDecl _ f _) = bindUnqual f (Var (qualQualify m f))
 > bindValue _ _ = id

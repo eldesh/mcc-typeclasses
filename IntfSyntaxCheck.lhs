@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -44,8 +44,8 @@ The latter must not occur in type expressions in interfaces.
 >   qualBindTopEnv tc (Data tc (map constr (catMaybes cs)))
 > bindType (INewtypeDecl _ tc _ nc) = qualBindTopEnv tc (Data tc [nconstr nc])
 > bindType (ITypeDecl _ tc _ _) = qualBindTopEnv tc (Alias tc)
-> bindType (HidingClassDecl _ cls _) = qualBindTopEnv cls (Class cls [])
-> bindType (IClassDecl _ cls _ ds) =
+> bindType (HidingClassDecl _ _ cls _) = qualBindTopEnv cls (Class cls [])
+> bindType (IClassDecl _ cx cls _ ds) =
 >   qualBindTopEnv cls (Class cls (map imethod (catMaybes ds)))
 > bindType (IInstanceDecl _ _ _ _) = id
 > bindType (IFunctionDecl _ _ _) = id
@@ -69,13 +69,15 @@ during syntax checking of type expressions.
 > checkIDecl env (ITypeDecl p tc tvs ty) =
 >   checkTypeLhs env p tvs &&>
 >   liftE (ITypeDecl p tc tvs) (checkClosedType env p tvs ty)
-> checkIDecl env (HidingClassDecl p cls tv) =
->   do
->     checkTypeLhs env p [tv]
->     return (HidingClassDecl p cls tv)
-> checkIDecl env (IClassDecl p cls tv ds) =
+> checkIDecl env (HidingClassDecl p cx cls tv) =
 >   checkTypeLhs env p [tv] &&>
->   liftE (IClassDecl p cls tv) (mapE (liftMaybe (checkIMethodDecl env tv)) ds)
+>   checkQualType env p (QualTypeExpr cx (VariableType tv)) &&>
+>   return (HidingClassDecl p cx cls tv)
+> checkIDecl env (IClassDecl p cx cls tv ds) =
+>   checkTypeLhs env p [tv] &&>
+>   checkQualType env p (QualTypeExpr cx (VariableType tv)) &&>
+>   liftE (IClassDecl p cx cls tv)
+>         (mapE (liftMaybe (checkIMethodDecl env tv)) ds)
 > checkIDecl env (IInstanceDecl p cx cls ty) =
 >   checkClass env p cls &&>
 >   liftE (IInstanceDecl p cx cls) (checkInstType env p cx ty)
@@ -137,8 +139,9 @@ during syntax checking of type expressions.
 
 > checkQualType :: TypeEnv -> Position -> QualTypeExpr -> Error QualTypeExpr
 > checkQualType env p (QualTypeExpr cx ty) =
+>   mapE_ (checkClassAssert env p) cx &&>
 >   do
->     ty' <- mapE_ (checkClassAssert env p) cx &&> checkType env p ty
+>     ty' <- checkType env p ty
 >     let tvs = fv ty'
 >     mapE_ (errorAt p . unboundVariable)
 >           (nub [tv | ClassAssert _ tv <- cx, tv `notElem` tvs])

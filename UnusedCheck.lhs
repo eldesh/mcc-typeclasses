@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: UnusedCheck.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -89,7 +89,7 @@ implemented by a traversal of the syntax tree.
 >   used _ (DataDecl _ _ _ _) = id
 >   used _ (NewtypeDecl _ _ _ _) = id
 >   used _ (TypeDecl _ _ _ _) = id
->   used m (ClassDecl _ _ _ ds) = used m ds
+>   used m (ClassDecl _ _ _ _ ds) = used m ds
 >   used m (InstanceDecl _ _ cls _ ds) =
 >     used m [qualifyLike cls f | MethodDecl _ f _ <- ds] . used m ds
 >   used m (BlockDecl d) = used m d
@@ -97,7 +97,7 @@ implemented by a traversal of the syntax tree.
 >   unused used p (DataDecl _ _ _ cs) = unused used p cs
 >   unused used p (NewtypeDecl _ _ _ nc) = unused used p nc
 >   unused _ _ (TypeDecl _ _ _ _) = id
->   unused used _ (ClassDecl p _ _ ds) = unused used p ds
+>   unused used _ (ClassDecl p _ _ _ ds) = unused used p ds
 >   unused used _ (InstanceDecl p _ _ _ ds) = unused used p ds
 >   unused used p (BlockDecl d) = unused used p d
 

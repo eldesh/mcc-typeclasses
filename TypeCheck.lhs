@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: TypeCheck.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -126,8 +126,9 @@ ambiguous.
 >         bind (NewConstrDecl _ c ty) =
 >           bindConstr NewtypeConstructor m tcEnv tvs c [ty] ty0
 > bindTypeValues _ _ (TypeDecl _ _ _ _) tyEnv = tyEnv
-> bindTypeValues m tcEnv (ClassDecl _ cls tv ds) tyEnv = foldr bind tyEnv ds
->   where bind (MethodSig _ fs ty) = bindMethods m tcEnv cls tv fs ty
+> bindTypeValues m tcEnv (ClassDecl _ _ cls tv ds) tyEnv = foldr bind tyEnv ds
+>   where cx = [ClassAssert (qualifyWith m cls) tv]
+>         bind (MethodSig _ fs ty) = bindMethods m tcEnv cx fs ty
 > bindTypeValues _ _ (InstanceDecl _ _ _ _ _) tyEnv = tyEnv
 > bindTypeValues _ _ (BlockDecl _) tyEnv = tyEnv
 
@@ -139,12 +140,16 @@ ambiguous.
 >   where ty' = typeScheme $ normalize (length tvs) $
 >               qualType (foldr TypeArrow ty0 (expandMonoTypes tcEnv tvs tys))
 
-> bindMethods :: ModuleIdent -> TCEnv -> Ident -> Ident -> [Ident] -> TypeExpr
+> bindMethods :: ModuleIdent -> TCEnv -> [ClassAssert] -> [Ident] -> TypeExpr
 >             -> ValueEnv -> ValueEnv
-> bindMethods m tcEnv cls tv fs ty tyEnv = foldr (bindMethod m ty') tyEnv fs
->   where cx = [TypePred (qualifyWith m cls) (TypeVariable 0)]
->         ty' = typeScheme $ normalize 0 $
->               QualType cx (expandMonoType tcEnv [tv] ty)
+> bindMethods m tcEnv cx fs ty tyEnv = foldr (bindMethod m ty') tyEnv fs
+>   where ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
+>         -- FIXME: expandPolyType will fail with
+>         --          internal error: implied <className>
+>         --        in the (rather contrived) case where a class with the
+>         --        same qualified name is in scope, e.g.
+>         --          module M where { class C a ... }
+>         --          module N where { import M as N; class C a ... }
 
 > bindMethod :: ModuleIdent -> TypeScheme -> Ident -> ValueEnv -> ValueEnv
 > bindMethod m ty f = globalBindTopEnv m f (Value (qualifyWith m f) ty)
@@ -164,7 +169,7 @@ instance declarations from the current module.
 >   bindEnv (CT cls' (root ty')) cx'
 >   where cls' =
 >           case qualLookupTopEnv cls tcEnv of
->             [TypeClass cls' _] -> cls'
+>             [TypeClass cls' _ _] -> cls'
 >             _ -> internalError "bindInstance"
 >         ForAll _ (QualType cx' ty') =
 >           expandPolyType tcEnv (QualTypeExpr cx ty)
@@ -407,9 +412,11 @@ uninstantiated instance type in the method's type signature.
 \begin{verbatim}
 
 > tcInstDecl :: ModuleIdent -> TCEnv -> TopDecl a -> TcState (TopDecl Type)
-> tcInstDecl m tcEnv (InstanceDecl p cx cls ty ds) =
+> tcInstDecl m tcEnv d@(InstanceDecl p cx cls ty ds) =
 >   do
 >     ty'' <- liftM snd (inst ty')
+>     reduceContext p "instance declaration" (ppTopDecl d) m
+>                   [TypePred cls ty'' | cls <- superClasses cls tcEnv] ()
 >     liftM (InstanceDecl p cx cls ty)
 >           (mapM (tcMethodDecl m tcEnv cls ty' ty'') ds)
 >   where ty' = expandPolyType tcEnv (QualTypeExpr cx ty)

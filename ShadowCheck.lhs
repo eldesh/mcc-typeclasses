@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: ShadowCheck.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -152,7 +152,7 @@ with their positions.
 \begin{verbatim}
 
 > funs :: TopDecl a -> [P Ident]
-> funs (ClassDecl _ _ _ ds) = [P p f | MethodSig p fs _ <- ds, f <- fs]
+> funs (ClassDecl _ _ _ _ ds) = [P p f | MethodSig p fs _ <- ds, f <- fs]
 > funs (BlockDecl d) = vars d
 > funs _ = []
 

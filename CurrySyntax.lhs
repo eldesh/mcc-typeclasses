@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: CurrySyntax.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -54,7 +54,7 @@ parsed representation of a Curry program.
 >     DataDecl Position Ident [Ident] [ConstrDecl]
 >   | NewtypeDecl Position Ident [Ident] NewConstrDecl
 >   | TypeDecl Position Ident [Ident] TypeExpr
->   | ClassDecl Position Ident Ident [MethodSig]
+>   | ClassDecl Position [ClassAssert] Ident Ident [MethodSig]
 >   | InstanceDecl Position [ClassAssert] QualIdent TypeExpr [MethodDecl a]
 >   | BlockDecl (Decl a)
 >   deriving (Eq,Show)
@@ -108,8 +108,8 @@ Interface declarations are restricted to type declarations and signatures.
 >   | IDataDecl Position QualIdent [Ident] [Maybe ConstrDecl]
 >   | INewtypeDecl Position QualIdent [Ident] NewConstrDecl
 >   | ITypeDecl Position QualIdent [Ident] TypeExpr
->   | HidingClassDecl Position QualIdent Ident
->   | IClassDecl Position QualIdent Ident [Maybe IMethodDecl]
+>   | HidingClassDecl Position [ClassAssert] QualIdent Ident
+>   | IClassDecl Position [ClassAssert] QualIdent Ident [Maybe IMethodDecl]
 >   | IInstanceDecl Position [ClassAssert] QualIdent TypeExpr
 >   | IFunctionDecl Position QualIdent QualTypeExpr
 >   deriving (Eq,Show)
@@ -249,7 +249,7 @@ The abstract syntax tree is a functor with respect to the attributes.
 >   fmap _ (DataDecl p tc tvs cs) = DataDecl p tc tvs cs
 >   fmap _ (NewtypeDecl p tc tvs nc) = NewtypeDecl p tc tvs nc
 >   fmap _ (TypeDecl p tc tvs ty) = TypeDecl p tc tvs ty
->   fmap f (ClassDecl p cls tv ds) = ClassDecl p cls tv ds
+>   fmap f (ClassDecl p cx cls tv ds) = ClassDecl p cx cls tv ds
 >   fmap f (InstanceDecl p cx cls ty ds) =
 >     InstanceDecl p cx cls ty (map (fmap f) ds)
 >   fmap f (BlockDecl d) = BlockDecl (fmap f d)

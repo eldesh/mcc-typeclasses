@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfEquiv.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: IntfEquiv.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 2000-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -61,9 +61,10 @@ inadvertently mix up these cases.
 >     tc1 == tc2 && tvs1 == tvs2 && nc1 =~= nc2
 >   ITypeDecl _ tc1 tvs1 ty1 =~= ITypeDecl _ tc2 tvs2 ty2 =
 >     tc1 == tc2 && tvs1 == tvs2 && ty1 == ty2
->   HidingClassDecl _ cls1 _ =~= HidingClassDecl _ cls2 _ = cls1 == cls2
->   IClassDecl _ cls1 _ ds1 =~= IClassDecl _ cls2 _ ds2 =
->     cls1 == cls2 && ds1 `eqvList` ds2
+>   HidingClassDecl _ cx1 cls1 _ =~= HidingClassDecl _ cx2 cls2 _ =
+>     cx1 == cx2 && cls1 == cls2
+>   IClassDecl _ cx1 cls1 _ ds1 =~= IClassDecl _ cx2 cls2 _ ds2 =
+>     cx1 == cx2 && cls1 == cls2 && ds1 `eqvList` ds2
 >   IInstanceDecl _ cx1 cls1 ty1 =~= IInstanceDecl _ cx2 cls2 ty2 =
 >     cx1 == cx2 && cls1 == cls2 && ty1 == ty2
 >   IFunctionDecl _ f1 ty1 =~= IFunctionDecl _ f2 ty2 = f1 == f2 && ty1 == ty2
@@ -109,8 +110,8 @@ by function \texttt{fixInterface} and the associated type class
 >   fix tcs (IDataDecl p tc tvs cs) = IDataDecl p tc tvs (fix tcs cs)
 >   fix tcs (INewtypeDecl p tc tvs nc) = INewtypeDecl p tc tvs (fix tcs nc)
 >   fix tcs (ITypeDecl p tc tvs ty) = ITypeDecl p tc tvs (fix tcs ty)
->   fix tcs (HidingClassDecl p cls tv) = HidingClassDecl p cls tv
->   fix tcs (IClassDecl p cls tv ds) = IClassDecl p cls tv (fix tcs ds)
+>   fix tcs (HidingClassDecl p cx cls tv) = HidingClassDecl p cx cls tv
+>   fix tcs (IClassDecl p cx cls tv ds) = IClassDecl p cx cls tv (fix tcs ds)
 >   fix tcs (IInstanceDecl p cx cls ty) = IInstanceDecl p cx cls (fix tcs ty)
 >   fix tcs (IFunctionDecl p f ty) = IFunctionDecl p f (fix tcs ty)
 
@@ -149,8 +150,8 @@ by function \texttt{fixInterface} and the associated type class
 >         tcs (IDataDecl _ tc _ _) tcs = tc : tcs
 >         tcs (INewtypeDecl _ tc _ _) tcs = tc : tcs
 >         tcs (ITypeDecl _ tc _ _) tcs = tc : tcs
->         tcs (HidingClassDecl _ _ _) tcs = tcs
->         tcs (IClassDecl _ _ _ _) tcs = tcs
+>         tcs (HidingClassDecl _ _ _ _) tcs = tcs
+>         tcs (IClassDecl _ _ _ _ _) tcs = tcs
 >         tcs (IInstanceDecl _ _ _ _) tcs = tcs
 >         tcs (IFunctionDecl _ _ _) tcs = tcs
 

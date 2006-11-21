@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -58,7 +58,7 @@ later for checking the optional export list of the current module.
 >   globalBindTopEnv m tc (Data (qualifyWith m tc) [nconstr nc])
 > bindType m (TypeDecl _ tc _ _) =
 >   globalBindTopEnv m tc (Alias (qualifyWith m tc))
-> bindType m (ClassDecl _ cls _ ds) =
+> bindType m (ClassDecl _ _ cls _ ds) =
 >   globalBindTopEnv m cls (Class (qualifyWith m cls) (concatMap methods ds))
 > bindType m (InstanceDecl _ _ _ _ _) = id
 > bindType _ (BlockDecl _) = id
@@ -80,10 +80,10 @@ signatures.
 > checkTopDecl env (TypeDecl p tc tvs ty) =
 >   checkTypeLhs env p tvs &&>
 >   liftE (TypeDecl p tc tvs) (checkClosedType env p tvs ty)
-> checkTopDecl env (ClassDecl p cls tv ds) =
->   do
->     checkTypeLhs env p [tv]
->     liftE (ClassDecl p cls tv) (mapE (checkMethodSig env tv) ds)
+> checkTopDecl env (ClassDecl p cx cls tv ds) =
+>   checkTypeLhs env p [tv] &&> 
+>   checkQualType env p (QualTypeExpr cx (VariableType tv)) &&>
+>   liftE (ClassDecl p cx cls tv) (mapE (checkMethodSig env tv) ds)
 > checkTopDecl env (InstanceDecl p cx cls ty ds) =
 >   checkClass env p cls &&>
 >   liftE2 (InstanceDecl p cx cls)
@@ -240,8 +240,9 @@ interpret the identifier as such.
 
 > checkQualType :: TypeEnv -> Position -> QualTypeExpr -> Error QualTypeExpr
 > checkQualType env p (QualTypeExpr cx ty) =
+>   mapE_ (checkClassAssert env p) cx &&> 
 >   do
->     ty' <- mapE_ (checkClassAssert env p) cx &&> checkType env p ty
+>     ty' <- checkType env p ty
 >     let tvs = fv ty'
 >     mapE_ (errorAt p . unboundVariable)
 >           (nub [tv | ClassAssert _ tv <- cx, tv `notElem` tvs])
@@ -324,7 +325,7 @@ Auxiliary definitions.
 > tident (DataDecl p tc _ _) = P p tc
 > tident (NewtypeDecl p tc _ _) = P p tc
 > tident (TypeDecl p tc _ _) = P p tc
-> tident (ClassDecl p cls _ _) = P p cls
+> tident (ClassDecl p _ cls _ _) = P p cls
 > tident (InstanceDecl _ _ _ _ _) = internalError "tident"
 > tident (BlockDecl _) = internalError "tident"
 

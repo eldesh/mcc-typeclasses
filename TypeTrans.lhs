@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2015 2006-11-21 09:16:28Z wlux $
+% $Id: TypeTrans.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -173,16 +173,13 @@ names.
 
 > expandPolyType :: TCEnv -> QualTypeExpr -> TypeScheme
 > expandPolyType tcEnv (QualTypeExpr cx ty) =
->   typeScheme $ normalize 0 $ QualType cx' ty'
->   where cx' = nub (map (expandTypePred tcEnv . toTypePred' tvs) cx)
+>   typeScheme $ normalize 0 $ QualType (impliedContext tcEnv cx') ty'
+>   where cx' = map (expandTypePred tcEnv . toTypePred' tvs) cx
 >         ty' = expandType tcEnv (toType' tvs ty)
 >         tvs = enumTypeVars [] ty
 
 > expandTypePred :: TCEnv -> TypePred -> TypePred
-> expandTypePred tcEnv (TypePred cls ty) =
->   case qualLookupTopEnv cls tcEnv of
->     [TypeClass cls' _] -> TypePred cls' (expandType tcEnv ty)
->     _ -> internalError ("expandTypePred " ++ show cls)
+> expandTypePred tcEnv (TypePred cls ty) = TypePred cls (expandType tcEnv ty)
 
 > expandType :: TCEnv -> Type -> Type
 > expandType tcEnv (TypeConstructor tc tys) =
@@ -197,6 +194,19 @@ names.
 > expandType tcEnv (TypeArrow ty1 ty2) =
 >   TypeArrow (expandType tcEnv ty1) (expandType tcEnv ty2)
 > expandType _ (TypeSkolem k) = TypeSkolem k
+
+\end{verbatim}
+The function \texttt{impliedContext} transforms a context by adding
+type predicates for all type predicates which are implied by the super
+class hierarchy.
+\begin{verbatim}
+
+> impliedContext :: TCEnv -> Context -> Context
+> impliedContext tcEnv cx = nub (concatMap implied cx)
+>   where implied (TypePred cls ty) =
+>           case qualLookupTopEnv cls tcEnv of
+>             [TypeClass cls' clss _] -> map (flip TypePred ty) (cls' : clss)
+>             _ -> internalError ("implied " ++ show cls)
 
 \end{verbatim}
 The following functions implement pretty-printing for types by

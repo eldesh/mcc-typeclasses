@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: Exports.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -73,9 +73,9 @@ declarations which cannot be used in another module because
 >       where newConstr _ = newConstrDecl m tyEnv tc c
 >     [AliasType _ n ty] ->
 >       iTypeDecl ITypeDecl m tc n (const (fromType m ty)) : ds
->     [TypeClass _ fs] ->
->       IClassDecl noPos (qualUnqualify m tc) (head nameSupply) methods : ds
->       where methods = map (hideDecl (methodDecl m tyEnv tc) xs) fs
+>     [TypeClass _ clss fs] ->
+>       iClassDecl IClassDecl m (qualUnqualify m tc) clss (methods fs) : ds
+>       where methods fs = map (hideDecl (methodDecl m tyEnv tc) xs) fs
 >     _ -> internalError "typeDecl"
 >   where hideDecl f xs x = x >>= fmap f . hide xs
 >         hide xs x
@@ -86,6 +86,13 @@ declarations which cannot be used in another module because
 >           -> ModuleIdent -> QualIdent -> Int -> ([Ident] -> a) -> IDecl
 > iTypeDecl f m tc n g = f noPos (qualUnqualify m tc) tvs (g tvs')
 >   where (tvs,tvs') = splitAt n nameSupply
+
+> iClassDecl :: (Position -> [ClassAssert] -> QualIdent -> Ident -> a)
+>             -> ModuleIdent -> QualIdent -> [QualIdent] -> a
+> iClassDecl f m cls clss = f noPos cx cls tv
+>   where ty = TypeVariable 0
+>         QualTypeExpr cx (VariableType tv) =
+>           fromQualType m (QualType (map (flip TypePred ty) clss) ty)
 
 > constrDecl :: ModuleIdent -> ValueEnv -> QualIdent -> Int -> [Ident]
 >            -> Ident -> ConstrDecl
@@ -157,7 +164,7 @@ not module \texttt{B}.
 >   modules (IDataDecl _ tc _ cs) = modules tc . modules cs
 >   modules (INewtypeDecl _ tc _ nc) = modules tc . modules nc
 >   modules (ITypeDecl _ tc _ ty) = modules tc . modules ty
->   modules (IClassDecl _ cls _ ds) = modules cls . modules ds
+>   modules (IClassDecl _ cx cls _ ds) = modules cx . modules cls . modules ds
 >   modules (IInstanceDecl _ cx cls ty) = modules cx . modules cls . modules ty
 >   modules (IFunctionDecl _ f ty) = modules f . modules ty
 
@@ -202,7 +209,7 @@ loading the imported modules.
 >   case qualLookupTopEnv (qualQualify m tc) tcEnv of
 >     [DataType _ n _] -> HidingDataDecl noPos tc (take n nameSupply)
 >     [RenamingType _ n _] -> HidingDataDecl noPos tc (take n nameSupply)
->     [TypeClass _ _] -> HidingClassDecl noPos tc (head nameSupply)
+>     [TypeClass _ clss _] -> iClassDecl HidingClassDecl m tc clss
 >     _ -> internalError "hiddenTypeDecl"
 
 > hiddenTypes :: [IDecl] -> [QualIdent]
@@ -215,7 +222,7 @@ loading the imported modules.
 > definedType (IDataDecl _ tc _ _) tcs = tc : tcs
 > definedType (INewtypeDecl _ tc _ _) tcs = tc : tcs
 > definedType (ITypeDecl _ tc _ _) tcs = tc : tcs
-> definedType (IClassDecl _ cls _ _) tcs = cls : tcs
+> definedType (IClassDecl _ _ cls _ _) tcs = cls : tcs
 > definedType (IInstanceDecl _ _ _ _) tcs = tcs
 > definedType (IFunctionDecl _ _ _)  tcs = tcs
 
@@ -232,7 +239,7 @@ loading the imported modules.
 >   usedTypes (IDataDecl _ _ _ cs) = usedTypes cs
 >   usedTypes (INewtypeDecl _ _ _ nc) = usedTypes nc
 >   usedTypes (ITypeDecl _ _ _ ty) = usedTypes ty
->   usedTypes (IClassDecl _ _ _ ds) = usedTypes ds
+>   usedTypes (IClassDecl _ cx _ _ ds) = usedTypes cx . usedTypes ds
 >   usedTypes (IInstanceDecl _ cx cls ty) =
 >     usedTypes cx . (cls :) . usedTypes ty
 >   usedTypes (IFunctionDecl _ _ ty) = usedTypes ty

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2015 2006-11-21 09:16:28Z wlux $
+% $Id: Imports.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -50,8 +50,8 @@ all instance declarations are always imported into the current module.
 > isHiddenDecl (IDataDecl _ _ _ _) = False
 > isHiddenDecl (INewtypeDecl _ _ _ _) = False
 > isHiddenDecl (ITypeDecl _ _ _ _) = False
-> isHiddenDecl (HidingClassDecl _ _ _) = True
-> isHiddenDecl (IClassDecl _ _ _ _) = False
+> isHiddenDecl (HidingClassDecl _ _ _ _) = True
+> isHiddenDecl (IClassDecl _ _ _ _ _) = False
 > isHiddenDecl (IInstanceDecl _ _ _ _) = False
 > isHiddenDecl (IFunctionDecl _ _ _) = False
 
@@ -75,8 +75,8 @@ all instance declarations are always imported into the current module.
 > importMembers isVisible (RenamingType tc n nc) =
 >   maybe (DataType tc n []) (RenamingType tc n) (importMember isVisible nc)
 > importMembers isVisible (AliasType tc n ty) = AliasType tc n ty
-> importMembers isVisible (TypeClass cls fs) =
->   TypeClass cls (map (>>= importMember isVisible) fs)
+> importMembers isVisible (TypeClass cls clss fs) =
+>   TypeClass cls clss (map (>>= importMember isVisible) fs)
 
 > importMember :: (Ident -> Bool) -> Ident -> Maybe Ident
 > importMember isVisible c
@@ -137,8 +137,8 @@ instances imported from another module.
 > entity (IDataDecl _ tc _ _) = tc
 > entity (INewtypeDecl _ tc _ _) = tc
 > entity (ITypeDecl _ tc _ _) = tc
-> entity (HidingClassDecl _ cls _) = cls
-> entity (IClassDecl _ cls _ _) = cls
+> entity (HidingClassDecl _ _ cls _) = cls
+> entity (IClassDecl _ _ cls _ _) = cls
 > entity (IInstanceDecl _ _ _ _) = qualify anonId
 > entity (IFunctionDecl _ f _) = f
 
@@ -166,10 +166,9 @@ following functions.
 >   qual tc (typeCon RenamingType m tc tvs (nconstr nc))
 > types m (ITypeDecl _ tc tvs ty) =
 >   qual tc (typeCon AliasType m tc tvs (toType m tvs ty))
-> types m (HidingClassDecl _ cls tv) =
->   qual cls (TypeClass (qualQualify m cls) [])
-> types m (IClassDecl _ cls tv fs) =
->   qual cls (TypeClass (qualQualify m cls) (map (fmap imethod) fs))
+> types m (HidingClassDecl _ cx cls tv) = qual cls (typeCls m cx cls tv [])
+> types m (IClassDecl _ cx cls tv fs) =
+>   qual cls (typeCls m cx cls tv (map (fmap imethod) fs))
 > types _ _ = id
 
 > values :: ModuleIdent -> IDecl -> [I ValueInfo] -> [I ValueInfo]
@@ -181,8 +180,8 @@ following functions.
 >   where tc' = qualQualify m tc
 > values m (IFunctionDecl _ f ty) =
 >   qual f (Value (qualQualify m f) (toTypeScheme m ty))
-> values m (IClassDecl _ cls tv ds) =
->   (map (classMethod m cls' [ClassAssert cls' tv]) (catMaybes ds) ++)
+> values m (IClassDecl _ cx cls tv ds) =
+>   (map (classMethod m cls' (ClassAssert cls tv : cx)) (catMaybes ds) ++)
 >   where cls' = qualQualify m cls
 > values _ _ = id
 
@@ -198,7 +197,7 @@ following functions.
 > newConstr m tc tvs ty0 (NewConstrDecl _ c ty1) =
 >   (c,con NewtypeConstructor m tc tvs c (ArrowType ty1 ty0))
 
-> classMethod :: ModuleIdent -> QualIdent -> [ClassAssert] -> IMethodDecl 
+> classMethod :: ModuleIdent -> QualIdent -> [ClassAssert] -> IMethodDecl
 >             -> I ValueInfo
 > classMethod m cls cx (IMethodDecl _ f ty) =
 >   (f,Value (qualifyLike cls f) (methodType m cx ty))
@@ -235,6 +234,12 @@ Auxiliary functions:
 
 > typeCon :: (QualIdent -> Int -> a) -> ModuleIdent -> QualIdent -> [Ident] -> a
 > typeCon f m tc tvs = f (qualQualify m tc) (length tvs)
+
+> typeCls :: ModuleIdent -> [ClassAssert] -> QualIdent -> Ident -> [Maybe Ident]
+>         -> TypeInfo
+> typeCls m cx cls tv =
+>   TypeClass (qualQualify m cls) [cls | TypePred cls _ <- cx']
+>   where QualType cx' _ = toQualType m [] (QualTypeExpr cx (VariableType tv))
 
 > con :: (QualIdent -> TypeScheme -> a) -> ModuleIdent -> QualIdent -> [Ident]
 >     -> Ident -> TypeExpr -> a

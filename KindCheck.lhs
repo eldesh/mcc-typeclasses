@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: KindCheck.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -35,7 +35,7 @@ to non-termination during their expansion.
 > kindCheck :: ModuleIdent -> TCEnv -> [TopDecl a] -> Error TCEnv
 > kindCheck m tcEnv ds =
 >   do
->     checkSynonynms m tds
+>     checkSuperClasses m tds &&> checkSynonynms m tds
 >     let tcEnv' = bindTypes m tds tcEnv
 >     mapE_ (checkTopDecl tcEnv') ds
 >     return tcEnv'
@@ -53,8 +53,11 @@ declarations.
 \end{verbatim}
 When synonym types are entered into the type environment, their right
 hand sides are already fully expanded. This is possible because Curry
-does not allow (mutually) recursive type synonyms, which is checked by
-function \texttt{checkSynonyms} below.
+does not allow (mutually) recursive type synonyms, which is checked in
+function \texttt{checkSynonyms} below. In addition, the compiler
+checks that the super class hierarchy is acyclic (in function
+\texttt{checkSuperClasses}) and computes all direct and indirect super
+classes of a type class when it is entered into the type environment.
 
 Note that \texttt{bindTC} is passed the \emph{final} type constructor
 environment so that we do not need to pass the declarations to this
@@ -73,8 +76,13 @@ function in any particular order.
 > bindTC m tcEnv (TypeDecl _ tc tvs ty) =
 >   globalBindTopEnv m tc
 >                    (typeCon AliasType m tc tvs (expandMonoType tcEnv tvs ty))
-> bindTC m tcEnv (ClassDecl _ cls _ ds) =
->   globalBindTopEnv m cls (typeClass m cls (map Just (concatMap methods ds)))
+> bindTC m tcEnv (ClassDecl _ cx cls tv ds) =
+>   globalBindTopEnv m cls (typeClass m cls clss fs)
+>   where clss = [cls | TypePred cls _ <- context ty]
+>         fs = map Just (concatMap methods ds)
+>         ty = expandPolyType tcEnv (QualTypeExpr cx (VariableType tv))
+>         context (ForAll _ (QualType cx _)) = cx
+
 > bindTC _ _ (InstanceDecl _ _ _ _ _) = id
 > bindTC _ _ (BlockDecl _) = id
 
@@ -83,13 +91,13 @@ function in any particular order.
 >   where bound (DataDecl _ tc _ _) = [tc]
 >         bound (NewtypeDecl _ tc _ _) = [tc]
 >         bound (TypeDecl _ tc _ _) = [tc]
->         bound (ClassDecl _ _ _ _) = []
+>         bound (ClassDecl _ _ _ _ _) = []
 >         bound (InstanceDecl _ _ _ _ _) = []
 >         bound (BlockDecl _) = []
 >         free (DataDecl _ _ _ _) = []
 >         free (NewtypeDecl _ _ _ _) = []
 >         free (TypeDecl _ _ _ ty) = ft m ty []
->         free (ClassDecl _ _ _ _) = []
+>         free (ClassDecl _ _ _ _ _) = []
 >         free (InstanceDecl _ _ _ _ _) = []
 >         free (BlockDecl _) = []
 
@@ -97,12 +105,12 @@ function in any particular order.
 > typeDecl _ [] = internalError "typeDecl"
 > typeDecl _ [DataDecl _ _ _ _] = return ()
 > typeDecl _ [NewtypeDecl _ _ _ _] = return ()
-> typeDecl m [d@(TypeDecl p tc _ ty)]
+> typeDecl m [TypeDecl p tc _ ty]
 >   | tc `elem` ft m ty [] = errorAt p (recursiveTypes [tc])
 >   | otherwise = return ()
 > typeDecl _ (TypeDecl p tc _ _ : ds) =
 >   errorAt p (recursiveTypes (tc : [tc' | TypeDecl _ tc' _ _ <- ds]))
-> typeDecl _ [ClassDecl _ _ _ _] = return ()
+> typeDecl _ [ClassDecl _ _ _ _ _] = return ()
 
 > ft :: ModuleIdent -> TypeExpr -> [Ident] -> [Ident]
 > ft m (ConstructorType tc tys) tcs =
@@ -112,6 +120,25 @@ function in any particular order.
 > ft m (ListType ty) tcs = ft m ty tcs
 > ft m (ArrowType ty1 ty2) tcs = ft m ty1 $ ft m ty2 $ tcs
 
+> checkSuperClasses :: ModuleIdent -> [TopDecl a] -> Error ()
+> checkSuperClasses m =
+>   mapE_ (classDecl m) . scc bound free . filter isClassDecl
+>   where bound (ClassDecl _ _ cls _ _) = [cls]
+>         free (ClassDecl _ cx _ _ _) = fc m cx
+
+> classDecl :: ModuleIdent -> [TopDecl a] -> Error ()
+> classDecl _ [] = internalError "clasDecl"
+> classDecl m [ClassDecl p cx cls _ _]
+>   | cls `elem` fc m cx = errorAt p (recursiveClasses [cls])
+>   | otherwise = return ()
+> classDecl _ (ClassDecl p _ cls _ _ : ds) =
+>   errorAt p (recursiveClasses (cls : [cls' | ClassDecl _ _ cls' _ _ <- ds]))
+> classDecl _ [d] = return ()
+
+> fc :: ModuleIdent -> [ClassAssert] -> [Ident]
+> fc m cx =
+>   foldr (\(ClassAssert cls _) -> maybe id (:) (localIdent m cls)) [] cx
+
 \end{verbatim}
 Kind checking is applied to all type expressions in the program.
 \begin{verbatim}
@@ -120,10 +147,9 @@ Kind checking is applied to all type expressions in the program.
 > checkTopDecl tcEnv (DataDecl _ _ _ cs) = mapE_ (checkConstrDecl tcEnv) cs
 > checkTopDecl tcEnv (NewtypeDecl _ _ _ nc) = checkNewConstrDecl tcEnv nc
 > checkTopDecl tcEnv (TypeDecl p _ _ ty) = checkType tcEnv p ty
-> checkTopDecl tcEnv (ClassDecl _ _ _ ds) = mapE_ (checkMethodSig tcEnv) ds
-> checkTopDecl tcEnv (InstanceDecl p cx _ ty ds) =
->   checkQualType tcEnv p (QualTypeExpr cx ty) &&>
->     mapE_ (checkMethodDecl tcEnv) ds
+> checkTopDecl tcEnv (ClassDecl _ _ _ _ ds) = mapE_ (checkMethodSig tcEnv) ds
+> checkTopDecl tcEnv (InstanceDecl p _ _ ty ds) =
+>   checkType tcEnv p ty &&> mapE_ (checkMethodDecl tcEnv) ds
 > checkTopDecl tcEnv (BlockDecl d) = checkDecl tcEnv d
 
 > checkMethodSig :: TCEnv -> MethodSig -> Error ()
@@ -225,7 +251,7 @@ Auxiliary functions.
 > typeCon :: (QualIdent -> Int -> a) -> ModuleIdent -> Ident -> [Ident] -> a
 > typeCon f m tc tvs = f (qualifyWith m tc) (length tvs)
 
-> typeClass :: ModuleIdent -> Ident -> [Maybe Ident] -> TypeInfo
+> typeClass :: ModuleIdent -> Ident -> [QualIdent] -> [Maybe Ident] -> TypeInfo
 > typeClass m cls = TypeClass (qualifyWith m cls)
 
 \end{verbatim}
@@ -236,6 +262,13 @@ Error messages.
 > recursiveTypes [tc] = "Recursive type synonym " ++ name tc
 > recursiveTypes (tc:tcs) =
 >   "Mutually recursive type synonyms " ++ name tc ++ types "" tcs
+>   where types comma [tc] = comma ++ " and " ++ name tc
+>         types _ (tc:tcs) = ", " ++ name tc ++ types "," tcs
+
+> recursiveClasses :: [Ident] -> String
+> recursiveClasses [tc] = "Recursive type class " ++ name tc
+> recursiveClasses (tc:tcs) =
+>   "Mutually recursive type classes " ++ name tc ++ types "" tcs
 >   where types comma [tc] = comma ++ " and " ++ name tc
 >         types _ (tc:tcs) = ", " ++ name tc ++ types "," tcs
 

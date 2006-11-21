@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2014 2006-11-20 09:14:14Z wlux $
+% $Id: DictTrans.lhs 2016 2006-11-21 10:57:21Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -27,6 +27,7 @@ from the source code before invoking the functions from this module.
 > import Base
 > import Combined
 > import Env
+> import List
 > import Maybe
 > import Monad
 > import TopEnv
@@ -76,7 +77,7 @@ tasks:
 >   where transModule m tcEnv tyEnv ds =
 >           do
 >             ds' <- mapM (dictTransTopDecl m tcEnv iEnv tyEnv) ds
->             dss <- mapM (methodStubs m tyEnv) ds
+>             dss <- mapM (methodStubs m tcEnv tyEnv) ds
 >             return (Module m es is (ds' ++ concat dss))
 
 > dictTransTopDecl :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv
@@ -87,7 +88,7 @@ tasks:
 >   return (NewtypeDecl p tc tvs nc)
 > dictTransTopDecl _ _ _ _ (TypeDecl p tc tvs ty) =
 >   return (TypeDecl p tc tvs ty)
-> dictTransTopDecl _ _ _ _ (ClassDecl p cls tv ds) =
+> dictTransTopDecl _ _ _ _ (ClassDecl p _ cls tv ds) =
 >   return (dictDecl p cls tv ds)
 > dictTransTopDecl m tcEnv iEnv tyEnv (InstanceDecl p cx cls ty ds) =
 >   instDecl m tcEnv iEnv tyEnv p cx cls ty ds
@@ -109,7 +110,7 @@ generator.
 > dictTransInterface :: Interface -> Interface
 > dictTransInterface (Interface m is ds) =
 >   Interface m is (map (dictTransIntfDecl m) (ds ++ dss))
->   where dss = concatMap intfMethodStubs ds
+>   where dss = concatMap (intfMethodStubs m) ds
 
 > dictTransIntfDecl :: ModuleIdent -> IDecl -> IDecl
 > dictTransIntfDecl _ (IInfixDecl p fix pr op) = IInfixDecl p fix pr op
@@ -117,8 +118,8 @@ generator.
 > dictTransIntfDecl _ (IDataDecl p tc tvs cs) = IDataDecl p tc tvs cs
 > dictTransIntfDecl _ (INewtypeDecl p tc tvs nc) = INewtypeDecl p tc tvs nc
 > dictTransIntfDecl _ (ITypeDecl p tc tvs ty) = ITypeDecl p tc tvs ty
-> dictTransIntfDecl _ (HidingClassDecl p cls tv) = dictIDecl p cls tv Nothing
-> dictTransIntfDecl _ (IClassDecl p cls tv ds) = dictIDecl p cls tv (Just ds)
+> dictTransIntfDecl _ (HidingClassDecl p _ cls tv) = dictIDecl p cls tv Nothing
+> dictTransIntfDecl _ (IClassDecl p _ cls tv ds) = dictIDecl p cls tv (Just ds)
 > dictTransIntfDecl m (IInstanceDecl p cx cls ty) = instIDecl m p cx cls ty
 > dictTransIntfDecl m (IFunctionDecl p f ty) =
 >   IFunctionDecl p f (fromTransType m (transformType (toQualType m [] ty)))
@@ -152,19 +153,19 @@ constructor's arguments.
 
 > bindDictTypes :: TCEnv -> TCEnv
 > bindDictTypes = fmap transInfo
->   where transInfo (TypeClass cls _) = dictTypeInfo cls
+>   where transInfo (TypeClass cls _ _) = dictTypeInfo cls
 >         transInfo ti = ti
 
 > bindDictConstrs :: ModuleIdent -> TCEnv -> ValueEnv -> ValueEnv
 > bindDictConstrs m tcEnv tyEnv =
->   foldr (bindDictConstr m) tyEnv (allEntities tcEnv)
+>   foldr (bindDictConstr m tcEnv) tyEnv (allEntities tcEnv)
 
-> bindDictConstr :: ModuleIdent -> TypeInfo -> ValueEnv -> ValueEnv
-> bindDictConstr m (TypeClass cls fs) tyEnv =
+> bindDictConstr :: ModuleIdent -> TCEnv -> TypeInfo -> ValueEnv -> ValueEnv
+> bindDictConstr m tcEnv (TypeClass cls _ fs) tyEnv =
 >   bindEntity m c (DataConstructor c ty) tyEnv
 >   where c = qualifyLike cls (dictConstrId (unqualify cls))
->         ty = polyType (classDictType tyEnv cls fs)
-> bindDictConstr _ _ tyEnv =  tyEnv
+>         ty = polyType (classDictType tcEnv tyEnv cls fs)
+> bindDictConstr _ _ _ tyEnv =  tyEnv
 
 > dictDecl :: Position -> Ident -> Ident -> [MethodSig] -> TopDecl Type
 > dictDecl p cls tv ds =
@@ -183,15 +184,16 @@ constructor's arguments.
 > expandMethodSigs :: [MethodSig] -> [MethodSig]
 > expandMethodSigs ds = [MethodSig p [f] ty | MethodSig p fs ty <- ds, f <- fs]
 
-> classDictType :: ValueEnv -> QualIdent -> [Maybe Ident] -> Type
-> classDictType tyEnv cls fs =
+> classDictType :: TCEnv -> ValueEnv -> QualIdent -> [Maybe Ident] -> Type
+> classDictType tcEnv tyEnv cls fs =
 >   foldr TypeArrow (dictType (TypePred cls (TypeVariable 0))) tys
->   where tys = map (maybe (TypeVariable 0) (classMethodType tyEnv cls)) fs
+>   where tys = map (maybe (TypeVariable 0) (classMethodType tyEnv cls n)) fs
+>         n = 1 + length (superClasses cls tcEnv)
 
-> classMethodType :: ValueEnv -> QualIdent -> Ident -> Type
-> classMethodType tyEnv cls f = ty'
+> classMethodType :: ValueEnv -> QualIdent -> Int -> Ident -> Type
+> classMethodType tyEnv cls n f = arrows (transformType ty) !! n
 >   where ForAll _ ty = funType (qualifyLike cls f) tyEnv
->         TypeArrow _ ty' = transformType ty
+>         arrows ty = ty : case ty of {TypeArrow _ ty -> arrows ty; _ -> [] }
 
 \end{verbatim}
 \paragraph{Method Stubs}
@@ -200,42 +202,70 @@ These stub functions take a dictionary as first argument and return
 the appropriate member function from the dictionary. For instance,
 given the class declaration
 \begin{verbatim}
-  data Eq a where
+  class Eq a where
     (==) :: a -> a -> Bool
     (/=) :: a -> a -> Bool
 \end{verbatim}
 two functions similar to
 \begin{verbatim}
-  (==) (_Dict_Eq eq _) = eq
-  (/=) (_Dict_Eq _ neq) = neq
+  (==) dict_Eq = case dict of { _Dict_Eq eq _ -> eq }
+  (/=) dict_Eq = case dict of { _Dict_Eq _ neq -> neq }
 \end{verbatim}
-are introduced.
+are introduced. When a class has super classes, additional arguments
+are added for each of the direct and indirect super classes of the
+class so that the stubs can be called like other overloaded functions.
+For instance, given the class declarations
+\begin{verbatim}
+  class Eq a
+  class Show a
+  class (Eq a, Show a) => Num a where
+    fromInteger :: Integer -> a
+\end{verbatim}
+a stub function similar to
+\begin{verbatim}
+  fromInteger dict_Eq dict_Num dict_Show =
+    case dict_Num of { _Dict_Num fromInt -> fromInt }
+\end{verbatim}
+is defined. Note that the contexts of overloaded functions, and
+therefore the dictionary arguments of the method stubs, are sorted
+according to the qualified names of the type classes involved. This
+necessitates the somewhat ugly construction of the stub methods'
+contexts in \texttt{intfMethodStubs} below.
 \begin{verbatim}
 
-> methodStubs :: ModuleIdent -> ValueEnv -> TopDecl a
+> methodStubs :: ModuleIdent -> TCEnv -> ValueEnv -> TopDecl a
 >             -> DictState [TopDecl Type]
-> methodStubs m tyEnv (ClassDecl _ cls _ ds) =
+> methodStubs m tcEnv tyEnv (ClassDecl _ cx cls tv ds) =
 >   do
+>     us <- mapM (freshVar m "_#dict" . dictType) cx'
 >     vs <- mapM (freshVar m "_#method") tys
->     return (zipWith (methodStub (dictPattern ty cls' vs)) ds' vs)
->   where (tys,ty) = arrowUnapply (classDictType tyEnv cls' (map Just fs))
+>     return (zipWith (methodStub us (us!!n) (dictPattern ty cls' vs)) ds' vs)
+>   where (tys,ty) = arrowUnapply (classDictType tcEnv tyEnv cls' (map Just fs))
 >         cls' = qualifyWith m cls
+>         cx' = context (expandPolyType tcEnv ty')
+>         ty' = QualTypeExpr (ClassAssert cls' tv : cx) (VariableType tv)
+>         n = fromJust (elemIndex (TypePred cls' (TypeVariable 0)) cx')
 >         fs = concatMap methods ds
 >         ds' = expandMethodSigs ds
-> methodStubs _ _ _ = return []
+>         context (ForAll _ (QualType cx _)) = cx
+> methodStubs _ _ _ _ = return []
 
-> methodStub :: ConstrTerm Type -> MethodSig -> (Type,Ident) -> TopDecl Type
-> methodStub t (MethodSig p [f] _) v =
->   BlockDecl (funDecl p f [t] (uncurry mkVar v) [])
+> methodStub :: [(Type,Ident)] -> (Type,Ident) -> ConstrTerm Type -> MethodSig
+>            -> (Type,Ident) -> TopDecl Type
+> methodStub vs v t (MethodSig p [f] _) v' =
+>   BlockDecl (funDecl p f (map (uncurry VariablePattern) vs) e [])
+>   where e = Case (uncurry mkVar v) [caseAlt p t (uncurry mkVar v')]
 
-> intfMethodStubs :: IDecl -> [IDecl]
-> intfMethodStubs (IClassDecl _ cls tv ds) =
->   map (intfMethodStub cls tv) (catMaybes ds)
-> intfMethodStubs _ = []
+> intfMethodStubs :: ModuleIdent -> IDecl -> [IDecl]
+> intfMethodStubs m (IClassDecl _ cx cls tv ds) =
+>   map (intfMethodStub cls cx) (catMaybes ds)
+>   where cx = [ClassAssert (qualUnqualify m cls) tv | cls <- sort clss]
+>         clss = map (qualQualify m) (cls : [cls | ClassAssert cls _ <- cx])
+> intfMethodStubs _ _ = []
 
-> intfMethodStub :: QualIdent -> Ident -> IMethodDecl -> IDecl
-> intfMethodStub cls tv (IMethodDecl p f ty) =
->   IFunctionDecl p (qualifyLike cls f) (QualTypeExpr [ClassAssert cls tv] ty)
+> intfMethodStub :: QualIdent -> [ClassAssert] -> IMethodDecl -> IDecl
+> intfMethodStub cls cx (IMethodDecl p f ty) =
+>   IFunctionDecl p (qualifyLike cls f) (QualTypeExpr cx ty)
 
 > dictPattern :: Type -> QualIdent -> [(Type,Ident)] -> ConstrTerm Type
 > dictPattern ty cls vs =
@@ -318,12 +348,12 @@ the class methods, which may be used -- possibly at a different type
 >     liftM BlockDecl $
 >       dictTrans m iEnv (foldr (bindMeth m) tyEnv' vs) emptyEnv $
 >       funDecl p f [] (dictExpr ty' cls vs ds')
->                 (catMaybes (zipWith (fmap . (renameMethod . snd)) vs ds'))
+>               (catMaybes (zipWith (fmap . (renameMethod . snd)) vs ds'))
 >   where f = instFunId tp
->         (cx',tp) = toTypePred m cx cls ty
+>         (cx',tp) = toTypePred (expandPolyType tcEnv) cx cls ty
 >         fs = classMethods cls tcEnv
 >         ds' = orderMethodDecls fs ds
->         ty' = instDictType tyEnv tp fs ds'
+>         ty' = instDictType tcEnv tyEnv tp fs ds'
 >         tyEnv' = bindFun m f (typeScheme (qualDictType cx' tp)) tyEnv
 >         bindMeth m (ty,v) = bindFun m v (monoType ty)
 >         bindFun m f ty = localBindTopEnv f (Value (qualifyWith m f) ty)
@@ -332,22 +362,22 @@ the class methods, which may be used -- possibly at a different type
 >           -> IDecl
 > instIDecl m p cx cls ty =
 >   IFunctionDecl p (qInstFunId tp) (fromTransType m (transDictType cx' tp))
->   where (cx',tp) = toTypePred m cx cls ty
+>   where (cx',tp) = toTypePred (toTypeScheme m) cx (qualQualify m cls) ty
 
-> toTypePred :: ModuleIdent -> [ClassAssert] -> QualIdent -> TypeExpr
->            -> (Context,TypePred)
-> toTypePred m cx cls ty = (cx',TypePred (qualQualify m cls) ty')
->   where QualType cx' ty' = toQualType m [] (QualTypeExpr cx ty)
+> toTypePred :: (QualTypeExpr -> TypeScheme) -> [ClassAssert]
+>            -> QualIdent -> TypeExpr -> (Context,TypePred)
+> toTypePred f cx cls ty = (cx',TypePred cls ty')
+>   where ForAll _ (QualType cx' ty') = f (QualTypeExpr cx ty)
 
 > orderMethodDecls :: [Maybe Ident] -> [MethodDecl a] -> [Maybe (MethodDecl a)]
 > orderMethodDecls fs ds =
 >   map (>>= flip lookup [(f,d) | d@(MethodDecl _ f _) <- ds]) fs
 
-> instDictType :: ValueEnv -> TypePred -> [Maybe Ident]
+> instDictType :: TCEnv -> ValueEnv -> TypePred -> [Maybe Ident]
 >              -> [Maybe (MethodDecl Type)] -> Type
-> instDictType tyEnv (TypePred cls ty) fs ds =
+> instDictType tcEnv tyEnv (TypePred cls ty) fs ds =
 >   subst (matchInstMethodTypes (arrowArgs ty') ds idSubst) ty'
->   where ty' = expandAliasType [ty] (classDictType tyEnv cls fs)
+>   where ty' = expandAliasType [ty] (classDictType tcEnv tyEnv cls fs)
 
 > dictExpr :: Type -> QualIdent -> [(Type,Ident)] -> [Maybe (MethodDecl a)]
 >          -> Expression Type
@@ -725,6 +755,9 @@ Convenience functions for constructing parts of the syntax tree.
 >         -> Decl a
 > funDecl p f ts e ds =
 >   FunctionDecl p f [Equation p (FunLhs f ts) (SimpleRhs p e ds)]
+
+> caseAlt :: Position -> ConstrTerm a -> Expression a -> Alt a
+> caseAlt p t e = Alt p t (SimpleRhs p e [])
 
 > mkVar :: a -> Ident -> Expression a
 > mkVar a = Variable a . qualify

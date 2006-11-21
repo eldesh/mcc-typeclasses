@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2016 2006-11-21 10:57:21Z wlux $
+% $Id: TypeCheck.lhs 2019 2006-11-21 15:25:08Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -557,7 +557,9 @@ Note that overloaded literals are not supported in patterns.
 > tcLiteral poly (Int _)
 >   | poly = freshNumType
 >   | otherwise = liftM ((,) []) (freshConstrained numTypes)
-> tcLiteral _ (Float _) = return ([],floatType)
+> tcLiteral poly (Float _)
+>   | poly = freshFracType
+>   | otherwise = liftM ((,) []) (freshConstrained fracTypes)
 > tcLiteral _ (String _) = return ([],stringType)
 
 > tcVariable :: ModuleIdent -> TCEnv -> SigEnv -> Bool -> Position
@@ -1144,13 +1146,15 @@ report~\cite{PeytonJones03:Haskell}).
 >     Nothing -> id
 
 > defaultType :: InstEnv -> [TypePred] -> Maybe Type
-> defaultType iEnv tps
->   | qNumId `elem` clss =
->       case [ty | ty <- numTypes, all (flip (hasInstance iEnv) ty) clss] of
->         [] -> Nothing
->         ty:_ -> Just ty
->   | otherwise = Nothing
+> defaultType iEnv tps =
+>   case [ty | ty <- defaultTypes, all (flip (hasInstance iEnv) ty) clss] of
+>     [] -> Nothing
+>     ty:_ -> Just ty
 >   where clss = [cls | TypePred cls _ <- tps]
+>         defaultTypes
+>           | qNumId `elem` clss = numTypes
+>           | qFractionalId `elem` clss = fracTypes
+>           | otherwise = []
 
 \end{verbatim}
 The function \texttt{splitContext} splits a context
@@ -1198,6 +1202,12 @@ We use negative offsets for fresh type variables.
 >   do
 >     tv <- freshTypeVar
 >     return ([TypePred qNumId tv],tv)
+
+> freshFracType :: TcState (Context,Type)
+> freshFracType =
+>   do
+>     tv <- freshTypeVar
+>     return ([TypePred qFractionalId tv],tv)
 
 > freshConstrained :: [Type] -> TcState Type
 > freshConstrained tys = freshVar (TypeConstrained tys)

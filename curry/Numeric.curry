@@ -1,4 +1,4 @@
--- $Id: Numeric.curry 2018 2006-11-21 13:34:30Z wlux $
+-- $Id: Numeric.curry 2019 2006-11-21 15:25:08Z wlux $
 --
 -- Copyright (c) 2003-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -76,7 +76,7 @@ showFFloat d f = showFFloat (maybe (-1) (max 0) d) (toFloat f)
 
 showGFloat :: RealFrac a => Maybe Int -> a -> ShowS
 showGFloat d f
-  | f' >= fromFloat 0.1 && f' < fromFloat 1.0e7 = showFFloat d f
+  | f' >= 0.1 && f' < 1.0e7 = showFFloat d f
   | otherwise = showEFloat d f
   where f' = if f < 0 then -f else f
         
@@ -87,8 +87,8 @@ showFloat = showGFloat Nothing
 readFloat :: Fractional a => ReadS a
 readFloat r = [(convert ds (k - d),t) | (ds,d,s) <- lexFix r,
                                         (k,t) <- readExp s] ++
-              [(fromFloat (0/0),t) | t <- match "NaN" r] ++
-              [(fromFloat (1/0),t) | t <- match "Infinity" r]
+              [(0/0,t) | t <- match "NaN" r] ++
+              [(1/0,t) | t <- match "Infinity" r]
   where lexFix r = [(ds ++ ds',length ds',t) | (ds,s) <- lexDigits r,
                                                (ds',t) <- lexFrac s]
         lexFrac "" = [("","")]

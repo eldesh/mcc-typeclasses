@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2016 2006-11-21 10:57:21Z wlux $
+% $Id: DictTrans.lhs 2019 2006-11-21 15:25:08Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -483,7 +483,11 @@ the concrete type at which $f$ is used in the application.
 >   | ty == floatType = return (Literal ty (Float (fromIntegral i)))
 >   | otherwise = dictTrans m iEnv tyEnv dictEnv
 >                           (apply (prelFromInt ty) [Literal intType (Int i)])
-> transLiteral _ _ _ _ ty (Float f) = return (Literal ty (Float f))
+> transLiteral m iEnv tyEnv dictEnv ty (Float f)
+>   | ty == floatType = return (Literal ty (Float f))
+>   | otherwise =
+>       dictTrans m iEnv tyEnv dictEnv
+>                 (apply (prelFromFloat ty) [Literal floatType (Float f)])
 > transLiteral _ _ _ _ ty (String cs) = return (Literal ty (String cs))
 
 > instance DictTrans Expression where
@@ -786,6 +790,11 @@ Prelude entities.
 > prelFromInt a =
 >   Variable (intType `TypeArrow` a)
 >            (qualifyWith preludeMIdent (mkIdent "fromInt"))
+
+> prelFromFloat :: Type -> Expression Type
+> prelFromFloat a =
+>   Variable (floatType `TypeArrow` a)
+>            (qualifyWith preludeMIdent (mkIdent "fromFloat"))
 
 > prelUndefined :: Type -> Expression Type
 > prelUndefined a = Variable a (qualifyWith preludeMIdent (mkIdent "undefined"))

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 2004 2006-11-12 16:19:26Z wlux $
+% $Id: Types.lhs 2019 2006-11-21 15:25:08Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -258,11 +258,15 @@ be determined otherwise.
 > guardTypes = [successType,boolType]
 
 \end{verbatim}
-The variable \texttt{numTypes} maintains the list of types admissible
-for ambiguous numeric expressions.
+The variables \texttt{numTypes} and \texttt{fracTypes} maintain the
+lists of types admissible for ambiguous types with \texttt{Num} and
+\texttt{Fractional} constraints, respectively.
 \begin{verbatim}
 
 > numTypes :: [Type]
 > numTypes = [intType,floatType]
+
+> fracTypes :: [Type]
+> fracTypes = tail numTypes
 
 \end{verbatim}

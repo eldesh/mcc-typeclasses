@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2003 2006-11-12 14:34:01Z wlux $
+% $Id: TypeTrans.lhs 2015 2006-11-21 09:16:28Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,7 +10,8 @@ This module implements transformations between the internal and
 external type representations.
 \begin{verbatim}
 
-> module TypeTrans(toType, toTypes, toQualType, fromType, fromQualType,
+> module TypeTrans(toType, toTypes, toQualType, toTypeScheme,
+>                  fromType, fromQualType,
 >                  expandMonoType, expandMonoTypes, expandPolyType,
 >                  ppType, ppQualType, ppTypeScheme) where
 > import Base
@@ -24,16 +25,17 @@ external type representations.
 
 \end{verbatim}
 The functions \texttt{toType} and \texttt{toTypes} convert Curry type
-expressions into types. The function \texttt{toQualType} similarly
-converts a qualified type expression into a qualified type. The
-compiler uses only correctly qualified names internally and therefore
-adds the name of the current module to all type constructors and type
-classes that lack a module qualifier. Type variables are assigned
-ascending indices in the order of their occurrence in the types. It is
-possible to pass a list of additional type variables to these
-functions, which are assigned indices before those variables occurring
-in the type. This allows preserving the order of type variables in the
-left hand side of a type declaration and in the head of a type class
+expressions into types. The functions \texttt{toQualType} and
+\texttt{toTypeScheme} similarly convert a qualified type expression
+into a qualified type and a type scheme, respectively. The compiler
+uses only correctly qualified names internally and therefore adds the
+name of the current module to all type constructors and type classes
+that lack a module qualifier. Type variables are assigned ascending
+indices in the order of their occurrence in the types. It is possible
+to pass a list of additional type variables to these functions, which
+are assigned indices before those variables occurring in the type.
+This allows preserving the order of type variables in the left hand
+side of a type declaration and in the head of a type class
 declaration, respectively.
 
 Note the subtle difference between \texttt{toTypes m tvs tys} and
@@ -51,6 +53,9 @@ indices independently in each type expression.
 
 > toQualType :: ModuleIdent -> [Ident] -> QualTypeExpr -> QualType
 > toQualType m tvs ty = qualifyQualType m (toQualType' (enumTypeVars tvs ty) ty)
+
+> toTypeScheme :: ModuleIdent -> QualTypeExpr -> TypeScheme
+> toTypeScheme m ty = typeScheme (toQualType m [] ty)
 
 > enumTypeVars :: Expr a => [Ident] -> a -> FM Ident Int
 > enumTypeVars tvs ty = fromListFM (zip (tvs ++ tvs') [0..])

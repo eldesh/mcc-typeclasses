@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: Imports.lhs 2015 2006-11-21 09:16:28Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -180,7 +180,7 @@ following functions.
 >   (newConstr m tc' tvs (constrType tc' tvs) nc :)
 >   where tc' = qualQualify m tc
 > values m (IFunctionDecl _ f ty) =
->   qual f (Value (qualQualify m f) (typeScheme (toQualType m [] ty)))
+>   qual f (Value (qualQualify m f) (toTypeScheme m ty))
 > values m (IClassDecl _ cls tv ds) =
 >   (map (classMethod m cls' [ClassAssert cls' tv]) (catMaybes ds) ++)
 >   where cls' = qualQualify m cls
@@ -244,6 +244,6 @@ Auxiliary functions:
 > constrType tc tvs = ConstructorType tc (map VariableType tvs)
 
 > methodType :: ModuleIdent -> [ClassAssert] -> TypeExpr -> TypeScheme
-> methodType m cx ty = typeScheme (toQualType m [] (QualTypeExpr cx ty))
+> methodType m cx ty = toTypeScheme m (QualTypeExpr cx ty)
 
 \end{verbatim}

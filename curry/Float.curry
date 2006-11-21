@@ -1,4 +1,4 @@
--- $Id: Float.curry 2000 2006-11-11 16:21:14Z wlux $
+-- $Id: Float.curry 2018 2006-11-21 13:34:30Z wlux $
 --
 -- Copyright (c) 2004, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -28,14 +28,6 @@ pi = 3.14159265358979323846
 --- Convert an integer to a floating point number
 i2f :: Int -> Float
 i2f = fromInt
-
---- Convert a floating point number to an integer always rounding towards 0
-truncate :: Float -> Int
-truncate = truncateFloat
-
---- Convert a floating point number to the nearest integer number
-round :: Float -> Int
-round = roundFloat
 
 --- x^n computes the nth power of x, n must be non-negative
 (^) :: Float -> Int -> Float

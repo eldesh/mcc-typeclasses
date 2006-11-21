@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2017 2006-11-21 11:21:49Z wlux $
+-- $Id: Prelude.curry 2018 2006-11-21 13:34:30Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -202,7 +202,7 @@ instance Ord Ordering where
       (GT,GT) -> EQ
       (GT,_)  -> GT
 
- 
+
 -- Pairs
 
 --++ data (a,b) = (a,b)
@@ -674,13 +674,12 @@ showParen False x = x
 
 
 --- Standard numeric types and classes
---- Operations supported by all numeric data types
---- NB Temporarily defines fromInt instead of fromIntegral because MCC
----    does not yet support arbitrary precision integers.
----    Negate is temporarily a polymorphic function until default method
----    implementations are supported.
----    Abs and signum are currently missing.
 class Eq a => Num a where
+  -- NB Temporarily defines fromInt instead of fromIntegral because MCC
+  --    does not yet support arbitrary precision integers.
+  --    Negate is temporarily a polymorphic function until default method
+  --    implementations are supported.
+  --    Abs and signum are currently missing.
   (+) :: a -> a -> a
   (-) :: a -> a -> a
   (*) :: a -> a -> a
@@ -689,12 +688,39 @@ class Eq a => Num a where
 negate :: Num a => a -> a
 negate n = 0 - n
 
+class (Ord a, Num a) => Real a where
+  -- NB Temporarily defines toFloat instead of toRational because MCC
+  --    does not yet support rational numbers
+  toFloat :: a -> Float
+
+class Real a => Integral a where
+  -- quot, rem, div, and mod must satisfy the following laws
+  -- N `quot` M + N `rem` M = N
+  -- N `div`  M + N `mod` M = N
+  -- the result of quot is truncated towards zero and the result
+  -- of div is truncated towards negative infinity
+  -- NB Temporarily defines toInt instead of toInteger because MCC
+  --    does not yet support arbitrary precision integers.
+  --    QuotRem and divMod are currently missing.
+  quot, rem :: a -> a -> a
+  div, mod :: a -> a -> a
+  toInt :: a -> Int
+
+class Num a => Fractional a where
+  -- NB Temporarily defines fromFloat instead of fromRational because
+  --    MCC does not yet support rational numbers.
+  --    Recip is currently missing.
+  (/) :: a -> a -> a
+  fromFloat :: Float -> a
+
+class (Real a, Fractional a) => RealFrac a where
+  -- NB Result of truncate and round restricted to Int because polymorphic
+  --    methods are not supported.
+  --    ProperFraction, ceiling, and floor currently not implemented.
+  truncate, round :: a -> Int
+
+
 -- Types of primitive arithmetic functions and predicates
--- NB quot, rem, div, and mod must satisfy the following laws
---    N `quot` M + N `rem` M = N
---    N `div`  M + N `mod` M = N
---    the result of quot is truncated towards zero and the result
---    of div is truncated towards negative infinity
 data Int
 instance Eq Int where
   (==) = primEqInt
@@ -716,10 +742,20 @@ instance Num Int where
     where foreign import ccall "prims.h" primMulInt :: Int -> Int -> Int
   fromInt n = n
 
-foreign import ccall "prims.h primQuotInt" quot :: Int -> Int -> Int
-foreign import ccall "prims.h primRemInt" rem :: Int -> Int -> Int
-foreign import ccall "prims.h primDivInt" div :: Int -> Int -> Int
-foreign import ccall "prims.h primModInt" mod :: Int -> Int -> Int
+instance Real Int where
+  toFloat = fromInt
+
+instance Integral Int where
+  quot = primQuotInt
+    where foreign import ccall "prims.h" primQuotInt :: Int -> Int -> Int
+  rem = primRemInt
+    where foreign import ccall "prims.h" primRemInt :: Int -> Int -> Int
+  div = primDivInt
+    where foreign import ccall "prims.h" primDivInt :: Int -> Int -> Int
+  mod = primModInt
+    where foreign import ccall "prims.h" primModInt :: Int -> Int -> Int
+  toInt n = n
+
 
 data Float
 instance Eq Float where
@@ -743,11 +779,19 @@ instance Num Float where
   fromInt = primFloat
     where foreign import ccall "prims.h" primFloat  :: Int -> Float
 
-foreign import ccall "prims.h primDivFloat" (/) :: Float -> Float -> Float
+instance Real Float where
+  toFloat x = x
 
--- conversions
-foreign import ccall "prims.h primTrunc" truncateFloat :: Float -> Int
-foreign import ccall "prims.h primRound" roundFloat    :: Float -> Int
+instance Fractional Float where
+  (/) = primDivFloat
+    where foreign import ccall "prims.h" primDivFloat :: Float -> Float -> Float
+  fromFloat x = x
+
+instance RealFrac Float where
+  truncate = primTrunc
+    where foreign import ccall "prims.h" primTrunc :: Float -> Int
+  round = primRound
+    where foreign import ccall "prims.h" primRound :: Float -> Int
 
 
 --- Generates an infinite sequence of ascending integers.

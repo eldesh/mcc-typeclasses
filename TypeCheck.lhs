@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2019 2006-11-21 15:25:08Z wlux $
+% $Id: TypeCheck.lhs 2020 2006-11-26 11:24:38Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -414,12 +414,22 @@ uninstantiated instance type in the method's type signature.
 > tcInstDecl :: ModuleIdent -> TCEnv -> TopDecl a -> TcState (TopDecl Type)
 > tcInstDecl m tcEnv d@(InstanceDecl p cx cls ty ds) =
 >   do
->     ty'' <- liftM snd (inst ty')
->     reduceContext p "instance declaration" (ppTopDecl d) m
->                   [TypePred cls ty'' | cls <- superClasses cls tcEnv] ()
+>     ty'' <-
+>       inst ty' >>=
+>       tcInstContext p "instance declaration" (ppTopDecl d) m tcEnv cls
 >     liftM (InstanceDecl p cx cls ty)
 >           (mapM (tcMethodDecl m tcEnv cls ty' ty'') ds)
 >   where ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
+
+> tcInstContext :: Position -> String -> Doc -> ModuleIdent -> TCEnv
+>               -> QualIdent -> (Context,Type) -> TcState Type
+> tcInstContext p what doc m tcEnv cls (cx,ty) =
+>   do
+>     (cx',_) <- reduceContext p what doc m [TypePred cls ty | cls <- clss] ()
+>     foldM (reportMissingInstance p what doc m initIEnv) idSubst
+>           (filter (`notElem` cx) cx')
+>     return ty
+>   where clss = superClasses cls tcEnv
 
 > tcMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> TypeScheme -> Type
 >              -> MethodDecl a -> TcState (MethodDecl Type)

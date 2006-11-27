@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 2016 2006-11-21 10:57:21Z wlux $
+% $Id: ShadowCheck.lhs 2022 2006-11-27 18:26:02Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -74,12 +74,17 @@ traversal of the syntax tree.
 >   shadow p = shadowGroup p
 
 > instance SyntaxTree (TopDecl a) where
+>   shadow _ (ClassDecl p _ _ _ ds) = shadow p ds
 >   shadow _ (InstanceDecl p _ _ _ ds) = shadow p ds
 >   shadow p (BlockDecl d) = shadow p d
 >   shadow _ _ = id
 
 >   shadowGroup p ds =
 >     bindVars (concatMap funs ds) >>> foldr ((&&&) . shadow p) id ds
+
+> instance SyntaxTree (MethodSig a) where
+>   shadow _ (MethodSig _ _ _) = id
+>   shadow _ (DefaultMethodDecl p _ eqs) = shadow p eqs
 
 > instance SyntaxTree (MethodDecl a) where
 >   shadow _ (MethodDecl p _ eqs) = shadow p eqs

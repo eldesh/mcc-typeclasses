@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2016 2006-11-21 10:57:21Z wlux $
+% $Id: CurryPP.lhs 2022 2006-11-27 18:26:02Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -103,8 +103,9 @@ Declarations
 >   | null ds = head
 >   | otherwise = head <+> text "where" $$ indent (vcat ds)
 
-> ppMethodSig :: MethodSig -> Doc
+> ppMethodSig :: MethodSig a -> Doc
 > ppMethodSig (MethodSig p fs ty) = ppDecl (TypeSig p fs (QualTypeExpr [] ty))
+> ppMethodSig (DefaultMethodDecl p f eqs) = ppDecl (FunctionDecl p f eqs)
 
 > ppMethodDecl :: MethodDecl a -> Doc
 > ppMethodDecl (MethodDecl p f eqs) = ppDecl (FunctionDecl p f eqs)

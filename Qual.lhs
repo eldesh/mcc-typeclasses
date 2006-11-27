@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2016 2006-11-21 10:57:21Z wlux $
+% $Id: Qual.lhs 2022 2006-11-27 18:26:02Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -71,8 +71,10 @@ functions remain unchanged.
 >   qual tcEnv tyEnv (ArrowType ty1 ty2) =
 >     ArrowType (qual tcEnv tyEnv ty1) (qual tcEnv tyEnv ty2)
 
-> instance Qual MethodSig where
+> instance Qual (MethodSig a) where
 >   qual tcEnv tyEnv (MethodSig p fs ty) = MethodSig p fs (qual tcEnv tyEnv ty)
+>   qual tcEnv tyEnv (DefaultMethodDecl p f eqs) =
+>     DefaultMethodDecl p f (qual tcEnv tyEnv eqs)
 
 > instance Qual (MethodDecl a) where
 >   qual tcEnv tyEnv (MethodDecl p f eqs) =

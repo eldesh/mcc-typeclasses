@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2016 2006-11-21 10:57:21Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2022 2006-11-27 18:26:02Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -91,7 +91,7 @@ signatures.
 >          (mapE (checkMethodDecl env) ds)
 > checkTopDecl env (BlockDecl d) = liftE BlockDecl (checkDecl env d)
 
-> checkMethodSig :: TypeEnv -> Ident -> MethodSig -> Error MethodSig
+> checkMethodSig :: TypeEnv -> Ident -> MethodSig a -> Error (MethodSig a)
 > checkMethodSig env tv (MethodSig p fs ty) =
 >   do
 >     ty' <- checkType env p ty
@@ -99,6 +99,8 @@ signatures.
 >     unless (tv `elem` tvs) (errorAt p (ambiguousType tv)) &&>
 >       mapE_ (errorAt p . polymorphicMethod) (nub (filter (tv /=) tvs))
 >     return (MethodSig p fs ty')
+> checkMethodSig env _ (DefaultMethodDecl p f eqs) =
+>   liftE (DefaultMethodDecl p f) (mapE (checkEquation env) eqs)
 
 > checkMethodDecl :: TypeEnv -> MethodDecl a -> Error (MethodDecl a)
 > checkMethodDecl env (MethodDecl p f eqs) =

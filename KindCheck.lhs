@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2016 2006-11-21 10:57:21Z wlux $
+% $Id: KindCheck.lhs 2022 2006-11-27 18:26:02Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -82,7 +82,6 @@ function in any particular order.
 >         fs = map Just (concatMap methods ds)
 >         ty = expandPolyType tcEnv (QualTypeExpr cx (VariableType tv))
 >         context (ForAll _ (QualType cx _)) = cx
-
 > bindTC _ _ (InstanceDecl _ _ _ _ _) = id
 > bindTC _ _ (BlockDecl _) = id
 
@@ -152,8 +151,10 @@ Kind checking is applied to all type expressions in the program.
 >   checkType tcEnv p ty &&> mapE_ (checkMethodDecl tcEnv) ds
 > checkTopDecl tcEnv (BlockDecl d) = checkDecl tcEnv d
 
-> checkMethodSig :: TCEnv -> MethodSig -> Error ()
+> checkMethodSig :: TCEnv -> MethodSig a -> Error ()
 > checkMethodSig tcEnv (MethodSig p _ ty) = checkType tcEnv p ty
+> checkMethodSig tcEnv (DefaultMethodDecl _ _ eqs) =
+>   mapE_ (checkEquation tcEnv) eqs
 
 > checkMethodDecl :: TCEnv -> MethodDecl a -> Error ()
 > checkMethodDecl tcEnv (MethodDecl _ _ eqs) = mapE_ (checkEquation tcEnv) eqs

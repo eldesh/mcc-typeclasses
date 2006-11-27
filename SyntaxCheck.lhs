@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2016 2006-11-21 10:57:21Z wlux $
+% $Id: SyntaxCheck.lhs 2022 2006-11-27 18:26:02Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -101,6 +101,8 @@ in order to check the global declaration group.
 >   where (ds',ds'') = span isBlockDecl ds
 
 > checkTopDeclRhs :: TypeEnv -> VarEnv -> TopDecl a -> Error (TopDecl a)
+> checkTopDeclRhs _ env (ClassDecl p cx cls tv ds) =
+>   liftE (ClassDecl p cx cls tv) (checkClassDecls env p cls tv ds)
 > checkTopDeclRhs tEnv env (InstanceDecl p cx cls ty ds) =
 >   liftE (InstanceDecl p cx cls ty) (checkInstDecls tEnv env p cls ds)
 > checkTopDeclRhs _ env (BlockDecl d) = liftE BlockDecl (checkDeclRhs env d)
@@ -145,8 +147,9 @@ top-level.
 >     return (env'',ds'')
 >   where env' = nestEnv env
 
-> checkMethodSig :: VarEnv -> MethodSig -> Error ()
+> checkMethodSig :: VarEnv -> MethodSig a -> Error ()
 > checkMethodSig env (MethodSig p fs _) = checkVars "type signature" p env fs
+> checkMethodSig _ (DefaultMethodDecl _ _ _) = return ()
 
 > checkDeclLhs :: Bool -> VarEnv -> Decl a -> Error (Decl a)
 > checkDeclLhs _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
@@ -276,14 +279,47 @@ top-level.
 >     return (Equation p lhs' rhs')
 
 \end{verbatim}
-The method declarations in an instance declaration are checked like
+The method declarations in an instance declaration and also the
+default method declarations in a class declaration are checked like
 any other declaration group except that the declared methods are not
 added to the variable name environment. Instead, the compiler checks
 that the declared methods are members of the specified class. Note
-that the method names are required to be in scope, but the name under
-which a method is in scope is immaterial (cf.\ Sect.~4.3.2 of the
-revised Haskell'98 report~\cite{PeytonJones03:Haskell}).
+that in an instance declaration the method names are required to be in
+scope, but the name under which a method is in scope is immaterial
+(cf.\ Sect.~4.3.2 of the revised Haskell'98
+report~\cite{PeytonJones03:Haskell}).
 \begin{verbatim}
+
+> checkClassDecls :: VarEnv -> Position -> Ident -> Ident -> [MethodSig a]
+>                 -> Error [MethodSig a]
+> checkClassDecls env p cls tv ds =
+>   do
+>     ds' <-
+>       liftE (map methodDecl . joinEquations) (mapE (checkClassDeclLhs env) ds)
+>     checkClassMethods cls (mthds (ClassDecl p [] cls tv ds)) ds'
+>     mapE (checkClassDeclRhs env) ds'
+>   where methodDecl (TypeSig p fs (QualTypeExpr _ ty)) = MethodSig p fs ty
+>         methodDecl (FunctionDecl p f eqs) = DefaultMethodDecl p f eqs
+>         methodDecl _ = internalError "methodDecl (ClassDecl)"
+
+> checkClassDeclLhs :: VarEnv -> MethodSig a -> Error (Decl a)
+> checkClassDeclLhs env (MethodSig p fs ty) =
+>   return (TypeSig p fs (QualTypeExpr [] ty))
+> checkClassDeclLhs env (DefaultMethodDecl p f eqs) =
+>   checkEquationLhs True env p eqs
+
+> checkClassMethods :: Ident -> [P Ident] -> [MethodSig a] -> Error ()
+> checkClassMethods cls fs ds =
+>   reportDuplicates duplicateDefinition repeatedDefinition fs' &&>
+>   mapE_ (\(P p f) -> errorAt p (undefinedMethod (qualify cls) f))
+>         (filter (`notElem` fs) fs')
+>   where fs' = [P p f | DefaultMethodDecl p f _ <- ds]
+
+> checkClassDeclRhs :: VarEnv -> MethodSig a -> Error (MethodSig a)
+> checkClassDeclRhs env (MethodSig p fs ty) = return (MethodSig p fs ty)
+> checkClassDeclRhs env (DefaultMethodDecl p f eqs) =
+>   checkArity p f eqs &&>
+>   liftE (DefaultMethodDecl p f) (mapE (checkEquation env) eqs)
 
 > checkInstDecls :: TypeEnv -> VarEnv -> Position -> QualIdent -> [MethodDecl a]
 >                -> Error [MethodDecl a]
@@ -294,18 +330,19 @@ revised Haskell'98 report~\cite{PeytonJones03:Haskell}).
 >     checkInstMethods cls (map (P p) (classMthds cls tEnv)) ds'
 >     mapE (checkInstDeclRhs env) ds'
 >   where methodDecl (FunctionDecl p f eqs) = MethodDecl p f eqs
->         methodDecl _ = internalError "methodDecl"
+>         methodDecl _ = internalError "methodDecl (InstanceDecl)"
 
 > checkInstDeclLhs :: VarEnv -> MethodDecl a -> Error (Decl a)
 > checkInstDeclLhs env (MethodDecl p f eqs) = checkEquationLhs True env p eqs
 
 > checkInstMethods :: QualIdent -> [P Ident] -> [MethodDecl a] -> Error ()
-> checkInstMethods cls fs ds' =
+> checkInstMethods cls fs ds =
 >   reportDuplicates duplicateDefinition repeatedDefinition fs' &&>
 >   mapE_ (\(P p f) -> errorAt p (undefinedMethod cls f))
 >         (filter (`notElem` fs) fs')
->   where fs' = [P p f | MethodDecl p f _ <- ds']
+>   where fs' = [P p f | MethodDecl p f _ <- ds]
 
+> checkInstDeclRhs :: VarEnv -> MethodDecl a -> Error (MethodDecl a)
 > checkInstDeclRhs env (MethodDecl p f eqs) =
 >   checkArity p f eqs &&>
 >   liftE (MethodDecl p f) (mapE (checkEquation env) eqs)

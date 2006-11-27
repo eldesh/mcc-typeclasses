@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: OverlapCheck.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: OverlapCheck.lhs 2022 2006-11-27 18:26:02Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -45,9 +45,15 @@ are collected with a simple traversal of the syntax tree.
 >   overlap p xs ys = foldr (overlap p) ys xs
 
 > instance Typeable a => Syntax (TopDecl a) where
+>   overlap _ (ClassDecl p _ _ _ ds) = overlap p ds 
 >   overlap _ (InstanceDecl p _ _ _ ds) = overlap p ds 
 >   overlap p (BlockDecl d) = overlap p d
 >   overlap _ _ = id
+
+> instance Typeable a => Syntax (MethodSig a) where
+>   overlap _ (MethodSig _ _ _) = id
+>   overlap _ (DefaultMethodDecl p f eqs) =
+>     ([P p f | isNonDet eqs] ++) . overlap p eqs
 
 > instance Typeable a => Syntax (MethodDecl a) where
 >   overlap _ (MethodDecl p f eqs) = ([P p f | isNonDet eqs] ++) . overlap p eqs

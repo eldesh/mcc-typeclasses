@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2020 2006-11-26 11:24:38Z wlux $
+% $Id: TypeCheck.lhs 2022 2006-11-27 18:26:02Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -31,6 +31,7 @@ type annotation is present.
 > import Combined
 > import Error
 > import List
+> import Maybe
 > import Monad
 > import SCC
 > import Set
@@ -53,21 +54,16 @@ current module into the type environment.
 >   run (do
 >          (cx,vds') <- tcDecls m tcEnv [d | BlockDecl d <- vds]
 >          unless (null cx) (internalError ("typeCheck " ++ show cx))
->          ids' <- mapM (tcInstDecl m tcEnv) ids
+>          tds' <- mapM (tcTopDecl m tcEnv) tds
 >          tyEnv' <- fetchSt
 >          theta <- liftSt fetchSt
 >          return (iEnv',
 >                  subst theta tyEnv',
->                  map untyped tds ++
->                  map (fmap (subst theta)) (map BlockDecl vds' ++ ids')))
+>                  map (fmap (subst theta)) (tds' ++ map BlockDecl vds')))
 >       iEnv'
 >       (foldr (bindTypeValues m tcEnv) tyEnv tds)
->   where (tds,vds) = partition isTypeDecl ds
->         ids = filter isInstanceDecl vds
->         iEnv' = foldr (bindInstance tcEnv) iEnv ids
-
-> untyped :: Functor f => f a -> f Type
-> untyped = fmap (internalError "untyped")
+>   where (vds,tds) = partition isBlockDecl ds
+>         iEnv' = foldr (bindInstance tcEnv) iEnv tds
 
 \end{verbatim}
 Type checking of a goal is simpler because there are no type
@@ -129,6 +125,7 @@ ambiguous.
 > bindTypeValues m tcEnv (ClassDecl _ _ cls tv ds) tyEnv = foldr bind tyEnv ds
 >   where cx = [ClassAssert (qualifyWith m cls) tv]
 >         bind (MethodSig _ fs ty) = bindMethods m tcEnv cx fs ty
+>         bind (DefaultMethodDecl _ _ _) = id
 > bindTypeValues _ _ (InstanceDecl _ _ _ _ _) tyEnv = tyEnv
 > bindTypeValues _ _ (BlockDecl _) tyEnv = tyEnv
 
@@ -178,6 +175,7 @@ instance declarations from the current module.
 >         root (TypeConstrained _ _) = internalError "bindInstance"
 >         root (TypeArrow _ _) = qArrowId
 >         root (TypeSkolem _) = internalError "bindInstance"
+> bindInstance _ _ = id
 
 \end{verbatim}
 \paragraph{Type Signatures}
@@ -396,23 +394,41 @@ in \texttt{tcVariable} below.
 >   ty == sigTy && all (`elem` sigCx) cx
 
 \end{verbatim}
-\paragraph{Instance declarations}
-When checking instance declarations, the type expected for each method
-is determined by the method's type signature with the instance type
-being substituted for the type class variable. It is important for the
-dictionary transformation (see Sect.~\ref{sec:dict-trans}) that the
-free type variables of the instance type are instantiated consistently
-when inferring the types of the method implementations.  For that
-reason, the instance type is instantiated in \texttt{tcInstDecl}
-rather than having the instance type's type variables instantiated
-along with a method's type scheme in \texttt{tcMethodDeclLhs}. On the
-other hand, when checking that a method's inferred type is general
-enough in \texttt{genMethodDecl}, the type checker must substitute the
-uninstantiated instance type in the method's type signature.
+\paragraph{Class and instance declarations}
+When checking method implementations in class and instance
+declarations, the compiler must check that the inferred type matches
+the method's declared type. This is straight forward in class
+declarations (the only difference with respect to an overloaded
+function with an explicit type signature is that a class method's type
+signature is composed of its declared type signature and the context
+from the class declaration), but a little bit more complicated for
+instance declarations because the instance type must be substituted
+for the type variable used in the type class declaration.
+Furthermore, it is important for the dictionary transformation (see
+Sect.~\ref{sec:dict-trans}) that the free type variables of the
+instance type are instantiated consistently when inferring the types
+of the method implementations. For that reason, the instance type is
+instantiated in \texttt{tcInstDecl} rather than having the instance
+type's type variables instantiated along with a method's type scheme
+in \texttt{tcMethodDeclLhs}. On the other hand, when checking that a
+method's inferred type is general enough in \texttt{genMethodDecl},
+the type checker must substitute the uninstantiated instance type in
+the method's type signature.
 \begin{verbatim}
 
-> tcInstDecl :: ModuleIdent -> TCEnv -> TopDecl a -> TcState (TopDecl Type)
-> tcInstDecl m tcEnv d@(InstanceDecl p cx cls ty ds) =
+> tcTopDecl :: ModuleIdent -> TCEnv -> TopDecl a -> TcState (TopDecl Type)
+> tcTopDecl _ _ (DataDecl p tc tvs cs) = return (DataDecl p tc tvs cs)
+> tcTopDecl _ _ (NewtypeDecl p tc tvs nc) = return (NewtypeDecl p tc tvs nc)
+> tcTopDecl _ _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
+> tcTopDecl m tcEnv d@(ClassDecl p cx cls tv ds) =
+>   do
+>     vds' <- mapM (tcMethodSig m tcEnv sigs) vds
+>     return (ClassDecl p cx cls tv (map untyped tds ++ vds'))
+>   where cx' = ClassAssert (qualify cls) tv : cx
+>         sigs = foldr (bindTypeSigs . typeSig cx') noSigs tds
+>         (tds,vds) = partition isMethodSig ds
+>         typeSig cx (MethodSig p fs ty) = TypeSig p fs (QualTypeExpr cx ty)
+> tcTopDecl m tcEnv d@(InstanceDecl p cx cls ty ds) =
 >   do
 >     ty'' <-
 >       inst ty' >>=
@@ -420,6 +436,45 @@ uninstantiated instance type in the method's type signature.
 >     liftM (InstanceDecl p cx cls ty)
 >           (mapM (tcMethodDecl m tcEnv cls ty' ty'') ds)
 >   where ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
+> tcTopDecl _ _ (BlockDecl _) = internalError "tcTopDecl"
+
+> tcMethodSig :: ModuleIdent -> TCEnv -> SigEnv -> MethodSig a
+>             -> TcState (MethodSig Type)
+> tcMethodSig m tcEnv sigs d =
+>   do
+>     ty <- liftM snd $ tcMethodSigLhs m tcEnv sigTy d
+>     (cx,d') <- tcMethodSigRhs m tcEnv ty d
+>     genMethodSig m tcEnv sigTy cx ty d
+>     return d'
+>   where sigTy = methodType sigs d
+>         methodType sigs (DefaultMethodDecl _ f _) =
+>           fromJust (lookupEnv f sigs)
+
+> tcMethodSigLhs :: ModuleIdent -> TCEnv -> QualTypeExpr -> MethodSig a
+>                -> TcState (Context,Type)
+> tcMethodSigLhs m tcEnv sigTy (DefaultMethodDecl p f _) =
+>   inst (expandPolyType tcEnv sigTy)
+
+> tcMethodSigRhs :: ModuleIdent -> TCEnv -> Type -> MethodSig a
+>                -> TcState (Context,MethodSig Type)
+> tcMethodSigRhs m tcEnv ty d@(DefaultMethodDecl p f eqs) =
+>   do
+>     tyEnv0 <- fetchSt
+>     theta <- liftSt fetchSt
+>     (cxs,eqs') <- liftM unzip $
+>       mapM (tcEquation m tcEnv (fsEnv (subst theta tyEnv0)) ty f) eqs
+>     reduceContext p "method declaration" (ppMethodSig d) m (concat cxs)
+>                   (DefaultMethodDecl p f eqs')
+
+> genMethodSig :: ModuleIdent -> TCEnv -> QualTypeExpr -> Context -> Type
+>              -> MethodSig a -> TcState ()
+> genMethodSig m tcEnv sigTy cx ty (DefaultMethodDecl p f _) =
+>   do
+>     theta <- liftSt fetchSt
+>     let sigma = gen zeroSet cx (subst theta ty)
+>     unless (sigma `matchesTypeSig` expandPolyType tcEnv sigTy)
+>            (errorAt p (typeSigTooGeneral m what sigTy sigma))
+>   where what = text "Method:" <+> ppIdent f
 
 > tcInstContext :: Position -> String -> Doc -> ModuleIdent -> TCEnv
 >               -> QualIdent -> (Context,Type) -> TcState Type
@@ -1102,7 +1157,7 @@ the current substitution.
 >     ty' -> errorAt p (noInstance what doc m cls ty')
 
 > hasInstance :: InstEnv -> QualIdent -> Type -> Bool
-> hasInstance iEnv cls ty = maybe False (const True) (instContext iEnv cls ty)
+> hasInstance iEnv cls ty = isJust (instContext iEnv cls ty)
 
 \end{verbatim}
 When a constrained type variable that is not free in the type
@@ -1284,6 +1339,16 @@ here because we know that they are closed.
 
 > localTypes :: ValueEnv -> [TypeScheme]
 > localTypes tyEnv = [ty | (_,Value _ ty) <- localBindings tyEnv]
+
+\end{verbatim}
+The function \texttt{untyped} is used when transforming annotated
+syntax tree nodes into typed syntax tree nodes without adding type
+information. This is useful for nodes which contain no attributes
+themselves, e.g., operator fixity declarations.
+\begin{verbatim}
+
+> untyped :: Functor f => f a -> f Type
+> untyped = fmap (internalError "untyped")
 
 \end{verbatim}
 Error functions.

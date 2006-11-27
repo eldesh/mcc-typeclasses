@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2016 2006-11-21 10:57:21Z wlux $
+% $Id: CurryParser.lhs 2022 2006-11-27 18:26:02Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -200,10 +200,14 @@ directory path to the module is ignored.
 >   -- NB Don't try to ``optimize'' this into withContext (,,) cls <*> ty
 >   --    as this will yield a parse error if the context is omitted
 
-> methodSig :: Parser Token MethodSig a
-> methodSig =
->   MethodSig <$> position <*> var `sepBy1` comma
->             <*-> token DoubleColon <*> type0
+> methodSig :: Parser Token (MethodSig ()) a
+> methodSig = position <**> decl
+>   where decl = sigDecl <$> var `sepBy1` comma <*-> token DoubleColon <*> type0
+>           <|?> defDecl <$> lhs <*> declRhs
+>         lhs = (\f -> (f,FunLhs f [])) <$> fun
+>          <|?> funLhs
+>         sigDecl fs ty p = MethodSig p fs ty
+>         defDecl (f,lhs) rhs p = DefaultMethodDecl p f [Equation p lhs rhs]
 
 > methodDecl :: Parser Token (MethodDecl ()) a
 > methodDecl = methodDecl <$> position <*> lhs <*> declRhs

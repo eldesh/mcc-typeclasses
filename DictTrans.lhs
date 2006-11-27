@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2019 2006-11-21 15:25:08Z wlux $
+% $Id: DictTrans.lhs 2022 2006-11-27 18:26:02Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -47,13 +47,13 @@ state monad.
 > run m tyEnv = runSt (callSt m tyEnv) 1
 
 \end{verbatim}
-The introduction of dictionaries is divided into five different
-tasks:
+The introduction of dictionaries is divided into six different tasks:
 \begin{enumerate}
 \item Introduce a dictionary type for each class defined in the
   current module,
 \item introduce a stub function for each type class method declared in
   the current module,
+\item lift all default method implementations to the top-level,
 \item introduce a global function for each instance declaration in the
   current module that returns an appropriate dictionary,
 \item add dictionary arguments to the left hand sides of all equations
@@ -66,9 +66,10 @@ tasks:
 > doTrans :: (ModuleIdent -> TCEnv -> ValueEnv -> a -> DictState b) -> TCEnv
 >         -> InstEnv -> ValueEnv -> ModuleIdent -> a -> (TCEnv,ValueEnv,b)
 > doTrans f tcEnv iEnv tyEnv m x =
->   run (f m tcEnv tyEnv x >>= \x' -> fetchSt >>= \tyEnv' ->
->        return (bindDictTypes tcEnv,tyEnv',x'))
->       (bindDictConstrs m tcEnv $ bindInstFuns tcEnv iEnv $ rebindFuns tyEnv)
+>   run (f m tcEnv tyEnv' x >>= \x' -> fetchSt >>= \tyEnv'' ->
+>        return (bindDictTypes tcEnv,tyEnv'',x'))
+>       (bindDictConstrs m tcEnv $ bindInstFuns tcEnv iEnv $ rebindFuns tyEnv')
+>   where tyEnv' = bindClassMethods m tcEnv tyEnv
 
 > dictTransModule :: TCEnv -> InstEnv -> ValueEnv -> Module Type
 >                 -> (TCEnv,ValueEnv,Module Type)
@@ -76,7 +77,8 @@ tasks:
 >   doTrans transModule tcEnv iEnv tyEnv m ds
 >   where transModule m tcEnv tyEnv ds =
 >           do
->             ds' <- mapM (dictTransTopDecl m tcEnv iEnv tyEnv) ds
+>             ds' <- mapM (dictTransTopDecl m tcEnv iEnv tyEnv)
+>                         (ds ++ concatMap (defaultMethodDecls tyEnv) ds)
 >             dss <- mapM (methodStubs m tcEnv tyEnv) ds
 >             return (Module m es is (ds' ++ concat dss))
 
@@ -110,7 +112,8 @@ generator.
 > dictTransInterface :: Interface -> Interface
 > dictTransInterface (Interface m is ds) =
 >   Interface m is (map (dictTransIntfDecl m) (ds ++ dss))
->   where dss = concatMap (intfMethodStubs m) ds
+>   where dss = concatMap (intfMethodStubs m) ds ++
+>               concatMap (intfDefaultMethodDecls m) ds
 
 > dictTransIntfDecl :: ModuleIdent -> IDecl -> IDecl
 > dictTransIntfDecl _ (IInfixDecl p fix pr op) = IInfixDecl p fix pr op
@@ -167,7 +170,7 @@ constructor's arguments.
 >         ty = polyType (classDictType tcEnv tyEnv cls fs)
 > bindDictConstr _ _ _ tyEnv =  tyEnv
 
-> dictDecl :: Position -> Ident -> Ident -> [MethodSig] -> TopDecl Type
+> dictDecl :: Position -> Ident -> Ident -> [MethodSig a] -> TopDecl Type
 > dictDecl p cls tv ds =
 >   DataDecl p (dictTypeId cls) [tv] [dictConstrDecl p cls tys]
 >   where tys = [ty | MethodSig _ _ ty <- expandMethodSigs ds]
@@ -181,7 +184,7 @@ constructor's arguments.
 >         methodType (IMethodDecl _ _ ty) = ty
 > dictIDecl p cls tv Nothing = HidingDataDecl p (qDictTypeId cls) [tv]
 
-> expandMethodSigs :: [MethodSig] -> [MethodSig]
+> expandMethodSigs :: [MethodSig a] -> [MethodSig a]
 > expandMethodSigs ds = [MethodSig p [f] ty | MethodSig p fs ty <- ds, f <- fs]
 
 > classDictType :: TCEnv -> ValueEnv -> QualIdent -> [Maybe Ident] -> Type
@@ -250,17 +253,15 @@ contexts in \texttt{intfMethodStubs} below.
 >         context (ForAll _ (QualType cx _)) = cx
 > methodStubs _ _ _ _ = return []
 
-> methodStub :: [(Type,Ident)] -> (Type,Ident) -> ConstrTerm Type -> MethodSig
->            -> (Type,Ident) -> TopDecl Type
+> methodStub :: [(Type,Ident)] -> (Type,Ident) -> ConstrTerm Type
+>            -> MethodSig a -> (Type,Ident) -> TopDecl Type
 > methodStub vs v t (MethodSig p [f] _) v' =
 >   BlockDecl (funDecl p f (map (uncurry VariablePattern) vs) e [])
 >   where e = Case (uncurry mkVar v) [caseAlt p t (uncurry mkVar v')]
 
 > intfMethodStubs :: ModuleIdent -> IDecl -> [IDecl]
 > intfMethodStubs m (IClassDecl _ cx cls tv ds) =
->   map (intfMethodStub cls cx) (catMaybes ds)
->   where cx = [ClassAssert (qualUnqualify m cls) tv | cls <- sort clss]
->         clss = map (qualQualify m) (cls : [cls | ClassAssert cls _ <- cx])
+>   map (intfMethodStub cls (intfMethodContext m cx cls tv)) (catMaybes ds)
 > intfMethodStubs _ _ = []
 
 > intfMethodStub :: QualIdent -> [ClassAssert] -> IMethodDecl -> IDecl
@@ -277,6 +278,95 @@ contexts in \texttt{intfMethodStubs} below.
 > dictTypeInfo :: QualIdent -> TypeInfo
 > dictTypeInfo cls =
 >   DataType (qDictTypeId cls) 1 [Just (dictConstrId (unqualify cls))]
+
+\end{verbatim}
+\paragraph{Lifting default method implementations}
+The default method implementations of a class must be available at
+instance declarations so that they can be used instead of omitted
+instance methods when creating instance dictionaries. To that end, the
+compiler simply lifts default method declarations to the top-level.
+Since the method names themselves are used for the method stubs, the
+default implementations are renamed while they are lifted. In order to
+avoid problems with hidden methods, whose names are not available in
+the interface files, the lifted name is derived from the class' name
+and the method's index. The lifted methods are then transformed just
+like other overloaded functions (see \texttt{dictTransModule} above).
+
+If the user does not provide a default implementation for a method,
+the compiler provides a default implementation that is equivalent to
+\texttt{Prelude.undefined}.
+
+\ToDo{Use \texttt{Prelude.error} instead of \texttt{Prelude.undefined}
+  as default implementation for omitted methods?}
+\begin{verbatim}
+
+> bindClassMethods :: ModuleIdent -> TCEnv -> ValueEnv -> ValueEnv
+> bindClassMethods m tcEnv tyEnv =
+>   foldr (bindDefaultMethods m) tyEnv (allEntities tcEnv)
+
+> bindDefaultMethods :: ModuleIdent -> TypeInfo -> ValueEnv -> ValueEnv
+> bindDefaultMethods m (TypeClass cls clss fs) tyEnv =
+>   foldr ($) tyEnv
+>         (zipWith (bindDefaultMethod m cls ty) fs (qDefaultMethodIds cls))
+>   where ty = ForAll 1 (QualType cx tv)
+>         cx = [TypePred cls tv | cls <- sort (cls : clss)]
+>         tv = TypeVariable 0
+> bindDefaultMethods _ _ tyEnv = tyEnv
+
+> bindDefaultMethod :: ModuleIdent -> QualIdent -> TypeScheme -> Maybe Ident
+>                   -> QualIdent -> ValueEnv -> ValueEnv
+> bindDefaultMethod m cls ty f f' tyEnv =
+>   bindEntity m f' (Value f' (maybe ty (methType tyEnv cls) f)) tyEnv
+>   where methType tyEnv cls f = funType (qualifyLike cls f) tyEnv
+
+> defaultMethodDecls :: ValueEnv -> TopDecl Type -> [TopDecl Type]
+> defaultMethodDecls tyEnv (ClassDecl p _ cls _ ds) =
+>   map BlockDecl (zipWith renameFunction (defaultMethodIds cls) vds'')
+>   where (tds,vds) = partition isMethodSig ds
+>         fs = concatMap methods tds
+>         vds' = orderDefaultMethodDecls fs vds
+>         vds'' = zipWith (defaultMethodDecl tyEnv p) fs vds'
+> defaultMethodDecls _ _ = []
+
+> defaultMethodDecl :: ValueEnv -> Position -> Ident -> Maybe (MethodSig Type)
+>                   -> Decl Type
+> defaultMethodDecl _ _ _ (Just d) = methodDecl d
+>   where methodDecl (DefaultMethodDecl p f eqs) = FunctionDecl p f eqs
+> defaultMethodDecl tyEnv p f Nothing =
+>   funDecl p f [] (prelUndefined (rawType (varType f tyEnv))) []
+
+> orderDefaultMethodDecls :: [Ident] -> [MethodSig a] -> [Maybe (MethodSig a)]
+> orderDefaultMethodDecls fs ds =
+>   map (flip lookup [(f,d) | d@(DefaultMethodDecl _ f _) <- ds]) fs
+
+> intfDefaultMethodDecls :: ModuleIdent -> IDecl -> [IDecl]
+> intfDefaultMethodDecls m (IClassDecl p cx cls tv ds) =
+>   zipWith (intfDefaultMethodDecl p cx' ty) (qDefaultMethodIds cls) ds
+>   where cx' = intfMethodContext m cx cls tv
+>         ty = VariableType tv
+> intfDefaultMethodDecls _ _ = []
+
+> intfDefaultMethodDecl :: Position -> [ClassAssert] -> TypeExpr -> QualIdent
+>                       -> Maybe IMethodDecl -> IDecl
+> intfDefaultMethodDecl _ cx _ f (Just (IMethodDecl p _ ty)) =
+>   IFunctionDecl p f (QualTypeExpr cx ty)
+> intfDefaultMethodDecl p cx ty f Nothing =
+>   IFunctionDecl p f (QualTypeExpr cx ty)
+
+> intfMethodContext :: ModuleIdent -> [ClassAssert] -> QualIdent -> Ident
+>                   -> [ClassAssert]
+> intfMethodContext m cx cls tv =
+>   [ClassAssert (qualUnqualify m cls) tv | cls <- sort clss]
+>   where clss = map (qualQualify m) (cls : [cls | ClassAssert cls _ <- cx])
+
+> defaultMethodIds :: Ident -> [Ident]
+> defaultMethodIds cls = map (defaultMethodId cls) [1..]
+>   where defaultMethodId cls n =
+>           mkIdent ("_Method#" ++ name cls ++ "#" ++ show n)
+
+> qDefaultMethodIds :: QualIdent -> [QualIdent]
+> qDefaultMethodIds cls =
+>   map (qualifyLike cls) (defaultMethodIds (unqualify cls))
 
 \end{verbatim}
 \paragraph{Instance Dictionaries}
@@ -312,14 +402,15 @@ The dictionary constructor's argument expressions $g_i$ are given by
     \left\{
       \begin{array}{ll}
         h_i & \mbox{if $i \in \left\{ i_1, \dots, i_m \right\}$,} \\
-        \texttt{Prelude.undefined} & \mbox{otherwise.}
+        f_i' & \mbox{otherwise,}
       \end{array}
     \right.
 \end{displaymath}
-The instance methods are renamed using fresh identifiers $h_{i_1},
-\dots, h_{i_m}$ so that the local function definitions do not shadow
-the class methods, which may be used -- possibly at a different type
--- in the method implementations.
+where $f_i'$ is the name of the default method implementation of
+method $f_i$ in class $C$. The instance methods are renamed using
+fresh identifiers $h_{i_1}, \dots, h_{i_m}$ so that the local function
+definitions do not shadow the class methods, which may be used --
+possibly at a different type -- in the method implementations.
 \begin{verbatim}
 
 > bindInstFuns :: TCEnv -> InstEnv -> ValueEnv -> ValueEnv
@@ -355,8 +446,10 @@ the class methods, which may be used -- possibly at a different type
 >         ds' = orderMethodDecls fs ds
 >         ty' = instDictType tcEnv tyEnv tp fs ds'
 >         tyEnv' = bindFun m f (typeScheme (qualDictType cx' tp)) tyEnv
+>         renameMethod f = renameFunction f . methodDecl
 >         bindMeth m (ty,v) = bindFun m v (monoType ty)
 >         bindFun m f ty = localBindTopEnv f (Value (qualifyWith m f) ty)
+>         methodDecl (MethodDecl p f eqs) = (FunctionDecl p f eqs)
 
 > instIDecl :: ModuleIdent -> Position -> [ClassAssert] -> QualIdent -> TypeExpr
 >           -> IDecl
@@ -382,12 +475,13 @@ the class methods, which may be used -- possibly at a different type
 > dictExpr :: Type -> QualIdent -> [(Type,Ident)] -> [Maybe (MethodDecl a)]
 >          -> Expression Type
 > dictExpr ty cls vs ds =
->   apply (Constructor ty (qDictConstrId cls)) (zipWith instFun vs ds)
->   where instFun (ty,v) (Just _) = mkVar ty v
->         instFun (ty,_) Nothing = prelUndefined ty
+>   apply (Constructor ty (qDictConstrId cls))
+>         (zipWith3 instFun vs (qDefaultMethodIds cls) ds)
+>   where instFun (ty,v) _ (Just _) = mkVar ty v
+>         instFun (ty,_) f Nothing = Variable ty f
 
-> renameMethod :: Ident -> MethodDecl Type -> Decl Type
-> renameMethod f (MethodDecl p _ eqs) =
+> renameFunction :: Ident -> Decl Type -> Decl Type
+> renameFunction f (FunctionDecl p _ eqs) =
 >   FunctionDecl p f (map (renameEqnLhs f) eqs)
 >   where renameEqnLhs f (Equation p lhs rhs) = Equation p (renameLhs f lhs) rhs
 >         renameLhs f (FunLhs _ ts) = FunLhs f ts

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2016 2006-11-21 10:57:21Z wlux $
+% $Id: Renaming.lhs 2022 2006-11-27 18:26:02Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -157,11 +157,14 @@ syntax tree and renames all type and expression variables.
 > renameNewConstrDecl env (NewConstrDecl p c ty) =
 >   liftM (NewConstrDecl p c) (renameType env ty)
 
-> renameMethodSig :: Ident -> RenameEnv -> MethodSig -> RenameState MethodSig
+> renameMethodSig :: Ident -> RenameEnv -> MethodSig a
+>                 -> RenameState (MethodSig a)
 > renameMethodSig tv env (MethodSig p fs ty) =
 >   do
 >     env <- bindVars env (filter (tv /=) (fv ty))
 >     liftM (MethodSig p fs) (renameType env ty)
+> renameMethodSig _ _ (DefaultMethodDecl p f eqs) =
+>   liftM (DefaultMethodDecl p f) (mapM (renameEqn f emptyEnv) eqs)
 
 > renameMethodDecl :: MethodDecl a -> RenameState (MethodDecl a)
 > renameMethodDecl (MethodDecl p f eqs) =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 2016 2006-11-21 10:57:21Z wlux $
+% $Id: CaseCheck.lhs 2022 2006-11-27 18:26:02Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -161,8 +161,9 @@ collect all defined identifiers.
 >   names p ty xs =
 >     map (D p TypeVarId) (nub (filter (not . isAnonId) (fv ty))) ++ xs
 
-> instance SyntaxTree MethodSig where
+> instance SyntaxTree (MethodSig a) where
 >   names _ (MethodSig p fs _) xs = map (D p MethodId) fs ++ xs
+>   names _ (DefaultMethodDecl p _ eqs) xs = names p eqs xs
 
 > instance SyntaxTree (MethodDecl a) where
 >   names _ (MethodDecl p _ eqs) xs = names p eqs xs

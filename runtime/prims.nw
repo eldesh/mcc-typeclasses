@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: prims.nw 2013 2006-11-16 14:10:51Z wlux $
+% $Id: prims.nw 2024 2006-11-27 23:33:32Z wlux $
 %
-% Copyright (c) 2004-2005, Wolfgang Lux
+% Copyright (c) 2004-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Primitive Operations}
@@ -10,19 +10,30 @@ related functions. Many of these functions are so simple that they are
 defined as macros in order to avoid the cost of an additional function
 call.
 
-We start with equality tests for the basic types. The compare
-primitives are supposed to return results $-1$, $0$, and $1$ depending
-on whether the first argument is smaller than, equal to, or greater
-than the second, respectively.
+We start with equality tests and ordering predicates for the basic
+types.
 
 <<prims.h>>=
 #define primEqChar(x,y)  (x == y)
-#define primEqInt(x,y)   (x == y)
-#define primEqFloat(x,y) (x == y)
+#define primNeqChar(x,y) (x != y)
+#define primLtChar(x,y)  (x < y)
+#define primLeqChar(x,y) (x <= y)
+#define primGeqChar(x,y) (x >= y)
+#define primGtChar(x,y)  (x > y)
 
-#define primCmpChar(x,y)  (x < y ? -1 : x > y ? 1 : 0)
-#define primCmpInt(x,y)   (x < y ? -1 : x > y ? 1 : 0)
-#define primCmpFloat(x,y) (x < y ? -1 : x > y ? 1 : 0)
+#define primEqInt(x,y)  (x == y)
+#define primNeqInt(x,y) (x != y)
+#define primLtInt(x,y)  (x < y)
+#define primLeqInt(x,y) (x <= y)
+#define primGeqInt(x,y) (x >= y)
+#define primGtInt(x,y)  (x > y)
+
+#define primEqFloat(x,y)  (x == y)
+#define primNeqFloat(x,y) (x != y)
+#define primLtFloat(x,y)  (x < y)
+#define primLeqFloat(x,y) (x <= y)
+#define primGeqFloat(x,y) (x >= y)
+#define primGtFloat(x,y)  (x > y)
 
 @ 
 The primitives for the operators \texttt{div}, \texttt{mod},
@@ -249,7 +260,11 @@ support arithmetic operations on [[void]] pointers.
 <<prims.h>>=
 #define primNullPtr()		0
 #define primEqPtr(x,y)		(x == y)
-#define primCmpPtr(x,y)         (x < y ? -1 : x > y ? 1 : 0)
+#define primNeqPtr(x,y)		(x != y)
+#define primLtPtr(x,y)		(x < y)
+#define primLeqPtr(x,y)		(x <= y)
+#define primGeqPtr(x,y)		(x >= y)
+#define primGtPtr(x,y)		(x > y)
 #define primCastPtr(x)		(x)
 #define primPlusPtr(x,y)	((char *)x + y)
 #define primMinusPtr(x,y)	((char *)x - (char *)y)

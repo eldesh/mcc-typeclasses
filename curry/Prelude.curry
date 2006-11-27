@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2023 2006-11-27 22:30:14Z wlux $
+-- $Id: Prelude.curry 2024 2006-11-27 23:33:32Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -610,13 +610,17 @@ data Char
 instance Eq Char where
   (==) = primEqChar
     where foreign import ccall "prims.h" primEqChar :: Char -> Char -> Bool
+  (/=) = primNeqChar
+    where foreign import ccall "prims.h" primNeqChar :: Char -> Char -> Bool
 instance Ord Char where
-  x `compare` y =
-    case x `primCmpChar` y of
-      -1 -> LT
-      0  -> EQ
-      1  -> GT
-    where foreign import ccall "prims.h" primCmpChar :: Char -> Char -> Int
+  (<) = primLtChar
+    where foreign import ccall "prims.h" primLtChar :: Char -> Char -> Bool
+  (<=) = primLeqChar
+    where foreign import ccall "prims.h" primLeqChar :: Char -> Char -> Bool
+  (>=) = primGeqChar
+    where foreign import ccall "prims.h" primGeqChar :: Char -> Char -> Bool
+  (>) = primGtChar
+    where foreign import ccall "prims.h" primGtChar :: Char -> Char -> Bool
 
 --- Converts a characters into its ASCII value.
 foreign import ccall "prims.h primOrd" ord :: Char -> Int
@@ -733,13 +737,17 @@ data Int
 instance Eq Int where
   (==) = primEqInt
     where foreign import ccall "prims.h" primEqInt :: Int -> Int -> Bool
+  (/=) = primNeqInt
+    where foreign import ccall "prims.h" primNeqInt :: Int -> Int -> Bool
 instance Ord Int where
-  x `compare` y =
-    case x `primCmpInt` y of
-      -1 -> LT
-      0  -> EQ
-      1  -> GT
-    where foreign import ccall "prims.h" primCmpInt :: Int -> Int -> Int
+  (<) = primLtInt
+    where foreign import ccall "prims.h" primLtInt :: Int -> Int -> Bool
+  (<=) = primLeqInt
+    where foreign import ccall "prims.h" primLeqInt :: Int -> Int -> Bool
+  (>=) = primGeqInt
+    where foreign import ccall "prims.h" primGeqInt :: Int -> Int -> Bool
+  (>) = primGtInt
+    where foreign import ccall "prims.h" primGtInt :: Int -> Int -> Bool
 
 instance Num Int where
   (+) = primAddInt
@@ -769,13 +777,23 @@ data Float
 instance Eq Float where
   (==) = primEqFloat
     where foreign import ccall "prims.h" primEqFloat :: Float -> Float -> Bool
+  (/=) = primNeqFloat
+    where foreign import ccall "prims.h" primNeqFloat :: Float -> Float -> Bool
 instance Ord Float where
-  x `compare` y =
-    case x `primCmpFloat` y of
-      -1 -> LT
-      0  -> EQ
-      1  -> GT
-    where foreign import ccall "prims.h" primCmpFloat :: Float -> Float -> Int
+  (<) = primLtFloat
+    where foreign import ccall "prims.h" primLtFloat :: Float -> Float -> Bool
+  (<=) = primLeqFloat
+    where foreign import ccall "prims.h" primLeqFloat :: Float -> Float -> Bool
+  (>=) = primGeqFloat
+    where foreign import ccall "prims.h" primGeqFloat :: Float -> Float -> Bool
+  (>) = primGtFloat
+    where foreign import ccall "prims.h" primGtFloat :: Float -> Float -> Bool
+  -- The following implementation of compare is designed such that compare
+  -- has no solution if one of the arguments is NaN.
+  x `compare` y
+    | x < y = LT
+    | x > y = GT
+    | x == y = EQ
 
 instance Num Float where
   (+) = primAddFloat

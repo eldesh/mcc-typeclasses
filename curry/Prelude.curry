@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2018 2006-11-21 13:34:30Z wlux $
+-- $Id: Prelude.curry 2023 2006-11-27 22:30:14Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -113,28 +113,35 @@ class Eq a where
   -- NB (/=) is temporarily an overloaded function until default method
   --    implementations are supported.
   (==) :: a -> a -> Bool
---(/=) :: a -> a -> Bool
+  (/=) :: a -> a -> Bool
 
-(/=) :: Eq a => a -> a -> Bool
-(/=) x y = not (x == y)
+  -- Minimal complete definition:
+  -- (==) or (/=)
+  x /= y = not (x == y)
+  x == y = not (x /= y)
 
 
 class Eq a => Ord a where
-  -- NB (<), (<=), (>=), (>), min, and max are temporarily overloaded
-  --    functions until default method implementations are supported
   compare              :: a -> a -> Ordering
---(<), (<=), (>=), (>) :: a -> a -> Bool
---min, max             :: a -> a -> a
+  (<), (<=), (>=), (>) :: a -> a -> Bool
+  min, max             :: a -> a -> a
 
-(<), (<=), (>=), (>) :: Ord a => a -> a -> Bool
-x <= y = case compare x y of GT -> False; _ -> True
-x < y  = case compare x y of LT -> True; _ -> False
-x > y  = case compare x y of GT -> True; _ -> False
-x >= y = case compare x y of LT -> False; _ -> True
+  -- Minimal complete definition:
+  -- (<=) or compare
+  -- Using compare can be more efficient for complex types
+  compare x y
+    | x == y = EQ
+    | x <= y = LT
+    | otherwise = GT
 
-min, max :: Ord a => a -> a -> a
-max x y = if x >= y then x else y
-min x y = if x <= y then x else y
+  x <= y = case compare x y of GT -> False; _ -> True
+  x < y  = case compare x y of LT -> True; _ -> False
+  x > y  = case compare x y of GT -> True; _ -> False
+  x >= y = case compare x y of LT -> False; _ -> True
+
+  -- note that (min x y, max x y) = (x,y) or (y,x)
+  max x y = if x <= y then y else x
+  min x y = if x <= y then x else y
 
 
 -- Boolean values
@@ -677,16 +684,17 @@ showParen False x = x
 class Eq a => Num a where
   -- NB Temporarily defines fromInt instead of fromIntegral because MCC
   --    does not yet support arbitrary precision integers.
-  --    Negate is temporarily a polymorphic function until default method
-  --    implementations are supported.
   --    Abs and signum are currently missing.
   (+) :: a -> a -> a
   (-) :: a -> a -> a
   (*) :: a -> a -> a
+  negate :: a -> a
   fromInt :: Int -> a
 
-negate :: Num a => a -> a
-negate n = 0 - n
+  -- Minimal complete definition:
+  -- All except negate or (-)
+  x - y    = x + negate y
+  negate x = 0 - x
 
 class (Ord a, Num a) => Real a where
   -- NB Temporarily defines toFloat instead of toRational because MCC

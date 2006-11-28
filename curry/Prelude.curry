@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2024 2006-11-27 23:33:32Z wlux $
+-- $Id: Prelude.curry 2025 2006-11-28 00:17:48Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -688,11 +688,11 @@ showParen False x = x
 class Eq a => Num a where
   -- NB Temporarily defines fromInt instead of fromIntegral because MCC
   --    does not yet support arbitrary precision integers.
-  --    Abs and signum are currently missing.
   (+) :: a -> a -> a
   (-) :: a -> a -> a
   (*) :: a -> a -> a
   negate :: a -> a
+  abs, signum :: a -> a
   fromInt :: Int -> a
 
   -- Minimal complete definition:
@@ -756,6 +756,8 @@ instance Num Int where
     where foreign import ccall "prims.h" primSubInt :: Int -> Int -> Int
   (*) = primMulInt
     where foreign import ccall "prims.h" primMulInt :: Int -> Int -> Int
+  abs n = if n >= 0 then n else - n
+  signum n = if n > 0 then 1 else if n < 0 then -1 else 0
   fromInt n = n
 
 instance Real Int where
@@ -802,6 +804,15 @@ instance Num Float where
     where foreign import ccall "prims.h" primSubFloat :: Float -> Float -> Float
   (*) = primMulFloat
     where foreign import ccall "prims.h" primMulFloat :: Float -> Float -> Float
+  abs x =
+    -- NB this implementation ensures that abs of a negative zero is positive
+    if x <= 0 then - x else x
+  signum x =
+    -- NB use compare so that signum NaN has no solution
+    case x `compare` 0 of
+      LT -> -1
+      EQ -> 0
+      GT -> 1
   fromInt = primFloat
     where foreign import ccall "prims.h" primFloat  :: Int -> Float
 

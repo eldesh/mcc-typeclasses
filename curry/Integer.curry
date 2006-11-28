@@ -1,4 +1,4 @@
--- $Id: Integer.curry 2013 2006-11-16 14:10:51Z wlux $
+-- $Id: Integer.curry 2025 2006-11-28 00:17:48Z wlux $
 --
 -- Copyright (c) 2004-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -40,10 +40,6 @@ factorial n = fact 1 n
 --- Fails if m <= 0 or n <= m
 binomial :: Int -> Int -> Int
 binomial n m = foldr1 (*) [n-m+1 .. n] `quot` foldr1 (*) [1 .. m]
-
---- (abs n) returns the absolute value of n
-abs :: Int -> Int
-abs n = if n >= 0 then n else -n
 
 --- (max3 m n o) returns the maximum of m, n, and o
 max3 :: Ord a => a -> a -> a -> a

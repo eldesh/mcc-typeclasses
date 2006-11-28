@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2026 2006-11-28 00:31:33Z wlux $
+-- $Id: Prelude.curry 2027 2006-11-28 00:43:57Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -731,9 +731,14 @@ class Real a => Integral a where
 class Num a => Fractional a where
   -- NB Temporarily defines fromFloat instead of fromRational because
   --    MCC does not yet support rational numbers.
-  --    Recip is currently missing.
   (/) :: a -> a -> a
+  recip :: a -> a
   fromFloat :: Float -> a
+
+  -- Minimal complete definition:
+  -- fromFloat (fromRational) and (recip of (/))
+  recip x = 1 / x
+  x / y   = x * recip y
 
 class (Real a, Fractional a) => RealFrac a where
   -- NB Result of truncate and round restricted to Int because polymorphic

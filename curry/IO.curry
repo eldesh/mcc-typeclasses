@@ -46,6 +46,9 @@ instance Ord IOMode where
       (AppendMode,_)             -> GT
       (ReadWriteMode,ReadWriteMode) -> EQ
       (ReadWriteMode,_)             -> GT
+instance Bounded IOMode where
+  minBound = ReadMode
+  maxBound = ReadWriteMode
 
 data BufferMode = NoBuffering | LineBuffering | BlockBuffering (Maybe Int)
 instance Eq BufferMode where
@@ -84,6 +87,9 @@ instance Ord SeekMode where
       (RelativeSeek,SeekFromEnd)  -> LT
       (SeekFromEnd,SeekFromEnd)   -> EQ
       (SeekFromEnd,_)             -> GT
+instance Bounded SeekMode where
+  minBound = AbsoluteSeek
+  maxBound = SeekFromEnd
 
 --- Predefined handles for standard input, output, and error
 foreign import primitive stdin  :: Handle

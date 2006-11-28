@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2022 2006-11-27 18:26:02Z wlux $
+% $Id: DictTrans.lhs 2030 2006-11-28 13:31:04Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -605,20 +605,16 @@ the concrete type at which $f$ is used in the application.
 >            (dictTrans m iEnv tyEnv dictEnv e)
 >            (mapM (dictTrans m iEnv tyEnv dictEnv) sts)
 >   dictTrans m iEnv tyEnv dictEnv (EnumFrom e) =
->     liftM EnumFrom (dictTrans m iEnv tyEnv dictEnv e)
+>     dictTrans m iEnv tyEnv dictEnv (apply (prelEnumFrom (typeOf e)) [e])
 >   dictTrans m iEnv tyEnv dictEnv (EnumFromThen e1 e2) =
->     liftM2 EnumFromThen
->            (dictTrans m iEnv tyEnv dictEnv e1)
->            (dictTrans m iEnv tyEnv dictEnv e2)
+>     dictTrans m iEnv tyEnv dictEnv
+>               (apply (prelEnumFromThen (typeOf e1)) [e1,e2])
 >   dictTrans m iEnv tyEnv dictEnv (EnumFromTo e1 e2) =
->     liftM2 EnumFromTo
->            (dictTrans m iEnv tyEnv dictEnv e1)
->            (dictTrans m iEnv tyEnv dictEnv e2)
+>     dictTrans m iEnv tyEnv dictEnv
+>               (apply (prelEnumFromTo (typeOf e1)) [e1,e2])
 >   dictTrans m iEnv tyEnv dictEnv (EnumFromThenTo e1 e2 e3) =
->     liftM3 EnumFromThenTo
->            (dictTrans m iEnv tyEnv dictEnv e1)
->            (dictTrans m iEnv tyEnv dictEnv e2)
->            (dictTrans m iEnv tyEnv dictEnv e3)
+>     dictTrans m iEnv tyEnv dictEnv
+>               (apply (prelEnumFromThenTo (typeOf e1)) [e1,e2,e3])
 >   dictTrans m iEnv tyEnv dictEnv (UnaryMinus e) =
 >     dictTrans m iEnv tyEnv dictEnv (apply (prelNegate (typeOf e)) [e])
 >   dictTrans m iEnv tyEnv dictEnv (Apply e1 e2) =
@@ -875,6 +871,26 @@ Prelude entities.
 >   Variable (opType a b c `TypeArrow` opType b a c)
 >            (qualifyWith preludeMIdent (mkIdent "flip"))
 >   where opType a b c = a `TypeArrow` (b `TypeArrow` c)
+
+> prelEnumFrom :: Type -> Expression Type
+> prelEnumFrom a =
+>   Variable (a `TypeArrow` listType a)
+>            (qualifyWith preludeMIdent (mkIdent "enumFrom"))
+
+> prelEnumFromThen :: Type -> Expression Type
+> prelEnumFromThen a =
+>   Variable (a `TypeArrow` (a `TypeArrow` listType a))
+>            (qualifyWith preludeMIdent (mkIdent "enumFromThen"))
+
+> prelEnumFromTo :: Type -> Expression Type
+> prelEnumFromTo a =
+>   Variable (a `TypeArrow` (a `TypeArrow` listType a))
+>            (qualifyWith preludeMIdent (mkIdent "enumFromTo"))
+
+> prelEnumFromThenTo :: Type -> Expression Type
+> prelEnumFromThenTo a =
+>   Variable (a `TypeArrow` (a `TypeArrow` (a `TypeArrow` listType a)))
+>            (qualifyWith preludeMIdent (mkIdent "enumFromThenTo"))
 
 > prelNegate :: Type -> Expression Type
 > prelNegate a =

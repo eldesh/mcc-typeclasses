@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2022 2006-11-27 18:26:02Z wlux $
+% $Id: TypeCheck.lhs 2030 2006-11-28 13:31:04Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -809,48 +809,52 @@ Note that overloaded literals are not supported in patterns.
 >     return (concat cxs ++ cx,listType ty,ListCompr e' qs')
 > tcExpr m tcEnv p e@(EnumFrom e1) =
 >   do
->     (cx,e1') <-
+>     (cx,ty) <- freshEnumType
+>     (cx',e1') <-
 >       tcExpr m tcEnv p e1 >>=
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) m intType
->     return (cx,listType intType,EnumFrom e1')
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) m ty
+>     return (cx ++ cx',listType ty,EnumFrom e1')
 > tcExpr m tcEnv p e@(EnumFromThen e1 e2) =
 >   do
->     (cx,e1') <-
+>     (cx,ty) <- freshEnumType
+>     (cx',e1') <-
 >       tcExpr m tcEnv p e1 >>=
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) m intType
->     (cx',e2') <-
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) m ty
+>     (cx'',e2') <-
 >       tcExpr m tcEnv p e2 >>=
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) m intType
->     return (cx ++ cx',listType intType,EnumFromThen e1' e2')
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) m ty
+>     return (cx ++ cx' ++ cx'',listType ty,EnumFromThen e1' e2')
 > tcExpr m tcEnv p e@(EnumFromTo e1 e2) =
 >   do
->     (cx,e1') <-
+>     (cx,ty) <- freshEnumType
+>     (cx',e1') <-
 >       tcExpr m tcEnv p e1 >>=
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) m intType
->     (cx',e2') <-
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) m ty
+>     (cx'',e2') <-
 >       tcExpr m tcEnv p e2 >>=
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) m intType
->     return (cx ++ cx',listType intType,EnumFromTo e1' e2')
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) m ty
+>     return (cx ++ cx' ++ cx'',listType ty,EnumFromTo e1' e2')
 > tcExpr m tcEnv p e@(EnumFromThenTo e1 e2 e3) =
 >   do
->     (cx,e1') <-
+>     (cx,ty) <- freshEnumType
+>     (cx',e1') <-
 >       tcExpr m tcEnv p e1 >>=
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) m intType
->     (cx',e2') <-
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) m ty
+>     (cx'',e2') <-
 >       tcExpr m tcEnv p e2 >>=
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) m intType
->     (cx'',e3') <-
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) m ty
+>     (cx''',e3') <-
 >       tcExpr m tcEnv p e3 >>=
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e3) m intType
->     return (cx ++ cx' ++ cx'',listType intType,EnumFromThenTo e1' e2' e3')
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e3) m ty
+>     return (cx ++ cx' ++ cx'' ++ cx''',listType ty,EnumFromThenTo e1' e2' e3')
 > tcExpr m tcEnv p e@(UnaryMinus e1) =
 >   do
 >     (cx,ty) <- freshNumType
@@ -1262,17 +1266,16 @@ We use negative offsets for fresh type variables.
 > freshTypeVar :: TcState Type
 > freshTypeVar = freshVar TypeVariable
 
-> freshNumType :: TcState (Context,Type)
-> freshNumType =
+> freshQualType :: QualIdent -> TcState (Context,Type)
+> freshQualType cls =
 >   do
 >     tv <- freshTypeVar
->     return ([TypePred qNumId tv],tv)
+>     return ([TypePred cls tv],tv)
 
-> freshFracType :: TcState (Context,Type)
-> freshFracType =
->   do
->     tv <- freshTypeVar
->     return ([TypePred qFractionalId tv],tv)
+> freshEnumType, freshNumType, freshFracType :: TcState (Context,Type)
+> freshEnumType = freshQualType qEnumId
+> freshNumType = freshQualType qNumId
+> freshFracType = freshQualType qFractionalId
 
 > freshConstrained :: [Type] -> TcState Type
 > freshConstrained tys = freshVar (TypeConstrained tys)

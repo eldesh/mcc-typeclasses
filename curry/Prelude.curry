@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2028 2006-11-28 09:05:38Z wlux $
+-- $Id: Prelude.curry 2030 2006-11-28 13:31:04Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -108,7 +108,10 @@ foreign import primitive "failed" undefined :: a
 foreign import primitive failed :: a
 
 
--- Standard classes
+--- Standard classes
+
+--- Equality and Ordered classes
+
 class Eq a where
   -- NB (/=) is temporarily an overloaded function until default method
   --    implementations are supported.
@@ -119,7 +122,6 @@ class Eq a where
   -- (==) or (/=)
   x /= y = not (x == y)
   x == y = not (x /= y)
-
 
 class Eq a => Ord a where
   compare              :: a -> a -> Ordering
@@ -143,6 +145,29 @@ class Eq a => Ord a where
   max x y = if x <= y then y else x
   min x y = if x <= y then x else y
 
+--- Enumeration and Bounded classes
+
+class Enum a where
+  succ, pred 	 :: a -> a
+  toEnum     	 :: Int -> a
+  fromEnum   	 :: a -> Int
+  enumFrom   	 :: a -> [a]
+  enumFromThen   :: a -> a -> [a]
+  enumFromTo     :: a -> a -> [a]
+  enumFromThenTo :: a -> a -> a -> [a]
+
+  -- Minimal complete definition:
+  -- toEnum, fromEnum
+
+  -- NB These default methods only make sense for types that
+  --    map injectively into Int using fromEnum and toEnum
+  succ x = toEnum (fromEnum x + 1)
+  pred x = toEnum (fromEnum x - 1)
+  enumFrom x           = map toEnum [fromEnum x ..]
+  enumFromTo x y       = map toEnum [fromEnum x .. fromEnum y]
+  enumFromThen x y     = map toEnum [fromEnum x, fromEnum y ..]
+  enumFromThenTo x y z = map toEnum [fromEnum x, fromEnum y .. fromEnum z]
+
 class Bounded a where
   minBound :: a
   maxBound :: a
@@ -165,6 +190,15 @@ instance Ord Bool where
       (False,True) -> LT
       (True,False) -> GT
       (True,True) -> EQ
+instance Enum Bool where
+  succ False = True
+  pred True = False
+  toEnum 0 = False
+  toEnum 1 = True
+  fromEnum False = 0
+  fromEnum True = 1
+  enumFrom x = enumFromTo x True
+  enumFromThen x y = enumFromThenTo x y (x <= y)
 instance Bounded Bool where
   minBound = False
   maxBound = True
@@ -215,6 +249,19 @@ instance Ord Ordering where
       (EQ,GT) -> LT
       (GT,GT) -> EQ
       (GT,_)  -> GT
+instance Enum Ordering where
+  succ LT = EQ
+  succ EQ = GT
+  pred EQ = LT
+  pred GT = EQ
+  toEnum 0 = LT
+  toEnum 1 = EQ
+  toEnum 2 = GT
+  fromEnum LT = 0
+  fromEnum EQ = 1
+  fromEnum GT = 2
+  enumFrom x = enumFromTo x GT
+  enumFromThen x y = enumFromThenTo x y (if x <= y then GT else LT)
 instance Bounded Ordering where
   minBound = LT
   maxBound = GT
@@ -401,6 +448,15 @@ instance Eq () where
   x == y = case (x,y) of ((),()) -> True
 instance Ord () where
   x `compare` y = case (x,y) of ((),()) -> EQ
+instance Enum () where
+  pred () = failed
+  succ () = failed
+  toEnum 0 = ()
+  fromEnum () = 0
+  enumFrom () = [()]
+  enumFromTo () () = [()]
+  enumFromThen () () = repeat ()
+  enumFromThenTo () () () = repeat ()
 instance Bounded () where
   minBound = ()
   maxBound = ()
@@ -652,6 +708,18 @@ instance Ord Char where
     where foreign import ccall "prims.h" primGeqChar :: Char -> Char -> Bool
   (>) = primGtChar
     where foreign import ccall "prims.h" primGtChar :: Char -> Char -> Bool
+instance Enum Char where
+  pred x | x > minBound = primPredChar x
+    where foreign import ccall "prims.h" primPredChar :: Char -> Char
+  succ x | x < maxBound = primSuccChar x
+    where foreign import ccall "prims.h" primSuccChar :: Char -> Char
+  toEnum = primChr
+    where foreign import ccall "prims.h" primChr :: Int -> Char
+  fromEnum = primOrd
+    where foreign import ccall "prims.h" primOrd :: Char -> Int
+  enumFrom c = enumFromTo c maxBound
+  enumFromThen c1 c2 =
+    enumFromThenTo c1 c2 (if c1 <= c2 then maxBound else minBound)
 instance Bounded Char where
   minBound = primMinChar
     where foreign import ccall "prims.h" primMinChar :: Char
@@ -741,7 +809,7 @@ class (Ord a, Num a) => Real a where
   --    does not yet support rational numbers
   toFloat :: a -> Float
 
-class Real a => Integral a where
+class (Enum a, Real a) => Integral a where
   -- quot, rem, div, and mod must satisfy the following laws
   -- N `quot` M + N `rem` M = N
   -- N `div`  M + N `mod` M = N
@@ -799,6 +867,18 @@ instance Ord Int where
     where foreign import ccall "prims.h" primGeqInt :: Int -> Int -> Bool
   (>) = primGtInt
     where foreign import ccall "prims.h" primGtInt :: Int -> Int -> Bool
+instance Enum Int where
+  succ n | n < maxBound = n + 1
+  pred n | n > minBound = n - 1
+  toEnum n = n
+  fromEnum n = n
+  enumFrom n = enumFromTo n maxBound
+  enumFromThen n1 n2 =
+    enumFromThenTo n1 n2 (if n1 <= n2 then maxBound else minBound)
+  enumFromTo n m = takeWhile (m >=) (iterate (1 +) n)
+  enumFromThenTo n1 n2 m
+    | n1 <= n2 = takeWhile (m >=) (iterate ((n2 - n1) +) n1)
+    | otherwise = takeWhile (m <=) (iterate ((n2 - n1) +) n1)
 instance Bounded Int where
   minBound = primMinInt
     where foreign import ccall "prims.h" primMinInt :: Int
@@ -854,6 +934,20 @@ instance Ord Float where
     | x < y = LT
     | x > y = GT
     | x == y = EQ
+instance Enum Float where
+  -- NB This is a rather dubious instance; it is defined just for
+  --    compatibility with the Haskell report
+  succ x = x + 1
+  pred x = x - 1
+  toEnum n = fromInt n
+  fromEnum x = truncate x
+  enumFrom x = iterate (1 +) x
+  enumFromTo x1 x2 = takeWhile (<= x2 + 0.5) (enumFrom x1)
+  enumFromThen x1 x2 = [x1 + n * i | n <- enumFrom 0]
+    where i = x2 - x1
+  enumFromThenTo x1 x2 x3
+    | x1 <= x2 = takeWhile (<= x3 + (x2 - x1) * 0.5) (enumFromThen x1 x2)
+    | otherwise = takeWhile (>= x3 + (x2 - x1) * 0.5) (enumFromThen x1 x2)
 
 instance Num Float where
   (+) = primAddFloat
@@ -887,24 +981,6 @@ instance RealFrac Float where
     where foreign import ccall "prims.h" primTrunc :: Float -> Int
   round = primRound
     where foreign import ccall "prims.h" primRound :: Float -> Int
-
-
---- Generates an infinite sequence of ascending integers.
-enumFrom               :: Int -> [Int]                   -- [n..]
-enumFrom n             = iterate (1 +) n
-
---- Generates an infinite sequence of integers with a particular in/decrement.
-enumFromThen           :: Int -> Int -> [Int]            -- [n1,n2..]
-enumFromThen n1 n2     = iterate ((n2 - n1) +) n1
-
---- Generates a sequence of ascending integers.
-enumFromTo             :: Int -> Int -> [Int]            -- [n..m]
-enumFromTo n m         = takeWhile (m >=) (enumFrom n)
-
---- Generates a sequence of integers with a particular in/decrement.
-enumFromThenTo         :: Int -> Int -> Int -> [Int]     -- [n1,n2..m]
-enumFromThenTo n1 n2 m =
-  takeWhile (if n1 <= n2 then (m >=) else (m <=)) (enumFromThen n1 n2)
 
 
 -- Constraints

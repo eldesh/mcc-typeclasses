@@ -46,6 +46,24 @@ instance Ord IOMode where
       (AppendMode,_)             -> GT
       (ReadWriteMode,ReadWriteMode) -> EQ
       (ReadWriteMode,_)             -> GT
+instance Enum IOMode where
+  succ ReadMode = WriteMode
+  succ WriteMode = AppendMode
+  succ AppendMode = ReadWriteMode
+  pred WriteMode = ReadMode
+  pred AppendMode = WriteMode
+  pred ReadWriteMode = AppendMode
+  toEnum 0 = ReadMode
+  toEnum 1 = WriteMode
+  toEnum 2 = AppendMode
+  toEnum 3 = ReadWriteMode
+  fromEnum ReadMode = 0
+  fromEnum WriteMode = 1
+  fromEnum AppendMode = 2
+  fromEnum ReadWriteMode = 3
+  enumFrom x = enumFromTo x ReadWriteMode
+  enumFromThen x1 x2 =
+    enumFromThenTo x1 x2 (if x1 <= x2 then ReadWriteMode else ReadMode)
 instance Bounded IOMode where
   minBound = ReadMode
   maxBound = ReadWriteMode
@@ -87,6 +105,20 @@ instance Ord SeekMode where
       (RelativeSeek,SeekFromEnd)  -> LT
       (SeekFromEnd,SeekFromEnd)   -> EQ
       (SeekFromEnd,_)             -> GT
+instance Enum SeekMode where
+  succ AbsoluteSeek = RelativeSeek
+  succ RelativeSeek = SeekFromEnd
+  pred RelativeSeek = AbsoluteSeek
+  pred SeekFromEnd = RelativeSeek
+  toEnum 0 = AbsoluteSeek
+  toEnum 1 = RelativeSeek
+  toEnum 2 = SeekFromEnd
+  fromEnum AbsoluteSeek = 0
+  fromEnum RelativeSeek = 1
+  fromEnum SeekFromEnd = 2
+  enumFrom x = enumFromTo x SeekFromEnd
+  enumFromThen x1 x2 =
+    enumFromThenTo x1 x2 (if x1 <= x2 then SeekFromEnd else AbsoluteSeek)
 instance Bounded SeekMode where
   minBound = AbsoluteSeek
   maxBound = SeekFromEnd

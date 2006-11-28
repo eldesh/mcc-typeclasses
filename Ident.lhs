@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Ident.lhs 2019 2006-11-21 15:25:08Z wlux $
+% $Id: Ident.lhs 2030 2006-11-28 13:31:04Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -34,13 +34,13 @@ unqualified identifier.}
 >              emptyMIdent,preludeMIdent,debugPreludeMIdent,
 >              ptrMIdent,stablePtrMIdent,
 >              anonId,unitId,boolId,charId,intId,floatId,listId,arrowId,ioId,
->              numId,fractionalId,ptrId,funPtrId,stablePtrId,
+>              enumId,numId,fractionalId,ptrId,funPtrId,stablePtrId,
 >              successId,trueId,falseId,nilId,consId,mainId,
 >              tupleId,isTupleId,tupleArity,selectorId,isSelectorId,
 >              minusId,
 >              qUnitId,qBoolId,qCharId,qIntId,qFloatId,qListId,qArrowId,qIOId,
->              qSuccessId,qNumId,qFractionalId,qPtrId,qFunPtrId,qStablePtrId,
->              qTrueId,qFalseId,qNilId,qConsId,
+>              qSuccessId,qEnumId,qNumId,qFractionalId,
+>              qPtrId,qFunPtrId,qStablePtrId,qTrueId,qFalseId,qNilId,qConsId,
 >              qTupleId,isQTupleId,qTupleArity,isQSelectorId) where
 > import Char
 > import List
@@ -173,7 +173,8 @@ A few identifiers a predefined here.
 > ioId      = Ident "IO" 0
 > successId = Ident "Success" 0
 
-> numId, fractionalId :: Ident
+> enumId, numId, fractionalId :: Ident
+> enumId = Ident "Enum" 0
 > numId = Ident "Num" 0
 > fractionalId = Ident "Fractional" 0
 
@@ -228,7 +229,8 @@ A few identifiers a predefined here.
 > qSuccessId = QualIdent preludeMIdent successId
 > qIOId = QualIdent preludeMIdent ioId
 
-> qNumId, qFractionalId :: QualIdent
+> qEnumId, qNumId, qFractionalId :: QualIdent
+> qEnumId = QualIdent preludeMIdent enumId
 > qNumId = QualIdent preludeMIdent numId
 > qFractionalId = QualIdent preludeMIdent fractionalId
 

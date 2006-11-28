@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: prims.nw 2024 2006-11-27 23:33:32Z wlux $
+% $Id: prims.nw 2030 2006-11-28 13:31:04Z wlux $
 %
 % Copyright (c) 2004-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -232,6 +232,8 @@ applied to a code outside of the Unicode character set range.
 <<prims.h>>=
 #define primMinChar() 0
 #define primMaxChar() 0x10ffff
+#define primSuccChar(c) (c + 1)
+#define primPredChar(c) (c - 1)
 #define primOrd(c) (c)
 extern int primChr(long);
 

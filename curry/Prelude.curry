@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2027 2006-11-28 00:43:57Z wlux $
+-- $Id: Prelude.curry 2028 2006-11-28 09:05:38Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -143,6 +143,10 @@ class Eq a => Ord a where
   max x y = if x <= y then y else x
   min x y = if x <= y then x else y
 
+class Bounded a where
+  minBound :: a
+  maxBound :: a
+
 
 -- Boolean values
 -- already defined as builtin, since it is required for if-then-else
@@ -161,6 +165,9 @@ instance Ord Bool where
       (False,True) -> LT
       (True,False) -> GT
       (True,True) -> EQ
+instance Bounded Bool where
+  minBound = False
+  maxBound = True
 
 --- Sequential conjunction on Booleans.
 (&&)            :: Bool -> Bool -> Bool
@@ -208,6 +215,9 @@ instance Ord Ordering where
       (EQ,GT) -> LT
       (GT,GT) -> EQ
       (GT,_)  -> GT
+instance Bounded Ordering where
+  minBound = LT
+  maxBound = GT
 
 
 -- Pairs
@@ -225,6 +235,9 @@ instance (Ord a,Ord b) => Ord (a,b) where
 	  LT -> LT
 	  EQ -> x2 `compare` y2
 	  GT -> GT
+instance (Bounded a,Bounded b) => Bounded (a,b) where
+  minBound = (minBound,minBound)
+  maxBound = (maxBound,maxBound)
 
 --- Selects the first component of a pair.
 fst             :: (a,b) -> a
@@ -252,6 +265,9 @@ instance (Ord a,Ord b,Ord c) => Ord (a,b,c) where
 	      EQ -> x3 `compare` y3
 	      GT -> GT
 	  GT -> GT
+instance (Bounded a,Bounded b,Bounded c) => Bounded (a,b,c) where
+  minBound = (minBound,minBound,minBound)
+  maxBound = (maxBound,maxBound,maxBound)
 
 instance (Eq a,Eq b,Eq c,Eq d) => Eq (a,b,c,d) where
   x == y =
@@ -274,6 +290,9 @@ instance (Ord a,Ord b,Ord c,Ord d) => Ord (a,b,c,d) where
 		  GT -> GT
 	      GT -> GT
 	  GT -> GT
+instance (Bounded a,Bounded b,Bounded c,Bounded d) => Bounded (a,b,c,d) where
+  minBound = (minBound,minBound,minBound,minBound)
+  maxBound = (maxBound,maxBound,maxBound,maxBound)
 
 instance (Eq a,Eq b,Eq c,Eq d,Eq e) => Eq (a,b,c,d,e) where
   x == y =
@@ -300,6 +319,9 @@ instance (Ord a,Ord b,Ord c,Ord d,Ord e) => Ord (a,b,c,d,e) where
 		  GT -> GT
 	      GT -> GT
 	  GT -> GT
+instance (Bounded a,Bounded b,Bounded c,Bounded d,Bounded e) => Bounded (a,b,c,d,e) where
+  minBound = (minBound,minBound,minBound,minBound,minBound)
+  maxBound = (maxBound,maxBound,maxBound,maxBound,maxBound)
 
 instance (Eq a,Eq b,Eq c,Eq d,Eq e,Eq f) => Eq (a,b,c,d,e,f) where
   x == y =
@@ -330,6 +352,9 @@ instance (Ord a,Ord b,Ord c,Ord d,Ord e,Ord f) => Ord (a,b,c,d,e,f) where
 		  GT -> GT
 	      GT -> GT
 	  GT -> GT
+instance (Bounded a,Bounded b,Bounded c,Bounded d,Bounded e,Bounded f) => Bounded (a,b,c,d,e,f) where
+  minBound = (minBound,minBound,minBound,minBound,minBound,minBound)
+  maxBound = (maxBound,maxBound,maxBound,maxBound,maxBound,maxBound)
 
 instance (Eq a,Eq b,Eq c,Eq d,Eq e,Eq f,Eq g) => Eq (a,b,c,d,e,f,g) where
   x == y =
@@ -365,6 +390,9 @@ instance (Ord a,Ord b,Ord c,Ord d,Ord e,Ord f,Ord g) => Ord (a,b,c,d,e,f,g) wher
 		  GT -> GT
 	      GT -> GT
 	  GT -> GT
+instance (Bounded a,Bounded b,Bounded c,Bounded d,Bounded e,Bounded f,Bounded g) => Bounded (a,b,c,d,e,f,g) where
+  minBound = (minBound,minBound,minBound,minBound,minBound,minBound,minBound)
+  maxBound = (maxBound,maxBound,maxBound,maxBound,maxBound,maxBound,maxBound)
 
 
 -- Unit type
@@ -373,6 +401,9 @@ instance Eq () where
   x == y = case (x,y) of ((),()) -> True
 instance Ord () where
   x `compare` y = case (x,y) of ((),()) -> EQ
+instance Bounded () where
+  minBound = ()
+  maxBound = ()
 
 
 -- Lists
@@ -621,6 +652,11 @@ instance Ord Char where
     where foreign import ccall "prims.h" primGeqChar :: Char -> Char -> Bool
   (>) = primGtChar
     where foreign import ccall "prims.h" primGtChar :: Char -> Char -> Bool
+instance Bounded Char where
+  minBound = primMinChar
+    where foreign import ccall "prims.h" primMinChar :: Char
+  maxBound = primMaxChar
+    where foreign import ccall "prims.h" primMaxChar :: Char
 
 --- Converts a characters into its ASCII value.
 foreign import ccall "prims.h primOrd" ord :: Char -> Int
@@ -763,6 +799,11 @@ instance Ord Int where
     where foreign import ccall "prims.h" primGeqInt :: Int -> Int -> Bool
   (>) = primGtInt
     where foreign import ccall "prims.h" primGtInt :: Int -> Int -> Bool
+instance Bounded Int where
+  minBound = primMinInt
+    where foreign import ccall "prims.h" primMinInt :: Int
+  maxBound = primMaxInt
+    where foreign import ccall "prims.h" primMaxInt :: Int
 
 instance Num Int where
   (+) = primAddInt

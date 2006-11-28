@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2025 2006-11-28 00:17:48Z wlux $
+-- $Id: Prelude.curry 2026 2006-11-28 00:31:33Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -713,10 +713,20 @@ class Real a => Integral a where
   -- of div is truncated towards negative infinity
   -- NB Temporarily defines toInt instead of toInteger because MCC
   --    does not yet support arbitrary precision integers.
-  --    QuotRem and divMod are currently missing.
   quot, rem :: a -> a -> a
   div, mod :: a -> a -> a
+  quotRem, divMod :: a -> a -> (a,a)
   toInt :: a -> Int
+
+  -- Minimal complete definition:
+  -- quotRem, toInt(eger)
+  n `quot` d = case quotRem n d of (q,r) -> q
+  n `rem` d  = case quotRem n d of (q,r) -> r
+  n `div` d  = case divMod n d of (q,r) -> q
+  n `mod` d  = case divMod n d of (q,r) -> r
+  divMod n d =
+    case quotRem n d of
+      qr@(q,r) -> if signum r == - signum d then (q - 1, r + d) else qr
 
 class Num a => Fractional a where
   -- NB Temporarily defines fromFloat instead of fromRational because
@@ -772,6 +782,8 @@ instance Integral Int where
     where foreign import ccall "prims.h" primDivInt :: Int -> Int -> Int
   mod = primModInt
     where foreign import ccall "prims.h" primModInt :: Int -> Int -> Int
+  quotRem n d = (n `quot` d, n `rem` d)
+  divMod n d = (n `div` d, n `mod` d)
   toInt n = n
 
 

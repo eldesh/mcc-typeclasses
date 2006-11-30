@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2022 2006-11-27 18:26:02Z wlux $
+% $Id: Renaming.lhs 2031 2006-11-30 10:06:13Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -106,16 +106,18 @@ syntax tree and renames all type and expression variables.
 >     return (Goal p e' ds')
 
 > renameTopDecl :: TopDecl a -> RenameState (TopDecl a)
-> renameTopDecl (DataDecl p tc tvs cs) =
+> renameTopDecl (DataDecl p cx tc tvs cs) =
 >   do
 >     env <- bindVars emptyEnv tvs
->     liftM2 (DataDecl p tc)
+>     liftM3 (flip (DataDecl p) tc)
+>            (mapM (renameClassAssert env) cx)
 >            (mapM (renameVar env) tvs)
 >            (mapM (renameConstrDecl env) cs)
-> renameTopDecl (NewtypeDecl p tc tvs nc) =
+> renameTopDecl (NewtypeDecl p cx tc tvs nc) =
 >   do
 >     env <- bindVars emptyEnv tvs
->     liftM2 (NewtypeDecl p tc)
+>     liftM3 (flip (NewtypeDecl p) tc)
+>            (mapM (renameClassAssert env) cx)
 >            (mapM (renameVar env) tvs)
 >            (renameNewConstrDecl env nc)
 > renameTopDecl (TypeDecl p tc tvs ty) =

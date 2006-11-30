@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2022 2006-11-27 18:26:02Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2031 2006-11-30 10:06:13Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -52,9 +52,9 @@ later for checking the optional export list of the current module.
 >   where env = fmap typeKind tcEnv
 
 > bindType :: ModuleIdent -> TopDecl a -> TypeEnv -> TypeEnv
-> bindType m (DataDecl _ tc _ cs) =
+> bindType m (DataDecl _ _ tc _ cs) =
 >   globalBindTopEnv m tc (Data (qualifyWith m tc) (map constr cs))
-> bindType m (NewtypeDecl _ tc _ nc) =
+> bindType m (NewtypeDecl _ _ tc _ nc) =
 >   globalBindTopEnv m tc (Data (qualifyWith m tc) [nconstr nc])
 > bindType m (TypeDecl _ tc _ _) =
 >   globalBindTopEnv m tc (Alias (qualifyWith m tc))
@@ -71,18 +71,17 @@ signatures.
 \begin{verbatim}
 
 > checkTopDecl :: TypeEnv -> TopDecl a -> Error (TopDecl a)
-> checkTopDecl env (DataDecl p tc tvs cs) =
->   checkTypeLhs env p tvs &&>
->   liftE (DataDecl p tc tvs) (mapE (checkConstrDecl env tvs) cs)
-> checkTopDecl env (NewtypeDecl p tc tvs nc) =
->   checkTypeLhs env p tvs &&>
->   liftE (NewtypeDecl p tc tvs) (checkNewConstrDecl env tvs nc)
+> checkTopDecl env (DataDecl p cx tc tvs cs) =
+>   checkTypeLhs env p cx tvs &&>
+>   liftE (DataDecl p cx tc tvs) (mapE (checkConstrDecl env tvs) cs)
+> checkTopDecl env (NewtypeDecl p cx tc tvs nc) =
+>   checkTypeLhs env p cx tvs &&>
+>   liftE (NewtypeDecl p cx tc tvs) (checkNewConstrDecl env tvs nc)
 > checkTopDecl env (TypeDecl p tc tvs ty) =
->   checkTypeLhs env p tvs &&>
+>   checkTypeLhs env p [] tvs &&>
 >   liftE (TypeDecl p tc tvs) (checkClosedType env p tvs ty)
 > checkTopDecl env (ClassDecl p cx cls tv ds) =
->   checkTypeLhs env p [tv] &&> 
->   checkQualType env p (QualTypeExpr cx (VariableType tv)) &&>
+>   checkTypeLhs env p cx [tv] &&>
 >   liftE (ClassDecl p cx cls tv) (mapE (checkMethodSig env tv) ds)
 > checkTopDecl env (InstanceDecl p cx cls ty ds) =
 >   checkClass env p cls &&>
@@ -117,22 +116,25 @@ signatures.
 >   liftE (ForeignDecl p cc ie f) (checkType env p ty)
 > checkDecl _ d = return d
 
-> checkTypeLhs :: TypeEnv -> Position -> [Ident] -> Error ()
-> checkTypeLhs env p tvs =
->   mapE_ (errorAt p . noVariable "left hand side of type declaration")
->         (nub tcs) &&>
->   mapE_ (errorAt p . nonLinear "left hand side of type declaration". fst)
->         (duplicates (filter (anonId /=) tvs'))
+> checkTypeLhs :: TypeEnv -> Position -> [ClassAssert] -> [Ident] -> Error ()
+> checkTypeLhs env p cx tvs =
+>   do
+>     mapE_ (errorAt p . noVariable "left hand side of type declaration")
+>           (nub tcs) &&>
+>       mapE_ (checkClassAssert env p) cx &&>
+>       mapE_ (errorAt p . nonLinear "left hand side of type declaration". fst)
+>             (duplicates (filter (anonId /=) tvs'))
+>     checkClosedContext p cx tvs
 >   where (tcs,tvs') = partition isTypeConstr tvs
 >         isTypeConstr tv = not (null (lookupTopEnv tv env))
 
 > checkConstrDecl :: TypeEnv -> [Ident] -> ConstrDecl -> Error ConstrDecl
 > checkConstrDecl env tvs (ConstrDecl p evs c tys) =
->   checkTypeLhs env p evs &&>
+>   checkTypeLhs env p [] evs &&>
 >   liftE (ConstrDecl p evs c) (mapE (checkClosedType env p tvs') tys)
 >   where tvs' = evs ++ tvs
 > checkConstrDecl env tvs (ConOpDecl p evs ty1 op ty2) =
->   checkTypeLhs env p evs &&>
+>   checkTypeLhs env p [] evs &&>
 >   liftE2 (flip (ConOpDecl p evs) op)
 >          (checkClosedType env p tvs' ty1)
 >          (checkClosedType env p tvs' ty2)
@@ -242,12 +244,9 @@ interpret the identifier as such.
 
 > checkQualType :: TypeEnv -> Position -> QualTypeExpr -> Error QualTypeExpr
 > checkQualType env p (QualTypeExpr cx ty) =
->   mapE_ (checkClassAssert env p) cx &&> 
 >   do
->     ty' <- checkType env p ty
->     let tvs = fv ty'
->     mapE_ (errorAt p . unboundVariable)
->           (nub [tv | ClassAssert _ tv <- cx, tv `notElem` tvs])
+>     ty' <- mapE_ (checkClassAssert env p) cx &&> checkType env p ty
+>     checkClosedContext p cx (fv ty')
 >     return (QualTypeExpr cx ty')
 
 > checkClassAssert :: TypeEnv -> Position -> ClassAssert -> Error ()
@@ -255,6 +254,11 @@ interpret the identifier as such.
 >   checkClass env p cls &&>
 >   unless (null (lookupTopEnv tv env))
 >          (errorAt p (noVariable "class assertion" tv))
+
+> checkClosedContext :: Position -> [ClassAssert] -> [Ident] -> Error ()
+> checkClosedContext p cx tvs =
+>   mapE_ (errorAt p . unboundVariable)
+>         (nub [tv | ClassAssert _ tv <- cx, tv `notElem` tvs])
 
 > checkType :: TypeEnv -> Position -> TypeExpr -> Error TypeExpr
 > checkType env p (ConstructorType tc tys) =
@@ -324,8 +328,8 @@ Auxiliary definitions.
 \begin{verbatim}
 
 > tident :: TopDecl a -> P Ident
-> tident (DataDecl p tc _ _) = P p tc
-> tident (NewtypeDecl p tc _ _) = P p tc
+> tident (DataDecl p _ tc _ _) = P p tc
+> tident (NewtypeDecl p _ tc _ _) = P p tc
 > tident (TypeDecl p tc _ _) = P p tc
 > tident (ClassDecl p _ cls _ _) = P p cls
 > tident (InstanceDecl _ _ _ _ _) = internalError "tident"

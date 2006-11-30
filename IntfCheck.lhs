@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2016 2006-11-21 10:57:21Z wlux $
+% $Id: IntfCheck.lhs 2031 2006-11-30 10:06:13Z wlux $
 %
 % Copyright (c) 2000-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -68,21 +68,21 @@ interface module only. However, this has not been implemented yet.
 >         checkData (RenamingType tc' n' _)
 >           | tc == tc' && length tvs == n' = Just (return ())
 >         checkData _ = Nothing
-> checkImport m _ tcEnv tyEnv (IDataDecl p tc tvs cs) =
+> checkImport m _ tcEnv tyEnv (IDataDecl p cx tc tvs cs) =
 >   checkTypeInfo "data type" checkData tcEnv p tc
 >   where checkData (DataType tc' n' cs')
 >           | tc == tc' && length tvs == n' &&
 >             (null cs || length cs == length cs') &&
->             and (zipWith (isVisible constr) cs cs') =
->               Just (mapM_ (checkConstrImport m tyEnv tc tvs) (catMaybes cs))
+>             and (zipWith (isVisible constr) cs cs') = Just $
+>               mapM_ (checkConstrImport m tyEnv cx tc tvs) (catMaybes cs)
 >         checkData (RenamingType tc' n' _)
 >           | tc == tc' && length tvs == n' && null cs = Just (return ())
 >         checkData _ = Nothing
-> checkImport m _ tcEnv tyEnv (INewtypeDecl p tc tvs nc) =
+> checkImport m _ tcEnv tyEnv (INewtypeDecl p cx tc tvs nc) =
 >   checkTypeInfo "newtype" checkNewtype tcEnv p tc
 >   where checkNewtype (RenamingType tc' n' nc')
 >           | tc == tc' && length tvs == n' && nconstr nc == nc' =
->               Just (checkNewConstrImport m tyEnv tc tvs nc)
+>               Just (checkNewConstrImport m tyEnv cx tc tvs nc)
 >         checkNewtype _ = Nothing
 > checkImport m _ tcEnv _ (ITypeDecl p tc tvs ty) =
 >   checkTypeInfo "synonym type" checkType tcEnv p tc
@@ -114,31 +114,30 @@ interface module only. However, this has not been implemented yet.
 >           f == f' && toQualType m [] ty == ty'
 >         checkFun _ = False
 
-> checkConstrImport :: ModuleIdent -> ValueEnv -> QualIdent -> [Ident]
->                   -> ConstrDecl -> Error ()
-> checkConstrImport m tyEnv tc tvs (ConstrDecl p evs c tys) =
+> checkConstrImport :: ModuleIdent -> ValueEnv -> [ClassAssert] -> QualIdent
+>                   -> [Ident] -> ConstrDecl -> Error ()
+> checkConstrImport m tyEnv cx tc tvs (ConstrDecl p evs c tys) =
 >   checkValueInfo "data constructor" checkConstr tyEnv p qc
 >   where qc = qualifyLike tc c
->         checkConstr (DataConstructor c' (ForAll n' (QualType _ ty'))) =
+>         checkConstr (DataConstructor c' (ForAll n' ty')) =
 >           qc == c' && length (tvs ++ evs) == n' &&
->           toTypes m tvs tys == arrowArgs ty'
+>           toConstrType m cx tc tvs tys == ty'
 >         checkConstr _ = False
-> checkConstrImport m tyEnv tc tvs (ConOpDecl p evs ty1 op ty2) =
+> checkConstrImport m tyEnv cx tc tvs (ConOpDecl p evs ty1 op ty2) =
 >   checkValueInfo "data constructor" checkConstr tyEnv p qc
 >   where qc = qualifyLike tc op
->         checkConstr (DataConstructor c' (ForAll n' (QualType _ ty'))) =
+>         checkConstr (DataConstructor c' (ForAll n' ty')) =
 >           qc == c' && length (tvs ++ evs) == n' &&
->           toTypes m tvs [ty1,ty2] == arrowArgs ty'
+>           toConstrType m cx tc tvs [ty1,ty2] == ty'
 >         checkConstr _ = False
 
-> checkNewConstrImport :: ModuleIdent -> ValueEnv -> QualIdent -> [Ident]
->                      -> NewConstrDecl -> Error ()
-> checkNewConstrImport m tyEnv tc tvs (NewConstrDecl p c ty) =
+> checkNewConstrImport :: ModuleIdent -> ValueEnv -> [ClassAssert] -> QualIdent
+>                      -> [Ident] -> NewConstrDecl -> Error ()
+> checkNewConstrImport m tyEnv cx tc tvs (NewConstrDecl p c ty) =
 >   checkValueInfo "newtype constructor" checkNewConstr tyEnv p qc
 >   where qc = qualifyLike tc c
->         checkNewConstr (NewtypeConstructor c' (ForAll n' (QualType _ ty'))) =
->           qc == c' && length tvs == n' &&
->           toType m tvs ty == head (arrowArgs ty')
+>         checkNewConstr (NewtypeConstructor c' (ForAll n' ty')) =
+>           qc == c' && length tvs == n' && toConstrType m cx tc tvs [ty] == ty'
 >         checkNewConstr _ = False
 
 > checkMethodImport :: ModuleIdent -> ValueEnv -> QualIdent -> [ClassAssert]

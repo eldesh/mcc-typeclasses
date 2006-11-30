@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2022 2006-11-27 18:26:02Z wlux $
+% $Id: CurryPP.lhs 2031 2006-11-30 10:06:13Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -63,13 +63,13 @@ Declarations
 \begin{verbatim}
 
 > ppTopDecl :: TopDecl a -> Doc
-> ppTopDecl (DataDecl _ tc tvs cs) =
->   sep (ppTypeDeclLhs "data" tc tvs :
+> ppTopDecl (DataDecl _ cx tc tvs cs) =
+>   sep (ppTypeDeclLhs "data" cx tc tvs :
 >        map indent (zipWith (<+>) (equals : repeat vbar) (map ppConstr cs)))
-> ppTopDecl (NewtypeDecl _ tc tvs nc) =
->   sep [ppTypeDeclLhs "newtype" tc tvs <+> equals,indent (ppNewConstr nc)]
+> ppTopDecl (NewtypeDecl _ cx tc tvs nc) =
+>   sep [ppTypeDeclLhs "newtype" cx tc tvs <+> equals,indent (ppNewConstr nc)]
 > ppTopDecl (TypeDecl _ tc tvs ty) =
->   sep [ppTypeDeclLhs "type" tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
+>   sep [ppTypeDeclLhs "type" [] tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
 > ppTopDecl (ClassDecl _ cx cls tv ds) =
 >   ppClassInstDecl (ppClassInstHead "class" cx (qualify cls) (VariableType tv))
 >                   (map ppMethodSig ds)
@@ -77,8 +77,9 @@ Declarations
 >   ppClassInstDecl (ppClassInstHead "instance" cx cls ty) (map ppMethodDecl ds)
 > ppTopDecl (BlockDecl d) = ppDecl d
 
-> ppTypeDeclLhs :: String -> Ident -> [Ident] -> Doc
-> ppTypeDeclLhs kw tc tvs = text kw <+> ppIdent tc <+> hsep (map ppIdent tvs)
+> ppTypeDeclLhs :: String -> [ClassAssert] -> Ident -> [Ident] -> Doc
+> ppTypeDeclLhs kw cx tc tvs =
+>   text kw <+> sep [ppContext cx, ppIdent tc <+> hsep (map ppIdent tvs)]
 
 > ppConstr :: ConstrDecl -> Doc
 > ppConstr (ConstrDecl _ tvs c tys) =
@@ -182,15 +183,15 @@ Interfaces
 > ppIDecl :: IDecl -> Doc
 > ppIDecl (IInfixDecl _ fix p op) = ppPrec fix p <+> ppQInfixOp op
 > ppIDecl (HidingDataDecl _ tc tvs) =
->   text "hiding" <+> ppITypeDeclLhs "data" tc tvs
-> ppIDecl (IDataDecl _ tc tvs cs) =
->   sep (ppITypeDeclLhs "data" tc tvs :
+>   text "hiding" <+> ppITypeDeclLhs "data" [] tc tvs
+> ppIDecl (IDataDecl _ cx tc tvs cs) =
+>   sep (ppITypeDeclLhs "data" cx tc tvs :
 >        map indent (zipWith (<+>) (equals : repeat vbar) (map ppIConstr cs)))
 >   where ppIConstr = maybe (char '_') ppConstr
-> ppIDecl (INewtypeDecl _ tc tvs nc) =
->   sep [ppITypeDeclLhs "newtype" tc tvs <+> equals,indent (ppNewConstr nc)]
+> ppIDecl (INewtypeDecl _ cx tc tvs nc) =
+>   sep [ppITypeDeclLhs "newtype" cx tc tvs <+> equals,indent (ppNewConstr nc)]
 > ppIDecl (ITypeDecl _ tc tvs ty) =
->   sep [ppITypeDeclLhs "type" tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
+>   sep [ppITypeDeclLhs "type" [] tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
 > ppIDecl (HidingClassDecl p cx cls tv) =
 >   text "hiding" <+> ppIDecl (IClassDecl p cx cls tv [])
 > ppIDecl (IClassDecl _ cx cls tv ds) =
@@ -199,8 +200,9 @@ Interfaces
 > ppIDecl (IFunctionDecl _ f ty) =
 >   ppQIdent f <+> text "::" <+> ppQualTypeExpr ty
 
-> ppITypeDeclLhs :: String -> QualIdent -> [Ident] -> Doc
-> ppITypeDeclLhs kw tc tvs = text kw <+> ppQIdent tc <+> hsep (map ppIdent tvs)
+> ppITypeDeclLhs :: String -> [ClassAssert] -> QualIdent -> [Ident] -> Doc
+> ppITypeDeclLhs kw cx tc tvs =
+>   text kw <+> sep [ppContext cx,ppQIdent tc <+> hsep (map ppIdent tvs)]
 
 > ppIClassDecl :: Doc -> [Maybe IMethodDecl] -> Doc
 > ppIClassDecl head ds

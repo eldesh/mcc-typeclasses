@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2022 2006-11-27 18:26:02Z wlux $
+% $Id: Base.lhs 2031 2006-11-30 10:06:13Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -556,8 +556,8 @@ name space.
 \begin{verbatim}
 
 > isTypeDecl, isClassDecl, isInstanceDecl, isBlockDecl :: TopDecl a -> Bool
-> isTypeDecl (DataDecl _ _ _ _) = True
-> isTypeDecl (NewtypeDecl _ _ _ _) = True
+> isTypeDecl (DataDecl _ _ _ _ _) = True
+> isTypeDecl (NewtypeDecl _ _ _ _ _) = True
 > isTypeDecl (TypeDecl _ _ _ _) = True
 > isTypeDecl (ClassDecl _ _ _ _ _) = True {-sic!-}
 > isTypeDecl (InstanceDecl _ _ _ _ _) = False

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfEquiv.lhs 2016 2006-11-21 10:57:21Z wlux $
+% $Id: IntfEquiv.lhs 2031 2006-11-30 10:06:13Z wlux $
 %
 % Copyright (c) 2000-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -55,10 +55,10 @@ inadvertently mix up these cases.
 >     fix1 == fix2 && p1 == p2 && op1 == op2
 >   HidingDataDecl _ tc1 tvs1 =~= HidingDataDecl _ tc2 tvs2 =
 >     tc1 == tc2 && tvs1 == tvs2
->   IDataDecl _ tc1 tvs1 cs1 =~= IDataDecl _ tc2 tvs2 cs2 =
->     tc1 == tc2 && tvs1 == tvs2 && cs1 `eqvList` cs2
->   INewtypeDecl _ tc1 tvs1 nc1 =~= INewtypeDecl _ tc2 tvs2 nc2 =
->     tc1 == tc2 && tvs1 == tvs2 && nc1 =~= nc2
+>   IDataDecl _ cx1 tc1 tvs1 cs1 =~= IDataDecl _ cx2 tc2 tvs2 cs2 =
+>     cx1 == cx2 && tc1 == tc2 && tvs1 == tvs2 && cs1 `eqvList` cs2
+>   INewtypeDecl _ cx1 tc1 tvs1 nc1 =~= INewtypeDecl _ cx2 tc2 tvs2 nc2 =
+>     cx1 == cx2 && tc1 == tc2 && tvs1 == tvs2 && nc1 =~= nc2
 >   ITypeDecl _ tc1 tvs1 ty1 =~= ITypeDecl _ tc2 tvs2 ty2 =
 >     tc1 == tc2 && tvs1 == tvs2 && ty1 == ty2
 >   HidingClassDecl _ cx1 cls1 _ =~= HidingClassDecl _ cx2 cls2 _ =
@@ -107,8 +107,9 @@ by function \texttt{fixInterface} and the associated type class
 > instance FixInterface IDecl where
 >   fix tcs (IInfixDecl p fix pr op) = IInfixDecl p fix pr op
 >   fix tcs (HidingDataDecl p tc tvs) = HidingDataDecl p tc tvs
->   fix tcs (IDataDecl p tc tvs cs) = IDataDecl p tc tvs (fix tcs cs)
->   fix tcs (INewtypeDecl p tc tvs nc) = INewtypeDecl p tc tvs (fix tcs nc)
+>   fix tcs (IDataDecl p cx tc tvs cs) = IDataDecl p cx tc tvs (fix tcs cs)
+>   fix tcs (INewtypeDecl p cx tc tvs nc) =
+>     INewtypeDecl p cx tc tvs (fix tcs nc)
 >   fix tcs (ITypeDecl p tc tvs ty) = ITypeDecl p tc tvs (fix tcs ty)
 >   fix tcs (HidingClassDecl p cx cls tv) = HidingClassDecl p cx cls tv
 >   fix tcs (IClassDecl p cx cls tv ds) = IClassDecl p cx cls tv (fix tcs ds)
@@ -147,8 +148,8 @@ by function \texttt{fixInterface} and the associated type class
 >   [tc | (Nothing,tc) <- map splitQualIdent (foldr tcs [] ds)]
 >   where tcs (IInfixDecl _ _ _ _) tcs = tcs
 >         tcs (HidingDataDecl _ tc _) tcs = tc : tcs
->         tcs (IDataDecl _ tc _ _) tcs = tc : tcs
->         tcs (INewtypeDecl _ tc _ _) tcs = tc : tcs
+>         tcs (IDataDecl _ _ tc _ _) tcs = tc : tcs
+>         tcs (INewtypeDecl _ _ tc _ _) tcs = tc : tcs
 >         tcs (ITypeDecl _ tc _ _) tcs = tc : tcs
 >         tcs (HidingClassDecl _ _ _ _) tcs = tcs
 >         tcs (IClassDecl _ _ _ _ _) tcs = tcs

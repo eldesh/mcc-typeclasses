@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2030 2006-11-28 13:31:04Z wlux $
+% $Id: DictTrans.lhs 2031 2006-11-30 10:06:13Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -84,10 +84,10 @@ The introduction of dictionaries is divided into six different tasks:
 
 > dictTransTopDecl :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv
 >                  -> TopDecl Type -> DictState (TopDecl Type)
-> dictTransTopDecl _ _ _ _ (DataDecl p tc tvs cs) =
->   return (DataDecl p tc tvs cs)
-> dictTransTopDecl _ _ _ _ (NewtypeDecl p tc tvs nc) =
->   return (NewtypeDecl p tc tvs nc)
+> dictTransTopDecl _ _ _ _ (DataDecl p _ tc tvs cs) =
+>   return (DataDecl p [] tc tvs cs)
+> dictTransTopDecl _ _ _ _ (NewtypeDecl p _ tc tvs nc) =
+>   return (NewtypeDecl p [] tc tvs nc)
 > dictTransTopDecl _ _ _ _ (TypeDecl p tc tvs ty) =
 >   return (TypeDecl p tc tvs ty)
 > dictTransTopDecl _ _ _ _ (ClassDecl p _ cls tv ds) =
@@ -118,8 +118,8 @@ generator.
 > dictTransIntfDecl :: ModuleIdent -> IDecl -> IDecl
 > dictTransIntfDecl _ (IInfixDecl p fix pr op) = IInfixDecl p fix pr op
 > dictTransIntfDecl _ (HidingDataDecl p tc tvs) = HidingDataDecl p tc tvs
-> dictTransIntfDecl _ (IDataDecl p tc tvs cs) = IDataDecl p tc tvs cs
-> dictTransIntfDecl _ (INewtypeDecl p tc tvs nc) = INewtypeDecl p tc tvs nc
+> dictTransIntfDecl _ (IDataDecl p _ tc tvs cs) = IDataDecl p [] tc tvs cs
+> dictTransIntfDecl _ (INewtypeDecl p _ tc tvs nc) = INewtypeDecl p [] tc tvs nc
 > dictTransIntfDecl _ (ITypeDecl p tc tvs ty) = ITypeDecl p tc tvs ty
 > dictTransIntfDecl _ (HidingClassDecl p _ cls tv) = dictIDecl p cls tv Nothing
 > dictTransIntfDecl _ (IClassDecl p _ cls tv ds) = dictIDecl p cls tv (Just ds)
@@ -172,13 +172,13 @@ constructor's arguments.
 
 > dictDecl :: Position -> Ident -> Ident -> [MethodSig a] -> TopDecl Type
 > dictDecl p cls tv ds =
->   DataDecl p (dictTypeId cls) [tv] [dictConstrDecl p cls tys]
+>   DataDecl p [] (dictTypeId cls) [tv] [dictConstrDecl p cls tys]
 >   where tys = [ty | MethodSig _ _ ty <- expandMethodSigs ds]
 >         
 > dictIDecl :: Position -> QualIdent -> Ident -> Maybe [Maybe IMethodDecl]
 >           -> IDecl
 > dictIDecl p cls tv (Just ds) =
->   IDataDecl p (qDictTypeId cls) [tv]
+>   IDataDecl p [] (qDictTypeId cls) [tv]
 >             [Just (dictConstrDecl p (unqualify cls) tys)]
 >   where tys = map (maybe (VariableType tv) methodType) ds
 >         methodType (IMethodDecl _ _ ty) = ty

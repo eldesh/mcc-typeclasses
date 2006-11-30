@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2030 2006-11-28 13:31:04Z wlux $
+% $Id: TypeCheck.lhs 2031 2006-11-30 10:06:13Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -100,27 +100,18 @@ instance environment is passed around using a reader monad.
 \paragraph{Defining Data Constructors and Methods}
 First, the types of all data and newtype constructors as well as those
 of all type class methods are entered into the type environment. All
-type synonyms occurring in their types are expanded. We cannot use
-\texttt{expandPolyType} for expanding the type of a data or newtype
-constructor in function \texttt{bindConstr} because of the different
-normalization scheme used for constructor types and also because the
-name of the type may be ambiguous. We also cannot use
-\texttt{expandPolyType} for expanding the type signature of a method
-in function \texttt{bindMethods} because the name of the class may be
-ambiguous.
+type synonyms occurring in their types are expanded.
 \begin{verbatim}
 
 > bindTypeValues :: ModuleIdent -> TCEnv -> TopDecl a -> ValueEnv -> ValueEnv
-> bindTypeValues m tcEnv (DataDecl _ tc tvs cs) tyEnv = foldr bind tyEnv cs
->   where ty0 = constrType m tc tvs
->         bind (ConstrDecl _ _ c tys) =
->           bindConstr DataConstructor m tcEnv tvs c tys ty0
+> bindTypeValues m tcEnv (DataDecl _ cx tc tvs cs) tyEnv = foldr bind tyEnv cs
+>   where bind (ConstrDecl _ _ c tys) =
+>           bindConstr DataConstructor m tcEnv cx tc tvs c tys
 >         bind (ConOpDecl _ _ ty1 op ty2) =
->           bindConstr DataConstructor m tcEnv tvs op [ty1,ty2] ty0
-> bindTypeValues m tcEnv (NewtypeDecl _ tc tvs nc) tyEnv = bind nc tyEnv
->   where ty0 = constrType m tc tvs
->         bind (NewConstrDecl _ c ty) =
->           bindConstr NewtypeConstructor m tcEnv tvs c [ty] ty0
+>           bindConstr DataConstructor m tcEnv cx tc tvs op [ty1,ty2]
+> bindTypeValues m tcEnv (NewtypeDecl _ cx tc tvs nc) tyEnv = bind nc tyEnv
+>   where bind (NewConstrDecl _ c ty) =
+>           bindConstr NewtypeConstructor m tcEnv cx tc tvs c [ty]
 > bindTypeValues _ _ (TypeDecl _ _ _ _) tyEnv = tyEnv
 > bindTypeValues m tcEnv (ClassDecl _ _ cls tv ds) tyEnv = foldr bind tyEnv ds
 >   where cx = [ClassAssert (qualifyWith m cls) tv]
@@ -130,12 +121,11 @@ ambiguous.
 > bindTypeValues _ _ (BlockDecl _) tyEnv = tyEnv
 
 > bindConstr :: (QualIdent -> TypeScheme -> ValueInfo) -> ModuleIdent
->            -> TCEnv -> [Ident] -> Ident -> [TypeExpr] -> Type
->            -> ValueEnv -> ValueEnv
-> bindConstr f m tcEnv tvs c tys ty0 =
->   globalBindTopEnv m c (f (qualifyWith m c) ty')
->   where ty' = typeScheme $ normalize (length tvs) $
->               qualType (foldr TypeArrow ty0 (expandMonoTypes tcEnv tvs tys))
+>            -> TCEnv -> [ClassAssert] -> Ident -> [Ident] -> Ident
+>            -> [TypeExpr] -> ValueEnv -> ValueEnv
+> bindConstr f m tcEnv cx tc tvs c tys =
+>   globalBindTopEnv m c (f (qualifyWith m c) (typeScheme ty))
+>   where ty = expandConstrType tcEnv cx (qualifyWith m tc) tvs tys
 
 > bindMethods :: ModuleIdent -> TCEnv -> [ClassAssert] -> [Ident] -> TypeExpr
 >             -> ValueEnv -> ValueEnv
@@ -150,10 +140,6 @@ ambiguous.
 
 > bindMethod :: ModuleIdent -> TypeScheme -> Ident -> ValueEnv -> ValueEnv
 > bindMethod m ty f = globalBindTopEnv m f (Value (qualifyWith m f) ty)
-
-> constrType :: ModuleIdent -> Ident -> [Ident] -> Type
-> constrType m tc tvs =
->   TypeConstructor (qualifyWith m tc) (map TypeVariable [0..length tvs-1])
 
 \end{verbatim}
 \paragraph{Defining Instances}
@@ -417,8 +403,9 @@ the method's type signature.
 \begin{verbatim}
 
 > tcTopDecl :: ModuleIdent -> TCEnv -> TopDecl a -> TcState (TopDecl Type)
-> tcTopDecl _ _ (DataDecl p tc tvs cs) = return (DataDecl p tc tvs cs)
-> tcTopDecl _ _ (NewtypeDecl p tc tvs nc) = return (NewtypeDecl p tc tvs nc)
+> tcTopDecl _ _ (DataDecl p cx tc tvs cs) = return (DataDecl p cx tc tvs cs)
+> tcTopDecl _ _ (NewtypeDecl p cx tc tvs nc) =
+>   return (NewtypeDecl p cx tc tvs nc)
 > tcTopDecl _ _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
 > tcTopDecl m tcEnv d@(ClassDecl p cx cls tv ds) =
 >   do

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2022 2006-11-27 18:26:02Z wlux $
+% $Id: SyntaxCheck.lhs 2031 2006-11-30 10:06:13Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -589,18 +589,18 @@ Auxiliary definitions.
 \begin{verbatim}
 
 > constrs :: TopDecl a -> [P Ident]
-> constrs (DataDecl _ _ _ cs) = map constr cs
+> constrs (DataDecl _ _ _ _ cs) = map constr cs
 >   where constr (ConstrDecl p _ c _) = P p c
 >         constr (ConOpDecl p _ _ op _) = P p op
-> constrs (NewtypeDecl _ _ _ (NewConstrDecl p c _)) = [P p c]
+> constrs (NewtypeDecl _ _ _ _ (NewConstrDecl p c _)) = [P p c]
 > constrs (TypeDecl _ _ _ _) = []
 > constrs (ClassDecl _ _ _ _ _) = []
 > constrs (InstanceDecl _ _ _ _ _) = []
 > constrs (BlockDecl _) = []
 
 > mthds :: TopDecl a -> [P Ident]
-> mthds (DataDecl _ _ _ _) = []
-> mthds (NewtypeDecl _ _ _ _) = []
+> mthds (DataDecl _ _ _ _ _) = []
+> mthds (NewtypeDecl _ _ _ _ _) = []
 > mthds (TypeDecl _ _ _ _) = []
 > mthds (ClassDecl _ _ _ _ ds) = [P p f | MethodSig p fs _ <- ds, f <- fs]
 > mthds (InstanceDecl _ _ _ _ _) = []

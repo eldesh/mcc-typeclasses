@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2016 2006-11-21 10:57:21Z wlux $
+% $Id: TypeTrans.lhs 2031 2006-11-30 10:06:13Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,9 +10,9 @@ This module implements transformations between the internal and
 external type representations.
 \begin{verbatim}
 
-> module TypeTrans(toType, toTypes, toQualType, toTypeScheme,
+> module TypeTrans(toType, toTypes, toQualType, toConstrType, toTypeScheme,
 >                  fromType, fromQualType,
->                  expandMonoType, expandMonoTypes, expandPolyType,
+>                  expandMonoType, expandConstrType, expandPolyType,
 >                  ppType, ppQualType, ppTypeScheme) where
 > import Base
 > import CurryPP
@@ -27,16 +27,24 @@ external type representations.
 The functions \texttt{toType} and \texttt{toTypes} convert Curry type
 expressions into types. The functions \texttt{toQualType} and
 \texttt{toTypeScheme} similarly convert a qualified type expression
-into a qualified type and a type scheme, respectively. The compiler
-uses only correctly qualified names internally and therefore adds the
-name of the current module to all type constructors and type classes
-that lack a module qualifier. Type variables are assigned ascending
-indices in the order of their occurrence in the types. It is possible
-to pass a list of additional type variables to these functions, which
-are assigned indices before those variables occurring in the type.
-This allows preserving the order of type variables in the left hand
-side of a type declaration and in the head of a type class
-declaration, respectively.
+into a qualified type and a type scheme, respectively. The function
+\texttt{toConstrType} returns the type of a data or newtype
+constructor. It computes the constructor's type from the context, type
+name, and type variables from the left hand side of the type
+declaration and the constructor's argument types. A special feature of
+this function is that it restricts the context to those type variables
+which are free in the argument types as specified in Sect.~4.2.1 of
+the revised Haskell'98 report~\cite{PeytonJones03:Haskell}.
+
+The compiler uses only correctly qualified names internally and
+therefore adds the name of the current module to all type constructors
+and type classes that lack a module qualifier. Type variables are
+assigned ascending indices in the order of their occurrence in the
+types. It is possible to pass a list of additional type variables to
+these functions, which are assigned indices before those variables
+occurring in the type.  This allows preserving the order of type
+variables in the left hand side of a type declaration and in the head
+of a type class declaration, respectively.
 
 Note the subtle difference between \texttt{toTypes m tvs tys} and
 \texttt{map (toType m tvs) tys}. The former ensures that consistent
@@ -54,12 +62,23 @@ indices independently in each type expression.
 > toQualType :: ModuleIdent -> [Ident] -> QualTypeExpr -> QualType
 > toQualType m tvs ty = qualifyQualType m (toQualType' (enumTypeVars tvs ty) ty)
 
+> toConstrType :: ModuleIdent -> [ClassAssert] -> QualIdent -> [Ident]
+>              -> [TypeExpr] -> QualType
+> toConstrType m cx tc tvs tys = toQualType m tvs (QualTypeExpr cx' ty')
+>   where cx' = restrictContext tys cx
+>         ty' = foldr ArrowType (ConstructorType tc (map VariableType tvs)) tys
+
 > toTypeScheme :: ModuleIdent -> QualTypeExpr -> TypeScheme
 > toTypeScheme m ty = typeScheme (toQualType m [] ty)
 
 > enumTypeVars :: Expr a => [Ident] -> a -> FM Ident Int
 > enumTypeVars tvs ty = fromListFM (zip (tvs ++ tvs') [0..])
 >   where tvs' = [tv | tv <- nub (fv ty), tv `notElem` tvs]
+
+> restrictContext :: [TypeExpr] -> [ClassAssert] -> [ClassAssert]
+> restrictContext tys cx =
+>   [ClassAssert cls tv | ClassAssert cls tv <- cx, tv `elem` tvs'']
+>   where tvs'' = nub (fv tys)
 
 > toQualType' :: FM Ident Int -> QualTypeExpr -> QualType
 > toQualType' tvs (QualTypeExpr cx ty) =
@@ -153,30 +172,46 @@ constructors and type classes defined in the current module.
 > unqualifyType m (TypeSkolem k) = TypeSkolem k
 
 \end{verbatim}
-The functions \texttt{expandMonoType}, \texttt{expandMonoTypes}, and
-\texttt{expandPolyType} convert (qualified) type expressions into
-(qualified) types and also expand all type synonyms and qualify all
-type constructors during the conversion. Qualification and expansion
-have to be performed at the same time since type constructors are
-recorded in the type constructor environment using the names visible
-in the source code, but the expanded types refer to the original
-names.
+The functions \texttt{expandMonoType} and \texttt{expandPolyType}
+convert (qualified) type expressions into (qualified) types and also
+expand all type synonyms and qualify all type constructors during the
+conversion. Qualification and expansion have to be performed at the
+same time since type constructors are recorded in the type constructor
+environment using the names visible in the source code, but the
+expanded types refer to the original names.
+
+The function \texttt{expandConstrType} computes the type of a data or
+newtype constructor from the context, type name, and type variables
+from the left hand side of the type declaration and the constructor's
+argument types. Similar to \texttt{toConstrType}, the type's context
+is restricted to those type variables which are free in the argument
+types. The implementation is complicated by the fact that we must not
+apply \texttt{expandType} to the constructor's result type because the
+type's name may be ambiguous.
 \begin{verbatim}
 
 > expandMonoType :: TCEnv -> [Ident] -> TypeExpr -> Type
 > expandMonoType tcEnv tvs ty =
 >   expandType tcEnv (toType' (enumTypeVars tvs ty) ty)
 
-> expandMonoTypes :: TCEnv -> [Ident] -> [TypeExpr] -> [Type]
-> expandMonoTypes tcEnv tvs tys =
->   map (expandType tcEnv . toType' (enumTypeVars tvs tys)) tys
+> expandConstrType :: TCEnv -> [ClassAssert] -> QualIdent -> [Ident]
+>                  -> [TypeExpr] -> QualType
+> expandConstrType tcEnv cx tc tvs tys = normalize (length tvs) $
+>   QualType (expandContext tcEnv (map (toTypePred' tvs') cx'))
+>            (foldr TypeArrow ty0 (map (expandType tcEnv . toType' tvs') tys))
+>   where tvs' = enumTypeVars tvs tys
+>         cx' = restrictContext tys cx
+>         ty0 = TypeConstructor tc (map TypeVariable [0..length tvs-1])
 
 > expandPolyType :: TCEnv -> QualTypeExpr -> TypeScheme
 > expandPolyType tcEnv (QualTypeExpr cx ty) =
->   typeScheme $ normalize 0 $ QualType (impliedContext tcEnv cx') ty'
->   where cx' = map (expandTypePred tcEnv . toTypePred' tvs) cx
+>   typeScheme $ normalize 0 $ QualType cx' ty'
+>   where cx' = expandContext tcEnv (map (toTypePred' tvs) cx)
 >         ty' = expandType tcEnv (toType' tvs ty)
 >         tvs = enumTypeVars [] ty
+
+> expandContext :: TCEnv -> [TypePred] -> [TypePred]
+> expandContext tcEnv cx = impliedContext tcEnv (map (expandTypePred tcEnv) cx)
 
 > expandTypePred :: TCEnv -> TypePred -> TypePred
 > expandTypePred tcEnv (TypePred cls ty) = TypePred cls (expandType tcEnv ty)

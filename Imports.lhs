@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2016 2006-11-21 10:57:21Z wlux $
+% $Id: Imports.lhs 2031 2006-11-30 10:06:13Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -47,8 +47,8 @@ all instance declarations are always imported into the current module.
 > isHiddenDecl :: IDecl -> Bool
 > isHiddenDecl (IInfixDecl _ _ _ _) = False
 > isHiddenDecl (HidingDataDecl _ _ _) = True 
-> isHiddenDecl (IDataDecl _ _ _ _) = False
-> isHiddenDecl (INewtypeDecl _ _ _ _) = False
+> isHiddenDecl (IDataDecl _ _ _ _ _) = False
+> isHiddenDecl (INewtypeDecl _ _ _ _ _) = False
 > isHiddenDecl (ITypeDecl _ _ _ _) = False
 > isHiddenDecl (HidingClassDecl _ _ _ _) = True
 > isHiddenDecl (IClassDecl _ _ _ _ _) = False
@@ -134,8 +134,8 @@ instances imported from another module.
 > entity :: IDecl -> QualIdent
 > entity (IInfixDecl _ _ _ op) = op
 > entity (HidingDataDecl _ tc _) = tc
-> entity (IDataDecl _ tc _ _) = tc
-> entity (INewtypeDecl _ tc _ _) = tc
+> entity (IDataDecl _ _ tc _ _) = tc
+> entity (INewtypeDecl _ _ tc _ _) = tc
 > entity (ITypeDecl _ tc _ _) = tc
 > entity (HidingClassDecl _ _ cls _) = cls
 > entity (IClassDecl _ _ cls _ _) = cls
@@ -160,9 +160,9 @@ following functions.
 
 > types :: ModuleIdent -> IDecl -> [I TypeInfo] -> [I TypeInfo]
 > types m (HidingDataDecl _ tc tvs) = qual tc (typeCon DataType m tc tvs [])
-> types m (IDataDecl _ tc tvs cs) =
+> types m (IDataDecl _ _ tc tvs cs) =
 >   qual tc (typeCon DataType m tc tvs (map (fmap constr) cs))
-> types m (INewtypeDecl _ tc tvs nc) =
+> types m (INewtypeDecl _ _ tc tvs nc) =
 >   qual tc (typeCon RenamingType m tc tvs (nconstr nc))
 > types m (ITypeDecl _ tc tvs ty) =
 >   qual tc (typeCon AliasType m tc tvs (toType m tvs ty))
@@ -172,12 +172,10 @@ following functions.
 > types _ _ = id
 
 > values :: ModuleIdent -> IDecl -> [I ValueInfo] -> [I ValueInfo]
-> values m (IDataDecl _ tc tvs cs) =
->   (map (dataConstr m tc' tvs (constrType tc' tvs)) (catMaybes cs) ++)
->   where tc' = qualQualify m tc
-> values m (INewtypeDecl _ tc tvs nc) =
->   (newConstr m tc' tvs (constrType tc' tvs) nc :)
->   where tc' = qualQualify m tc
+> values m (IDataDecl _ cx tc tvs cs) =
+>   (map (dataConstr m cx (qualQualify m tc) tvs) (catMaybes cs) ++)
+> values m (INewtypeDecl _ cx tc tvs nc) =
+>   (newConstr m cx (qualQualify m tc) tvs nc :)
 > values m (IFunctionDecl _ f ty) =
 >   qual f (Value (qualQualify m f) (toTypeScheme m ty))
 > values m (IClassDecl _ cx cls tv ds) =
@@ -185,17 +183,17 @@ following functions.
 >   where cls' = qualQualify m cls
 > values _ _ = id
 
-> dataConstr :: ModuleIdent -> QualIdent -> [Ident] -> TypeExpr -> ConstrDecl
->            -> I ValueInfo
-> dataConstr m tc tvs ty0 (ConstrDecl _ _ c tys) =
->   (c,con DataConstructor m tc tvs c (foldr ArrowType ty0 tys))
-> dataConstr m tc tvs ty0 (ConOpDecl _ _ ty1 op ty2) =
->   (op,con DataConstructor m tc tvs op (ArrowType ty1 (ArrowType ty2 ty0)))
+> dataConstr :: ModuleIdent -> [ClassAssert] -> QualIdent -> [Ident]
+>            -> ConstrDecl -> I ValueInfo
+> dataConstr m cx tc tvs (ConstrDecl _ _ c tys) =
+>   (c,con DataConstructor m cx tc tvs c tys)
+> dataConstr m cx tc tvs (ConOpDecl _ _ ty1 op ty2) =
+>   (op,con DataConstructor m cx tc tvs op [ty1,ty2])
 
-> newConstr :: ModuleIdent -> QualIdent -> [Ident] -> TypeExpr -> NewConstrDecl
->           -> I ValueInfo
-> newConstr m tc tvs ty0 (NewConstrDecl _ c ty1) =
->   (c,con NewtypeConstructor m tc tvs c (ArrowType ty1 ty0))
+> newConstr :: ModuleIdent -> [ClassAssert] -> QualIdent -> [Ident]
+>           -> NewConstrDecl -> I ValueInfo
+> newConstr m cx tc tvs (NewConstrDecl _ c ty) =
+>   (c,con NewtypeConstructor m cx tc tvs c [ty])
 
 > classMethod :: ModuleIdent -> QualIdent -> [ClassAssert] -> IMethodDecl
 >             -> I ValueInfo
@@ -241,12 +239,10 @@ Auxiliary functions:
 >   TypeClass (qualQualify m cls) [cls | TypePred cls _ <- cx']
 >   where QualType cx' _ = toQualType m [] (QualTypeExpr cx (VariableType tv))
 
-> con :: (QualIdent -> TypeScheme -> a) -> ModuleIdent -> QualIdent -> [Ident]
->     -> Ident -> TypeExpr -> a
-> con f m tc tvs c ty = f (qualifyLike tc c) (polyType (toType m tvs ty))
-
-> constrType :: QualIdent -> [Ident] -> TypeExpr
-> constrType tc tvs = ConstructorType tc (map VariableType tvs)
+> con :: (QualIdent -> TypeScheme -> a) -> ModuleIdent -> [ClassAssert]
+>     -> QualIdent -> [Ident] -> Ident -> [TypeExpr] -> a
+> con f m cx tc tvs c tys =
+>   f (qualifyLike tc c) (typeScheme (toConstrType m cx tc tvs tys))
 
 > methodType :: ModuleIdent -> [ClassAssert] -> TypeExpr -> TypeScheme
 > methodType m cx ty = toTypeScheme m (QualTypeExpr cx ty)

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2022 2006-11-27 18:26:02Z wlux $
+% $Id: CurrySyntax.lhs 2031 2006-11-30 10:06:13Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -51,8 +51,8 @@ parsed representation of a Curry program.
 \begin{verbatim}
 
 > data TopDecl a =
->     DataDecl Position Ident [Ident] [ConstrDecl]
->   | NewtypeDecl Position Ident [Ident] NewConstrDecl
+>     DataDecl Position [ClassAssert] Ident [Ident] [ConstrDecl]
+>   | NewtypeDecl Position [ClassAssert] Ident [Ident] NewConstrDecl
 >   | TypeDecl Position Ident [Ident] TypeExpr
 >   | ClassDecl Position [ClassAssert] Ident Ident [MethodSig a]
 >   | InstanceDecl Position [ClassAssert] QualIdent TypeExpr [MethodDecl a]
@@ -109,8 +109,8 @@ Interface declarations are restricted to type declarations and signatures.
 > data IDecl =
 >     IInfixDecl Position Infix Int QualIdent
 >   | HidingDataDecl Position QualIdent [Ident]
->   | IDataDecl Position QualIdent [Ident] [Maybe ConstrDecl]
->   | INewtypeDecl Position QualIdent [Ident] NewConstrDecl
+>   | IDataDecl Position [ClassAssert] QualIdent [Ident] [Maybe ConstrDecl]
+>   | INewtypeDecl Position [ClassAssert] QualIdent [Ident] NewConstrDecl
 >   | ITypeDecl Position QualIdent [Ident] TypeExpr
 >   | HidingClassDecl Position [ClassAssert] QualIdent Ident
 >   | IClassDecl Position [ClassAssert] QualIdent Ident [Maybe IMethodDecl]
@@ -250,8 +250,8 @@ The abstract syntax tree is a functor with respect to the attributes.
 >   fmap f (Module m es is ds) = Module m es is (map (fmap f) ds)
 
 > instance Functor TopDecl where
->   fmap _ (DataDecl p tc tvs cs) = DataDecl p tc tvs cs
->   fmap _ (NewtypeDecl p tc tvs nc) = NewtypeDecl p tc tvs nc
+>   fmap _ (DataDecl p cx tc tvs cs) = DataDecl p cx tc tvs cs
+>   fmap _ (NewtypeDecl p cx tc tvs nc) = NewtypeDecl p cx tc tvs nc
 >   fmap _ (TypeDecl p tc tvs ty) = TypeDecl p tc tvs ty
 >   fmap f (ClassDecl p cx cls tv ds) = ClassDecl p cx cls tv (map (fmap f) ds)
 >   fmap f (InstanceDecl p cx cls ty ds) =

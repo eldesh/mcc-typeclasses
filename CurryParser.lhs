@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2022 2006-11-27 18:26:02Z wlux $
+% $Id: CurryParser.lhs 2031 2006-11-30 10:06:13Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -147,19 +147,26 @@ directory path to the module is ignored.
 >                 <|> trustAnnotation
 
 > dataDecl :: Parser Token (TopDecl ()) a
-> dataDecl = typeDeclLhs DataDecl KW_data <*> constrs
+> dataDecl = dataDeclLhs DataDecl KW_data <*> constrs
 >   where constrs = equals <-*> constrDecl `sepBy1` bar
 >             `opt` []
 
 > newtypeDecl :: Parser Token (TopDecl ()) a
-> newtypeDecl = typeDeclLhs NewtypeDecl KW_newtype <*-> equals <*> newConstrDecl
+> newtypeDecl = dataDeclLhs NewtypeDecl KW_newtype <*-> equals <*> newConstrDecl
 
 > typeDecl :: Parser Token (TopDecl ()) a
-> typeDecl = typeDeclLhs TypeDecl KW_type <*-> equals <*> type0
+> typeDecl = typeDeclLhs (uncurry . TypeDecl) KW_type id <*-> equals <*> type0
 
-> typeDeclLhs :: (Position -> Ident -> [Ident] -> a) -> Category
->             -> Parser Token a b
-> typeDeclLhs f kw = f <$> position <*-> token kw <*> tycon <*> many typeVar
+> dataDeclLhs :: (Position -> [ClassAssert] -> Ident -> [Ident] -> a)
+>             -> Category -> Parser Token a b
+> dataDeclLhs f kw = typeDeclLhs f' kw (withContext (,))
+>   where f' p = uncurry (uncurry . f p)
+
+> typeDeclLhs :: (Position -> a -> b) -> Category
+>             -> (Parser Token (Ident,[Ident]) c -> Parser Token a c)
+>             -> Parser Token b c
+> typeDeclLhs f kw g =
+>   f <$> position <*-> token kw <*> g ((,) <$> tycon <*> many typeVar)
 >   where typeVar = tyvar <|> anonId <$-> token Underscore
 
 > constrDecl :: Parser Token ConstrDecl a
@@ -331,7 +338,7 @@ directory path to the module is ignored.
 >         hidingId = qualify (mkIdent "hiding")
 
 > iDataDecl :: Parser Token IDecl a
-> iDataDecl = iTypeDeclLhs IDataDecl KW_data <*> constrs
+> iDataDecl = iDataDeclLhs IDataDecl KW_data <*> constrs
 >   where constrs = equals <-*> maybeHidden constrDecl `sepBy1` bar
 >             `opt` []
 
@@ -341,14 +348,22 @@ directory path to the module is ignored.
 
 > iNewtypeDecl :: Parser Token IDecl a
 > iNewtypeDecl =
->   iTypeDeclLhs INewtypeDecl KW_newtype <*-> equals <*> newConstrDecl
+>   iDataDeclLhs INewtypeDecl KW_newtype <*-> equals <*> newConstrDecl
 
 > iTypeDecl :: Parser Token IDecl a
-> iTypeDecl = iTypeDeclLhs ITypeDecl KW_type <*-> equals <*> type0
+> iTypeDecl =
+>   iTypeDeclLhs (uncurry . ITypeDecl) KW_type id <*-> equals <*> type0
 
-> iTypeDeclLhs :: (Position -> QualIdent -> [Ident] -> a) -> Category
->              -> Parser Token a b
-> iTypeDeclLhs f kw = f <$> position <*-> token kw <*> qtycon <*> many tyvar
+> iDataDeclLhs :: (Position -> [ClassAssert] -> QualIdent -> [Ident] -> a)
+>              -> Category -> Parser Token a b
+> iDataDeclLhs f kw = iTypeDeclLhs f' kw (withContext (,))
+>   where f' p = uncurry (uncurry . f p)
+
+> iTypeDeclLhs :: (Position -> a -> b) -> Category
+>               -> (Parser Token (QualIdent,[Ident]) c -> Parser Token a c)
+>               -> Parser Token b c
+> iTypeDeclLhs f kw g =
+>   f <$> position <*-> token kw <*> g ((,) <$> qtycon <*> many tyvar)
 
 > iClassDecl :: Parser Token IDecl a
 > iClassDecl = iClassInstDecl IClassDecl KW_class qtycls tyvar <*> methodDefs

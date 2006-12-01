@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: CurryParser.lhs 2032 2006-12-01 12:29:45Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -401,7 +401,7 @@ directory path to the module is ignored.
 
 > context :: Parser Token [ClassAssert] a
 > context = return <$> classAssert
->       <|> parens (classAssert `sepBy1` comma)
+>       <|> parens (classAssert `sepBy` comma)
 
 > classAssert :: Parser Token ClassAssert a
 > classAssert = ClassAssert <$> qtycls <*> tyvar

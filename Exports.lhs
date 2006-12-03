@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: Exports.lhs 2037 2006-12-03 13:28:53Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -130,11 +130,8 @@ declarations which cannot be used in another module because
 >   | isJust (localIdent m cls) && cls `notElem` ts = ds
 >   | isJust (localIdent m tc) && not (isPrimTypeId tc) && tc `notElem` ts = ds
 >   | otherwise = IInstanceDecl noPos cx' (qualUnqualify m cls) ty' : ds
->   where QualTypeExpr cx' ty' = fromQualType m (QualType cx ty)
->         ty
->           | tc == qArrowId = TypeArrow (tvs !! 0) (tvs !! 1)
->           | otherwise = TypeConstructor tc (take (constrKind tc tcEnv) tvs)
->         tvs = map TypeVariable [0..]
+>   where QualTypeExpr cx' ty' = fromQualType m (QualType cx (applyType tc tvs))
+>         tvs = take (constrKind tc tcEnv) (map TypeVariable [0..])
 
 \end{verbatim}
 The compiler determines the list of imported modules from the set of

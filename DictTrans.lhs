@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2035 2006-12-03 10:24:34Z wlux $
+% $Id: DictTrans.lhs 2037 2006-12-03 13:28:53Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -426,11 +426,8 @@ possibly at a different type -- in the method implementations.
 >         tp = ctTypePred tcEnv ct
 
 > ctTypePred :: TCEnv -> CT -> TypePred
-> ctTypePred tcEnv (CT cls tc) = TypePred cls ty
->   where ty
->           | tc == qArrowId = TypeArrow (tvs !! 0) (tvs !! 1)
->           | otherwise = TypeConstructor tc (take (constrKind tc tcEnv) tvs)
->         tvs = map TypeVariable [0..]
+> ctTypePred tcEnv (CT cls tc) = TypePred cls (applyType tc tvs)
+>   where tvs = take (constrKind tc tcEnv) (map TypeVariable [0..])
 
 > instDecl :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv -> Position
 >          -> [ClassAssert] -> QualIdent -> TypeExpr -> [MethodDecl Type]
@@ -696,11 +693,6 @@ computed for the context instantiated at the appropriate types.
 >       instFunApp iEnv dictEnv (map (expandAliasType tys) cx) (TypePred cls ty)
 >     Nothing -> internalError ("instDict " ++ show cls ++ " " ++ show tc)
 >   where (tc,tys) = unapplyType ty
->         unapplyType (TypeConstructor tc tys) = (tc,tys)
->         unapplyType (TypeVariable _) = internalError "unapplyType"
->         unapplyType (TypeConstrained tys _) = unapplyType (head tys)
->         unapplyType (TypeArrow ty1 ty2) = (qArrowId,[ty1,ty2])
->         unapplyType (TypeSkolem _) = internalError "unapplyType"
 
 > instFunApp :: InstEnv -> DictEnv -> Context -> TypePred -> Expression Type
 > instFunApp iEnv dictEnv cx tp =

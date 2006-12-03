@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 2019 2006-11-21 15:25:08Z wlux $
+% $Id: Types.lhs 2037 2006-12-03 13:28:53Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -44,6 +44,25 @@ as well, these variables must never be quantified.
 >   | TypeArrow Type Type
 >   | TypeSkolem Int
 >   deriving (Eq,Ord,Show)
+
+\end{verbatim}
+The function \texttt{applyType} applies a type constructor to a list
+of argument types. The function \texttt{unapplyType} decomposes a type
+into a type constructor and a list of type arguments. Both functions
+can be used to compose and decompose arrow types.
+\begin{verbatim}
+
+> applyType :: QualIdent -> [Type] -> Type
+> applyType tc tys
+>   | tc == qArrowId && length tys == 2 = TypeArrow (tys!!0) (tys!!1)
+>   | otherwise = TypeConstructor tc tys
+
+> unapplyType :: Type -> (QualIdent,[Type])
+> unapplyType (TypeConstructor tc tys) = (tc,tys)
+> unapplyType (TypeVariable _) = error "internal error: unapplyType"
+> unapplyType (TypeConstrained tys _) = unapplyType (head tys)
+> unapplyType (TypeArrow ty1 ty2) = (qArrowId,[ty1,ty2])
+> unapplyType (TypeSkolem _) = error "internal error: unapplyType"
 
 \end{verbatim}
 The function \texttt{isArrowType} checks whether a type $\tau = \tau_1
@@ -263,10 +282,8 @@ lists of types admissible for ambiguous types with \texttt{Num} and
 \texttt{Fractional} constraints, respectively.
 \begin{verbatim}
 
-> numTypes :: [Type]
+> numTypes, fracTypes :: [Type]
 > numTypes = [intType,floatType]
-
-> fracTypes :: [Type]
 > fracTypes = tail numTypes
 
 \end{verbatim}

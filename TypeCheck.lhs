@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2036 2006-12-03 11:23:51Z wlux $
+% $Id: TypeCheck.lhs 2037 2006-12-03 13:28:53Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -149,18 +149,13 @@ instance declarations from the current module.
 
 > bindInstance :: TCEnv -> TopDecl a -> InstEnv -> InstEnv
 > bindInstance tcEnv (InstanceDecl p cx cls ty _) =
->   bindEnv (CT cls' (root ty')) cx'
+>   bindEnv (CT cls' (fst (unapplyType ty'))) cx'
 >   where cls' =
 >           case qualLookupTopEnv cls tcEnv of
 >             [TypeClass cls' _ _] -> cls'
 >             _ -> internalError "bindInstance"
 >         ForAll _ (QualType cx' ty') =
 >           expandPolyType tcEnv (QualTypeExpr cx ty)
->         root (TypeConstructor tc _) = tc
->         root (TypeVariable _) = internalError "bindInstance"
->         root (TypeConstrained _ _) = internalError "bindInstance"
->         root (TypeArrow _ _) = qArrowId
->         root (TypeSkolem _) = internalError "bindInstance"
 > bindInstance _ _ = id
 
 \end{verbatim}

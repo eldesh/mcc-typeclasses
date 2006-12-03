@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2033 2006-12-03 09:50:07Z wlux $
+% $Id: Imports.lhs 2037 2006-12-03 13:28:53Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -88,13 +88,8 @@ all instance declarations are always imported into the current module.
 
 > bindInstance :: ModuleIdent -> IDecl -> InstEnv -> InstEnv
 > bindInstance m (IInstanceDecl _ cx cls ty) =
->   bindEnv (CT (qualQualify m cls) (root ty')) cx'
+>   bindEnv (CT (qualQualify m cls) (fst (unapplyType ty'))) cx'
 >   where QualType cx' ty' = toQualType m [] (QualTypeExpr cx ty)
->         root (TypeConstructor tc _) = tc
->         root (TypeVariable _) = internalError "importInstances"
->         root (TypeConstrained _ _) = internalError "importInstances"
->         root (TypeArrow _ _) = qArrowId
->         root (TypeSkolem _) = internalError "importInstances"
 > bindInstance _ _ = id
 
 \end{verbatim}

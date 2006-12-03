@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: IntfCheck.lhs 2033 2006-12-03 09:50:07Z wlux $
 %
 % Copyright (c) 2000-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -146,7 +146,9 @@ interface module only. However, this has not been implemented yet.
 >   checkValueInfo "method" checkMethod tyEnv p qf
 >   where qf = qualifyLike cls f
 >         checkMethod (Value f' (ForAll _ ty')) =
->           qf == f' && toQualType m [] (QualTypeExpr cx ty) == ty'
+>           -- FIXME: canonType is necessary only because we must include all
+>           --        implied super class predicates in the context
+>           qf == f' && canonType (toQualType m [] (QualTypeExpr cx ty)) == ty'
 >         checkMethod _ = False
 
 > checkPrecInfo :: (PrecInfo -> Bool) -> PEnv -> Position

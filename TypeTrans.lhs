@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: TypeTrans.lhs 2033 2006-12-03 09:50:07Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -82,7 +82,7 @@ indices independently in each type expression.
 
 > toQualType' :: FM Ident Int -> QualTypeExpr -> QualType
 > toQualType' tvs (QualTypeExpr cx ty) =
->   canonType (QualType (nub (map (toTypePred' tvs) cx)) (toType' tvs ty))
+>   QualType (nub (map (toTypePred' tvs) cx)) (toType' tvs ty)
 
 > toTypePred' :: FM Ident Int -> ClassAssert -> TypePred
 > toTypePred' tvs (ClassAssert cls tv) =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: Imports.lhs 2033 2006-12-03 09:50:07Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -245,6 +245,9 @@ Auxiliary functions:
 >   f (qualifyLike tc c) (typeScheme (toConstrType m cx tc tvs tys))
 
 > methodType :: ModuleIdent -> [ClassAssert] -> TypeExpr -> TypeScheme
-> methodType m cx ty = toTypeScheme m (QualTypeExpr cx ty)
+> methodType m cx ty =
+>   -- FIXME: canonType is necessary only because we must include all
+>   --        implied super class predicates in the context
+>   typeScheme (canonType (toQualType m [] (QualTypeExpr cx ty)))
 
 \end{verbatim}

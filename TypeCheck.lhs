@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: TypeCheck.lhs 2036 2006-12-03 11:23:51Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -75,13 +75,13 @@ non-empty context for the goal's type or not.
 > typeCheckGoal :: Bool -> TCEnv -> InstEnv -> ValueEnv -> Goal a
 >               -> Error (ValueEnv,Context,Goal Type)
 > typeCheckGoal forEval tcEnv iEnv tyEnv g =
->    run (do
->           (cx,g') <- tcGoal forEval emptyMIdent tcEnv g
->           tyEnv' <- fetchSt
->           theta <- liftSt fetchSt
->           return (subst theta tyEnv',cx,fmap (subst theta) g'))
->        iEnv
->        tyEnv
+>   run (do
+>          (cx,g') <- tcGoal forEval emptyMIdent tcEnv g
+>          tyEnv' <- fetchSt
+>          theta <- liftSt fetchSt
+>          return (subst theta tyEnv',cx,fmap (subst theta) g'))
+>       iEnv
+>       tyEnv
 
 \end{verbatim}
 The type checker makes use of nested state monads in order to
@@ -1253,16 +1253,16 @@ We use negative offsets for fresh type variables.
 > freshTypeVar :: TcState Type
 > freshTypeVar = freshVar TypeVariable
 
-> freshQualType :: QualIdent -> TcState (Context,Type)
-> freshQualType cls =
+> freshQualType :: [QualIdent] -> TcState (Context,Type)
+> freshQualType clss =
 >   do
 >     tv <- freshTypeVar
->     return ([TypePred cls tv],tv)
+>     return ([TypePred cls tv | cls <- clss],tv)
 
 > freshEnumType, freshNumType, freshFracType :: TcState (Context,Type)
-> freshEnumType = freshQualType qEnumId
-> freshNumType = freshQualType qNumId
-> freshFracType = freshQualType qFractionalId
+> freshEnumType = freshQualType [qEnumId]
+> freshNumType = freshQualType numClasses
+> freshFracType = freshQualType fracClasses
 
 > freshConstrained :: [Type] -> TcState Type
 > freshConstrained tys = freshVar (TypeConstrained tys)
@@ -1275,6 +1275,24 @@ We use negative offsets for fresh type variables.
 >   do
 >     tys <- replicateM n freshTypeVar
 >     return (map (expandAliasType tys) cx,expandAliasType tys ty)
+
+\end{verbatim}
+The functions \texttt{numClasses} and \texttt{fracClasses} return
+lists of class and super class identifiers for the classes
+\texttt{Num} and \texttt{Fractional}, respectively. These are used in
+order to compute the contexts of overloaded integral and fractional
+literals. In principle, the compiler should determine these lists from
+the type constructor environment. However, it may be unable to do so
+because the identifiers \texttt{Num} and \texttt{Fractional} may be
+not in scope or ambiguous.
+
+\ToDo{Keep these lists in sync with the \texttt{Prelude} and make sure
+  that they are sorted properly.}
+\begin{verbatim}
+
+> numClasses, fracClasses :: [QualIdent]
+> numClasses = [qEqId,qNumId]
+> fracClasses = [qEqId,qFractionalId,qNumId]
 
 \end{verbatim}
 The function \texttt{skol} instantiates the type of data and newtype

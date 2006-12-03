@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2034 2006-12-03 10:17:55Z wlux $
+% $Id: DictTrans.lhs 2035 2006-12-03 10:24:34Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -426,9 +426,11 @@ possibly at a different type -- in the method implementations.
 >         tp = ctTypePred tcEnv ct
 
 > ctTypePred :: TCEnv -> CT -> TypePred
-> ctTypePred tcEnv (CT cls tc) =
->   TypePred cls (TypeConstructor tc (take n (map TypeVariable [0..])))
->   where n = constrKind tc tcEnv
+> ctTypePred tcEnv (CT cls tc) = TypePred cls ty
+>   where ty
+>           | tc == qArrowId = TypeArrow (tvs !! 0) (tvs !! 1)
+>           | otherwise = TypeConstructor tc (take (constrKind tc tcEnv) tvs)
+>         tvs = map TypeVariable [0..]
 
 > instDecl :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv -> Position
 >          -> [ClassAssert] -> QualIdent -> TypeExpr -> [MethodDecl Type]

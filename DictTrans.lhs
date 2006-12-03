@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: DictTrans.lhs 2034 2006-12-03 10:17:55Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -794,6 +794,7 @@ particular module that implements them.
 > instFunId (TypePred cls ty) =
 >   mkIdent ("_Inst#" ++ qualName cls ++ "#" ++ typeName ty)
 >   where typeName (TypeConstructor tc _) = qualName tc
+>         typeName (TypeConstrained tys _) = typeName (head tys)
 >         typeName (TypeArrow _ _) = name arrowId
 >         typeName ty = internalError ("instFunId " ++ show ty)
 

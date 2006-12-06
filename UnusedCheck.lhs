@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: UnusedCheck.lhs 2038 2006-12-06 17:19:07Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -86,15 +86,15 @@ implemented by a traversal of the syntax tree.
 >   unused _ _ _ = id
 
 > instance SyntaxTree (TopDecl a) where
->   used _ (DataDecl _ _ _ _ _) = id
->   used _ (NewtypeDecl _ _ _ _ _) = id
+>   used _ (DataDecl _ _ _ _ _ _) = id
+>   used _ (NewtypeDecl _ _ _ _ _ _) = id
 >   used _ (TypeDecl _ _ _ _) = id
 >   used m (ClassDecl _ _ _ _ ds) = used m ds
 >   used m (InstanceDecl _ _ _ _ ds) = used m ds
 >   used m (BlockDecl d) = used m d
 
->   unused used p (DataDecl _ _ _ _ cs) = unused used p cs
->   unused used p (NewtypeDecl _ _ _ _ nc) = unused used p nc
+>   unused used p (DataDecl _ _ _ _ cs _) = unused used p cs
+>   unused used p (NewtypeDecl _ _ _ _ nc _) = unused used p nc
 >   unused _ _ (TypeDecl _ _ _ _) = id
 >   unused used _ (ClassDecl p _ _ _ ds) = unused used p ds
 >   unused used _ (InstanceDecl p _ _ _ ds) = unused used p ds

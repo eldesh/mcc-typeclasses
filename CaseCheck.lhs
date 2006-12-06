@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: CaseCheck.lhs 2038 2006-12-06 17:19:07Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -131,8 +131,9 @@ collect all defined identifiers.
 >   names p xs ys = foldr (names p) ys xs
 
 > instance SyntaxTree (TopDecl a) where
->   names _ (DataDecl p _ tc tvs cs) xs = typeNames p tc tvs ++ names p cs xs
->   names _ (NewtypeDecl p _ tc tvs nc) xs = typeNames p tc tvs ++ names p nc xs
+>   names _ (DataDecl p _ tc tvs cs _) xs = typeNames p tc tvs ++ names p cs xs
+>   names _ (NewtypeDecl p _ tc tvs nc _) xs =
+>     typeNames p tc tvs ++ names p nc xs
 >   names _ (TypeDecl p tc tvs _) xs = typeNames p tc tvs ++ xs
 >   names _ (ClassDecl p _ cls tv ds) xs =
 >     D p TypeClassId cls : D p TypeVarId tv : names p ds xs

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2032 2006-12-01 12:29:45Z wlux $
+% $Id: CurryParser.lhs 2038 2006-12-06 17:19:07Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -147,12 +147,13 @@ directory path to the module is ignored.
 >                 <|> trustAnnotation
 
 > dataDecl :: Parser Token (TopDecl ()) a
-> dataDecl = dataDeclLhs DataDecl KW_data <*> constrs
+> dataDecl = dataDeclLhs DataDecl KW_data <*> constrs <*> deriv
 >   where constrs = equals <-*> constrDecl `sepBy1` bar
 >             `opt` []
 
 > newtypeDecl :: Parser Token (TopDecl ()) a
-> newtypeDecl = dataDeclLhs NewtypeDecl KW_newtype <*-> equals <*> newConstrDecl
+> newtypeDecl =
+>   dataDeclLhs NewtypeDecl KW_newtype <*-> equals <*> newConstrDecl <*> deriv
 
 > typeDecl :: Parser Token (TopDecl ()) a
 > typeDecl = typeDeclLhs (uncurry . TypeDecl) KW_type id <*-> equals <*> type0
@@ -185,6 +186,12 @@ directory path to the module is ignored.
 
 > newConstrDecl :: Parser Token NewConstrDecl a
 > newConstrDecl = NewConstrDecl <$> position <*> con <*> type2
+
+> deriv :: Parser Token [QualIdent] a
+> deriv = token KW_deriving <-*> classes
+>   `opt` []
+>   where classes = return <$> qtycls
+>               <|> parens (qtycls `sepBy` comma)
 
 > classDecl :: Parser Token (TopDecl ()) a
 > classDecl = classInstDecl ClassDecl KW_class tycls tyvar methodSig

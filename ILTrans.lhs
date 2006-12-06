@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: ILTrans.lhs 2038 2006-12-06 17:19:07Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -44,9 +44,9 @@ synonyms in place of newtype declarations (see Sect.~\ref{sec:IL}).
 >   where ds' = concatMap (translTopDecl m tyEnv) ds
 
 > translTopDecl :: ModuleIdent -> ValueEnv -> TopDecl a -> [IL.Decl]
-> translTopDecl m tyEnv (DataDecl _ _ tc tvs cs) =
+> translTopDecl m tyEnv (DataDecl _ _ tc tvs cs _) =
 >   [translData m tyEnv tc tvs cs]
-> translTopDecl m tyEnv (NewtypeDecl _ _ tc tvs nc) =
+> translTopDecl m tyEnv (NewtypeDecl _ _ tc tvs nc _) =
 >   translNewtype m tyEnv tc tvs nc
 > translTopDecl _ _ (TypeDecl _ _ _ _) = []
 > translTopDecl _ _ (ClassDecl _ _ _ _ _) = []

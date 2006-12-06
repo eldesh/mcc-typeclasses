@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2037 2006-12-03 13:28:53Z wlux $
+% $Id: TypeCheck.lhs 2038 2006-12-06 17:19:07Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -104,12 +104,12 @@ type synonyms occurring in their types are expanded.
 \begin{verbatim}
 
 > bindTypeValues :: ModuleIdent -> TCEnv -> TopDecl a -> ValueEnv -> ValueEnv
-> bindTypeValues m tcEnv (DataDecl _ cx tc tvs cs) tyEnv = foldr bind tyEnv cs
+> bindTypeValues m tcEnv (DataDecl _ cx tc tvs cs _) tyEnv = foldr bind tyEnv cs
 >   where bind (ConstrDecl _ _ c tys) =
 >           bindConstr DataConstructor m tcEnv cx tc tvs c tys
 >         bind (ConOpDecl _ _ ty1 op ty2) =
 >           bindConstr DataConstructor m tcEnv cx tc tvs op [ty1,ty2]
-> bindTypeValues m tcEnv (NewtypeDecl _ cx tc tvs nc) tyEnv = bind nc tyEnv
+> bindTypeValues m tcEnv (NewtypeDecl _ cx tc tvs nc _) tyEnv = bind nc tyEnv
 >   where bind (NewConstrDecl _ c ty) =
 >           bindConstr NewtypeConstructor m tcEnv cx tc tvs c [ty]
 > bindTypeValues _ _ (TypeDecl _ _ _ _) tyEnv = tyEnv
@@ -398,9 +398,14 @@ the method's type signature.
 \begin{verbatim}
 
 > tcTopDecl :: ModuleIdent -> TCEnv -> TopDecl a -> TcState (TopDecl Type)
-> tcTopDecl _ _ (DataDecl p cx tc tvs cs) = return (DataDecl p cx tc tvs cs)
-> tcTopDecl _ _ (NewtypeDecl p cx tc tvs nc) =
->   return (NewtypeDecl p cx tc tvs nc)
+> tcTopDecl _ _ (DataDecl p cx tc tvs cs clss) =
+>   do
+>     mapM (tcDerivable p) clss
+>     return (DataDecl p cx tc tvs cs clss)
+> tcTopDecl _ _ (NewtypeDecl p cx tc tvs nc clss) =
+>   do
+>     mapM (tcDerivable p) clss
+>     return (NewtypeDecl p cx tc tvs nc clss)
 > tcTopDecl _ _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
 > tcTopDecl m tcEnv d@(ClassDecl p cx cls tv ds) =
 >   do
@@ -419,6 +424,10 @@ the method's type signature.
 >           (mapM (tcMethodDecl m tcEnv cls ty' ty'') ds)
 >   where ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
 > tcTopDecl _ _ (BlockDecl _) = internalError "tcTopDecl"
+
+> tcDerivable :: Position -> QualIdent -> TcState ()
+> tcDerivable p cls = errorAt p (notDerivable cls)
+>   -- FIXME: need a ``real'' implementation for tcDerivable
 
 > tcMethodSig :: ModuleIdent -> TCEnv -> SigEnv -> MethodSig a
 >             -> TcState (MethodSig Type)
@@ -1436,5 +1445,8 @@ Error functions.
 >              ppQIdent (qualUnqualify m cls) <+> ppTypeExpr 2 (fromType m ty),
 >              text "in" <+> text what],
 >         doc]
+
+> notDerivable :: QualIdent -> String
+> notDerivable cls = "Instances of " ++ qualName cls ++ " cannot be derived"
 
 \end{verbatim}

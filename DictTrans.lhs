@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2037 2006-12-03 13:28:53Z wlux $
+% $Id: DictTrans.lhs 2038 2006-12-06 17:19:07Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -84,10 +84,10 @@ The introduction of dictionaries is divided into six different tasks:
 
 > dictTransTopDecl :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv
 >                  -> TopDecl Type -> DictState (TopDecl Type)
-> dictTransTopDecl _ _ _ _ (DataDecl p _ tc tvs cs) =
->   return (DataDecl p [] tc tvs cs)
-> dictTransTopDecl _ _ _ _ (NewtypeDecl p _ tc tvs nc) =
->   return (NewtypeDecl p [] tc tvs nc)
+> dictTransTopDecl _ _ _ _ (DataDecl p _ tc tvs cs _) =
+>   return (DataDecl p [] tc tvs cs [])
+> dictTransTopDecl _ _ _ _ (NewtypeDecl p _ tc tvs nc _) =
+>   return (NewtypeDecl p [] tc tvs nc [])
 > dictTransTopDecl _ _ _ _ (TypeDecl p tc tvs ty) =
 >   return (TypeDecl p tc tvs ty)
 > dictTransTopDecl _ _ _ _ (ClassDecl p _ cls tv ds) =
@@ -172,7 +172,7 @@ constructor's arguments.
 
 > dictDecl :: Position -> Ident -> Ident -> [MethodSig a] -> TopDecl Type
 > dictDecl p cls tv ds =
->   DataDecl p [] (dictTypeId cls) [tv] [dictConstrDecl p cls tys]
+>   DataDecl p [] (dictTypeId cls) [tv] [dictConstrDecl p cls tys] []
 >   where tys = [ty | MethodSig _ _ ty <- expandMethodSigs ds]
 >         
 > dictIDecl :: Position -> QualIdent -> Ident -> Maybe [Maybe IMethodDecl]

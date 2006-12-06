@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: CurryPP.lhs 2038 2006-12-06 17:19:07Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -63,11 +63,13 @@ Declarations
 \begin{verbatim}
 
 > ppTopDecl :: TopDecl a -> Doc
-> ppTopDecl (DataDecl _ cx tc tvs cs) =
+> ppTopDecl (DataDecl _ cx tc tvs cs clss) =
 >   sep (ppTypeDeclLhs "data" cx tc tvs :
->        map indent (zipWith (<+>) (equals : repeat vbar) (map ppConstr cs)))
-> ppTopDecl (NewtypeDecl _ cx tc tvs nc) =
->   sep [ppTypeDeclLhs "newtype" cx tc tvs <+> equals,indent (ppNewConstr nc)]
+>        map indent (zipWith (<+>) (equals : repeat vbar) (map ppConstr cs) ++
+>                    [ppDeriving clss]))
+> ppTopDecl (NewtypeDecl _ cx tc tvs nc clss) =
+>   sep (ppTypeDeclLhs "newtype" cx tc tvs <+> equals :
+>        map indent [ppNewConstr nc,ppDeriving clss])
 > ppTopDecl (TypeDecl _ tc tvs ty) =
 >   sep [ppTypeDeclLhs "type" [] tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
 > ppTopDecl (ClassDecl _ cx cls tv ds) =
@@ -94,6 +96,11 @@ Declarations
 
 > ppNewConstr :: NewConstrDecl -> Doc
 > ppNewConstr (NewConstrDecl _ c ty) = ppIdent c <+> ppTypeExpr 2 ty
+
+> ppDeriving :: [QualIdent] -> Doc
+> ppDeriving [] = empty
+> ppDeriving [cls] = text "deriving" <+> ppQIdent cls
+> ppDeriving clss = text "deriving" <+> parenList (map ppQIdent clss)
 
 > ppClassInstHead :: String -> [ClassAssert] -> QualIdent -> TypeExpr -> Doc
 > ppClassInstHead kw cx cls ty =

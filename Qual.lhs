@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: Qual.lhs 2038 2006-12-06 17:19:07Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -30,10 +30,12 @@ functions remain unchanged.
 >     Goal p (qual tcEnv tyEnv e) (qual tcEnv tyEnv ds)
 
 > instance Qual (TopDecl a) where
->   qual tcEnv tyEnv (DataDecl p cx tc tvs cs) =
+>   qual tcEnv tyEnv (DataDecl p cx tc tvs cs clss) =
 >     DataDecl p (qual tcEnv tyEnv cx) tc tvs (qual tcEnv tyEnv cs)
->   qual tcEnv tyEnv (NewtypeDecl p cx tc tvs nc) =
+>              (map (qualIdent tcEnv) clss)
+>   qual tcEnv tyEnv (NewtypeDecl p cx tc tvs nc clss) =
 >     NewtypeDecl p (qual tcEnv tyEnv cx) tc tvs (qual tcEnv tyEnv nc)
+>                 (map (qualIdent tcEnv) clss)
 >   qual tcEnv tyEnv (TypeDecl p tc tvs ty) =
 >     TypeDecl p tc tvs (qual tcEnv tyEnv ty)
 >   qual tcEnv tyEnv (ClassDecl p cx cls tv ds) =

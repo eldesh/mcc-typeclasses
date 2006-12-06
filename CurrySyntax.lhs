@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: CurrySyntax.lhs 2038 2006-12-06 17:19:07Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -51,8 +51,8 @@ parsed representation of a Curry program.
 \begin{verbatim}
 
 > data TopDecl a =
->     DataDecl Position [ClassAssert] Ident [Ident] [ConstrDecl]
->   | NewtypeDecl Position [ClassAssert] Ident [Ident] NewConstrDecl
+>     DataDecl Position [ClassAssert] Ident [Ident] [ConstrDecl] [QualIdent]
+>   | NewtypeDecl Position [ClassAssert] Ident [Ident] NewConstrDecl [QualIdent]
 >   | TypeDecl Position Ident [Ident] TypeExpr
 >   | ClassDecl Position [ClassAssert] Ident Ident [MethodSig a]
 >   | InstanceDecl Position [ClassAssert] QualIdent TypeExpr [MethodDecl a]
@@ -250,8 +250,8 @@ The abstract syntax tree is a functor with respect to the attributes.
 >   fmap f (Module m es is ds) = Module m es is (map (fmap f) ds)
 
 > instance Functor TopDecl where
->   fmap _ (DataDecl p cx tc tvs cs) = DataDecl p cx tc tvs cs
->   fmap _ (NewtypeDecl p cx tc tvs nc) = NewtypeDecl p cx tc tvs nc
+>   fmap _ (DataDecl p cx tc tvs cs clss) = DataDecl p cx tc tvs cs clss
+>   fmap _ (NewtypeDecl p cx tc tvs nc clss) = NewtypeDecl p cx tc tvs nc clss
 >   fmap _ (TypeDecl p tc tvs ty) = TypeDecl p tc tvs ty
 >   fmap f (ClassDecl p cx cls tv ds) = ClassDecl p cx cls tv (map (fmap f) ds)
 >   fmap f (InstanceDecl p cx cls ty ds) =

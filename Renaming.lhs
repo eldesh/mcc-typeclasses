@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: Renaming.lhs 2038 2006-12-06 17:19:07Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -106,20 +106,20 @@ syntax tree and renames all type and expression variables.
 >     return (Goal p e' ds')
 
 > renameTopDecl :: TopDecl a -> RenameState (TopDecl a)
-> renameTopDecl (DataDecl p cx tc tvs cs) =
+> renameTopDecl (DataDecl p cx tc tvs cs clss) =
 >   do
 >     env <- bindVars emptyEnv tvs
->     liftM3 (flip (DataDecl p) tc)
->            (mapM (renameClassAssert env) cx)
->            (mapM (renameVar env) tvs)
->            (mapM (renameConstrDecl env) cs)
-> renameTopDecl (NewtypeDecl p cx tc tvs nc) =
+>     cx' <- mapM (renameClassAssert env) cx
+>     tvs' <- mapM (renameVar env) tvs
+>     cs' <- mapM (renameConstrDecl env) cs
+>     return (DataDecl p cx' tc tvs' cs' clss)
+> renameTopDecl (NewtypeDecl p cx tc tvs nc clss) =
 >   do
 >     env <- bindVars emptyEnv tvs
->     liftM3 (flip (NewtypeDecl p) tc)
->            (mapM (renameClassAssert env) cx)
->            (mapM (renameVar env) tvs)
->            (renameNewConstrDecl env nc)
+>     cx' <- mapM (renameClassAssert env) cx
+>     tvs' <- mapM (renameVar env) tvs
+>     nc' <- renameNewConstrDecl env nc
+>     return (NewtypeDecl p cx' tc tvs' nc' clss)
 > renameTopDecl (TypeDecl p tc tvs ty) =
 >   do
 >     env <- bindVars emptyEnv tvs

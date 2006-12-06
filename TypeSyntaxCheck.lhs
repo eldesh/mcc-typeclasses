@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2038 2006-12-06 17:19:07Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -52,9 +52,9 @@ later for checking the optional export list of the current module.
 >   where env = fmap typeKind tcEnv
 
 > bindType :: ModuleIdent -> TopDecl a -> TypeEnv -> TypeEnv
-> bindType m (DataDecl _ _ tc _ cs) =
+> bindType m (DataDecl _ _ tc _ cs _) =
 >   globalBindTopEnv m tc (Data (qualifyWith m tc) (map constr cs))
-> bindType m (NewtypeDecl _ _ tc _ nc) =
+> bindType m (NewtypeDecl _ _ tc _ nc _) =
 >   globalBindTopEnv m tc (Data (qualifyWith m tc) [nconstr nc])
 > bindType m (TypeDecl _ tc _ _) =
 >   globalBindTopEnv m tc (Alias (qualifyWith m tc))
@@ -71,12 +71,14 @@ signatures.
 \begin{verbatim}
 
 > checkTopDecl :: TypeEnv -> TopDecl a -> Error (TopDecl a)
-> checkTopDecl env (DataDecl p cx tc tvs cs) =
+> checkTopDecl env (DataDecl p cx tc tvs cs clss) =
 >   checkTypeLhs env p cx tvs &&>
->   liftE (DataDecl p cx tc tvs) (mapE (checkConstrDecl env tvs) cs)
-> checkTopDecl env (NewtypeDecl p cx tc tvs nc) =
+>   mapE_ (checkClass env p) clss &&>
+>   liftE (flip (DataDecl p cx tc tvs) clss) (mapE (checkConstrDecl env tvs) cs)
+> checkTopDecl env (NewtypeDecl p cx tc tvs nc clss) =
 >   checkTypeLhs env p cx tvs &&>
->   liftE (NewtypeDecl p cx tc tvs) (checkNewConstrDecl env tvs nc)
+>   mapE_ (checkClass env p) clss &&>
+>   liftE (flip (NewtypeDecl p cx tc tvs) clss) (checkNewConstrDecl env tvs nc)
 > checkTopDecl env (TypeDecl p tc tvs ty) =
 >   checkTypeLhs env p [] tvs &&>
 >   liftE (TypeDecl p tc tvs) (checkClosedType env p tvs ty)
@@ -306,8 +308,7 @@ conflicts between locally defined instances and imported instances.
 >                                                      inst `elemSet` iEnv] &&>
 >       reportDuplicates duplicateInstance repeatedInstance cts
 >     return ()
->   where cts = [P p (qualCT tEnv (CT cls (root ty)))
->               | InstanceDecl p _ cls ty _ <- ds]
+>   where cts = map (fmap (qualCT tEnv)) (concatMap instances ds)
 >         unique [] = []
 >         unique (x:xs)
 >           | x `elem` xs = unique (filter (x /=) xs)
@@ -318,22 +319,29 @@ conflicts between locally defined instances and imported instances.
 
 > qualCT :: TypeEnv -> CT -> CT
 > qualCT env (CT cls tc) = CT (qual env cls) (qual env tc)
->   where qual env x =
->           case qualLookupTopEnv x env of
->             [y] -> origName y
->             _ -> internalError "qualCT"
+>   where qual env x = origName (head (qualLookupTopEnv x env))
 
 \end{verbatim}
 Auxiliary definitions.
 \begin{verbatim}
 
 > tident :: TopDecl a -> P Ident
-> tident (DataDecl p _ tc _ _) = P p tc
-> tident (NewtypeDecl p _ tc _ _) = P p tc
+> tident (DataDecl p _ tc _ _ _) = P p tc
+> tident (NewtypeDecl p _ tc _ _ _) = P p tc
 > tident (TypeDecl p tc _ _) = P p tc
 > tident (ClassDecl p _ cls _ _) = P p cls
 > tident (InstanceDecl _ _ _ _ _) = internalError "tident"
 > tident (BlockDecl _) = internalError "tident"
+
+> instances :: TopDecl a -> [P CT]
+> instances (DataDecl p _ tc _ _ clss) =
+>   [P p (CT cls (qualify tc)) | cls <- clss]
+> instances (NewtypeDecl p _ tc _ _ clss) =
+>   [P p (CT cls (qualify tc)) | cls <- clss]
+> instances (TypeDecl _ _ _ _) = []
+> instances (ClassDecl _ _ _ _ _) = []
+> instances (InstanceDecl p _ cls ty _) = [P p (CT cls (root ty))]
+> instances (BlockDecl _) = []
 
 > isSimpleType :: TypeExpr -> Bool
 > isSimpleType (ConstructorType _ tys) = all isVariableType tys

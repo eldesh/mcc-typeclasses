@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: KindCheck.lhs 2038 2006-12-06 17:19:07Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -69,9 +69,9 @@ function in any particular order.
 >   where tcEnv' = foldr (bindTC m tcEnv') tcEnv ds
 
 > bindTC :: ModuleIdent -> TCEnv -> TopDecl a -> TCEnv -> TCEnv
-> bindTC m tcEnv (DataDecl _ _ tc tvs cs) =
+> bindTC m tcEnv (DataDecl _ _ tc tvs cs _) =
 >   globalBindTopEnv m tc (typeCon DataType m tc tvs (map (Just . constr) cs))
-> bindTC m tcEnv (NewtypeDecl _ _ tc tvs nc) =
+> bindTC m tcEnv (NewtypeDecl _ _ tc tvs nc _) =
 >   globalBindTopEnv m tc (typeCon RenamingType m tc tvs (nconstr nc))
 > bindTC m tcEnv (TypeDecl _ tc tvs ty) =
 >   globalBindTopEnv m tc
@@ -87,14 +87,14 @@ function in any particular order.
 
 > checkSynonynms :: ModuleIdent -> [TopDecl a] -> Error ()
 > checkSynonynms m = mapE_ (typeDecl m) . scc bound free
->   where bound (DataDecl _ _ tc _ _) = [tc]
->         bound (NewtypeDecl _ _ tc _ _) = [tc]
+>   where bound (DataDecl _ _ tc _ _ _) = [tc]
+>         bound (NewtypeDecl _ _ tc _ _ _) = [tc]
 >         bound (TypeDecl _ tc _ _) = [tc]
 >         bound (ClassDecl _ _ _ _ _) = []
 >         bound (InstanceDecl _ _ _ _ _) = []
 >         bound (BlockDecl _) = []
->         free (DataDecl _ _ _ _ _) = []
->         free (NewtypeDecl _ _ _ _ _) = []
+>         free (DataDecl _ _ _ _ _ _) = []
+>         free (NewtypeDecl _ _ _ _ _ _) = []
 >         free (TypeDecl _ _ _ ty) = ft m ty []
 >         free (ClassDecl _ _ _ _ _) = []
 >         free (InstanceDecl _ _ _ _ _) = []
@@ -102,8 +102,8 @@ function in any particular order.
 
 > typeDecl :: ModuleIdent -> [TopDecl a] -> Error ()
 > typeDecl _ [] = internalError "typeDecl"
-> typeDecl _ [DataDecl _ _ _ _ _] = return ()
-> typeDecl _ [NewtypeDecl _ _ _ _ _] = return ()
+> typeDecl _ [DataDecl _ _ _ _ _ _] = return ()
+> typeDecl _ [NewtypeDecl _ _ _ _ _ _] = return ()
 > typeDecl m [TypeDecl p tc _ ty]
 >   | tc `elem` ft m ty [] = errorAt p (recursiveTypes [tc])
 >   | otherwise = return ()
@@ -143,8 +143,8 @@ Kind checking is applied to all type expressions in the program.
 \begin{verbatim}
 
 > checkTopDecl :: TCEnv -> TopDecl a -> Error ()
-> checkTopDecl tcEnv (DataDecl _ _ _ _ cs) = mapE_ (checkConstrDecl tcEnv) cs
-> checkTopDecl tcEnv (NewtypeDecl _ _ _ _ nc) = checkNewConstrDecl tcEnv nc
+> checkTopDecl tcEnv (DataDecl _ _ _ _ cs _) = mapE_ (checkConstrDecl tcEnv) cs
+> checkTopDecl tcEnv (NewtypeDecl _ _ _ _ nc _) = checkNewConstrDecl tcEnv nc
 > checkTopDecl tcEnv (TypeDecl p _ _ ty) = checkType tcEnv p ty
 > checkTopDecl tcEnv (ClassDecl _ _ _ _ ds) = mapE_ (checkMethodSig tcEnv) ds
 > checkTopDecl tcEnv (InstanceDecl p _ _ ty ds) =

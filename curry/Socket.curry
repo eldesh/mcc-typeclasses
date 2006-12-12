@@ -1,4 +1,4 @@
--- $Id: Socket.curry 2011 2006-11-16 12:17:25Z wlux $
+-- $Id: Socket.curry 2039 2006-12-12 12:20:09Z wlux $
 --
 -- Copyright (c) 2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -17,10 +17,8 @@ import IOExts(openFd)
 import Unsafe(isVar)
 
 -- (Abstract) Socket type
-newtype Socket = Socket Int
+newtype Socket = Socket Int deriving Eq
 
-instance Eq Socket where
-  Socket s1 == Socket s2 = s1 == s2
 
 -- Creates a new INET socket. Use socketBind, socketListen, and
 -- socketAccept for establishing a server for this socket.

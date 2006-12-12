@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2030 2006-11-28 13:31:04Z wlux $
+-- $Id: Prelude.curry 2039 2006-12-12 12:20:09Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -175,33 +175,7 @@ class Bounded a where
 
 -- Boolean values
 -- already defined as builtin, since it is required for if-then-else
-data Bool = False | True
-instance Eq Bool where
-  x == y =
-    case (x,y) of
-      (False,False) -> True
-      (False,True) -> False
-      (True,False) -> False
-      (True,True) -> True
-instance Ord Bool where
-  x `compare` y =
-    case (x,y) of
-      (False,False) -> EQ
-      (False,True) -> LT
-      (True,False) -> GT
-      (True,True) -> EQ
-instance Enum Bool where
-  succ False = True
-  pred True = False
-  toEnum 0 = False
-  toEnum 1 = True
-  fromEnum False = 0
-  fromEnum True = 1
-  enumFrom x = enumFromTo x True
-  enumFromThen x y = enumFromThenTo x y (x <= y)
-instance Bounded Bool where
-  minBound = False
-  maxBound = True
+data Bool = False | True deriving (Eq,Ord,Enum,Bounded)
 
 --- Sequential conjunction on Booleans.
 (&&)            :: Bool -> Bool -> Bool
@@ -231,40 +205,7 @@ otherwise       = True
 
 
 -- Ordering
-data Ordering = LT | EQ | GT
-instance Eq Ordering where
-  x == y =
-    case (x,y) of
-      (LT,LT) -> True
-      (EQ,EQ) -> True
-      (GT,GT) -> True
-      _ -> False
-instance Ord Ordering where
-  x `compare` y =
-    case (x,y) of
-      (LT,LT) -> EQ
-      (LT,_)  -> LT
-      (EQ,LT) -> GT
-      (EQ,EQ) -> EQ
-      (EQ,GT) -> LT
-      (GT,GT) -> EQ
-      (GT,_)  -> GT
-instance Enum Ordering where
-  succ LT = EQ
-  succ EQ = GT
-  pred EQ = LT
-  pred GT = EQ
-  toEnum 0 = LT
-  toEnum 1 = EQ
-  toEnum 2 = GT
-  fromEnum LT = 0
-  fromEnum EQ = 1
-  fromEnum GT = 2
-  enumFrom x = enumFromTo x GT
-  enumFromThen x y = enumFromThenTo x y (if x <= y then GT else LT)
-instance Bounded Ordering where
-  minBound = LT
-  maxBound = GT
+data Ordering = LT | EQ | GT deriving (Eq,Ord,Enum,Bounded)
 
 
 -- Pairs
@@ -1005,20 +946,7 @@ c1 &> c2 | c1 = c2
 
 -- Maybe type
 
-data Maybe a = Nothing | Just a
-instance Eq a => Eq (Maybe a) where
-  x == y =
-    case (x,y) of
-      (Nothing,Nothing) -> True
-      (Just x1,Just y1) -> x1 == y1
-      _ -> False
-instance Ord a => Ord (Maybe a) where
-  x `compare` y =
-    case (x,y) of
-      (Nothing,Nothing) -> EQ
-      (Nothing,Just _)  -> LT
-      (Just _,Nothing)  -> GT
-      (Just x1,Just y1) -> x1 `compare` y1
+data Maybe a = Nothing | Just a deriving (Eq,Ord)
 
 maybe		   :: b -> (a -> b) -> Maybe a -> b
 maybe z _ Nothing  = z
@@ -1027,20 +955,7 @@ maybe _ f (Just x) = f x
 
 -- Either type
 
-data Either a b = Left a | Right b
-instance (Eq a,Eq b) => Eq (Either a b) where
-  x == y =
-    case (x,y) of
-      (Left x1,Left y1) -> x1 == y1
-      (Right x2,Right y2) -> x2 == y2
-      _ -> False
-instance (Ord a,Ord b) => Ord (Either a b) where
-  x `compare` y =
-    case (x,y) of
-      (Left x1,Left y1)   -> x1 `compare` y1
-      (Left _,Right _)    -> LT
-      (Right _,Left _)    -> GT
-      (Right x2,Right y2) -> x2 `compare` y2
+data Either a b = Left a | Right b deriving (Eq,Ord)
 
 either		     :: (a -> c) -> (b -> c) -> Either a b -> c
 either f _ (Left x)  = f x

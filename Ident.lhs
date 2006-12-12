@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Ident.lhs 2036 2006-12-03 11:23:51Z wlux $
+% $Id: Ident.lhs 2039 2006-12-12 12:20:09Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -34,12 +34,13 @@ unqualified identifier.}
 >              emptyMIdent,preludeMIdent,debugPreludeMIdent,
 >              ptrMIdent,stablePtrMIdent,
 >              anonId,unitId,boolId,charId,intId,floatId,listId,arrowId,ioId,
->              eqId,enumId,numId,fractionalId,ptrId,funPtrId,stablePtrId,
+>              eqId,ordId,enumId,boundedId,numId,fractionalId,
+>              ptrId,funPtrId,stablePtrId,
 >              successId,trueId,falseId,nilId,consId,mainId,
 >              tupleId,isTupleId,tupleArity,selectorId,isSelectorId,
 >              minusId,
 >              qUnitId,qBoolId,qCharId,qIntId,qFloatId,qListId,qArrowId,qIOId,
->              qSuccessId,qEqId,qEnumId,qNumId,qFractionalId,
+>              qSuccessId,qEqId,qOrdId,qEnumId,qBoundedId,qNumId,qFractionalId,
 >              qPtrId,qFunPtrId,qStablePtrId,qTrueId,qFalseId,qNilId,qConsId,
 >              qTupleId,isQTupleId,qTupleArity,isQSelectorId) where
 > import Char
@@ -173,9 +174,11 @@ A few identifiers a predefined here.
 > ioId      = Ident "IO" 0
 > successId = Ident "Success" 0
 
-> eqId, enumId, numId, fractionalId :: Ident
+> eqId, ordId, enumId, boundedId, numId, fractionalId :: Ident
 > eqId = Ident "Eq" 0
+> ordId = Ident "Ord" 0
 > enumId = Ident "Enum" 0
+> boundedId = Ident "Bounded" 0
 > numId = Ident "Num" 0
 > fractionalId = Ident "Fractional" 0
 
@@ -230,9 +233,11 @@ A few identifiers a predefined here.
 > qSuccessId = QualIdent preludeMIdent successId
 > qIOId = QualIdent preludeMIdent ioId
 
-> qEqId, qEnumId, qNumId, qFractionalId :: QualIdent
+> qEqId, qOrdId, qEnumId, qBoundedId, qNumId, qFractionalId :: QualIdent
 > qEqId = QualIdent preludeMIdent eqId
+> qOrdId = QualIdent preludeMIdent ordId
 > qEnumId = QualIdent preludeMIdent enumId
+> qBoundedId = QualIdent preludeMIdent boundedId
 > qNumId = QualIdent preludeMIdent numId
 > qFractionalId = QualIdent preludeMIdent fractionalId
 

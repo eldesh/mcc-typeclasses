@@ -18,110 +18,19 @@ instance Eq Handle where
   (==) = primEqHandle
     where foreign import primitive primEqHandle :: Handle -> Handle -> Bool
 
-data HandlePosn	= HandlePosn Handle Int
-instance Eq HandlePosn where
-  p1 == p2 =
-    case (p1,p2) of
-      (HandlePosn h1 n1,HandlePosn h2 n2) -> h1 == h2 && n1 == n2
+data HandlePosn	= HandlePosn Handle Int deriving Eq
 
-data IOMode = ReadMode | WriteMode | AppendMode | ReadWriteMode
-instance Eq IOMode where
-  m1 == m2 =
-    case (m1,m2) of
-      (ReadMode,ReadMode) -> True
-      (WriteMode,WriteMode) -> True
-      (AppendMode,AppendMode) -> True
-      (ReadWriteMode,ReadWriteMode) -> True
-      _ -> False
-instance Ord IOMode where
-  m1 `compare` m2 =
-    case (m1,m2) of
-      (ReadMode,ReadMode) -> EQ
-      (ReadMode,_)        -> LT
-      (WriteMode,ReadMode)  -> GT
-      (WriteMode,WriteMode) -> EQ
-      (WriteMode,_)         -> LT
-      (AppendMode,ReadWriteMode) -> LT
-      (AppendMode,AppendMode)    -> EQ
-      (AppendMode,_)             -> GT
-      (ReadWriteMode,ReadWriteMode) -> EQ
-      (ReadWriteMode,_)             -> GT
-instance Enum IOMode where
-  succ ReadMode = WriteMode
-  succ WriteMode = AppendMode
-  succ AppendMode = ReadWriteMode
-  pred WriteMode = ReadMode
-  pred AppendMode = WriteMode
-  pred ReadWriteMode = AppendMode
-  toEnum 0 = ReadMode
-  toEnum 1 = WriteMode
-  toEnum 2 = AppendMode
-  toEnum 3 = ReadWriteMode
-  fromEnum ReadMode = 0
-  fromEnum WriteMode = 1
-  fromEnum AppendMode = 2
-  fromEnum ReadWriteMode = 3
-  enumFrom x = enumFromTo x ReadWriteMode
-  enumFromThen x1 x2 =
-    enumFromThenTo x1 x2 (if x1 <= x2 then ReadWriteMode else ReadMode)
-instance Bounded IOMode where
-  minBound = ReadMode
-  maxBound = ReadWriteMode
+data IOMode =
+  ReadMode | WriteMode | AppendMode | ReadWriteMode
+  deriving (Eq,Ord,Bounded,Enum)
 
-data BufferMode = NoBuffering | LineBuffering | BlockBuffering (Maybe Int)
-instance Eq BufferMode where
-  m1 == m2 =
-    case (m1,m2) of
-      (NoBuffering,NoBuffering) -> True
-      (LineBuffering,LineBuffering) -> True
-      (BlockBuffering n1,BlockBuffering n2) -> n1 == n2
-      _ -> False
-instance Ord BufferMode where
-  m1 `compare` m2 =
-    case (m1,m2) of
-      (NoBuffering,NoBuffering) -> EQ
-      (NoBuffering,_)           -> LT
-      (LineBuffering,NoBuffering)      -> GT
-      (LineBuffering,LineBuffering)    -> EQ
-      (LineBuffering,BlockBuffering _) -> LT
-      (BlockBuffering n1,BlockBuffering n2) -> n1 `compare` n2
-      (BlockBuffering _,_)                  -> GT
+data BufferMode =
+  NoBuffering | LineBuffering | BlockBuffering (Maybe Int)
+  deriving (Eq,Ord)
 
-data SeekMode = AbsoluteSeek | RelativeSeek | SeekFromEnd
-instance Eq SeekMode where
-  m1 == m2 =
-    case (m1,m2) of
-      (AbsoluteSeek,AbsoluteSeek) -> True
-      (RelativeSeek,RelativeSeek) -> True
-      (SeekFromEnd,SeekFromEnd) -> True
-      _ -> False
-instance Ord SeekMode where
-  m1 `compare` m2 =
-    case (m1,m2) of
-      (AbsoluteSeek,AbsoluteSeek) -> EQ
-      (AbsoluteSeek,_)            -> LT
-      (RelativeSeek,AbsoluteSeek) -> GT
-      (RelativeSeek,RelativeSeek) -> EQ
-      (RelativeSeek,SeekFromEnd)  -> LT
-      (SeekFromEnd,SeekFromEnd)   -> EQ
-      (SeekFromEnd,_)             -> GT
-instance Enum SeekMode where
-  succ AbsoluteSeek = RelativeSeek
-  succ RelativeSeek = SeekFromEnd
-  pred RelativeSeek = AbsoluteSeek
-  pred SeekFromEnd = RelativeSeek
-  toEnum 0 = AbsoluteSeek
-  toEnum 1 = RelativeSeek
-  toEnum 2 = SeekFromEnd
-  fromEnum AbsoluteSeek = 0
-  fromEnum RelativeSeek = 1
-  fromEnum SeekFromEnd = 2
-  enumFrom x = enumFromTo x SeekFromEnd
-  enumFromThen x1 x2 =
-    enumFromThenTo x1 x2 (if x1 <= x2 then SeekFromEnd else AbsoluteSeek)
-instance Bounded SeekMode where
-  minBound = AbsoluteSeek
-  maxBound = SeekFromEnd
+data SeekMode =
+  AbsoluteSeek | RelativeSeek | SeekFromEnd
+  deriving (Eq,Ord,Bounded,Enum)
 
 --- Predefined handles for standard input, output, and error
 foreign import primitive stdin  :: Handle

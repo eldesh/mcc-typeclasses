@@ -1,4 +1,4 @@
--- $Id: Lexing.curry 2013 2006-11-16 14:10:51Z wlux $
+-- $Id: Lexing.curry 2039 2006-12-12 12:20:09Z wlux $
 
 -- Implementation of lexing combinators based on
 -- Manuel M.T. Chakravarty. Lazy Lexing is Fast. In:
@@ -16,7 +16,7 @@ infixl 3 +>
 infixl 2 >|<, >||<
 
 -- Types
-newtype Position  = P (String, Int, Int)
+newtype Position  = P (String, Int, Int) deriving (Eq,Ord)
 type LexerState s = (String, Position, s)
 
 type Regexp s t	  = Lexer s t -> Lexer s t
@@ -27,11 +27,6 @@ type Action t = String -> Position -> Maybe t
 type Meta s t = Position -> s -> (Position, s, Maybe (Lexer s t))
 
 data LexAction s t = Action (Action t) | Meta (Meta s t) | NoAction
-
-instance Eq Position where
-  P p1 == P p2 = p1 == p2
-instance Ord Position where
-  P p1 `compare` P p2 = p1 `compare` p2
 
 -- Regular Expressions
 

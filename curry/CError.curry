@@ -1,4 +1,4 @@
--- $Id: CError.curry 2017 2006-11-21 11:21:49Z wlux $
+-- $Id: CError.curry 2039 2006-12-12 12:20:09Z wlux $
 --
 -- Copyright (c) 2005, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -32,9 +32,7 @@ import CString
 import IO
 import Unsafe
 
-newtype Errno = Errno CInt
-instance Eq Errno where
-  Errno e1 == Errno e2 = e1 == e2
+newtype Errno = Errno CInt deriving Eq
 
 eOK = Errno 0
 e2BIG = Errno e2BIG

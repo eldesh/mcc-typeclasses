@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2043 2006-12-13 22:03:58Z wlux $
+% $Id: Modules.lhs 2044 2006-12-13 22:53:02Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -123,7 +123,7 @@ declaration to the module.
 >     tcEnv' <- kindCheck m tcEnv ds'''
 >     iEnv' <- instCheck m tcEnv' iEnv ds'''
 >     (tyEnv',ds'''') <-
->       derive m tcEnv' iEnv' ds''' >>= typeCheck m tcEnv' iEnv' tyEnv
+>       derive m pEnv' tcEnv' iEnv' ds''' >>= typeCheck m tcEnv' iEnv' tyEnv
 >     let (pEnv'',tcEnv'',tyEnv'') = qualifyEnv mEnv m pEnv' tcEnv' tyEnv'
 >     return (tcEnv'',iEnv',tyEnv'',
 >             Module m (Just es') is (qual tcEnv' tyEnv' ds''''),

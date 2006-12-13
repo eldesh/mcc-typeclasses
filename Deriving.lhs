@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2043 2006-12-13 22:03:58Z wlux $
+% $Id: Deriving.lhs 2044 2006-12-13 22:53:02Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -19,11 +19,11 @@ This module implements the code generating derived instance declarations.
 > import Monad
 > import TopEnv
 
-> derive :: ModuleIdent -> TCEnv -> InstEnv -> [TopDecl ()]
+> derive :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> [TopDecl ()]
 >         -> Error [TopDecl ()]
-> derive m tcEnv iEnv ds =
+> derive m pEnv tcEnv iEnv ds =
 >   do
->     dss' <- run (mapM (deriveInstances m tcEnv iEnv) ds)
+>     dss' <- run (mapM (deriveInstances m pEnv tcEnv iEnv) ds)
 >     return (ds ++ concat dss')
 
 \end{verbatim}
@@ -52,21 +52,21 @@ classes be derived.
 
 > type Constr = (QualIdent,Int)
 
-> deriveInstances :: ModuleIdent -> TCEnv -> InstEnv -> TopDecl ()
+> deriveInstances :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> TopDecl ()
 >                 -> DeriveState [TopDecl ()]
-> deriveInstances m tcEnv iEnv (DataDecl p _ tc tvs cs clss) =
->   mapM (deriveInstance m tcEnv iEnv p tc tvs cs) clss
-> deriveInstances m tcEnv iEnv (NewtypeDecl p _ tc tvs nc clss) =
->   mapM (deriveInstance m tcEnv iEnv p tc tvs [constrDecl nc]) clss
+> deriveInstances m pEnv tcEnv iEnv (DataDecl p _ tc tvs cs clss) =
+>   mapM (deriveInstance m pEnv tcEnv iEnv p tc tvs cs) clss
+> deriveInstances m pEnv tcEnv iEnv (NewtypeDecl p _ tc tvs nc clss) =
+>   mapM (deriveInstance m pEnv tcEnv iEnv p tc tvs [constrDecl nc]) clss
 >   where constrDecl (NewConstrDecl p c ty) = ConstrDecl p [] c [ty]
-> deriveInstances _ _ _ _ = return []
+> deriveInstances _ _ _ _ _ = return []
 
-> deriveInstance :: ModuleIdent -> TCEnv -> InstEnv -> Position
+> deriveInstance :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> Position
 >                -> Ident -> [Ident] -> [ConstrDecl] -> QualIdent
 >                -> DeriveState (TopDecl ())
-> deriveInstance m tcEnv iEnv p tc tvs cs cls =
+> deriveInstance m pEnv tcEnv iEnv p tc tvs cs cls =
 >   liftM (InstanceDecl p (map (toClassAssert tvs) cx) cls ty)
->         (deriveMethods tcEnv p (map constr cs) cls)
+>         (deriveMethods pEnv tcEnv p (map constr cs) cls)
 >   where cx = fromJust (lookupEnv (CT cls' tc') iEnv)
 >         ty = ConstructorType (qualifyWith m tc) (map VariableType tvs)
 >         tc' = qualifyWith m tc
@@ -78,14 +78,14 @@ classes be derived.
 >           -- FIXME: this context may contain improperly qualified
 >           --        identifiers when as renamings are used
 
-> deriveMethods :: TCEnv -> Position -> [Constr] -> QualIdent
+> deriveMethods :: PEnv -> TCEnv -> Position -> [Constr] -> QualIdent
 >               -> DeriveState [MethodDecl ()]
-> deriveMethods tcEnv p cs cls
+> deriveMethods pEnv tcEnv p cs cls
 >   | cls' == qEqId = eqMethods p cs
 >   | cls' == qOrdId = ordMethods p cs
 >   | cls' == qEnumId = enumMethods p cs
 >   | cls' == qBoundedId = boundedMethods p cs
->   | cls' == qShowId = showMethods p cs
+>   | cls' == qShowId = showMethods pEnv p cs
 >   | otherwise = errorAt p (notDerivable cls)
 >   where cls' = origName (head (qualLookupTopEnv cls tcEnv))
 
@@ -317,7 +317,10 @@ all arguments.
 \paragraph{String Representation}
 Instances of \texttt{Show} can be derived for all data types. We
 derive only an implementation of \texttt{showsPrec} and rely on the
-default implementations of \texttt{show} and \texttt{showList}. Note
+default implementations of \texttt{show} and \texttt{showList}. The
+derived \texttt{showsPrec} uses infix notation for infix constructor
+applications adding parentheses only where needed, ignoring
+associativity (cf.\ Chap.~10 of~\cite{PeytonJones03:Haskell}). Note
 that in contrast to the \texttt{show} function in the current Curry
 report, \texttt{showsPrec} is a flexible function. For instance,
 \texttt{let x :: Bool; x free in show x} non-deterministically binds
@@ -326,33 +329,34 @@ returns its string representation \verb|"False"| and \verb|"True"|,
 respectively.
 \begin{verbatim}
 
-> showMethods :: Position -> [Constr] -> DeriveState [MethodDecl ()]
-> showMethods p cs = sequence [deriveShowsPrec p cs]
+> showMethods :: PEnv -> Position -> [Constr] -> DeriveState [MethodDecl ()]
+> showMethods pEnv p cs = sequence [deriveShowsPrec pEnv p cs]
 
-> deriveShowsPrec :: Position -> [Constr] -> DeriveState (MethodDecl ())
-> deriveShowsPrec p cs = liftM (MethodDecl p f) (mapM (showsPrecEqn p f) cs)
+> deriveShowsPrec :: PEnv -> Position -> [Constr] -> DeriveState (MethodDecl ())
+> deriveShowsPrec pEnv p cs =
+>   liftM (MethodDecl p f) (mapM (showsPrecEqn pEnv p f) cs)
 >   where f = showsPrecId
 
-> showsPrecEqn :: Position -> Ident -> Constr -> DeriveState (Equation ())
-> showsPrecEqn p f (c,n) =
+> showsPrecEqn :: PEnv -> Position -> Ident -> Constr
+>              -> DeriveState (Equation ())
+> showsPrecEqn pEnv p f (c,n) =
 >   do
 >     l <- freshIdent
 >     xs <- freshIdents n
->     return (equation p f (showsPrecMatch l c xs) (showsPrecExpr l c xs))
+>     return (equation p f (showsPrecMatch l c xs) (showsPrecExpr pEnv l c xs))
 
 > showsPrecMatch :: Ident -> QualIdent -> [Ident] -> [ConstrTerm ()]
 > showsPrecMatch l c xs =
 >   [VariablePattern () l,ConstructorPattern () c (map (VariablePattern ()) xs)]
 
-> showsPrecExpr :: Ident -> QualIdent -> [Ident] -> Expression ()
-> showsPrecExpr l c xs
+> showsPrecExpr :: PEnv -> Ident -> QualIdent -> [Ident] -> Expression ()
+> showsPrecExpr pEnv l c xs
 >   | null xs = showsPrecShowString (showsCon c' "")
 >   | isInfixOp c' && length xs == 2 =
->       -- FIXME: use the operator's real precedence
->       --     => need the operator precedence environment here
->       showsPrecShowParen l 9 (showsPrecShowInfixApp 9 c' xs)
+>       showsPrecShowParen l p (showsPrecShowInfixApp p c' xs)
 >   | otherwise = showsPrecShowParen l 10 (showsPrecShowApp 10 c' xs)
 >   where c' = unqualify c
+>         OpPrec _ p = prec c pEnv
 
 > showsCon :: Ident -> ShowS
 > showsCon c = showParen (isInfixOp c) (showString (name c))
@@ -374,11 +378,17 @@ respectively.
 > showsPrecShowInfixApp :: Int -> Ident -> [Ident] -> Expression ()
 > showsPrecShowInfixApp p op xs =
 >   foldr1 prelDot $
->   intersperse (showsPrecShowString ((' ' : name op ++ " ")))
+>   intersperse (showsPrecShowString (' ' : name op ++ " "))
 >               (map (showsPrecShowArg p) xs)
 
 > showsPrecShowArg :: Int -> Ident -> Expression ()
 > showsPrecShowArg p = prelShowsPrec (Literal () (Int (p + 1))) . mkVar
+
+> prec :: QualIdent -> PEnv -> OpPrec
+> prec op env =
+>   case qualLookupTopEnv op env of
+>     [] -> defaultP
+>     PrecInfo _ p : _ -> p
 
 \end{verbatim}
 \paragraph{Auxiliary functions}

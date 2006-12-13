@@ -15,6 +15,11 @@ instance Eq a => Eq (Array a) where
   a1 == a2 = assocs a1 == assocs a2
 instance Ord a => Ord (Array a) where
   a1 `compare` a2 = assocs a1 `compare` assocs a2
+instance Show a => Show (Array a) where
+  showsPrec p a =
+    showParen (p > 10)
+              (showString "array " . showsPrec 11 (bounds a) .
+                      showChar ' ' . showsPrec 11 (assocs a))
 
 array      :: (Int,Int) -> [(Int,a)] -> Array a
 array b ixs = unsafePerformIO initArray

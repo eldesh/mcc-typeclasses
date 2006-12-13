@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2039 2006-12-12 12:20:09Z wlux $
+-- $Id: Prelude.curry 2041 2006-12-13 09:43:43Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -172,10 +172,25 @@ class Bounded a where
   minBound :: a
   maxBound :: a
 
+--- Show class
+class Show a where
+  showsPrec :: Int -> a -> ShowS
+  show      :: a -> String
+  showList  :: [a] -> ShowS
+
+  -- Minimal complete definition:
+  -- show or showsPrec
+  showsPrec _ x s = show x ++ s
+  show x          = showsPrec 0 x ""
+  showList []     = showString "[]"
+  showList (x:xs) = showChar '[' . shows x . showl xs
+    where showl []     = showChar ']'
+          showl (x:xs) = showChar ',' . shows x . showl xs
+
 
 -- Boolean values
 -- already defined as builtin, since it is required for if-then-else
-data Bool = False | True deriving (Eq,Ord,Enum,Bounded)
+data Bool = False | True deriving (Eq,Ord,Enum,Show,Bounded)
 
 --- Sequential conjunction on Booleans.
 (&&)            :: Bool -> Bool -> Bool
@@ -205,7 +220,7 @@ otherwise       = True
 
 
 -- Ordering
-data Ordering = LT | EQ | GT deriving (Eq,Ord,Enum,Bounded)
+data Ordering = LT | EQ | GT deriving (Eq,Ord,Enum,Show,Bounded)
 
 
 -- Pairs
@@ -226,6 +241,9 @@ instance (Ord a,Ord b) => Ord (a,b) where
 instance (Bounded a,Bounded b) => Bounded (a,b) where
   minBound = (minBound,minBound)
   maxBound = (maxBound,maxBound)
+instance (Show a,Show b) => Show (a,b) where
+  showsPrec _ (x1,x2) =
+    showChar '(' . shows x1 . showChar ',' . shows x2 . showChar ')'
 
 --- Selects the first component of a pair.
 fst             :: (a,b) -> a
@@ -256,6 +274,11 @@ instance (Ord a,Ord b,Ord c) => Ord (a,b,c) where
 instance (Bounded a,Bounded b,Bounded c) => Bounded (a,b,c) where
   minBound = (minBound,minBound,minBound)
   maxBound = (maxBound,maxBound,maxBound)
+instance (Show a,Show b,Show c) => Show (a,b,c) where
+  showsPrec _ (x1,x2,x3) =
+    showChar '(' . shows x1 . showChar ',' .
+                   shows x2 . showChar ',' .
+                   shows x3 . showChar ')'
 
 instance (Eq a,Eq b,Eq c,Eq d) => Eq (a,b,c,d) where
   x == y =
@@ -281,6 +304,12 @@ instance (Ord a,Ord b,Ord c,Ord d) => Ord (a,b,c,d) where
 instance (Bounded a,Bounded b,Bounded c,Bounded d) => Bounded (a,b,c,d) where
   minBound = (minBound,minBound,minBound,minBound)
   maxBound = (maxBound,maxBound,maxBound,maxBound)
+instance (Show a,Show b,Show c,Show d) => Show (a,b,c,d) where
+  showsPrec _ (x1,x2,x3,x4) =
+    showChar '(' . shows x1 . showChar ',' .
+                   shows x2 . showChar ',' .
+                   shows x3 . showChar ',' .
+                   shows x4 . showChar ')'
 
 instance (Eq a,Eq b,Eq c,Eq d,Eq e) => Eq (a,b,c,d,e) where
   x == y =
@@ -310,6 +339,13 @@ instance (Ord a,Ord b,Ord c,Ord d,Ord e) => Ord (a,b,c,d,e) where
 instance (Bounded a,Bounded b,Bounded c,Bounded d,Bounded e) => Bounded (a,b,c,d,e) where
   minBound = (minBound,minBound,minBound,minBound,minBound)
   maxBound = (maxBound,maxBound,maxBound,maxBound,maxBound)
+instance (Show a,Show b,Show c,Show d,Show e) => Show (a,b,c,d,e) where
+  showsPrec _ (x1,x2,x3,x4,x5) =
+    showChar '(' . shows x1 . showChar ',' .
+                   shows x2 . showChar ',' .
+                   shows x3 . showChar ',' .
+                   shows x4 . showChar ',' .
+                   shows x5 . showChar ')'
 
 instance (Eq a,Eq b,Eq c,Eq d,Eq e,Eq f) => Eq (a,b,c,d,e,f) where
   x == y =
@@ -343,6 +379,14 @@ instance (Ord a,Ord b,Ord c,Ord d,Ord e,Ord f) => Ord (a,b,c,d,e,f) where
 instance (Bounded a,Bounded b,Bounded c,Bounded d,Bounded e,Bounded f) => Bounded (a,b,c,d,e,f) where
   minBound = (minBound,minBound,minBound,minBound,minBound,minBound)
   maxBound = (maxBound,maxBound,maxBound,maxBound,maxBound,maxBound)
+instance (Show a,Show b,Show c,Show d,Show e,Show f) => Show (a,b,c,d,e,f) where
+  showsPrec _ (x1,x2,x3,x4,x5,x6) =
+    showChar '(' . shows x1 . showChar ',' .
+                   shows x2 . showChar ',' .
+                   shows x3 . showChar ',' .
+                   shows x4 . showChar ',' .
+                   shows x5 . showChar ',' .
+                   shows x6 . showChar ')'
 
 instance (Eq a,Eq b,Eq c,Eq d,Eq e,Eq f,Eq g) => Eq (a,b,c,d,e,f,g) where
   x == y =
@@ -381,6 +425,15 @@ instance (Ord a,Ord b,Ord c,Ord d,Ord e,Ord f,Ord g) => Ord (a,b,c,d,e,f,g) wher
 instance (Bounded a,Bounded b,Bounded c,Bounded d,Bounded e,Bounded f,Bounded g) => Bounded (a,b,c,d,e,f,g) where
   minBound = (minBound,minBound,minBound,minBound,minBound,minBound,minBound)
   maxBound = (maxBound,maxBound,maxBound,maxBound,maxBound,maxBound,maxBound)
+instance (Show a,Show b,Show c,Show d,Show e,Show f,Show g) => Show (a,b,c,d,e,f,g) where
+  showsPrec _ (x1,x2,x3,x4,x5,x6,x7) =
+    showChar '(' . shows x1 . showChar ',' .
+                   shows x2 . showChar ',' .
+                   shows x3 . showChar ',' .
+                   shows x4 . showChar ',' .
+                   shows x5 . showChar ',' .
+                   shows x6 . showChar ',' .
+                   shows x7 . showChar ')'
 
 
 -- Unit type
@@ -401,6 +454,8 @@ instance Enum () where
 instance Bounded () where
   minBound = ()
   maxBound = ()
+instance Show () where
+  showsPrec _ () = showString "()"
 
 
 -- Lists
@@ -423,6 +478,8 @@ instance Ord a => Ord [a] where
 	  LT -> LT
 	  EQ -> xs `compare` ys
 	  GT -> GT
+instance Show a => Show [a] where
+  showsPrec _ = showList
 
 --- Evaluates the argument to spine form and returns it.
 --- Suspends until the result is bound to a non-variable spine.
@@ -666,6 +723,11 @@ instance Bounded Char where
     where foreign import ccall "prims.h" primMinChar :: Char
   maxBound = primMaxChar
     where foreign import ccall "prims.h" primMaxChar :: Char
+instance Show Char where
+  -- FIXME: use a dedicated primitive for this (if at all)
+  showsPrec _ = shows where foreign import primitive shows :: a -> ShowS
+  showList cs = if null cs then showString "\"\"" else shows cs
+    where foreign import primitive shows :: a -> ShowS
 
 --- Converts a characters into its ASCII value.
 foreign import ccall "prims.h primOrd" ord :: Char -> Int
@@ -706,23 +768,16 @@ unwords []	 = []
 unwords (w:ws) = w ++ foldr (\w cs -> (' ' : w) ++ cs) "" ws
 
 --- Converts an arbitrary term into an external string representation.
-show :: a -> String
-show x = shows x ""
-
 type ShowS = String -> String
-foreign import primitive shows :: a -> ShowS
+
+shows :: Show a => a -> ShowS
+shows = showsPrec 0
 
 showChar :: Char -> ShowS
 showChar c = (c :)
 
 showString :: String -> ShowS
 showString s = (s ++)
-
-showList :: [a] -> ShowS
-showList [] = showString "[]"
-showList (x:xs) = showChar '[' . shows x . showl xs
-  where showl [] = showChar ']'
-        showl (x:xs) = showChar ',' . shows x . showl xs
 
 showParen :: Bool -> ShowS -> ShowS
 showParen True x = showChar '(' . x . showChar ')'
@@ -825,6 +880,9 @@ instance Bounded Int where
     where foreign import ccall "prims.h" primMinInt :: Int
   maxBound = primMaxInt
     where foreign import ccall "prims.h" primMaxInt :: Int
+instance Show Int where
+  -- FIXME: use a dedicated primitive for this
+  showsPrec _ = shows where foreign import primitive shows :: a -> ShowS
 
 instance Num Int where
   (+) = primAddInt
@@ -889,6 +947,9 @@ instance Enum Float where
   enumFromThenTo x1 x2 x3
     | x1 <= x2 = takeWhile (<= x3 + (x2 - x1) * 0.5) (enumFromThen x1 x2)
     | otherwise = takeWhile (>= x3 + (x2 - x1) * 0.5) (enumFromThen x1 x2)
+instance Show Float where
+  -- FIXME: use a dedicated primitive for this
+  showsPrec _ = shows where foreign import primitive shows :: a -> ShowS
 
 instance Num Float where
   (+) = primAddFloat
@@ -926,6 +987,8 @@ instance RealFrac Float where
 
 -- Constraints
 data Success
+instance Show Success where
+  show c | c = "success"
 
 --- Equational constraint
 foreign import primitive (=:=) :: a -> a -> Success
@@ -946,7 +1009,7 @@ c1 &> c2 | c1 = c2
 
 -- Maybe type
 
-data Maybe a = Nothing | Just a deriving (Eq,Ord)
+data Maybe a = Nothing | Just a deriving (Eq,Ord,Show)
 
 maybe		   :: b -> (a -> b) -> Maybe a -> b
 maybe z _ Nothing  = z
@@ -955,11 +1018,11 @@ maybe _ f (Just x) = f x
 
 -- Either type
 
-data Either a b = Left a | Right b deriving (Eq,Ord)
+data Either a b = Left a | Right b deriving (Eq,Ord,Show)
 
 either		     :: (a -> c) -> (b -> c) -> Either a b -> c
 either f _ (Left x)  = f x
-either _ g (Right x) = g x
+either _ g (Right y) = g y
 
 
 -- Monadic IO
@@ -1002,7 +1065,7 @@ putStrLn          :: String -> IO ()
 putStrLn cs       = putStr cs >> putChar '\n'
 
 --- Converts a term into a string and prints it.
-print             :: a -> IO ()
+print             :: Show a => a -> IO ()
 print t           = putStrLn (show t)
 
 --- Convert a simple stream filter into an I/O program
@@ -1127,12 +1190,12 @@ findfirst g = head (findall g)
 
 
 --- Show the solution of a solved constraint.
-browse  :: (a -> Success) -> IO ()
+browse  :: Show a => (a -> Success) -> IO ()
 browse g = putStr (show (unpack g))
 
 --- Unpack solutions from a list of lambda abstractions and write 
 --- them to the screen.
-browseList :: [a -> Success] -> IO ()
+browseList :: Show a => [a -> Success] -> IO ()
 browseList [] = done
 browseList (g:gs) = browse g >> putChar '\n' >> browseList gs
 

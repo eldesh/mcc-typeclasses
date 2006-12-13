@@ -3,8 +3,7 @@
 -- Copyright (c) 2002-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
-module Set(Set, showSet,showsSet,
-           nullSet, zeroSet, unitSet, addToSet, deleteFromSet,
+module Set(Set, nullSet, zeroSet, unitSet, addToSet, deleteFromSet,
 	   elemSet, notElemSet, subsetSet, fromListSet, toListSet,
 	   unionSet, unionSets, intersectionSet, diffSet, symDiffSet,
 	   mapSet, domainFM) where
@@ -22,17 +21,13 @@ instance Eq a => Eq (Set a) where
   xs == ys = toListSet xs == toListSet ys
 instance Ord a => Ord (Set a) where
   xs `compare` ys = toListSet xs `compare` toListSet ys
-
-showSet :: Set a -> String
-showSet set = showsSet set ""
-
-showsSet :: Set a -> ShowS
-showsSet set =
-  case toListSet set of
-    [] -> showString "{}"
-    (x:xs) -> showChar '{' . shows x . showl xs
-      where showl [] = showChar '}'
-            showl (x:xs) = showChar ',' . shows x . showl xs
+instance Show a => Show (Set a) where
+  showsPrec _ set =
+    case toListSet set of
+      [] -> showString "{}"
+      (x:xs) -> showChar '{' . shows x . showl xs
+        where showl [] = showChar '}'
+              showl (x:xs) = showChar ',' . shows x . showl xs
 
 nullSet :: Set a -> Bool
 nullSet xs = null (toListSet xs)

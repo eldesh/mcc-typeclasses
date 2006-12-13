@@ -1,4 +1,4 @@
--- $Id: Random.curry 1744 2005-08-23 16:17:12Z wlux $
+-- $Id: Random.curry 2041 2006-12-13 09:43:43Z wlux $
 --
 -- Copyright (c) 2004, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -6,6 +6,9 @@
 module Random where
 
 data StdGen
+instance Show StdGen where
+  -- FIXME: use a dedicated primitive for this
+  showsPrec _ = shows where foreign import primitive shows :: a -> ShowS
 
 foreign import primitive genRange	   :: StdGen -> (Int,Int)
 foreign import primitive "nextStdGen" next :: StdGen -> (Int,StdGen)

@@ -1,4 +1,4 @@
--- $Id: AllSolutions.curry 2040 2006-12-13 08:06:51Z wlux $
+-- $Id: AllSolutions.curry 2041 2006-12-13 09:43:43Z wlux $
 --
 -- Copyright (c) 2004, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -10,7 +10,7 @@ module AllSolutions(SearchTree(..), getSearchTree, allValuesD, allValuesB,
 import Maybe
 import Monad
 
-data SearchTree a = Fail | Val a | Or [SearchTree a] deriving (Eq,Ord)
+data SearchTree a = Fail | Val a | Or [SearchTree a] deriving (Eq,Ord,Show)
 
 foreign import primitive encapsulate :: a -> IO (a -> Success)
 

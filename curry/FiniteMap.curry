@@ -4,8 +4,7 @@
 -- See ../LICENSE for the full license.
 
 module FiniteMap(FM, nullFM, zeroFM, unitFM, addToFM, deleteFromFM,
-                 lookupFM, fromListFM, toListFM,
-                 showFM, showsFM, mapFM) where
+                 lookupFM, fromListFM, toListFM, mapFM) where
 
 data FM a b =
     Empty
@@ -14,6 +13,14 @@ data FM a b =
 
 instance (Eq a, Eq b) => Eq (FM a b) where
   xys1 == xys2 = toListFM xys1 == toListFM xys2
+instance (Show a, Show b) => Show (FM a b) where
+  showsPrec _ xys =
+    case toListFM xys of
+      [] -> showString "{}"
+      (xy:xys) -> showChar '{' . showp xy . showl xys
+        where showl [] = showChar '}'
+              showl (xy:xys) = showChar ',' . showp xy . showl xys
+              showp (x,y) = showsPrec 11 x . showString ":=" . showsPrec 11 y
 
 nullFM :: FM a b -> Bool
 nullFM Empty             = True
@@ -142,18 +149,6 @@ toListFM = flip elems []
   where elems Empty xs = xs
         elems (Node2 a x b) xs = elems a (x : elems b xs)
         elems (Node3 a x b y c) xs = elems a (x : elems b (y : elems c xs))
-
-showFM :: FM a b -> String
-showFM xys = showsFM xys ""
-
-showsFM :: FM a b -> ShowS
-showsFM xys =
-  case toListFM xys of
-    [] -> showString "{}"
-    (xy:xys) -> showChar '{' . showp xy . showl xys
-      where showl [] = showChar '}'
-            showl (xy:xys) = showChar ',' . showp xy . showl xys
-            showp (x,y) = shows x . showString "|->" . shows y
 
 mapFM :: (b -> c) -> FM a b -> FM a c
 mapFM f Empty = Empty

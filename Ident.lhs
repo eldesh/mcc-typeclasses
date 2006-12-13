@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Ident.lhs 2039 2006-12-12 12:20:09Z wlux $
+% $Id: Ident.lhs 2041 2006-12-13 09:43:43Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -34,13 +34,14 @@ unqualified identifier.}
 >              emptyMIdent,preludeMIdent,debugPreludeMIdent,
 >              ptrMIdent,stablePtrMIdent,
 >              anonId,unitId,boolId,charId,intId,floatId,listId,arrowId,ioId,
->              eqId,ordId,enumId,boundedId,numId,fractionalId,
+>              eqId,ordId,enumId,boundedId,showId,numId,fractionalId,
 >              ptrId,funPtrId,stablePtrId,
 >              successId,trueId,falseId,nilId,consId,mainId,
 >              tupleId,isTupleId,tupleArity,selectorId,isSelectorId,
 >              minusId,
 >              qUnitId,qBoolId,qCharId,qIntId,qFloatId,qListId,qArrowId,qIOId,
->              qSuccessId,qEqId,qOrdId,qEnumId,qBoundedId,qNumId,qFractionalId,
+>              qSuccessId,qEqId,qOrdId,qEnumId,qBoundedId,qShowId,
+>              qNumId,qFractionalId,
 >              qPtrId,qFunPtrId,qStablePtrId,qTrueId,qFalseId,qNilId,qConsId,
 >              qTupleId,isQTupleId,qTupleArity,isQSelectorId) where
 > import Char
@@ -174,11 +175,12 @@ A few identifiers a predefined here.
 > ioId      = Ident "IO" 0
 > successId = Ident "Success" 0
 
-> eqId, ordId, enumId, boundedId, numId, fractionalId :: Ident
+> eqId, ordId, enumId, boundedId, showId, numId, fractionalId :: Ident
 > eqId = Ident "Eq" 0
 > ordId = Ident "Ord" 0
 > enumId = Ident "Enum" 0
 > boundedId = Ident "Bounded" 0
+> showId = Ident "Show" 0
 > numId = Ident "Num" 0
 > fractionalId = Ident "Fractional" 0
 
@@ -233,11 +235,13 @@ A few identifiers a predefined here.
 > qSuccessId = QualIdent preludeMIdent successId
 > qIOId = QualIdent preludeMIdent ioId
 
-> qEqId, qOrdId, qEnumId, qBoundedId, qNumId, qFractionalId :: QualIdent
+> qEqId, qOrdId, qEnumId, qBoundedId, qShowId :: QualIdent
+> qNumId, qFractionalId :: QualIdent
 > qEqId = QualIdent preludeMIdent eqId
 > qOrdId = QualIdent preludeMIdent ordId
 > qEnumId = QualIdent preludeMIdent enumId
 > qBoundedId = QualIdent preludeMIdent boundedId
+> qShowId = QualIdent preludeMIdent showId
 > qNumId = QualIdent preludeMIdent numId
 > qFractionalId = QualIdent preludeMIdent fractionalId
 

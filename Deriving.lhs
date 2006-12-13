@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2039 2006-12-12 12:20:09Z wlux $
+% $Id: Deriving.lhs 2041 2006-12-13 09:43:43Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -35,6 +35,7 @@ This module implements the code generating derived instance declarations.
 >   | cls' == qOrdId = ordMethods p cs
 >   | cls' == qEnumId = enumMethods p cs
 >   | cls' == qBoundedId = boundedMethods p cs
+>   | cls' == qShowId = showMethods p cs
 >   | otherwise = errorAt p (notDerivable cls)
 >   where cls' = origName (head (qualLookupTopEnv cls tcEnv))
 
@@ -288,6 +289,76 @@ all arguments.
 >   apply (Constructor () c) (replicate n prelMaxBound)
 
 \end{verbatim}
+\paragraph{String Representation}
+Instances of \texttt{Show} can be derived for all data types. We
+derive only an implementation of \texttt{showsPrec} and rely on the
+default implementations of \texttt{show} and \texttt{showList}. Note
+that in contrast to the \texttt{show} function in the current Curry
+report, \texttt{showsPrec} is a flexible function. For instance,
+\texttt{let x :: Bool; x free in show x} non-deterministically binds
+\texttt{x} to one of the constants \verb|False| and \verb|True| and
+returns its string representation \verb|"False"| and \verb|"True"|,
+respectively.
+\begin{verbatim}
+
+> showMethods :: Monad m => Position -> [Constr]
+>             -> DeriveState m [MethodDecl ()]
+> showMethods p cs = sequence [deriveShowsPrec p cs]
+
+> deriveShowsPrec :: Monad m => Position -> [Constr]
+>                 -> DeriveState m (MethodDecl ())
+> deriveShowsPrec p cs = liftM (MethodDecl p f) (mapM (showsPrecEqn p f) cs)
+>   where f = showsPrecId
+
+> showsPrecEqn :: Monad m => Position -> Ident -> Constr
+>              -> DeriveState m (Equation ())
+> showsPrecEqn p f (c,n) =
+>   do
+>     l <- freshIdent
+>     xs <- freshIdents n
+>     return (equation p f (showsPrecMatch l c xs) (showsPrecExpr l c xs))
+
+> showsPrecMatch :: Ident -> QualIdent -> [Ident] -> [ConstrTerm ()]
+> showsPrecMatch l c xs =
+>   [VariablePattern () l,ConstructorPattern () c (map (VariablePattern ()) xs)]
+
+> showsPrecExpr :: Ident -> QualIdent -> [Ident] -> Expression ()
+> showsPrecExpr l c xs
+>   | null xs = showsPrecShowString (showsCon c' "")
+>   | isInfixOp c' && length xs == 2 =
+>       -- FIXME: use the operator's real precedence
+>       --     => need the operator precedence environment here
+>       showsPrecShowParen l 9 (showsPrecShowInfixApp 9 c' xs)
+>   | otherwise = showsPrecShowParen l 10 (showsPrecShowApp 10 c' xs)
+>   where c' = unqualify c
+
+> showsCon :: Ident -> ShowS
+> showsCon c = showParen (isInfixOp c) (showString (name c))
+
+> showsPrecShowString :: String -> Expression ()
+> showsPrecShowString s = prelShowString (Literal () (String s))
+
+> showsPrecShowParen :: Ident -> Int -> Expression () -> Expression ()
+> showsPrecShowParen l p =
+>   prelShowParen (prelGt (mkVar l) (Literal () (Int p)))
+
+> showsPrecShowApp :: Int -> Ident -> [Ident] -> Expression ()
+> showsPrecShowApp p c xs =
+>   foldr1 prelDot $
+>   showsPrecShowString (showsCon c " ") :
+>   intersperse (prelShowChar (Literal () (Char ' ')))
+>               (map (showsPrecShowArg p) xs)
+
+> showsPrecShowInfixApp :: Int -> Ident -> [Ident] -> Expression ()
+> showsPrecShowInfixApp p op xs =
+>   foldr1 prelDot $
+>   intersperse (showsPrecShowString ((' ' : name op ++ " ")))
+>               (map (showsPrecShowArg p) xs)
+
+> showsPrecShowArg :: Int -> Ident -> Expression ()
+> showsPrecShowArg p = prelShowsPrec (Literal () (Int (p + 1))) . mkVar
+
+\end{verbatim}
 \paragraph{Auxiliary functions}
 \begin{verbatim}
 
@@ -338,15 +409,29 @@ all arguments.
 > prelMinBound = Variable () qMinBoundId
 > prelMaxBound = Variable () qMaxBoundId
 
+> prelShowsPrec :: Expression () -> Expression () -> Expression ()
+> prelShowsPrec x y = apply (Variable () qShowsPrecId) [x,y]
+
+> prelShowParen :: Expression () -> Expression () -> Expression ()
+> prelShowParen x y = apply (Variable () qShowParenId) [x,y]
+
+> prelShowChar, prelShowString :: Expression () -> Expression ()
+> prelShowChar x = apply (Variable () qShowCharId) [x]
+> prelShowString x = apply (Variable () qShowStringId) [x]
+
 > type BinOp a = Expression a -> Expression a -> Expression a
+
+> prelDot :: BinOp ()
+> prelDot = binOp qDotOpId
 
 > prelAnd, prelEq :: BinOp ()
 > prelAnd = binOp qAndOpId
 > prelEq = binOp qEqOpId
 
-> prelCompare, prelLeq :: BinOp ()
+> prelCompare, prelLeq, prelGt :: BinOp ()
 > prelCompare = binOp qCompareId
 > prelLeq = binOp qLeqOpId
+> prelGt = binOp qGtOpId
 
 > binOp :: QualIdent -> BinOp ()
 > binOp op x y = InfixApply x (InfixOp () op) y
@@ -355,11 +440,14 @@ all arguments.
 Additional prelude identifiers.
 \begin{verbatim}
 
-> eqOpId, leqOpId, andOpId, compareId, succId, predId :: Ident
+> dotOpId, eqOpId, leqOpId, gtOpId, andOpId, compareId, succId, predId :: Ident
 > fromEnumId, toEnumId, enumFromId, enumFromThenId :: Ident
 > minBoundId, maxBoundId :: Ident
+> showsPrecId, showParenId, showCharId, showStringId :: Ident
+> dotOpId = mkIdent "."
 > eqOpId = mkIdent "=="
 > leqOpId = mkIdent "<="
+> gtOpId = mkIdent ">"
 > andOpId = mkIdent "&&"
 > compareId = mkIdent "compare"
 > succId = mkIdent "succ"
@@ -372,11 +460,17 @@ Additional prelude identifiers.
 > enumFromThenToId = mkIdent "enumFromThenTo"
 > minBoundId = mkIdent "minBound"
 > maxBoundId = mkIdent "maxBound"
+> showsPrecId = mkIdent "showsPrec"
+> showParenId = mkIdent "showParen"
+> showCharId = mkIdent "showChar"
+> showStringId = mkIdent "showString"
 
-> qAndOpId, qEqOpId, qLeqOpId, qCompareId :: QualIdent
+> qDotOpId, qAndOpId, qEqOpId, qLeqOpId, qGtOpId, qCompareId :: QualIdent
+> qDotOpId = qualifyWith preludeMIdent dotOpId
 > qAndOpId = qualifyWith preludeMIdent andOpId
 > qEqOpId = qualifyWith preludeMIdent eqOpId
 > qLeqOpId = qualifyWith preludeMIdent leqOpId
+> qGtOpId = qualifyWith preludeMIdent gtOpId
 > qCompareId = qualifyWith preludeMIdent compareId
 
 > qFromEnumId, qEnumFromToId, qEnumFromThenToId :: QualIdent
@@ -387,6 +481,12 @@ Additional prelude identifiers.
 > qMinBoundId, qMaxBoundId :: QualIdent
 > qMinBoundId = qualifyWith preludeMIdent minBoundId
 > qMaxBoundId = qualifyWith preludeMIdent maxBoundId
+
+> qShowsPrecId, qShowParenId, qShowCharId, qShowStringId :: QualIdent
+> qShowsPrecId = qualifyWith preludeMIdent showsPrecId
+> qShowParenId = qualifyWith preludeMIdent showParenId
+> qShowCharId = qualifyWith preludeMIdent showCharId
+> qShowStringId = qualifyWith preludeMIdent showStringId
 
 > qLTId, qEQId, qGTId :: QualIdent
 > qLTId = qualifyWith preludeMIdent (mkIdent "LT")

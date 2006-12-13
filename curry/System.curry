@@ -1,4 +1,4 @@
--- $Id: System.curry 2039 2006-12-12 12:20:09Z wlux $
+-- $Id: System.curry 2041 2006-12-13 09:43:43Z wlux $
 --
 -- Copyright (c) 2002-2005, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -12,7 +12,7 @@ import CString
 import CError
 import MarshalError
 
-data ExitCode = ExitSuccess | ExitFailure Int deriving (Eq,Ord)
+data ExitCode = ExitSuccess | ExitFailure Int deriving (Eq,Ord,Show)
 
 foreign import ccall curry_argc :: IO Int
 foreign import ccall curry_argv :: IO (Ptr CString)

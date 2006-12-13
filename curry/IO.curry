@@ -17,20 +17,23 @@ data Handle
 instance Eq Handle where
   (==) = primEqHandle
     where foreign import primitive primEqHandle :: Handle -> Handle -> Bool
+instance Show Handle where
+  -- FIXME: use a dedicated primitive for this
+  showsPrec _ = shows where foreign import primitive shows :: a -> ShowS
 
-data HandlePosn	= HandlePosn Handle Int deriving Eq
+data HandlePosn	= HandlePosn Handle Int deriving (Eq,Show)
 
 data IOMode =
   ReadMode | WriteMode | AppendMode | ReadWriteMode
-  deriving (Eq,Ord,Bounded,Enum)
+  deriving (Eq,Ord,Bounded,Enum,Show)
 
 data BufferMode =
   NoBuffering | LineBuffering | BlockBuffering (Maybe Int)
-  deriving (Eq,Ord)
+  deriving (Eq,Ord,Show)
 
 data SeekMode =
   AbsoluteSeek | RelativeSeek | SeekFromEnd
-  deriving (Eq,Ord,Bounded,Enum)
+  deriving (Eq,Ord,Bounded,Enum,Show)
 
 --- Predefined handles for standard input, output, and error
 foreign import primitive stdin  :: Handle
@@ -94,7 +97,7 @@ hPutStrLn :: Handle -> String -> IO ()
 hPutStrLn h cs = hPutStr h cs >> hPutChar h '\n'
 
 --- Action that converts a term into a strings and writes it to an open handle.
-hPrint :: Handle -> a -> IO ()
+hPrint :: Show a => Handle -> a -> IO ()
 hPrint h x = hPutStrLn h (show x)
 
 --- Action to determine the current buffer mode of a handle.

@@ -1,4 +1,4 @@
--- $Id: ForeignPtr.curry 2013 2006-11-16 14:10:51Z wlux $
+-- $Id: ForeignPtr.curry 2041 2006-12-13 09:43:43Z wlux $
 --
 -- Copyright (c) 2005, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -16,6 +16,8 @@ instance Eq (ForeignPtr a) where
   p1 == p2 = unsafeForeignPtrToPtr p1 == unsafeForeignPtrToPtr p2
 instance Ord (ForeignPtr a) where
   p1 `compare` p2 = unsafeForeignPtrToPtr p1 `compare` unsafeForeignPtrToPtr p2
+instance Show (ForeignPtr a) where
+  showsPrec p = showsPrec p . unsafeForeignPtrToPtr
 
 foreign import primitive "newForeignPtr"
         newForeignPtr_ :: Ptr a -> IO (ForeignPtr a)

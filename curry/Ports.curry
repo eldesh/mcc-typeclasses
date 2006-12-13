@@ -1,4 +1,4 @@
--- $Id: Ports.curry 2039 2006-12-12 12:20:09Z wlux $
+-- $Id: Ports.curry 2041 2006-12-13 09:43:43Z wlux $
 --
 -- Copyright (c) 2004-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -43,7 +43,7 @@ data SP_Msg = SP_Put String
             | SP_GetChar Char
             | SP_EOF Bool
             | SP_Close
-            deriving (Eq,Ord)
+            deriving (Eq,Ord,Show)
 
 openProcessPort :: String -> IO (Port SP_Msg)
 openProcessPort cmd =

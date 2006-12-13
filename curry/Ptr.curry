@@ -1,4 +1,4 @@
--- $Id: Ptr.curry 2024 2006-11-27 23:33:32Z wlux $
+-- $Id: Ptr.curry 2041 2006-12-13 09:43:43Z wlux $
 --
 -- Copyright (c) 2005, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -21,6 +21,9 @@ instance Ord (Ptr a) where
     where foreign import ccall "prims.h" primGeqPtr :: Ptr a -> Ptr a -> Bool
   (>) = primGtPtr
     where foreign import ccall "prims.h" primGtPtr :: Ptr a -> Ptr a -> Bool
+instance Show (Ptr a) where
+  -- FIXME: use a dedicated primitive for this
+  showsPrec _ = shows where foreign import primitive shows :: a -> ShowS
 
 foreign import ccall "prims.h primNullPtr" nullPtr :: Ptr a
 foreign import ccall "prims.h primCastPtr" castPtr :: Ptr a -> Ptr b
@@ -45,6 +48,8 @@ instance Ord (FunPtr a) where
     where foreign import ccall "prims.h" primGeqPtr :: FunPtr a -> FunPtr a -> Bool
   (>) = primGtPtr
     where foreign import ccall "prims.h" primGtPtr :: FunPtr a -> FunPtr a -> Bool
+instance Show (FunPtr a) where
+  showsPrec p = showsPrec p . castFunPtrToPtr
 
 foreign import ccall "prims.h primNullPtr" nullFunPtr :: FunPtr a
 foreign import ccall "prims.h primCastPtr" castFunPtr :: FunPtr a -> FunPtr b

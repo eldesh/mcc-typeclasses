@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: data.nw 1910 2006-05-01 09:37:16Z wlux $
+% $Id: data.nw 2041 2006-12-13 09:43:43Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -55,7 +55,7 @@ DECLARE_CONST(__Success);
 DEFINE_CONST(___40__41_, "()", UNIT_TAG);
 DEFINE_CONST(___91__93_, "[]", NIL_TAG);
 DEFINE_DATA(___58_, ":", CONS_TAG, 2);
-DEFINE_CONST(__Success, "Success", SUCCESS_TAG);
+DEFINE_CONST(__Success, "success", SUCCESS_TAG);
 
 @ 
 The functions [[___40__41__unify]], [[___91__93__unify]], and

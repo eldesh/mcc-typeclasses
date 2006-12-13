@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2041 2006-12-13 09:43:43Z wlux $
+% $Id: Deriving.lhs 2043 2006-12-13 22:03:58Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -12,24 +12,74 @@ This module implements the code generating derived instance declarations.
 > module Deriving(derive) where
 > import Base
 > import Combined
+> import Env
 > import Error
 > import List
+> import Maybe
 > import Monad
 > import TopEnv
 
+> derive :: ModuleIdent -> TCEnv -> InstEnv -> [TopDecl ()]
+>         -> Error [TopDecl ()]
+> derive m tcEnv iEnv ds =
+>   do
+>     dss' <- run (mapM (deriveInstances m tcEnv iEnv) ds)
+>     return (ds ++ concat dss')
+
+\end{verbatim}
+When deriving instance declarations, the compiler must introduce fresh
+variables which are distinct from all other variables in the program.
+Furthermore, the fresh variables must use a non-zero renaming key. We
+use a state monad once more for the introduction of fresh variables.
+\begin{verbatim}
+
+> type DeriveState a = StateT [Ident] Error a
+
+> run :: DeriveState a -> Error a
+> run m = callSt m [renameIdent (mkIdent ("_#" ++ show i)) 1 | i <- [1..]]
+
+> freshIdent :: DeriveState Ident
+> freshIdent = liftM head (updateSt tail)
+
+> freshIdents :: Int -> DeriveState [Ident]
+> freshIdents n = liftM (take n) (updateSt (drop n))
+
+\end{verbatim}
+Note that instances can be derived only for a set of predefined
+classes. An error is reported if the user asks for instances of other
+classes be derived.
+\begin{verbatim}
+
 > type Constr = (QualIdent,Int)
 
-> derive :: Monad m => ModuleIdent -> TCEnv -> Int -> Position -> [ClassAssert]
->        -> Ident -> [Ident] -> [ConstrDecl] -> QualIdent -> m (TopDecl ())
-> derive m tcEnv n p cx tc tvs cs cls =
->   liftM (InstanceDecl p cx cls ty)
->         (run (deriveMethods tcEnv p (map constr cs) cls) n)
->   where ty = ConstructorType (qualifyWith m tc) (map VariableType tvs)
+> deriveInstances :: ModuleIdent -> TCEnv -> InstEnv -> TopDecl ()
+>                 -> DeriveState [TopDecl ()]
+> deriveInstances m tcEnv iEnv (DataDecl p _ tc tvs cs clss) =
+>   mapM (deriveInstance m tcEnv iEnv p tc tvs cs) clss
+> deriveInstances m tcEnv iEnv (NewtypeDecl p _ tc tvs nc clss) =
+>   mapM (deriveInstance m tcEnv iEnv p tc tvs [constrDecl nc]) clss
+>   where constrDecl (NewConstrDecl p c ty) = ConstrDecl p [] c [ty]
+> deriveInstances _ _ _ _ = return []
+
+> deriveInstance :: ModuleIdent -> TCEnv -> InstEnv -> Position
+>                -> Ident -> [Ident] -> [ConstrDecl] -> QualIdent
+>                -> DeriveState (TopDecl ())
+> deriveInstance m tcEnv iEnv p tc tvs cs cls =
+>   liftM (InstanceDecl p (map (toClassAssert tvs) cx) cls ty)
+>         (deriveMethods tcEnv p (map constr cs) cls)
+>   where cx = fromJust (lookupEnv (CT cls' tc') iEnv)
+>         ty = ConstructorType (qualifyWith m tc) (map VariableType tvs)
+>         tc' = qualifyWith m tc
+>         cls' = origName (head (qualLookupTopEnv cls tcEnv))
 >         constr (ConstrDecl _ _ c tys) = (qualifyWith m c,length tys)
 >         constr (ConOpDecl _ _ _ op _) = (qualifyWith m op,2)
+>         toClassAssert tvs (TypePred cls (TypeVariable n)) =
+>           ClassAssert (qualUnqualify m cls) (tvs !! n)
+>           -- FIXME: this context may contain improperly qualified
+>           --        identifiers when as renamings are used
 
-> deriveMethods :: Monad m => TCEnv -> Position -> [Constr]
->               -> QualIdent -> DeriveState m [MethodDecl ()]
+> deriveMethods :: TCEnv -> Position -> [Constr] -> QualIdent
+>               -> DeriveState [MethodDecl ()]
 > deriveMethods tcEnv p cs cls
 >   | cls' == qEqId = eqMethods p cs
 >   | cls' == qOrdId = ordMethods p cs
@@ -38,26 +88,6 @@ This module implements the code generating derived instance declarations.
 >   | cls' == qShowId = showMethods p cs
 >   | otherwise = errorAt p (notDerivable cls)
 >   where cls' = origName (head (qualLookupTopEnv cls tcEnv))
-
-\end{verbatim}
-When deriving instance declarations, the compiler must introduce fresh
-variables which are distinct from all other variables in the program.
-Furthermore, the fresh variables must use a non-zero renaming key. For
-that reason, the \texttt{derive} function must be applied to a
-different renaming key for each derived instance. We use a state monad
-once more for the introduction of fresh variables.
-\begin{verbatim}
-
-> type DeriveState m a = StateT [Ident] m a
-
-> run :: Monad m => DeriveState m a -> Int -> m a
-> run m n = callSt m [renameIdent (mkIdent ("_#" ++ show i)) n | i <- [1..]]
-
-> freshIdent :: Monad m => DeriveState m Ident
-> freshIdent = liftM head (updateSt tail)
-
-> freshIdents :: Monad m => Int -> DeriveState m [Ident]
-> freshIdents n = liftM (take n) (updateSt (drop n))
 
 \end{verbatim}
 \paragraph{Equality}
@@ -71,30 +101,30 @@ is rigid like the polymorphic equality operator in the current Curry
 report.
 \begin{verbatim}
 
-> eqMethods :: Monad m => Position -> [Constr] -> DeriveState m [MethodDecl ()]
+> eqMethods :: Position -> [Constr] -> DeriveState [MethodDecl ()]
 > eqMethods p cs = sequence [deriveEq p cs]
 
-> deriveEq :: Monad m => Position -> [Constr] -> DeriveState m (MethodDecl ())
+> deriveEq :: Position -> [Constr] -> DeriveState (MethodDecl ())
 > deriveEq p cs =
 >   do
 >     x <- freshIdent
 >     y <- freshIdent
 >     liftM (methodDecl p eqOpId [x,y] . Case (mkVar x)) (mapM (eqCase p y) cs)
 
-> eqCase :: Monad m => Position -> Ident -> Constr -> DeriveState m (Alt ())
+> eqCase :: Position -> Ident -> Constr -> DeriveState (Alt ())
 > eqCase p y (c,n) =
 >   do
 >     xs <- freshIdents n
 >     liftM (caseAlt p (conPattern c xs) . Case (mkVar y))
 >           (sequence [eqEqCase p xs (c,n),eqNeqCase p])
 
-> eqEqCase :: Monad m => Position -> [Ident] -> Constr -> DeriveState m (Alt ())
+> eqEqCase :: Position -> [Ident] -> Constr -> DeriveState (Alt ())
 > eqEqCase p xs (c,n) =
 >   do
 >     ys <- freshIdents n
 >     return (caseAlt p (conPattern c ys) (eqCaseArgs p xs ys))
 
-> eqNeqCase :: Monad m => Position -> DeriveState m (Alt ())
+> eqNeqCase :: Position -> DeriveState (Alt ())
 > eqNeqCase p =
 >   do
 >     x <- freshIdent
@@ -122,11 +152,10 @@ default implementations.
   enumeration types.}
 \begin{verbatim}
 
-> ordMethods :: Monad m => Position -> [Constr] -> DeriveState m [MethodDecl ()]
+> ordMethods :: Position -> [Constr] -> DeriveState [MethodDecl ()]
 > ordMethods p cs = sequence [deriveCompare p cs]
 
-> deriveCompare :: Monad m => Position -> [Constr]
->               -> DeriveState m (MethodDecl ())
+> deriveCompare :: Position -> [Constr] -> DeriveState (MethodDecl ())
 > deriveCompare p cs =
 >   do
 >     x <- freshIdent
@@ -137,8 +166,8 @@ default implementations.
 >         splits (x:xs) =
 >           ([],x,xs) : map (\(ys,z,zs) -> (x:ys,z,zs)) (splits xs)
 
-> cmpCase :: Monad m => Position -> Ident -> ([Constr],Constr,[Constr])
->         -> DeriveState m (Alt ())
+> cmpCase :: Position -> Ident -> ([Constr],Constr,[Constr])
+>         -> DeriveState (Alt ())
 > cmpCase p y (csLT,(c,n),csGT) =
 >   do
 >     xs <- freshIdents n
@@ -146,15 +175,13 @@ default implementations.
 >           (sequence (map (cmpNeqCase p prelGT) csLT ++
 >                      cmpEqCase p xs (c,n) : map (cmpNeqCase p prelLT) csGT))
 
-> cmpEqCase :: Monad m => Position -> [Ident] -> Constr
->           -> DeriveState m (Alt ())
+> cmpEqCase :: Position -> [Ident] -> Constr -> DeriveState (Alt ())
 > cmpEqCase p xs (c,n) =
 >   do
 >     ys <- freshIdents n
 >     return (caseAlt p (conPattern c ys) (cmpCaseArgs p xs ys))
 
-> cmpNeqCase :: Monad m => Position -> Expression () -> Constr
->            -> DeriveState m (Alt ())
+> cmpNeqCase :: Position -> Expression () -> Constr -> DeriveState (Alt ())
 > cmpNeqCase p z (c,n) =
 >   do
 >     ys <- freshIdents n
@@ -190,8 +217,7 @@ like \verb|[False ..]| well defined.
 > isEnum [] = False
 > isEnum (c:cs) = all ((0 ==) . snd) (c:cs)
 
-> enumMethods :: Monad m => Position -> [Constr]
->             -> DeriveState m [MethodDecl ()]
+> enumMethods :: Position -> [Constr] -> DeriveState [MethodDecl ()]
 > enumMethods p cs
 >   | isEnum cs = sequence [succ,pred,toEnum,fromEnum,enumFrom,enumFromThen]
 >   | otherwise = errorAt p notEnum
@@ -218,16 +244,15 @@ like \verb|[False ..]| well defined.
 > deriveToEnum p cs = MethodDecl p f (zipWith (toEnumEqn p f) [0..] cs)
 >   where f = toEnumId
 
-> deriveEnumFrom :: Monad m => Position -> Constr
->                -> DeriveState m (MethodDecl ())
+> deriveEnumFrom :: Position -> Constr -> DeriveState (MethodDecl ())
 > deriveEnumFrom p (c,n) =
 >   do
 >     x <- freshIdent
 >     return (methodDecl p enumFromId [x] $
 >             prelEnumFromTo (mkVar x) (Constructor () c))
 
-> deriveEnumFromThen :: Monad m => Position -> Constr -> Constr
->                    -> DeriveState m (MethodDecl ())
+> deriveEnumFromThen :: Position -> Constr -> Constr
+>                    -> DeriveState (MethodDecl ())
 > deriveEnumFromThen p c1 c2 =
 >   do
 >     x <- freshIdent
@@ -270,8 +295,8 @@ all arguments.
 > isBounded :: [Constr] -> Bool
 > isBounded cs = length cs == 1 || isEnum cs
 
-> boundedMethods :: Monad m => Position -> [Constr]
->                -> DeriveState m [MethodDecl ()]
+> boundedMethods :: Position -> [Constr]
+>                -> DeriveState [MethodDecl ()]
 > boundedMethods p cs
 >   | isBounded cs = return [minBound,maxBound]
 >   | otherwise = errorAt p notBounded
@@ -301,17 +326,14 @@ returns its string representation \verb|"False"| and \verb|"True"|,
 respectively.
 \begin{verbatim}
 
-> showMethods :: Monad m => Position -> [Constr]
->             -> DeriveState m [MethodDecl ()]
+> showMethods :: Position -> [Constr] -> DeriveState [MethodDecl ()]
 > showMethods p cs = sequence [deriveShowsPrec p cs]
 
-> deriveShowsPrec :: Monad m => Position -> [Constr]
->                 -> DeriveState m (MethodDecl ())
+> deriveShowsPrec :: Position -> [Constr] -> DeriveState (MethodDecl ())
 > deriveShowsPrec p cs = liftM (MethodDecl p f) (mapM (showsPrecEqn p f) cs)
 >   where f = showsPrecId
 
-> showsPrecEqn :: Monad m => Position -> Ident -> Constr
->              -> DeriveState m (Equation ())
+> showsPrecEqn :: Position -> Ident -> Constr -> DeriveState (Equation ())
 > showsPrecEqn p f (c,n) =
 >   do
 >     l <- freshIdent

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2042 2006-12-13 09:50:04Z wlux $
+% $Id: TypeCheck.lhs 2043 2006-12-13 22:03:58Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -29,7 +29,6 @@ type annotation is present.
 > import TypeSubst
 > import TypeTrans
 > import Combined
-> import Deriving
 > import Error
 > import List
 > import Maybe
@@ -50,26 +49,18 @@ current module into the type environment.
 \begin{verbatim}
 
 > typeCheck :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv -> [TopDecl a]
->           -> Error (InstEnv,ValueEnv,[TopDecl Type])
+>           -> Error (ValueEnv,[TopDecl Type])
 > typeCheck m tcEnv iEnv tyEnv ds =
->   do
->     iEnv' <- foldM (bindDerivedInstances m tcEnv)
->                    (foldr (bindInstance tcEnv) iEnv tds)
->                    (sortDeriving m tds)
->     run (do
->            idss <- mapM (deriveInstances m tcEnv iEnv') tds
->            (cx,vds') <- tcDecls m tcEnv [d | BlockDecl d <- vds]
->            unless (null cx) (internalError ("typeCheck " ++ show cx))
->            tds' <- mapM (tcTopDecl m tcEnv) tds
->            ids' <- mapM (tcTopDecl m tcEnv) (concat idss)
->            tyEnv' <- fetchSt
->            theta <- liftSt fetchSt
->            return (iEnv',
->                    subst theta tyEnv',
->                    map (fmap (subst theta))
->                        (tds' ++ ids' ++ map BlockDecl vds')))
->         iEnv'
->         (foldr (bindTypeValues m tcEnv) tyEnv tds)
+>   run (do
+>          (cx,vds') <- tcDecls m tcEnv [d | BlockDecl d <- vds]
+>          unless (null cx) (internalError ("typeCheck " ++ show cx))
+>          tds' <- mapM (tcTopDecl m tcEnv) tds
+>          tyEnv' <- fetchSt
+>          theta <- liftSt fetchSt
+>          return (subst theta tyEnv',
+>                  map (fmap (subst theta)) (tds' ++ map BlockDecl vds')))
+>       iEnv
+>       (foldr (bindTypeValues m tcEnv) tyEnv tds)
 >   where (vds,tds) = partition isBlockDecl ds
 
 \end{verbatim}
@@ -147,189 +138,6 @@ type synonyms occurring in their types are expanded.
 
 > bindMethod :: ModuleIdent -> TypeScheme -> Ident -> ValueEnv -> ValueEnv
 > bindMethod m ty f = globalBindTopEnv m f (Value (qualifyWith m f) ty)
-
-\end{verbatim}
-\paragraph{Defining Instances}
-Besides adding types of constructors and methods to the type
-environment, the compiler also adds all instances declared in the
-current module to the instance environment. The main problem here is
-that we have to infer the contexts of derived instance declarations.
-Given a data type declaration
-\begin{displaymath}
-  \mbox{\texttt{data} \emph{cx} $\Rightarrow$ $T$ $u_1$ $\dots\;u_k$
-    \texttt{=} $K_1$ $t_{11}$ $\dots\;t_{1k_1}$
-    \texttt{|} \dots \texttt{|}
-    $K_n$ $t_{n1}$ $\dots\;t_{nk_n}$
-    \texttt{deriving} \texttt{(}$C_1, \dots, C_m$\texttt{)}}
-\end{displaymath}
-the context of the instance declaration derived for a class $C \in
-\left\{ C_1, \dots, C_m \right\}$ must be of the form $(\emph{cx},
-\emph{cx}')$ such that $\emph{cx'} \Rightarrow C\,t_{ij}$ holds for
-each constituent type $t_{ij}$ of the data type declaration and that
-\emph{cx'} is the minimal context for which this property holds
-(cf.\ Chap.~10 of~\cite{PeytonJones03:Haskell}). In the case of
-(mutually) recursive data types, inference of the appropriate contexts
-may require a fixpoint calculation.
-
-The compiler first adds the contexts of all explicit instance
-declarations to the instance environment. Next, the compiler sorts the
-data and newtype declarations with non-empty deriving clauses into
-minimal binding groups and infers contexts for their instance
-declarations, and finally the compiler checks the contexts of all
-explicit instance declarations detecting missing super class
-instances. Note that this check is performed in \texttt{tcTopDecl}
-below.
-
-While inferring instance contexts, the compiler must carefully respect
-the super class hierarchy so that super class instances are added to
-the instance environment before instances of their subclasses.
-
-\ToDo{Factor out this code into a separate module together with
-  instance head checking, which is currently done in
-  \texttt{tcTopDecl}. Note that this means that the code used by
-  \texttt{reduceContext} will have to be made accessible to the new
-  module, too.}
-\begin{verbatim}
-
-> bindInstance :: TCEnv -> TopDecl a -> InstEnv -> InstEnv
-> bindInstance tcEnv (InstanceDecl _ cx cls ty _) =
->   bindEnv (CT cls' (fst (unapplyType ty'))) cx'
->   where cls' = origName (head (qualLookupTopEnv cls tcEnv))
->         ForAll _ (QualType cx' ty') =
->           expandPolyType tcEnv (QualTypeExpr cx ty)
-> bindInstance _ _ = id
-
-> bindDerivedInstances :: Monad m => ModuleIdent -> TCEnv -> InstEnv
->                      -> [TopDecl a] -> m InstEnv
-> bindDerivedInstances m tcEnv iEnv [DataDecl p cx tc tvs cs clss]
->   | null cs = errorAt p noAbstractDerive
->   | any (`notElem` tvs) (fv tys) = errorAt p noExistentialDerive
->   | tc `notElem` foldr (ft m) [] tys =
->       foldM (bindDerived m tcEnv p cx tc tvs tys) iEnv
->             (sortClasses tcEnv clss)
->   where tys = concatMap constrTypes cs
-> bindDerivedInstances m tcEnv iEnv
->                      [NewtypeDecl p cx tc tvs (NewConstrDecl _ _ ty) clss]
->   | tc `notElem` ft m ty [] =
->       foldM (bindDerived m tcEnv p cx tc tvs [ty]) iEnv
->             (sortClasses tcEnv clss)
-> bindDerivedInstances m tcEnv iEnv ds =
->   foldM (bindInitialContexts m tcEnv) iEnv ds >>=
->   fixpoint (\iEnv' -> updateContexts iEnv' . concat)
->            (\iEnv' -> mapM (inferContexts m tcEnv iEnv') ds)
->   where fixpoint f m x = m x >>= maybe (return x) (fixpoint f m) . f x
-
-> bindDerived :: Monad m => ModuleIdent -> TCEnv -> Position -> [ClassAssert]
->             -> Ident -> [Ident] -> [TypeExpr] -> InstEnv -> QualIdent
->             -> m InstEnv
-> bindDerived m tcEnv p cx tc tvs tys iEnv cls =
->   liftM (flip (uncurry bindEnv) iEnv)
->         (inferContext m tcEnv iEnv p cx tc tvs tys cls)
-
-> bindInitialContexts :: Monad m => ModuleIdent -> TCEnv -> InstEnv -> TopDecl a
->                     -> m InstEnv
-> bindInitialContexts m tcEnv iEnv (DataDecl p cx tc tvs cs clss)
->   | null cs = errorAt p noAbstractDerive
->   | any (`notElem` tvs) (fv tys) = errorAt p noExistentialDerive
->   | otherwise =
->       foldM (bindDerived m tcEnv p cx tc tvs []) iEnv (sortClasses tcEnv clss)
->   where tys = concatMap constrTypes cs
-> bindInitialContexts m tcEnv iEnv (NewtypeDecl p cx tc tvs _ clss) =
->   foldM (bindDerived m tcEnv p cx tc tvs []) iEnv(sortClasses tcEnv clss)
-
-> inferContexts :: Monad m => ModuleIdent -> TCEnv -> InstEnv -> TopDecl a
->               -> m [(CT,Context)]
-> inferContexts m tcEnv iEnv (DataDecl p cx tc tvs cs clss) =
->   mapM (inferContext m tcEnv iEnv p cx tc tvs tys) clss
->   where tys = concatMap constrTypes cs
-> inferContexts m tcEnv iEnv
->               (NewtypeDecl p cx tc tvs (NewConstrDecl _ c ty) clss) =
->   mapM (inferContext m tcEnv iEnv p cx tc tvs [ty]) clss
-
-> inferContext :: Monad m => ModuleIdent -> TCEnv -> InstEnv -> Position
->              -> [ClassAssert] -> Ident -> [Ident] -> [TypeExpr] -> QualIdent
->              -> m (CT,Context)
-> inferContext m tcEnv iEnv p cx tc tvs tys cls =
->   do
->     let (cx''',cx'''') = partitionContext (reduceTypePreds iEnv cx'')
->     foldM (reportMissingInstance p "derived instance"
->              (ppTopDecl (InstanceDecl p [] cls ty'' [])) m iEnv)
->           idSubst cx''''
->     return (CT cls' tc',sort cx''')
->   where QualType cx' ty' = expandConstrType tcEnv cx tc' tvs tys
->         tc' = qualifyWith m tc
->         (cls',clss) =
->           case qualLookupTopEnv cls tcEnv of
->             [TypeClass cls' clss _] -> (cls',clss)
->             _ -> internalError "inferContext"
->         cx'' = nub (cx' ++ [TypePred cls (arrowBase ty') | cls <- clss] ++
->                     [TypePred cls ty | cls <- cls':clss, ty <- arrowArgs ty'])
->         ty'' = ConstructorType (qualify tc) (map VariableType tvs)
-
-> updateContexts :: InstEnv -> [(CT,Context)] -> Maybe InstEnv
-> updateContexts iEnv cxs = if or upds then Just iEnv' else Nothing
->   where (iEnv',upds) = mapAccumL updateInstance iEnv cxs
->         updateInstance iEnv (ct,cx) =
->           case lookupEnv ct iEnv of
->             Just cx'
->               | cx == cx' -> (iEnv,False)
->               | otherwise -> (bindEnv ct cx iEnv,True)
->             Nothing -> internalError "updateContext"
-
-> deriveInstances :: ModuleIdent -> TCEnv -> InstEnv -> TopDecl a
->                 -> TcState [TopDecl ()]
-> deriveInstances m tcEnv iEnv (DataDecl p _ tc tvs cs clss) =
->   mapM (deriveInstance m tcEnv iEnv p tc tvs cs) clss
-> deriveInstances m tcEnv iEnv (NewtypeDecl p _ tc tvs nc clss) =
->   mapM (deriveInstance m tcEnv iEnv p tc tvs [constrDecl nc]) clss
-> deriveInstances _ _ _ _ = return []
-
-> deriveInstance :: ModuleIdent -> TCEnv -> InstEnv -> Position -> Ident
->                -> [Ident] -> [ConstrDecl] -> QualIdent -> TcState (TopDecl ())
-> deriveInstance m tcEnv iEnv p tc tvs cs cls =
->   do
->     n <- fresh id
->     derive m tcEnv n p (map (toClassAssert tvs) cx) tc tvs cs cls
->   where cx = fromJust (lookupEnv (CT cls' tc') iEnv)
->         tc' = qualifyWith m tc
->         cls' = origName (head (qualLookupTopEnv cls tcEnv))
->         toClassAssert tvs (TypePred cls (TypeVariable n)) =
->           ClassAssert (qualUnqualify m cls) (tvs !! n)
->           -- FIXME: this context may contain improperly qualified
->           --        identifiers when as renamings are used
-
-> sortClasses :: TCEnv -> [QualIdent] -> [QualIdent]
-> sortClasses tcEnv clss =
->   map fst (sortBy compareDepth (map (adjoinDepth tcEnv) clss))
->   where (_,d1) `compareDepth` (_,d2) = d1 `compare` d2
->         adjoinDepth tcEnv cls =
->           case qualLookupTopEnv cls tcEnv of
->             [TypeClass _ clss _] -> (cls,length clss)
->             _ -> internalError "sortClasses"
-
-> sortDeriving :: ModuleIdent -> [TopDecl a] -> [[TopDecl a]]
-> sortDeriving m ds = scc bound free (filter hasDerivedInstance ds)
->   where bound (DataDecl _ _ tc _ _ _) = [tc]
->         bound (NewtypeDecl _ _ tc _ _ _) = [tc]
->         free (DataDecl _ _ _ _ cs _) =
->           foldr (ft m) [] (concatMap constrTypes cs)
->         free (NewtypeDecl _ _ _ _ (NewConstrDecl _ _ ty) _) = ft m ty []
-
-> hasDerivedInstance :: TopDecl a -> Bool
-> hasDerivedInstance (DataDecl _ _ _ _ _ clss) = not (null clss)
-> hasDerivedInstance (NewtypeDecl _ _ _ _ _ clss) = not (null clss)
-> hasDerivedInstance (TypeDecl _ _ _ _) = False
-> hasDerivedInstance (ClassDecl _ _ _ _ _) = False
-> hasDerivedInstance (InstanceDecl _ _ _ _ _) = False
-> hasDerivedInstance (BlockDecl _) = False
-
-> ft :: ModuleIdent -> TypeExpr -> [Ident] -> [Ident]
-> ft m (ConstructorType tc tys) tcs =
->   maybe id (:) (localIdent m tc) (foldr (ft m) tcs tys)
-> ft _ (VariableType _) tcs = tcs
-> ft m (TupleType tys) tcs = foldr (ft m) tcs tys
-> ft m (ListType ty) tcs = ft m ty tcs
-> ft m (ArrowType ty1 ty2) tcs = ft m ty1 $ ft m ty2 $ tcs
 
 \end{verbatim}
 \paragraph{Type Signatures}
@@ -571,12 +379,12 @@ the method's type signature.
 \begin{verbatim}
 
 > tcTopDecl :: ModuleIdent -> TCEnv -> TopDecl a -> TcState (TopDecl Type)
-> tcTopDecl _ tcEnv (DataDecl p cx tc tvs cs clss) =
+> tcTopDecl _ _ (DataDecl p cx tc tvs cs clss) =
 >   return (DataDecl p cx tc tvs cs clss)
-> tcTopDecl _ tcEnv (NewtypeDecl p cx tc tvs nc clss) =
+> tcTopDecl _ _ (NewtypeDecl p cx tc tvs nc clss) =
 >   return (NewtypeDecl p cx tc tvs nc clss)
 > tcTopDecl _ _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
-> tcTopDecl m tcEnv d@(ClassDecl p cx cls tv ds) =
+> tcTopDecl m tcEnv (ClassDecl p cx cls tv ds) =
 >   do
 >     vds' <- mapM (tcMethodSig m tcEnv sigs) vds
 >     return (ClassDecl p cx cls tv (map untyped tds ++ vds'))
@@ -584,11 +392,9 @@ the method's type signature.
 >         sigs = foldr (bindTypeSigs . typeSig cx') noSigs tds
 >         (tds,vds) = partition isMethodSig ds
 >         typeSig cx (MethodSig p fs ty) = TypeSig p fs (QualTypeExpr cx ty)
-> tcTopDecl m tcEnv d@(InstanceDecl p cx cls ty ds) =
+> tcTopDecl m tcEnv (InstanceDecl p cx cls ty ds) =
 >   do
->     ty'' <-
->       inst ty' >>=
->       tcInstContext p "instance declaration" (ppTopDecl d) m tcEnv cls
+>     ty'' <- liftM snd (inst ty')
 >     liftM (InstanceDecl p cx cls ty)
 >           (mapM (tcMethodDecl m tcEnv cls ty' ty'') ds)
 >   where ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
@@ -631,16 +437,6 @@ the method's type signature.
 >     unless (sigma `matchesTypeSig` expandPolyType tcEnv sigTy)
 >            (errorAt p (typeSigTooGeneral m what sigTy sigma))
 >   where what = text "Method:" <+> ppIdent f
-
-> tcInstContext :: Position -> String -> Doc -> ModuleIdent -> TCEnv
->               -> QualIdent -> (Context,Type) -> TcState Type
-> tcInstContext p what doc m tcEnv cls (cx,ty) =
->   do
->     (cx',_) <- reduceContext p what doc m [TypePred cls ty | cls <- clss] ()
->     foldM (reportMissingInstance p what doc m initIEnv) idSubst
->           (filter (`notElem` cx) cx')
->     return ty
->   where clss = superClasses cls tcEnv
 
 > tcMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> TypeScheme -> Type
 >              -> MethodDecl a -> TcState (MethodDecl Type)
@@ -1305,8 +1101,8 @@ the current substitution.
 >         isTypeVar (TypeArrow _ _) = False
 >         isTypeVar (TypeSkolem _) = False
 
-> reportMissingInstance :: Monad m => Position -> String -> Doc -> ModuleIdent
->                       -> InstEnv -> TypeSubst -> TypePred -> m TypeSubst
+> reportMissingInstance :: Position -> String -> Doc -> ModuleIdent -> InstEnv
+>                       -> TypeSubst -> TypePred -> TcState TypeSubst
 > reportMissingInstance p what doc m iEnv theta (TypePred cls ty) =
 >   case subst theta ty of
 >     TypeConstrained tys tv ->
@@ -1502,20 +1298,6 @@ quantified type variables are constrained.
 
 \end{verbatim}
 \paragraph{Auxiliary Functions}
-The function \texttt{constrDecl} converts a newtype constructor
-declaration into a data type constructor declaration and the function
-\texttt{constrTypes} extracts the argument types of a data constructor
-from its declaration.
-\begin{verbatim}
-
-> constrDecl :: NewConstrDecl -> ConstrDecl
-> constrDecl (NewConstrDecl p c ty) = ConstrDecl p [] c [ty]
-
-> constrTypes :: ConstrDecl -> [TypeExpr]
-> constrTypes (ConstrDecl _ _ _ tys) = tys
-> constrTypes (ConOpDecl _ _ ty1 _ ty2) = [ty1,ty2]
-
-\end{verbatim}
 The functions \texttt{fvEnv} and \texttt{fsEnv} compute the set of
 free type variables and free skolems of a type environment,
 respectively. We ignore the types of data and newtype constructors
@@ -1624,12 +1406,5 @@ Error functions.
 >              ppQIdent (qualUnqualify m cls) <+> ppTypeExpr 2 (fromType m ty),
 >              text "in" <+> text what],
 >         doc]
-
-> noAbstractDerive :: String
-> noAbstractDerive = "Instances cannot be derived for abstract types"
-
-> noExistentialDerive :: String
-> noExistentialDerive =
->   "Instances cannot be derived for existentially quantified types"
 
 \end{verbatim}

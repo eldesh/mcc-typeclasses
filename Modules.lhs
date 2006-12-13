@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2010 2006-11-15 18:22:59Z wlux $
+% $Id: Modules.lhs 2043 2006-12-13 22:03:58Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -20,6 +20,8 @@ This module controls the compilation of modules.
 > import Renaming(rename,renameGoal)
 > import PrecCheck(precCheck,precCheckGoal)
 > import KindCheck(kindCheck,kindCheckGoal)
+> import InstCheck(instCheck)
+> import Deriving(derive)
 > import TypeCheck(typeCheck,typeCheckGoal)
 > import CaseCheck(caseCheck,caseCheckGoal)
 > import UnusedCheck(unusedCheck,unusedCheckGoal)
@@ -109,7 +111,7 @@ declaration to the module.
 >   foldM (loadInterface paths [m]) emptyEnv
 >         [P p m | ImportDecl p m _ _ _ <- is]
 
-> checkModule :: ModuleEnv -> Module a
+> checkModule :: ModuleEnv -> Module ()
 >             -> Error (TCEnv,InstEnv,ValueEnv,Module Type,Interface)
 > checkModule mEnv (Module m es is ds) =
 >   do
@@ -119,7 +121,9 @@ declaration to the module.
 >     es' <- checkExports m is tEnv vEnv es
 >     (pEnv',ds''') <- precCheck m pEnv $ rename ds''
 >     tcEnv' <- kindCheck m tcEnv ds'''
->     (iEnv',tyEnv',ds'''') <- typeCheck m tcEnv' iEnv tyEnv ds'''
+>     iEnv' <- instCheck m tcEnv' iEnv ds'''
+>     (tyEnv',ds'''') <-
+>       derive m tcEnv' iEnv' ds''' >>= typeCheck m tcEnv' iEnv' tyEnv
 >     let (pEnv'',tcEnv'',tyEnv'') = qualifyEnv mEnv m pEnv' tcEnv' tyEnv'
 >     return (tcEnv'',iEnv',tyEnv'',
 >             Module m (Just es') is (qual tcEnv' tyEnv' ds''''),
@@ -257,7 +261,7 @@ compilation of a goal is similar to that of a module.
 >   where p = first ""
 >         m = preludeMIdent
 
-> checkGoal :: Bool -> ModuleEnv -> [ImportDecl] -> Goal a
+> checkGoal :: Bool -> ModuleEnv -> [ImportDecl] -> Goal ()
 >           -> Error (TCEnv,InstEnv,ValueEnv,Context,Goal Type)
 > checkGoal forEval mEnv is g =
 >   do

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2039 2006-12-12 12:20:09Z wlux $
+% $Id: TypeCheck.lhs 2042 2006-12-13 09:50:04Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1460,8 +1460,8 @@ not in scope or ambiguous.
 \begin{verbatim}
 
 > numClasses, fracClasses :: [QualIdent]
-> numClasses = [qEqId,qNumId]
-> fracClasses = [qEqId,qFractionalId,qNumId]
+> numClasses = [qEqId,qNumId,qShowId]
+> fracClasses = [qEqId,qFractionalId,qNumId,qShowId]
 
 \end{verbatim}
 The function \texttt{skol} instantiates the type of data and newtype

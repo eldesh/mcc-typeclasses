@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2041 2006-12-13 09:43:43Z wlux $
+-- $Id: Prelude.curry 2042 2006-12-13 09:50:04Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -785,7 +785,7 @@ showParen False x = x
 
 
 --- Standard numeric types and classes
-class Eq a => Num a where
+class (Eq a, Show a) => Num a where
   -- NB Temporarily defines fromInt instead of fromIntegral because MCC
   --    does not yet support arbitrary precision integers.
   (+) :: a -> a -> a

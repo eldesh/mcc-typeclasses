@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2043 2006-12-13 22:03:58Z wlux $
+% $Id: TypeCheck.lhs 2045 2006-12-14 12:43:17Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -114,7 +114,7 @@ type synonyms occurring in their types are expanded.
 > bindTypeValues m tcEnv (ClassDecl _ _ cls tv ds) tyEnv = foldr bind tyEnv ds
 >   where cx = [ClassAssert (qualifyWith m cls) tv]
 >         bind (MethodSig _ fs ty) = bindMethods m tcEnv cx fs ty
->         bind (DefaultMethodDecl _ _ _) = id
+>         bind (MethodDecl _ _ _) = id
 > bindTypeValues _ _ (InstanceDecl _ _ _ _ _) tyEnv = tyEnv
 > bindTypeValues _ _ (BlockDecl _) tyEnv = tyEnv
 
@@ -386,7 +386,7 @@ the method's type signature.
 > tcTopDecl _ _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
 > tcTopDecl m tcEnv (ClassDecl p cx cls tv ds) =
 >   do
->     vds' <- mapM (tcMethodSig m tcEnv sigs) vds
+>     vds' <- mapM (tcClassMethodDecl m tcEnv sigs) vds
 >     return (ClassDecl p cx cls tv (map untyped tds ++ vds'))
 >   where cx' = ClassAssert (qualify cls) tv : cx
 >         sigs = foldr (bindTypeSigs . typeSig cx') noSigs tds
@@ -396,41 +396,24 @@ the method's type signature.
 >   do
 >     ty'' <- liftM snd (inst ty')
 >     liftM (InstanceDecl p cx cls ty)
->           (mapM (tcMethodDecl m tcEnv cls ty' ty'') ds)
+>           (mapM (tcInstMethodDecl m tcEnv cls ty' ty'') ds)
 >   where ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
 > tcTopDecl _ _ (BlockDecl _) = internalError "tcTopDecl"
 
-> tcMethodSig :: ModuleIdent -> TCEnv -> SigEnv -> MethodSig a
->             -> TcState (MethodSig Type)
-> tcMethodSig m tcEnv sigs d =
+> tcClassMethodDecl :: ModuleIdent -> TCEnv -> SigEnv -> MethodDecl a
+>                   -> TcState (MethodDecl Type)
+> tcClassMethodDecl m tcEnv sigs d =
 >   do
->     ty <- liftM snd $ tcMethodSigLhs m tcEnv sigTy d
->     (cx,d') <- tcMethodSigRhs m tcEnv ty d
->     genMethodSig m tcEnv sigTy cx ty d
+>     ty <- liftM snd $ inst (expandPolyType tcEnv sigTy)
+>     (cx,d') <- tcMethodDeclRhs m tcEnv ty d
+>     genClassMethodDecl m tcEnv sigTy cx ty d
 >     return d'
 >   where sigTy = methodType sigs d
->         methodType sigs (DefaultMethodDecl _ f _) =
->           fromJust (lookupEnv f sigs)
+>         methodType sigs (MethodDecl _ f _) = fromJust (lookupEnv f sigs)
 
-> tcMethodSigLhs :: ModuleIdent -> TCEnv -> QualTypeExpr -> MethodSig a
->                -> TcState (Context,Type)
-> tcMethodSigLhs m tcEnv sigTy (DefaultMethodDecl p f _) =
->   inst (expandPolyType tcEnv sigTy)
-
-> tcMethodSigRhs :: ModuleIdent -> TCEnv -> Type -> MethodSig a
->                -> TcState (Context,MethodSig Type)
-> tcMethodSigRhs m tcEnv ty d@(DefaultMethodDecl p f eqs) =
->   do
->     tyEnv0 <- fetchSt
->     theta <- liftSt fetchSt
->     (cxs,eqs') <- liftM unzip $
->       mapM (tcEquation m tcEnv (fsEnv (subst theta tyEnv0)) ty f) eqs
->     reduceContext p "method declaration" (ppMethodSig d) m (concat cxs)
->                   (DefaultMethodDecl p f eqs')
-
-> genMethodSig :: ModuleIdent -> TCEnv -> QualTypeExpr -> Context -> Type
->              -> MethodSig a -> TcState ()
-> genMethodSig m tcEnv sigTy cx ty (DefaultMethodDecl p f _) =
+> genClassMethodDecl :: ModuleIdent -> TCEnv -> QualTypeExpr -> Context -> Type
+>                    -> MethodDecl a -> TcState ()
+> genClassMethodDecl m tcEnv sigTy cx ty (MethodDecl p f _) =
 >   do
 >     theta <- liftSt fetchSt
 >     let sigma = gen zeroSet cx (subst theta ty)
@@ -438,13 +421,13 @@ the method's type signature.
 >            (errorAt p (typeSigTooGeneral m what sigTy sigma))
 >   where what = text "Method:" <+> ppIdent f
 
-> tcMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> TypeScheme -> Type
->              -> MethodDecl a -> TcState (MethodDecl Type)
-> tcMethodDecl m tcEnv cls instTy instTy' d =
+> tcInstMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> TypeScheme -> Type
+>                  -> MethodDecl a -> TcState (MethodDecl Type)
+> tcInstMethodDecl m tcEnv cls instTy instTy' d =
 >   do
 >     ty <- liftM snd $ tcMethodDeclLhs cls instTy' d
 >     (cx,d') <- tcMethodDeclRhs m tcEnv ty d
->     genMethodDecl m cls instTy cx ty d
+>     genInstMethodDecl m cls instTy cx ty d
 >     return d'
 
 > tcMethodDeclLhs :: QualIdent -> Type -> MethodDecl a -> TcState (Context,Type)
@@ -462,9 +445,9 @@ the method's type signature.
 >     reduceContext p "method declaration" (ppMethodDecl d) m (concat cxs)
 >                   (MethodDecl p f eqs')
 
-> genMethodDecl :: ModuleIdent -> QualIdent -> TypeScheme -> Context -> Type
->               -> MethodDecl a -> TcState ()
-> genMethodDecl m cls (ForAll _ instTy) cx ty (MethodDecl p f _) =
+> genInstMethodDecl :: ModuleIdent -> QualIdent -> TypeScheme -> Context -> Type
+>                   -> MethodDecl a -> TcState ()
+> genInstMethodDecl m cls (ForAll _ instTy) cx ty (MethodDecl p f _) =
 >   do
 >     methTy <- tcMethod cls instTy f
 >     theta <- liftSt fetchSt

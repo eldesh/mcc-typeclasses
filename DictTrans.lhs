@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2038 2006-12-06 17:19:07Z wlux $
+% $Id: DictTrans.lhs 2045 2006-12-14 12:43:17Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -170,7 +170,7 @@ constructor's arguments.
 >         ty = polyType (classDictType tcEnv tyEnv cls fs)
 > bindDictConstr _ _ _ tyEnv =  tyEnv
 
-> dictDecl :: Position -> Ident -> Ident -> [MethodSig a] -> TopDecl Type
+> dictDecl :: Position -> Ident -> Ident -> [MethodDecl a] -> TopDecl Type
 > dictDecl p cls tv ds =
 >   DataDecl p [] (dictTypeId cls) [tv] [dictConstrDecl p cls tys] []
 >   where tys = [ty | MethodSig _ _ ty <- expandMethodSigs ds]
@@ -184,7 +184,7 @@ constructor's arguments.
 >         methodType (IMethodDecl _ _ ty) = ty
 > dictIDecl p cls tv Nothing = HidingDataDecl p (qDictTypeId cls) [tv]
 
-> expandMethodSigs :: [MethodSig a] -> [MethodSig a]
+> expandMethodSigs :: [MethodDecl a] -> [MethodDecl a]
 > expandMethodSigs ds = [MethodSig p [f] ty | MethodSig p fs ty <- ds, f <- fs]
 
 > classDictType :: TCEnv -> ValueEnv -> QualIdent -> [Maybe Ident] -> Type
@@ -254,7 +254,7 @@ contexts in \texttt{intfMethodStubs} below.
 > methodStubs _ _ _ _ = return []
 
 > methodStub :: [(Type,Ident)] -> (Type,Ident) -> ConstrTerm Type
->            -> MethodSig a -> (Type,Ident) -> TopDecl Type
+>            -> MethodDecl a -> (Type,Ident) -> TopDecl Type
 > methodStub vs v t (MethodSig p [f] _) v' =
 >   BlockDecl (funDecl p f (map (uncurry VariablePattern) vs) e [])
 >   where e = Case (uncurry mkVar v) [caseAlt p t (uncurry mkVar v')]
@@ -324,20 +324,16 @@ the compiler provides a default implementation that is equivalent to
 >   map BlockDecl (zipWith renameFunction (defaultMethodIds cls) vds'')
 >   where (tds,vds) = partition isMethodSig ds
 >         fs = concatMap methods tds
->         vds' = orderDefaultMethodDecls fs vds
+>         vds' = orderMethodDecls (map Just fs) vds
 >         vds'' = zipWith (defaultMethodDecl tyEnv p) fs vds'
 > defaultMethodDecls _ _ = []
 
-> defaultMethodDecl :: ValueEnv -> Position -> Ident -> Maybe (MethodSig Type)
+> defaultMethodDecl :: ValueEnv -> Position -> Ident -> Maybe (MethodDecl Type)
 >                   -> Decl Type
 > defaultMethodDecl _ _ _ (Just d) = methodDecl d
->   where methodDecl (DefaultMethodDecl p f eqs) = FunctionDecl p f eqs
+>   where methodDecl (MethodDecl p f eqs) = FunctionDecl p f eqs
 > defaultMethodDecl tyEnv p f Nothing =
 >   funDecl p f [] (prelUndefined (rawType (varType f tyEnv))) []
-
-> orderDefaultMethodDecls :: [Ident] -> [MethodSig a] -> [Maybe (MethodSig a)]
-> orderDefaultMethodDecls fs ds =
->   map (flip lookup [(f,d) | d@(DefaultMethodDecl _ f _) <- ds]) fs
 
 > intfDefaultMethodDecls :: ModuleIdent -> IDecl -> [IDecl]
 > intfDefaultMethodDecls m (IClassDecl p cx cls tv ds) =

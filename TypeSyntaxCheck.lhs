@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2038 2006-12-06 17:19:07Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2045 2006-12-14 12:43:17Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -84,27 +84,23 @@ signatures.
 >   liftE (TypeDecl p tc tvs) (checkClosedType env p tvs ty)
 > checkTopDecl env (ClassDecl p cx cls tv ds) =
 >   checkTypeLhs env p cx [tv] &&>
->   liftE (ClassDecl p cx cls tv) (mapE (checkMethodSig env tv) ds)
+>   liftE (ClassDecl p cx cls tv) (mapE (checkMethodDecl env tv) ds)
 > checkTopDecl env (InstanceDecl p cx cls ty ds) =
 >   checkClass env p cls &&>
 >   liftE2 (InstanceDecl p cx cls)
 >          (checkInstType env p cx ty)
->          (mapE (checkMethodDecl env) ds)
+>          (mapE (checkMethodDecl env anonId) ds)
 > checkTopDecl env (BlockDecl d) = liftE BlockDecl (checkDecl env d)
 
-> checkMethodSig :: TypeEnv -> Ident -> MethodSig a -> Error (MethodSig a)
-> checkMethodSig env tv (MethodSig p fs ty) =
+> checkMethodDecl :: TypeEnv -> Ident -> MethodDecl a -> Error (MethodDecl a)
+> checkMethodDecl env tv (MethodSig p fs ty) =
 >   do
 >     ty' <- checkType env p ty
 >     let tvs = fv ty'
 >     unless (tv `elem` tvs) (errorAt p (ambiguousType tv)) &&>
 >       mapE_ (errorAt p . polymorphicMethod) (nub (filter (tv /=) tvs))
 >     return (MethodSig p fs ty')
-> checkMethodSig env _ (DefaultMethodDecl p f eqs) =
->   liftE (DefaultMethodDecl p f) (mapE (checkEquation env) eqs)
-
-> checkMethodDecl :: TypeEnv -> MethodDecl a -> Error (MethodDecl a)
-> checkMethodDecl env (MethodDecl p f eqs) =
+> checkMethodDecl env _ (MethodDecl p f eqs) =
 >   liftE (MethodDecl p f) (mapE (checkEquation env) eqs)
 
 > checkDecl :: TypeEnv -> Decl a -> Error (Decl a)

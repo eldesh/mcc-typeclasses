@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2038 2006-12-06 17:19:07Z wlux $
+% $Id: SyntaxCheck.lhs 2045 2006-12-14 12:43:17Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -102,9 +102,11 @@ in order to check the global declaration group.
 
 > checkTopDeclRhs :: TypeEnv -> VarEnv -> TopDecl a -> Error (TopDecl a)
 > checkTopDeclRhs _ env (ClassDecl p cx cls tv ds) =
->   liftE (ClassDecl p cx cls tv) (checkClassDecls env p cls tv ds)
+>   liftE (ClassDecl p cx cls tv) (checkMethodDecls env (qualify cls) fs ds)
+>   where fs = mthds (ClassDecl p cx cls tv ds)
 > checkTopDeclRhs tEnv env (InstanceDecl p cx cls ty ds) =
->   liftE (InstanceDecl p cx cls ty) (checkInstDecls tEnv env p cls ds)
+>   liftE (InstanceDecl p cx cls ty) (checkMethodDecls env cls fs ds)
+>   where fs = map (P p) (classMthds cls tEnv)
 > checkTopDeclRhs _ env (BlockDecl d) = liftE BlockDecl (checkDeclRhs env d)
 > checkTopDeclRhs _ _ d = return d
 
@@ -147,9 +149,9 @@ top-level.
 >     return (env'',ds'')
 >   where env' = nestEnv env
 
-> checkMethodSig :: VarEnv -> MethodSig a -> Error ()
+> checkMethodSig :: VarEnv -> MethodDecl a -> Error ()
 > checkMethodSig env (MethodSig p fs _) = checkVars "type signature" p env fs
-> checkMethodSig _ (DefaultMethodDecl _ _ _) = return ()
+> checkMethodSig _ (MethodDecl _ _ _) = return ()
 
 > checkDeclLhs :: Bool -> VarEnv -> Decl a -> Error (Decl a)
 > checkDeclLhs _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
@@ -290,62 +292,33 @@ scope, but the name under which a method is in scope is immaterial
 report~\cite{PeytonJones03:Haskell}).
 \begin{verbatim}
 
-> checkClassDecls :: VarEnv -> Position -> Ident -> Ident -> [MethodSig a]
->                 -> Error [MethodSig a]
-> checkClassDecls env p cls tv ds =
+> checkMethodDecls :: VarEnv -> QualIdent -> [P Ident] -> [MethodDecl a]
+>                  -> Error [MethodDecl a]
+> checkMethodDecls env cls fs ds =
 >   do
->     ds' <-
->       liftE (map methodDecl . joinEquations) (mapE (checkClassDeclLhs env) ds)
->     checkClassMethods cls (mthds (ClassDecl p [] cls tv ds)) ds'
->     mapE (checkClassDeclRhs env) ds'
->   where methodDecl (TypeSig p fs (QualTypeExpr _ ty)) = MethodSig p fs ty
->         methodDecl (FunctionDecl p f eqs) = DefaultMethodDecl p f eqs
->         methodDecl _ = internalError "methodDecl (ClassDecl)"
+>     ds' <- liftE joinEquations (mapE (checkMethodDeclLhs env) ds)
+>     checkMethods cls fs ds'
+>     mapE (checkMethodDeclRhs env) ds'
 
-> checkClassDeclLhs :: VarEnv -> MethodSig a -> Error (Decl a)
-> checkClassDeclLhs env (MethodSig p fs ty) =
+> checkMethodDeclLhs :: VarEnv -> MethodDecl a -> Error (Decl a)
+> checkMethodDeclLhs _ (MethodSig p fs ty) =
 >   return (TypeSig p fs (QualTypeExpr [] ty))
-> checkClassDeclLhs env (DefaultMethodDecl p f eqs) =
->   checkEquationLhs True env p eqs
+> checkMethodDeclLhs env (MethodDecl p f eqs) = checkEquationLhs True env p eqs
 
-> checkClassMethods :: Ident -> [P Ident] -> [MethodSig a] -> Error ()
-> checkClassMethods cls fs ds =
->   reportDuplicates duplicateDefinition repeatedDefinition fs' &&>
->   mapE_ (\(P p f) -> errorAt p (undefinedMethod (qualify cls) f))
->         (filter (`notElem` fs) fs')
->   where fs' = [P p f | DefaultMethodDecl p f _ <- ds]
-
-> checkClassDeclRhs :: VarEnv -> MethodSig a -> Error (MethodSig a)
-> checkClassDeclRhs env (MethodSig p fs ty) = return (MethodSig p fs ty)
-> checkClassDeclRhs env (DefaultMethodDecl p f eqs) =
->   checkArity p f eqs &&>
->   liftE (DefaultMethodDecl p f) (mapE (checkEquation env) eqs)
-
-> checkInstDecls :: TypeEnv -> VarEnv -> Position -> QualIdent -> [MethodDecl a]
->                -> Error [MethodDecl a]
-> checkInstDecls tEnv env p cls ds =
->   do
->     ds' <-
->       liftE (map methodDecl . joinEquations) (mapE (checkInstDeclLhs env) ds)
->     checkInstMethods cls (map (P p) (classMthds cls tEnv)) ds'
->     mapE (checkInstDeclRhs env) ds'
->   where methodDecl (FunctionDecl p f eqs) = MethodDecl p f eqs
->         methodDecl _ = internalError "methodDecl (InstanceDecl)"
-
-> checkInstDeclLhs :: VarEnv -> MethodDecl a -> Error (Decl a)
-> checkInstDeclLhs env (MethodDecl p f eqs) = checkEquationLhs True env p eqs
-
-> checkInstMethods :: QualIdent -> [P Ident] -> [MethodDecl a] -> Error ()
-> checkInstMethods cls fs ds =
+> checkMethods :: QualIdent -> [P Ident] -> [Decl a] -> Error ()
+> checkMethods cls fs ds =
 >   reportDuplicates duplicateDefinition repeatedDefinition fs' &&>
 >   mapE_ (\(P p f) -> errorAt p (undefinedMethod cls f))
 >         (filter (`notElem` fs) fs')
->   where fs' = [P p f | MethodDecl p f _ <- ds]
+>   where fs' = [P p f | FunctionDecl p f _ <- ds]
 
-> checkInstDeclRhs :: VarEnv -> MethodDecl a -> Error (MethodDecl a)
-> checkInstDeclRhs env (MethodDecl p f eqs) =
+> checkMethodDeclRhs :: VarEnv -> Decl a -> Error (MethodDecl a)
+> checkMethodDeclRhs _ (TypeSig p fs (QualTypeExpr _ ty)) =
+>   return (MethodSig p fs ty)
+> checkMethodDeclRhs env (FunctionDecl p f eqs) =
 >   checkArity p f eqs &&>
 >   liftE (MethodDecl p f) (mapE (checkEquation env) eqs)
+> checkMethodDeclRhs _ _ = internalError "checkMethodDeclRhs"
 
 \end{verbatim}
 The syntax checker examines the optional import specification of

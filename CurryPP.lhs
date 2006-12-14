@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2038 2006-12-06 17:19:07Z wlux $
+% $Id: CurryPP.lhs 2045 2006-12-14 12:43:17Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -74,7 +74,7 @@ Declarations
 >   sep [ppTypeDeclLhs "type" [] tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
 > ppTopDecl (ClassDecl _ cx cls tv ds) =
 >   ppClassInstDecl (ppClassInstHead "class" cx (qualify cls) (VariableType tv))
->                   (map ppMethodSig ds)
+>                   (map ppMethodDecl ds)
 > ppTopDecl (InstanceDecl _ cx cls ty ds) =
 >   ppClassInstDecl (ppClassInstHead "instance" cx cls ty) (map ppMethodDecl ds)
 > ppTopDecl (BlockDecl d) = ppDecl d
@@ -111,11 +111,8 @@ Declarations
 >   | null ds = head
 >   | otherwise = head <+> text "where" $$ indent (vcat ds)
 
-> ppMethodSig :: MethodSig a -> Doc
-> ppMethodSig (MethodSig p fs ty) = ppDecl (TypeSig p fs (QualTypeExpr [] ty))
-> ppMethodSig (DefaultMethodDecl p f eqs) = ppDecl (FunctionDecl p f eqs)
-
 > ppMethodDecl :: MethodDecl a -> Doc
+> ppMethodDecl (MethodSig p fs ty) = ppDecl (TypeSig p fs (QualTypeExpr [] ty))
 > ppMethodDecl (MethodDecl p f eqs) = ppDecl (FunctionDecl p f eqs)
 
 > ppBlock :: [Decl a] -> Doc

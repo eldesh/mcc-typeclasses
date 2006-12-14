@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 2038 2006-12-06 17:19:07Z wlux $
+% $Id: UnusedCheck.lhs 2045 2006-12-14 12:43:17Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -109,14 +109,10 @@ implemented by a traversal of the syntax tree.
 >   used _ _ = id
 >   unused used _ (NewConstrDecl p c _) = unusedVars Data used p [c]
 
-> instance SyntaxTree (MethodSig a) where
->   used m (MethodSig _ _ _) = id
->   used m (DefaultMethodDecl _ _ eqs) = used m eqs
->   unused used _ (MethodSig p fs _) = unusedVars Meth used p fs
->   unused used _ (DefaultMethodDecl p _ eqs) = unused used p eqs
-
 > instance SyntaxTree (MethodDecl a) where
+>   used m (MethodSig _ _ _) = id
 >   used m (MethodDecl _ _ eqs) = used m eqs
+>   unused used _ (MethodSig p fs _) = unusedVars Meth used p fs
 >   unused used _ (MethodDecl p _ eqs) = unused used p eqs
 
 > instance SyntaxTree (Decl a) where

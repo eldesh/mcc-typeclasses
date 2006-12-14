@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2038 2006-12-06 17:19:07Z wlux $
+% $Id: CurrySyntax.lhs 2045 2006-12-14 12:43:17Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -54,7 +54,7 @@ parsed representation of a Curry program.
 >     DataDecl Position [ClassAssert] Ident [Ident] [ConstrDecl] [QualIdent]
 >   | NewtypeDecl Position [ClassAssert] Ident [Ident] NewConstrDecl [QualIdent]
 >   | TypeDecl Position Ident [Ident] TypeExpr
->   | ClassDecl Position [ClassAssert] Ident Ident [MethodSig a]
+>   | ClassDecl Position [ClassAssert] Ident Ident [MethodDecl a]
 >   | InstanceDecl Position [ClassAssert] QualIdent TypeExpr [MethodDecl a]
 >   | BlockDecl (Decl a)
 >   deriving (Eq,Show)
@@ -65,11 +65,10 @@ parsed representation of a Curry program.
 >   deriving (Eq,Show)
 > data NewConstrDecl = NewConstrDecl Position Ident TypeExpr deriving (Eq,Show)
 
-> data MethodSig a =
+> data MethodDecl a =
 >     MethodSig Position [Ident] TypeExpr
->   | DefaultMethodDecl Position Ident [Equation a]
+>   | MethodDecl Position Ident [Equation a]
 >   deriving (Eq,Show)
-> data MethodDecl a = MethodDecl Position Ident [Equation a] deriving (Eq,Show)
 > data Decl a =
 >     InfixDecl Position Infix Int [Ident]
 >   | TypeSig Position [Ident] QualTypeExpr
@@ -91,9 +90,9 @@ parsed representation of a Curry program.
 > nconstr :: NewConstrDecl -> Ident
 > nconstr (NewConstrDecl _ c _) = c
 
-> methods :: MethodSig a -> [Ident]
+> methods :: MethodDecl a -> [Ident]
 > methods (MethodSig _ fs _) = fs
-> methods (DefaultMethodDecl _ _ _) = []
+> methods (MethodDecl _ _ _) = []
 
 \end{verbatim}
 \paragraph{Module interfaces}
@@ -258,11 +257,8 @@ The abstract syntax tree is a functor with respect to the attributes.
 >     InstanceDecl p cx cls ty (map (fmap f) ds)
 >   fmap f (BlockDecl d) = BlockDecl (fmap f d)
 
-> instance Functor MethodSig where
->   fmap _ (MethodSig p fs ty) = MethodSig p fs ty
->   fmap f (DefaultMethodDecl p f' eqs) =
->     DefaultMethodDecl p f' (map (fmap f) eqs)
 > instance Functor MethodDecl where
+>   fmap _ (MethodSig p fs ty) = MethodSig p fs ty
 >   fmap f (MethodDecl p f' eqs) = MethodDecl p f' (map (fmap f) eqs)
 
 > instance Functor Decl where

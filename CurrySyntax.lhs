@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2045 2006-12-14 12:43:17Z wlux $
+% $Id: CurrySyntax.lhs 2046 2006-12-15 13:29:51Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -66,7 +66,8 @@ parsed representation of a Curry program.
 > data NewConstrDecl = NewConstrDecl Position Ident TypeExpr deriving (Eq,Show)
 
 > data MethodDecl a =
->     MethodSig Position [Ident] TypeExpr
+>     MethodFixity Position Infix Int [Ident]
+>   | MethodSig Position [Ident] TypeExpr
 >   | MethodDecl Position Ident [Equation a]
 >   deriving (Eq,Show)
 > data Decl a =
@@ -91,6 +92,7 @@ parsed representation of a Curry program.
 > nconstr (NewConstrDecl _ c _) = c
 
 > methods :: MethodDecl a -> [Ident]
+> methods (MethodFixity _ _ _ _) = []
 > methods (MethodSig _ fs _) = fs
 > methods (MethodDecl _ _ _) = []
 
@@ -258,6 +260,7 @@ The abstract syntax tree is a functor with respect to the attributes.
 >   fmap f (BlockDecl d) = BlockDecl (fmap f d)
 
 > instance Functor MethodDecl where
+>   fmap _ (MethodFixity p fix pr ops) = MethodFixity p fix pr ops
 >   fmap _ (MethodSig p fs ty) = MethodSig p fs ty
 >   fmap f (MethodDecl p f' eqs) = MethodDecl p f' (map (fmap f) eqs)
 

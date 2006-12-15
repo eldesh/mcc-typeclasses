@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2045 2006-12-14 12:43:17Z wlux $
+% $Id: DictTrans.lhs 2046 2006-12-15 13:29:51Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -322,8 +322,8 @@ the compiler provides a default implementation that is equivalent to
 > defaultMethodDecls :: ValueEnv -> TopDecl Type -> [TopDecl Type]
 > defaultMethodDecls tyEnv (ClassDecl p _ cls _ ds) =
 >   map BlockDecl (zipWith renameFunction (defaultMethodIds cls) vds'')
->   where (tds,vds) = partition isMethodSig ds
->         fs = concatMap methods tds
+>   where (vds,ods) = partition isMethodDecl ds
+>         fs = concatMap methods ods
 >         vds' = orderMethodDecls (map Just fs) vds
 >         vds'' = zipWith (defaultMethodDecl tyEnv p) fs vds'
 > defaultMethodDecls _ _ = []

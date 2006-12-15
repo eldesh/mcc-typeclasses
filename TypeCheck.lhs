@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2045 2006-12-14 12:43:17Z wlux $
+% $Id: TypeCheck.lhs 2046 2006-12-15 13:29:51Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -113,6 +113,7 @@ type synonyms occurring in their types are expanded.
 > bindTypeValues _ _ (TypeDecl _ _ _ _) tyEnv = tyEnv
 > bindTypeValues m tcEnv (ClassDecl _ _ cls tv ds) tyEnv = foldr bind tyEnv ds
 >   where cx = [ClassAssert (qualifyWith m cls) tv]
+>         bind (MethodFixity _ _ _ _) = id
 >         bind (MethodSig _ fs ty) = bindMethods m tcEnv cx fs ty
 >         bind (MethodDecl _ _ _) = id
 > bindTypeValues _ _ (InstanceDecl _ _ _ _ _) tyEnv = tyEnv
@@ -387,10 +388,11 @@ the method's type signature.
 > tcTopDecl m tcEnv (ClassDecl p cx cls tv ds) =
 >   do
 >     vds' <- mapM (tcClassMethodDecl m tcEnv sigs) vds
->     return (ClassDecl p cx cls tv (map untyped tds ++ vds'))
+>     return (ClassDecl p cx cls tv (map untyped ods ++ vds'))
 >   where cx' = ClassAssert (qualify cls) tv : cx
->         sigs = foldr (bindTypeSigs . typeSig cx') noSigs tds
->         (tds,vds) = partition isMethodSig ds
+>         sigs = foldr (bindTypeSigs . typeSig cx') noSigs ods
+>         (vds,ods) = partition isMethodDecl ds
+>         typeSig _ (MethodFixity p fix pr ops) = InfixDecl p fix pr ops
 >         typeSig cx (MethodSig p fs ty) = TypeSig p fs (QualTypeExpr cx ty)
 > tcTopDecl m tcEnv (InstanceDecl p cx cls ty ds) =
 >   do

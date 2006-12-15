@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2045 2006-12-14 12:43:17Z wlux $
+% $Id: KindCheck.lhs 2046 2006-12-15 13:29:51Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -152,6 +152,7 @@ Kind checking is applied to all type expressions in the program.
 > checkTopDecl tcEnv (BlockDecl d) = checkDecl tcEnv d
 
 > checkMethodDecl :: TCEnv -> MethodDecl a -> Error ()
+> checkMethodDecl tcEnv (MethodFixity _ _ _ _) = return ()
 > checkMethodDecl tcEnv (MethodSig p _ ty) = checkType tcEnv p ty
 > checkMethodDecl tcEnv (MethodDecl _ _ eqs) = mapE_ (checkEquation tcEnv) eqs
 

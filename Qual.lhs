@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2045 2006-12-14 12:43:17Z wlux $
+% $Id: Qual.lhs 2046 2006-12-15 13:29:51Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -74,6 +74,7 @@ functions remain unchanged.
 >     ArrowType (qual tcEnv tyEnv ty1) (qual tcEnv tyEnv ty2)
 
 > instance Qual (MethodDecl a) where
+>   qual _ _ (MethodFixity p fix pr ops) = MethodFixity p fix pr ops
 >   qual tcEnv tyEnv (MethodSig p fs ty) = MethodSig p fs (qual tcEnv tyEnv ty)
 >   qual tcEnv tyEnv (MethodDecl p f eqs) =
 >     MethodDecl p f (qual tcEnv tyEnv eqs)

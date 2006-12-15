@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2045 2006-12-14 12:43:17Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2046 2006-12-15 13:29:51Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -93,6 +93,8 @@ signatures.
 > checkTopDecl env (BlockDecl d) = liftE BlockDecl (checkDecl env d)
 
 > checkMethodDecl :: TypeEnv -> Ident -> MethodDecl a -> Error (MethodDecl a)
+> checkMethodDecl _ _ (MethodFixity p fix pr ops) =
+>   return (MethodFixity p fix pr ops)
 > checkMethodDecl env tv (MethodSig p fs ty) =
 >   do
 >     ty' <- checkType env p ty
@@ -104,6 +106,7 @@ signatures.
 >   liftE (MethodDecl p f) (mapE (checkEquation env) eqs)
 
 > checkDecl :: TypeEnv -> Decl a -> Error (Decl a)
+> checkDecl _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
 > checkDecl env (TypeSig p vs ty) =
 >   liftE (TypeSig p vs) (checkQualType env p ty)
 > checkDecl env (FunctionDecl p f eqs) =
@@ -112,7 +115,8 @@ signatures.
 >   liftE (PatternDecl p t) (checkRhs env rhs)
 > checkDecl env (ForeignDecl p cc ie f ty) =
 >   liftE (ForeignDecl p cc ie f) (checkType env p ty)
-> checkDecl _ d = return d
+> checkDecl _ (FreeDecl p vs) = return (FreeDecl p vs)
+> checkDecl _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
 
 > checkTypeLhs :: TypeEnv -> Position -> [ClassAssert] -> [Ident] -> Error ()
 > checkTypeLhs env p cx tvs =

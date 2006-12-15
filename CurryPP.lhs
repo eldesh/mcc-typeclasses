@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2045 2006-12-14 12:43:17Z wlux $
+% $Id: CurryPP.lhs 2046 2006-12-15 13:29:51Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -112,6 +112,7 @@ Declarations
 >   | otherwise = head <+> text "where" $$ indent (vcat ds)
 
 > ppMethodDecl :: MethodDecl a -> Doc
+> ppMethodDecl (MethodFixity p fix pr ops) = ppDecl (InfixDecl p fix pr ops)
 > ppMethodDecl (MethodSig p fs ty) = ppDecl (TypeSig p fs (QualTypeExpr [] ty))
 > ppMethodDecl (MethodDecl p f eqs) = ppDecl (FunctionDecl p f eqs)
 

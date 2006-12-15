@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 2045 2006-12-14 12:43:17Z wlux $
+% $Id: PrecCheck.lhs 2046 2006-12-15 13:29:51Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -51,7 +51,13 @@ because it is used for constructing the module's interface.
 >   do
 >     ds' <- mapE (checkTopDecl m pEnv') ds
 >     return (pEnv',ds')
->   where pEnv' = bindPrecs m [d | BlockDecl d <- ds] pEnv
+>   where pEnv' = bindPrecs m (concatMap decls ds) pEnv
+>         decls (ClassDecl _ _ _ _ ds) = map decl ds
+>         decls (BlockDecl d) = [d]
+>         decls _ = []
+>         decl (MethodFixity p fix pr ops) = InfixDecl p fix pr ops
+>         decl (MethodSig p fs ty) = TypeSig p fs (QualTypeExpr [] ty)
+>         decl (MethodDecl p f eqs) = FunctionDecl p f eqs
 
 > precCheckGoal :: PEnv -> Goal a -> Error (Goal a)
 > precCheckGoal pEnv (Goal p e ds) =
@@ -68,6 +74,8 @@ because it is used for constructing the module's interface.
 > checkTopDecl _ _ d = return d
 
 > checkMethodDecl :: ModuleIdent -> PEnv -> MethodDecl a -> Error (MethodDecl a)
+> checkMethodDecl _ _ (MethodFixity p fix pr ops) =
+>   return (MethodFixity p fix pr ops)
 > checkMethodDecl _ _ (MethodSig p fs ty) = return (MethodSig p fs ty)
 > checkMethodDecl m pEnv (MethodDecl p f eqs) =
 >   liftE (MethodDecl p f) (mapE (checkEqn m pEnv) eqs)

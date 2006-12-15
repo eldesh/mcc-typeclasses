@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2045 2006-12-14 12:43:17Z wlux $
+% $Id: SyntaxCheck.lhs 2046 2006-12-15 13:29:51Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -71,6 +71,13 @@ This error would go by unnoticed if the compiler would partition
 top-level declarations into type and value declarations.
 Unfortunately, this means that we cannot use \texttt{checkLocalDecls}
 in order to check the global declaration group.
+
+Note that fixity declarations for class methods can occur either at
+the top-level of a module or in the class declaration itself
+(cf.\ Sect.~4.4.2 of the revised Haskell'98
+report~\cite{PeytonJones03:Haskell}). In order to detect duplicate
+fixity declarations for class methods, the relevant top-level fixity
+declarations are passed to \texttt{checkMethodDecls}.
 \begin{verbatim}
 
 > checkTopDecls :: ModuleIdent -> TypeEnv -> [P Ident] -> VarEnv -> [TopDecl a]
@@ -80,8 +87,9 @@ in order to check the global declaration group.
 >     ds' <- liftE joinTopEquations (mapE (checkTopDeclLhs env) ds)
 >     env' <- checkDeclVars (bindFunc m) cs (concatMap mthds ds') env
 >                           [d | BlockDecl d <- ds']
->     ds'' <- mapE (checkTopDeclRhs tEnv env') ds'
+>     ds'' <- mapE (checkTopDeclRhs tEnv env' ops) ds'
 >     return (env',ds'')
+>   where ops = [P p op | BlockDecl (InfixDecl p _ _ ops) <- ds, op <- ops]
 
 > checkTopDeclLhs :: VarEnv -> TopDecl a -> Error (TopDecl a)
 > checkTopDeclLhs env (ClassDecl p cx cls tv ds) =
@@ -100,15 +108,17 @@ in order to check the global declaration group.
 >   | otherwise = d : joinTopEquations ds
 >   where (ds',ds'') = span isBlockDecl ds
 
-> checkTopDeclRhs :: TypeEnv -> VarEnv -> TopDecl a -> Error (TopDecl a)
-> checkTopDeclRhs _ env (ClassDecl p cx cls tv ds) =
->   liftE (ClassDecl p cx cls tv) (checkMethodDecls env (qualify cls) fs ds)
+> checkTopDeclRhs :: TypeEnv -> VarEnv -> [P Ident] -> TopDecl a
+>                 -> Error (TopDecl a)
+> checkTopDeclRhs _ env ops (ClassDecl p cx cls tv ds) =
+>   liftE (ClassDecl p cx cls tv)
+>         (checkMethodDecls env (qualify cls) (filter (`elem` fs) ops) fs ds)
 >   where fs = mthds (ClassDecl p cx cls tv ds)
-> checkTopDeclRhs tEnv env (InstanceDecl p cx cls ty ds) =
->   liftE (InstanceDecl p cx cls ty) (checkMethodDecls env cls fs ds)
+> checkTopDeclRhs tEnv env _ (InstanceDecl p cx cls ty ds) =
+>   liftE (InstanceDecl p cx cls ty) (checkMethodDecls env cls [] fs ds)
 >   where fs = map (P p) (classMthds cls tEnv)
-> checkTopDeclRhs _ env (BlockDecl d) = liftE BlockDecl (checkDeclRhs env d)
-> checkTopDeclRhs _ _ d = return d
+> checkTopDeclRhs _ env _ (BlockDecl d) = liftE BlockDecl (checkDeclRhs env d)
+> checkTopDeclRhs _ _ _ d = return d
 
 \end{verbatim}
 A goal is checked like the right hand side of a pattern declaration.
@@ -150,6 +160,7 @@ top-level.
 >   where env' = nestEnv env
 
 > checkMethodSig :: VarEnv -> MethodDecl a -> Error ()
+> checkMethodSig _ (MethodFixity _ _ _ _) = return ()
 > checkMethodSig env (MethodSig p fs _) = checkVars "type signature" p env fs
 > checkMethodSig _ (MethodDecl _ _ _) = return ()
 
@@ -292,27 +303,33 @@ scope, but the name under which a method is in scope is immaterial
 report~\cite{PeytonJones03:Haskell}).
 \begin{verbatim}
 
-> checkMethodDecls :: VarEnv -> QualIdent -> [P Ident] -> [MethodDecl a]
->                  -> Error [MethodDecl a]
-> checkMethodDecls env cls fs ds =
+> checkMethodDecls :: VarEnv -> QualIdent -> [P Ident] -> [P Ident]
+>                  -> [MethodDecl a] -> Error [MethodDecl a]
+> checkMethodDecls env cls ops fs ds =
 >   do
 >     ds' <- liftE joinEquations (mapE (checkMethodDeclLhs env) ds)
->     checkMethods cls fs ds'
+>     checkMethods cls ops fs ds'
 >     mapE (checkMethodDeclRhs env) ds'
 
 > checkMethodDeclLhs :: VarEnv -> MethodDecl a -> Error (Decl a)
+> checkMethodDeclLhs _ (MethodFixity p fix pr ops) =
+>   return (InfixDecl p fix pr ops)
 > checkMethodDeclLhs _ (MethodSig p fs ty) =
 >   return (TypeSig p fs (QualTypeExpr [] ty))
 > checkMethodDeclLhs env (MethodDecl p f eqs) = checkEquationLhs True env p eqs
 
-> checkMethods :: QualIdent -> [P Ident] -> [Decl a] -> Error ()
-> checkMethods cls fs ds =
+> checkMethods :: QualIdent -> [P Ident] -> [P Ident] -> [Decl a] -> Error ()
+> checkMethods cls ops fs ds =
+>   reportDuplicates duplicatePrecedence repeatedPrecedence (ops ++ ops') &&>
 >   reportDuplicates duplicateDefinition repeatedDefinition fs' &&>
 >   mapE_ (\(P p f) -> errorAt p (undefinedMethod cls f))
->         (filter (`notElem` fs) fs')
+>         (filter (`notElem` fs) (ops' ++ fs'))
 >   where fs' = [P p f | FunctionDecl p f _ <- ds]
+>         ops' = concatMap vars (filter isInfixDecl ds)
 
 > checkMethodDeclRhs :: VarEnv -> Decl a -> Error (MethodDecl a)
+> checkMethodDeclRhs _ (InfixDecl p fix pr ops) =
+>   return (MethodFixity p fix pr ops)
 > checkMethodDeclRhs _ (TypeSig p fs (QualTypeExpr _ ty)) =
 >   return (MethodSig p fs ty)
 > checkMethodDeclRhs env (FunctionDecl p f eqs) =

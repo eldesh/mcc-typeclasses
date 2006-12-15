@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2045 2006-12-14 12:43:17Z wlux $
+% $Id: CurryParser.lhs 2046 2006-12-15 13:29:51Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -194,8 +194,8 @@ directory path to the module is ignored.
 >               <|> parens (qtycls `sepBy` comma)
 
 > classDecl :: Parser Token (TopDecl ()) a
-> classDecl =
->   classInstDecl ClassDecl KW_class tycls tyvar (methodSig <|?> methodDecl)
+> classDecl = classInstDecl ClassDecl KW_class tycls tyvar classMethod
+>   where classMethod = methodFixity <|> methodSig <|?> methodDecl
 
 > instanceDecl :: Parser Token (TopDecl ()) a
 > instanceDecl = classInstDecl InstanceDecl KW_instance qtycls type2 methodDecl
@@ -214,6 +214,9 @@ directory path to the module is ignored.
 > classInstHead kw cls ty = token kw <-*> withContext (,) ((,) <$> cls <*> ty)
 >   -- NB Don't try to ``optimize'' this into withContext (,,) cls <*> ty
 >   --    as this will yield a parse error if the context is omitted
+
+> methodFixity :: Parser Token (MethodDecl ()) a
+> methodFixity = infixDeclLhs MethodFixity <*> funop `sepBy1` comma
 
 > methodSig :: Parser Token (MethodDecl ()) a
 > methodSig =

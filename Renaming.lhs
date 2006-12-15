@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2045 2006-12-14 12:43:17Z wlux $
+% $Id: Renaming.lhs 2046 2006-12-15 13:29:51Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -161,6 +161,8 @@ syntax tree and renames all type and expression variables.
 
 > renameMethodDecl :: Ident -> RenameEnv -> MethodDecl a
 >                  -> RenameState (MethodDecl a)
+> renameMethodDecl _ _ (MethodFixity p fix pr ops) =
+>   return (MethodFixity p fix pr ops)
 > renameMethodDecl tv env (MethodSig p fs ty) =
 >   do
 >     env <- bindVars env (filter (tv /=) (fv ty))

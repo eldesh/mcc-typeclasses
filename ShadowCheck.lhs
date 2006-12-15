@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 2045 2006-12-14 12:43:17Z wlux $
+% $Id: ShadowCheck.lhs 2046 2006-12-15 13:29:51Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -83,6 +83,7 @@ traversal of the syntax tree.
 >     bindVars (concatMap funs ds) >>> foldr ((&&&) . shadow p) id ds
 
 > instance SyntaxTree (MethodDecl a) where
+>   shadow _ (MethodFixity _ _ _ _) = id
 >   shadow _ (MethodSig _ _ _) = id
 >   shadow _ (MethodDecl p _ eqs) = shadow p eqs
 

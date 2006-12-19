@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2046 2006-12-15 13:29:51Z wlux $
+% $Id: Renaming.lhs 2047 2006-12-19 09:46:38Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -22,7 +22,7 @@ imported functions and constructors. This qualification will be done
 after type checking was performed.
 \begin{verbatim}
 
-> module Renaming(rename,renameGoal) where
+> module Renaming(Key,k0,rename,renameGoal) where
 > import Base
 > import Combined
 > import Env
@@ -46,13 +46,24 @@ names.
 
 \end{verbatim}
 In order to thread the counter used for generating unique keys, we use
-a simple state monad.
+a simple state monad. Since renaming is applied independently to
+source code declarations and derived instance declarations, the
+counter's value must be returned from the state monad when renaming is
+finished and used as new initial state upon the next invocation of the
+renaming state monad. The global variable \texttt{k0} provides the
+initial counter value for the first invocation of the renaming state
+monad. We use the private \texttt{Key} type in order to hide the
+counter's representation from client modules.
 \begin{verbatim}
 
+> newtype Key = Key Int
 > type RenameState a = StateT Int Id a
 
-> run :: RenameState a -> a
-> run m = runSt m (globalKey + 1)
+> run :: RenameState a -> Key -> (Key,a)
+> run m (Key k) = runSt (m >>= \x -> fetchSt >>= \k' -> return (Key k',x)) k
+
+> k0 :: Key
+> k0 = Key (globalKey + 1)
 
 > globalKey :: Int
 > globalKey = uniqueId (mkIdent "")
@@ -94,11 +105,11 @@ The renaming pass simply descends into the structure of the abstract
 syntax tree and renames all type and expression variables.
 \begin{verbatim}
 
-> rename :: [TopDecl a] -> [TopDecl a]
-> rename ds = run (mapM renameTopDecl ds)
+> rename :: Key -> [TopDecl a] -> (Key,[TopDecl a])
+> rename k ds = run (mapM renameTopDecl ds) k
 
-> renameGoal :: Goal a -> Goal a
-> renameGoal (Goal p e ds) = run $
+> renameGoal :: Key -> Goal a -> (Key,Goal a)
+> renameGoal k (Goal p e ds) = flip run k $
 >   do
 >     env' <- bindVars emptyEnv (bv ds)
 >     ds' <- mapM (renameDecl env') ds

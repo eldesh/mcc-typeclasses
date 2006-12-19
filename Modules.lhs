@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2044 2006-12-13 22:53:02Z wlux $
+% $Id: Modules.lhs 2047 2006-12-19 09:46:38Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -17,7 +17,7 @@ This module controls the compilation of modules.
 > import TypeSyntaxCheck(typeSyntaxCheck,typeSyntaxCheckGoal)
 > import SyntaxCheck(syntaxCheck,syntaxCheckGoal)
 > import ExportSyntaxCheck(checkExports)
-> import Renaming(rename,renameGoal)
+> import Renaming(k0,rename,renameGoal)
 > import PrecCheck(precCheck,precCheckGoal)
 > import KindCheck(kindCheck,kindCheckGoal)
 > import InstCheck(instCheck)
@@ -119,14 +119,15 @@ declaration to the module.
 >     (tEnv,ds') <- typeSyntaxCheck m tcEnv iEnv ds
 >     (vEnv,ds'') <- syntaxCheck m tEnv tyEnv ds'
 >     es' <- checkExports m is tEnv vEnv es
->     (pEnv',ds''') <- precCheck m pEnv $ rename ds''
->     tcEnv' <- kindCheck m tcEnv ds'''
->     iEnv' <- instCheck m tcEnv' iEnv ds'''
->     (tyEnv',ds'''') <-
->       derive m pEnv' tcEnv' iEnv' ds''' >>= typeCheck m tcEnv' iEnv' tyEnv
+>     let (k1,ds''') = rename k0 ds''
+>     (pEnv',ds'''') <- precCheck m pEnv ds'''
+>     tcEnv' <- kindCheck m tcEnv ds''''
+>     iEnv' <- instCheck m tcEnv' iEnv ds''''
+>     (k2,deriv) <- liftM (rename k1) (derive m pEnv' tcEnv' iEnv' ds'''')
+>     (tyEnv',ds''''') <- typeCheck m tcEnv' iEnv' tyEnv (ds'''' ++ deriv)
 >     let (pEnv'',tcEnv'',tyEnv'') = qualifyEnv mEnv m pEnv' tcEnv' tyEnv'
 >     return (tcEnv'',iEnv',tyEnv'',
->             Module m (Just es') is (qual tcEnv' tyEnv' ds''''),
+>             Module m (Just es') is (qual tcEnv' tyEnv' ds'''''),
 >             exportInterface m es' pEnv'' tcEnv'' iEnv' tyEnv'')
 
 > warnModule :: CaseMode -> [Warn] -> Module Type -> [String]
@@ -266,13 +267,14 @@ compilation of a goal is similar to that of a module.
 > checkGoal forEval mEnv is g =
 >   do
 >     (pEnv,tcEnv,iEnv,tyEnv) <- importModules mEnv is
->     g' <- typeSyntaxCheckGoal tcEnv g >>=
->           syntaxCheckGoal tyEnv >>=
->           precCheckGoal pEnv . renameGoal
->     (tyEnv',cx,g'') <- kindCheckGoal tcEnv g' >>
->                        typeCheckGoal forEval tcEnv iEnv tyEnv g'
+>     (k1,g') <-
+>       liftM (renameGoal k0)
+>             (typeSyntaxCheckGoal tcEnv g >>= syntaxCheckGoal tyEnv)
+>     g'' <- precCheckGoal pEnv g'
+>     (tyEnv',cx,g''') <- kindCheckGoal tcEnv g'' >>
+>                         typeCheckGoal forEval tcEnv iEnv tyEnv g''
 >     let (_,tcEnv',tyEnv'') = qualifyEnv mEnv emptyMIdent pEnv tcEnv tyEnv'
->     return (tcEnv',iEnv,tyEnv'',cx,qual tcEnv tyEnv' g'')
+>     return (tcEnv',iEnv,tyEnv'',cx,qual tcEnv tyEnv' g''')
 
 > warnGoal :: CaseMode -> [Warn] -> Goal Type -> [String]
 > warnGoal caseMode warn g =

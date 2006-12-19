@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2044 2006-12-13 22:53:02Z wlux $
+% $Id: Deriving.lhs 2047 2006-12-19 09:46:38Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -22,21 +22,32 @@ This module implements the code generating derived instance declarations.
 > derive :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> [TopDecl ()]
 >         -> Error [TopDecl ()]
 > derive m pEnv tcEnv iEnv ds =
->   do
->     dss' <- run (mapM (deriveInstances m pEnv tcEnv iEnv) ds)
->     return (ds ++ concat dss')
+>   liftE concat (mapE (deriveInstances m pEnv tcEnv iEnv) ds)
+
+> deriveInstances :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> TopDecl ()
+>                 -> Error [TopDecl ()]
+> deriveInstances m pEnv tcEnv iEnv (DataDecl p _ tc tvs cs clss) =
+>   mapE (deriveInstance m pEnv tcEnv iEnv p tc tvs cs) clss
+> deriveInstances m pEnv tcEnv iEnv (NewtypeDecl p _ tc tvs nc clss) =
+>   mapE (deriveInstance m pEnv tcEnv iEnv p tc tvs [constrDecl nc]) clss
+>   where constrDecl (NewConstrDecl p c ty) = ConstrDecl p [] c [ty]
+> deriveInstances _ _ _ _ _ = return []
 
 \end{verbatim}
 When deriving instance declarations, the compiler must introduce fresh
-variables which are distinct from all other variables in the program.
-Furthermore, the fresh variables must use a non-zero renaming key. We
-use a state monad once more for the introduction of fresh variables.
+variables. We use a state monad once more for the introduction of
+fresh variables.
+
+\ToDo{There is really no need to use a state monad for renaming. It is
+  sufficient if variable names are unique within each scope. The
+  renaming pass, which is applied to the derived declarations will
+  ensure that the fresh variable names are globally unique.}
 \begin{verbatim}
 
 > type DeriveState a = StateT [Ident] Error a
 
 > run :: DeriveState a -> Error a
-> run m = callSt m [renameIdent (mkIdent ("_#" ++ show i)) 1 | i <- [1..]]
+> run m = callSt m nameSupply
 
 > freshIdent :: DeriveState Ident
 > freshIdent = liftM head (updateSt tail)
@@ -52,21 +63,12 @@ classes be derived.
 
 > type Constr = (QualIdent,Int)
 
-> deriveInstances :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> TopDecl ()
->                 -> DeriveState [TopDecl ()]
-> deriveInstances m pEnv tcEnv iEnv (DataDecl p _ tc tvs cs clss) =
->   mapM (deriveInstance m pEnv tcEnv iEnv p tc tvs cs) clss
-> deriveInstances m pEnv tcEnv iEnv (NewtypeDecl p _ tc tvs nc clss) =
->   mapM (deriveInstance m pEnv tcEnv iEnv p tc tvs [constrDecl nc]) clss
->   where constrDecl (NewConstrDecl p c ty) = ConstrDecl p [] c [ty]
-> deriveInstances _ _ _ _ _ = return []
-
 > deriveInstance :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> Position
 >                -> Ident -> [Ident] -> [ConstrDecl] -> QualIdent
->                -> DeriveState (TopDecl ())
+>                -> Error (TopDecl ())
 > deriveInstance m pEnv tcEnv iEnv p tc tvs cs cls =
 >   liftM (InstanceDecl p (map (toClassAssert tvs) cx) cls ty)
->         (deriveMethods pEnv tcEnv p (map constr cs) cls)
+>         (run (deriveMethods pEnv tcEnv p (map constr cs) cls))
 >   where cx = fromJust (lookupEnv (CT cls' tc') iEnv)
 >         ty = ConstructorType (qualifyWith m tc) (map VariableType tvs)
 >         tc' = qualifyWith m tc
@@ -295,8 +297,7 @@ all arguments.
 > isBounded :: [Constr] -> Bool
 > isBounded cs = length cs == 1 || isEnum cs
 
-> boundedMethods :: Position -> [Constr]
->                -> DeriveState [MethodDecl ()]
+> boundedMethods :: Position -> [Constr] -> DeriveState [MethodDecl ()]
 > boundedMethods p cs
 >   | isBounded cs = return [minBound,maxBound]
 >   | otherwise = errorAt p notBounded

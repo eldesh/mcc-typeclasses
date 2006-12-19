@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2047 2006-12-19 09:46:38Z wlux $
+% $Id: Deriving.lhs 2048 2006-12-19 12:19:10Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -11,12 +11,10 @@ This module implements the code generating derived instance declarations.
 
 > module Deriving(derive) where
 > import Base
-> import Combined
 > import Env
 > import Error
 > import List
 > import Maybe
-> import Monad
 > import TopEnv
 
 > derive :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> [TopDecl ()]
@@ -34,28 +32,6 @@ This module implements the code generating derived instance declarations.
 > deriveInstances _ _ _ _ _ = return []
 
 \end{verbatim}
-When deriving instance declarations, the compiler must introduce fresh
-variables. We use a state monad once more for the introduction of
-fresh variables.
-
-\ToDo{There is really no need to use a state monad for renaming. It is
-  sufficient if variable names are unique within each scope. The
-  renaming pass, which is applied to the derived declarations will
-  ensure that the fresh variable names are globally unique.}
-\begin{verbatim}
-
-> type DeriveState a = StateT [Ident] Error a
-
-> run :: DeriveState a -> Error a
-> run m = callSt m nameSupply
-
-> freshIdent :: DeriveState Ident
-> freshIdent = liftM head (updateSt tail)
-
-> freshIdents :: Int -> DeriveState [Ident]
-> freshIdents n = liftM (take n) (updateSt (drop n))
-
-\end{verbatim}
 Note that instances can be derived only for a set of predefined
 classes. An error is reported if the user asks for instances of other
 classes be derived.
@@ -67,8 +43,8 @@ classes be derived.
 >                -> Ident -> [Ident] -> [ConstrDecl] -> QualIdent
 >                -> Error (TopDecl ())
 > deriveInstance m pEnv tcEnv iEnv p tc tvs cs cls =
->   liftM (InstanceDecl p (map (toClassAssert tvs) cx) cls ty)
->         (run (deriveMethods pEnv tcEnv p (map constr cs) cls))
+>   liftE (InstanceDecl p (map (toClassAssert tvs) cx) cls ty)
+>         (deriveMethods pEnv tcEnv p (map constr cs) cls)
 >   where cx = fromJust (lookupEnv (CT cls' tc') iEnv)
 >         ty = ConstructorType (qualifyWith m tc) (map VariableType tvs)
 >         tc' = qualifyWith m tc
@@ -81,13 +57,13 @@ classes be derived.
 >           --        identifiers when as renamings are used
 
 > deriveMethods :: PEnv -> TCEnv -> Position -> [Constr] -> QualIdent
->               -> DeriveState [MethodDecl ()]
+>               -> Error [MethodDecl ()]
 > deriveMethods pEnv tcEnv p cs cls
->   | cls' == qEqId = eqMethods p cs
->   | cls' == qOrdId = ordMethods p cs
+>   | cls' == qEqId = return (eqMethods p cs)
+>   | cls' == qOrdId = return (ordMethods p cs)
 >   | cls' == qEnumId = enumMethods p cs
 >   | cls' == qBoundedId = boundedMethods p cs
->   | cls' == qShowId = showMethods pEnv p cs
+>   | cls' == qShowId = return (showMethods pEnv p cs)
 >   | otherwise = errorAt p (notDerivable cls)
 >   where cls' = origName (head (qualLookupTopEnv cls tcEnv))
 
@@ -103,34 +79,25 @@ is rigid like the polymorphic equality operator in the current Curry
 report.
 \begin{verbatim}
 
-> eqMethods :: Position -> [Constr] -> DeriveState [MethodDecl ()]
-> eqMethods p cs = sequence [deriveEq p cs]
+> eqMethods :: Position -> [Constr] -> [MethodDecl ()]
+> eqMethods p cs = [deriveEq nameSupply p cs]
 
-> deriveEq :: Position -> [Constr] -> DeriveState (MethodDecl ())
-> deriveEq p cs =
->   do
->     x <- freshIdent
->     y <- freshIdent
->     liftM (methodDecl p eqOpId [x,y] . Case (mkVar x)) (mapM (eqCase p y) cs)
+> deriveEq :: [Ident] -> Position -> [Constr] -> MethodDecl ()
+> deriveEq (x:y:vs) p cs =
+>   methodDecl p eqOpId [x,y] (Case (mkVar x) (map (eqCase vs p y) cs))
 
-> eqCase :: Position -> Ident -> Constr -> DeriveState (Alt ())
-> eqCase p y (c,n) =
->   do
->     xs <- freshIdents n
->     liftM (caseAlt p (conPattern c xs) . Case (mkVar y))
->           (sequence [eqEqCase p xs (c,n),eqNeqCase p])
+> eqCase :: [Ident] -> Position -> Ident -> Constr -> Alt ()
+> eqCase vs p y (c,n) =
+>   caseAlt p (conPattern c xs)
+>           (Case (mkVar y) [eqEqCase vs' p xs (c,n),eqNeqCase p])
+>   where (xs,vs') = splitAt n vs
 
-> eqEqCase :: Position -> [Ident] -> Constr -> DeriveState (Alt ())
-> eqEqCase p xs (c,n) =
->   do
->     ys <- freshIdents n
->     return (caseAlt p (conPattern c ys) (eqCaseArgs p xs ys))
+> eqEqCase :: [Ident] -> Position -> [Ident] -> Constr -> Alt ()
+> eqEqCase vs p xs (c,n) = caseAlt p (conPattern c ys) (eqCaseArgs p xs ys)
+>   where ys = take n vs
 
-> eqNeqCase :: Position -> DeriveState (Alt ())
-> eqNeqCase p =
->   do
->     x <- freshIdent
->     return (caseAlt p (VariablePattern () x) prelFalse)
+> eqNeqCase :: Position -> Alt ()
+> eqNeqCase p = caseAlt p (VariablePattern () anonId) prelFalse
 
 > eqCaseArgs :: Position -> [Ident] -> [Ident] -> Expression ()
 > eqCaseArgs p xs ys
@@ -154,40 +121,32 @@ default implementations.
   enumeration types.}
 \begin{verbatim}
 
-> ordMethods :: Position -> [Constr] -> DeriveState [MethodDecl ()]
-> ordMethods p cs = sequence [deriveCompare p cs]
+> ordMethods :: Position -> [Constr] -> [MethodDecl ()]
+> ordMethods p cs = [deriveCompare nameSupply p cs]
 
-> deriveCompare :: Position -> [Constr] -> DeriveState (MethodDecl ())
-> deriveCompare p cs =
->   do
->     x <- freshIdent
->     y <- freshIdent
->     liftM (methodDecl p compareId [x,y] . Case (mkVar x))
->           (mapM (cmpCase p y) (splits cs))
+> deriveCompare :: [Ident] -> Position -> [Constr] -> MethodDecl ()
+> deriveCompare (x:y:vs) p cs =
+>   methodDecl p compareId [x,y]
+>              (Case (mkVar x) (map (cmpCase vs p y) (splits cs)))
 >   where splits [] = []
 >         splits (x:xs) =
 >           ([],x,xs) : map (\(ys,z,zs) -> (x:ys,z,zs)) (splits xs)
 
-> cmpCase :: Position -> Ident -> ([Constr],Constr,[Constr])
->         -> DeriveState (Alt ())
-> cmpCase p y (csLT,(c,n),csGT) =
->   do
->     xs <- freshIdents n
->     liftM (caseAlt p (conPattern c xs) . Case (mkVar y))
->           (sequence (map (cmpNeqCase p prelGT) csLT ++
->                      cmpEqCase p xs (c,n) : map (cmpNeqCase p prelLT) csGT))
+> cmpCase :: [Ident] -> Position -> Ident -> ([Constr],Constr,[Constr])
+>         -> Alt ()
+> cmpCase vs p y (csLT,(c,n),csGT) =
+>   caseAlt p (conPattern c xs)
+>           (Case (mkVar y)
+>                 (map (cmpNeqCase p prelGT) csLT ++
+>                  cmpEqCase vs' p xs (c,n) : map (cmpNeqCase p prelLT) csGT))
+>   where (xs,vs') = splitAt n vs
 
-> cmpEqCase :: Position -> [Ident] -> Constr -> DeriveState (Alt ())
-> cmpEqCase p xs (c,n) =
->   do
->     ys <- freshIdents n
->     return (caseAlt p (conPattern c ys) (cmpCaseArgs p xs ys))
+> cmpEqCase :: [Ident] -> Position -> [Ident] -> Constr -> Alt ()
+> cmpEqCase vs p xs (c,n) = caseAlt p (conPattern c ys) (cmpCaseArgs p xs ys)
+>   where ys = take n vs
 
-> cmpNeqCase :: Position -> Expression () -> Constr -> DeriveState (Alt ())
-> cmpNeqCase p z (c,n) =
->   do
->     ys <- freshIdents n
->     return (caseAlt p (conPattern c ys) z)
+> cmpNeqCase :: Position -> Expression () -> Constr -> Alt ()
+> cmpNeqCase p z (c,n) = caseAlt p (conPattern c (replicate n anonId)) z
 
 > cmpCaseArgs :: Position -> [Ident] -> [Ident] -> Expression ()
 > cmpCaseArgs p xs ys
@@ -219,16 +178,16 @@ like \verb|[False ..]| well defined.
 > isEnum [] = False
 > isEnum (c:cs) = all ((0 ==) . snd) (c:cs)
 
-> enumMethods :: Position -> [Constr] -> DeriveState [MethodDecl ()]
+> enumMethods :: Position -> [Constr] -> Error [MethodDecl ()]
 > enumMethods p cs
->   | isEnum cs = sequence [succ,pred,toEnum,fromEnum,enumFrom,enumFromThen]
+>   | isEnum cs = return [succ,pred,toEnum,fromEnum,enumFrom,enumFromThen]
 >   | otherwise = errorAt p notEnum
->   where succ = return (deriveSucc p cs)
->         pred = return (derivePred p cs)
->         toEnum = return (deriveToEnum p cs)
->         fromEnum = return (deriveFromEnum p cs)
->         enumFrom = deriveEnumFrom p (last cs) 
->         enumFromThen = deriveEnumFromThen p (head cs) (last cs)
+>   where succ = deriveSucc p cs
+>         pred = derivePred p cs
+>         toEnum = deriveToEnum p cs
+>         fromEnum = deriveFromEnum p cs
+>         enumFrom = deriveEnumFrom nameSupply p (last cs) 
+>         enumFromThen = deriveEnumFromThen nameSupply p (head cs) (last cs)
 
 > deriveSucc :: Position -> [Constr] -> MethodDecl ()
 > deriveSucc p cs = MethodDecl p f (zipWith (succEqn p f) cs (tail cs))
@@ -246,21 +205,14 @@ like \verb|[False ..]| well defined.
 > deriveToEnum p cs = MethodDecl p f (zipWith (toEnumEqn p f) [0..] cs)
 >   where f = toEnumId
 
-> deriveEnumFrom :: Position -> Constr -> DeriveState (MethodDecl ())
-> deriveEnumFrom p (c,n) =
->   do
->     x <- freshIdent
->     return (methodDecl p enumFromId [x] $
->             prelEnumFromTo (mkVar x) (Constructor () c))
+> deriveEnumFrom :: [Ident] -> Position -> Constr -> MethodDecl ()
+> deriveEnumFrom (x:_) p (c,n) =
+>   methodDecl p enumFromId [x] (prelEnumFromTo (mkVar x) (Constructor () c))
 
-> deriveEnumFromThen :: Position -> Constr -> Constr
->                    -> DeriveState (MethodDecl ())
-> deriveEnumFromThen p c1 c2 =
->   do
->     x <- freshIdent
->     y <- freshIdent
->     return (methodDecl p enumFromThenId [x,y] $
->             prelEnumFromThenTo (mkVar x) (mkVar y) (enumBound x y c1 c2))
+> deriveEnumFromThen :: [Ident] -> Position -> Constr -> Constr -> MethodDecl ()
+> deriveEnumFromThen (x:y:_) p c1 c2 =
+>   methodDecl p enumFromThenId [x,y]
+>              (prelEnumFromThenTo (mkVar x) (mkVar y) (enumBound x y c1 c2))
 
 > enumBound :: Ident -> Ident -> Constr -> Constr -> Expression ()
 > enumBound x y (c1,_) (c2,_) =
@@ -297,7 +249,7 @@ all arguments.
 > isBounded :: [Constr] -> Bool
 > isBounded cs = length cs == 1 || isEnum cs
 
-> boundedMethods :: Position -> [Constr] -> DeriveState [MethodDecl ()]
+> boundedMethods :: Position -> [Constr] -> Error [MethodDecl ()]
 > boundedMethods p cs
 >   | isBounded cs = return [minBound,maxBound]
 >   | otherwise = errorAt p notBounded
@@ -330,21 +282,17 @@ returns its string representation \verb|"False"| and \verb|"True"|,
 respectively.
 \begin{verbatim}
 
-> showMethods :: PEnv -> Position -> [Constr] -> DeriveState [MethodDecl ()]
-> showMethods pEnv p cs = sequence [deriveShowsPrec pEnv p cs]
+> showMethods :: PEnv -> Position -> [Constr] -> [MethodDecl ()]
+> showMethods pEnv p cs = [deriveShowsPrec pEnv nameSupply p cs]
 
-> deriveShowsPrec :: PEnv -> Position -> [Constr] -> DeriveState (MethodDecl ())
-> deriveShowsPrec pEnv p cs =
->   liftM (MethodDecl p f) (mapM (showsPrecEqn pEnv p f) cs)
->   where f = showsPrecId
+> deriveShowsPrec :: PEnv -> [Ident] -> Position -> [Constr] -> MethodDecl ()
+> deriveShowsPrec pEnv vs p cs =
+>   MethodDecl p showsPrecId (map (showsPrecEqn pEnv vs p showsPrecId) cs)
 
-> showsPrecEqn :: PEnv -> Position -> Ident -> Constr
->              -> DeriveState (Equation ())
-> showsPrecEqn pEnv p f (c,n) =
->   do
->     l <- freshIdent
->     xs <- freshIdents n
->     return (equation p f (showsPrecMatch l c xs) (showsPrecExpr pEnv l c xs))
+> showsPrecEqn :: PEnv -> [Ident] -> Position -> Ident -> Constr -> Equation ()
+> showsPrecEqn pEnv (l:vs) p f (c,n) =
+>   equation p f (showsPrecMatch l c xs) (showsPrecExpr pEnv l c xs)
+>   where xs = take n vs
 
 > showsPrecMatch :: Ident -> QualIdent -> [Ident] -> [ConstrTerm ()]
 > showsPrecMatch l c xs =

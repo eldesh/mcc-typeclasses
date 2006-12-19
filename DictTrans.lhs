@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2046 2006-12-15 13:29:51Z wlux $
+% $Id: DictTrans.lhs 2049 2006-12-19 16:56:50Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -321,19 +321,22 @@ the compiler provides a default implementation that is equivalent to
 
 > defaultMethodDecls :: ValueEnv -> TopDecl Type -> [TopDecl Type]
 > defaultMethodDecls tyEnv (ClassDecl p _ cls _ ds) =
->   map BlockDecl (zipWith renameFunction (defaultMethodIds cls) vds'')
+>   map BlockDecl $
+>   zipWith3 (defaultMethodDecl tyEnv p) (defaultMethodIds cls) fs vds'
 >   where (vds,ods) = partition isMethodDecl ds
 >         fs = concatMap methods ods
 >         vds' = orderMethodDecls (map Just fs) vds
->         vds'' = zipWith (defaultMethodDecl tyEnv p) fs vds'
 > defaultMethodDecls _ _ = []
 
-> defaultMethodDecl :: ValueEnv -> Position -> Ident -> Maybe (MethodDecl Type)
->                   -> Decl Type
-> defaultMethodDecl _ _ _ (Just d) = methodDecl d
+> defaultMethodDecl :: ValueEnv -> Position -> Ident -> Ident
+>                   -> Maybe (MethodDecl Type) -> Decl Type
+> defaultMethodDecl tyEnv p f _ (Just d) =
+>   funDecl p f [] (methodVar tyEnv d) [methodDecl d]
 >   where methodDecl (MethodDecl p f eqs) = FunctionDecl p f eqs
-> defaultMethodDecl tyEnv p f Nothing =
->   funDecl p f [] (prelUndefined (rawType (varType f tyEnv))) []
+>         methodVar tyEnv (MethodDecl _ f _) =
+>           mkVar (rawType (varType f tyEnv)) f
+> defaultMethodDecl tyEnv p f f' Nothing =
+>   funDecl p f [] (prelUndefined (rawType (varType f' tyEnv))) []
 
 > intfDefaultMethodDecls :: ModuleIdent -> IDecl -> [IDecl]
 > intfDefaultMethodDecls m (IClassDecl p cx cls tv ds) =
@@ -368,9 +371,9 @@ the compiler provides a default implementation that is equivalent to
 \paragraph{Instance Dictionaries}
 For every instance declaration
 \begin{displaymath}
-  \mbox{\texttt{instance} \texttt{(}$C_1\,x_{i_1}$\texttt{,}
-    \dots\texttt{,} $C_l\,x_{i_o}$\texttt{)} \texttt{=>}
-    $C$ \texttt{($T\,x_1\dots\,x_l$)} \texttt{where} \texttt{\lb}
+  \mbox{\texttt{instance} \texttt{(}$C_1\,u_{i_1}$\texttt{,}
+    \dots\texttt{,} $C_l\,u_{i_o}$\texttt{)} \texttt{=>}
+    $C$ \texttt{($T\,u_1\dots\,u_l$)} \texttt{where} \texttt{\lb}
     $f_{i_1}$ \texttt{=} $e_{i_1}$\texttt{;} \dots\texttt{;}
     $f_{i_m}$ \texttt{=} $e_{i_m}$ \texttt{\rb}},
 \end{displaymath}
@@ -379,13 +382,13 @@ a subset of the methods $f_1, \dots, f_n$ declared for class $C$, a
 global function
 \begin{displaymath}
   \mbox{$f$ $d_1$ $\dots\;d_o$ \texttt{=} $C'$ $g_1$ $\dots\;g_n$
-    \texttt{where} \texttt{\lb} $h_{i_1}$ \texttt{=} $e_{i_1}$\texttt{;} 
-    \dots\texttt{;} $h_{i_m}$ \texttt{=} $e_{i_m}$ \texttt{\rb}},
+    \texttt{where} \texttt{\lb} $f_{i_1}$ \texttt{=} $e_{i_1}$\texttt{;} 
+    \dots\texttt{;} $f_{i_m}$ \texttt{=} $e_{i_m}$ \texttt{\rb}},
 \end{displaymath}
 where $f=\emph{instFunId}(C,T)$ and $C'=\emph{dictConstrId}(C)$ is
 added to the source code and its type is recorded in the type
 environment. The function receives a dictionary argument for each of
-the type predicates $C_i\,x_i$ appearing in the instance context
+the type predicates $C_i\,u_i$ appearing in the instance context
 similar to the transformation of overloaded functions (see below).
 These dictionaries are in scope in the (transformed) method
 implementations. We do not add explicit dictionary arguments to the
@@ -397,16 +400,16 @@ The dictionary constructor's argument expressions $g_i$ are given by
   g_i =
     \left\{
       \begin{array}{ll}
-        h_i & \mbox{if $i \in \left\{ i_1, \dots, i_m \right\}$,} \\
+        f_i & \mbox{if $i \in \left\{ i_1, \dots, i_m \right\}$,} \\
         f_i' & \mbox{otherwise,}
       \end{array}
     \right.
 \end{displaymath}
 where $f_i'$ is the name of the default method implementation of
-method $f_i$ in class $C$. The instance methods are renamed using
-fresh identifiers $h_{i_1}, \dots, h_{i_m}$ so that the local function
-definitions do not shadow the class methods, which may be used --
-possibly at a different type -- in the method implementations.
+method $f_i$ in class $C$. Note that the instance methods have been
+renamed using fresh renaming keys and thus do not shadow occurrences
+of the class methods in the right hand sides of the method
+implementations.
 \begin{verbatim}
 
 > bindInstFuns :: TCEnv -> InstEnv -> ValueEnv -> ValueEnv
@@ -429,22 +432,16 @@ possibly at a different type -- in the method implementations.
 >          -> [ClassAssert] -> QualIdent -> TypeExpr -> [MethodDecl Type]
 >          -> DictState (TopDecl Type)
 > instDecl m tcEnv iEnv tyEnv p cx cls ty ds =
->   do
->     vs <- mapM (freshVar m "_#method") (arrowArgs ty')
->     liftM BlockDecl $
->       dictTrans m iEnv (foldr (bindMeth m) tyEnv' vs) emptyEnv $
->       funDecl p f [] (dictExpr ty' cls vs ds')
->               (catMaybes (zipWith (fmap . (renameMethod . snd)) vs ds'))
+>   liftM BlockDecl $
+>   dictTrans m iEnv tyEnv' emptyEnv $
+>   funDecl p f [] (dictExpr ty' cls ds') (map methodDecl (catMaybes ds'))
 >   where f = instFunId tp
 >         (cx',tp) = toTypePred (expandPolyType tcEnv) cx cls ty
 >         fs = classMethods cls tcEnv
 >         ds' = orderMethodDecls fs ds
 >         ty' = instDictType tcEnv tyEnv tp fs ds'
 >         tyEnv' = bindFun m f (typeScheme (qualDictType cx' tp)) tyEnv
->         renameMethod f = renameFunction f . methodDecl
->         bindMeth m (ty,v) = bindFun m v (monoType ty)
->         bindFun m f ty = localBindTopEnv f (Value (qualifyWith m f) ty)
->         methodDecl (MethodDecl p f eqs) = (FunctionDecl p f eqs)
+>         methodDecl (MethodDecl p f eqs) = FunctionDecl p f eqs
 
 > instIDecl :: ModuleIdent -> Position -> [ClassAssert] -> QualIdent -> TypeExpr
 >           -> IDecl
@@ -459,7 +456,7 @@ possibly at a different type -- in the method implementations.
 
 > orderMethodDecls :: [Maybe Ident] -> [MethodDecl a] -> [Maybe (MethodDecl a)]
 > orderMethodDecls fs ds =
->   map (>>= flip lookup [(f,d) | d@(MethodDecl _ f _) <- ds]) fs
+>   map (>>= flip lookup [(unRenameIdent f,d) | d@(MethodDecl _ f _) <- ds]) fs
 
 > instDictType :: TCEnv -> ValueEnv -> TypePred -> [Maybe Ident]
 >              -> [Maybe (MethodDecl Type)] -> Type
@@ -467,31 +464,22 @@ possibly at a different type -- in the method implementations.
 >   subst (matchInstMethodTypes (arrowArgs ty') ds idSubst) ty'
 >   where ty' = expandAliasType [ty] (classDictType tcEnv tyEnv cls fs)
 
-> dictExpr :: Type -> QualIdent -> [(Type,Ident)] -> [Maybe (MethodDecl a)]
->          -> Expression Type
-> dictExpr ty cls vs ds =
+> dictExpr :: Type -> QualIdent -> [Maybe (MethodDecl a)] -> Expression Type
+> dictExpr ty cls ds =
 >   apply (Constructor ty (qDictConstrId cls))
->         (zipWith3 instFun vs (qDefaultMethodIds cls) ds)
->   where instFun (ty,v) _ (Just _) = mkVar ty v
->         instFun (ty,_) f Nothing = Variable ty f
-
-> renameFunction :: Ident -> Decl Type -> Decl Type
-> renameFunction f (FunctionDecl p _ eqs) =
->   FunctionDecl p f (map (renameEqnLhs f) eqs)
->   where renameEqnLhs f (Equation p lhs rhs) = Equation p (renameLhs f lhs) rhs
->         renameLhs f (FunLhs _ ts) = FunLhs f ts
->         renameLhs f (OpLhs t1 _ t2) = OpLhs t1 f t2
->         renameLhs f (ApLhs lhs ts) = ApLhs (renameLhs f lhs) ts
+>         (zipWith3 instFun (arrowArgs ty) (qDefaultMethodIds cls) ds)
+>   where instFun ty _ (Just (MethodDecl _ f _)) = mkVar ty f
+>         instFun ty f Nothing = Variable ty f
 
 \end{verbatim}
 \paragraph{Adding Dictionary Arguments}
-Given a function $f$ with type $(C_1\,x_1, \dots, C_n\,x_n)
+Given a function $f$ with type $(C_1\,u_1, \dots, C_n\,u_n)
 \Rightarrow \tau$, the compiler adds $n$ implicit dictionary arguments
 to the function's declaration thereby changing $f$'s type into
-$T_1\,x_1 \rightarrow \dots \rightarrow T_n\,x_n \rightarrow \tau$,
+$T_1\,u_1 \rightarrow \dots \rightarrow T_n\,u_n \rightarrow \tau$,
 where $T_i=\emph{dictTypeId}(C_i)$. The types of these variables are
 recorded in the type environment and an environment mapping the
-constraints $C_i\,x_i$ onto their corresponding dictionary arguments
+constraints $C_i\,u_i$ onto their corresponding dictionary arguments
 is computed as well. This environment is used when transforming
 function applications in $f$'s body.
 \begin{verbatim}
@@ -556,10 +544,10 @@ function applications in $f$'s body.
 >            (dictTrans m iEnv tyEnv dictEnv e)
 
 \end{verbatim}
-An application of an overloaded function $f$ with type $(C_1\,x_1,
-\dots, C_n\,x_n) \Rightarrow \tau$ is changed into an application of
+An application of an overloaded function $f$ with type $(C_1\,u_1,
+\dots, C_n\,u_n) \Rightarrow \tau$ is changed into an application of
 $f$ to the dictionaries for $C_1\,\tau_1, \dots, C_n\,\tau_n$ where
-the types $\tau_i$ are given by $\tau_i = \vartheta x_i$ where
+the types $\tau_i$ are given by $\tau_i = \vartheta u_i$ where
 $\vartheta$ is the most general unifier between $f$'s type $\tau$ and
 the concrete type at which $f$ is used in the application.
 \begin{verbatim}

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2047 2006-12-19 09:46:38Z wlux $
+% $Id: Renaming.lhs 2049 2006-12-19 16:56:50Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -138,17 +138,19 @@ syntax tree and renames all type and expression variables.
 > renameTopDecl (ClassDecl p cx cls tv ds) =
 >   do
 >     env <- bindVars emptyEnv [tv]
+>     env' <- bindVars emptyEnv [f | MethodDecl _ f _ <- ds]
 >     liftM3 (flip (ClassDecl p) cls)
 >            (mapM (renameClassAssert env) cx)
 >            (renameVar env tv)
->            (mapM (renameMethodDecl tv env) ds)
+>            (mapM (renameMethodDecl tv env env') ds)
 > renameTopDecl (InstanceDecl p cx cls ty ds) =
 >   do
 >     env <- bindVars emptyEnv (fv ty)
+>     env' <- bindVars emptyEnv [f | MethodDecl _ f _ <- ds]
 >     liftM3 (flip (InstanceDecl p) cls)
 >            (mapM (renameClassAssert env) cx)
 >            (renameType env ty)
->            (mapM (renameMethodDecl anonId emptyEnv) ds)
+>            (mapM (renameMethodDecl anonId emptyEnv env') ds)
 > renameTopDecl (BlockDecl d) = liftM BlockDecl (renameDecl emptyEnv d)
 
 > renameConstrDecl :: RenameEnv -> ConstrDecl -> RenameState ConstrDecl
@@ -170,16 +172,29 @@ syntax tree and renames all type and expression variables.
 > renameNewConstrDecl env (NewConstrDecl p c ty) =
 >   liftM (NewConstrDecl p c) (renameType env ty)
 
-> renameMethodDecl :: Ident -> RenameEnv -> MethodDecl a
+\end{verbatim}
+When renaming class and instance declarations, the compiler renames
+method identifiers in the left hand side of method implementations,
+but does not change method identifiers that occur in the right hand
+sides (nor in type signatures and fixity declarations). This nicely
+reflects the fact that the method identifier in the left hand side
+denotes a particular method implementation, whereas any occurrence of
+a method identifier in the right hand side denotes the overloaded type
+class method.
+\begin{verbatim}
+
+> renameMethodDecl :: Ident -> RenameEnv -> RenameEnv -> MethodDecl a
 >                  -> RenameState (MethodDecl a)
-> renameMethodDecl _ _ (MethodFixity p fix pr ops) =
+> renameMethodDecl _ _ _ (MethodFixity p fix pr ops) =
 >   return (MethodFixity p fix pr ops)
-> renameMethodDecl tv env (MethodSig p fs ty) =
+> renameMethodDecl tv env _ (MethodSig p fs ty) =
 >   do
 >     env <- bindVars env (filter (tv /=) (fv ty))
 >     liftM (MethodSig p fs) (renameType env ty)
-> renameMethodDecl _ _ (MethodDecl p f eqs) =
->   liftM (MethodDecl p f) (mapM (renameEqn f emptyEnv) eqs)
+> renameMethodDecl _ _ env' (MethodDecl p f eqs) =
+>   do
+>     f' <- renameVar env' f
+>     liftM (MethodDecl p f') (mapM (renameEqn f' emptyEnv) eqs)
 
 > renameTypeSig :: QualTypeExpr -> RenameState QualTypeExpr
 > renameTypeSig ty =

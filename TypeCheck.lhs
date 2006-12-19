@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2046 2006-12-15 13:29:51Z wlux $
+% $Id: TypeCheck.lhs 2049 2006-12-19 16:56:50Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -411,7 +411,8 @@ the method's type signature.
 >     genClassMethodDecl m tcEnv sigTy cx ty d
 >     return d'
 >   where sigTy = methodType sigs d
->         methodType sigs (MethodDecl _ f _) = fromJust (lookupEnv f sigs)
+>         methodType sigs (MethodDecl _ f _) =
+>           fromJust (lookupEnv (unRenameIdent f) sigs)
 
 > genClassMethodDecl :: ModuleIdent -> TCEnv -> QualTypeExpr -> Context -> Type
 >                    -> MethodDecl a -> TcState ()
@@ -421,6 +422,9 @@ the method's type signature.
 >     let sigma = gen zeroSet cx (subst theta ty)
 >     unless (sigma `matchesTypeSig` expandPolyType tcEnv sigTy)
 >            (errorAt p (typeSigTooGeneral m what sigTy sigma))
+>     -- NB sigma is the right hand side type, which may lack some type
+>     --    predicates implied by the super class context
+>     updateSt_ (bindFun m f sigma)
 >   where what = text "Method:" <+> ppIdent f
 
 > tcInstMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> TypeScheme -> Type
@@ -456,6 +460,9 @@ the method's type signature.
 >     let sigma = gen zeroSet cx (subst theta ty)
 >     unless (sigma `matchesTypeSig` typeScheme methTy)
 >            (errorAt p (methodSigTooGeneral m what methTy sigma))
+>     -- NB sigma is the right hand side type, which may lack some type
+>     --    predicates implied by the instance context
+>     updateSt_ (bindFun m f sigma)
 >   where what = text "Method" <+> ppIdent f
 
 \end{verbatim}
@@ -471,11 +478,11 @@ instance declaration.
 \begin{verbatim}
 
 > tcMethod :: QualIdent -> QualType -> Ident -> TcState QualType
-> tcMethod cls ty f =
->   -- FIXME: The method f may not be in scope with same module qualifier
->   --        as its class cls and it may be ambiguous
->   liftM (instMethodType ty . rawType . funType (qualifyLike cls f)) fetchSt
->   where instMethodType (QualType cx ty) =
+> tcMethod cls ty f = liftM (instMethodType ty . rawType . funType f') fetchSt
+>   where f' = qualifyLike cls (unRenameIdent f)
+>                -- FIXME: The method f may not be in scope with same module
+>                --        qualifier as its class cls and it may be ambiguous
+>         instMethodType (QualType cx ty) =
 >           normalize 0 . QualType cx . expandAliasType [ty]
 
 \end{verbatim}

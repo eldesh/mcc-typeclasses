@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 2046 2006-12-15 13:29:51Z wlux $
+% $Id: PrecCheck.lhs 2049 2006-12-19 16:56:50Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -44,6 +44,10 @@ with the lowest precedence becomes the root and that two adjacent
 operators with the same precedence will not have conflicting
 associativities. The top-level precedence environment is returned
 because it is used for constructing the module's interface.
+
+Note that the compiler must temporarily undo the renaming of method
+identifiers on the left hand sides of method implementations so that
+the correct operator precedence is used.
 \begin{verbatim}
 
 > precCheck :: ModuleIdent -> PEnv -> [TopDecl a] -> Error (PEnv,[TopDecl a])
@@ -78,7 +82,13 @@ because it is used for constructing the module's interface.
 >   return (MethodFixity p fix pr ops)
 > checkMethodDecl _ _ (MethodSig p fs ty) = return (MethodSig p fs ty)
 > checkMethodDecl m pEnv (MethodDecl p f eqs) =
->   liftE (MethodDecl p f) (mapE (checkEqn m pEnv) eqs)
+>   liftE (MethodDecl p f) (mapE (checkMethodEqn m pEnv) eqs)
+>   where checkMethodEqn m pEnv =
+>           liftE (renameEqn f) . checkEqn m pEnv . renameEqn (unRenameIdent f)
+>         renameEqn f (Equation p lhs rhs) = Equation p (renameLhs f lhs) rhs
+>         renameLhs f (FunLhs _ ts) = FunLhs f ts
+>         renameLhs f (OpLhs t1 _ t2) = OpLhs t1 f t2
+>         renameLhs f (ApLhs lhs ts) = ApLhs (renameLhs f lhs) ts
 
 > checkDecl :: ModuleIdent -> PEnv -> Decl a -> Error (Decl a)
 > checkDecl m pEnv (FunctionDecl p f eqs) =

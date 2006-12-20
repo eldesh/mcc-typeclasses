@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2047 2006-12-19 09:46:38Z wlux $
+% $Id: Modules.lhs 2051 2006-12-20 09:52:53Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -140,12 +140,12 @@ declaration to the module.
 >             -> (Either CFile [CFile],[(Dump,Doc)])
 > transModule split debug tr mEnv tcEnv iEnv tyEnv (Module m es is ds) =
 >   (ccode,dumps)
->   where trEnv = trustEnv tr ds
+>   where trEnv = if debug then trustEnv tr ds else emptyEnv
 >         mEnv' = fmap dictTransInterface mEnv
 >         (tcEnv',tyEnv',dict) =
 >           dictTransModule tcEnv iEnv tyEnv (Module m es is ds)
 >         (desugared,tyEnv'') = desugar tcEnv' tyEnv' dict
->         (simplified,tyEnv''') = simplify tyEnv'' desugared
+>         (simplified,tyEnv''') = simplify tyEnv'' trEnv desugared
 >         (lifted,tyEnv'''',trEnv') = lift tyEnv''' trEnv simplified
 >         il = ilTrans tyEnv'''' lifted
 >         ilDbg
@@ -287,11 +287,13 @@ compilation of a goal is similar to that of a module.
 >   where m = emptyMIdent
 >         goalId = mainId
 >         qGoalId = qualifyWith m goalId
->         trEnv = bindEnv goalId Suspect (trustEnvGoal tr g)
+>         trEnv
+>           | debug = bindEnv goalId Suspect (trustEnvGoal tr g)
+>           | otherwise = emptyEnv
 >         mEnv' = fmap dictTransInterface mEnv
 >         (tcEnv',tyEnv',dict) = dictTransGoal tcEnv iEnv tyEnv m g
 >         (vs,desugared,tyEnv'') = desugarGoal debug tcEnv' tyEnv' m goalId dict
->         (simplified,tyEnv''') = simplify tyEnv'' desugared
+>         (simplified,tyEnv''') = simplify tyEnv'' trEnv desugared
 >         (lifted,tyEnv'''',trEnv') = lift tyEnv''' trEnv simplified
 >         il = ilTrans tyEnv'''' lifted
 >         ilDbg

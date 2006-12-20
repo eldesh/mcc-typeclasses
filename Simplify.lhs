@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 1986 2006-10-29 16:45:56Z wlux $
+% $Id: Simplify.lhs 2051 2006-12-20 09:52:53Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -30,11 +30,12 @@ Currently, the following optimizations are implemented:
 > import Typing
 > import Utils
 
-> type SimplifyState a = StateT ValueEnv (StateT Int Id) a
+> type SimplifyState a = StateT ValueEnv (ReaderT TrustEnv (StateT Int Id)) a
 > type InlineEnv = Env Ident (Expression Type)
 
-> simplify :: ValueEnv -> Module Type -> (Module Type,ValueEnv)
-> simplify tyEnv m = runSt (callSt (simplifyModule m) tyEnv) 1
+> simplify :: ValueEnv -> TrustEnv -> Module Type -> (Module Type,ValueEnv)
+> simplify tyEnv trEnv m =
+>   runSt (callRt (callSt (simplifyModule m) tyEnv) trEnv) 1
 
 > simplifyModule :: Module Type -> SimplifyState (Module Type,ValueEnv)
 > simplifyModule (Module m es is ds) =
@@ -117,8 +118,8 @@ the change of evaluation order.
 
 This transformation is actually just a special case of inlining a
 (local) function definition. We are unable to handle the general case
-because it would require to represent the pattern matching code
-explicitly in a Curry expression.
+because it would require representing pattern matching code explicitly
+in Curry expressions.
 \begin{verbatim}
 
 > simplifyEquation :: ModuleIdent -> InlineEnv -> Equation Type
@@ -127,14 +128,15 @@ explicitly in a Curry expression.
 >   do
 >     rhs' <- simplifyRhs m env rhs
 >     tyEnv <- fetchSt
->     return (inlineFun m tyEnv p lhs rhs')
+>     trEnv <- liftSt envRt
+>     return (inlineFun m tyEnv trEnv p lhs rhs')
 
-> inlineFun :: ModuleIdent -> ValueEnv -> Position -> Lhs Type -> Rhs Type
->           -> [Equation Type]
-> inlineFun m tyEnv p (FunLhs f ts)
+> inlineFun :: ModuleIdent -> ValueEnv -> TrustEnv -> Position -> Lhs Type
+>           -> Rhs Type -> [Equation Type]
+> inlineFun m tyEnv trEnv p (FunLhs f ts)
 >           (SimpleRhs _ (Let [FunctionDecl _ f' eqs'] e) _)
 >   | f' `notElem` qfv m eqs' && e' == Variable (typeOf e') (qualify f') &&
->     n == arrowArity (rawType (varType f' tyEnv)) =
+>     n == arrowArity (rawType (varType f' tyEnv)) && trustedFun trEnv f' =
 >     map (merge p f ts' vs') eqs'
 >   where n :: Int                      -- type signature necessary for nhc
 >         (n,vs',ts',e') = etaReduce 0 [] (reverse ts) e
@@ -143,7 +145,7 @@ explicitly in a Curry expression.
 >         etaReduce n vs (VariablePattern _ v : ts) (Apply e (Variable _ v'))
 >           | qualify v == v' = etaReduce (n+1) (v:vs) ts e
 >         etaReduce n vs ts e = (n,vs,reverse ts,e)
-> inlineFun _ _ p lhs rhs = [Equation p lhs rhs]
+> inlineFun _ _ _ p lhs rhs = [Equation p lhs rhs]
 
 > simplifyRhs :: ModuleIdent -> InlineEnv -> Rhs Type
 >             -> SimplifyState (Rhs Type)
@@ -504,11 +506,14 @@ selector functions.
 Auxiliary functions
 \begin{verbatim}
 
+> trustedFun :: TrustEnv -> Ident -> Bool
+> trustedFun trEnv f = maybe True (Trust ==) (lookupEnv f trEnv)
+
 > freshIdent :: ModuleIdent -> (Int -> Ident) -> TypeScheme
 >            -> SimplifyState Ident
 > freshIdent m f ty =
 >   do
->     x <- liftM f (liftSt (updateSt (1 +)))
+>     x <- liftM f (liftSt (liftRt (updateSt (1 +))))
 >     updateSt_ (bindFun m x ty)
 >     return x
 

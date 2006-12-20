@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2046 2006-12-15 13:29:51Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2052 2006-12-20 11:37:05Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -104,6 +104,7 @@ signatures.
 >     return (MethodSig p fs ty')
 > checkMethodDecl env _ (MethodDecl p f eqs) =
 >   liftE (MethodDecl p f) (mapE (checkEquation env) eqs)
+> checkMethodDecl _ _ (TrustMethod p tr fs) = return (TrustMethod p tr fs)
 
 > checkDecl :: TypeEnv -> Decl a -> Error (Decl a)
 > checkDecl _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)

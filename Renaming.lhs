@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2049 2006-12-19 16:56:50Z wlux $
+% $Id: Renaming.lhs 2052 2006-12-20 11:37:05Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -195,6 +195,9 @@ class method.
 >   do
 >     f' <- renameVar env' f
 >     liftM (MethodDecl p f') (mapM (renameEqn f' emptyEnv) eqs)
+> renameMethodDecl _ _ env' (TrustMethod p tr fs) =
+>   liftM (TrustMethod p tr)
+>         (maybe (return Nothing) (liftM Just . mapM (renameVar env')) fs)
 
 > renameTypeSig :: QualTypeExpr -> RenameState QualTypeExpr
 > renameTypeSig ty =

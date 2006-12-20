@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 2049 2006-12-19 16:56:50Z wlux $
+% $Id: PrecCheck.lhs 2052 2006-12-20 11:37:05Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -62,6 +62,7 @@ the correct operator precedence is used.
 >         decl (MethodFixity p fix pr ops) = InfixDecl p fix pr ops
 >         decl (MethodSig p fs ty) = TypeSig p fs (QualTypeExpr [] ty)
 >         decl (MethodDecl p f eqs) = FunctionDecl p f eqs
+>         decl (TrustMethod p tr fs) = TrustAnnot p tr fs
 
 > precCheckGoal :: PEnv -> Goal a -> Error (Goal a)
 > precCheckGoal pEnv (Goal p e ds) =
@@ -89,6 +90,7 @@ the correct operator precedence is used.
 >         renameLhs f (FunLhs _ ts) = FunLhs f ts
 >         renameLhs f (OpLhs t1 _ t2) = OpLhs t1 f t2
 >         renameLhs f (ApLhs lhs ts) = ApLhs (renameLhs f lhs) ts
+> checkMethodDecl _ _ (TrustMethod p tr fs) = return (TrustMethod p tr fs)
 
 > checkDecl :: ModuleIdent -> PEnv -> Decl a -> Error (Decl a)
 > checkDecl m pEnv (FunctionDecl p f eqs) =

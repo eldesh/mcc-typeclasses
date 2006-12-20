@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2046 2006-12-15 13:29:51Z wlux $
+% $Id: CurrySyntax.lhs 2052 2006-12-20 11:37:05Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -69,6 +69,7 @@ parsed representation of a Curry program.
 >     MethodFixity Position Infix Int [Ident]
 >   | MethodSig Position [Ident] TypeExpr
 >   | MethodDecl Position Ident [Equation a]
+>   | TrustMethod Position Trust (Maybe [Ident])
 >   deriving (Eq,Show)
 > data Decl a =
 >     InfixDecl Position Infix Int [Ident]
@@ -95,6 +96,7 @@ parsed representation of a Curry program.
 > methods (MethodFixity _ _ _ _) = []
 > methods (MethodSig _ fs _) = fs
 > methods (MethodDecl _ _ _) = []
+> methods (TrustMethod _ _ _) = []
 
 \end{verbatim}
 \paragraph{Module interfaces}
@@ -263,6 +265,7 @@ The abstract syntax tree is a functor with respect to the attributes.
 >   fmap _ (MethodFixity p fix pr ops) = MethodFixity p fix pr ops
 >   fmap _ (MethodSig p fs ty) = MethodSig p fs ty
 >   fmap f (MethodDecl p f' eqs) = MethodDecl p f' (map (fmap f) eqs)
+>   fmap _ (TrustMethod p tr fs) = TrustMethod p tr fs
 
 > instance Functor Decl where
 >   fmap _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops

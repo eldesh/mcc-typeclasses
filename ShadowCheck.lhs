@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 2046 2006-12-15 13:29:51Z wlux $
+% $Id: ShadowCheck.lhs 2052 2006-12-20 11:37:05Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -86,6 +86,7 @@ traversal of the syntax tree.
 >   shadow _ (MethodFixity _ _ _ _) = id
 >   shadow _ (MethodSig _ _ _) = id
 >   shadow _ (MethodDecl p _ eqs) = shadow p eqs
+>   shadow _ (TrustMethod _ _ _) = id
 
 > instance SyntaxTree (Decl a) where
 >   shadow _ (FunctionDecl p _ eqs) = shadow p eqs

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Trust.lhs 1999 2006-11-10 21:53:29Z wlux $
+% $Id: Trust.lhs 2052 2006-12-20 11:37:05Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -40,7 +40,7 @@ the local functions \texttt{h} and \texttt{i} are trusted, but
 \begin{verbatim}
 
 > trustEnv :: Trust -> [TopDecl a] -> TrustEnv
-> trustEnv tr ds = trust tr [d | BlockDecl d <- ds] emptyEnv
+> trustEnv tr ds = trust tr ds emptyEnv
 
 > trustEnvGoal :: Trust -> Goal a -> TrustEnv
 > trustEnvGoal tr (Goal _ e ds) = trust tr e (trust tr ds emptyEnv)
@@ -54,6 +54,27 @@ the local functions \texttt{h} and \texttt{i} are trusted, but
 > instance SyntaxTree a => SyntaxTree [a] where
 >   trust = trustList
 
+> instance SyntaxTree (TopDecl a) where
+>   trust tr (ClassDecl _ _ _ _ ds) = trust tr ds
+>   trust tr (InstanceDecl _ _ _ _ ds) = trust tr ds
+>   trust tr (BlockDecl d) = trust tr d
+>   trust _ _ = id
+
+>   trustList tr ds = trustDeclGroup tr [d | BlockDecl d <- ds] ds
+
+> instance SyntaxTree (MethodDecl a) where
+>   trust tr (MethodDecl _ f eqs) env =
+>     case lookupEnv f env of
+>       Just tr' -> trust tr' eqs env
+>       Nothing -> trust tr eqs (bindEnv f tr env)
+>   trust _ _ env = env
+
+>   trustList tr ds = trustDeclGroup tr (map decl ds) ds
+>     where decl (MethodFixity p fix tr ops) = InfixDecl p fix tr ops
+>           decl (MethodSig p fs ty) = TypeSig p fs (QualTypeExpr [] ty)
+>           decl (MethodDecl p f eqs) = FunctionDecl p f eqs
+>           decl (TrustMethod p tr fs) = TrustAnnot p tr fs
+
 > instance SyntaxTree (Decl a) where
 >   trust tr (FunctionDecl _ f eqs) env =
 >     case lookupEnv f env of
@@ -62,11 +83,15 @@ the local functions \texttt{h} and \texttt{i} are trusted, but
 >   trust tr (PatternDecl _ _ rhs) env = trust tr rhs env
 >   trust _ _ env = env
 
->   trustList tr ds env = foldr (trust tr') env' ds
->     where tr' = head $ [tr | TrustAnnot _ tr Nothing <- ds] ++ [tr]
->           env' =
->             foldr ($) env
->                   [bindEnv f tr | TrustAnnot _ tr (Just fs) <- ds, f <- fs]
+>   trustList tr ds = trustDeclGroup tr ds ds
+
+> trustDeclGroup :: SyntaxTree d => Trust -> [Decl a] -> [d] -> TrustEnv
+>                -> TrustEnv
+> trustDeclGroup tr ds ds' env = foldr (trust tr') env' ds'
+>   where tr' = head ([tr | TrustAnnot _ tr Nothing <- ds] ++ [tr])
+>         env' =
+>           foldr ($) env
+>                 [bindEnv f tr | TrustAnnot _ tr (Just fs) <- ds, f <- fs]
 
 > instance SyntaxTree (Equation a) where
 >   trust tr (Equation _ _ rhs) = trust tr rhs

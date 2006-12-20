@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2046 2006-12-15 13:29:51Z wlux $
+% $Id: CurryParser.lhs 2052 2006-12-20 11:37:05Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -196,9 +196,11 @@ directory path to the module is ignored.
 > classDecl :: Parser Token (TopDecl ()) a
 > classDecl = classInstDecl ClassDecl KW_class tycls tyvar classMethod
 >   where classMethod = methodFixity <|> methodSig <|?> methodDecl
+>                   <|> trustMethod
 
 > instanceDecl :: Parser Token (TopDecl ()) a
-> instanceDecl = classInstDecl InstanceDecl KW_instance qtycls type2 methodDecl
+> instanceDecl = classInstDecl InstanceDecl KW_instance qtycls type2 instMethod
+>   where instMethod = methodDecl <|> trustMethod
 
 > classInstDecl :: (Position -> [ClassAssert] -> a -> b -> [c] -> TopDecl ())
 >               -> Category -> Parser Token a d -> Parser Token b d
@@ -228,6 +230,15 @@ directory path to the module is ignored.
 >   where lhs = (\f -> (f,FunLhs f [])) <$> fun
 >          <|?> funLhs
 >         methodDecl p (f,lhs) rhs = MethodDecl p f [Equation p lhs rhs]
+
+> trustMethod :: Parser Token (MethodDecl ()) a
+> trustMethod =
+>   TrustMethod <$> position <*> tokenOps pragmaKW <*> funList
+>               <*-> token PragmaEnd
+>   where pragmaKW = [(PragmaBegin SuspectPragma,Suspect),
+>                     (PragmaBegin TrustPragma,Trust)]
+>         funList = Nothing <$-> token Underscore
+>               <|> Just <$> fun `sepBy1` comma
 
 > infixDecl :: Parser Token (Decl ()) a
 > infixDecl = infixDeclLhs InfixDecl <*> funop `sepBy1` comma

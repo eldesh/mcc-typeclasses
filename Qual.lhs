@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2046 2006-12-15 13:29:51Z wlux $
+% $Id: Qual.lhs 2052 2006-12-20 11:37:05Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -78,6 +78,7 @@ functions remain unchanged.
 >   qual tcEnv tyEnv (MethodSig p fs ty) = MethodSig p fs (qual tcEnv tyEnv ty)
 >   qual tcEnv tyEnv (MethodDecl p f eqs) =
 >     MethodDecl p f (qual tcEnv tyEnv eqs)
+>   qual _ _ (TrustMethod p tr fs) = TrustMethod p tr fs
 
 > instance Qual (Decl a) where
 >   qual _ _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops
@@ -88,8 +89,8 @@ functions remain unchanged.
 >     ForeignDecl p cc ie f (qual tcEnv tyEnv ty)
 >   qual tcEnv tyEnv (PatternDecl p t rhs) =
 >     PatternDecl p (qual tcEnv tyEnv t) (qual tcEnv tyEnv rhs)
->   qual _ _ (FreeDecl p vs) = (FreeDecl p vs)
->   qual _ _ (TrustAnnot p tr fs) = (TrustAnnot p tr fs)
+>   qual _ _ (FreeDecl p vs) = FreeDecl p vs
+>   qual _ _ (TrustAnnot p tr fs) = TrustAnnot p tr fs
 
 > instance Qual (Equation a) where
 >   qual tcEnv tyEnv (Equation p lhs rhs) =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2046 2006-12-15 13:29:51Z wlux $
+% $Id: KindCheck.lhs 2052 2006-12-20 11:37:05Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -152,16 +152,19 @@ Kind checking is applied to all type expressions in the program.
 > checkTopDecl tcEnv (BlockDecl d) = checkDecl tcEnv d
 
 > checkMethodDecl :: TCEnv -> MethodDecl a -> Error ()
-> checkMethodDecl tcEnv (MethodFixity _ _ _ _) = return ()
+> checkMethodDecl _ (MethodFixity _ _ _ _) = return ()
 > checkMethodDecl tcEnv (MethodSig p _ ty) = checkType tcEnv p ty
 > checkMethodDecl tcEnv (MethodDecl _ _ eqs) = mapE_ (checkEquation tcEnv) eqs
+> checkMethodDecl _ (TrustMethod _ _ _) = return ()
 
 > checkDecl :: TCEnv -> Decl a -> Error ()
+> checkDecl _ (InfixDecl _ _ _ _) = return ()
 > checkDecl tcEnv (TypeSig p _ ty) = checkQualType tcEnv p ty
 > checkDecl tcEnv (FunctionDecl _ _ eqs) = mapE_ (checkEquation tcEnv) eqs
 > checkDecl tcEnv (PatternDecl _ _ rhs) = checkRhs tcEnv rhs
 > checkDecl tcEnv (ForeignDecl p _ _ _ ty) = checkType tcEnv p ty
-> checkDecl _ d = return ()
+> checkDecl _ (FreeDecl _ _) = return ()
+> checkDecl _ (TrustAnnot _ _ _) = return ()
 
 > checkConstrDecl :: TCEnv -> ConstrDecl -> Error ()
 > checkConstrDecl tcEnv (ConstrDecl p _ _ tys) = mapE_ (checkType tcEnv p) tys

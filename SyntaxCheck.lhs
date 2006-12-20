@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2046 2006-12-15 13:29:51Z wlux $
+% $Id: SyntaxCheck.lhs 2052 2006-12-20 11:37:05Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -163,6 +163,7 @@ top-level.
 > checkMethodSig _ (MethodFixity _ _ _ _) = return ()
 > checkMethodSig env (MethodSig p fs _) = checkVars "type signature" p env fs
 > checkMethodSig _ (MethodDecl _ _ _) = return ()
+> checkMethodSig _ (TrustMethod _ _ _) = return ()
 
 > checkDeclLhs :: Bool -> VarEnv -> Decl a -> Error (Decl a)
 > checkDeclLhs _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
@@ -317,15 +318,22 @@ report~\cite{PeytonJones03:Haskell}).
 > checkMethodDeclLhs _ (MethodSig p fs ty) =
 >   return (TypeSig p fs (QualTypeExpr [] ty))
 > checkMethodDeclLhs env (MethodDecl p f eqs) = checkEquationLhs True env p eqs
+> checkMethodDeclLhs _ (TrustMethod p tr fs) = return (TrustAnnot p tr fs)
 
 > checkMethods :: QualIdent -> [P Ident] -> [P Ident] -> [Decl a] -> Error ()
 > checkMethods cls ops fs ds =
 >   reportDuplicates duplicatePrecedence repeatedPrecedence (ops ++ ops') &&>
 >   reportDuplicates duplicateDefinition repeatedDefinition fs' &&>
+>   reportDuplicates (const duplicateDefaultTrustAnnot)
+>                    (const repeatedDefaultTrustAnnot)
+>                    [P p () | TrustAnnot p _ Nothing <- ds] &&>
+>   reportDuplicates duplicateTrustAnnot repeatedTrustAnnot trs &&>
 >   mapE_ (\(P p f) -> errorAt p (undefinedMethod cls f))
->         (filter (`notElem` fs) (ops' ++ fs'))
+>         (filter (`notElem` fs) (ops' ++ fs')) &&>
+>     mapE_ (\(P p f) -> errorAt p (noBody f)) (filter (`notElem` fs') trs)
 >   where fs' = [P p f | FunctionDecl p f _ <- ds]
 >         ops' = concatMap vars (filter isInfixDecl ds)
+>         trs = concatMap vars (filter isTrustAnnot ds)
 
 > checkMethodDeclRhs :: VarEnv -> Decl a -> Error (MethodDecl a)
 > checkMethodDeclRhs _ (InfixDecl p fix pr ops) =
@@ -335,6 +343,7 @@ report~\cite{PeytonJones03:Haskell}).
 > checkMethodDeclRhs env (FunctionDecl p f eqs) =
 >   checkArity p f eqs &&>
 >   liftE (MethodDecl p f) (mapE (checkEquation env) eqs)
+> checkMethodDeclRhs _ (TrustAnnot p tr fs) = return (TrustMethod p tr fs)
 > checkMethodDeclRhs _ _ = internalError "checkMethodDeclRhs"
 
 \end{verbatim}

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2049 2006-12-19 16:56:50Z wlux $
+% $Id: TypeCheck.lhs 2052 2006-12-20 11:37:05Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -116,6 +116,7 @@ type synonyms occurring in their types are expanded.
 >         bind (MethodFixity _ _ _ _) = id
 >         bind (MethodSig _ fs ty) = bindMethods m tcEnv cx fs ty
 >         bind (MethodDecl _ _ _) = id
+>         bind (TrustMethod _ _ _) = id
 > bindTypeValues _ _ (InstanceDecl _ _ _ _ _) tyEnv = tyEnv
 > bindTypeValues _ _ (BlockDecl _) tyEnv = tyEnv
 
@@ -394,12 +395,14 @@ the method's type signature.
 >         (vds,ods) = partition isMethodDecl ds
 >         typeSig _ (MethodFixity p fix pr ops) = InfixDecl p fix pr ops
 >         typeSig cx (MethodSig p fs ty) = TypeSig p fs (QualTypeExpr cx ty)
+>         typeSig _ (TrustMethod p tr fs) = TrustAnnot p tr fs
 > tcTopDecl m tcEnv (InstanceDecl p cx cls ty ds) =
 >   do
 >     ty'' <- liftM snd (inst ty')
->     liftM (InstanceDecl p cx cls ty)
->           (mapM (tcInstMethodDecl m tcEnv cls ty' ty'') ds)
+>     vds' <- mapM (tcInstMethodDecl m tcEnv cls ty' ty'') vds
+>     return (InstanceDecl p cx cls ty (map untyped ods ++ vds'))
 >   where ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
+>         (vds,ods) = partition isMethodDecl ds
 > tcTopDecl _ _ (BlockDecl _) = internalError "tcTopDecl"
 
 > tcClassMethodDecl :: ModuleIdent -> TCEnv -> SigEnv -> MethodDecl a

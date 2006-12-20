@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2048 2006-12-19 12:19:10Z wlux $
+% $Id: Deriving.lhs 2052 2006-12-20 11:37:05Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -43,7 +43,7 @@ classes be derived.
 >                -> Ident -> [Ident] -> [ConstrDecl] -> QualIdent
 >                -> Error (TopDecl ())
 > deriveInstance m pEnv tcEnv iEnv p tc tvs cs cls =
->   liftE (InstanceDecl p (map (toClassAssert tvs) cx) cls ty)
+>   liftE (InstanceDecl p (map (toClassAssert tvs) cx) cls ty . trustAll p)
 >         (deriveMethods pEnv tcEnv p (map constr cs) cls)
 >   where cx = fromJust (lookupEnv (CT cls' tc') iEnv)
 >         ty = ConstructorType (qualifyWith m tc) (map VariableType tvs)
@@ -55,6 +55,7 @@ classes be derived.
 >           ClassAssert (qualUnqualify m cls) (tvs !! n)
 >           -- FIXME: this context may contain improperly qualified
 >           --        identifiers when as renamings are used
+>         trustAll p ds = TrustMethod p Trust Nothing : ds
 
 > deriveMethods :: PEnv -> TCEnv -> Position -> [Constr] -> QualIdent
 >               -> Error [MethodDecl ()]

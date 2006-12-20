@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 2046 2006-12-15 13:29:51Z wlux $
+% $Id: UnusedCheck.lhs 2052 2006-12-20 11:37:05Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -113,9 +113,11 @@ implemented by a traversal of the syntax tree.
 >   used _ (MethodFixity _ _ _ _) = id
 >   used _ (MethodSig _ _ _) = id
 >   used m (MethodDecl _ _ eqs) = used m eqs
+>   used _ (TrustMethod _ _ _) = id
 >   unused _ _ (MethodFixity _ _ _ _) = id
 >   unused used _ (MethodSig p fs _) = unusedVars Meth used p fs
 >   unused used _ (MethodDecl p _ eqs) = unused used p eqs
+>   unused _ _ (TrustMethod _ _ _) = id
 
 > instance SyntaxTree (Decl a) where
 >   used m (FunctionDecl _ _ eqs) = used m eqs

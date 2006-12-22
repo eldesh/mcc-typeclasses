@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2051 2006-12-20 09:52:53Z wlux $
+% $Id: Modules.lhs 2053 2006-12-22 15:51:24Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -141,7 +141,7 @@ declaration to the module.
 > transModule split debug tr mEnv tcEnv iEnv tyEnv (Module m es is ds) =
 >   (ccode,dumps)
 >   where trEnv = if debug then trustEnv tr ds else emptyEnv
->         mEnv' = fmap dictTransInterface mEnv
+>         mEnv' = fmap (dictTransInterface tcEnv tyEnv) mEnv
 >         (tcEnv',tyEnv',dict) =
 >           dictTransModule tcEnv iEnv tyEnv (Module m es is ds)
 >         (desugared,tyEnv'') = desugar tcEnv' tyEnv' dict
@@ -290,7 +290,7 @@ compilation of a goal is similar to that of a module.
 >         trEnv
 >           | debug = bindEnv goalId Suspect (trustEnvGoal tr g)
 >           | otherwise = emptyEnv
->         mEnv' = fmap dictTransInterface mEnv
+>         mEnv' = fmap (dictTransInterface tcEnv tyEnv) mEnv
 >         (tcEnv',tyEnv',dict) = dictTransGoal tcEnv iEnv tyEnv m g
 >         (vs,desugared,tyEnv'') = desugarGoal debug tcEnv' tyEnv' m goalId dict
 >         (simplified,tyEnv''') = simplify tyEnv'' trEnv desugared

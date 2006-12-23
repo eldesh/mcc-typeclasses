@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2053 2006-12-22 15:51:24Z wlux $
+% $Id: DictTrans.lhs 2054 2006-12-23 14:09:24Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -100,13 +100,13 @@ The introduction of dictionaries is divided into six different tasks:
 >   return (dictDecl p cls tv ds)
 > dictTransTopDecl m tcEnv iEnv tyEnv (InstanceDecl p cx cls ty _) =
 >   instDecl m tcEnv iEnv tyEnv p cx cls ty
-> dictTransTopDecl m _ iEnv tyEnv (BlockDecl d) =
->   liftM BlockDecl (dictTrans m iEnv tyEnv emptyEnv d)
+> dictTransTopDecl m tcEnv iEnv tyEnv (BlockDecl d) =
+>   liftM BlockDecl (dictTrans m tcEnv iEnv tyEnv emptyEnv d)
 
 > dictTransGoal :: TCEnv -> InstEnv -> ValueEnv -> ModuleIdent -> Goal Type
 >               -> (TCEnv,ValueEnv,Goal Type)
 > dictTransGoal tcEnv iEnv tyEnv m g = doTrans transGoal tcEnv iEnv tyEnv m g
->   where transGoal m tcEnv tyEnv = dictTrans m iEnv tyEnv emptyEnv
+>   where transGoal m tcEnv tyEnv = dictTrans m tcEnv iEnv tyEnv emptyEnv
 
 \end{verbatim}
 Besides the source code definitions, the compiler must also transform
@@ -452,7 +452,7 @@ of method $f_i$ in class $C$.
 >          -> [ClassAssert] -> QualIdent -> TypeExpr -> DictState (TopDecl Type)
 > instDecl m tcEnv iEnv tyEnv p cx cls ty =
 >   liftM BlockDecl $
->   dictTrans m iEnv tyEnv' emptyEnv $
+>   dictTrans m tcEnv iEnv tyEnv' emptyEnv $
 >   funDecl p f [] (dictExpr ty' cls (zipWith const (qInstMethodIds tp) fs)) []
 >   where f = instFunId tp
 >         (cx',tp) = toTypePred (expandPolyType tcEnv) cx cls ty
@@ -555,30 +555,30 @@ function applications in $f$'s body.
 >         transInfo vi = vi
 
 > class DictTrans a where
->   dictTrans :: ModuleIdent -> InstEnv -> ValueEnv -> DictEnv -> a Type
->             -> DictState (a Type)
+>   dictTrans :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv -> DictEnv
+>             -> a Type -> DictState (a Type)
 
 > instance DictTrans Goal where
->   dictTrans m iEnv tyEnv dictEnv (Goal p e ds) =
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (Goal p e ds) =
 >     liftM2 (Goal p)
->            (dictTrans m iEnv tyEnv dictEnv e)
->            (mapM (dictTrans m iEnv tyEnv dictEnv) ds)
+>            (dictTrans m tcEnv iEnv tyEnv dictEnv e)
+>            (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) ds)
 
 > instance DictTrans Decl where
->   dictTrans m iEnv tyEnv dictEnv (FunctionDecl p f eqs) =
->     liftM (FunctionDecl p f) (mapM (dictTrans m iEnv tyEnv dictEnv) eqs)
->   dictTrans m iEnv tyEnv dictEnv (PatternDecl p t rhs) =
->     liftM (PatternDecl p t) (dictTrans m iEnv tyEnv dictEnv rhs)
->   dictTrans _ _ _ _ d = return d
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (FunctionDecl p f eqs) =
+>     liftM (FunctionDecl p f) (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) eqs)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (PatternDecl p t rhs) =
+>     liftM (PatternDecl p t) (dictTrans m tcEnv iEnv tyEnv dictEnv rhs)
+>   dictTrans _ _ _ _ _ d = return d
 
 > instance DictTrans Equation where
->   dictTrans m iEnv tyEnv dictEnv (Equation p lhs rhs) =
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (Equation p lhs rhs) =
 >     do
 >       -- FIXME: could share dictionary variables between all equations
 >       --        of a function => perform transformation in Decl instance
 >       xs <- mapM (freshVar m "_#dict" . dictType) cx
->       liftM (Equation p (addArgs (map (uncurry VariablePattern) xs) lhs))
->             (dictTrans m iEnv tyEnv (foldr bindDict dictEnv (zip cx xs)) rhs)
+>       liftM (Equation p (addArgs (map (uncurry VariablePattern) xs) lhs)) $
+>         dictTrans m tcEnv iEnv tyEnv (foldr bindDict dictEnv (zip cx xs)) rhs
 >     where (f,ts) = flatLhs lhs
 >           ty = foldr TypeArrow (typeOf rhs) (map typeOf ts)
 >           cx = matchContext (varType f tyEnv) ty
@@ -590,20 +590,20 @@ function applications in $f$'s body.
 > addArgs xs (ApLhs lhs ts) = ApLhs (addArgs xs lhs) ts
 
 > instance DictTrans Rhs where
->   dictTrans m iEnv tyEnv dictEnv (SimpleRhs p e ds) =
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (SimpleRhs p e ds) =
 >     liftM2 (SimpleRhs p)
->            (dictTrans m iEnv tyEnv dictEnv e)
->            (mapM (dictTrans m iEnv tyEnv dictEnv) ds)
->   dictTrans m iEnv tyEnv dictEnv (GuardedRhs es ds) =
+>            (dictTrans m tcEnv iEnv tyEnv dictEnv e)
+>            (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) ds)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (GuardedRhs es ds) =
 >     liftM2 GuardedRhs
->            (mapM (dictTrans m iEnv tyEnv dictEnv) es)
->            (mapM (dictTrans m iEnv tyEnv dictEnv) ds)
+>            (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) es)
+>            (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) ds)
 
 > instance DictTrans CondExpr where
->   dictTrans m iEnv tyEnv dictEnv (CondExpr p g e) =
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (CondExpr p g e) =
 >     liftM2 (CondExpr p)
->            (dictTrans m iEnv tyEnv dictEnv g)
->            (dictTrans m iEnv tyEnv dictEnv e)
+>            (dictTrans m tcEnv iEnv tyEnv dictEnv g)
+>            (dictTrans m tcEnv iEnv tyEnv dictEnv e)
 
 \end{verbatim}
 An application of an overloaded function $f$ with type $(C_1\,u_1,
@@ -614,97 +614,101 @@ $\vartheta$ is the most general unifier between $f$'s type $\tau$ and
 the concrete type at which $f$ is used in the application.
 \begin{verbatim}
 
-> transLiteral :: ModuleIdent -> InstEnv -> ValueEnv -> DictEnv -> Type
+> transLiteral :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv -> DictEnv -> Type
 >              -> Literal -> DictState (Expression Type)
-> transLiteral _ _ _ _ ty (Char c) = return (Literal ty (Char c))
-> transLiteral m iEnv tyEnv dictEnv ty (Int i)
+> transLiteral _ _ _ _ _ ty (Char c) = return (Literal ty (Char c))
+> transLiteral m tcEnv iEnv tyEnv dictEnv ty (Int i)
 >   | ty == intType = return (Literal ty (Int i))
 >   | ty == floatType = return (Literal ty (Float (fromIntegral i)))
->   | otherwise = dictTrans m iEnv tyEnv dictEnv
+>   | otherwise = dictTrans m tcEnv iEnv tyEnv dictEnv
 >                           (apply (prelFromInt ty) [Literal intType (Int i)])
-> transLiteral m iEnv tyEnv dictEnv ty (Float f)
+> transLiteral m tcEnv iEnv tyEnv dictEnv ty (Float f)
 >   | ty == floatType = return (Literal ty (Float f))
 >   | otherwise =
->       dictTrans m iEnv tyEnv dictEnv
+>       dictTrans m tcEnv iEnv tyEnv dictEnv
 >                 (apply (prelFromFloat ty) [Literal floatType (Float f)])
-> transLiteral _ _ _ _ ty (String cs) = return (Literal ty (String cs))
+> transLiteral _ _ _ _ _ ty (String cs) = return (Literal ty (String cs))
 
 > instance DictTrans Expression where
->   dictTrans m iEnv tyEnv dictEnv (Literal ty l) =
->     transLiteral m iEnv tyEnv dictEnv ty l
->   dictTrans _ iEnv tyEnv dictEnv (Variable ty v) =
->     return (apply (Variable ty' v) xs)
->     where ty' = foldr (TypeArrow . typeOf) ty xs
->           xs = map (dictArg iEnv dictEnv) (matchContext (funType v tyEnv) ty)
->   dictTrans _ _ _ _ (Constructor ty c) = return (Constructor ty c)
->   dictTrans m iEnv tyEnv dictEnv (Paren e) =
->     liftM Paren (dictTrans m iEnv tyEnv dictEnv e)
->   dictTrans m iEnv tyEnv dictEnv (Typed e ty) =
->     liftM (flip Typed ty) (dictTrans m iEnv tyEnv dictEnv e)
->   dictTrans m iEnv tyEnv dictEnv (Tuple es) =
->     liftM Tuple (mapM (dictTrans m iEnv tyEnv dictEnv) es)
->   dictTrans m iEnv tyEnv dictEnv (List ty es) =
->     liftM (List ty) (mapM (dictTrans m iEnv tyEnv dictEnv) es)
->   dictTrans m iEnv tyEnv dictEnv (ListCompr e sts) =
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (Literal ty l) =
+>     transLiteral m tcEnv iEnv tyEnv dictEnv ty l
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (Variable ty v) =
+>     case instanceMethod tcEnv cx v of
+>       Just f -> dictTrans m tcEnv iEnv tyEnv dictEnv (Variable ty f)
+>       Nothing ->
+>         return (apply (Variable (foldr (TypeArrow . typeOf) ty xs) v) xs)
+>     where xs = map (dictArg iEnv dictEnv) cx
+>           cx = matchContext (funType v tyEnv) ty
+>   dictTrans _ _ _ _ _ (Constructor ty c) = return (Constructor ty c)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (Paren e) =
+>     liftM Paren (dictTrans m tcEnv iEnv tyEnv dictEnv e)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (Typed e ty) =
+>     liftM (flip Typed ty) (dictTrans m tcEnv iEnv tyEnv dictEnv e)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (Tuple es) =
+>     liftM Tuple (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) es)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (List ty es) =
+>     liftM (List ty) (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) es)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (ListCompr e sts) =
 >     liftM2 ListCompr
->            (dictTrans m iEnv tyEnv dictEnv e)
->            (mapM (dictTrans m iEnv tyEnv dictEnv) sts)
->   dictTrans m iEnv tyEnv dictEnv (EnumFrom e) =
->     dictTrans m iEnv tyEnv dictEnv (apply (prelEnumFrom (typeOf e)) [e])
->   dictTrans m iEnv tyEnv dictEnv (EnumFromThen e1 e2) =
->     dictTrans m iEnv tyEnv dictEnv
+>            (dictTrans m tcEnv iEnv tyEnv dictEnv e)
+>            (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) sts)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (EnumFrom e) =
+>     dictTrans m tcEnv iEnv tyEnv dictEnv (apply (prelEnumFrom (typeOf e)) [e])
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (EnumFromThen e1 e2) =
+>     dictTrans m tcEnv iEnv tyEnv dictEnv
 >               (apply (prelEnumFromThen (typeOf e1)) [e1,e2])
->   dictTrans m iEnv tyEnv dictEnv (EnumFromTo e1 e2) =
->     dictTrans m iEnv tyEnv dictEnv
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (EnumFromTo e1 e2) =
+>     dictTrans m tcEnv iEnv tyEnv dictEnv
 >               (apply (prelEnumFromTo (typeOf e1)) [e1,e2])
->   dictTrans m iEnv tyEnv dictEnv (EnumFromThenTo e1 e2 e3) =
->     dictTrans m iEnv tyEnv dictEnv
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (EnumFromThenTo e1 e2 e3) =
+>     dictTrans m tcEnv iEnv tyEnv dictEnv
 >               (apply (prelEnumFromThenTo (typeOf e1)) [e1,e2,e3])
->   dictTrans m iEnv tyEnv dictEnv (UnaryMinus e) =
->     dictTrans m iEnv tyEnv dictEnv (apply (prelNegate (typeOf e)) [e])
->   dictTrans m iEnv tyEnv dictEnv (Apply e1 e2) =
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (UnaryMinus e) =
+>     dictTrans m tcEnv iEnv tyEnv dictEnv (apply (prelNegate (typeOf e)) [e])
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (Apply e1 e2) =
 >     liftM2 Apply
->            (dictTrans m iEnv tyEnv dictEnv e1)
->            (dictTrans m iEnv tyEnv dictEnv e2)
->   dictTrans m iEnv tyEnv dictEnv (InfixApply e1 op e2) =
->     dictTrans m iEnv tyEnv dictEnv (apply (infixOp op) [e1,e2])
->   dictTrans m iEnv tyEnv dictEnv (LeftSection e op) =
->     dictTrans m iEnv tyEnv dictEnv (apply (infixOp op) [e])
->   dictTrans m iEnv tyEnv dictEnv (RightSection op e) =
->     dictTrans m iEnv tyEnv dictEnv (apply (prelFlip ty1 ty2 ty3) [op',e])
+>            (dictTrans m tcEnv iEnv tyEnv dictEnv e1)
+>            (dictTrans m tcEnv iEnv tyEnv dictEnv e2)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (InfixApply e1 op e2) =
+>     dictTrans m tcEnv iEnv tyEnv dictEnv (apply (infixOp op) [e1,e2])
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (LeftSection e op) =
+>     dictTrans m tcEnv iEnv tyEnv dictEnv (apply (infixOp op) [e])
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (RightSection op e) =
+>     dictTrans m tcEnv iEnv tyEnv dictEnv
+>               (apply (prelFlip ty1 ty2 ty3) [op',e])
 >     where TypeArrow ty1 (TypeArrow ty2 ty3) = typeOf op'
 >           op' = infixOp op
->   dictTrans m iEnv tyEnv dictEnv (Lambda ts e) =
->     liftM (Lambda ts) (dictTrans m iEnv tyEnv dictEnv e)
->   dictTrans m iEnv tyEnv dictEnv (Let ds e) =
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (Lambda ts e) =
+>     liftM (Lambda ts) (dictTrans m tcEnv iEnv tyEnv dictEnv e)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (Let ds e) =
 >     liftM2 Let
->            (mapM (dictTrans m iEnv tyEnv dictEnv) ds)
->            (dictTrans m iEnv tyEnv dictEnv e)
->   dictTrans m iEnv tyEnv dictEnv (Do sts e) =
+>            (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) ds)
+>            (dictTrans m tcEnv iEnv tyEnv dictEnv e)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (Do sts e) =
 >     liftM2 Do
->            (mapM (dictTrans m iEnv tyEnv dictEnv) sts)
->            (dictTrans m iEnv tyEnv dictEnv e)
->   dictTrans m iEnv tyEnv dictEnv (IfThenElse e1 e2 e3) =
+>            (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) sts)
+>            (dictTrans m tcEnv iEnv tyEnv dictEnv e)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (IfThenElse e1 e2 e3) =
 >     liftM3 IfThenElse
->            (dictTrans m iEnv tyEnv dictEnv e1)
->            (dictTrans m iEnv tyEnv dictEnv e2)
->            (dictTrans m iEnv tyEnv dictEnv e3)
->   dictTrans m iEnv tyEnv dictEnv (Case e as) =
+>            (dictTrans m tcEnv iEnv tyEnv dictEnv e1)
+>            (dictTrans m tcEnv iEnv tyEnv dictEnv e2)
+>            (dictTrans m tcEnv iEnv tyEnv dictEnv e3)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (Case e as) =
 >     liftM2 Case
->            (dictTrans m iEnv tyEnv dictEnv e)
->            (mapM (dictTrans m iEnv tyEnv dictEnv) as)
+>            (dictTrans m tcEnv iEnv tyEnv dictEnv e)
+>            (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) as)
 
 > instance DictTrans Alt where
->   dictTrans m iEnv tyEnv dictEnv (Alt p t rhs) =
->     liftM (Alt p t) (dictTrans m iEnv tyEnv dictEnv rhs)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (Alt p t rhs) =
+>     liftM (Alt p t) (dictTrans m tcEnv iEnv tyEnv dictEnv rhs)
 
 > instance DictTrans Statement where
->   dictTrans m iEnv tyEnv dictEnv (StmtExpr e) =
->     liftM StmtExpr (dictTrans m iEnv tyEnv dictEnv e)
->   dictTrans m iEnv tyEnv dictEnv (StmtBind t e) =
->     liftM (StmtBind t) (dictTrans m iEnv tyEnv dictEnv e)
->   dictTrans m iEnv tyEnv dictEnv (StmtDecl ds) =
->     liftM StmtDecl (mapM (dictTrans m iEnv tyEnv dictEnv) ds)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (StmtExpr e) =
+>     liftM StmtExpr (dictTrans m tcEnv iEnv tyEnv dictEnv e)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (StmtBind t e) =
+>     liftM (StmtBind t) (dictTrans m tcEnv iEnv tyEnv dictEnv e)
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (StmtDecl ds) =
+>     liftM StmtDecl (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) ds)
 
 > transformType :: QualType -> Type
 > transformType (QualType cx ty) = foldr (TypeArrow . dictType) ty cx
@@ -723,9 +727,9 @@ dictionary construction function is applied to the dictionaries
 computed for the context instantiated at the appropriate types.
 
 \ToDo{The transformed code should share instance dictionaries whenever
-  possible. For instance, just one \texttt{Num} \texttt{Float}
-  dictionary should be created for the expression
-  \texttt{x*x + y*y :: Float}.}
+  possible. For instance, just one \texttt{Eq} \texttt{Int} dictionary
+  should be created for the expression
+  \texttt{elem (x::Int) xs \&\& elem x ys}.}
 \begin{verbatim}
 
 > dictArg :: InstEnv -> DictEnv -> TypePred -> Expression Type
@@ -744,6 +748,48 @@ computed for the context instantiated at the appropriate types.
 > instFunApp iEnv dictEnv cx tp =
 >   apply (Variable (transDictType cx tp) (qInstFunId tp))
 >         (map (dictArg iEnv dictEnv) cx)
+
+\end{verbatim}
+When a type class method is applied at a known type, the compiler does
+not need to apply the method stub to a dictionary, but can apply the
+instance method directly. This improves performance considerably for a
+lot of examples. The function \texttt{instanceMethod} checks whether a
+function name denotes a type class method and whether it is used at a
+fixed type. If that is the case, \texttt{instanceMethod} returns the
+name of the instance method. Since the compiler does not distinguish
+(overloaded) functions and type class methods in the syntax tree nor
+in the type environment, we detect methods here by checking the
+(instantiated) context of the type at which the function is used. If
+the identifier denotes a type class method, the first elements of the
+context are type predicates for the method's type class and its super
+classes (recall that contexts are currently represented in their
+expanded form). Thus, it is sufficient to check whether the applied
+function is a member of any of these classes.
+\begin{verbatim}
+
+> instanceMethod :: TCEnv -> Context -> QualIdent -> Maybe QualIdent
+> instanceMethod tcEnv cx f
+>   | isRenamed (unqualify f) = Nothing
+>   | otherwise = foldr mplus Nothing (map (instanceMethodOf tcEnv f) cx)
+
+> instanceMethodOf :: TCEnv -> QualIdent -> TypePred -> Maybe QualIdent
+> instanceMethodOf tcEnv f (TypePred cls ty)
+>   -- FIXME: don't need to apply isKnownType to each type predicate in
+>   --        a context; either isKnownType holds for all predicates or
+>   --        for none at all
+>   | isKnownType ty && f == qualifyLike cls f' =
+>       fmap (qInstMethodIds (TypePred cls ty) !!)
+>            (Just f' `elemIndex` classMethods cls tcEnv)
+>   | otherwise = Nothing
+>   where f' = unqualify f
+
+> isKnownType :: Type -> Bool
+> isKnownType (TypeConstructor _ _) = True
+> isKnownType (TypeVariable _) = False
+> isKnownType (TypeConstrained _ _) = True
+> isKnownType (TypeArrow _ _) = True
+> isKnownType (TypeSkolem _) = False
+
 
 \end{verbatim}
 \paragraph{Unification}
@@ -822,7 +868,7 @@ dictionary type.
 The functions \texttt{instFunId} and \texttt{qInstFunId} return the
 name of the global function which returns the dictionary for a
 particular C-T instance pair. Note that all instances are assumed to
-be defined in a pseudo module whose module name is empty.  This
+be defined in a pseudo module whose module name is empty. This
 reflects the fact that instances are global and not tied to the
 particular module that implements them.
 \begin{verbatim}

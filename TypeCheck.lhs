@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2052 2006-12-20 11:37:05Z wlux $
+% $Id: TypeCheck.lhs 2055 2006-12-28 16:06:38Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1102,10 +1102,12 @@ the current substitution.
 >   case subst theta ty of
 >     TypeConstrained tys tv ->
 >       case filter (hasInstance iEnv cls) tys of
->         [] -> errorAt p (noInstance what doc m cls ty)
+>         [] -> errorAt p (noInstance what doc m cls (TypeConstrained tys tv))
 >         [ty'] -> return (bindSubst tv ty' theta)
 >         _ -> return theta
->     ty' -> errorAt p (noInstance what doc m cls ty')
+>     ty'
+>       | hasInstance iEnv cls ty' -> return theta
+>       | otherwise -> errorAt p (noInstance what doc m cls ty')
 
 > hasInstance :: InstEnv -> QualIdent -> Type -> Bool
 > hasInstance iEnv cls ty = isJust (instContext iEnv cls ty)

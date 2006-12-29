@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2052 2006-12-20 11:37:05Z wlux $
+% $Id: Qual.lhs 2056 2006-12-29 18:35:47Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -131,10 +131,11 @@ functions remain unchanged.
 
 > instance Qual (Expression a) where
 >   qual _ _ (Literal a l) = Literal a l
->   qual tcEnv tyEnv (Variable a v) = Variable a (qualIdent tyEnv v)
->   qual tcEnv tyEnv (Constructor a c) = Constructor a (qualIdent tyEnv c)
+>   qual _ tyEnv (Variable a v) = Variable a (qualIdent tyEnv v)
+>   qual _ tyEnv (Constructor a c) = Constructor a (qualIdent tyEnv c)
 >   qual tcEnv tyEnv (Paren e) = Paren (qual tcEnv tyEnv e)
->   qual tcEnv tyEnv (Typed e ty) = Typed (qual tcEnv tyEnv e) ty
+>   qual tcEnv tyEnv (Typed e ty) =
+>     Typed (qual tcEnv tyEnv e) (qual tcEnv tyEnv ty)
 >   qual tcEnv tyEnv (Tuple es) = Tuple (qual tcEnv tyEnv es)
 >   qual tcEnv tyEnv (List a es) = List a (qual tcEnv tyEnv es)
 >   qual tcEnv tyEnv (ListCompr e qs) =
@@ -181,8 +182,8 @@ functions remain unchanged.
 >     Alt p (qual tcEnv tyEnv t) (qual tcEnv tyEnv rhs)
 
 > instance Qual (InfixOp a) where
->   qual tcEnv tyEnv (InfixOp a op) = InfixOp a (qualIdent tyEnv op)
->   qual tcEnv tyEnv (InfixConstr a op) = InfixConstr a (qualIdent tyEnv op)
+>   qual _ tyEnv (InfixOp a op) = InfixOp a (qualIdent tyEnv op)
+>   qual _ tyEnv (InfixConstr a op) = InfixConstr a (qualIdent tyEnv op)
 
 > qualIdent :: Entity a => TopEnv a -> QualIdent -> QualIdent
 > qualIdent env x

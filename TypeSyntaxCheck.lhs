@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2052 2006-12-20 11:37:05Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2060 2007-01-03 11:53:27Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -305,9 +305,10 @@ conflicts between locally defined instances and imported instances.
 > checkInstances :: TypeEnv -> InstSet -> [TopDecl a] -> Error ()
 > checkInstances tEnv iEnv ds =
 >   do
->     sequenceE_ [errorAt p (duplicateInstance inst) | P p inst <- unique cts,
->                                                      inst `elemSet` iEnv] &&>
->       reportDuplicates duplicateInstance repeatedInstance cts
+>     sequenceE_ [errorAt p (duplicateInstance (unqualCT tEnv inst))
+>                | P p inst <- unique cts, inst `elemSet` iEnv] &&>
+>       reportDuplicates (duplicateInstance . unqualCT tEnv)
+>                        (repeatedInstance . unqualCT tEnv) cts
 >     return ()
 >   where cts = map (fmap (qualCT tEnv)) (concatMap instances ds)
 >         unique [] = []
@@ -321,6 +322,14 @@ conflicts between locally defined instances and imported instances.
 > qualCT :: TypeEnv -> CT -> CT
 > qualCT env (CT cls tc) = CT (qual env cls) (qual env tc)
 >   where qual env x = origName (head (qualLookupTopEnv x env))
+
+> unqualCT :: TypeEnv -> CT -> CT
+> unqualCT env (CT cls tc) = CT (unqual env cls) (unqual env tc)
+>   where unqual env x =
+>           case lookupTopEnv x' env of
+>             [y] | origName y == x -> qualify x'
+>             _ -> x
+>           where x' = unqualify x
 
 \end{verbatim}
 Auxiliary definitions.

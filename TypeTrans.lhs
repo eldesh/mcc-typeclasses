@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2033 2006-12-03 09:50:07Z wlux $
+% $Id: TypeTrans.lhs 2059 2007-01-03 11:33:52Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -120,15 +120,16 @@ indices independently in each type expression.
 \end{verbatim}
 The functions \texttt{fromType} and \texttt{fromQualType} convert a
 (qualified) type into a (qualified) Curry type expression. During the
-conversion, the compiler removes the module qualifier from all type
-constructors and type classes defined in the current module.
+conversion, the compiler removes unnecessary module qualifiers from
+all type constructors and type classes that are in scope with
+unqualified names.
 \begin{verbatim}
 
-> fromType :: ModuleIdent -> Type -> TypeExpr
-> fromType m ty = fromType' (unqualifyType m ty)
+> fromType :: TCEnv -> Type -> TypeExpr
+> fromType tcEnv ty = fromType' (unqualifyType tcEnv ty)
 
-> fromQualType :: ModuleIdent -> QualType -> QualTypeExpr
-> fromQualType m ty = fromQualType' (unqualifyQualType m ty)
+> fromQualType :: TCEnv -> QualType -> QualTypeExpr
+> fromQualType tcEnv ty = fromQualType' (unqualifyQualType tcEnv ty)
 
 > fromQualType' :: QualType -> QualTypeExpr
 > fromQualType' (QualType cx ty) =
@@ -145,7 +146,7 @@ constructors and type classes defined in the current module.
 >   | isQTupleId tc = TupleType tys'
 >   | tc == qListId && length tys == 1 = ListType (head tys')
 >   | otherwise = ConstructorType tc tys'
->   where tys' = map (fromType') tys
+>   where tys' = map fromType' tys
 > fromType' (TypeVariable tv) =
 >   VariableType (if tv >= 0 then nameSupply !! tv
 >                            else mkIdent ('_' : show (-tv)))
@@ -153,23 +154,30 @@ constructors and type classes defined in the current module.
 > fromType' (TypeArrow ty1 ty2) = ArrowType (fromType' ty1) (fromType' ty2)
 > fromType' (TypeSkolem k) = VariableType (mkIdent ("_?" ++ show k))
 
-> unqualifyQualType :: ModuleIdent -> QualType -> QualType
-> unqualifyQualType m (QualType cx ty) =
->   QualType (map (unqualifyTypePred m) cx) (unqualifyType m ty)
+> unqualifyQualType :: TCEnv -> QualType -> QualType
+> unqualifyQualType tcEnv (QualType cx ty) =
+>   QualType (map (unqualifyTypePred tcEnv) cx) (unqualifyType tcEnv ty)
 
-> unqualifyTypePred :: ModuleIdent -> TypePred -> TypePred
-> unqualifyTypePred m (TypePred cls ty) =
->   TypePred (qualUnqualify m cls) (unqualifyType m ty)
+> unqualifyTypePred :: TCEnv -> TypePred -> TypePred
+> unqualifyTypePred tcEnv (TypePred cls ty) =
+>   TypePred (unqualifyTC tcEnv cls) (unqualifyType tcEnv ty)
 
-> unqualifyType :: ModuleIdent -> Type -> Type
-> unqualifyType m (TypeConstructor tc tys) =
->   TypeConstructor (qualUnqualify m tc) (map (unqualifyType m) tys)
+> unqualifyType :: TCEnv -> Type -> Type
+> unqualifyType tcEnv (TypeConstructor tc tys) =
+>   TypeConstructor (unqualifyTC tcEnv tc) (map (unqualifyType tcEnv) tys)
 > unqualifyType _ (TypeVariable tv) = TypeVariable tv
-> unqualifyType m (TypeConstrained tys tv) =
->   TypeConstrained (map (unqualifyType m) tys) tv
-> unqualifyType m (TypeArrow ty1 ty2) =
->   TypeArrow (unqualifyType m ty1) (unqualifyType m ty2)
-> unqualifyType m (TypeSkolem k) = TypeSkolem k
+> unqualifyType tcEnv (TypeConstrained tys tv) =
+>   TypeConstrained (map (unqualifyType tcEnv) tys) tv
+> unqualifyType tcEnv (TypeArrow ty1 ty2) =
+>   TypeArrow (unqualifyType tcEnv ty1) (unqualifyType tcEnv ty2)
+> unqualifyType _ (TypeSkolem k) = TypeSkolem k
+
+> unqualifyTC :: TCEnv -> QualIdent -> QualIdent
+> unqualifyTC tcEnv tc =
+>   case lookupTopEnv tc' tcEnv of
+>     [t] | origName t == tc -> qualify tc'
+>     _ -> tc
+>   where tc' = unqualify tc
 
 \end{verbatim}
 The functions \texttt{expandMonoType} and \texttt{expandPolyType}
@@ -248,13 +256,13 @@ The following functions implement pretty-printing for types by
 converting them into type expressions.
 \begin{verbatim}
 
-> ppType :: ModuleIdent -> Type -> Doc
-> ppType m = ppTypeExpr 0 . fromType m
+> ppType :: TCEnv -> Type -> Doc
+> ppType tcEnv = ppTypeExpr 0 . fromType tcEnv
 
-> ppQualType :: ModuleIdent -> QualType -> Doc
-> ppQualType m = ppQualTypeExpr . fromQualType m
+> ppQualType :: TCEnv -> QualType -> Doc
+> ppQualType tcEnv = ppQualTypeExpr . fromQualType tcEnv
 
-> ppTypeScheme :: ModuleIdent -> TypeScheme -> Doc
-> ppTypeScheme m (ForAll _ ty) = ppQualType m ty
+> ppTypeScheme :: TCEnv -> TypeScheme -> Doc
+> ppTypeScheme tcEnv (ForAll _ ty) = ppQualType tcEnv ty
 
 \end{verbatim}

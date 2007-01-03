@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2037 2006-12-03 13:28:53Z wlux $
+% $Id: Exports.lhs 2059 2007-01-03 11:33:52Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -42,7 +42,7 @@ declarations which cannot be used in another module because
 >         hidden = map (hiddenTypeDecl m tcEnv) (hiddenTypes ds)
 >         ds = types ++ values ++ insts
 >         types = foldr (typeDecl m tcEnv tyEnv) [] es
->         values = foldr (funDecl m tyEnv) [] es
+>         values = foldr (funDecl m tcEnv tyEnv) [] es
 >         insts = foldr (uncurry (instDecl m tcEnv ts)) [] (envToList iEnv)
 >         ts = [tc | ExportTypeWith tc _ <- es] ++
 >              map (qualQualify m) (hiddenTypes values)
@@ -70,16 +70,17 @@ declarations which cannot be used in another module because
 >               (nub (concatMap (maybe [] fst) cs),map (fmap snd) cs)
 >             constrs evs
 >               | null xs = []
->               | otherwise = map (hideDecl (constrDecl m tyEnv tc n evs) xs) cs
+>               | otherwise =
+>                   map (hideDecl (constrDecl tcEnv tyEnv tc n evs) xs) cs
 >     [RenamingType _ n c]
 >       | null xs -> iTypeDecl IDataDecl m tc n (const ([],[])) : ds
 >       | otherwise -> iTypeDecl INewtypeDecl m tc n newConstr : ds
->       where newConstr _ = newConstrDecl m tyEnv tc c
+>       where newConstr _ = newConstrDecl tcEnv tyEnv tc c
 >     [AliasType _ n ty] ->
->       iTypeDecl (const . ITypeDecl) m tc n (const ([],fromType m ty)) : ds
+>       iTypeDecl (const . ITypeDecl) m tc n (const ([],fromType tcEnv ty)) : ds
 >     [TypeClass _ clss fs] ->
->       iClassDecl IClassDecl m (qualUnqualify m tc) clss (methods fs) : ds
->       where methods fs = map (hideDecl (methodDecl m tyEnv tc) xs) fs
+>       iClassDecl IClassDecl tcEnv (qualUnqualify m tc) clss (methods fs) : ds
+>       where methods fs = map (hideDecl (methodDecl tcEnv tyEnv tc) xs) fs
 >     _ -> internalError "typeDecl"
 >   where hideDecl f xs x = x >>= fmap f . hide xs
 >         hide xs x
@@ -94,35 +95,36 @@ declarations which cannot be used in another module because
 >   where (tvs,tvs') = splitAt n nameSupply
 >         (cx,x) = g tvs'
 
-> iClassDecl :: (Position -> [ClassAssert] -> QualIdent -> Ident -> a)
->             -> ModuleIdent -> QualIdent -> [QualIdent] -> a
-> iClassDecl f m cls clss = f noPos cx cls tv
+> iClassDecl :: (Position -> [ClassAssert] -> QualIdent -> Ident -> a) -> TCEnv
+>             -> QualIdent -> [QualIdent] -> a
+> iClassDecl f tcEnv cls clss = f noPos cx cls tv
 >   where ty = TypeVariable 0
 >         QualTypeExpr cx (VariableType tv) =
->           fromQualType m (QualType (map (flip TypePred ty) clss) ty)
+>           fromQualType tcEnv (QualType (map (flip TypePred ty) clss) ty)
 
-> constrDecl :: ModuleIdent -> ValueEnv -> QualIdent -> Int -> [Ident]
->            -> Ident -> ([ClassAssert],ConstrDecl)
-> constrDecl m tyEnv tc n evs c =
+> constrDecl :: TCEnv -> ValueEnv -> QualIdent -> Int -> [Ident] -> Ident
+>            -> ([ClassAssert],ConstrDecl)
+> constrDecl tcEnv tyEnv tc n evs c =
 >   (cx',ConstrDecl noPos (take (n' - n) evs) c (argTypes ty'))
 >   where ForAll n' (QualType cx ty) = conType (qualifyLike tc c) tyEnv
->         QualTypeExpr cx' ty' = fromQualType m (QualType cx ty)
+>         QualTypeExpr cx' ty' = fromQualType tcEnv (QualType cx ty)
 
-> newConstrDecl :: ModuleIdent -> ValueEnv -> QualIdent -> Ident
+> newConstrDecl :: TCEnv -> ValueEnv -> QualIdent -> Ident
 >               -> ([ClassAssert],NewConstrDecl)
-> newConstrDecl m tyEnv tc c = (cx',NewConstrDecl noPos c (head (argTypes ty')))
+> newConstrDecl tcEnv tyEnv tc c =
+>   (cx',NewConstrDecl noPos c (head (argTypes ty')))
 >   where ForAll _ (QualType cx ty) = conType (qualifyLike tc c) tyEnv
->         QualTypeExpr cx' ty' = fromQualType m (QualType cx ty)
+>         QualTypeExpr cx' ty' = fromQualType tcEnv (QualType cx ty)
 
-> methodDecl :: ModuleIdent -> ValueEnv -> QualIdent -> Ident -> IMethodDecl
-> methodDecl m tyEnv cls f = IMethodDecl noPos f (fromType m ty)
+> methodDecl :: TCEnv -> ValueEnv -> QualIdent -> Ident -> IMethodDecl
+> methodDecl tcEnv tyEnv cls f = IMethodDecl noPos f (fromType tcEnv ty)
 >   where ForAll _ (QualType _ ty) = funType (qualifyLike cls f) tyEnv
 
-> funDecl :: ModuleIdent -> ValueEnv -> Export -> [IDecl] -> [IDecl]
-> funDecl m tyEnv (Export f) ds =
->   IFunctionDecl noPos (qualUnqualify m f) (fromQualType m ty) : ds
+> funDecl :: ModuleIdent -> TCEnv -> ValueEnv -> Export -> [IDecl] -> [IDecl]
+> funDecl m tcEnv tyEnv (Export f) ds =
+>   IFunctionDecl noPos (qualUnqualify m f) (fromQualType tcEnv ty) : ds
 >   where ForAll _ ty = funType f tyEnv
-> funDecl _ _ (ExportTypeWith _ _) ds = ds
+> funDecl _ _ _ (ExportTypeWith _ _) ds = ds
 
 > instDecl :: ModuleIdent -> TCEnv -> [QualIdent] -> CT -> Context -> [IDecl]
 >          -> [IDecl]
@@ -130,7 +132,8 @@ declarations which cannot be used in another module because
 >   | isJust (localIdent m cls) && cls `notElem` ts = ds
 >   | isJust (localIdent m tc) && not (isPrimTypeId tc) && tc `notElem` ts = ds
 >   | otherwise = IInstanceDecl noPos cx' (qualUnqualify m cls) ty' : ds
->   where QualTypeExpr cx' ty' = fromQualType m (QualType cx (applyType tc tvs))
+>   where QualTypeExpr cx' ty' =
+>           fromQualType tcEnv (QualType cx (applyType tc tvs))
 >         tvs = take (constrKind tc tcEnv) (map TypeVariable [0..])
 
 \end{verbatim}
@@ -214,7 +217,7 @@ loading the imported modules.
 >   case qualLookupTopEnv (qualQualify m tc) tcEnv of
 >     [DataType _ n _] -> HidingDataDecl noPos tc (take n nameSupply)
 >     [RenamingType _ n _] -> HidingDataDecl noPos tc (take n nameSupply)
->     [TypeClass _ clss _] -> iClassDecl HidingClassDecl m tc clss
+>     [TypeClass _ clss _] -> iClassDecl HidingClassDecl tcEnv tc clss
 >     _ -> internalError "hiddenTypeDecl"
 
 > hiddenTypes :: [IDecl] -> [QualIdent]

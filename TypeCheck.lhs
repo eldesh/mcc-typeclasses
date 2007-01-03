@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2055 2006-12-28 16:06:38Z wlux $
+% $Id: TypeCheck.lhs 2059 2007-01-03 11:33:52Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -273,14 +273,15 @@ general than the type signature.
 >     theta <- liftSt fetchSt
 >     (cxs,eqs') <- liftM unzip $
 >       mapM (tcEquation m tcEnv (fsEnv (subst theta tyEnv0)) tyLhs f) eqs
->     reduceContext p "function declaration" (ppDecl d) m (cx ++ concat cxs)
+>     reduceContext p "function declaration" (ppDecl d) tcEnv (cx ++ concat cxs)
 >                   (FunctionDecl p f eqs')
 > tcDeclRhs m tcEnv cx (cxLhs,tyLhs,t') d@(PatternDecl p t rhs) =
 >   do
 >     tyEnv0 <- fetchSt
 >     (cx',rhs') <-
 >       tcRhs m tcEnv rhs >>=
->       unifyDecl p "pattern declaration" (ppDecl d) m tyEnv0 (cx++cxLhs) tyLhs
+>       unifyDecl p "pattern declaration" (ppDecl d) tcEnv tyEnv0
+>                 (cx++cxLhs) tyLhs
 >     return (cx',PatternDecl p t' rhs')
 
 > tcEquation :: ModuleIdent -> TCEnv -> Set Int -> Type -> Ident -> Equation a
@@ -290,8 +291,8 @@ general than the type signature.
 >     tyEnv0 <- fetchSt
 >     cx <-
 >       tcEqn m tcEnv p lhs rhs >>=
->       unifyDecl p "function declaration" (ppEquation eq) m tyEnv0 [] ty
->     checkSkolems p m (text "Function:" <+> ppIdent f) fs ty
+>       unifyDecl p "function declaration" (ppEquation eq) tcEnv tyEnv0 [] ty
+>     checkSkolems p tcEnv (text "Function:" <+> ppIdent f) fs ty
 >     return cx
 
 > tcEqn :: ModuleIdent -> TCEnv -> Position -> Lhs a -> Rhs a
@@ -310,21 +311,21 @@ general than the type signature.
 >     alpha <- freshTypeVar
 >     (cx,SimpleRhs _ e' ds') <-
 >       tcRhs m tcEnv (SimpleRhs p e ds) >>=
->       unifyDecl p "goal" (ppExpr 0 e) m tyEnv0 [] alpha
->     checkSkolems p emptyMIdent (text "Goal:" <+> ppExpr 0 e) zeroSet alpha
->     when forEval (applyDefaults p "goal" (ppExpr 0 e) m cx alpha)
+>       unifyDecl p "goal" (ppExpr 0 e) tcEnv tyEnv0 [] alpha
+>     checkSkolems p tcEnv (text "Goal:" <+> ppExpr 0 e) zeroSet alpha
+>     when forEval (applyDefaults p "goal" (ppExpr 0 e) tcEnv cx alpha)
 >     return (cx,Goal p e' ds')
 
-> unifyDecl :: Position -> String -> Doc -> ModuleIdent -> ValueEnv
->           -> Context -> Type -> (Context,Type,a) -> TcState (Context,a)
-> unifyDecl p what doc m tyEnv0 cxLhs tyLhs (cxRhs,tyRhs,x) =
+> unifyDecl :: Position -> String -> Doc -> TCEnv -> ValueEnv -> Context -> Type
+>           -> (Context,Type,a) -> TcState (Context,a)
+> unifyDecl p what doc tcEnv tyEnv0 cxLhs tyLhs (cxRhs,tyRhs,x) =
 >   do
->     cx <- liftM fst $ unify p what doc m tyLhs (cxLhs ++ cxRhs,tyRhs,())
+>     cx <- liftM fst $ unify p what doc tcEnv tyLhs (cxLhs ++ cxRhs,tyRhs,())
 >     theta <- liftSt fetchSt
 >     let ty = subst theta tyLhs
 >         fvs = foldr addToSet (fvEnv (subst theta tyEnv0)) (typeVars ty)
 >         (gcx,lcx) = splitContext fvs cx
->     applyDefaults p what doc m lcx ty
+>     applyDefaults p what doc tcEnv lcx ty
 >     return (gcx,x)
 
 \end{verbatim}
@@ -348,7 +349,7 @@ in \texttt{tcVariable} below.
 >   case lookupEnv f sigs of
 >     Just sigTy
 >       | sigma `matchesTypeSig` expandPolyType tcEnv sigTy -> return ()
->       | otherwise -> errorAt p (typeSigTooGeneral m what sigTy sigma)
+>       | otherwise -> errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
 >     Nothing -> updateSt_ (rebindFun m f sigma)
 >   where what = text "Function:" <+> ppIdent f
 > genDecl _ _ _ _ (PatternDecl _ _ _) = return ()
@@ -424,7 +425,7 @@ the method's type signature.
 >     theta <- liftSt fetchSt
 >     let sigma = gen zeroSet cx (subst theta ty)
 >     unless (sigma `matchesTypeSig` expandPolyType tcEnv sigTy)
->            (errorAt p (typeSigTooGeneral m what sigTy sigma))
+>            (errorAt p (typeSigTooGeneral tcEnv what sigTy sigma))
 >     -- NB sigma is the right hand side type, which may lack some type
 >     --    predicates implied by the super class context
 >     updateSt_ (bindFun m f sigma)
@@ -436,7 +437,7 @@ the method's type signature.
 >   do
 >     ty <- liftM snd $ tcMethodDeclLhs cls instTy' d
 >     (cx,d') <- tcMethodDeclRhs m tcEnv ty d
->     genInstMethodDecl m cls instTy cx ty d
+>     genInstMethodDecl m tcEnv cls instTy cx ty d
 >     return d'
 
 > tcMethodDeclLhs :: QualIdent -> Type -> MethodDecl a -> TcState (Context,Type)
@@ -451,18 +452,18 @@ the method's type signature.
 >     theta <- liftSt fetchSt
 >     (cxs,eqs') <- liftM unzip $
 >       mapM (tcEquation m tcEnv (fsEnv (subst theta tyEnv0)) ty f) eqs
->     reduceContext p "method declaration" (ppMethodDecl d) m (concat cxs)
+>     reduceContext p "method declaration" (ppMethodDecl d) tcEnv (concat cxs)
 >                   (MethodDecl p f eqs')
 
-> genInstMethodDecl :: ModuleIdent -> QualIdent -> TypeScheme -> Context -> Type
->                   -> MethodDecl a -> TcState ()
-> genInstMethodDecl m cls (ForAll _ instTy) cx ty (MethodDecl p f _) =
+> genInstMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> TypeScheme
+>                   -> Context -> Type -> MethodDecl a -> TcState ()
+> genInstMethodDecl m tcEnv cls (ForAll _ instTy) cx ty (MethodDecl p f _) =
 >   do
 >     methTy <- tcMethod cls instTy f
 >     theta <- liftSt fetchSt
 >     let sigma = gen zeroSet cx (subst theta ty)
 >     unless (sigma `matchesTypeSig` typeScheme methTy)
->            (errorAt p (methodSigTooGeneral m what methTy sigma))
+>            (errorAt p (methodSigTooGeneral tcEnv what methTy sigma))
 >     -- NB sigma is the right hand side type, which may lack some type
 >     --    predicates implied by the instance context
 >     updateSt_ (bindFun m f sigma)
@@ -511,27 +512,28 @@ arbitrary type.
 >   where ty' = expandPolyType tcEnv (QualTypeExpr [] ty)
 >         checkForeignType CallConvPrimitive _ = return ()
 >         checkForeignType CallConvCCall ty
->           | ie == Just "dynamic" = checkCDynCallType m p ty
->           | maybe False ('&' `elem`) ie = checkCAddrType m p ty
->           | otherwise = checkCCallType m p ty
+>           | ie == Just "dynamic" = checkCDynCallType tcEnv p ty
+>           | maybe False ('&' `elem`) ie = checkCAddrType tcEnv p ty
+>           | otherwise = checkCCallType tcEnv p ty
 
-> checkCCallType :: ModuleIdent -> Position -> Type -> TcState ()
-> checkCCallType m p (TypeArrow ty1 ty2)
->   | isCArgType ty1 = checkCCallType m p ty2
->   | otherwise = errorAt p (invalidCType "argument" m ty1)
-> checkCCallType m p ty
+> checkCCallType :: TCEnv -> Position -> Type -> TcState ()
+> checkCCallType tcEnv p (TypeArrow ty1 ty2)
+>   | isCArgType ty1 = checkCCallType tcEnv p ty2
+>   | otherwise = errorAt p (invalidCType "argument" tcEnv ty1)
+> checkCCallType tcEnv p ty
 >   | isCRetType ty = return ()
->   | otherwise = errorAt p (invalidCType "result" m ty)
+>   | otherwise = errorAt p (invalidCType "result" tcEnv ty)
 
-> checkCDynCallType :: ModuleIdent -> Position -> Type -> TcState ()
-> checkCDynCallType m p (TypeArrow (TypeConstructor tc [ty1]) ty2)
->   | tc == qFunPtrId && ty1 == ty2 = checkCCallType m p ty1
-> checkCDynCallType m p ty = errorAt p (invalidCType "dynamic function" m ty)
+> checkCDynCallType :: TCEnv -> Position -> Type -> TcState ()
+> checkCDynCallType tcEnv p (TypeArrow (TypeConstructor tc [ty1]) ty2)
+>   | tc == qFunPtrId && ty1 == ty2 = checkCCallType tcEnv p ty1
+> checkCDynCallType tcEnv p ty =
+>   errorAt p (invalidCType "dynamic function" tcEnv ty)
 
-> checkCAddrType :: ModuleIdent -> Position -> Type -> TcState ()
-> checkCAddrType m p ty
+> checkCAddrType :: TCEnv -> Position -> Type -> TcState ()
+> checkCAddrType tcEnv p ty
 >   | isCPtrType ty = return ()
->   | otherwise = errorAt p (invalidCType "static address" m ty)
+>   | otherwise = errorAt p (invalidCType "static address" tcEnv ty)
 
 > isCArgType :: Type -> Bool
 > isCArgType (TypeConstructor tc []) = tc `elem` cBasicTypeId
@@ -646,13 +648,14 @@ Note that overloaded literals are not supported in patterns.
 >     return (concat cxs,listType ty,ListPattern (listType ty) ts')
 >   where tcElem doc ty t =
 >           tcConstrTerm m tcEnv sigs p t >>=
->           unify p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t) m ty
+>           unify p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t)
+>                 tcEnv ty
 > tcConstrTerm m tcEnv sigs p t@(AsPattern v t') =
 >   do
 >     (cx,ty) <- tcVariable m tcEnv sigs False p v
 >     (cx',t'') <-
 >       tcConstrTerm m tcEnv sigs p t' >>=
->       unify p "pattern" (ppConstrTerm 0 t) m ty
+>       unify p "pattern" (ppConstrTerm 0 t) tcEnv ty
 >     return (cx ++ cx',ty,AsPattern v t'')
 > tcConstrTerm m tcEnv sigs p (LazyPattern t) =
 >   do
@@ -676,7 +679,7 @@ Note that overloaded literals are not supported in patterns.
 >             -> ConstrTerm a -> Type -> TcState (Context,ConstrTerm Type)
 > tcConstrArg m tcEnv sigs p doc t ty =
 >   tcConstrTerm m tcEnv sigs p t >>=
->   unify p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t) m ty
+>   unify p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t) tcEnv ty
 
 > tcRhs :: ModuleIdent -> TCEnv -> Rhs a -> TcState (Context,Type,Rhs Type)
 > tcRhs m tcEnv (SimpleRhs p e ds) =
@@ -699,9 +702,10 @@ Note that overloaded literals are not supported in patterns.
 >            -> TcState (Context,CondExpr Type)
 > tcCondExpr m tcEnv gty ty (CondExpr p g e) =
 >   do
->     (cx,g') <- tcExpr m tcEnv p g >>= unify p "guard" (ppExpr 0 g) m gty
+>     (cx,g') <- tcExpr m tcEnv p g >>= unify p "guard" (ppExpr 0 g) tcEnv gty
 >     (cx',e') <-
->       tcExpr m tcEnv p e >>= unify p "guarded expression" (ppExpr 0 e) m ty
+>       tcExpr m tcEnv p e >>=
+>       unify p "guarded expression" (ppExpr 0 e) tcEnv ty
 >     return (cx ++ cx',CondExpr p g' e')
 
 > tcExpr :: ModuleIdent -> TCEnv -> Position -> Expression a
@@ -724,12 +728,13 @@ Note that overloaded literals are not supported in patterns.
 >     (cx,ty) <- inst sigma'
 >     (cx',e') <-
 >       tcExpr m tcEnv p e >>=
->       unifyDecl p "explicitly typed expression" (ppExpr 0 e) m tyEnv0 [] ty
+>       unifyDecl p "explicitly typed expression" (ppExpr 0 e) tcEnv tyEnv0
+>                 [] ty
 >     theta <- liftSt fetchSt
 >     let fvs = fvEnv (subst theta tyEnv0)
 >         sigma = gen fvs (snd (splitContext fvs cx')) (subst theta ty)
 >     unless (sigma `matchesTypeSig` sigma')
->       (errorAt p (typeSigTooGeneral m (text "Expression:" <+> ppExpr 0 e)
+>       (errorAt p (typeSigTooGeneral tcEnv (text "Expression:" <+> ppExpr 0 e)
 >                                     sig sigma))
 >     return (cx ++ cx',ty,Typed e' sig)
 >   where sigma' = expandPolyType tcEnv sig
@@ -748,7 +753,7 @@ Note that overloaded literals are not supported in patterns.
 >     return (concat cxs,listType ty,List (listType ty) es')
 >   where tcElem doc ty e =
 >           tcExpr m tcEnv p e >>=
->           unify p "expression" (doc $-$ text "Term:" <+> ppExpr 0 e) m ty
+>           unify p "expression" (doc $-$ text "Term:" <+> ppExpr 0 e) tcEnv ty
 > tcExpr m tcEnv p (ListCompr e qs) =
 >   do
 >     (cxs,qs') <- liftM unzip $ mapM (tcQual m tcEnv p) qs
@@ -760,7 +765,7 @@ Note that overloaded literals are not supported in patterns.
 >     (cx',e1') <-
 >       tcExpr m tcEnv p e1 >>=
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) m ty
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) tcEnv ty
 >     return (cx ++ cx',listType ty,EnumFrom e1')
 > tcExpr m tcEnv p e@(EnumFromThen e1 e2) =
 >   do
@@ -768,11 +773,11 @@ Note that overloaded literals are not supported in patterns.
 >     (cx',e1') <-
 >       tcExpr m tcEnv p e1 >>=
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) m ty
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) tcEnv ty
 >     (cx'',e2') <-
 >       tcExpr m tcEnv p e2 >>=
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) m ty
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) tcEnv ty
 >     return (cx ++ cx' ++ cx'',listType ty,EnumFromThen e1' e2')
 > tcExpr m tcEnv p e@(EnumFromTo e1 e2) =
 >   do
@@ -780,11 +785,11 @@ Note that overloaded literals are not supported in patterns.
 >     (cx',e1') <-
 >       tcExpr m tcEnv p e1 >>=
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) m ty
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) tcEnv ty
 >     (cx'',e2') <-
 >       tcExpr m tcEnv p e2 >>=
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) m ty
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) tcEnv ty
 >     return (cx ++ cx' ++ cx'',listType ty,EnumFromTo e1' e2')
 > tcExpr m tcEnv p e@(EnumFromThenTo e1 e2 e3) =
 >   do
@@ -792,15 +797,15 @@ Note that overloaded literals are not supported in patterns.
 >     (cx',e1') <-
 >       tcExpr m tcEnv p e1 >>=
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) m ty
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) tcEnv ty
 >     (cx'',e2') <-
 >       tcExpr m tcEnv p e2 >>=
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) m ty
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) tcEnv ty
 >     (cx''',e3') <-
 >       tcExpr m tcEnv p e3 >>=
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e3) m ty
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e3) tcEnv ty
 >     return (cx ++ cx' ++ cx'' ++ cx''',listType ty,EnumFromThenTo e1' e2' e3')
 > tcExpr m tcEnv p e@(UnaryMinus e1) =
 >   do
@@ -808,53 +813,55 @@ Note that overloaded literals are not supported in patterns.
 >     (cx',e1') <-
 >       tcExpr m tcEnv p e1 >>=
 >       unify p "unary negation" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1)
->             m ty
+>             tcEnv ty
 >     return (cx ++ cx',ty,UnaryMinus e1')
 > tcExpr m tcEnv p e@(Apply e1 e2) =
 >   do
 >     (cx,alpha,beta,e1') <-
 >       tcExpr m tcEnv p e1 >>=
->       tcArrow p "application" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) m
+>       tcArrow p "application" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1)
+>               tcEnv
 >     (cx',e2') <-
 >       tcExpr m tcEnv p e2 >>=
 >       unify p "application" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2)
->             m alpha
+>             tcEnv alpha
 >     return (cx ++ cx',beta,Apply e1' e2')
 > tcExpr m tcEnv p e@(InfixApply e1 op e2) =
 >   do
 >     (cx,alpha,beta,gamma,op') <-
 >       tcInfixOp m tcEnv p op >>=
 >       tcBinary p "infix application"
->                (ppExpr 0 e $-$ text "Operator:" <+> ppOp op) m
+>                (ppExpr 0 e $-$ text "Operator:" <+> ppOp op) tcEnv
 >     (cx',e1') <-
 >       tcExpr m tcEnv p e1 >>=
 >       unify p "infix application"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) m alpha
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) tcEnv alpha
 >     (cx'',e2') <-
 >       tcExpr m tcEnv p e2 >>=
 >       unify p "infix application"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) m beta
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) tcEnv beta
 >     return (cx ++ cx' ++ cx'',gamma,InfixApply e1' op' e2')
 > tcExpr m tcEnv p e@(LeftSection e1 op) =
 >   do
 >     (cx,alpha,beta,op') <-
 >       tcInfixOp m tcEnv p op >>=
->       tcArrow p "left section" (ppExpr 0 e $-$ text "Operator:" <+> ppOp op) m
+>       tcArrow p "left section" (ppExpr 0 e $-$ text "Operator:" <+> ppOp op)
+>               tcEnv
 >     (cx',e1') <-
 >       tcExpr m tcEnv p e1 >>=
 >       unify p "left section" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1)
->             m alpha
+>             tcEnv alpha
 >     return (cx ++ cx',beta,LeftSection e1' op')
 > tcExpr m tcEnv p e@(RightSection op e1) =
 >   do
 >     (cx,alpha,beta,gamma,op') <-
 >       tcInfixOp m tcEnv p op >>=
 >       tcBinary p "right section"
->                (ppExpr 0 e $-$ text "Operator:" <+> ppOp op) m
+>                (ppExpr 0 e $-$ text "Operator:" <+> ppOp op) tcEnv
 >     (cx',e1') <-
 >       tcExpr m tcEnv p e1 >>=
 >       unify p "right section" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1)
->             m beta
+>             tcEnv beta
 >     return (cx ++ cx',TypeArrow alpha gamma,RightSection op' e1')
 > tcExpr m tcEnv p (Lambda ts e) =
 >   do
@@ -870,18 +877,20 @@ Note that overloaded literals are not supported in patterns.
 >   do
 >     (cxs,sts') <- liftM unzip $ mapM (tcStmt m tcEnv p) sts
 >     ty <- liftM ioType freshTypeVar
->     (cx,e') <- tcExpr m tcEnv p e >>= unify p "statement" (ppExpr 0 e) m ty
+>     (cx,e') <-
+>       tcExpr m tcEnv p e >>= unify p "statement" (ppExpr 0 e) tcEnv ty
 >     return (concat cxs ++ cx,ty,Do sts' e')
 > tcExpr m tcEnv p e@(IfThenElse e1 e2 e3) =
 >   do
 >     (cx,e1') <-
 >       tcExpr m tcEnv p e1 >>=
 >       unify p "expression" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1)
->             m boolType
+>             tcEnv boolType
 >     (cx',ty,e2') <- tcExpr m tcEnv p e2
 >     (cx'',e3') <-
 >       tcExpr m tcEnv p e3 >>=
->       unify p "expression" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e3) m ty
+>       unify p "expression" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e3)
+>             tcEnv ty
 >     return (cx ++ cx' ++ cx'',ty,IfThenElse e1' e2' e3')
 > tcExpr m tcEnv p (Case e as) =
 >   do
@@ -897,8 +906,8 @@ Note that overloaded literals are not supported in patterns.
 >     (cx,t') <-
 >       tcConstrTerm m tcEnv noSigs p t >>=
 >       unify p "case pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t)
->             m tyLhs
->     (cx',rhs') <- tcRhs m tcEnv rhs >>= unify p "case branch" doc m tyRhs
+>             tcEnv tyLhs
+>     (cx',rhs') <- tcRhs m tcEnv rhs >>= unify p "case branch" doc tcEnv tyRhs
 >     return (cx ++ cx',Alt p t' rhs')
 >   where doc = ppAlt a
 
@@ -906,7 +915,8 @@ Note that overloaded literals are not supported in patterns.
 >        -> TcState (Context,Statement Type)
 > tcQual m tcEnv p (StmtExpr e) =
 >   do
->     (cx,e') <- tcExpr m tcEnv p e >>= unify p "guard" (ppExpr 0 e) m boolType
+>     (cx,e') <-
+>       tcExpr m tcEnv p e >>= unify p "guard" (ppExpr 0 e) tcEnv boolType
 >     return (cx,StmtExpr e')
 > tcQual m tcEnv p q@(StmtBind t e) =
 >   do
@@ -914,7 +924,7 @@ Note that overloaded literals are not supported in patterns.
 >     (cx',e') <-
 >       tcExpr m tcEnv p e >>=
 >       unify p "generator" (ppStmt q $-$ text "Term:" <+> ppExpr 0 e)
->             m (listType ty)
+>             tcEnv (listType ty)
 >     return (cx ++ cx',StmtBind t' e')
 > tcQual m tcEnv p (StmtDecl ds) =
 >   do
@@ -927,7 +937,8 @@ Note that overloaded literals are not supported in patterns.
 >   do
 >     alpha <- freshTypeVar
 >     (cx',e') <-
->       tcExpr m tcEnv p e >>= unify p "statement" (ppExpr 0 e) m (ioType alpha)
+>       tcExpr m tcEnv p e >>=
+>       unify p "statement" (ppExpr 0 e) tcEnv (ioType alpha)
 >     return (cx',StmtExpr e')
 > tcStmt m tcEnv p st@(StmtBind t e) =
 >   do
@@ -935,7 +946,7 @@ Note that overloaded literals are not supported in patterns.
 >     (cx',e') <-
 >       tcExpr m tcEnv p e >>=
 >       unify p "statement" (ppStmt st $-$ text "Term:" <+> ppExpr 0 e)
->             m (ioType ty)
+>             tcEnv (ioType ty)
 >     return (cx ++ cx',StmtBind t' e')
 > tcStmt m tcEnv p (StmtDecl ds) =
 >   do
@@ -962,9 +973,9 @@ $\alpha\rightarrow\beta\rightarrow\gamma$ and returns the triple
 $(\alpha,\beta,\gamma)$.
 \begin{verbatim}
 
-> tcArrow :: Position -> String -> Doc -> ModuleIdent -> (a,Type,b)
+> tcArrow :: Position -> String -> Doc -> TCEnv -> (a,Type,b)
 >         -> TcState (a,Type,Type,b)
-> tcArrow p what doc m (x,ty,y) =
+> tcArrow p what doc tcEnv (x,ty,y) =
 >   do
 >     theta <- liftSt fetchSt
 >     unaryArrow (subst theta ty)
@@ -975,11 +986,11 @@ $(\alpha,\beta,\gamma)$.
 >             beta <- freshTypeVar
 >             liftSt (updateSt_ (bindVar tv (TypeArrow alpha beta)))
 >             return (x,alpha,beta,y)
->         unaryArrow ty = errorAt p (nonFunctionType what doc m ty)
+>         unaryArrow ty = errorAt p (nonFunctionType what doc tcEnv ty)
 
-> tcBinary :: Position -> String -> Doc -> ModuleIdent -> (a,Type,b)
+> tcBinary :: Position -> String -> Doc -> TCEnv -> (a,Type,b)
 >          -> TcState (a,Type,Type,Type,b)
-> tcBinary p what doc m ty = tcArrow p what doc m ty >>= binaryArrow
+> tcBinary p what doc tcEnv ty = tcArrow p what doc tcEnv ty >>= binaryArrow
 >   where binaryArrow (x,ty1,TypeArrow ty2 ty3,y) = return (x,ty1,ty2,ty3,y)
 >         binaryArrow (x,ty1,TypeVariable tv,y) =
 >           do
@@ -988,7 +999,7 @@ $(\alpha,\beta,\gamma)$.
 >             liftSt (updateSt_ (bindVar tv (TypeArrow beta gamma)))
 >             return (x,ty1,beta,gamma,y)
 >         binaryArrow (_,ty1,ty2,_) =
->           errorAt p (nonBinaryOp what doc m (TypeArrow ty1 ty2))
+>           errorAt p (nonBinaryOp what doc tcEnv (TypeArrow ty1 ty2))
 
 \end{verbatim}
 \paragraph{Unification}
@@ -996,57 +1007,59 @@ The unification uses Robinson's algorithm (cf., e.g., Chap.~9
 of~\cite{PeytonJones87:Book}).
 \begin{verbatim}
 
-> unify :: Position -> String -> Doc -> ModuleIdent -> Type -> (Context,Type,a)
+> unify :: Position -> String -> Doc -> TCEnv -> Type -> (Context,Type,a)
 >       -> TcState (Context,a)
-> unify p what doc m ty1 (cx,ty2,x) =
+> unify p what doc tcEnv ty1 (cx,ty2,x) =
 >   do
 >     theta <- liftSt fetchSt
 >     let ty1' = subst theta ty1
 >     let ty2' = subst theta ty2
->     either (errorAt p . typeMismatch what doc m ty1' ty2')
+>     either (errorAt p . typeMismatch what doc tcEnv ty1' ty2')
 >            (liftSt . updateSt_ . compose)
->            (unifyTypes m ty1' ty2')
->     reduceContext p what doc m cx x
+>            (unifyTypes tcEnv ty1' ty2')
+>     reduceContext p what doc tcEnv cx x
 
-> unifyTypes :: ModuleIdent -> Type -> Type -> Either Doc TypeSubst
+> unifyTypes :: TCEnv -> Type -> Type -> Either Doc TypeSubst
 > unifyTypes _ (TypeVariable tv1) (TypeVariable tv2)
 >   | tv1 == tv2 = Right idSubst
 >   | otherwise = Right (bindSubst tv1 (TypeVariable tv2) idSubst)
-> unifyTypes m (TypeVariable tv) ty
->   | tv `elem` typeVars ty = Left (recursiveType m tv ty)
+> unifyTypes tcEnv (TypeVariable tv) ty
+>   | tv `elem` typeVars ty = Left (recursiveType tcEnv tv ty)
 >   | otherwise = Right (bindSubst tv ty idSubst)
-> unifyTypes m ty (TypeVariable tv)
->   | tv `elem` typeVars ty = Left (recursiveType m tv ty)
+> unifyTypes tcEnv ty (TypeVariable tv)
+>   | tv `elem` typeVars ty = Left (recursiveType tcEnv tv ty)
 >   | otherwise = Right (bindSubst tv ty idSubst)
 > unifyTypes _ (TypeConstrained tys1 tv1) (TypeConstrained tys2 tv2)
 >   | tv1 == tv2 = Right idSubst
 >   | tys1 == tys2 = Right (bindSubst tv1 (TypeConstrained tys2 tv2) idSubst)
-> unifyTypes m (TypeConstrained tys tv) ty =
->   foldr (choose . unifyTypes m ty) (Left (incompatibleTypes m ty (head tys)))
+> unifyTypes tcEnv (TypeConstrained tys tv) ty =
+>   foldr (choose . unifyTypes tcEnv ty)
+>         (Left (incompatibleTypes tcEnv ty (head tys)))
 >         tys
 >   where choose (Left _) theta' = theta'
 >         choose (Right theta) _ = Right (bindSubst tv ty theta)
-> unifyTypes m ty (TypeConstrained tys tv) =
->   foldr (choose . unifyTypes m ty) (Left (incompatibleTypes m ty (head tys)))
+> unifyTypes tcEnv ty (TypeConstrained tys tv) =
+>   foldr (choose . unifyTypes tcEnv ty)
+>         (Left (incompatibleTypes tcEnv ty (head tys)))
 >         tys
 >   where choose (Left _) theta' = theta'
 >         choose (Right theta) _ = Right (bindSubst tv ty theta)
-> unifyTypes m (TypeConstructor tc1 tys1) (TypeConstructor tc2 tys2)
->   | tc1 == tc2 = unifyTypeLists m tys1 tys2
-> unifyTypes m (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) =
->   unifyTypeLists m [ty11,ty12] [ty21,ty22]
+> unifyTypes tcEnv (TypeConstructor tc1 tys1) (TypeConstructor tc2 tys2)
+>   | tc1 == tc2 = unifyTypeLists tcEnv tys1 tys2
+> unifyTypes tcEnv (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) =
+>   unifyTypeLists tcEnv [ty11,ty12] [ty21,ty22]
 > unifyTypes _ (TypeSkolem k1) (TypeSkolem k2)
 >   | k1 == k2 = Right idSubst
-> unifyTypes m ty1 ty2 = Left (incompatibleTypes m ty1 ty2)
+> unifyTypes tcEnv ty1 ty2 = Left (incompatibleTypes tcEnv ty1 ty2)
 
-> unifyTypeLists :: ModuleIdent -> [Type] -> [Type] -> Either Doc TypeSubst
+> unifyTypeLists :: TCEnv -> [Type] -> [Type] -> Either Doc TypeSubst
 > unifyTypeLists _ [] _ = Right idSubst
 > unifyTypeLists _ _ [] = Right idSubst
-> unifyTypeLists m (ty1:tys1) (ty2:tys2) =
->   either Left (unifyTypesTheta m ty1 ty2) (unifyTypeLists m tys1 tys2)
->   where unifyTypesTheta m ty1 ty2 theta =
+> unifyTypeLists tcEnv (ty1:tys1) (ty2:tys2) =
+>   either Left (unifyTypesTheta tcEnv ty1 ty2) (unifyTypeLists tcEnv tys1 tys2)
+>   where unifyTypesTheta tcEnv ty1 ty2 theta =
 >           either Left (Right . flip compose theta)
->                  (unifyTypes m (subst theta ty1) (subst theta ty2))
+>                  (unifyTypes tcEnv (subst theta ty1) (subst theta ty2))
 
 \end{verbatim}
 After performing a unification, the resulting substitution is applied
@@ -1061,14 +1074,14 @@ after the context reduction and thus may cause a further extension of
 the current substitution.
 \begin{verbatim}
 
-> reduceContext :: Position -> String -> Doc -> ModuleIdent
->               -> Context -> a -> TcState (Context,a)
-> reduceContext p what doc m cx x =
+> reduceContext :: Position -> String -> Doc -> TCEnv -> Context -> a
+>               -> TcState (Context,a)
+> reduceContext p what doc tcEnv cx x =
 >   do
 >     iEnv <- liftSt (liftSt envRt)
 >     theta <- liftSt fetchSt
 >     let (cx1,cx2) = partitionContext (reduceTypePreds iEnv (subst theta cx))
->     theta' <- foldM (reportMissingInstance p what doc m iEnv) idSubst cx2
+>     theta' <- foldM (reportMissingInstance p what doc tcEnv iEnv) idSubst cx2
 >     liftSt (updateSt_ (compose theta'))
 >     return (cx1,x)
 
@@ -1096,18 +1109,19 @@ the current substitution.
 >         isTypeVar (TypeArrow _ _) = False
 >         isTypeVar (TypeSkolem _) = False
 
-> reportMissingInstance :: Position -> String -> Doc -> ModuleIdent -> InstEnv
+> reportMissingInstance :: Position -> String -> Doc -> TCEnv -> InstEnv
 >                       -> TypeSubst -> TypePred -> TcState TypeSubst
-> reportMissingInstance p what doc m iEnv theta (TypePred cls ty) =
+> reportMissingInstance p what doc tcEnv iEnv theta (TypePred cls ty) =
 >   case subst theta ty of
 >     TypeConstrained tys tv ->
 >       case filter (hasInstance iEnv cls) tys of
->         [] -> errorAt p (noInstance what doc m cls (TypeConstrained tys tv))
+>         [] ->
+>           errorAt p (noInstance what doc tcEnv cls (TypeConstrained tys tv))
 >         [ty'] -> return (bindSubst tv ty' theta)
 >         _ -> return theta
 >     ty'
 >       | hasInstance iEnv cls ty' -> return theta
->       | otherwise -> errorAt p (noInstance what doc m cls ty')
+>       | otherwise -> errorAt p (noInstance what doc tcEnv cls ty')
 
 > hasInstance :: InstEnv -> QualIdent -> Type -> Bool
 > hasInstance iEnv cls ty = isJust (instContext iEnv cls ty)
@@ -1144,16 +1158,16 @@ report~\cite{PeytonJones03:Haskell}).
 \ToDo{Support default declarations.}
 \begin{verbatim}
 
-> applyDefaults :: Position -> String -> Doc -> ModuleIdent -> Context
->               -> Type -> TcState ()
-> applyDefaults p what doc m cx ty =
+> applyDefaults :: Position -> String -> Doc -> TCEnv -> Context -> Type
+>               -> TcState ()
+> applyDefaults p what doc tcEnv cx ty =
 >   do
 >     iEnv <- liftSt (liftSt envRt)
 >     liftSt (updateSt_ (compose (foldr (bindDefault iEnv) idSubst tpss)))
 >     theta <- liftSt fetchSt
 >     let cx' = fst (partitionContext (subst theta cx))
 >         ty' = subst theta ty
->     unless (null cx') (errorAt p (ambiguousType what doc m cx' ty'))
+>     unless (null cx') (errorAt p (ambiguousType what doc tcEnv cx' ty'))
 >   where tpss = groupBy sameType (sort cx)
 >         sameType (TypePred _ ty1) (TypePred _ ty2) = ty1 == ty2
 
@@ -1193,13 +1207,12 @@ algorithm in~\cite{LauferOdersky94:AbstractTypes}, which checks for
 escaping skolems at every let binding, but is still sound.
 \begin{verbatim}
 
-> checkSkolems :: Position -> ModuleIdent -> Doc -> Set Int -> Type
->              -> TcState ()
-> checkSkolems p m what fs ty =
+> checkSkolems :: Position -> TCEnv -> Doc -> Set Int -> Type -> TcState ()
+> checkSkolems p tcEnv what fs ty =
 >   do
 >     ty' <- liftM (flip subst ty) (liftSt fetchSt)
 >     unless (all (`elemSet` fs) (typeSkolems ty'))
->            (errorAt p (skolemEscapingScope m what ty'))
+>            (errorAt p (skolemEscapingScope tcEnv what ty'))
 
 \end{verbatim}
 \paragraph{Instantiation and Generalization}
@@ -1327,18 +1340,17 @@ Error functions.
 > polymorphicVar :: Ident -> String
 > polymorphicVar v = "Variable " ++ name v ++ " cannot have polymorphic type"
 
-> typeSigTooGeneral :: ModuleIdent -> Doc -> QualTypeExpr
->                   -> TypeScheme -> String
-> typeSigTooGeneral m what ty sigma = show $
+> typeSigTooGeneral :: TCEnv -> Doc -> QualTypeExpr -> TypeScheme -> String
+> typeSigTooGeneral tcEnv what ty sigma = show $
 >   vcat [text "Type signature too general", what,
->         text "Inferred type:" <+> ppTypeScheme m sigma,
+>         text "Inferred type:" <+> ppTypeScheme tcEnv sigma,
 >         text "Type signature:" <+> ppQualTypeExpr ty]
 
-> methodSigTooGeneral :: ModuleIdent -> Doc -> QualType -> TypeScheme -> String
-> methodSigTooGeneral m what ty sigma = show $
+> methodSigTooGeneral :: TCEnv -> Doc -> QualType -> TypeScheme -> String
+> methodSigTooGeneral tcEnv what ty sigma = show $
 >   vcat [text "Method type not general enough", what,
->         text "Inferred type:" <+> ppTypeScheme m sigma,
->         text "Expected type:" <+> ppQualType m ty]
+>         text "Inferred type:" <+> ppTypeScheme tcEnv sigma,
+>         text "Expected type:" <+> ppQualType tcEnv ty]
 
 > wrongArity :: QualIdent -> Int -> Int -> String
 > wrongArity c arity argc = show $
@@ -1347,49 +1359,49 @@ Error functions.
 >         text "in patterns, but is applied to", int argc]
 >   where plural n x = if n == 1 then x else x ++ "s"
 
-> nonFunctionType :: String -> Doc -> ModuleIdent -> Type -> String
-> nonFunctionType what doc m ty = show $
+> nonFunctionType :: String -> Doc -> TCEnv -> Type -> String
+> nonFunctionType what doc tcEnv ty = show $
 >   vcat [text "Type error in" <+> text what, doc,
->         text "Type:" <+> ppType m ty,
+>         text "Type:" <+> ppType tcEnv ty,
 >         text "Cannot be applied"]
 
-> nonBinaryOp :: String -> Doc -> ModuleIdent -> Type -> String
-> nonBinaryOp what doc m ty = show $
+> nonBinaryOp :: String -> Doc -> TCEnv -> Type -> String
+> nonBinaryOp what doc tcEnv ty = show $
 >   vcat [text "Type error in" <+> text what, doc,
->         text "Type:" <+> ppType m ty,
+>         text "Type:" <+> ppType tcEnv ty,
 >         text "Cannot be used as binary operator"]
 
-> typeMismatch :: String -> Doc -> ModuleIdent -> Type -> Type -> Doc -> String
-> typeMismatch what doc m ty1 ty2 reason = show $
+> typeMismatch :: String -> Doc -> TCEnv -> Type -> Type -> Doc -> String
+> typeMismatch what doc tcEnv ty1 ty2 reason = show $
 >   vcat [text "Type error in" <+> text what, doc,
->         text "Inferred type:" <+> ppType m ty2,
->         text "Expected type:" <+> ppType m ty1,
+>         text "Inferred type:" <+> ppType tcEnv ty2,
+>         text "Expected type:" <+> ppType tcEnv ty1,
 >         reason]
 
-> skolemEscapingScope :: ModuleIdent -> Doc -> Type -> String
-> skolemEscapingScope m what ty = show $
+> skolemEscapingScope :: TCEnv -> Doc -> Type -> String
+> skolemEscapingScope tcEnv what ty = show $
 >   vcat [text "Existential type escapes out of its scope", what,
->         text "Type:" <+> ppType m ty]
+>         text "Type:" <+> ppType tcEnv ty]
 
-> invalidCType :: String -> ModuleIdent -> Type -> String
-> invalidCType what m ty = show $
+> invalidCType :: String -> TCEnv -> Type -> String
+> invalidCType what tcEnv ty = show $
 >   vcat [text ("Invalid " ++ what ++ " type in foreign declaration:"),
->         ppType m ty]
+>         ppType tcEnv ty]
 
-> recursiveType :: ModuleIdent -> Int -> Type -> Doc
-> recursiveType m tv ty = incompatibleTypes m (TypeVariable tv) ty
+> recursiveType :: TCEnv -> Int -> Type -> Doc
+> recursiveType tcEnv tv ty = incompatibleTypes tcEnv (TypeVariable tv) ty
 
-> incompatibleTypes :: ModuleIdent -> Type -> Type -> Doc
-> incompatibleTypes m ty1 ty2 =
->   sep [text "Types" <+> ppType m ty1,
->        nest 2 (text "and" <+> ppType m ty2),
+> incompatibleTypes :: TCEnv -> Type -> Type -> Doc
+> incompatibleTypes tcEnv ty1 ty2 =
+>   sep [text "Types" <+> ppType tcEnv ty1,
+>        nest 2 (text "and" <+> ppType tcEnv ty2),
 >        text "are incompatible"]
 
-> ambiguousType :: String -> Doc -> ModuleIdent -> Context -> Type -> String
-> ambiguousType what doc m cx ty = show $
+> ambiguousType :: String -> Doc -> TCEnv -> Context -> Type -> String
+> ambiguousType what doc tcEnv cx ty = show $
 >   vcat [text "Ambiguous type variable" <> plural tvs <+>
->           list (map (ppType m) tvs) <+> text "in type",
->         ppQualType m (canonType (QualType cx ty)),
+>           list (map (ppType tcEnv) tvs) <+> text "in type",
+>         ppQualType tcEnv (canonType (QualType cx ty)),
 >         text "inferred for" <+> text what, doc]
 >   where tvs = nub [ty | TypePred _ ty <- cx]
 >         plural (_:xs) = if null xs then empty else char 's'
@@ -1397,11 +1409,13 @@ Error functions.
 >         list [x1,x2] = x1 <+> text "and" <+> x2
 >         list xs = hsep (map (<> comma) (init xs)) <+> text "and" <+> last xs
 
-> noInstance :: String -> Doc -> ModuleIdent -> QualIdent -> Type -> String
-> noInstance what doc m cls ty = show $
+> noInstance :: String -> Doc -> TCEnv -> QualIdent -> Type -> String
+> noInstance what doc tcEnv cls ty = show $
 >   vcat [sep [text "Missing instance for",
->              ppQIdent (qualUnqualify m cls) <+> ppTypeExpr 2 (fromType m ty),
+>              ppQIdent cls' <+> ppTypeExpr 2 ty',
 >              text "in" <+> text what],
 >         doc]
+>   where QualTypeExpr [ClassAssert cls' _] ty' =
+>           fromQualType tcEnv (QualType [TypePred cls (TypeVariable 0)] ty)
 
 \end{verbatim}

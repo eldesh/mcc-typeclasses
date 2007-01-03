@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2054 2006-12-23 14:09:24Z wlux $
+% $Id: DictTrans.lhs 2059 2007-01-03 11:33:52Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -117,7 +117,7 @@ generator.
 
 > dictTransInterface :: TCEnv -> ValueEnv -> Interface -> Interface
 > dictTransInterface tcEnv tyEnv (Interface m is ds) =
->   Interface m is (map (dictTransIntfDecl m) (ds ++ dss))
+>   Interface m is (map (dictTransIntfDecl m tcEnv) (ds ++ dss))
 >   where dss = concatMap (intfMethodDecls m tcEnv tyEnv) ds
 >         intfMethodDecls m _ _ (IClassDecl p cx cls tv ds) =
 >           intfMethodStubs m cx cls tv ds ++
@@ -126,20 +126,24 @@ generator.
 >           intfInstMethodDecls m tcEnv tyEnv p cx cls ty
 >         intfMethodDecls _ _ _ _ = []
 
-> dictTransIntfDecl :: ModuleIdent -> IDecl -> IDecl
-> dictTransIntfDecl _ (IInfixDecl p fix pr op) = IInfixDecl p fix pr op
-> dictTransIntfDecl _ (HidingDataDecl p tc tvs) = HidingDataDecl p tc tvs
-> dictTransIntfDecl _ (IDataDecl p _ tc tvs cs) = IDataDecl p [] tc tvs cs
-> dictTransIntfDecl _ (INewtypeDecl p _ tc tvs nc) = INewtypeDecl p [] tc tvs nc
-> dictTransIntfDecl _ (ITypeDecl p tc tvs ty) = ITypeDecl p tc tvs ty
-> dictTransIntfDecl _ (HidingClassDecl p _ cls tv) = dictIDecl p cls tv Nothing
-> dictTransIntfDecl _ (IClassDecl p _ cls tv ds) = dictIDecl p cls tv (Just ds)
-> dictTransIntfDecl m (IInstanceDecl p cx cls ty) = instIDecl m p cx cls ty
-> dictTransIntfDecl m (IFunctionDecl p f ty) =
->   IFunctionDecl p f (fromTransType m (transformType (toQualType m [] ty)))
+> dictTransIntfDecl :: ModuleIdent -> TCEnv -> IDecl -> IDecl
+> dictTransIntfDecl _ _ (IInfixDecl p fix pr op) = IInfixDecl p fix pr op
+> dictTransIntfDecl _ _ (HidingDataDecl p tc tvs) = HidingDataDecl p tc tvs
+> dictTransIntfDecl _ _ (IDataDecl p _ tc tvs cs) = IDataDecl p [] tc tvs cs
+> dictTransIntfDecl _ _ (INewtypeDecl p _ tc tvs nc) =
+>   INewtypeDecl p [] tc tvs nc
+> dictTransIntfDecl _ _ (ITypeDecl p tc tvs ty) = ITypeDecl p tc tvs ty
+> dictTransIntfDecl _ _ (HidingClassDecl p _ cls tv) =
+>   dictIDecl p cls tv Nothing
+> dictTransIntfDecl _ _ (IClassDecl p _ cls tv ds) =
+>   dictIDecl p cls tv (Just ds)
+> dictTransIntfDecl m tcEnv (IInstanceDecl p cx cls ty) =
+>   instIDecl m tcEnv p cx cls ty
+> dictTransIntfDecl m tcEnv (IFunctionDecl p f ty) =
+>   IFunctionDecl p f (fromTransType tcEnv (transformType (toQualType m [] ty)))
 
-> fromTransType :: ModuleIdent -> Type -> QualTypeExpr
-> fromTransType m = QualTypeExpr [] . fromType m
+> fromTransType :: TCEnv -> Type -> QualTypeExpr
+> fromTransType tcEnv = QualTypeExpr [] . fromType tcEnv
 
 \end{verbatim}
 \paragraph{Dictionary Types}
@@ -480,10 +484,10 @@ of method $f_i$ in class $C$.
 > instMethodDecl p f f' (QualType _ ty) Nothing =
 >   BlockDecl $ funDecl p f [] (Variable ty f') []
 
-> instIDecl :: ModuleIdent -> Position -> [ClassAssert] -> QualIdent -> TypeExpr
->           -> IDecl
-> instIDecl m p cx cls ty =
->   IFunctionDecl p (qInstFunId tp) (fromTransType m (transDictType cx' tp))
+> instIDecl :: ModuleIdent -> TCEnv -> Position -> [ClassAssert] -> QualIdent
+>           -> TypeExpr -> IDecl
+> instIDecl m tcEnv p cx cls ty =
+>   IFunctionDecl p (qInstFunId tp) (fromTransType tcEnv (transDictType cx' tp))
 >   where (cx',tp) = toTypePred (toTypeScheme m) cx (qualQualify m cls) ty
 
 > intfInstMethodDecls :: ModuleIdent -> TCEnv -> ValueEnv -> Position
@@ -493,7 +497,7 @@ of method $f_i$ in class $C$.
 >   --        be used (and their type is almost always wrong)
 >   zipWith (IFunctionDecl p)
 >           (qInstMethodIds tp)
->           (map (fromQualType m . instMethodType tyEnv cx' tp) fs)
+>           (map (fromQualType tcEnv . instMethodType tyEnv cx' tp) fs)
 >   where cls' = qualQualify m cls
 >         (cx',tp) = toTypePred (toTypeScheme m) cx cls' ty
 >         fs = classMethods cls' tcEnv

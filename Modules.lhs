@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2053 2006-12-22 15:51:24Z wlux $
+% $Id: Modules.lhs 2059 2007-01-03 11:33:52Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -138,12 +138,11 @@ declaration to the module.
 > transModule :: Bool -> Bool -> Trust -> ModuleEnv
 >             -> TCEnv -> InstEnv -> ValueEnv -> Module Type
 >             -> (Either CFile [CFile],[(Dump,Doc)])
-> transModule split debug tr mEnv tcEnv iEnv tyEnv (Module m es is ds) =
->   (ccode,dumps)
->   where trEnv = if debug then trustEnv tr ds else emptyEnv
+> transModule split debug tr mEnv tcEnv iEnv tyEnv m = (ccode,dumps)
+>   where trEnv = if debug then trustEnv tr m else emptyEnv
 >         mEnv' = fmap (dictTransInterface tcEnv tyEnv) mEnv
 >         (tcEnv',tyEnv',dict) =
->           dictTransModule tcEnv iEnv tyEnv (Module m es is ds)
+>           dictTransModule tcEnv iEnv tyEnv m
 >         (desugared,tyEnv'') = desugar tcEnv' tyEnv' dict
 >         (simplified,tyEnv''') = simplify tyEnv'' trEnv desugared
 >         (lifted,tyEnv'''',trEnv') = lift tyEnv''' trEnv simplified
@@ -158,8 +157,8 @@ declaration to the module.
 >           | split = Right (genSplitModule imports cam)
 >           | otherwise = Left (genModule imports cam)
 >         dumps =
->           [(DumpRenamed,ppModule (Module m es is ds)),
->            (DumpTypes,ppTypes m (localBindings tyEnv)),
+>           [(DumpRenamed,ppModule m),
+>            (DumpTypes,ppTypes tcEnv (localBindings tyEnv)),
 >            (DumpDict, ppModule dict),
 >            (DumpDesugared,ppModule desugared),
 >            (DumpSimplified,ppModule simplified),
@@ -212,7 +211,7 @@ compilation of a goal is similar to that of a module.
 > compileGoal :: Options -> Maybe String -> Maybe FilePath -> ErrorT IO ()
 > compileGoal opts g fn =
 >   do
->     (mEnv,tcEnv,iEnv,tyEnv,_,_,g') <- loadGoal True paths cm ws g fn
+>     (mEnv,tcEnv,iEnv,tyEnv,_,g') <- loadGoal True paths cm ws g fn
 >     mEnv' <- importDebugPrelude paths dbg "" mEnv
 >     let (ccode,dumps) = transGoal dbg tr mEnv' tcEnv iEnv tyEnv g'
 >     liftErr $ mapM_ (doDump opts) dumps >>
@@ -226,21 +225,20 @@ compilation of a goal is similar to that of a module.
 > typeGoal :: Options -> String -> Maybe FilePath -> ErrorT IO ()
 > typeGoal opts g fn =
 >   do
->     (_,_,_,tyEnv,m,cx,Goal _ e _) <-
+>     (_,tcEnv,_,tyEnv,cx,Goal _ e _) <-
 >       loadGoal False (importPath opts) (caseMode opts) (warn opts) (Just g) fn
->     liftErr $ print (ppQualType m (QualType cx (typeOf e)))
+>     liftErr $ print (ppQualType tcEnv (QualType cx (typeOf e)))
 
 > loadGoal :: Bool -> [FilePath] -> CaseMode -> [Warn]
 >          -> Maybe String -> Maybe FilePath
->          -> ErrorT IO (ModuleEnv,TCEnv,InstEnv,ValueEnv,
->                        ModuleIdent,Context,Goal Type)
+>          -> ErrorT IO (ModuleEnv,TCEnv,InstEnv,ValueEnv,Context,Goal Type)
 > loadGoal forEval paths caseMode warn g fn =
 >   do
 >     (mEnv,m,is) <- loadGoalModule paths g fn
 >     (tcEnv,iEnv,tyEnv,cx,g') <-
 >       okM $ maybe (return mainGoal) parseGoal g >>= checkGoal forEval mEnv is
 >     liftErr $ mapM_ putErrLn $ warnGoal caseMode warn g'
->     return (mEnv,tcEnv,iEnv,tyEnv,m,cx,g')
+>     return (mEnv,tcEnv,iEnv,tyEnv,cx,g')
 >   where mainGoal = Goal (first "") (Variable () (qualify mainId)) []
 
 > loadGoalModule :: [FilePath] -> Maybe String -> Maybe FilePath
@@ -273,8 +271,16 @@ compilation of a goal is similar to that of a module.
 >     g'' <- precCheckGoal pEnv g'
 >     (tyEnv',cx,g''') <- kindCheckGoal tcEnv g'' >>
 >                         typeCheckGoal forEval tcEnv iEnv tyEnv g''
->     let (_,tcEnv',tyEnv'') = qualifyEnv mEnv emptyMIdent pEnv tcEnv tyEnv'
->     return (tcEnv',iEnv,tyEnv'',cx,qual tcEnv tyEnv' g''')
+>     return (qualifyGoal forEval mEnv m pEnv tcEnv iEnv tyEnv' cx g''')
+>   where m = emptyMIdent
+
+> qualifyGoal :: Bool -> ModuleEnv -> ModuleIdent
+>             -> PEnv -> TCEnv -> InstEnv -> ValueEnv -> Context
+>             -> Goal a -> (TCEnv,InstEnv,ValueEnv,Context,Goal a)
+> qualifyGoal True mEnv m pEnv tcEnv iEnv tyEnv cx g =
+>   (tcEnv',iEnv,tyEnv',cx,qual tcEnv tyEnv g)
+>   where (_,tcEnv',tyEnv') = qualifyEnv mEnv m pEnv tcEnv tyEnv
+> qualifyGoal False _ _ _ tcEnv iEnv tyEnv cx g = (tcEnv,iEnv,tyEnv,cx,g)
 
 > warnGoal :: CaseMode -> [Warn] -> Goal Type -> [String]
 > warnGoal caseMode warn g =
@@ -306,7 +312,7 @@ compilation of a goal is similar to that of a module.
 >         ccode' = genMain (fun qGoalId) (fmap (map name) vs)
 >         dumps =
 >           [(DumpRenamed,ppGoal g),
->            (DumpTypes,ppTypes m (localBindings tyEnv)),
+>            (DumpTypes,ppTypes tcEnv (localBindings tyEnv)),
 >            (DumpDict,ppGoal dict),
 >            (DumpDesugared,ppModule desugared),
 >            (DumpSimplified,ppModule simplified),
@@ -520,14 +526,15 @@ The function \texttt{ppTypes} is used for pretty-printing the types
 from the type environment.
 \begin{verbatim}
 
-> ppTypes :: ModuleIdent -> [(Ident,ValueInfo)] -> Doc
-> ppTypes m = vcat . map ppInfo
+> ppTypes :: TCEnv -> [(Ident,ValueInfo)] -> Doc
+> ppTypes tcEnv = vcat . map ppInfo
 >   where ppInfo (c,DataConstructor _ (ForAll _ ty)) =
 >           ppIDecl (mkDecl c ty) <+> text "-- data constructor"
 >         ppInfo (c,NewtypeConstructor _ (ForAll _ ty)) =
 >           ppIDecl (mkDecl c ty) <+> text "-- newtype constructor"
 >         ppInfo (x,Value _ (ForAll _ ty)) = ppIDecl (mkDecl x ty)
->         mkDecl f ty = IFunctionDecl undefined (qualify f) (fromQualType m ty)
+>         mkDecl f ty =
+>           IFunctionDecl undefined (qualify f) (fromQualType tcEnv ty)
 
 \end{verbatim}
 Various filename extensions.

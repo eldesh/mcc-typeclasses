@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2043 2006-12-13 22:03:58Z wlux $
+% $Id: InstCheck.lhs 2059 2007-01-03 11:33:52Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -32,7 +32,7 @@ compiler are added to the instance environment.
 > instCheck m tcEnv iEnv ds =
 >   do
 >     iEnv'' <- foldM (bindDerivedInstances m tcEnv) iEnv' (sortDeriving m tds)
->     mapE_ (checkInstance m tcEnv iEnv'') ids
+>     mapE_ (checkInstance tcEnv iEnv'') ids
 >     return iEnv''
 >   where (tds,ods) = partition isTypeDecl ds
 >         ids = filter isInstanceDecl ods
@@ -130,7 +130,7 @@ environment before instances of their subclasses.
 >              -> Error (CT,Context)
 > inferContext m tcEnv iEnv p cx tc tvs tys cls =
 >   do
->     cx''' <- reduceContext p what doc m iEnv cx''
+>     cx''' <- reduceContext p what doc tcEnv iEnv cx''
 >     return (CT cls' tc',sort cx''')
 >   where what = "derived instance"
 >         doc = ppTopDecl (InstanceDecl p [] cls ty'' [])
@@ -200,17 +200,18 @@ also that the contexts of the corresponding instance declarations are
 satisfied by \emph{cx}.
 \begin{verbatim}
 
-> checkInstance :: ModuleIdent -> TCEnv -> InstEnv -> TopDecl a -> Error ()
-> checkInstance m tcEnv iEnv (InstanceDecl p cx cls ty ds) =
+> checkInstance :: TCEnv -> InstEnv -> TopDecl a -> Error ()
+> checkInstance tcEnv iEnv (InstanceDecl p cx cls ty ds) =
 >   do
->     cx''' <- reduceContext p what doc m iEnv cx''
->     mapE_ (reportMissingInstance p what doc m) (filter (`notElem` cx') cx''')
+>     cx''' <- reduceContext p what doc tcEnv iEnv cx''
+>     mapE_ (reportMissingInstance p what doc tcEnv)
+>           (filter (`notElem` cx') cx''')
 >   where what = "instance declaration"
 >         doc = ppTopDecl (InstanceDecl p cx cls ty [])
 >         ForAll _ (QualType cx' ty') =
 >           expandPolyType tcEnv (QualTypeExpr cx ty)
 >         cx'' = [TypePred cls ty' | cls <- superClasses cls tcEnv]
-> checkInstance _ _ _ _ = return ()
+> checkInstance _ _ _ = return ()
 
 \end{verbatim}
 The function \texttt{reduceContext} simplifies a context
@@ -220,11 +221,11 @@ $u$ being a type variable. An error is reported if the context cannot
 be transformed into this form.
 \begin{verbatim}
 
-> reduceContext :: Position -> String -> Doc -> ModuleIdent -> InstEnv
->               -> Context -> Error Context
-> reduceContext p what doc m iEnv cx =
+> reduceContext :: Position -> String -> Doc -> TCEnv -> InstEnv -> Context
+>               -> Error Context
+> reduceContext p what doc tcEnv iEnv cx =
 >   do
->     mapE_ (reportMissingInstance p what doc m) cx2
+>     mapE_ (reportMissingInstance p what doc tcEnv) cx2
 >     return cx1
 >   where (cx1,cx2) = partitionContext (reduceTypePreds iEnv cx)
 
@@ -252,10 +253,10 @@ be transformed into this form.
 >         isTypeVar (TypeArrow _ _) = False
 >         isTypeVar (TypeSkolem _) = False
 
-> reportMissingInstance :: Position -> String -> Doc -> ModuleIdent -> TypePred
+> reportMissingInstance :: Position -> String -> Doc -> TCEnv -> TypePred
 >                       -> Error ()
-> reportMissingInstance p what doc m (TypePred cls ty) =
->   errorAt p (noInstance what doc m cls ty)
+> reportMissingInstance p what doc tcEnv (TypePred cls ty) =
+>   errorAt p (noInstance what doc tcEnv cls ty)
 
 \end{verbatim}
 The function \texttt{constrTypes} extracts the argument types of a
@@ -270,12 +271,14 @@ data constructor from its declaration.
 Error functions.
 \begin{verbatim}
 
-> noInstance :: String -> Doc -> ModuleIdent -> QualIdent -> Type -> String
-> noInstance what doc m cls ty = show $
+> noInstance :: String -> Doc -> TCEnv -> QualIdent -> Type -> String
+> noInstance what doc tcEnv cls ty = show $
 >   vcat [sep [text "Missing instance for",
->              ppQIdent (qualUnqualify m cls) <+> ppTypeExpr 2 (fromType m ty),
+>              ppQIdent cls' <+> ppTypeExpr 2 ty',
 >              text "in" <+> text what],
 >         doc]
+>   where QualTypeExpr [ClassAssert cls' _] ty' =
+>           fromQualType tcEnv (QualType [TypePred cls (TypeVariable 0)] ty)
 
 > noAbstractDerive :: String
 > noAbstractDerive = "Instances cannot be derived for abstract types"

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2052 2006-12-20 11:37:05Z wlux $
+% $Id: Deriving.lhs 2063 2007-01-05 14:53:01Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -52,9 +52,7 @@ classes be derived.
 >         constr (ConstrDecl _ _ c tys) = (qualifyWith m c,length tys)
 >         constr (ConOpDecl _ _ _ op _) = (qualifyWith m op,2)
 >         toClassAssert tvs (TypePred cls (TypeVariable n)) =
->           ClassAssert (qualUnqualify m cls) (tvs !! n)
->           -- FIXME: this context may contain improperly qualified
->           --        identifiers when as renamings are used
+>           ClassAssert cls (tvs !! n)
 >         trustAll p ds = TrustMethod p Trust Nothing : ds
 
 > deriveMethods :: PEnv -> TCEnv -> Position -> [Constr] -> QualIdent

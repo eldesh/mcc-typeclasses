@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2059 2007-01-03 11:33:52Z wlux $
+% $Id: TypeCheck.lhs 2063 2007-01-05 14:53:01Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -131,12 +131,6 @@ type synonyms occurring in their types are expanded.
 >             -> ValueEnv -> ValueEnv
 > bindMethods m tcEnv cx fs ty tyEnv = foldr (bindMethod m ty') tyEnv fs
 >   where ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
->         -- FIXME: expandPolyType will fail with
->         --          internal error: implied <className>
->         --        in the (rather contrived) case where a class with the
->         --        same qualified name is in scope, e.g.
->         --          module M where { class C a ... }
->         --          module N where { import M as N; class C a ... }
 
 > bindMethod :: ModuleIdent -> TypeScheme -> Ident -> ValueEnv -> ValueEnv
 > bindMethod m ty f = globalBindTopEnv m f (Value (qualifyWith m f) ty)
@@ -400,9 +394,10 @@ the method's type signature.
 > tcTopDecl m tcEnv (InstanceDecl p cx cls ty ds) =
 >   do
 >     ty'' <- liftM snd (inst ty')
->     vds' <- mapM (tcInstMethodDecl m tcEnv cls ty' ty'') vds
+>     vds' <- mapM (tcInstMethodDecl m tcEnv cls' ty' ty'') vds
 >     return (InstanceDecl p cx cls ty (map untyped ods ++ vds'))
->   where ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
+>   where cls' = origName (head (qualLookupTopEnv cls tcEnv))
+>         ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
 >         (vds,ods) = partition isMethodDecl ds
 > tcTopDecl _ _ (BlockDecl _) = internalError "tcTopDecl"
 
@@ -475,17 +470,11 @@ for a particular instance of its class. We can simply discard the
 context of the method's type recorded in the type environment (using
 \texttt{rawType}) because this context is trivially satisfied by the
 instance declaration.
-
-\ToDo{In order to fix the method name visibility issue, either record
-  the types of all methods in the type constructor environment or
-  qualify all identifiers properly before invoking the type checker.}
 \begin{verbatim}
 
 > tcMethod :: QualIdent -> QualType -> Ident -> TcState QualType
 > tcMethod cls ty f = liftM (instMethodType ty . rawType . funType f') fetchSt
 >   where f' = qualifyLike cls (unRenameIdent f)
->                -- FIXME: The method f may not be in scope with same module
->                --        qualifier as its class cls and it may be ambiguous
 >         instMethodType (QualType cx ty) =
 >           normalize 0 . QualType cx . expandAliasType [ty]
 

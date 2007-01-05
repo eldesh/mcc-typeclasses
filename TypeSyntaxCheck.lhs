@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2060 2007-01-03 11:53:27Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2061 2007-01-05 08:44:13Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -46,9 +46,11 @@ later for checking the optional export list of the current module.
 >   where tds = filter isTypeDecl ds
 >         env = foldr (bindType m) (fmap typeKind tcEnv) tds
 
-> typeSyntaxCheckGoal :: TCEnv -> Goal a -> Error (Goal a)
-> typeSyntaxCheckGoal tcEnv (Goal p e ds) =
->   liftE2 (Goal p) (checkExpr env p e) (mapE (checkDecl env) ds)
+> typeSyntaxCheckGoal :: TCEnv -> Goal a -> Error (TypeEnv,Goal a)
+> typeSyntaxCheckGoal tcEnv g =
+>   do
+>     g' <- checkGoal env g
+>     return (env,g')
 >   where env = fmap typeKind tcEnv
 
 > bindType :: ModuleIdent -> TopDecl a -> TypeEnv -> TypeEnv
@@ -91,6 +93,10 @@ signatures.
 >          (checkInstType env p cx ty)
 >          (mapE (checkMethodDecl env anonId) ds)
 > checkTopDecl env (BlockDecl d) = liftE BlockDecl (checkDecl env d)
+
+> checkGoal :: TypeEnv -> Goal a -> Error (Goal a)
+> checkGoal env (Goal p e ds) =
+>   liftE2 (Goal p) (checkExpr env p e) (mapE (checkDecl env) ds)
 
 > checkMethodDecl :: TypeEnv -> Ident -> MethodDecl a -> Error (MethodDecl a)
 > checkMethodDecl _ _ (MethodFixity p fix pr ops) =

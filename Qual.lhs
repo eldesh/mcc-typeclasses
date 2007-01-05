@@ -1,193 +1,227 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2056 2006-12-29 18:35:47Z wlux $
+% $Id: Qual.lhs 2061 2007-01-05 08:44:13Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Qual.lhs}
-\section{Proper Qualification}
-After checking the module and before starting the translation into the
-intermediate language, the compiler properly qualifies all (type)
-constructors and functions occurring in (type) expressions and
-patterns so that their module prefix matches the module of their
-definition. This is done also for functions and (type) constructors
-declared in the current module. The names of local variables and
-functions remain unchanged.
+\section{Qualification}
+After syntax checking and before kind checking, the compiler removes
+unnecessary module qualifiers from all identifiers in the current
+module and changes the module qualifiers of those entities whose name
+would otherwise be ambiguous to match the modules containing their
+definitions. This policy allows the compiler to add references to
+prelude entities into the source code without risk of name conflicts
+and at the same time avoids messing up error messages with lots of
+redundant module qualifiers.
+
+After type checking succeeds, the compiler adds correct module
+qualifiers to all entites except for entities defined in local
+declaration groups.
+
+Exporting the types \texttt{Qual} and \texttt{Phase} is necessary in
+order to compile this module with hbc.
 \begin{verbatim}
 
-> module Qual(Qual(..)) where
+> module Qual(Qual, Phase, qual1, qual2) where
 > import Base
 > import TopEnv
 
+> data Phase = One | Two
+
+> qual1, qual2 :: Qual a => TypeEnv -> FunEnv -> a -> a
+> qual1 = qual One
+> qual2 = qual Two
+
 > class Qual a where
->   qual :: TCEnv -> ValueEnv -> a -> a
+>   qual :: Phase -> TypeEnv -> FunEnv -> a -> a
 
 > instance Qual a => Qual [a] where
->   qual tcEnv tyEnv = map (qual tcEnv tyEnv)
+>   qual phase tEnv vEnv = map (qual phase tEnv vEnv)
 
 > instance Qual (Goal a) where
->   qual tcEnv tyEnv (Goal p e ds) =
->     Goal p (qual tcEnv tyEnv e) (qual tcEnv tyEnv ds)
+>   qual phase tEnv vEnv (Goal p e ds) =
+>     Goal p (qual phase tEnv vEnv e) (qual phase tEnv vEnv ds)
 
 > instance Qual (TopDecl a) where
->   qual tcEnv tyEnv (DataDecl p cx tc tvs cs clss) =
->     DataDecl p (qual tcEnv tyEnv cx) tc tvs (qual tcEnv tyEnv cs)
->              (map (qualIdent tcEnv) clss)
->   qual tcEnv tyEnv (NewtypeDecl p cx tc tvs nc clss) =
->     NewtypeDecl p (qual tcEnv tyEnv cx) tc tvs (qual tcEnv tyEnv nc)
->                 (map (qualIdent tcEnv) clss)
->   qual tcEnv tyEnv (TypeDecl p tc tvs ty) =
->     TypeDecl p tc tvs (qual tcEnv tyEnv ty)
->   qual tcEnv tyEnv (ClassDecl p cx cls tv ds) =
->     ClassDecl p (qual tcEnv tyEnv cx) cls tv (qual tcEnv tyEnv ds)
->   qual tcEnv tyEnv (InstanceDecl p cx cls ty ds) =
->     InstanceDecl p (qual tcEnv tyEnv cx)
->                  (qualIdent tcEnv cls)
->                  (qual tcEnv tyEnv ty)
->                  (qual tcEnv tyEnv ds)
->   qual tcEnv tyEnv (BlockDecl d) = BlockDecl (qual tcEnv tyEnv d)
+>   qual phase tEnv vEnv (DataDecl p cx tc tvs cs clss) =
+>     DataDecl p (qual phase tEnv vEnv cx) tc tvs (qual phase tEnv vEnv cs)
+>              (map (qualIdent phase tEnv) clss)
+>   qual phase tEnv vEnv (NewtypeDecl p cx tc tvs nc clss) =
+>     NewtypeDecl p (qual phase tEnv vEnv cx) tc tvs
+>                 (qual phase tEnv vEnv nc)
+>                 (map (qualIdent phase tEnv) clss)
+>   qual phase tEnv vEnv (TypeDecl p tc tvs ty) =
+>     TypeDecl p tc tvs (qual phase tEnv vEnv ty)
+>   qual phase tEnv vEnv (ClassDecl p cx cls tv ds) =
+>     ClassDecl p (qual phase tEnv vEnv cx) cls tv (qual phase tEnv vEnv ds)
+>   qual phase tEnv vEnv (InstanceDecl p cx cls ty ds) =
+>     InstanceDecl p (qual phase tEnv vEnv cx)
+>                  (qualIdent phase tEnv cls)
+>                  (qual phase tEnv vEnv ty)
+>                  (qual phase tEnv vEnv ds)
+>   qual phase tEnv vEnv (BlockDecl d) = BlockDecl (qual phase tEnv vEnv d)
 
 > instance Qual ConstrDecl where
->   qual tcEnv tyEnv (ConstrDecl p evs c tys) =
->     ConstrDecl p evs c (qual tcEnv tyEnv tys)
->   qual tcEnv tyEnv (ConOpDecl p evs ty1 op ty2) =
->     ConOpDecl p evs (qual tcEnv tyEnv ty1) op (qual tcEnv tyEnv ty2)
+>   qual phase tEnv vEnv (ConstrDecl p evs c tys) =
+>     ConstrDecl p evs c (qual phase tEnv vEnv tys)
+>   qual phase tEnv vEnv (ConOpDecl p evs ty1 op ty2) =
+>     ConOpDecl p evs (qual phase tEnv vEnv ty1) op (qual phase tEnv vEnv ty2)
 
 > instance Qual NewConstrDecl where
->   qual tcEnv tyEnv (NewConstrDecl p c ty) =
->     NewConstrDecl p c (qual tcEnv tyEnv ty)
+>   qual phase tEnv vEnv (NewConstrDecl p c ty) =
+>     NewConstrDecl p c (qual phase tEnv vEnv ty)
 
 > instance Qual QualTypeExpr where
->   qual tcEnv tyEnv (QualTypeExpr cx ty) =
->     QualTypeExpr (qual tcEnv tyEnv cx) (qual tcEnv tyEnv ty)
+>   qual phase tEnv vEnv (QualTypeExpr cx ty) =
+>     QualTypeExpr (qual phase tEnv vEnv cx) (qual phase tEnv vEnv ty)
 
 > instance Qual ClassAssert where
->   qual tcEnv _ (ClassAssert cls tv) = ClassAssert (qualIdent tcEnv cls) tv
+>   qual phase tEnv _ (ClassAssert cls tv) =
+>     ClassAssert (qualIdent phase tEnv cls) tv
 
 > instance Qual TypeExpr where
->   qual tcEnv tyEnv (ConstructorType c tys) =
->     ConstructorType (qualIdent tcEnv c) (qual tcEnv tyEnv tys)
->   qual _ _ (VariableType tv) = VariableType tv
->   qual tcEnv tyEnv (TupleType tys) = TupleType (qual tcEnv tyEnv tys)
->   qual tcEnv tyEnv (ListType ty) = ListType (qual tcEnv tyEnv ty)
->   qual tcEnv tyEnv (ArrowType ty1 ty2) =
->     ArrowType (qual tcEnv tyEnv ty1) (qual tcEnv tyEnv ty2)
+>   qual phase tEnv vEnv (ConstructorType c tys) =
+>     ConstructorType (qualIdent phase tEnv c) (qual phase tEnv vEnv tys)
+>   qual _ _ _ (VariableType tv) = VariableType tv
+>   qual phase tEnv vEnv (TupleType tys) = TupleType (qual phase tEnv vEnv tys)
+>   qual phase tEnv vEnv (ListType ty) = ListType (qual phase tEnv vEnv ty)
+>   qual phase tEnv vEnv (ArrowType ty1 ty2) =
+>     ArrowType (qual phase tEnv vEnv ty1) (qual phase tEnv vEnv ty2)
 
 > instance Qual (MethodDecl a) where
->   qual _ _ (MethodFixity p fix pr ops) = MethodFixity p fix pr ops
->   qual tcEnv tyEnv (MethodSig p fs ty) = MethodSig p fs (qual tcEnv tyEnv ty)
->   qual tcEnv tyEnv (MethodDecl p f eqs) =
->     MethodDecl p f (qual tcEnv tyEnv eqs)
->   qual _ _ (TrustMethod p tr fs) = TrustMethod p tr fs
+>   qual _ _ _ (MethodFixity p fix pr ops) = MethodFixity p fix pr ops
+>   qual phase tEnv vEnv (MethodSig p fs ty) =
+>     MethodSig p fs (qual phase tEnv vEnv ty)
+>   qual phase tEnv vEnv (MethodDecl p f eqs) =
+>     MethodDecl p f (qual phase tEnv vEnv eqs)
+>   qual _ _ _ (TrustMethod p tr fs) = TrustMethod p tr fs
 
 > instance Qual (Decl a) where
->   qual _ _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops
->   qual tcEnv tyEnv (TypeSig p fs ty) = TypeSig p fs (qual tcEnv tyEnv ty)
->   qual tcEnv tyEnv (FunctionDecl p f eqs) =
->     FunctionDecl p f (qual tcEnv tyEnv eqs)
->   qual tcEnv tyEnv (ForeignDecl p cc ie f ty) =
->     ForeignDecl p cc ie f (qual tcEnv tyEnv ty)
->   qual tcEnv tyEnv (PatternDecl p t rhs) =
->     PatternDecl p (qual tcEnv tyEnv t) (qual tcEnv tyEnv rhs)
->   qual _ _ (FreeDecl p vs) = FreeDecl p vs
->   qual _ _ (TrustAnnot p tr fs) = TrustAnnot p tr fs
+>   qual _ _ _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops
+>   qual phase tEnv vEnv (TypeSig p fs ty) =
+>     TypeSig p fs (qual phase tEnv vEnv ty)
+>   qual phase tEnv vEnv (FunctionDecl p f eqs) =
+>     FunctionDecl p f (qual phase tEnv vEnv eqs)
+>   qual phase tEnv vEnv (ForeignDecl p cc ie f ty) =
+>     ForeignDecl p cc ie f (qual phase tEnv vEnv ty)
+>   qual phase tEnv vEnv (PatternDecl p t rhs) =
+>     PatternDecl p (qual phase tEnv vEnv t) (qual phase tEnv vEnv rhs)
+>   qual _ _ _ (FreeDecl p vs) = FreeDecl p vs
+>   qual _ _ _ (TrustAnnot p tr fs) = TrustAnnot p tr fs
 
 > instance Qual (Equation a) where
->   qual tcEnv tyEnv (Equation p lhs rhs) =
->     Equation p (qual tcEnv tyEnv lhs) (qual tcEnv tyEnv rhs)
+>   qual phase tEnv vEnv (Equation p lhs rhs) =
+>     Equation p (qual phase tEnv vEnv lhs) (qual phase tEnv vEnv rhs)
 
 > instance Qual (Lhs a) where
->   qual tcEnv tyEnv (FunLhs f ts) = FunLhs f (qual tcEnv tyEnv ts)
->   qual tcEnv tyEnv (OpLhs t1 op t2) =
->     OpLhs (qual tcEnv tyEnv t1) op (qual tcEnv tyEnv t2)
->   qual tcEnv tyEnv (ApLhs lhs ts) =
->     ApLhs (qual tcEnv tyEnv lhs) (qual tcEnv tyEnv ts)
+>   qual phase tEnv vEnv (FunLhs f ts) = FunLhs f (qual phase tEnv vEnv ts)
+>   qual phase tEnv vEnv (OpLhs t1 op t2) =
+>     OpLhs (qual phase tEnv vEnv t1) op (qual phase tEnv vEnv t2)
+>   qual phase tEnv vEnv (ApLhs lhs ts) =
+>     ApLhs (qual phase tEnv vEnv lhs) (qual phase tEnv vEnv ts)
 
 > instance Qual (ConstrTerm a) where
->   qual _ _ (LiteralPattern a l) = LiteralPattern a l
->   qual _ _ (NegativePattern a l) = NegativePattern a l
->   qual _ _ (VariablePattern a v) = VariablePattern a v
->   qual tcEnv tyEnv (ConstructorPattern a c ts) =
->     ConstructorPattern a (qualIdent tyEnv c) (qual tcEnv tyEnv ts)
->   qual tcEnv tyEnv (InfixPattern a t1 op t2) =
->     InfixPattern a (qual tcEnv tyEnv t1)
->                  (qualIdent tyEnv op)
->                  (qual tcEnv tyEnv t2)
->   qual tcEnv tyEnv (ParenPattern t) = ParenPattern (qual tcEnv tyEnv t)
->   qual tcEnv tyEnv (TuplePattern ts) = TuplePattern (qual tcEnv tyEnv ts)
->   qual tcEnv tyEnv (ListPattern a ts) = ListPattern a (qual tcEnv tyEnv ts)
->   qual tcEnv tyEnv (AsPattern v t) = AsPattern v (qual tcEnv tyEnv t)
->   qual tcEnv tyEnv (LazyPattern t) = LazyPattern (qual tcEnv tyEnv t)
+>   qual _ _ _ (LiteralPattern a l) = LiteralPattern a l
+>   qual _ _ _ (NegativePattern a l) = NegativePattern a l
+>   qual _ _ _ (VariablePattern a v) = VariablePattern a v
+>   qual phase tEnv vEnv (ConstructorPattern a c ts) =
+>     ConstructorPattern a (qualIdent phase vEnv c) (qual phase tEnv vEnv ts)
+>   qual phase tEnv vEnv (InfixPattern a t1 op t2) =
+>     InfixPattern a (qual phase tEnv vEnv t1)
+>                  (qualIdent phase vEnv op)
+>                  (qual phase tEnv vEnv t2)
+>   qual phase tEnv vEnv (ParenPattern t) =
+>     ParenPattern (qual phase tEnv vEnv t)
+>   qual phase tEnv vEnv (TuplePattern ts) =
+>     TuplePattern (qual phase tEnv vEnv ts)
+>   qual phase tEnv vEnv (ListPattern a ts) =
+>     ListPattern a (qual phase tEnv vEnv ts)
+>   qual phase tEnv vEnv (AsPattern v t) = AsPattern v (qual phase tEnv vEnv t)
+>   qual phase tEnv vEnv (LazyPattern t) = LazyPattern (qual phase tEnv vEnv t)
 
 > instance Qual (Rhs a) where
->   qual tcEnv tyEnv (SimpleRhs p e ds) =
->     SimpleRhs p (qual tcEnv tyEnv e) (qual tcEnv tyEnv ds) 
->   qual tcEnv tyEnv (GuardedRhs es ds) =
->     GuardedRhs (qual tcEnv tyEnv es) (qual tcEnv tyEnv ds)
+>   qual phase tEnv vEnv (SimpleRhs p e ds) =
+>     SimpleRhs p (qual phase tEnv vEnv e) (qual phase tEnv vEnv ds) 
+>   qual phase tEnv vEnv (GuardedRhs es ds) =
+>     GuardedRhs (qual phase tEnv vEnv es) (qual phase tEnv vEnv ds)
 
 > instance Qual (CondExpr a) where
->   qual tcEnv tyEnv (CondExpr p g e) =
->     CondExpr p (qual tcEnv tyEnv g) (qual tcEnv tyEnv e)
+>   qual phase tEnv vEnv (CondExpr p g e) =
+>     CondExpr p (qual phase tEnv vEnv g) (qual phase tEnv vEnv e)
 
 > instance Qual (Expression a) where
->   qual _ _ (Literal a l) = Literal a l
->   qual _ tyEnv (Variable a v) = Variable a (qualIdent tyEnv v)
->   qual _ tyEnv (Constructor a c) = Constructor a (qualIdent tyEnv c)
->   qual tcEnv tyEnv (Paren e) = Paren (qual tcEnv tyEnv e)
->   qual tcEnv tyEnv (Typed e ty) =
->     Typed (qual tcEnv tyEnv e) (qual tcEnv tyEnv ty)
->   qual tcEnv tyEnv (Tuple es) = Tuple (qual tcEnv tyEnv es)
->   qual tcEnv tyEnv (List a es) = List a (qual tcEnv tyEnv es)
->   qual tcEnv tyEnv (ListCompr e qs) =
->     ListCompr (qual tcEnv tyEnv e) (qual tcEnv tyEnv qs)
->   qual tcEnv tyEnv (EnumFrom e) = EnumFrom (qual tcEnv tyEnv e)
->   qual tcEnv tyEnv (EnumFromThen e1 e2) =
->     EnumFromThen (qual tcEnv tyEnv e1) (qual tcEnv tyEnv e2)
->   qual tcEnv tyEnv (EnumFromTo e1 e2) =
->     EnumFromTo (qual tcEnv tyEnv e1) (qual tcEnv tyEnv e2)
->   qual tcEnv tyEnv (EnumFromThenTo e1 e2 e3) =
->     EnumFromThenTo (qual tcEnv tyEnv e1)
->                    (qual tcEnv tyEnv e2)
->                    (qual tcEnv tyEnv e3)
->   qual tcEnv tyEnv (UnaryMinus e) = UnaryMinus (qual tcEnv tyEnv e)
->   qual tcEnv tyEnv (Apply e1 e2) =
->     Apply (qual tcEnv tyEnv e1) (qual tcEnv tyEnv e2)
->   qual tcEnv tyEnv (InfixApply e1 op e2) =
->     InfixApply (qual tcEnv tyEnv e1)
->                (qual tcEnv tyEnv op)
->                (qual tcEnv tyEnv e2)
->   qual tcEnv tyEnv (LeftSection e op) =
->     LeftSection (qual tcEnv tyEnv e) (qual tcEnv tyEnv op)
->   qual tcEnv tyEnv (RightSection op e) =
->     RightSection (qual tcEnv tyEnv op) (qual tcEnv tyEnv e)
->   qual tcEnv tyEnv (Lambda ts e) =
->     Lambda (qual tcEnv tyEnv ts) (qual tcEnv tyEnv e)
->   qual tcEnv tyEnv (Let ds e) = Let (qual tcEnv tyEnv ds) (qual tcEnv tyEnv e)
->   qual tcEnv tyEnv (Do sts e) = Do (qual tcEnv tyEnv sts) (qual tcEnv tyEnv e)
->   qual tcEnv tyEnv (IfThenElse e1 e2 e3) =
->     IfThenElse (qual tcEnv tyEnv e1)
->                (qual tcEnv tyEnv e2)
->                (qual tcEnv tyEnv e3)
->   qual tcEnv tyEnv (Case e alts) =
->     Case (qual tcEnv tyEnv e) (qual tcEnv tyEnv alts)
+>   qual _ _ _ (Literal a l) = Literal a l
+>   qual phase _ vEnv (Variable a v) = Variable a (qualIdent phase vEnv v)
+>   qual phase _ vEnv (Constructor a c) = Constructor a (qualIdent phase vEnv c)
+>   qual phase tEnv vEnv (Paren e) = Paren (qual phase tEnv vEnv e)
+>   qual phase tEnv vEnv (Typed e ty) =
+>     Typed (qual phase tEnv vEnv e) (qual phase tEnv vEnv ty)
+>   qual phase tEnv vEnv (Tuple es) = Tuple (qual phase tEnv vEnv es)
+>   qual phase tEnv vEnv (List a es) = List a (qual phase tEnv vEnv es)
+>   qual phase tEnv vEnv (ListCompr e qs) =
+>     ListCompr (qual phase tEnv vEnv e) (qual phase tEnv vEnv qs)
+>   qual phase tEnv vEnv (EnumFrom e) = EnumFrom (qual phase tEnv vEnv e)
+>   qual phase tEnv vEnv (EnumFromThen e1 e2) =
+>     EnumFromThen (qual phase tEnv vEnv e1) (qual phase tEnv vEnv e2)
+>   qual phase tEnv vEnv (EnumFromTo e1 e2) =
+>     EnumFromTo (qual phase tEnv vEnv e1) (qual phase tEnv vEnv e2)
+>   qual phase tEnv vEnv (EnumFromThenTo e1 e2 e3) =
+>     EnumFromThenTo (qual phase tEnv vEnv e1)
+>                    (qual phase tEnv vEnv e2)
+>                    (qual phase tEnv vEnv e3)
+>   qual phase tEnv vEnv (UnaryMinus e) = UnaryMinus (qual phase tEnv vEnv e)
+>   qual phase tEnv vEnv (Apply e1 e2) =
+>     Apply (qual phase tEnv vEnv e1) (qual phase tEnv vEnv e2)
+>   qual phase tEnv vEnv (InfixApply e1 op e2) =
+>     InfixApply (qual phase tEnv vEnv e1)
+>                (qual phase tEnv vEnv op)
+>                (qual phase tEnv vEnv e2)
+>   qual phase tEnv vEnv (LeftSection e op) =
+>     LeftSection (qual phase tEnv vEnv e) (qual phase tEnv vEnv op)
+>   qual phase tEnv vEnv (RightSection op e) =
+>     RightSection (qual phase tEnv vEnv op) (qual phase tEnv vEnv e)
+>   qual phase tEnv vEnv (Lambda ts e) =
+>     Lambda (qual phase tEnv vEnv ts) (qual phase tEnv vEnv e)
+>   qual phase tEnv vEnv (Let ds e) =
+>     Let (qual phase tEnv vEnv ds) (qual phase tEnv vEnv e)
+>   qual phase tEnv vEnv (Do sts e) =
+>     Do (qual phase tEnv vEnv sts) (qual phase tEnv vEnv e)
+>   qual phase tEnv vEnv (IfThenElse e1 e2 e3) =
+>     IfThenElse (qual phase tEnv vEnv e1)
+>                (qual phase tEnv vEnv e2)
+>                (qual phase tEnv vEnv e3)
+>   qual phase tEnv vEnv (Case e alts) =
+>     Case (qual phase tEnv vEnv e) (qual phase tEnv vEnv alts)
 
 > instance Qual (Statement a) where
->   qual tcEnv tyEnv (StmtExpr e) = StmtExpr (qual tcEnv tyEnv e)
->   qual tcEnv tyEnv (StmtBind t e) =
->     StmtBind (qual tcEnv tyEnv t) (qual tcEnv tyEnv e)
->   qual tcEnv tyEnv (StmtDecl ds) = StmtDecl (qual tcEnv tyEnv ds)
+>   qual phase tEnv vEnv (StmtExpr e) = StmtExpr (qual phase tEnv vEnv e)
+>   qual phase tEnv vEnv (StmtBind t e) =
+>     StmtBind (qual phase tEnv vEnv t) (qual phase tEnv vEnv e)
+>   qual phase tEnv vEnv (StmtDecl ds) = StmtDecl (qual phase tEnv vEnv ds)
 
 > instance Qual (Alt a) where
->   qual tcEnv tyEnv (Alt p t rhs) =
->     Alt p (qual tcEnv tyEnv t) (qual tcEnv tyEnv rhs)
+>   qual phase tEnv vEnv (Alt p t rhs) =
+>     Alt p (qual phase tEnv vEnv t) (qual phase tEnv vEnv rhs)
 
 > instance Qual (InfixOp a) where
->   qual _ tyEnv (InfixOp a op) = InfixOp a (qualIdent tyEnv op)
->   qual _ tyEnv (InfixConstr a op) = InfixConstr a (qualIdent tyEnv op)
+>   qual phase _ vEnv (InfixOp a op) = InfixOp a (qualIdent phase vEnv op)
+>   qual phase _ vEnv (InfixConstr a op) =
+>     InfixConstr a (qualIdent phase vEnv op)
 
-> qualIdent :: Entity a => TopEnv a -> QualIdent -> QualIdent
-> qualIdent env x
->   | isRenamed (unqualify x) = x
+> qualIdent :: Entity a => Phase -> TopEnv a -> QualIdent -> QualIdent
+> qualIdent One env x
+>   | isQualified x =
+>       case qualLookupTopEnv x env of
+>         [y] ->
+>           case lookupTopEnv x' env of
+>             [z] | origName y == origName z -> qualify x'
+>             _ -> origName y
+>           where x' = unqualify x
+>         _ -> internalError ("qualIdent: " ++ show x)
+>   | otherwise = x
+> qualIdent Two env x
+>   | isQualified x || isRenamed (unqualify x) = x
 >   | otherwise =
 >       case qualLookupTopEnv x env of
 >         [y] -> origName y

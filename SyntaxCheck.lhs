@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2052 2006-12-20 11:37:05Z wlux $
+% $Id: SyntaxCheck.lhs 2061 2007-01-05 08:44:13Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -46,8 +46,12 @@ declarations are checked within the resulting environment.
 >   where env = foldr (bindConstr m) (globalEnv (fmap valueKind tyEnv)) cs
 >         cs = concatMap constrs ds
 
-> syntaxCheckGoal :: ValueEnv -> Goal a -> Error (Goal a)
-> syntaxCheckGoal tyEnv g = checkGoal (globalEnv (fmap valueKind tyEnv)) g
+> syntaxCheckGoal :: ValueEnv -> Goal a -> Error (FunEnv,Goal a)
+> syntaxCheckGoal tyEnv g =
+>   do
+>     g' <- checkGoal (globalEnv env) g
+>     return (env,g')
+>   where env = fmap valueKind tyEnv
 
 > bindConstr :: ModuleIdent -> P Ident -> VarEnv -> VarEnv
 > bindConstr m (P _ c) = globalBindNestEnv m c (Constr (qualifyWith m c))

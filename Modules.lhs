@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2059 2007-01-03 11:33:52Z wlux $
+% $Id: Modules.lhs 2061 2007-01-05 08:44:13Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -33,7 +33,7 @@ This module controls the compilation of modules.
 > import Imports(importInterface,importInterfaceIntf,importUnifyData)
 > import Exports(exportInterface)
 > import Trust(trustEnv,trustEnvGoal)
-> import Qual(Qual(..))
+> import Qual(qual1,qual2)
 > import DictTrans(dictTransModule,dictTransInterface,dictTransGoal)
 > import Desugar(desugar,desugarGoal)
 > import Simplify(simplify)
@@ -120,15 +120,17 @@ declaration to the module.
 >     (vEnv,ds'') <- syntaxCheck m tEnv tyEnv ds'
 >     es' <- checkExports m is tEnv vEnv es
 >     let (k1,ds''') = rename k0 ds''
->     (pEnv',ds'''') <- precCheck m pEnv ds'''
->     tcEnv' <- kindCheck m tcEnv ds''''
->     iEnv' <- instCheck m tcEnv' iEnv ds''''
->     (k2,deriv) <- liftM (rename k1) (derive m pEnv' tcEnv' iEnv' ds'''')
->     (tyEnv',ds''''') <- typeCheck m tcEnv' iEnv' tyEnv (ds'''' ++ deriv)
->     let (pEnv'',tcEnv'',tyEnv'') = qualifyEnv mEnv m pEnv' tcEnv' tyEnv'
->     return (tcEnv'',iEnv',tyEnv'',
->             Module m (Just es') is (qual tcEnv' tyEnv' ds'''''),
->             exportInterface m es' pEnv'' tcEnv'' iEnv' tyEnv'')
+>     let (pEnv',tcEnv',tyEnv') = qualifyEnv1 mEnv is pEnv tcEnv tyEnv
+>     (pEnv'',ds'''') <- precCheck m pEnv' (qual1 tEnv vEnv ds''')
+>     tcEnv'' <- kindCheck m tcEnv' ds''''
+>     iEnv' <- instCheck m tcEnv'' iEnv ds''''
+>     (k2,deriv) <- liftM (rename k1) (derive m pEnv'' tcEnv'' iEnv' ds'''')
+>     (tyEnv'',ds''''') <- typeCheck m tcEnv'' iEnv' tyEnv' (ds'''' ++ deriv)
+>     let (pEnv''',tcEnv''',tyEnv''') =
+>           qualifyEnv2 mEnv m pEnv'' tcEnv'' tyEnv''
+>     return (tcEnv''',iEnv',tyEnv''',
+>             Module m (Just es') is (qual2 tEnv vEnv ds'''''),
+>             exportInterface m es' pEnv''' tcEnv''' iEnv' tyEnv''')
 
 > warnModule :: CaseMode -> [Warn] -> Module Type -> [String]
 > warnModule caseMode warn m =
@@ -168,9 +170,21 @@ declaration to the module.
 >           [(DumpNormalized,ILPP.ppModule ilNormal),
 >            (DumpCam,CamPP.ppModule cam)]
 
-> qualifyEnv :: ModuleEnv -> ModuleIdent -> PEnv -> TCEnv -> ValueEnv
+> qualifyEnv1 :: ModuleEnv -> [ImportDecl] -> PEnv -> TCEnv -> ValueEnv
 >            -> (PEnv,TCEnv,ValueEnv)
-> qualifyEnv mEnv m pEnv tcEnv tyEnv =
+> qualifyEnv1 mEnv is pEnv tcEnv tyEnv =
+>   (foldr (importEntities pEnv) pEnv' ms,
+>    foldr (importEntities tcEnv) tcEnv' ms,
+>    foldr (importEntities tyEnv) tyEnv' ms)
+>   where ms = nub [fromMaybe m asM | ImportDecl _ m False asM _ <- is]
+>         (pEnv',tcEnv',_,tyEnv') =
+>           foldl importInterfaceIntf initEnvs (map snd (envToList mEnv))
+>         importEntities env m env' =
+>           foldr (uncurry (importTopEnv False m)) env' (moduleImports m env)
+
+> qualifyEnv2 :: ModuleEnv -> ModuleIdent -> PEnv -> TCEnv -> ValueEnv
+>            -> (PEnv,TCEnv,ValueEnv)
+> qualifyEnv2 mEnv m pEnv tcEnv tyEnv =
 >   (foldr (uncurry (globalBindTopEnv m)) pEnv' (localBindings pEnv),
 >    foldr (uncurry (globalBindTopEnv m)) tcEnv' (localBindings tcEnv),
 >    foldr (uncurry (bindTopEnv m)) tyEnv' (localBindings tyEnv))
@@ -265,22 +279,26 @@ compilation of a goal is similar to that of a module.
 > checkGoal forEval mEnv is g =
 >   do
 >     (pEnv,tcEnv,iEnv,tyEnv) <- importModules mEnv is
->     (k1,g') <-
->       liftM (renameGoal k0)
->             (typeSyntaxCheckGoal tcEnv g >>= syntaxCheckGoal tyEnv)
->     g'' <- precCheckGoal pEnv g'
->     (tyEnv',cx,g''') <- kindCheckGoal tcEnv g'' >>
->                         typeCheckGoal forEval tcEnv iEnv tyEnv g''
->     return (qualifyGoal forEval mEnv m pEnv tcEnv iEnv tyEnv' cx g''')
->   where m = emptyMIdent
+>     (tEnv,g') <- typeSyntaxCheckGoal tcEnv g
+>     (vEnv,g'') <- syntaxCheckGoal tyEnv g'
+>     let (k1,g''') = renameGoal k0 g''
+>     let (pEnv',tcEnv',tyEnv') = qualifyEnv1 mEnv is pEnv tcEnv tyEnv
+>     g'''' <- precCheckGoal pEnv' (qual1 tEnv vEnv g''')
+>     (tyEnv'',cx,g''''') <- kindCheckGoal tcEnv' g'''' >>
+>                          typeCheckGoal forEval tcEnv' iEnv tyEnv' g''''
+>     let (_,tcEnv'',tyEnv''') =
+>           qualifyGoalEnv forEval mEnv emptyMIdent pEnv' tcEnv' tyEnv''
+>     return (tcEnv'',iEnv,tyEnv''',cx,qualifyGoal forEval tEnv vEnv g''''')
 
-> qualifyGoal :: Bool -> ModuleEnv -> ModuleIdent
->             -> PEnv -> TCEnv -> InstEnv -> ValueEnv -> Context
->             -> Goal a -> (TCEnv,InstEnv,ValueEnv,Context,Goal a)
-> qualifyGoal True mEnv m pEnv tcEnv iEnv tyEnv cx g =
->   (tcEnv',iEnv,tyEnv',cx,qual tcEnv tyEnv g)
->   where (_,tcEnv',tyEnv') = qualifyEnv mEnv m pEnv tcEnv tyEnv
-> qualifyGoal False _ _ _ tcEnv iEnv tyEnv cx g = (tcEnv,iEnv,tyEnv,cx,g)
+> qualifyGoalEnv :: Bool -> ModuleEnv -> ModuleIdent
+>                -> PEnv -> TCEnv -> ValueEnv -> (PEnv,TCEnv,ValueEnv)
+> qualifyGoalEnv True mEnv m pEnv tcEnv tyEnv =
+>   qualifyEnv2 mEnv m pEnv tcEnv tyEnv
+> qualifyGoalEnv False _ _ pEnv tcEnv tyEnv = (pEnv,tcEnv,tyEnv)
+
+> qualifyGoal :: Bool -> TypeEnv -> FunEnv -> Goal a -> Goal a
+> qualifyGoal True tEnv vEnv = qual2 tEnv vEnv
+> qualifyGoal False _ _ = id
 
 > warnGoal :: CaseMode -> [Warn] -> Goal Type -> [String]
 > warnGoal caseMode warn g =

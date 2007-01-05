@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2061 2007-01-05 08:44:13Z wlux $
+% $Id: Modules.lhs 2062 2007-01-05 14:44:08Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -176,11 +176,12 @@ declaration to the module.
 >   (foldr (importEntities pEnv) pEnv' ms,
 >    foldr (importEntities tcEnv) tcEnv' ms,
 >    foldr (importEntities tyEnv) tyEnv' ms)
->   where ms = nub [fromMaybe m asM | ImportDecl _ m False asM _ <- is]
+>   where ms = nub [(m,asM) | ImportDecl _ m False asM _ <- is]
 >         (pEnv',tcEnv',_,tyEnv') =
 >           foldl importInterfaceIntf initEnvs (map snd (envToList mEnv))
->         importEntities env m env' =
->           foldr (uncurry (importTopEnv False m)) env' (moduleImports m env)
+>         importEntities env (m,asM) env' =
+>           foldr (uncurry (importTopEnv False m)) env'
+>                 (moduleImports (fromMaybe m asM) env)
 
 > qualifyEnv2 :: ModuleEnv -> ModuleIdent -> PEnv -> TCEnv -> ValueEnv
 >            -> (PEnv,TCEnv,ValueEnv)

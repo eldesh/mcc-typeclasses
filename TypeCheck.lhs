@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2063 2007-01-05 14:53:01Z wlux $
+% $Id: TypeCheck.lhs 2065 2007-01-08 10:26:03Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -306,9 +306,13 @@ general than the type signature.
 >     (cx,SimpleRhs _ e' ds') <-
 >       tcRhs m tcEnv (SimpleRhs p e ds) >>=
 >       unifyDecl p "goal" (ppExpr 0 e) tcEnv tyEnv0 [] alpha
->     checkSkolems p tcEnv (text "Goal:" <+> ppExpr 0 e) zeroSet alpha
->     when forEval (applyDefaults p "goal" (ppExpr 0 e) tcEnv cx alpha)
->     return (cx,Goal p e' ds')
+>     theta <- liftSt fetchSt
+>     let tvs
+>           | forEval = zeroSet
+>           | otherwise = fromListSet (typeVars (subst theta alpha))
+>     checkSkolems p tcEnv (text "Goal:" <+> ppExpr 0 e) tvs alpha
+>     cx' <- applyDefaults p "goal" (ppExpr 0 e) tcEnv tvs cx alpha
+>     return (cx',Goal p e' ds')
 
 > unifyDecl :: Position -> String -> Doc -> TCEnv -> ValueEnv -> Context -> Type
 >           -> (Context,Type,a) -> TcState (Context,a)
@@ -318,9 +322,8 @@ general than the type signature.
 >     theta <- liftSt fetchSt
 >     let ty = subst theta tyLhs
 >         fvs = foldr addToSet (fvEnv (subst theta tyEnv0)) (typeVars ty)
->         (gcx,lcx) = splitContext fvs cx
->     applyDefaults p what doc tcEnv lcx ty
->     return (gcx,x)
+>     cx' <- applyDefaults p what doc tcEnv fvs cx ty
+>     return (cx',x)
 
 \end{verbatim}
 The code in \texttt{genDecl} below verifies that the inferred type for
@@ -1147,17 +1150,20 @@ report~\cite{PeytonJones03:Haskell}).
 \ToDo{Support default declarations.}
 \begin{verbatim}
 
-> applyDefaults :: Position -> String -> Doc -> TCEnv -> Context -> Type
->               -> TcState ()
-> applyDefaults p what doc tcEnv cx ty =
+> applyDefaults :: Position -> String -> Doc -> TCEnv -> Set Int -> Context
+>               -> Type -> TcState Context
+> applyDefaults p what doc tcEnv fvs cx ty =
 >   do
 >     iEnv <- liftSt (liftSt envRt)
 >     liftSt (updateSt_ (compose (foldr (bindDefault iEnv) idSubst tpss)))
 >     theta <- liftSt fetchSt
->     let cx' = fst (partitionContext (subst theta cx))
+>     let lcx' = fst (partitionContext (subst theta lcx))
 >         ty' = subst theta ty
->     unless (null cx') (errorAt p (ambiguousType what doc tcEnv cx' ty'))
->   where tpss = groupBy sameType (sort cx)
+>     unless (null lcx')
+>            (errorAt p (ambiguousType what doc tcEnv (gcx ++ lcx') ty'))
+>     return gcx
+>   where (gcx,lcx) = splitContext fvs cx
+>         tpss = groupBy sameType (sort lcx)
 >         sameType (TypePred _ ty1) (TypePred _ ty2) = ty1 == ty2
 
 > bindDefault :: InstEnv -> [TypePred] -> TypeSubst -> TypeSubst

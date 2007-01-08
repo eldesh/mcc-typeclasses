@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 2037 2006-12-03 13:28:53Z wlux $
+% $Id: Types.lhs 2064 2007-01-08 10:17:12Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -240,12 +240,12 @@ type scheme.
 
 \end{verbatim}
 There are a few predefined types. Note that the identifiers of the
-primitive types \texttt{()}, \texttt{[a]}, and the tuple types must
-never be qualified with a module prefix.
+primitive types \texttt{()}, \texttt{[a]}, \texttt{a -> b}, and the
+tuple types must never be qualified with a module prefix.
 \begin{verbatim}
 
 > isPrimTypeId :: QualIdent -> Bool
-> isPrimTypeId tc = tc `elem` [qUnitId,qListId] || isQTupleId tc
+> isPrimTypeId tc = tc `elem` [qUnitId,qListId,qArrowId] || isQTupleId tc
 
 > unitType,boolType,charType,intType,floatType,stringType,successType :: Type
 > unitType = TypeConstructor qUnitId []

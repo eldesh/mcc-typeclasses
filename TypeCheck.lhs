@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2065 2007-01-08 10:26:03Z wlux $
+% $Id: TypeCheck.lhs 2066 2007-01-09 16:44:12Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1160,7 +1160,7 @@ report~\cite{PeytonJones03:Haskell}).
 >     let lcx' = fst (partitionContext (subst theta lcx))
 >         ty' = subst theta ty
 >     unless (null lcx')
->            (errorAt p (ambiguousType what doc tcEnv (gcx ++ lcx') ty'))
+>            (errorAt p (ambiguousType what doc tcEnv lcx' (QualType gcx ty')))
 >     return gcx
 >   where (gcx,lcx) = splitContext fvs cx
 >         tpss = groupBy sameType (sort lcx)
@@ -1392,13 +1392,13 @@ Error functions.
 >        nest 2 (text "and" <+> ppType tcEnv ty2),
 >        text "are incompatible"]
 
-> ambiguousType :: String -> Doc -> TCEnv -> Context -> Type -> String
-> ambiguousType what doc tcEnv cx ty = show $
+> ambiguousType :: String -> Doc -> TCEnv -> Context -> QualType -> String
+> ambiguousType what doc tcEnv cx' (QualType cx ty) = show $
 >   vcat [text "Ambiguous type variable" <> plural tvs <+>
 >           list (map (ppType tcEnv) tvs) <+> text "in type",
->         ppQualType tcEnv (canonType (QualType cx ty)),
+>         ppQualType tcEnv (canonType (QualType (cx' ++ cx) ty)),
 >         text "inferred for" <+> text what, doc]
->   where tvs = nub [ty | TypePred _ ty <- cx]
+>   where tvs = nub [ty | TypePred _ ty <- cx']
 >         plural (_:xs) = if null xs then empty else char 's'
 >         list [x] = x
 >         list [x1,x2] = x1 <+> text "and" <+> x2

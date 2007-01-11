@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2066 2007-01-09 16:44:12Z wlux $
+% $Id: TypeCheck.lhs 2067 2007-01-11 20:39:00Z wlux $
 %
-% Copyright (c) 1999-2006, Wolfgang Lux
+% Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeCheck.lhs}
@@ -261,14 +261,8 @@ general than the type signature.
 
 > tcDeclRhs :: ModuleIdent -> TCEnv -> Context -> (Context,Type,ConstrTerm Type)
 >           -> Decl a -> TcState (Context,Decl Type)
-> tcDeclRhs m tcEnv cx (_,tyLhs,_) d@(FunctionDecl p f eqs) =
->   do
->     tyEnv0 <- fetchSt
->     theta <- liftSt fetchSt
->     (cxs,eqs') <- liftM unzip $
->       mapM (tcEquation m tcEnv (fsEnv (subst theta tyEnv0)) tyLhs f) eqs
->     reduceContext p "function declaration" (ppDecl d) tcEnv (cx ++ concat cxs)
->                   (FunctionDecl p f eqs')
+> tcDeclRhs m tcEnv cx (_,tyLhs,_) (FunctionDecl p f eqs) =
+>   tcEquations "function" m tcEnv cx tyLhs p f eqs
 > tcDeclRhs m tcEnv cx (cxLhs,tyLhs,t') d@(PatternDecl p t rhs) =
 >   do
 >     tyEnv0 <- fetchSt
@@ -277,6 +271,17 @@ general than the type signature.
 >       unifyDecl p "pattern declaration" (ppDecl d) tcEnv tyEnv0
 >                 (cx++cxLhs) tyLhs
 >     return (cx',PatternDecl p t' rhs')
+
+> tcEquations :: String -> ModuleIdent -> TCEnv -> Context -> Type -> Position
+>             -> Ident -> [Equation a] -> TcState (Context,Decl Type)
+> tcEquations what m tcEnv cx ty p f eqs =
+>   do
+>     tyEnv0 <- fetchSt
+>     theta <- liftSt fetchSt
+>     (cxs,eqs') <- liftM unzip $
+>       mapM (tcEquation m tcEnv (fsEnv (subst theta tyEnv0)) ty f) eqs
+>     reduceContext p (what ++ " declaration") (ppDecl (FunctionDecl p f eqs))
+>                   tcEnv (cx ++ concat cxs) (FunctionDecl p f eqs')
 
 > tcEquation :: ModuleIdent -> TCEnv -> Set Int -> Type -> Ident -> Equation a
 >            -> TcState (Context,Equation Type)
@@ -366,16 +371,6 @@ signature is composed of its declared type signature and the context
 from the class declaration), but a little bit more complicated for
 instance declarations because the instance type must be substituted
 for the type variable used in the type class declaration.
-Furthermore, it is important for the dictionary transformation (see
-Sect.~\ref{sec:dict-trans}) that the free type variables of the
-instance type are instantiated consistently when inferring the types
-of the method implementations. For that reason, the instance type is
-instantiated in \texttt{tcInstDecl} rather than having the instance
-type's type variables instantiated along with a method's type scheme
-in \texttt{tcMethodDeclLhs}. On the other hand, when checking that a
-method's inferred type is general enough in \texttt{genMethodDecl},
-the type checker must substitute the uninstantiated instance type in
-the method's type signature.
 \begin{verbatim}
 
 > tcTopDecl :: ModuleIdent -> TCEnv -> TopDecl a -> TcState (TopDecl Type)
@@ -396,8 +391,7 @@ the method's type signature.
 >         typeSig _ (TrustMethod p tr fs) = TrustAnnot p tr fs
 > tcTopDecl m tcEnv (InstanceDecl p cx cls ty ds) =
 >   do
->     ty'' <- liftM snd (inst ty')
->     vds' <- mapM (tcInstMethodDecl m tcEnv cls' ty' ty'') vds
+>     vds' <- mapM (tcInstMethodDecl m tcEnv cls' ty') vds
 >     return (InstanceDecl p cx cls ty (map untyped ods ++ vds'))
 >   where cls' = origName (head (qualLookupTopEnv cls tcEnv))
 >         ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
@@ -408,78 +402,65 @@ the method's type signature.
 >                   -> TcState (MethodDecl Type)
 > tcClassMethodDecl m tcEnv sigs d =
 >   do
->     ty <- liftM snd $ inst (expandPolyType tcEnv sigTy)
->     (cx,d') <- tcMethodDeclRhs m tcEnv ty d
->     genClassMethodDecl m tcEnv sigTy cx ty d
->     return d'
->   where sigTy = methodType sigs d
->         methodType sigs (MethodDecl _ f _) =
->           fromJust (lookupEnv (unRenameIdent f) sigs)
+>     (ty',d') <- tcMethodDecl m tcEnv (expandPolyType tcEnv sigTy) d
+>     checkClassMethodType tcEnv sigTy ty' d'
+>   where sigTy = classMethodType sigs d
 
-> genClassMethodDecl :: ModuleIdent -> TCEnv -> QualTypeExpr -> Context -> Type
->                    -> MethodDecl a -> TcState ()
-> genClassMethodDecl m tcEnv sigTy cx ty (MethodDecl p f _) =
->   do
->     theta <- liftSt fetchSt
->     let sigma = gen zeroSet cx (subst theta ty)
->     unless (sigma `matchesTypeSig` expandPolyType tcEnv sigTy)
->            (errorAt p (typeSigTooGeneral tcEnv what sigTy sigma))
->     -- NB sigma is the right hand side type, which may lack some type
->     --    predicates implied by the super class context
->     updateSt_ (bindFun m f sigma)
+> checkClassMethodType :: TCEnv -> QualTypeExpr -> TypeScheme -> Decl Type
+>                      -> TcState (MethodDecl Type)
+> checkClassMethodType tcEnv sigTy sigma (FunctionDecl p f eqs)
+>   | sigma `matchesTypeSig` expandPolyType tcEnv sigTy =
+>       return (MethodDecl p f eqs)
+>   | otherwise = errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
 >   where what = text "Method:" <+> ppIdent f
 
-> tcInstMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> TypeScheme -> Type
+> tcInstMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> TypeScheme
 >                  -> MethodDecl a -> TcState (MethodDecl Type)
-> tcInstMethodDecl m tcEnv cls instTy instTy' d =
+> tcInstMethodDecl m tcEnv cls instTy d =
 >   do
->     ty <- liftM snd $ tcMethodDeclLhs cls instTy' d
->     (cx,d') <- tcMethodDeclRhs m tcEnv ty d
->     genInstMethodDecl m tcEnv cls instTy cx ty d
->     return d'
+>     methTy <- liftM (instMethodType cls instTy d) fetchSt
+>     (ty',d') <- tcMethodDecl m tcEnv methTy d
+>     checkInstMethodType tcEnv methTy ty' d'
 
-> tcMethodDeclLhs :: QualIdent -> Type -> MethodDecl a -> TcState (Context,Type)
-> tcMethodDeclLhs cls ty (MethodDecl _ f _) =
->   tcMethod cls (QualType [] ty) f >>= inst . typeScheme
-
-> tcMethodDeclRhs :: ModuleIdent -> TCEnv -> Type -> MethodDecl a
->                 -> TcState (Context,MethodDecl Type)
-> tcMethodDeclRhs m tcEnv ty d@(MethodDecl p f eqs) =
->   do
->     tyEnv0 <- fetchSt
->     theta <- liftSt fetchSt
->     (cxs,eqs') <- liftM unzip $
->       mapM (tcEquation m tcEnv (fsEnv (subst theta tyEnv0)) ty f) eqs
->     reduceContext p "method declaration" (ppMethodDecl d) tcEnv (concat cxs)
->                   (MethodDecl p f eqs')
-
-> genInstMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> TypeScheme
->                   -> Context -> Type -> MethodDecl a -> TcState ()
-> genInstMethodDecl m tcEnv cls (ForAll _ instTy) cx ty (MethodDecl p f _) =
->   do
->     methTy <- tcMethod cls instTy f
->     theta <- liftSt fetchSt
->     let sigma = gen zeroSet cx (subst theta ty)
->     unless (sigma `matchesTypeSig` typeScheme methTy)
->            (errorAt p (methodSigTooGeneral tcEnv what methTy sigma))
->     -- NB sigma is the right hand side type, which may lack some type
->     --    predicates implied by the instance context
->     updateSt_ (bindFun m f sigma)
->   where what = text "Method" <+> ppIdent f
+> checkInstMethodType :: TCEnv -> TypeScheme -> TypeScheme -> Decl Type
+>                     -> TcState (MethodDecl Type)
+> checkInstMethodType tcEnv methTy sigma (FunctionDecl p f eqs)
+>   | sigma `matchesTypeSig` methTy = return (MethodDecl p f eqs)
+>   | otherwise = errorAt p (methodSigTooGeneral tcEnv what methTy sigma)
+>   where what = text "Method:" <+> ppIdent f
 
 \end{verbatim}
-The function \texttt{tcMethod} returns the type of a type class method
-for a particular instance of its class. We can simply discard the
-context of the method's type recorded in the type environment (using
-\texttt{rawType}) because this context is trivially satisfied by the
-instance declaration.
+The functions \texttt{classMethodType} and \texttt{instMethodType}
+return the type of a class method and an instance method,
+respectively. While we can simply look up the type of a class method
+among the type signatures of its class declaration, computing the type
+of an instance method is a little bit more complicated. The compiler
+first looks up the method's type in the value type environment and
+then instantiates the class type variable with the instance type. We
+can simply discard the context of the method's type recorded in the
+type environment here (using \texttt{rawType}) because this context is
+trivially satisfied by the instance declaration.
 \begin{verbatim}
 
-> tcMethod :: QualIdent -> QualType -> Ident -> TcState QualType
-> tcMethod cls ty f = liftM (instMethodType ty . rawType . funType f') fetchSt
->   where f' = qualifyLike cls (unRenameIdent f)
->         instMethodType (QualType cx ty) =
->           normalize 0 . QualType cx . expandAliasType [ty]
+> classMethodType :: SigEnv -> MethodDecl a -> QualTypeExpr
+> classMethodType sigs (MethodDecl _ f _) =
+>   fromJust (lookupEnv (unRenameIdent f) sigs)
+
+> instMethodType :: QualIdent -> TypeScheme -> MethodDecl a -> ValueEnv
+>                -> TypeScheme
+> instMethodType cls (ForAll _ (QualType cx ty)) (MethodDecl _ f _) =
+>   typeScheme . normalize 0 . QualType cx . expandAliasType [ty] . methodType f
+>   where methodType f = rawType . funType (qualifyLike cls (unRenameIdent f))
+
+> tcMethodDecl :: ModuleIdent -> TCEnv -> TypeScheme -> MethodDecl a
+>              -> TcState (TypeScheme,Decl Type)
+> tcMethodDecl m tcEnv methTy (MethodDecl p f eqs) =
+>   do
+>     updateSt_ (bindFun m f methTy)
+>     ty <- liftM snd $ inst methTy
+>     (cx,d') <- tcEquations "method" m tcEnv [] ty p f eqs
+>     theta <- liftSt fetchSt
+>     return (gen zeroSet cx (subst theta ty),d')
 
 \end{verbatim}
 \paragraph{Foreign Functions}
@@ -1341,11 +1322,11 @@ Error functions.
 >         text "Inferred type:" <+> ppTypeScheme tcEnv sigma,
 >         text "Type signature:" <+> ppQualTypeExpr ty]
 
-> methodSigTooGeneral :: TCEnv -> Doc -> QualType -> TypeScheme -> String
+> methodSigTooGeneral :: TCEnv -> Doc -> TypeScheme -> TypeScheme -> String
 > methodSigTooGeneral tcEnv what ty sigma = show $
 >   vcat [text "Method type not general enough", what,
 >         text "Inferred type:" <+> ppTypeScheme tcEnv sigma,
->         text "Expected type:" <+> ppQualType tcEnv ty]
+>         text "Expected type:" <+> ppTypeScheme tcEnv ty]
 
 > wrongArity :: QualIdent -> Int -> Int -> String
 > wrongArity c arity argc = show $

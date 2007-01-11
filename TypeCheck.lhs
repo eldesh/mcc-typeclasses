@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2067 2007-01-11 20:39:00Z wlux $
+% $Id: TypeCheck.lhs 2068 2007-01-11 23:21:12Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -204,12 +204,12 @@ whose result is the ill-typed list \verb|['H',1,'l',1,'o']|,
 because \verb|f|'s type would incorrectly be generalized to
 $\forall\alpha.\texttt{Bool}\rightarrow[\alpha]\rightarrow[\alpha]$.
 
-Note that \texttt{tcDeclRhs} ignores the context present in a
-function's type signature. This prevents spurious missing instance
-errors when the inferred type of a function is less general than the
-declared type. For instance, if the type signature's context were
-merged with the inferred context, the compiler would report a missing
-instance \texttt{Prelude.Eq (a -> a)} for the declaration
+Note that \texttt{tcFunctionDecl} ignores the context of a function's
+type signature. This prevents spurious missing instance errors when
+the inferred type of a function is less general than the declared
+type. For instance, if the type signature's context were merged with
+the inferred context, the compiler would report a missing instance
+\texttt{Prelude.Eq (a -> a)} for the declaration
 \begin{verbatim}
   f :: Eq a => a
   f = id
@@ -235,53 +235,69 @@ general than the type signature.
 >     return (cx,[ForeignDecl p cc ie f ty])
 > tcDeclGroup m tcEnv sigs cx [FreeDecl p vs] =
 >   do
->     mapM_ (tcVariable m tcEnv sigs False p) vs
+>     mapM_ (tcDeclVar (checkMonoType p) m tcEnv sigs) vs
 >     return (cx,[FreeDecl p vs])
 > tcDeclGroup m tcEnv sigs cx ds =
 >   do
 >     tyEnv0 <- fetchSt
->     tys <- mapM (tcDeclLhs m tcEnv sigs) ds
->     (cx',ds') <- mapAccumM (uncurry . tcDeclRhs m tcEnv) cx (zip tys ds)
+>     mapM_ (tcDeclVars m tcEnv sigs) ds
+>     (cx',ds') <- mapAccumM (tcDecl m tcEnv) cx ds
 >     tyEnv <- fetchSt
 >     theta <- liftSt fetchSt
 >     let tvss = map (typeVars . subst theta . flip varType tyEnv) vs
 >         fvs = foldr addToSet (fvEnv (subst theta tyEnv0)) (concat tvss)
 >         (gcx,lcx) = splitContext fvs cx'
->     zipWithM_ (genDecl m tcEnv sigs . gen fvs lcx . subst theta . snd3) tys ds
->     return (gcx,ds')
+>     mapM_ (uncurry (genDecl m tcEnv sigs . gen fvs lcx . subst theta)) ds'
+>     return (gcx,map snd ds')
 >   where vs = [v | PatternDecl _ t _ <- ds, v <- bv t]
 
-> tcDeclLhs :: ModuleIdent -> TCEnv -> SigEnv -> Decl a
->           -> TcState (Context,Type,ConstrTerm Type)
-> tcDeclLhs m tcEnv sigs (FunctionDecl p f _) =
->   do
->     (cx,ty) <- tcVariable m tcEnv sigs True p f
->     return (cx,ty,VariablePattern ty f)
-> tcDeclLhs m tcEnv sigs (PatternDecl p t _) = tcConstrTerm m tcEnv sigs p t
+> tcDeclVars :: ModuleIdent -> TCEnv -> SigEnv -> Decl a -> TcState ()
+> tcDeclVars m tcEnv sigs (FunctionDecl p f _) =
+>   tcDeclVar (const return) m tcEnv sigs f
+> tcDeclVars m tcEnv sigs (PatternDecl p t _) =
+>   mapM_ (tcDeclVar (checkMonoType p) m tcEnv sigs) (bv t)
 
-> tcDeclRhs :: ModuleIdent -> TCEnv -> Context -> (Context,Type,ConstrTerm Type)
->           -> Decl a -> TcState (Context,Decl Type)
-> tcDeclRhs m tcEnv cx (_,tyLhs,_) (FunctionDecl p f eqs) =
->   tcEquations "function" m tcEnv cx tyLhs p f eqs
-> tcDeclRhs m tcEnv cx (cxLhs,tyLhs,t') d@(PatternDecl p t rhs) =
+> tcDeclVar :: (Ident -> TypeScheme -> TcState TypeScheme) -> ModuleIdent
+>           -> TCEnv -> SigEnv -> Ident -> TcState ()
+> tcDeclVar checkType m tcEnv sigs v =
+>   maybe (liftM monoType freshTypeVar) (checkType v . expandPolyType tcEnv)
+>         (lookupEnv v sigs) >>=
+>   updateSt_ . bindFun m v
+
+> checkMonoType :: Monad m => Position -> Ident -> TypeScheme -> m TypeScheme
+> checkMonoType p v ty
+>   | isMonoType ty = return ty
+>   | otherwise = errorAt p (polymorphicVar v)
+>   where isMonoType (ForAll n _) = n == 0
+
+> tcDecl :: ModuleIdent -> TCEnv -> Context -> Decl a
+>        -> TcState (Context,(Type,Decl Type))
+> tcDecl m tcEnv cx (FunctionDecl p f eqs) =
+>   do
+>     ty <- liftM (varType f) fetchSt
+>     tcFunctionDecl "function" m tcEnv cx ty p f eqs
+> tcDecl m tcEnv cx d@(PatternDecl p t rhs) =
 >   do
 >     tyEnv0 <- fetchSt
->     (cx',rhs') <-
+>     (cx',ty',t') <- tcConstrTerm (lookupType tyEnv0) tcEnv p t
+>     (cx'',rhs') <-
 >       tcRhs m tcEnv rhs >>=
->       unifyDecl p "pattern declaration" (ppDecl d) tcEnv tyEnv0
->                 (cx++cxLhs) tyLhs
->     return (cx',PatternDecl p t' rhs')
+>       unifyDecl p "pattern declaration" (ppDecl d) tcEnv tyEnv0 (cx++cx') ty'
+>     return (cx'',(ty',PatternDecl p t' rhs'))
+>   where lookupType tyEnv v = inst (varType v tyEnv)
 
-> tcEquations :: String -> ModuleIdent -> TCEnv -> Context -> Type -> Position
->             -> Ident -> [Equation a] -> TcState (Context,Decl Type)
-> tcEquations what m tcEnv cx ty p f eqs =
+> tcFunctionDecl :: String -> ModuleIdent -> TCEnv -> Context -> TypeScheme
+>                -> Position -> Ident -> [Equation a]
+>                -> TcState (Context,(Type,Decl Type))
+> tcFunctionDecl what m tcEnv cx ty p f eqs =
 >   do
 >     tyEnv0 <- fetchSt
 >     theta <- liftSt fetchSt
+>     (_,ty') <- inst ty
 >     (cxs,eqs') <- liftM unzip $
->       mapM (tcEquation m tcEnv (fsEnv (subst theta tyEnv0)) ty f) eqs
+>       mapM (tcEquation m tcEnv (fsEnv (subst theta tyEnv0)) ty' f) eqs
 >     reduceContext p (what ++ " declaration") (ppDecl (FunctionDecl p f eqs))
->                   tcEnv (cx ++ concat cxs) (FunctionDecl p f eqs')
+>                   tcEnv (cx ++ concat cxs) (ty',FunctionDecl p f eqs')
 
 > tcEquation :: ModuleIdent -> TCEnv -> Set Int -> Type -> Ident -> Equation a
 >            -> TcState (Context,Equation Type)
@@ -298,7 +314,7 @@ general than the type signature.
 >       -> TcState (Context,Type,Equation Type)
 > tcEqn m tcEnv p lhs rhs =
 >   do
->     (cx,tys,lhs') <- tcLhs m tcEnv noSigs p lhs
+>     (cx,tys,lhs') <- tcLhs m tcEnv p lhs
 >     (cx',ty,rhs') <- tcRhs m tcEnv rhs
 >     return (cx ++ cx',foldr TypeArrow ty tys,Equation p lhs' rhs')
 
@@ -331,18 +347,18 @@ general than the type signature.
 >     return (cx',x)
 
 \end{verbatim}
-The code in \texttt{genDecl} below verifies that the inferred type for
+The code in \texttt{genDecl} below verifies that the inferred type of
 a function matches its declared type. Since the type inferred for the
 left hand side of a function or variable declaration is an instance of
 its declared type -- provided a type signature is given -- it can only
 be more specific. Therefore, if the inferred type does not match the
 type signature the declared type must be too general. Note that it is
 possible that the inferred context is only a subset of the declared
-context because the left hand side context of a function declaration
-is (deliberately) ignored in \texttt{tcDeclRhs} above. No check is
+context because the context of a function's type signature is
+(deliberately) ignored in \texttt{tcFunctionDecl} above. No check is
 necessary for the variables in variable and other pattern declarations
 because the types of variables must be monomorphic, which is checked
-in \texttt{tcVariable} below.
+in \texttt{tcDeclVar} and \texttt{checkMonoType} above.
 \begin{verbatim}
 
 > genDecl :: ModuleIdent -> TCEnv -> SigEnv -> TypeScheme -> Decl a
@@ -457,8 +473,7 @@ trivially satisfied by the instance declaration.
 > tcMethodDecl m tcEnv methTy (MethodDecl p f eqs) =
 >   do
 >     updateSt_ (bindFun m f methTy)
->     ty <- liftM snd $ inst methTy
->     (cx,d') <- tcEquations "method" m tcEnv [] ty p f eqs
+>     (cx,(ty,d')) <- tcFunctionDecl "method" m tcEnv [] methTy p f eqs
 >     theta <- liftSt fetchSt
 >     return (gen zeroSet cx (subst theta ty),d')
 
@@ -549,109 +564,100 @@ Note that overloaded literals are not supported in patterns.
 >   | otherwise = liftM ((,) []) (freshConstrained fracTypes)
 > tcLiteral _ (String _) = return ([],stringType)
 
-> tcVariable :: ModuleIdent -> TCEnv -> SigEnv -> Bool -> Position
->            -> Ident -> TcState (Context,Type)
-> tcVariable m tcEnv sigs poly p v =
->   case lookupEnv v sigs of
->     Just ty -> sigType m poly p v (expandPolyType tcEnv ty)
->     Nothing -> freshType m v
->   where sigType m poly p v ty
->           | poly || isMonoType ty = updateSt_ (bindFun m v ty) >> inst ty
->           | otherwise = errorAt p (polymorphicVar v)
->         freshType m v =
->           do
->             ty <- freshTypeVar
->             updateSt_ (bindFun m v (monoType ty))
->             return ([],ty)
->         isMonoType (ForAll n _) = n == 0
+> tcVariable :: ModuleIdent -> Ident -> TcState (Context,Type)
+> tcVariable m v =
+>   do
+>     ty <- freshTypeVar
+>     updateSt_ (bindFun m v (monoType ty))
+>     return ([],ty)
 
-> tcLhs :: ModuleIdent -> TCEnv -> SigEnv -> Position -> Lhs a
+> tcLhs :: ModuleIdent -> TCEnv -> Position -> Lhs a
 >       -> TcState (Context,[Type],Lhs Type)
-> tcLhs m tcEnv sigs p (FunLhs f ts) =
+> tcLhs m tcEnv p (FunLhs f ts) =
 >   do
->     (cxs,tys,ts') <- liftM unzip3 $ mapM (tcConstrTerm m tcEnv sigs p) ts
+>     (cxs,tys,ts') <-
+>       liftM unzip3 $ mapM (tcConstrTerm (tcVariable m) tcEnv p) ts
 >     return (concat cxs,tys,FunLhs f ts')
-> tcLhs m tcEnv sigs p (OpLhs t1 op t2) =
+> tcLhs m tcEnv p (OpLhs t1 op t2) =
 >   do
->     (cx1,ty1,t1') <- tcConstrTerm m tcEnv sigs p t1
->     (cx2,ty2,t2') <- tcConstrTerm m tcEnv sigs p t2
+>     (cx1,ty1,t1') <- tcConstrTerm (tcVariable m) tcEnv p t1
+>     (cx2,ty2,t2') <- tcConstrTerm (tcVariable m) tcEnv p t2
 >     return (cx1 ++ cx2,[ty1,ty2],OpLhs t1' op t2')
-> tcLhs m tcEnv sigs p (ApLhs lhs ts) =
+> tcLhs m tcEnv p (ApLhs lhs ts) =
 >   do
->     (cx,tys,lhs') <- tcLhs m tcEnv sigs p lhs
->     (cxs,tys',ts') <- liftM unzip3 $ mapM (tcConstrTerm m tcEnv sigs p) ts
+>     (cx,tys,lhs') <- tcLhs m tcEnv p lhs
+>     (cxs,tys',ts') <-
+>       liftM unzip3 $ mapM (tcConstrTerm (tcVariable m) tcEnv p) ts
 >     return (cx ++ concat cxs,tys ++ tys',ApLhs lhs' ts')
 
-
-> tcConstrTerm :: ModuleIdent -> TCEnv -> SigEnv -> Position -> ConstrTerm a
->              -> TcState (Context,Type,ConstrTerm Type)
-> tcConstrTerm m _ _ _ (LiteralPattern _ l) =
+> tcConstrTerm :: (Ident -> TcState (Context,Type)) -> TCEnv -> Position
+>              -> ConstrTerm a -> TcState (Context,Type,ConstrTerm Type)
+> tcConstrTerm _ _ _ (LiteralPattern _ l) =
 >   do
 >     (cx,ty) <- tcLiteral False l
 >     return (cx,ty,LiteralPattern ty l)
-> tcConstrTerm m _ _ _ (NegativePattern _ l) =
+> tcConstrTerm _ _ _ (NegativePattern _ l) =
 >   do
 >     (cx,ty) <- tcLiteral False l
 >     return (cx,ty,NegativePattern ty l)
-> tcConstrTerm m tcEnv sigs p (VariablePattern _ v) =
+> tcConstrTerm tcVar _ _ (VariablePattern _ v) =
 >   do
->     (cx,ty) <- tcVariable m tcEnv sigs False p v
+>     (cx,ty) <- tcVar v
 >     return (cx,ty,VariablePattern ty v)
-> tcConstrTerm m tcEnv sigs p t@(ConstructorPattern _ c ts) =
+> tcConstrTerm tcVar tcEnv p t@(ConstructorPattern _ c ts) =
 >   do
->     (cx,ty,ts') <- tcConstrApp m tcEnv sigs p (ppConstrTerm 0 t) c ts
+>     (cx,ty,ts') <- tcConstrApp tcVar tcEnv p (ppConstrTerm 0 t) c ts
 >     return (cx,ty,ConstructorPattern ty c ts')
-> tcConstrTerm m tcEnv sigs p t@(InfixPattern _ t1 op t2) =
+> tcConstrTerm tcVar tcEnv p t@(InfixPattern _ t1 op t2) =
 >   do
 >     (cx,ty,[t1',t2']) <-
->       tcConstrApp m tcEnv sigs p (ppConstrTerm 0 t) op [t1,t2]
+>       tcConstrApp tcVar tcEnv p (ppConstrTerm 0 t) op [t1,t2]
 >     return (cx,ty,InfixPattern ty t1' op t2')
-> tcConstrTerm m tcEnv sigs p (ParenPattern t) =
+> tcConstrTerm tcVar tcEnv p (ParenPattern t) =
 >   do
->     (cx,ty,t') <- tcConstrTerm m tcEnv sigs p t
+>     (cx,ty,t') <- tcConstrTerm tcVar tcEnv p t
 >     return (cx,ty,ParenPattern t')
-> tcConstrTerm m tcEnv sigs p (TuplePattern ts) =
+> tcConstrTerm tcVar tcEnv p (TuplePattern ts) =
 >   do
->     (cxs,tys,ts') <- liftM unzip3 $ mapM (tcConstrTerm m tcEnv sigs p) ts
+>     (cxs,tys,ts') <- liftM unzip3 $ mapM (tcConstrTerm tcVar tcEnv p) ts
 >     return (concat cxs,tupleType tys,TuplePattern ts')
-> tcConstrTerm m tcEnv sigs p t@(ListPattern _ ts) =
+> tcConstrTerm tcVar tcEnv p t@(ListPattern _ ts) =
 >   do
 >     ty <- freshTypeVar
 >     (cxs,ts') <- liftM unzip $ mapM (tcElem (ppConstrTerm 0 t) ty) ts
 >     return (concat cxs,listType ty,ListPattern (listType ty) ts')
 >   where tcElem doc ty t =
->           tcConstrTerm m tcEnv sigs p t >>=
+>           tcConstrTerm tcVar tcEnv p t >>=
 >           unify p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t)
 >                 tcEnv ty
-> tcConstrTerm m tcEnv sigs p t@(AsPattern v t') =
+> tcConstrTerm tcVar tcEnv p t@(AsPattern v t') =
 >   do
->     (cx,ty) <- tcVariable m tcEnv sigs False p v
+>     (cx,ty) <- tcVar v
 >     (cx',t'') <-
->       tcConstrTerm m tcEnv sigs p t' >>=
+>       tcConstrTerm tcVar tcEnv p t' >>=
 >       unify p "pattern" (ppConstrTerm 0 t) tcEnv ty
 >     return (cx ++ cx',ty,AsPattern v t'')
-> tcConstrTerm m tcEnv sigs p (LazyPattern t) =
+> tcConstrTerm tcVar tcEnv p (LazyPattern t) =
 >   do
->     (cx,ty,t') <- tcConstrTerm m tcEnv sigs p t
+>     (cx,ty,t') <- tcConstrTerm tcVar tcEnv p t
 >     return (cx,ty,LazyPattern t')
 
-> tcConstrApp :: ModuleIdent -> TCEnv -> SigEnv -> Position -> Doc
+> tcConstrApp :: (Ident -> TcState (Context,Type)) -> TCEnv -> Position -> Doc
 >             -> QualIdent -> [ConstrTerm a]
 >             -> TcState (Context,Type,[ConstrTerm Type])
-> tcConstrApp m tcEnv sigs p doc c ts =
+> tcConstrApp tcVar tcEnv p doc c ts =
 >   do
 >     tyEnv <- fetchSt
 >     (cx,(tys,ty)) <- liftM (apSnd arrowUnapply) (skol (conType c tyEnv))
 >     unless (length tys == n) (errorAt p (wrongArity c (length tys) n))
->     (cxs,ts') <-
->       liftM unzip $ zipWithM (tcConstrArg m tcEnv sigs p doc) ts tys
+>     (cxs,ts') <- liftM unzip $ zipWithM (tcConstrArg tcVar tcEnv p doc) ts tys
 >     return (cx ++ concat cxs,ty,ts')
 >   where n = length ts
 
-> tcConstrArg :: ModuleIdent -> TCEnv -> SigEnv -> Position -> Doc
+> tcConstrArg :: (Ident -> TcState (Context,Type)) -> TCEnv -> Position -> Doc
 >             -> ConstrTerm a -> Type -> TcState (Context,ConstrTerm Type)
-> tcConstrArg m tcEnv sigs p doc t ty =
->   tcConstrTerm m tcEnv sigs p t >>=
+> tcConstrArg tcVar tcEnv p doc t ty =
+>   tcConstrTerm tcVar tcEnv p t >>=
 >   unify p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t) tcEnv ty
 
 > tcRhs :: ModuleIdent -> TCEnv -> Rhs a -> TcState (Context,Type,Rhs Type)
@@ -838,7 +844,8 @@ Note that overloaded literals are not supported in patterns.
 >     return (cx ++ cx',TypeArrow alpha gamma,RightSection op' e1')
 > tcExpr m tcEnv p (Lambda ts e) =
 >   do
->     (cxs,tys,ts') <- liftM unzip3 $ mapM (tcConstrTerm m tcEnv noSigs p) ts
+>     (cxs,tys,ts') <-
+>       liftM unzip3 $ mapM (tcConstrTerm (tcVariable m) tcEnv p) ts
 >     (cx',ty,e') <- tcExpr m tcEnv p e
 >     return (concat cxs ++ cx',foldr TypeArrow ty tys,Lambda ts' e')
 > tcExpr m tcEnv p (Let ds e) =
@@ -877,7 +884,7 @@ Note that overloaded literals are not supported in patterns.
 > tcAlt m tcEnv tyLhs tyRhs a@(Alt p t rhs) =
 >   do
 >     (cx,t') <-
->       tcConstrTerm m tcEnv noSigs p t >>=
+>       tcConstrTerm (tcVariable m) tcEnv p t >>=
 >       unify p "case pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t)
 >             tcEnv tyLhs
 >     (cx',rhs') <- tcRhs m tcEnv rhs >>= unify p "case branch" doc tcEnv tyRhs
@@ -893,7 +900,7 @@ Note that overloaded literals are not supported in patterns.
 >     return (cx,StmtExpr e')
 > tcQual m tcEnv p q@(StmtBind t e) =
 >   do
->     (cx,ty,t') <- tcConstrTerm m tcEnv noSigs p t
+>     (cx,ty,t') <- tcConstrTerm (tcVariable m) tcEnv p t
 >     (cx',e') <-
 >       tcExpr m tcEnv p e >>=
 >       unify p "generator" (ppStmt q $-$ text "Term:" <+> ppExpr 0 e)
@@ -915,7 +922,7 @@ Note that overloaded literals are not supported in patterns.
 >     return (cx',StmtExpr e')
 > tcStmt m tcEnv p st@(StmtBind t e) =
 >   do
->     (cx,ty,t') <- tcConstrTerm m tcEnv noSigs p t
+>     (cx,ty,t') <- tcConstrTerm (tcVariable m) tcEnv p t
 >     (cx',e') <-
 >       tcExpr m tcEnv p e >>=
 >       unify p "statement" (ppStmt st $-$ text "Term:" <+> ppExpr 0 e)

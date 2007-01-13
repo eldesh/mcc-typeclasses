@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2037 2006-12-03 13:28:53Z wlux $
+% $Id: Imports.lhs 2069 2007-01-13 07:00:43Z wlux $
 %
 % Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -88,7 +88,7 @@ all instance declarations are always imported into the current module.
 
 > bindInstance :: ModuleIdent -> IDecl -> InstEnv -> InstEnv
 > bindInstance m (IInstanceDecl _ cx cls ty) =
->   bindEnv (CT (qualQualify m cls) (fst (unapplyType ty'))) cx'
+>   bindEnv (CT (qualQualify m cls) (rootOfType ty')) cx'
 >   where QualType cx' ty' = toQualType m [] (QualTypeExpr cx ty)
 > bindInstance _ _ = id
 

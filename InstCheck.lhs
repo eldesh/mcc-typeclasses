@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2059 2007-01-03 11:33:52Z wlux $
+% $Id: InstCheck.lhs 2069 2007-01-13 07:00:43Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -45,7 +45,7 @@ instance environment.
 
 > bindInstance :: TCEnv -> TopDecl a -> InstEnv -> InstEnv
 > bindInstance tcEnv (InstanceDecl _ cx cls ty _) =
->   bindEnv (CT cls' (fst (unapplyType ty'))) cx'
+>   bindEnv (CT cls' (rootOfType ty')) cx'
 >   where cls' = origName (head (qualLookupTopEnv cls tcEnv))
 >         ForAll _ (QualType cx' ty') =
 >           expandPolyType tcEnv (QualTypeExpr cx ty)

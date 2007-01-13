@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 2064 2007-01-08 10:17:12Z wlux $
+% $Id: Types.lhs 2069 2007-01-13 07:00:43Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -48,8 +48,11 @@ as well, these variables must never be quantified.
 \end{verbatim}
 The function \texttt{applyType} applies a type constructor to a list
 of argument types. The function \texttt{unapplyType} decomposes a type
-into a type constructor and a list of type arguments. Both functions
-can be used to compose and decompose arrow types.
+into a type constructor and a list of type arguments. The function
+\texttt{rootOfType} returns the type constructor at the root of a
+type. These functions may be used to compose and decompose arrow
+types. However, \texttt{rootOfType} must not be applied to a type
+variable or skolem type.
 \begin{verbatim}
 
 > applyType :: QualIdent -> [Type] -> Type
@@ -57,12 +60,16 @@ can be used to compose and decompose arrow types.
 >   | tc == qArrowId && length tys == 2 = TypeArrow (tys!!0) (tys!!1)
 >   | otherwise = TypeConstructor tc tys
 
-> unapplyType :: Type -> (QualIdent,[Type])
-> unapplyType (TypeConstructor tc tys) = (tc,tys)
-> unapplyType (TypeVariable _) = error "internal error: unapplyType"
+> unapplyType :: Type -> Maybe (QualIdent,[Type])
+> unapplyType (TypeConstructor tc tys) = Just (tc,tys)
+> unapplyType (TypeVariable _) = Nothing
 > unapplyType (TypeConstrained tys _) = unapplyType (head tys)
-> unapplyType (TypeArrow ty1 ty2) = (qArrowId,[ty1,ty2])
-> unapplyType (TypeSkolem _) = error "internal error: unapplyType"
+> unapplyType (TypeArrow ty1 ty2) = Just (qArrowId,[ty1,ty2])
+> unapplyType (TypeSkolem _) = Nothing
+
+> rootOfType :: Type -> QualIdent
+> rootOfType ty =
+>   maybe (error "internal error: rootOfType") fst (unapplyType ty)
 
 \end{verbatim}
 The function \texttt{isArrowType} checks whether a type $\tau = \tau_1

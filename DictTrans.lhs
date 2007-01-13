@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2059 2007-01-03 11:33:52Z wlux $
+% $Id: DictTrans.lhs 2069 2007-01-13 07:00:43Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -529,7 +529,7 @@ of method $f_i$ in class $C$.
 
 > instMethodIds :: TypePred -> [Ident]
 > instMethodIds (TypePred cls ty) =
->   map (instMethodId cls (fst (unapplyType ty))) [1..]
+>   map (instMethodId cls (rootOfType ty)) [1..]
 >   where instMethodId cls tc n =
 >           mkIdent ("_Method#" ++ qualName cls ++ "#"
 >                               ++ qualName tc ++ "#" ++ show n)
@@ -741,17 +741,23 @@ computed for the context instantiated at the appropriate types.
 >   fromMaybe (instDict iEnv dictEnv tp) (lookupEnv tp dictEnv)
 
 > instDict :: InstEnv -> DictEnv -> TypePred -> Expression Type
-> instDict iEnv dictEnv (TypePred cls ty) =
->   case lookupEnv (CT cls tc) iEnv of
->     Just cx ->
->       instFunApp iEnv dictEnv (map (expandAliasType tys) cx) (TypePred cls ty)
->     Nothing -> internalError ("instDict " ++ show cls ++ " " ++ show tc)
->   where (tc,tys) = unapplyType ty
+> instDict iEnv dictEnv tp = instFunApp iEnv dictEnv (instContext iEnv tp) tp
 
 > instFunApp :: InstEnv -> DictEnv -> Context -> TypePred -> Expression Type
 > instFunApp iEnv dictEnv cx tp =
 >   apply (Variable (transDictType cx tp) (qInstFunId tp))
 >         (map (dictArg iEnv dictEnv) cx)
+
+> instContext :: InstEnv -> TypePred -> Context
+> instContext iEnv (TypePred cls ty) =
+>   case unapplyType ty of
+>     Just (tc,tys) -> 
+>       case lookupEnv (CT cls tc) iEnv of
+>         Just cx -> map (expandAliasType tys) cx
+>         Nothing ->
+>           internalError ("instContext " ++ show cls ++ " " ++ show tc)
+>     Nothing ->
+>       internalError ("instContext " ++ show cls ++ " " ++ showsPrec 11 ty "")
 
 \end{verbatim}
 When a type class method is applied at a known type, the compiler does

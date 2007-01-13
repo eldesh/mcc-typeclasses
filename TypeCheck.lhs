@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2068 2007-01-11 23:21:12Z wlux $
+% $Id: TypeCheck.lhs 2070 2007-01-13 22:35:41Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -247,9 +247,11 @@ general than the type signature.
 >     let tvss = map (typeVars . subst theta . flip varType tyEnv) vs
 >         fvs = foldr addToSet (fvEnv (subst theta tyEnv0)) (concat tvss)
 >         (gcx,lcx) = splitContext fvs cx'
->     mapM_ (uncurry (genDecl m tcEnv sigs . gen fvs lcx . subst theta)) ds'
->     return (gcx,map snd ds')
+>     ds'' <- mapM (uncurry3 (dfltDecl tcEnv) . mergeContext lcx theta) ds'
+>     mapM_ (uncurry3 (\cx -> genDecl m tcEnv sigs . gen fvs cx)) ds''
+>     return (gcx,map thd3 ds'')
 >   where vs = [v | PatternDecl _ t _ <- ds, v <- bv t]
+>         mergeContext cx1 theta (cx2,ty,d) = (cx1 ++ cx2,subst theta ty,d)
 
 > tcDeclVars :: ModuleIdent -> TCEnv -> SigEnv -> Decl a -> TcState ()
 > tcDeclVars m tcEnv sigs (FunctionDecl p f _) =
@@ -271,11 +273,15 @@ general than the type signature.
 >   where isMonoType (ForAll n _) = n == 0
 
 > tcDecl :: ModuleIdent -> TCEnv -> Context -> Decl a
->        -> TcState (Context,(Type,Decl Type))
+>        -> TcState (Context,(Context,Type,Decl Type))
 > tcDecl m tcEnv cx (FunctionDecl p f eqs) =
 >   do
->     ty <- liftM (varType f) fetchSt
->     tcFunctionDecl "function" m tcEnv cx ty p f eqs
+>     tyEnv0 <- fetchSt
+>     (cx',(ty',d')) <-
+>       tcFunctionDecl "function" m tcEnv cx (varType f tyEnv0) p f eqs
+>     theta <- liftSt fetchSt
+>     let (gcx,lcx) = splitContext (fvEnv (subst theta tyEnv0)) cx'
+>     return (gcx,(lcx,ty',d'))
 > tcDecl m tcEnv cx d@(PatternDecl p t rhs) =
 >   do
 >     tyEnv0 <- fetchSt
@@ -283,7 +289,7 @@ general than the type signature.
 >     (cx'',rhs') <-
 >       tcRhs m tcEnv rhs >>=
 >       unifyDecl p "pattern declaration" (ppDecl d) tcEnv tyEnv0 (cx++cx') ty'
->     return (cx'',(ty',PatternDecl p t' rhs'))
+>     return (cx'',([],ty',PatternDecl p t' rhs'))
 >   where lookupType tyEnv v = inst (varType v tyEnv)
 
 > tcFunctionDecl :: String -> ModuleIdent -> TCEnv -> Context -> TypeScheme
@@ -328,11 +334,10 @@ general than the type signature.
 >       tcRhs m tcEnv (SimpleRhs p e ds) >>=
 >       unifyDecl p "goal" (ppExpr 0 e) tcEnv tyEnv0 [] alpha
 >     theta <- liftSt fetchSt
->     let tvs
->           | forEval = zeroSet
->           | otherwise = fromListSet (typeVars (subst theta alpha))
->     checkSkolems p tcEnv (text "Goal:" <+> ppExpr 0 e) tvs alpha
->     cx' <- applyDefaults p "goal" (ppExpr 0 e) tcEnv tvs cx alpha
+>     let ty = subst theta alpha
+>         tvs = if forEval then zeroSet else fromListSet (typeVars ty)
+>     checkSkolems p tcEnv (text "Goal:" <+> ppExpr 0 e) tvs ty
+>     cx' <- applyDefaults p "goal" (ppExpr 0 e) tcEnv tvs cx ty
 >     return (cx',Goal p e' ds')
 
 > unifyDecl :: Position -> String -> Doc -> TCEnv -> ValueEnv -> Context -> Type
@@ -345,6 +350,76 @@ general than the type signature.
 >         fvs = foldr addToSet (fvEnv (subst theta tyEnv0)) (typeVars ty)
 >     cx' <- applyDefaults p what doc tcEnv fvs cx ty
 >     return (cx',x)
+
+\end{verbatim}
+After inferring types for a group of mutually recursive declarations
+and computing the set of its constrained type variables, the compiler
+has to be prepared for some of the constrained type variables to not
+appear in some of the inferred types, i.e., there may be ambiguous
+types that have not been reported by \texttt{unifyDecl} above at the
+level of individual function equations and pattern declarations. For
+instance, given the two functions
+\begin{verbatim}
+  f1 [] = []
+  f1 (x:xs) = if x < 0 then f2 1 xs else x : f1 xs
+
+  f2 _ [] = []
+  f2 n (x:xs) = if x < 0 then f2 (n + 1) xs else x : f1 xs
+\end{verbatim}
+the compiler infers types $\alpha_1 \rightarrow \alpha_1$ and
+$\beta_1 \rightarrow \alpha_1 \rightarrow \alpha_1$ for \texttt{f1}
+and \texttt{f2}, respectively. In addition, the constraints
+$\texttt{Num}\,\alpha_1, \texttt{Ord}\,\alpha_1,
+\texttt{Num}\,\beta_1$ are inferred, which means that \texttt{f1}'s
+type is ambiguous because $\beta_1$ does not appear in its
+type.
+
+In~\cite{Jones99:THiH}, constrained type variables that do not appear
+in the types of all (implicitly typed) equations of a binding group
+are not generalized. Instead Haskell's default rules are employed in
+order to resolve these ambiguous types. However, this means that the
+compiler may fix $\beta_1$ prematurely to the default numeric type,
+which would prevent using \texttt{f2} (consistently) at another
+numeric type in the rest of the program. On the other hand, if we
+delay type resolution like for the types of bound variables, we may
+end up with some unresolved constraints after typing the whole module
+and with no good place for reporting the error.
+
+Fortunately there is a better solution, which is also implemented by
+ghc, hbc, and nhc98. We can simply generalize the type variable
+$\beta_1$ in \texttt{f2}'s type and apply default resolution to
+$\beta_1$ locally in function \texttt{f1}. This is implemented in
+function \texttt{dfltDecl} below. After resolving ambiguous type
+variables in the type of a function declaration, this function
+restores the old substitution and applies the substitution that fixes
+the ambiguous type variables to the function's type annotations only.
+
+A minor complication arises from explicitly typed declarations in a
+binding group. The compiler creates a fresh instance of its type
+signature at every place where an explicitly typed function is used,
+including the left hand side of its own declaration. The constraints
+that apply to these fresh type variables must not be considered in
+other declarations when checking for ambiguous types. Nevertheless,
+they must be taken into account when checking that the inferred type
+is not less general than the type signature in \texttt{genDecl} below.
+For that reason the inferred context of a function is split in the
+\texttt{FunctionDecl} case of \texttt{tcDecl} above into a global
+part, which applies to other declarations in the same binding group as
+well, and a local part, which applies only to the particular
+declaration.  These two parts are merged again before applying
+\texttt{dfltDecl} to the types.
+\begin{verbatim}
+
+> dfltDecl :: TCEnv -> Context -> Type -> Decl Type
+>          -> TcState (Context,Type,Decl Type)
+> dfltDecl tcEnv cx ty (FunctionDecl p f eqs) =
+>   do
+>     theta <- liftSt fetchSt
+>     cx' <- applyDefaults p what empty tcEnv (fromListSet (typeVars ty)) cx ty
+>     theta' <- liftSt (changeSt theta)
+>     return (cx',ty,fmap (subst theta') (FunctionDecl p f eqs))
+>   where what = "function " ++ name f
+> dfltDecl _ cx ty (PatternDecl p t rhs) = return (cx,ty,PatternDecl p t rhs)
 
 \end{verbatim}
 The code in \texttt{genDecl} below verifies that the inferred type of
@@ -1143,12 +1218,12 @@ report~\cite{PeytonJones03:Haskell}).
 > applyDefaults p what doc tcEnv fvs cx ty =
 >   do
 >     iEnv <- liftSt (liftSt envRt)
->     liftSt (updateSt_ (compose (foldr (bindDefault iEnv) idSubst tpss)))
->     theta <- liftSt fetchSt
->     let lcx' = fst (partitionContext (subst theta lcx))
+>     let theta = foldr (bindDefault iEnv) idSubst tpss
+>         lcx' = fst (partitionContext (subst theta lcx))
 >         ty' = subst theta ty
 >     unless (null lcx')
 >            (errorAt p (ambiguousType what doc tcEnv lcx' (QualType gcx ty')))
+>     liftSt (updateSt_ (compose theta))
 >     return gcx
 >   where (gcx,lcx) = splitContext fvs cx
 >         tpss = groupBy sameType (sort lcx)
@@ -1275,16 +1350,13 @@ The function \texttt{gen} generalizes a context \emph{cx} and a type
 $\tau$ into a type scheme $\forall\overline{\alpha} . \emph{cx}
 \Rightarrow \tau$ by universally quantifying all type variables that
 are free in $\tau$ and not fixed by the environment. The set of the
-latter is given by \texttt{gen}'s first argument. Note that
-\texttt{gen} carefully cleans up the context so that only universally
-quantified type variables are constrained.
+latter is given by \texttt{gen}'s first argument.
 \begin{verbatim}
 
 > gen :: Set Int -> Context -> Type -> TypeScheme
-> gen fvs cx ty = ForAll (length tvs) (subst tvs' (QualType cx' ty))
+> gen fvs cx ty = ForAll (length tvs) (subst theta (QualType cx ty))
 >   where tvs = [tv | tv <- nub (typeVars ty), tv `notElemSet` fvs]
->         tvs' = foldr2 bindSubst idSubst tvs (map TypeVariable [0..])
->         cx' = fst (splitContext (fromListSet tvs) cx)
+>         theta = foldr2 bindSubst idSubst tvs (map TypeVariable [0..])
 
 > replicateM :: Monad m => Int -> m a -> m [a]
 > replicateM n = sequence . replicate n

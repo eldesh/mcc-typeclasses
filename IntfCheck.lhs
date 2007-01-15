@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2033 2006-12-03 09:50:07Z wlux $
+% $Id: IntfCheck.lhs 2072 2007-01-15 23:02:44Z wlux $
 %
-% Copyright (c) 2000-2005, Wolfgang Lux
+% Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{IntfCheck.lhs}
@@ -105,7 +105,7 @@ interface module only. However, this has not been implemented yet.
 >             length ds == length fs' &&
 >             and (zipWith (isVisible imethod) ds fs') =
 >               Just (mapM_ (checkMethodImport m tyEnv cls cx') (catMaybes ds))
->           where cx' = ClassAssert cls tv : cx
+>           where cx' = [ClassAssert cls tv]
 >         checkClass _ = Nothing
 > checkImport m _ _ _ (IInstanceDecl _ _ _ _) = return ()
 > checkImport m _ _ tyEnv (IFunctionDecl p f ty) =
@@ -146,9 +146,7 @@ interface module only. However, this has not been implemented yet.
 >   checkValueInfo "method" checkMethod tyEnv p qf
 >   where qf = qualifyLike cls f
 >         checkMethod (Value f' (ForAll _ ty')) =
->           -- FIXME: canonType is necessary only because we must include all
->           --        implied super class predicates in the context
->           qf == f' && canonType (toQualType m [] (QualTypeExpr cx ty)) == ty'
+>           qf == f' && toQualType m [] (QualTypeExpr cx ty) == ty'
 >         checkMethod _ = False
 
 > checkPrecInfo :: (PrecInfo -> Bool) -> PEnv -> Position

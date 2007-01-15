@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2071 2007-01-15 22:21:22Z wlux $
+% $Id: TypeTrans.lhs 2072 2007-01-15 23:02:44Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -11,7 +11,7 @@ external type representations.
 \begin{verbatim}
 
 > module TypeTrans(toType, toTypes, toQualType, toConstrType, toTypeScheme,
->                  fromType, fromQualType,
+>                  fromType, fromQualType, minContext, maxContext,
 >                  expandMonoType, expandConstrType, expandPolyType,
 >                  ppType, ppQualType, ppTypeScheme) where
 > import Base
@@ -218,10 +218,12 @@ types.
 >   QualType (expandContext tcEnv cx) (expandType tcEnv ty)
 
 > expandContext :: TCEnv -> [TypePred] -> [TypePred]
-> expandContext tcEnv cx = impliedContext tcEnv (map (expandTypePred tcEnv) cx)
+> expandContext tcEnv cx = minContext tcEnv (map (expandTypePred tcEnv) cx)
 
 > expandTypePred :: TCEnv -> TypePred -> TypePred
-> expandTypePred tcEnv (TypePred cls ty) = TypePred cls (expandType tcEnv ty)
+> expandTypePred tcEnv (TypePred cls ty) =
+>   TypePred (origName (head (qualLookupTopEnv cls tcEnv)))
+>            (expandType tcEnv ty)
 
 > expandType :: TCEnv -> Type -> Type
 > expandType tcEnv (TypeConstructor tc tys) =
@@ -238,17 +240,23 @@ types.
 > expandType _ (TypeSkolem k) = TypeSkolem k
 
 \end{verbatim}
-The function \texttt{impliedContext} transforms a context by adding
-type predicates for all type predicates which are implied by the super
-class hierarchy.
+The function \texttt{minContext} transforms a context by removing all
+type predicates from the context which are implied by other predicates
+according to the super class hierarchy. Inversely, the function
+\texttt{maxContext} adds all predicates to a context which are implied
+by the predicates in the given context.
 \begin{verbatim}
 
-> impliedContext :: TCEnv -> Context -> Context
-> impliedContext tcEnv cx = nub (concatMap implied cx)
+> minContext :: TCEnv -> Context -> Context
+> minContext tcEnv cx = cx' \\ concatMap implied cx'
+>   where cx' = nub cx
+>         implied (TypePred cls ty) =
+>           [TypePred cls' ty | cls' <- tail (allSuperClasses cls tcEnv)]
+
+> maxContext :: TCEnv -> Context -> Context
+> maxContext tcEnv cx = nub (concatMap implied cx)
 >   where implied (TypePred cls ty) =
->           case qualLookupTopEnv cls tcEnv of
->             [TypeClass cls' clss _] -> map (flip TypePred ty) (cls' : clss)
->             _ -> internalError ("implied " ++ show cls)
+>           [TypePred cls' ty | cls' <- sort (allSuperClasses cls tcEnv)]
 
 \end{verbatim}
 The following functions implement pretty-printing for types by

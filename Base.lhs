@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2052 2006-12-20 11:37:05Z wlux $
+% $Id: Base.lhs 2072 2007-01-15 23:02:44Z wlux $
 %
-% Copyright (c) 1999-2006, Wolfgang Lux
+% Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Base.lhs}
@@ -44,15 +44,11 @@ the only information that must be recorded is the arity of each type.
 For algebraic data types and renaming types, the compiler also records
 all data constructors belonging to that type, for alias types the
 expanded right hand side type expression is saved, and for type
-classes the names of their super classes and the type class methods
-are saved. No kind information is saved for type classes because only
-single parameter type classes are supported and instance types must
-have kind $\ast$. The list of super classes contains all direct and
-indirect super classes and is always sorted by the names of the super
-classes. Including \emph{all} super classes is necessary because
-looking up indirect super classes in the type constructor environment
-may be impossible for the names of the super classes may be ambiguous
-or not in scope at all. Type classes are recorded in the type
+classes the names of their immediate super classes and the type class
+methods are saved. No kind information is saved for type classes
+because only single parameter type classes are supported and instance
+types must have kind $\ast$. The list of super classes is always
+sorted by their names. Type classes are recorded in the type
 constructor environment because type constructors and type classes
 share a common name space.
 
@@ -127,11 +123,24 @@ therefore should not fail.
 >     [AliasType _ _ _] -> []
 >     _ -> internalError ("constructors " ++ show tc)
 
+\end{verbatim}
+The function \texttt{superClasses} returns a list of all immediate
+super classes of a type class. The function \texttt{allSuperClasses}
+returns a list of all direct and indirect super classes of a class
+including the class itself, i.e., it computes the reflexive transitive
+closure of \texttt{superClasses}. The function \texttt{classMethods}
+returns the methods defined by a class.
+\begin{verbatim}
+
 > superClasses :: QualIdent -> TCEnv -> [QualIdent]
 > superClasses cls clsEnv =
 >   case qualLookupTopEnv cls clsEnv of
 >     [TypeClass _ clss _] -> clss
 >     _ -> internalError ("superClasses " ++ show cls)
+
+> allSuperClasses :: QualIdent -> TCEnv -> [QualIdent]
+> allSuperClasses cls clsEnv = nub (classes cls)
+>   where classes cls = cls : concatMap classes (superClasses cls clsEnv)
 
 > classMethods :: QualIdent -> TCEnv -> [Maybe Ident]
 > classMethods cls clsEnv =

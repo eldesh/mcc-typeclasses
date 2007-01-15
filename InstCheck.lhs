@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2069 2007-01-13 07:00:43Z wlux $
+% $Id: InstCheck.lhs 2072 2007-01-15 23:02:44Z wlux $
 %
-% Copyright (c) 2006, Wolfgang Lux
+% Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{InstCheck.lhs}
@@ -141,7 +141,7 @@ environment before instances of their subclasses.
 >             [TypeClass cls' clss _] -> (cls',clss)
 >             _ -> internalError "inferContext"
 >         cx'' = nub (cx' ++ [TypePred cls (arrowBase ty') | cls <- clss] ++
->                     [TypePred cls ty | cls <- cls':clss, ty <- arrowArgs ty'])
+>                     [TypePred cls' ty | ty <- arrowArgs ty'])
 >         ty'' = ConstructorType (qualify tc) (map VariableType tvs)
 
 > updateContexts :: InstEnv -> [(CT,Context)] -> Maybe InstEnv
@@ -158,10 +158,7 @@ environment before instances of their subclasses.
 > sortClasses tcEnv clss =
 >   map fst (sortBy compareDepth (map (adjoinDepth tcEnv) clss))
 >   where (_,d1) `compareDepth` (_,d2) = d1 `compare` d2
->         adjoinDepth tcEnv cls =
->           case qualLookupTopEnv cls tcEnv of
->             [TypeClass _ clss _] -> (cls,length clss)
->             _ -> internalError "sortClasses"
+>         adjoinDepth tcEnv cls = (cls,length (allSuperClasses cls tcEnv))
 
 > sortDeriving :: ModuleIdent -> [TopDecl a] -> [[TopDecl a]]
 > sortDeriving m ds = scc bound free (filter hasDerivedInstance ds)
@@ -205,7 +202,7 @@ satisfied by \emph{cx}.
 >   do
 >     cx''' <- reduceContext p what doc tcEnv iEnv cx''
 >     mapE_ (reportMissingInstance p what doc tcEnv)
->           (filter (`notElem` cx') cx''')
+>           (filter (`notElem` maxContext tcEnv cx') cx''')
 >   where what = "instance declaration"
 >         doc = ppTopDecl (InstanceDecl p cx cls ty [])
 >         ForAll _ (QualType cx' ty') =
@@ -218,7 +215,8 @@ The function \texttt{reduceContext} simplifies a context
 $(C_1\,\tau_1, \dots, C_n\,\tau_n)$ where the $\tau_i$ are arbitrary
 types into a context where all predicates are of the form $C\,u$ with
 $u$ being a type variable. An error is reported if the context cannot
-be transformed into this form.
+be transformed into this form. In addition, all predicates that are
+implied by other predicates in the context are removed.
 \begin{verbatim}
 
 > reduceContext :: Position -> String -> Doc -> TCEnv -> InstEnv -> Context
@@ -227,7 +225,8 @@ be transformed into this form.
 >   do
 >     mapE_ (reportMissingInstance p what doc tcEnv) cx2
 >     return cx1
->   where (cx1,cx2) = partitionContext (reduceTypePreds iEnv cx)
+>   where (cx1,cx2) =
+>           partitionContext (minContext tcEnv (reduceTypePreds iEnv cx))
 
 > reduceTypePreds :: InstEnv -> Context -> Context
 > reduceTypePreds iEnv = concatMap (reduceTypePred iEnv)
@@ -246,7 +245,7 @@ be transformed into this form.
 > instContext _ _ (TypeSkolem _) = Nothing
 
 > partitionContext :: Context -> (Context,Context)
-> partitionContext cx = partition (\(TypePred _ ty) -> isTypeVar ty) (nub cx)
+> partitionContext cx = partition (\(TypePred _ ty) -> isTypeVar ty) cx
 >   where isTypeVar (TypeConstructor _ _) = False
 >         isTypeVar (TypeVariable _) = True
 >         isTypeVar (TypeConstrained _ _) = False

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2070 2007-01-13 22:35:41Z wlux $
+% $Id: TypeCheck.lhs 2072 2007-01-15 23:02:44Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -441,15 +441,16 @@ in \texttt{tcDeclVar} and \texttt{checkMonoType} above.
 > genDecl m tcEnv sigs sigma (FunctionDecl p f _) =
 >   case lookupEnv f sigs of
 >     Just sigTy
->       | sigma `matchesTypeSig` expandPolyType tcEnv sigTy -> return ()
+>       | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma -> return ()
 >       | otherwise -> errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
 >     Nothing -> updateSt_ (rebindFun m f sigma)
 >   where what = text "Function:" <+> ppIdent f
 > genDecl _ _ _ _ (PatternDecl _ _ _) = return ()
 
-> matchesTypeSig :: TypeScheme -> TypeScheme -> Bool
-> ForAll _ (QualType cx ty) `matchesTypeSig` ForAll _ (QualType sigCx sigTy) =
->   ty == sigTy && all (`elem` sigCx) cx
+> checkTypeSig :: TCEnv -> TypeScheme -> TypeScheme -> Bool
+> checkTypeSig tcEnv (ForAll _ (QualType sigCx sigTy))
+>              (ForAll _ (QualType cx ty)) =
+>   ty == sigTy && all (`elem` maxContext tcEnv sigCx) cx
 
 \end{verbatim}
 \paragraph{Class and instance declarations}
@@ -474,7 +475,7 @@ for the type variable used in the type class declaration.
 >   do
 >     vds' <- mapM (tcClassMethodDecl m tcEnv sigs) vds
 >     return (ClassDecl p cx cls tv (map untyped ods ++ vds'))
->   where cx' = ClassAssert (qualify cls) tv : cx
+>   where cx' = [ClassAssert (qualify cls) tv]
 >         sigs = foldr (bindTypeSigs . typeSig cx') noSigs ods
 >         (vds,ods) = partition isMethodDecl ds
 >         typeSig _ (MethodFixity p fix pr ops) = InfixDecl p fix pr ops
@@ -500,7 +501,7 @@ for the type variable used in the type class declaration.
 > checkClassMethodType :: TCEnv -> QualTypeExpr -> TypeScheme -> Decl Type
 >                      -> TcState (MethodDecl Type)
 > checkClassMethodType tcEnv sigTy sigma (FunctionDecl p f eqs)
->   | sigma `matchesTypeSig` expandPolyType tcEnv sigTy =
+>   | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma =
 >       return (MethodDecl p f eqs)
 >   | otherwise = errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
 >   where what = text "Method:" <+> ppIdent f
@@ -516,7 +517,7 @@ for the type variable used in the type class declaration.
 > checkInstMethodType :: TCEnv -> TypeScheme -> TypeScheme -> Decl Type
 >                     -> TcState (MethodDecl Type)
 > checkInstMethodType tcEnv methTy sigma (FunctionDecl p f eqs)
->   | sigma `matchesTypeSig` methTy = return (MethodDecl p f eqs)
+>   | checkTypeSig tcEnv methTy sigma = return (MethodDecl p f eqs)
 >   | otherwise = errorAt p (methodSigTooGeneral tcEnv what methTy sigma)
 >   where what = text "Method:" <+> ppIdent f
 
@@ -779,7 +780,7 @@ Note that overloaded literals are not supported in patterns.
 > tcExpr m tcEnv p (Typed e sig) =
 >   do
 >     tyEnv0 <- fetchSt
->     (cx,ty) <- inst sigma'
+>     (cx,ty) <- inst sigTy
 >     (cx',e') <-
 >       tcExpr m tcEnv p e >>=
 >       unifyDecl p "explicitly typed expression" (ppExpr 0 e) tcEnv tyEnv0
@@ -787,11 +788,11 @@ Note that overloaded literals are not supported in patterns.
 >     theta <- liftSt fetchSt
 >     let fvs = fvEnv (subst theta tyEnv0)
 >         sigma = gen fvs (snd (splitContext fvs cx')) (subst theta ty)
->     unless (sigma `matchesTypeSig` sigma')
+>     unless (checkTypeSig tcEnv sigTy sigma)
 >       (errorAt p (typeSigTooGeneral tcEnv (text "Expression:" <+> ppExpr 0 e)
 >                                     sig sigma))
 >     return (cx ++ cx',ty,Typed e' sig)
->   where sigma' = expandPolyType tcEnv sig
+>   where sigTy = expandPolyType tcEnv sig
 > tcExpr m tcEnv p (Paren e) =
 >   do
 >     (cx,ty,e') <- tcExpr m tcEnv p e
@@ -1120,13 +1121,15 @@ of~\cite{PeytonJones87:Book}).
 After performing a unification, the resulting substitution is applied
 to the current context and the resulting context is subject to a
 context reduction. This context reduction retains all predicates whose
-types are simple variables and for all other types checks whether an
-instance exists. A minor complication arises due to constrained types,
-which at present are used to implement overloading of guard
-expressions and of numeric literals in patterns. The set of admissible
-types of a constrained type may be restricted by the current context
-after the context reduction and thus may cause a further extension of
-the current substitution.
+types are simple variables and which are not implied but other
+predicates in the context. For all other predicates, the compiler
+checks whether an instance exists and replaces them by applying the
+instances' contexts to the respective types. A minor complication
+arises due to constrained types, which at present are used to
+implement overloading of guard expressions and of numeric literals in
+patterns. The set of admissible types of a constrained type may be
+restricted by the current context after the context reduction and thus
+may cause a further extension of the current substitution.
 \begin{verbatim}
 
 > reduceContext :: Position -> String -> Doc -> TCEnv -> Context -> a
@@ -1135,7 +1138,9 @@ the current substitution.
 >   do
 >     iEnv <- liftSt (liftSt envRt)
 >     theta <- liftSt fetchSt
->     let (cx1,cx2) = partitionContext (reduceTypePreds iEnv (subst theta cx))
+>     let cx' = subst theta cx
+>         (cx1,cx2) =
+>           partitionContext (minContext tcEnv (reduceTypePreds iEnv cx'))
 >     theta' <- foldM (reportMissingInstance p what doc tcEnv iEnv) idSubst cx2
 >     liftSt (updateSt_ (compose theta'))
 >     return (cx1,x)
@@ -1157,7 +1162,7 @@ the current substitution.
 > instContext _ _ (TypeSkolem _) = Nothing
 
 > partitionContext :: Context -> (Context,Context)
-> partitionContext cx = partition (\(TypePred _ ty) -> isTypeVar ty) (nub cx)
+> partitionContext cx = partition (\(TypePred _ ty) -> isTypeVar ty) cx
 >   where isTypeVar (TypeConstructor _ _) = False
 >         isTypeVar (TypeVariable _) = True
 >         isTypeVar (TypeConstrained _ _) = False
@@ -1218,7 +1223,7 @@ report~\cite{PeytonJones03:Haskell}).
 > applyDefaults p what doc tcEnv fvs cx ty =
 >   do
 >     iEnv <- liftSt (liftSt envRt)
->     let theta = foldr (bindDefault iEnv) idSubst tpss
+>     let theta = foldr (bindDefault tcEnv iEnv) idSubst tpss
 >         lcx' = fst (partitionContext (subst theta lcx))
 >         ty' = subst theta ty
 >     unless (null lcx')
@@ -1229,18 +1234,18 @@ report~\cite{PeytonJones03:Haskell}).
 >         tpss = groupBy sameType (sort lcx)
 >         sameType (TypePred _ ty1) (TypePred _ ty2) = ty1 == ty2
 
-> bindDefault :: InstEnv -> [TypePred] -> TypeSubst -> TypeSubst
-> bindDefault iEnv tps =
->   case defaultType iEnv tps of
+> bindDefault :: TCEnv -> InstEnv -> [TypePred] -> TypeSubst -> TypeSubst
+> bindDefault tcEnv iEnv tps =
+>   case defaultType tcEnv iEnv tps of
 >     Just ty -> bindSubst (head [tv | TypePred _ (TypeVariable tv) <- tps]) ty
 >     Nothing -> id
 
-> defaultType :: InstEnv -> [TypePred] -> Maybe Type
-> defaultType iEnv tps =
+> defaultType :: TCEnv -> InstEnv -> [TypePred] -> Maybe Type
+> defaultType tcEnv iEnv tps =
 >   case [ty | ty <- defaultTypes, all (flip (hasInstance iEnv) ty) clss] of
 >     [] -> Nothing
 >     ty:_ -> Just ty
->   where clss = [cls | TypePred cls _ <- tps]
+>   where clss = [cls | TypePred cls _ <- maxContext tcEnv tps]
 >         defaultTypes
 >           | qNumId `elem` clss = numTypes
 >           | qFractionalId `elem` clss = fracTypes
@@ -1294,8 +1299,8 @@ We use negative offsets for fresh type variables.
 
 > freshEnumType, freshNumType, freshFracType :: TcState (Context,Type)
 > freshEnumType = freshQualType [qEnumId]
-> freshNumType = freshQualType numClasses
-> freshFracType = freshQualType fracClasses
+> freshNumType = freshQualType [qNumId]
+> freshFracType = freshQualType [qFractionalId]
 
 > freshConstrained :: [Type] -> TcState Type
 > freshConstrained tys = freshVar (TypeConstrained tys)
@@ -1308,24 +1313,6 @@ We use negative offsets for fresh type variables.
 >   do
 >     tys <- replicateM n freshTypeVar
 >     return (map (expandAliasType tys) cx,expandAliasType tys ty)
-
-\end{verbatim}
-The functions \texttt{numClasses} and \texttt{fracClasses} return
-lists of class and super class identifiers for the classes
-\texttt{Num} and \texttt{Fractional}, respectively. These are used in
-order to compute the contexts of overloaded integral and fractional
-literals. In principle, the compiler should determine these lists from
-the type constructor environment. However, it may be unable to do so
-because the identifiers \texttt{Num} and \texttt{Fractional} may be
-not in scope or ambiguous.
-
-\ToDo{Keep these lists in sync with the \texttt{Prelude} and make sure
-  that they are sorted properly.}
-\begin{verbatim}
-
-> numClasses, fracClasses :: [QualIdent]
-> numClasses = [qEqId,qNumId,qShowId]
-> fracClasses = [qEqId,qFractionalId,qNumId,qShowId]
 
 \end{verbatim}
 The function \texttt{skol} instantiates the type of data and newtype

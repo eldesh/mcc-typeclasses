@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2069 2007-01-13 07:00:43Z wlux $
+% $Id: Imports.lhs 2072 2007-01-15 23:02:44Z wlux $
 %
-% Copyright (c) 2000-2006, Wolfgang Lux
+% Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Imports.lhs}
@@ -173,8 +173,8 @@ following functions.
 >   (newConstr m cx (qualQualify m tc) tvs nc :)
 > values m (IFunctionDecl _ f ty) =
 >   qual f (Value (qualQualify m f) (toTypeScheme m ty))
-> values m (IClassDecl _ cx cls tv ds) =
->   (map (classMethod m cls' (ClassAssert cls tv : cx)) (catMaybes ds) ++)
+> values m (IClassDecl _ _ cls tv ds) =
+>   (map (classMethod m cls' [ClassAssert cls tv]) (catMaybes ds) ++)
 >   where cls' = qualQualify m cls
 > values _ _ = id
 
@@ -240,9 +240,6 @@ Auxiliary functions:
 >   f (qualifyLike tc c) (typeScheme (toConstrType m cx tc tvs tys))
 
 > methodType :: ModuleIdent -> [ClassAssert] -> TypeExpr -> TypeScheme
-> methodType m cx ty =
->   -- FIXME: canonType is necessary only because we must include all
->   --        implied super class predicates in the context
->   typeScheme (canonType (toQualType m [] (QualTypeExpr cx ty)))
+> methodType m cx ty = typeScheme (toQualType m [] (QualTypeExpr cx ty))
 
 \end{verbatim}

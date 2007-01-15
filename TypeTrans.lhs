@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2059 2007-01-03 11:33:52Z wlux $
+% $Id: TypeTrans.lhs 2071 2007-01-15 22:21:22Z wlux $
 %
-% Copyright (c) 1999-2006, Wolfgang Lux
+% Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeTrans.lhs}
@@ -193,9 +193,7 @@ newtype constructor from the context, type name, and type variables
 from the left hand side of the type declaration and the constructor's
 argument types. Similar to \texttt{toConstrType}, the type's context
 is restricted to those type variables which are free in the argument
-types. The implementation is complicated by the fact that we must not
-apply \texttt{expandType} to the constructor's result type because the
-type's name may be ambiguous.
+types.
 \begin{verbatim}
 
 > expandMonoType :: TCEnv -> [Ident] -> TypeExpr -> Type
@@ -205,18 +203,19 @@ type's name may be ambiguous.
 > expandConstrType :: TCEnv -> [ClassAssert] -> QualIdent -> [Ident]
 >                  -> [TypeExpr] -> QualType
 > expandConstrType tcEnv cx tc tvs tys = normalize (length tvs) $
->   QualType (expandContext tcEnv (map (toTypePred' tvs') cx'))
->            (foldr TypeArrow ty0 (map (expandType tcEnv . toType' tvs') tys))
+>   expandQualType tcEnv $ toQualType' tvs' (QualTypeExpr cx' ty')
 >   where tvs' = enumTypeVars tvs tys
 >         cx' = restrictContext tys cx
->         ty0 = TypeConstructor tc (map TypeVariable [0..length tvs-1])
+>         ty' = foldr ArrowType (ConstructorType tc (map VariableType tvs)) tys
 
 > expandPolyType :: TCEnv -> QualTypeExpr -> TypeScheme
-> expandPolyType tcEnv (QualTypeExpr cx ty) =
->   typeScheme $ normalize 0 $ QualType cx' ty'
->   where cx' = expandContext tcEnv (map (toTypePred' tvs) cx)
->         ty' = expandType tcEnv (toType' tvs ty)
->         tvs = enumTypeVars [] ty
+> expandPolyType tcEnv ty =
+>   typeScheme $ normalize 0 $ expandQualType tcEnv $ toQualType' tvs ty
+>   where tvs = enumTypeVars [] ty
+
+> expandQualType :: TCEnv -> QualType -> QualType
+> expandQualType tcEnv (QualType cx ty) =
+>   QualType (expandContext tcEnv cx) (expandType tcEnv ty)
 
 > expandContext :: TCEnv -> [TypePred] -> [TypePred]
 > expandContext tcEnv cx = impliedContext tcEnv (map (expandTypePred tcEnv) cx)

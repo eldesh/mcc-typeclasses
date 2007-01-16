@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2072 2007-01-15 23:02:44Z wlux $
+% $Id: DictTrans.lhs 2073 2007-01-16 18:11:31Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -51,32 +51,28 @@ state monad.
 > run m tyEnv = runSt (callSt m tyEnv) 1
 
 \end{verbatim}
-The introduction of dictionaries is divided into six different tasks:
-\begin{enumerate}
-\item Introduce a dictionary type for each class defined in the
-  current module,
-\item introduce a stub function for each type class method declared in
-  the current module,
-\item lift all default method implementations to the top-level,
-\item introduce a global function for each instance declaration in the
-  current module that returns an appropriate dictionary,
-\item add dictionary arguments to the left hand sides of all equations
-  and update the function types accordingly, and
-\item add dictionary argument expressions to every application of a
-  function with a non-trivial context.
-\end{enumerate}
-\begin{verbatim}
+The introduction of dictionaries proceeds in two phases. In the first
+phase, the compiler adds data type declarations for the dictionary
+constructors to the source code, introduces new top-level functions
+for creating instance dictionaries, and lifts class and instance
+method implementations to the top-level.
 
-> doTrans :: (ModuleIdent -> TCEnv -> ValueEnv -> a -> DictState b) -> TCEnv
->         -> InstEnv -> ValueEnv -> ModuleIdent -> a -> (TCEnv,ValueEnv,b)
-> doTrans f tcEnv iEnv tyEnv m x =
->   run (f m tcEnv tyEnv' x >>= \x' -> fetchSt >>= \tyEnv'' ->
->        return (bindDictTypes tcEnv,tyEnv'',x'))
->       (bindDictConstrs m tcEnv $
->        bindInstFuns tcEnv iEnv $
->        rebindFuns tcEnv tyEnv')
->   where tyEnv' = bindClassMethods m tcEnv $
->                  bindInstanceMethods tcEnv iEnv tyEnv
+Lifting default class method implementations is necessary so that the
+compiler can use them in place of omitted instance methods. Lifting
+instance method declarations allows calling methods directly when a
+method is applied at a known type, which can improve performance
+considerably.
+
+In the second phase, the compiler introduces dictionary arguments in
+the left hand sides of overloaded function declarations and lifted
+method declarations, and transforms occurrences of overloaded
+functions and methods in expressions into applications to the
+appropriate dictionary arguments.
+
+In addition, the compiler introduces a method stub function for each
+type class method that extracts the corresponding method implementation
+from a dictionary.
+\begin{verbatim}
 
 > dictTransModule :: TCEnv -> InstEnv -> ValueEnv -> Module Type
 >                 -> (TCEnv,ValueEnv,Module Type)
@@ -84,35 +80,38 @@ The introduction of dictionaries is divided into six different tasks:
 >   doTrans transModule tcEnv iEnv tyEnv m ds
 >   where transModule m tcEnv tyEnv ds =
 >           do
->             ds' <- mapM (dictTransTopDecl m tcEnv iEnv tyEnv)
->                         (ds ++ concatMap (methodDecls m tcEnv tyEnv) ds)
+>             ds' <- mapM (dictTrans m tcEnv iEnv tyEnv emptyEnv)
+>                         (concatMap (liftDecls tcEnv tyEnv) ds)
 >             dss <- mapM (methodStubs m tcEnv tyEnv) ds
 >             return (Module m es is (ds' ++ concat dss))
->         methodDecls _ _ tyEnv (ClassDecl p _ cls _ ds) =
->           defaultMethodDecls tyEnv p cls ds
->         methodDecls m tcEnv tyEnv (InstanceDecl p cx cls ty ds) =
->           instMethodDecls m tcEnv tyEnv p cx cls ty ds
->         methodDecls _ _ _ _ = []
 
-> dictTransTopDecl :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv
->                  -> TopDecl Type -> DictState (TopDecl Type)
-> dictTransTopDecl _ _ _ _ (DataDecl p _ tc tvs cs _) =
->   return (DataDecl p [] tc tvs cs [])
-> dictTransTopDecl _ _ _ _ (NewtypeDecl p _ tc tvs nc _) =
->   return (NewtypeDecl p [] tc tvs nc [])
-> dictTransTopDecl _ _ _ _ (TypeDecl p tc tvs ty) =
->   return (TypeDecl p tc tvs ty)
-> dictTransTopDecl _ _ _ _ (ClassDecl p _ cls tv ds) =
->   return (dictDecl p cls tv ds)
-> dictTransTopDecl m tcEnv iEnv tyEnv (InstanceDecl p cx cls ty _) =
->   instDecl m tcEnv iEnv tyEnv p cx cls ty
-> dictTransTopDecl m tcEnv iEnv tyEnv (BlockDecl d) =
->   liftM BlockDecl (dictTrans m tcEnv iEnv tyEnv emptyEnv d)
+> liftDecls :: TCEnv -> ValueEnv -> TopDecl Type -> [TopDecl Type]
+> liftDecls _ _ (DataDecl p _ tc tvs cs _) = [DataDecl p [] tc tvs cs []]
+> liftDecls _ _ (NewtypeDecl p _ tc tvs nc _) = [NewtypeDecl p [] tc tvs nc []]
+> liftDecls _ _ (TypeDecl p tc tvs ty) = [TypeDecl p tc tvs ty]
+> liftDecls _ tyEnv (ClassDecl p _ cls tv ds) =
+>   dictDecl p cls tv ds :
+>   defaultMethodDecls tyEnv p cls ds
+> liftDecls tcEnv tyEnv (InstanceDecl p cx cls ty ds) =
+>   instDecl tcEnv tyEnv p cx cls ty :
+>   instMethodDecls tcEnv tyEnv p cx cls ty ds
+> liftDecls _ _ (BlockDecl d) = [BlockDecl d]
 
 > dictTransGoal :: TCEnv -> InstEnv -> ValueEnv -> ModuleIdent -> Goal Type
 >               -> (TCEnv,ValueEnv,Goal Type)
 > dictTransGoal tcEnv iEnv tyEnv m g = doTrans transGoal tcEnv iEnv tyEnv m g
 >   where transGoal m tcEnv tyEnv = dictTrans m tcEnv iEnv tyEnv emptyEnv
+
+> doTrans :: (ModuleIdent -> TCEnv -> ValueEnv -> a -> DictState b) -> TCEnv
+>         -> InstEnv -> ValueEnv -> ModuleIdent -> a -> (TCEnv,ValueEnv,b)
+> doTrans f tcEnv iEnv tyEnv m x =
+>   run (f m tcEnv tyEnv' x >>= \x' -> fetchSt >>= \tyEnv'' ->
+>        return (bindDictTypes tcEnv,tyEnv'',x'))
+>       (rebindFuns tcEnv tyEnv')
+>   where tyEnv' = bindDictConstrs m tcEnv $
+>                  bindClassMethods m tcEnv $
+>                  bindInstFuns tcEnv iEnv $
+>                  bindInstanceMethods tcEnv iEnv tyEnv
 
 \end{verbatim}
 Besides the source code definitions, the compiler must also transform
@@ -123,30 +122,31 @@ generator.
 
 > dictTransInterface :: TCEnv -> ValueEnv -> Interface -> Interface
 > dictTransInterface tcEnv tyEnv (Interface m is ds) =
->   Interface m is (map (dictTransIntfDecl m tcEnv) (ds ++ dss))
->   where dss = concatMap (intfMethodDecls m tcEnv tyEnv) ds
->         intfMethodDecls _ _ _ (IClassDecl p _ cls tv ds) =
->           intfMethodStubs cls tv ds ++
->           intfDefaultMethodDecls p cls tv ds
->         intfMethodDecls m tcEnv tyEnv (IInstanceDecl p cx cls ty) =
->           intfInstMethodDecls m tcEnv tyEnv p cx cls ty
->         intfMethodDecls _ _ _ _ = []
+>   Interface m is (map (dictTransIntfDecl m tcEnv) dss)
+>   where dss = concatMap (liftIntfDecls m tcEnv tyEnv) ds
+
+> liftIntfDecls :: ModuleIdent -> TCEnv -> ValueEnv -> IDecl -> [IDecl]
+> liftIntfDecls _ _ _ (IInfixDecl p fix pr op) = [IInfixDecl p fix pr op]
+> liftIntfDecls _ _ _ (HidingDataDecl p tc tvs) = [HidingDataDecl p tc tvs]
+> liftIntfDecls _ _ _ (IDataDecl p _ tc tvs cs) = [IDataDecl p [] tc tvs cs]
+> liftIntfDecls _ _ _ (INewtypeDecl p _ tc tvs nc) =
+>   [INewtypeDecl p [] tc tvs nc]
+> liftIntfDecls _ _ _ (ITypeDecl p tc tvs ty) = [ITypeDecl p tc tvs ty]
+> liftIntfDecls _ _ _ (HidingClassDecl p _ cls tv) =
+>   [dictIDecl p cls tv Nothing]
+> liftIntfDecls _ _ _ (IClassDecl p _ cls tv ds) =
+>   dictIDecl p cls tv (Just ds) :
+>   intfDefaultMethodDecls p cls tv ds ++
+>   intfMethodStubs cls tv ds
+> liftIntfDecls m tcEnv tyEnv (IInstanceDecl p cx cls ty) =
+>   instIDecl m tcEnv p cx cls ty :
+>   intfInstMethodDecls m tcEnv tyEnv p cx cls ty
+> liftIntfDecls m tcEnv _ (IFunctionDecl p f ty) = [IFunctionDecl p f ty]
 
 > dictTransIntfDecl :: ModuleIdent -> TCEnv -> IDecl -> IDecl
-> dictTransIntfDecl _ _ (IInfixDecl p fix pr op) = IInfixDecl p fix pr op
-> dictTransIntfDecl _ _ (HidingDataDecl p tc tvs) = HidingDataDecl p tc tvs
-> dictTransIntfDecl _ _ (IDataDecl p _ tc tvs cs) = IDataDecl p [] tc tvs cs
-> dictTransIntfDecl _ _ (INewtypeDecl p _ tc tvs nc) =
->   INewtypeDecl p [] tc tvs nc
-> dictTransIntfDecl _ _ (ITypeDecl p tc tvs ty) = ITypeDecl p tc tvs ty
-> dictTransIntfDecl _ _ (HidingClassDecl p _ cls tv) =
->   dictIDecl p cls tv Nothing
-> dictTransIntfDecl _ _ (IClassDecl p _ cls tv ds) =
->   dictIDecl p cls tv (Just ds)
-> dictTransIntfDecl m tcEnv (IInstanceDecl p cx cls ty) =
->   instIDecl m tcEnv p cx cls ty
 > dictTransIntfDecl m tcEnv (IFunctionDecl p f ty) =
 >   IFunctionDecl p f (transformIntfType tcEnv (toQualType m [] ty))
+> dictTransIntfDecl _ _ d = d
 
 > transformIntfType :: TCEnv -> QualType -> QualTypeExpr
 > transformIntfType tcEnv (QualType cx ty) =
@@ -279,8 +279,8 @@ functions.
 > methodStub :: [(Type,Ident)] -> (Type,Ident) -> ConstrTerm Type
 >            -> MethodDecl a -> (Type,Ident) -> TopDecl Type
 > methodStub vs v t (MethodSig p [f] _) v' =
->   BlockDecl (funDecl p f (map (uncurry VariablePattern) vs) e [])
->   where e = Case (uncurry mkVar v) [caseAlt p t (uncurry mkVar v')]
+>   funDecl p f (map (uncurry VariablePattern) vs) $
+>   Case (uncurry mkVar v) [caseAlt p t (uncurry mkVar v')]
 
 > intfMethodStubs :: QualIdent -> Ident -> [Maybe IMethodDecl] -> [IDecl]
 > intfMethodStubs cls tv ds =
@@ -343,21 +343,20 @@ the compiler provides a default implementation that is equivalent to
 > defaultMethodDecls :: ValueEnv -> Position -> Ident -> [MethodDecl Type]
 >                    -> [TopDecl Type]
 > defaultMethodDecls tyEnv p cls ds =
->   map BlockDecl $
 >   zipWith3 (defaultMethodDecl tyEnv p) (defaultMethodIds cls) fs vds'
 >   where (vds,ods) = partition isMethodDecl ds
 >         fs = concatMap methods ods
 >         vds' = orderMethodDecls (map Just fs) vds
 
 > defaultMethodDecl :: ValueEnv -> Position -> Ident -> Ident
->                   -> Maybe (MethodDecl Type) -> Decl Type
+>                   -> Maybe (MethodDecl Type) -> TopDecl Type
 > defaultMethodDecl tyEnv p f _ (Just d) =
->   funDecl p f [] (methodVar tyEnv d) [methodDecl d]
+>   funDecl p f [] (Let [methodDecl d] (methodVar tyEnv d))
 >   where methodDecl (MethodDecl p f eqs) = FunctionDecl p f eqs
 >         methodVar tyEnv (MethodDecl _ f _) =
 >           mkVar (rawType (varType f tyEnv)) f
 > defaultMethodDecl tyEnv p f f' Nothing =
->   funDecl p f [] (prelUndefined (rawType (varType f' tyEnv))) []
+>   funDecl p f [] (prelUndefined (rawType (varType f' tyEnv)))
 
 > intfDefaultMethodDecls :: Position -> QualIdent -> Ident
 >                        -> [Maybe IMethodDecl] -> [IDecl]
@@ -424,10 +423,10 @@ of method $f_i$ in class $C$.
 
 > bindInstFun :: TCEnv -> (CT,Context) -> ValueEnv -> ValueEnv
 > bindInstFun tcEnv (ct,cx) =
->   importTopEnv False m f (Value (qualifyWith m f) (polyType ty))
+>   importTopEnv False m f (Value (qualifyWith m f) (typeScheme ty))
 >   where m = instanceMIdent
 >         f = instFunId tp
->         ty = transformType (qualDictType (maxContext tcEnv cx) tp)
+>         ty = qualDictType (maxContext tcEnv cx) tp
 >         tp = ctTypePred tcEnv ct
 
 > bindInstanceMethods :: TCEnv -> InstEnv -> ValueEnv -> ValueEnv
@@ -452,22 +451,18 @@ of method $f_i$ in class $C$.
 > ctTypePred tcEnv (CT cls tc) = TypePred cls (applyType tc tvs)
 >   where tvs = take (constrKind tc tcEnv) (map TypeVariable [0..])
 
-> instDecl :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv -> Position
->          -> [ClassAssert] -> QualIdent -> TypeExpr -> DictState (TopDecl Type)
-> instDecl m tcEnv iEnv tyEnv p cx cls ty =
->   liftM BlockDecl $
->   dictTrans m tcEnv iEnv tyEnv' emptyEnv $
->   funDecl p f [] (dictExpr ty' cls (zipWith const (qInstMethodIds tp) fs)) []
+> instDecl :: TCEnv -> ValueEnv -> Position -> [ClassAssert] -> QualIdent
+>          -> TypeExpr -> TopDecl Type
+> instDecl tcEnv tyEnv p cx cls ty =
+>   funDecl p f [] (dictExpr ty' cls (zipWith const (qInstMethodIds tp) fs))
 >   where f = instFunId tp
 >         (cx',tp) = toTypePred (expandPolyType tcEnv) cx cls ty
 >         fs = classMethods cls tcEnv
 >         ty' = instDictType tcEnv tyEnv tp fs
->         tyEnv' = bindFun m f (typeScheme (qualDictType cx' tp)) tyEnv
 
-> instMethodDecls :: ModuleIdent -> TCEnv -> ValueEnv -> Position
->                 -> [ClassAssert] -> QualIdent -> TypeExpr -> [MethodDecl Type]
->                 -> [TopDecl Type]
-> instMethodDecls m tcEnv tyEnv p cx cls ty ds =
+> instMethodDecls :: TCEnv -> ValueEnv -> Position -> [ClassAssert] -> QualIdent
+>                 -> TypeExpr -> [MethodDecl Type] -> [TopDecl Type]
+> instMethodDecls tcEnv tyEnv p cx cls ty ds =
 >    zipWith4 (instMethodDecl p)
 >             (instMethodIds tp)
 >             (qDefaultMethodIds cls)
@@ -480,15 +475,14 @@ of method $f_i$ in class $C$.
 > instMethodDecl :: Position -> Ident -> QualIdent -> QualType
 >                -> Maybe (MethodDecl Type) -> TopDecl Type
 > instMethodDecl _ f _ (QualType _ ty) (Just (MethodDecl p f' eqs)) =
->   BlockDecl $ funDecl p f [] (mkVar ty f') [FunctionDecl p f' eqs]
+>   funDecl p f [] (Let [FunctionDecl p f' eqs] (mkVar ty f'))
 > instMethodDecl p f f' (QualType _ ty) Nothing =
->   BlockDecl $ funDecl p f [] (Variable ty f') []
+>   funDecl p f [] (Variable ty f')
 
 > instIDecl :: ModuleIdent -> TCEnv -> Position -> [ClassAssert] -> QualIdent
 >           -> TypeExpr -> IDecl
 > instIDecl m tcEnv p cx cls ty =
->   IFunctionDecl p (qInstFunId tp)
->                 (transformIntfType tcEnv (qualDictType cx' tp))
+>   IFunctionDecl p (qInstFunId tp) (fromQualType tcEnv (qualDictType cx' tp))
 >   where (cx',tp) = toTypePred (toTypeScheme m) cx (qualQualify m cls) ty
 
 > intfInstMethodDecls :: ModuleIdent -> TCEnv -> ValueEnv -> Position
@@ -562,6 +556,11 @@ function applications in $f$'s body.
 > class DictTrans a where
 >   dictTrans :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv -> DictEnv
 >             -> a Type -> DictState (a Type)
+
+> instance DictTrans TopDecl where
+>   dictTrans m tcEnv iEnv tyEnv dictEnv (BlockDecl d) =
+>     liftM BlockDecl (dictTrans m tcEnv iEnv tyEnv dictEnv d)
+>   dictTrans _ _ _ _ _ d = return d
 
 > instance DictTrans Goal where
 >   dictTrans m tcEnv iEnv tyEnv dictEnv (Goal p e ds) =
@@ -807,7 +806,6 @@ function is a member of any of these classes.
 > isKnownType (TypeArrow _ _) = True
 > isKnownType (TypeSkolem _) = False
 
-
 \end{verbatim}
 \paragraph{Unification}
 When adding dictionary arguments on the left hand side of an equation
@@ -946,10 +944,9 @@ records it in the type environment.
 Convenience functions for constructing parts of the syntax tree.
 \begin{verbatim}
 
-> funDecl :: Position -> Ident -> [ConstrTerm a] -> Expression a -> [Decl a]
->         -> Decl a
-> funDecl p f ts e ds =
->   FunctionDecl p f [Equation p (FunLhs f ts) (SimpleRhs p e ds)]
+> funDecl :: Position -> Ident -> [ConstrTerm a] -> Expression a -> TopDecl a
+> funDecl p f ts e =
+>   BlockDecl $ FunctionDecl p f [Equation p (FunLhs f ts) (SimpleRhs p e [])]
 
 > caseAlt :: Position -> ConstrTerm a -> Expression a -> Alt a
 > caseAlt p t e = Alt p t (SimpleRhs p e [])

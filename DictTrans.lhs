@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2073 2007-01-16 18:11:31Z wlux $
+% $Id: DictTrans.lhs 2074 2007-01-16 22:32:21Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -183,14 +183,14 @@ constructor's arguments.
 
 > bindDictConstrs :: ModuleIdent -> TCEnv -> ValueEnv -> ValueEnv
 > bindDictConstrs m tcEnv tyEnv =
->   foldr (bindDictConstr m tcEnv) tyEnv (allEntities tcEnv)
+>   foldr (bindDictConstr m) tyEnv (allEntities tcEnv)
 
-> bindDictConstr :: ModuleIdent -> TCEnv -> TypeInfo -> ValueEnv -> ValueEnv
-> bindDictConstr m tcEnv (TypeClass cls _ fs) tyEnv =
+> bindDictConstr :: ModuleIdent -> TypeInfo -> ValueEnv -> ValueEnv
+> bindDictConstr m (TypeClass cls _ fs) tyEnv =
 >   bindEntity m c (DataConstructor c ty) tyEnv
 >   where c = qualifyLike cls (dictConstrId (unqualify cls))
->         ty = polyType (classDictType tcEnv tyEnv cls fs)
-> bindDictConstr _ _ _ tyEnv =  tyEnv
+>         ty = polyType (classDictType tyEnv cls fs)
+> bindDictConstr _ _ tyEnv =  tyEnv
 
 > dictDecl :: Position -> Ident -> Ident -> [MethodDecl a] -> TopDecl Type
 > dictDecl p cls tv ds =
@@ -209,18 +209,15 @@ constructor's arguments.
 > expandMethodSigs :: [MethodDecl a] -> [MethodDecl a]
 > expandMethodSigs ds = [MethodSig p [f] ty | MethodSig p fs ty <- ds, f <- fs]
 
-> classDictType :: TCEnv -> ValueEnv -> QualIdent -> [Maybe Ident] -> Type
-> classDictType tcEnv tyEnv cls fs =
->   foldr (TypeArrow . methodType) (dictType (TypePred cls (TypeVariable 0))) fs
->   where methodType =
->           maybe (TypeVariable 0) (classMethodType tcEnv tyEnv cls n)
->         n = length (allSuperClasses cls tcEnv)
+> classDictType :: ValueEnv -> QualIdent -> [Maybe Ident] -> Type
+> classDictType tyEnv cls =
+>   foldr (TypeArrow . classMethodType tyEnv cls)
+>         (dictType (TypePred cls (TypeVariable 0)))
 
-> classMethodType :: TCEnv -> ValueEnv -> QualIdent -> Int -> Ident -> Type
-> classMethodType tcEnv tyEnv cls n f =
->   arrows (transformType (QualType (maxContext tcEnv cx) ty)) !! n
+> classMethodType :: ValueEnv -> QualIdent -> Maybe Ident -> Type
+> classMethodType tyEnv cls (Just f) = transformType (QualType (tail cx) ty)
 >   where ForAll _ (QualType cx ty) = funType (qualifyLike cls f) tyEnv
->         arrows ty = ty : case ty of { TypeArrow _ ty -> arrows ty; _ -> [] }
+> classMethodType _ _ Nothing = TypeVariable 0
 
 \end{verbatim}
 \paragraph{Method Stubs}
@@ -267,7 +264,7 @@ functions.
 >     us <- mapM (freshVar m "_#dict" . dictType) cx
 >     vs <- mapM (freshVar m "_#method") tys
 >     return (zipWith (methodStub us (us!!n) (dictPattern ty cls' vs)) ds' vs)
->   where (tys,ty) = arrowUnapply (classDictType tcEnv tyEnv cls' (map Just fs))
+>   where (tys,ty) = arrowUnapply (classDictType tyEnv cls' (map Just fs))
 >         cls' = qualifyWith m cls
 >         tp = TypePred cls' (TypeVariable 0)
 >         cx = maxContext tcEnv [tp]
@@ -458,7 +455,7 @@ of method $f_i$ in class $C$.
 >   where f = instFunId tp
 >         (cx',tp) = toTypePred (expandPolyType tcEnv) cx cls ty
 >         fs = classMethods cls tcEnv
->         ty' = instDictType tcEnv tyEnv tp fs
+>         ty' = instDictType tyEnv tp fs
 
 > instMethodDecls :: TCEnv -> ValueEnv -> Position -> [ClassAssert] -> QualIdent
 >                 -> TypeExpr -> [MethodDecl Type] -> [TopDecl Type]
@@ -497,13 +494,6 @@ of method $f_i$ in class $C$.
 >         (cx',tp) = toTypePred (toTypeScheme m) cx cls' ty
 >         fs = classMethods cls' tcEnv
 
-> instMethodType :: ValueEnv -> Context -> TypePred -> Maybe Ident -> QualType
-> instMethodType tyEnv cx (TypePred cls ty) = 
->   QualType cx . expandAliasType [ty] . methodType tyEnv cls
->   where methodType tyEnv cls (Just f) =
->           rawType (funType (qualifyLike cls f) tyEnv)
->         methodType  _ _ Nothing = TypeVariable 0
-
 > toTypePred :: (QualTypeExpr -> TypeScheme) -> [ClassAssert]
 >            -> QualIdent -> TypeExpr -> (Context,TypePred)
 > toTypePred f cx cls ty = (cx',TypePred cls ty')
@@ -513,9 +503,13 @@ of method $f_i$ in class $C$.
 > orderMethodDecls fs ds =
 >   map (>>= flip lookup [(unRenameIdent f,d) | d@(MethodDecl _ f _) <- ds]) fs
 
-> instDictType :: TCEnv -> ValueEnv -> TypePred -> [Maybe Ident] -> Type
-> instDictType tcEnv tyEnv (TypePred cls ty) fs =
->   expandAliasType [ty] (classDictType tcEnv tyEnv cls fs)
+> instDictType :: ValueEnv -> TypePred -> [Maybe Ident] -> Type
+> instDictType tyEnv (TypePred cls ty) fs =
+>   expandAliasType [ty] (classDictType tyEnv cls fs)
+
+> instMethodType :: ValueEnv -> Context -> TypePred -> Maybe Ident -> QualType
+> instMethodType tyEnv cx (TypePred cls ty) = 
+>   QualType cx . expandAliasType [ty] . classMethodType tyEnv cls
 
 > dictExpr :: Type -> QualIdent -> [QualIdent] -> Expression Type
 > dictExpr ty cls fs =
@@ -778,9 +772,10 @@ in the type environment, we detect methods here by checking the
 (instantiated) context of the type at which the function is used. If
 the identifier denotes a type class method, the first elements of the
 context are type predicates for the method's type class and its super
-classes (recall that contexts are currently represented in their
-expanded form). Thus, it is sufficient to check whether the applied
-function is a member of any of these classes.
+classes. Thus, it is sufficient to check whether the applied function
+is a member of any of these classes. Note that it is not sufficient to
+check only the first element of the context because
+\texttt{instanceMethod} is applied to expanded contexts.
 \begin{verbatim}
 
 > instanceMethod :: TCEnv -> Context -> QualIdent -> Maybe QualIdent

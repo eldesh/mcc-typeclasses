@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2074 2007-01-16 22:32:21Z wlux $
+% $Id: DictTrans.lhs 2075 2007-01-17 08:16:46Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -93,8 +93,7 @@ from a dictionary.
 >   dictDecl p cls tv ds :
 >   defaultMethodDecls tyEnv p cls ds
 > liftDecls tcEnv tyEnv (InstanceDecl p cx cls ty ds) =
->   instDecl tcEnv tyEnv p cx cls ty :
->   instMethodDecls tcEnv tyEnv p cx cls ty ds
+>   instDecls tcEnv tyEnv p cls (expandPolyType tcEnv (QualTypeExpr cx ty)) ds
 > liftDecls _ _ (BlockDecl d) = [BlockDecl d]
 
 > dictTransGoal :: TCEnv -> InstEnv -> ValueEnv -> ModuleIdent -> Goal Type
@@ -110,8 +109,7 @@ from a dictionary.
 >       (rebindFuns tcEnv tyEnv')
 >   where tyEnv' = bindDictConstrs m tcEnv $
 >                  bindClassMethods m tcEnv $
->                  bindInstFuns tcEnv iEnv $
->                  bindInstanceMethods tcEnv iEnv tyEnv
+>                  bindInstDecls tcEnv iEnv tyEnv
 
 \end{verbatim}
 Besides the source code definitions, the compiler must also transform
@@ -139,8 +137,8 @@ generator.
 >   intfDefaultMethodDecls p cls tv ds ++
 >   intfMethodStubs cls tv ds
 > liftIntfDecls m tcEnv tyEnv (IInstanceDecl p cx cls ty) =
->   instIDecl m tcEnv p cx cls ty :
->   intfInstMethodDecls m tcEnv tyEnv p cx cls ty
+>   instIDecls tcEnv tyEnv p cls' (toQualType m [] (QualTypeExpr cx ty))
+>   where cls' = qualQualify m cls
 > liftIntfDecls m tcEnv _ (IFunctionDecl p f ty) = [IFunctionDecl p f ty]
 
 > dictTransIntfDecl :: ModuleIdent -> TCEnv -> IDecl -> IDecl
@@ -414,94 +412,64 @@ and $\overline{f}_i'$ is the name of the default method implementation
 of method $f_i$ in class $C$.
 \begin{verbatim}
 
-> bindInstFuns :: TCEnv -> InstEnv -> ValueEnv -> ValueEnv
-> bindInstFuns tcEnv iEnv tyEnv =
->   foldr (bindInstFun tcEnv) tyEnv (envToList iEnv)
+> bindInstDecls :: TCEnv -> InstEnv -> ValueEnv -> ValueEnv
+> bindInstDecls tcEnv iEnv tyEnv =
+>   foldr (bindInstFuns tcEnv) tyEnv (envToList iEnv)
 
-> bindInstFun :: TCEnv -> (CT,Context) -> ValueEnv -> ValueEnv
-> bindInstFun tcEnv (ct,cx) =
->   importTopEnv False m f (Value (qualifyWith m f) (typeScheme ty))
->   where m = instanceMIdent
->         f = instFunId tp
->         ty = qualDictType (maxContext tcEnv cx) tp
->         tp = ctTypePred tcEnv ct
-
-> bindInstanceMethods :: TCEnv -> InstEnv -> ValueEnv -> ValueEnv
-> bindInstanceMethods tcEnv iEnv tyEnv =
->   foldr (bindInstMethods tcEnv) tyEnv (envToList iEnv)
-
-> bindInstMethods :: TCEnv -> (CT,Context) -> ValueEnv -> ValueEnv
-> bindInstMethods tcEnv (CT cls tc,cx) tyEnv =
+> bindInstFuns :: TCEnv -> (CT,Context) -> ValueEnv -> ValueEnv
+> bindInstFuns tcEnv (CT cls tc,cx) tyEnv =
 >   foldr ($) tyEnv
->         (zipWith (bindInstMethod m)
->                  (instMethodIds tp)
->                  (map (instMethodType tyEnv cx tp) fs))
+>         (zipWith (bindInstFun m)
+>                  (instFunId tp : instMethodIds tp)
+>                  (qualDictType cx' tp : map (instMethodType tyEnv cx tp) fs))
 >   where m = instanceMIdent
->         tp = ctTypePred tcEnv (CT cls tc)
+>         tp = TypePred cls (applyType tc tvs)
+>         tvs = take (constrKind tc tcEnv) (map TypeVariable [0..])
+>         cx' = maxContext tcEnv cx
 >         fs = classMethods cls tcEnv
 
-> bindInstMethod :: ModuleIdent -> Ident -> QualType -> ValueEnv -> ValueEnv
-> bindInstMethod m f ty =
+> bindInstFun :: ModuleIdent -> Ident -> QualType -> ValueEnv -> ValueEnv
+> bindInstFun m f ty =
 >   importTopEnv False m f (Value (qualifyWith m f) (typeScheme ty))
 
-> ctTypePred :: TCEnv -> CT -> TypePred
-> ctTypePred tcEnv (CT cls tc) = TypePred cls (applyType tc tvs)
->   where tvs = take (constrKind tc tcEnv) (map TypeVariable [0..])
-
-> instDecl :: TCEnv -> ValueEnv -> Position -> [ClassAssert] -> QualIdent
->          -> TypeExpr -> TopDecl Type
-> instDecl tcEnv tyEnv p cx cls ty =
->   funDecl p f [] (dictExpr ty' cls (zipWith const (qInstMethodIds tp) fs))
->   where f = instFunId tp
->         (cx',tp) = toTypePred (expandPolyType tcEnv) cx cls ty
+> instDecls :: TCEnv -> ValueEnv -> Position -> QualIdent -> TypeScheme
+>           -> [MethodDecl Type] -> [TopDecl Type] 
+> instDecls tcEnv tyEnv p cls (ForAll _ (QualType cx ty)) ds =
+>   zipWith3 instDecl
+>            (p : map (maybe p pos) ds')
+>            (instFunId tp : instMethodIds tp)
+>            (dictExpr ty' cls (zipWith const (qInstMethodIds tp) ds') :
+>             zipWith3 instMethodExpr (qDefaultMethodIds cls) tys' ds')
+>   where tp = TypePred cls ty
 >         fs = classMethods cls tcEnv
 >         ty' = instDictType tyEnv tp fs
+>         tys' = [ty | QualType _ ty <- map (instMethodType tyEnv cx tp) fs]
+>         ds' = orderMethodDecls fs ds
+>         pos (MethodDecl p _ _) = p
 
-> instMethodDecls :: TCEnv -> ValueEnv -> Position -> [ClassAssert] -> QualIdent
->                 -> TypeExpr -> [MethodDecl Type] -> [TopDecl Type]
-> instMethodDecls tcEnv tyEnv p cx cls ty ds =
->    zipWith4 (instMethodDecl p)
->             (instMethodIds tp)
->             (qDefaultMethodIds cls)
->             (map (instMethodType tyEnv cx' tp) fs)
->             ds'
->    where (cx',tp) = toTypePred (expandPolyType tcEnv) cx cls ty
->          fs = classMethods cls tcEnv
->          ds' = orderMethodDecls fs ds
+> instDecl :: Position -> Ident -> Expression Type -> TopDecl Type
+> instDecl p f = funDecl p f []
 
-> instMethodDecl :: Position -> Ident -> QualIdent -> QualType
->                -> Maybe (MethodDecl Type) -> TopDecl Type
-> instMethodDecl _ f _ (QualType _ ty) (Just (MethodDecl p f' eqs)) =
->   funDecl p f [] (Let [FunctionDecl p f' eqs] (mkVar ty f'))
-> instMethodDecl p f f' (QualType _ ty) Nothing =
->   funDecl p f [] (Variable ty f')
+> instMethodExpr :: QualIdent -> Type -> Maybe (MethodDecl Type)
+>                -> Expression Type
+> instMethodExpr _ ty (Just (MethodDecl p f eqs)) =
+>   Let [FunctionDecl p f eqs] (mkVar ty f)
+> instMethodExpr f ty Nothing = Variable ty f
 
-> instIDecl :: ModuleIdent -> TCEnv -> Position -> [ClassAssert] -> QualIdent
->           -> TypeExpr -> IDecl
-> instIDecl m tcEnv p cx cls ty =
->   IFunctionDecl p (qInstFunId tp) (fromQualType tcEnv (qualDictType cx' tp))
->   where (cx',tp) = toTypePred (toTypeScheme m) cx (qualQualify m cls) ty
-
-> intfInstMethodDecls :: ModuleIdent -> TCEnv -> ValueEnv -> Position
->                     -> [ClassAssert] -> QualIdent -> TypeExpr -> [IDecl]
-> intfInstMethodDecls m tcEnv tyEnv p cx cls ty =
+> instIDecls :: TCEnv -> ValueEnv -> Position -> QualIdent -> QualType
+>            -> [IDecl]
+> instIDecls tcEnv tyEnv p cls (QualType cx ty) =
 >   -- FIXME: omit declarations for hidden methods since they cannot
 >   --        be used (and their type is almost always wrong)
->   zipWith (IFunctionDecl p)
->           (qInstMethodIds tp)
->           (map (fromQualType tcEnv . instMethodType tyEnv cx' tp) fs)
->   where cls' = qualQualify m cls
->         (cx',tp) = toTypePred (toTypeScheme m) cx cls' ty
->         fs = classMethods cls' tcEnv
+>   zipWith (instIDecl tcEnv p)
+>           (qInstFunId tp : qInstMethodIds tp)
+>           (qualDictType cx' tp : map (instMethodType tyEnv cx tp) fs)
+>   where tp = TypePred cls ty
+>         cx' = maxContext tcEnv cx
+>         fs = classMethods cls tcEnv
 
-> toTypePred :: (QualTypeExpr -> TypeScheme) -> [ClassAssert]
->            -> QualIdent -> TypeExpr -> (Context,TypePred)
-> toTypePred f cx cls ty = (cx',TypePred cls ty')
->   where ForAll _ (QualType cx' ty') = f (QualTypeExpr cx ty)
-
-> orderMethodDecls :: [Maybe Ident] -> [MethodDecl a] -> [Maybe (MethodDecl a)]
-> orderMethodDecls fs ds =
->   map (>>= flip lookup [(unRenameIdent f,d) | d@(MethodDecl _ f _) <- ds]) fs
+> instIDecl :: TCEnv -> Position -> QualIdent -> QualType -> IDecl
+> instIDecl tcEnv p f = IFunctionDecl p f . fromQualType tcEnv
 
 > instDictType :: ValueEnv -> TypePred -> [Maybe Ident] -> Type
 > instDictType tyEnv (TypePred cls ty) fs =
@@ -515,6 +483,10 @@ of method $f_i$ in class $C$.
 > dictExpr ty cls fs =
 >   apply (Constructor ty (qDictConstrId cls))
 >         (zipWith Variable (arrowArgs ty) fs)
+
+> orderMethodDecls :: [Maybe Ident] -> [MethodDecl a] -> [Maybe (MethodDecl a)]
+> orderMethodDecls fs ds =
+>   map (>>= flip lookup [(unRenameIdent f,d) | d@(MethodDecl _ f _) <- ds]) fs
 
 > instMethodIds :: TypePred -> [Ident]
 > instMethodIds (TypePred cls ty) =

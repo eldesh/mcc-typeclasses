@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2075 2007-01-17 08:16:46Z wlux $
+% $Id: DictTrans.lhs 2076 2007-01-19 13:19:30Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -139,16 +139,12 @@ generator.
 > liftIntfDecls m tcEnv tyEnv (IInstanceDecl p cx cls ty) =
 >   instIDecls tcEnv tyEnv p cls' (toQualType m [] (QualTypeExpr cx ty))
 >   where cls' = qualQualify m cls
-> liftIntfDecls m tcEnv _ (IFunctionDecl p f ty) = [IFunctionDecl p f ty]
+> liftIntfDecls _ _ _ (IFunctionDecl p f ty) = [IFunctionDecl p f ty]
 
 > dictTransIntfDecl :: ModuleIdent -> TCEnv -> IDecl -> IDecl
-> dictTransIntfDecl m tcEnv (IFunctionDecl p f ty) =
->   IFunctionDecl p f (transformIntfType tcEnv (toQualType m [] ty))
+> dictTransIntfDecl m tcEnv (IFunctionDecl p f ty) = IFunctionDecl p f $
+>   fromQualType tcEnv (transformQualType tcEnv (toQualType m [] ty))
 > dictTransIntfDecl _ _ d = d
-
-> transformIntfType :: TCEnv -> QualType -> QualTypeExpr
-> transformIntfType tcEnv (QualType cx ty) =
->   fromQualType tcEnv (transformQualType tcEnv (QualType cx ty))
 
 \end{verbatim}
 \paragraph{Dictionary Types}
@@ -814,14 +810,6 @@ instantiated to exactly the same type.\footnote{If newtype
 > matchTypes :: [Type] -> [Type] -> TypeSubst -> TypeSubst
 > matchTypes [] [] = id
 > matchTypes (ty1:tys1) (ty2:tys2) = match ty1 ty2 . matchTypes tys1 tys2
-
-> matchInstMethodTypes :: [Type] -> [Maybe (MethodDecl Type)] -> TypeSubst
->                      -> TypeSubst
-> matchInstMethodTypes [] [] = id
-> matchInstMethodTypes (ty:tys) (d:ds) =
->   maybe id (match ty . methodType) d . matchInstMethodTypes tys ds
->   where methodType (MethodDecl _ _ (Equation _ lhs rhs : _)) =
->           foldr (TypeArrow . typeOf) (typeOf rhs) (snd (flatLhs lhs))
 
 \end{verbatim}
 \paragraph{Auxiliary Functions}

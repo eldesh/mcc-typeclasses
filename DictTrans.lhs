@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2079 2007-01-23 14:09:44Z wlux $
+% $Id: DictTrans.lhs 2080 2007-01-23 18:59:50Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -236,8 +236,7 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 > classDictType tyEnv cls =
 >   foldr (TypeArrow . transformMethodType . classMethodType tyEnv cls) ty
 >   where ty = dictType (TypePred cls (TypeVariable 0))
->         transformMethodType (ForAll _ (QualType cx ty)) =
->           transformType (QualType (tail cx) ty)
+>         transformMethodType (ForAll _ ty) = transformType (contextMap tail ty)
 
 > classMethodType :: ValueEnv -> QualIdent -> Maybe Ident -> TypeScheme
 > classMethodType tyEnv cls (Just f) = funType (qualifyLike cls f) tyEnv
@@ -434,8 +433,9 @@ of method $f_i$ in class $C$.
 
 > instMethodType :: ValueEnv -> Context -> TypePred -> Maybe Ident -> QualType
 > instMethodType tyEnv cx (TypePred cls ty) f =
->   QualType cx (expandAliasType [ty] (transformType (QualType (tail cx') ty')))
->   where ForAll _ (QualType cx' ty') = classMethodType tyEnv cls f
+>   QualType cx (expandAliasType [ty] (transformType (contextMap tail ty')))
+>   where ForAll _ ty' = classMethodType tyEnv cls f
+>           
 
 > dictExpr :: Type -> QualIdent -> [QualIdent] -> Expression Type
 > dictExpr ty cls fs =
@@ -642,8 +642,8 @@ the concrete type at which $f$ is used in the application.
 > transformType (QualType cx ty) = foldr (TypeArrow . dictType) ty cx
 
 > transformQualType :: TCEnv -> QualType -> QualType
-> transformQualType tcEnv (QualType cx ty) =
->   QualType [] (transformType (QualType (maxContext tcEnv cx) ty))
+> transformQualType tcEnv =
+>   qualType . transformType . contextMap (maxContext tcEnv)
 
 \end{verbatim}
 The function \texttt{dictArg} is the heart of the dictionary

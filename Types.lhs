@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 2069 2007-01-13 07:00:43Z wlux $
+% $Id: Types.lhs 2080 2007-01-23 18:59:50Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -164,7 +164,10 @@ apply to the same type variable are grouped together.
 > qualType ty = QualType [] ty
 
 > canonType :: QualType -> QualType
-> canonType (QualType cx ty) = QualType (sort cx) ty
+> canonType = contextMap sort
+
+> contextMap :: (Context -> Context) -> QualType -> QualType
+> contextMap f (QualType cx ty) = QualType (f cx) ty
 
 \end{verbatim}
 The free and skolem variables of a qualified type are computed from

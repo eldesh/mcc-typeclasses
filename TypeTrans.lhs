@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2072 2007-01-15 23:02:44Z wlux $
+% $Id: TypeTrans.lhs 2079 2007-01-23 14:09:44Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,7 +10,7 @@ This module implements transformations between the internal and
 external type representations.
 \begin{verbatim}
 
-> module TypeTrans(toType, toTypes, toQualType, toConstrType, toTypeScheme,
+> module TypeTrans(toType, toTypes, toQualType, toConstrType,
 >                  fromType, fromQualType, minContext, maxContext,
 >                  expandMonoType, expandConstrType, expandPolyType,
 >                  ppType, ppQualType, ppTypeScheme) where
@@ -25,10 +25,9 @@ external type representations.
 
 \end{verbatim}
 The functions \texttt{toType} and \texttt{toTypes} convert Curry type
-expressions into types. The functions \texttt{toQualType} and
-\texttt{toTypeScheme} similarly convert a qualified type expression
-into a qualified type and a type scheme, respectively. The function
-\texttt{toConstrType} returns the type of a data or newtype
+expressions into types. The function \texttt{toQualType} similarly
+converts a qualified type expression into a qualified type. The
+function \texttt{toConstrType} returns the type of a data or newtype
 constructor. It computes the constructor's type from the context, type
 name, and type variables from the left hand side of the type
 declaration and the constructor's argument types. A special feature of
@@ -67,9 +66,6 @@ indices independently in each type expression.
 > toConstrType m cx tc tvs tys = toQualType m tvs (QualTypeExpr cx' ty')
 >   where cx' = restrictContext tys cx
 >         ty' = foldr ArrowType (ConstructorType tc (map VariableType tvs)) tys
-
-> toTypeScheme :: ModuleIdent -> QualTypeExpr -> TypeScheme
-> toTypeScheme m ty = typeScheme (toQualType m [] ty)
 
 > enumTypeVars :: Expr a => [Ident] -> a -> FM Ident Int
 > enumTypeVars tvs ty = fromListFM (zip (tvs ++ tvs') [0..])
@@ -208,9 +204,9 @@ types.
 >         cx' = restrictContext tys cx
 >         ty' = foldr ArrowType (ConstructorType tc (map VariableType tvs)) tys
 
-> expandPolyType :: TCEnv -> QualTypeExpr -> TypeScheme
+> expandPolyType :: TCEnv -> QualTypeExpr -> QualType
 > expandPolyType tcEnv ty =
->   typeScheme $ normalize 0 $ expandQualType tcEnv $ toQualType' tvs ty
+>   normalize 0 $ expandQualType tcEnv $ toQualType' tvs ty
 >   where tvs = enumTypeVars [] ty
 
 > expandQualType :: TCEnv -> QualType -> QualType

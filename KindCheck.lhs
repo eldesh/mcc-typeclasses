@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2052 2006-12-20 11:37:05Z wlux $
+% $Id: KindCheck.lhs 2079 2007-01-23 14:09:44Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -78,10 +78,10 @@ function in any particular order.
 >                    (typeCon AliasType m tc tvs (expandMonoType tcEnv tvs ty))
 > bindTC m tcEnv (ClassDecl _ cx cls tv ds) =
 >   globalBindTopEnv m cls (typeClass m cls clss fs)
->   where clss = [cls | TypePred cls _ <- context ty]
+>   where clss = [cls | TypePred cls _ <- cx']
 >         fs = map Just (concatMap methods ds)
->         ty = expandPolyType tcEnv (QualTypeExpr cx (VariableType tv))
->         context (ForAll _ (QualType cx _)) = cx
+>         QualType cx' _ =
+>           expandPolyType tcEnv (QualTypeExpr cx (VariableType tv))
 > bindTC _ _ (InstanceDecl _ _ _ _ _) = id
 > bindTC _ _ (BlockDecl _) = id
 

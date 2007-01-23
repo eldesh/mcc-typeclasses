@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2072 2007-01-15 23:02:44Z wlux $
+% $Id: InstCheck.lhs 2079 2007-01-23 14:09:44Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -47,8 +47,7 @@ instance environment.
 > bindInstance tcEnv (InstanceDecl _ cx cls ty _) =
 >   bindEnv (CT cls' (rootOfType ty')) cx'
 >   where cls' = origName (head (qualLookupTopEnv cls tcEnv))
->         ForAll _ (QualType cx' ty') =
->           expandPolyType tcEnv (QualTypeExpr cx ty)
+>         QualType cx' ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
 > bindInstance _ _ = id
 
 \end{verbatim}
@@ -205,8 +204,7 @@ satisfied by \emph{cx}.
 >           (filter (`notElem` maxContext tcEnv cx') cx''')
 >   where what = "instance declaration"
 >         doc = ppTopDecl (InstanceDecl p cx cls ty [])
->         ForAll _ (QualType cx' ty') =
->           expandPolyType tcEnv (QualTypeExpr cx ty)
+>         QualType cx' ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
 >         cx'' = [TypePred cls ty' | cls <- superClasses cls tcEnv]
 > checkInstance _ _ _ = return ()
 

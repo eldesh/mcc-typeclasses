@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2077 2007-01-21 15:15:35Z wlux $
+% $Id: DictTrans.lhs 2079 2007-01-23 14:09:44Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -391,9 +391,9 @@ of method $f_i$ in class $C$.
 > bindInstFun m f ty =
 >   importTopEnv False m f (Value (qualifyWith m f) (typeScheme ty))
 
-> instDecls :: TCEnv -> ValueEnv -> Position -> QualIdent -> TypeScheme
+> instDecls :: TCEnv -> ValueEnv -> Position -> QualIdent -> QualType
 >           -> [MethodDecl Type] -> [TopDecl Type] 
-> instDecls tcEnv tyEnv p cls (ForAll _ (QualType cx ty)) ds =
+> instDecls tcEnv tyEnv p cls (QualType cx ty) ds =
 >   zipWith4 funDecl
 >            (p : map (maybe p pos) ds')
 >            (instFunId tp : instMethodIds tp)

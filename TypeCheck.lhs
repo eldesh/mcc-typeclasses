@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2072 2007-01-15 23:02:44Z wlux $
+% $Id: TypeCheck.lhs 2079 2007-01-23 14:09:44Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -130,7 +130,7 @@ type synonyms occurring in their types are expanded.
 > bindMethods :: ModuleIdent -> TCEnv -> [ClassAssert] -> [Ident] -> TypeExpr
 >             -> ValueEnv -> ValueEnv
 > bindMethods m tcEnv cx fs ty tyEnv = foldr (bindMethod m ty') tyEnv fs
->   where ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
+>   where ty' = typeScheme (expandPolyType tcEnv (QualTypeExpr cx ty))
 
 > bindMethod :: ModuleIdent -> TypeScheme -> Ident -> ValueEnv -> ValueEnv
 > bindMethod m ty f = globalBindTopEnv m f (Value (qualifyWith m f) ty)
@@ -262,7 +262,8 @@ general than the type signature.
 > tcDeclVar :: (Ident -> TypeScheme -> TcState TypeScheme) -> ModuleIdent
 >           -> TCEnv -> SigEnv -> Ident -> TcState ()
 > tcDeclVar checkType m tcEnv sigs v =
->   maybe (liftM monoType freshTypeVar) (checkType v . expandPolyType tcEnv)
+>   maybe (liftM monoType freshTypeVar)
+>         (checkType v . typeScheme . expandPolyType tcEnv)
 >         (lookupEnv v sigs) >>=
 >   updateSt_ . bindFun m v
 
@@ -447,9 +448,8 @@ in \texttt{tcDeclVar} and \texttt{checkMonoType} above.
 >   where what = text "Function:" <+> ppIdent f
 > genDecl _ _ _ _ (PatternDecl _ _ _) = return ()
 
-> checkTypeSig :: TCEnv -> TypeScheme -> TypeScheme -> Bool
-> checkTypeSig tcEnv (ForAll _ (QualType sigCx sigTy))
->              (ForAll _ (QualType cx ty)) =
+> checkTypeSig :: TCEnv -> QualType -> TypeScheme -> Bool
+> checkTypeSig tcEnv (QualType sigCx sigTy) (ForAll _ (QualType cx ty)) =
 >   ty == sigTy && all (`elem` maxContext tcEnv sigCx) cx
 
 \end{verbatim}
@@ -506,7 +506,7 @@ for the type variable used in the type class declaration.
 >   | otherwise = errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
 >   where what = text "Method:" <+> ppIdent f
 
-> tcInstMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> TypeScheme
+> tcInstMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> QualType
 >                  -> MethodDecl a -> TcState (MethodDecl Type)
 > tcInstMethodDecl m tcEnv cls instTy d =
 >   do
@@ -514,7 +514,7 @@ for the type variable used in the type class declaration.
 >     (ty',d') <- tcMethodDecl m tcEnv methTy d
 >     checkInstMethodType tcEnv methTy ty' d'
 
-> checkInstMethodType :: TCEnv -> TypeScheme -> TypeScheme -> Decl Type
+> checkInstMethodType :: TCEnv -> QualType -> TypeScheme -> Decl Type
 >                     -> TcState (MethodDecl Type)
 > checkInstMethodType tcEnv methTy sigma (FunctionDecl p f eqs)
 >   | checkTypeSig tcEnv methTy sigma = return (MethodDecl p f eqs)
@@ -538,20 +538,21 @@ trivially satisfied by the instance declaration.
 > classMethodType sigs (MethodDecl _ f _) =
 >   fromJust (lookupEnv (unRenameIdent f) sigs)
 
-> instMethodType :: QualIdent -> TypeScheme -> MethodDecl a -> ValueEnv
->                -> TypeScheme
-> instMethodType cls (ForAll _ (QualType cx ty)) (MethodDecl _ f _) =
->   typeScheme . normalize 0 . QualType cx . expandAliasType [ty] . methodType f
+> instMethodType :: QualIdent -> QualType -> MethodDecl a -> ValueEnv
+>                -> QualType
+> instMethodType cls (QualType cx ty) (MethodDecl _ f _) =
+>   normalize 0 . QualType cx . expandAliasType [ty] . methodType f
 >   where methodType f = rawType . funType (qualifyLike cls (unRenameIdent f))
 
-> tcMethodDecl :: ModuleIdent -> TCEnv -> TypeScheme -> MethodDecl a
+> tcMethodDecl :: ModuleIdent -> TCEnv -> QualType -> MethodDecl a
 >              -> TcState (TypeScheme,Decl Type)
 > tcMethodDecl m tcEnv methTy (MethodDecl p f eqs) =
 >   do
->     updateSt_ (bindFun m f methTy)
->     (cx,(ty,d')) <- tcFunctionDecl "method" m tcEnv [] methTy p f eqs
+>     updateSt_ (bindFun m f methTy')
+>     (cx,(ty,d')) <- tcFunctionDecl "method" m tcEnv [] methTy' p f eqs
 >     theta <- liftSt fetchSt
 >     return (gen zeroSet cx (subst theta ty),d')
+>   where methTy' = typeScheme methTy
 
 \end{verbatim}
 \paragraph{Foreign Functions}
@@ -571,11 +572,11 @@ arbitrary type.
 >                -> Maybe String -> Ident -> TypeExpr -> TcState ()
 > tcForeignFunct m tcEnv p cc ie f ty =
 >   do
->     checkForeignType cc (rawType ty')
->     updateSt_ (bindFun m f ty')
+>     checkForeignType cc ty'
+>     updateSt_ (bindFun m f (typeScheme ty'))
 >   where ty' = expandPolyType tcEnv (QualTypeExpr [] ty)
 >         checkForeignType CallConvPrimitive _ = return ()
->         checkForeignType CallConvCCall ty
+>         checkForeignType CallConvCCall (QualType _ ty)
 >           | ie == Just "dynamic" = checkCDynCallType tcEnv p ty
 >           | maybe False ('&' `elem`) ie = checkCAddrType tcEnv p ty
 >           | otherwise = checkCCallType tcEnv p ty
@@ -780,7 +781,7 @@ Note that overloaded literals are not supported in patterns.
 > tcExpr m tcEnv p (Typed e sig) =
 >   do
 >     tyEnv0 <- fetchSt
->     (cx,ty) <- inst sigTy
+>     (cx,ty) <- inst (typeScheme sigTy)
 >     (cx',e') <-
 >       tcExpr m tcEnv p e >>=
 >       unifyDecl p "explicitly typed expression" (ppExpr 0 e) tcEnv tyEnv0
@@ -1388,11 +1389,11 @@ Error functions.
 >         text "Inferred type:" <+> ppTypeScheme tcEnv sigma,
 >         text "Type signature:" <+> ppQualTypeExpr ty]
 
-> methodSigTooGeneral :: TCEnv -> Doc -> TypeScheme -> TypeScheme -> String
+> methodSigTooGeneral :: TCEnv -> Doc -> QualType -> TypeScheme -> String
 > methodSigTooGeneral tcEnv what ty sigma = show $
 >   vcat [text "Method type not general enough", what,
 >         text "Inferred type:" <+> ppTypeScheme tcEnv sigma,
->         text "Expected type:" <+> ppTypeScheme tcEnv ty]
+>         text "Expected type:" <+> ppQualType tcEnv ty]
 
 > wrongArity :: QualIdent -> Int -> Int -> String
 > wrongArity c arity argc = show $

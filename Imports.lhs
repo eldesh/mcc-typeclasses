@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2072 2007-01-15 23:02:44Z wlux $
+% $Id: Imports.lhs 2079 2007-01-23 14:09:44Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -172,7 +172,7 @@ following functions.
 > values m (INewtypeDecl _ cx tc tvs nc) =
 >   (newConstr m cx (qualQualify m tc) tvs nc :)
 > values m (IFunctionDecl _ f ty) =
->   qual f (Value (qualQualify m f) (toTypeScheme m ty))
+>   qual f (Value (qualQualify m f) (typeScheme (toQualType m [] ty)))
 > values m (IClassDecl _ _ cls tv ds) =
 >   (map (classMethod m cls' [ClassAssert cls tv]) (catMaybes ds) ++)
 >   where cls' = qualQualify m cls

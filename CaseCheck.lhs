@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 2052 2006-12-20 11:37:05Z wlux $
+% $Id: CaseCheck.lhs 2082 2007-01-24 20:11:46Z wlux $
 %
-% Copyright (c) 2003-2006, Wolfgang Lux
+% Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CaseCheck.lhs}
@@ -136,7 +136,10 @@ collect all defined identifiers.
 >     typeNames p tc tvs ++ names p nc xs
 >   names _ (TypeDecl p tc tvs _) xs = typeNames p tc tvs ++ xs
 >   names _ (ClassDecl p _ cls tv ds) xs =
->     D p TypeClassId cls : D p TypeVarId tv : names p ds xs
+>     D p TypeClassId cls : D p TypeVarId tv :
+>     filter (not . isTypeVar tv) (names p ds []) ++ xs
+>     where isTypeVar tv (D _ TypeVarId tv') = tv == tv'
+>           isTypeVar _ _ = False
 >   names _ (InstanceDecl p _ _ ty ds) xs = names p ty (names p ds xs)
 >   names p (BlockDecl d) xs = names p d xs
 
@@ -164,7 +167,7 @@ collect all defined identifiers.
 
 > instance SyntaxTree (MethodDecl a) where
 >   names _ (MethodFixity _ _ _ _) xs = xs
->   names _ (MethodSig p fs _) xs = map (D p MethodId) fs ++ xs
+>   names _ (MethodSig p fs ty) xs = map (D p MethodId) fs ++ names p ty xs
 >   names _ (MethodDecl p _ eqs) xs = names p eqs xs
 >   names _ (TrustMethod _ _ _) xs = xs
 

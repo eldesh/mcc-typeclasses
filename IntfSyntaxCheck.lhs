@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2082 2007-01-24 20:11:46Z wlux $
 %
-% Copyright (c) 2000-2006, Wolfgang Lux
+% Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{IntfSyntaxCheck.lhs}
@@ -114,11 +114,11 @@ during syntax checking of type expressions.
 > checkIMethodDecl :: TypeEnv -> Ident -> IMethodDecl -> Error IMethodDecl
 > checkIMethodDecl env tv (IMethodDecl p f ty) =
 >   do
->     ty' <- checkType env p ty
->     let tvs = fv ty'
->     unless (tv `elem` tvs) (errorAt p (ambiguousType tv)) &&>
->       mapE_ (errorAt p . polymorphicMethod) (nub (filter (tv /=) tvs))
+>     ty' <- checkQualType env p ty
+>     unless (tv `elem` fv ty') (errorAt p (ambiguousType tv))
+>     when (tv `elem` constrainedVars ty') (errorAt p (constrainedClassType tv))
 >     return (IMethodDecl p f ty')
+>   where constrainedVars (QualTypeExpr cx _) = [tv | ClassAssert _ tv <- cx]
 
 > checkClosedType :: TypeEnv -> Position -> [Ident] -> TypeExpr
 >                 -> Error TypeExpr
@@ -254,10 +254,9 @@ Error messages.
 > ambiguousType tv =
 >   "Method type does not mention type variable " ++ name tv
 
-> polymorphicMethod :: Ident -> String
-> polymorphicMethod tv =
->   "Free type variable " ++ name tv ++ " in method type\n" ++
->   "(Implementation restriction: Polymorphic methods are not yet supported)"
+> constrainedClassType :: Ident -> String
+> constrainedClassType tv =
+>   "Method type context must not constrain type variable " ++ name tv
 
 > notSimpleType :: TypeExpr -> String
 > notSimpleType ty = show $

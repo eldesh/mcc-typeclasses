@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2061 2007-01-05 08:44:13Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2082 2007-01-24 20:11:46Z wlux $
 %
-% Copyright (c) 1999-2006, Wolfgang Lux
+% Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeSyntaxCheck.lhs}
@@ -98,16 +98,24 @@ signatures.
 > checkGoal env (Goal p e ds) =
 >   liftE2 (Goal p) (checkExpr env p e) (mapE (checkDecl env) ds)
 
+\end{verbatim}
+Method type signatures have to obey a few additional restrictions.
+The class type variable must appear in the method's type (otherwise,
+the type would be inherently ambiguous), and the method's context must
+not contain any additional constraints for that type variable
+(cf.\ Sect.~4.3.1 of the Haskell report).
+\begin{verbatim}
+
 > checkMethodDecl :: TypeEnv -> Ident -> MethodDecl a -> Error (MethodDecl a)
 > checkMethodDecl _ _ (MethodFixity p fix pr ops) =
 >   return (MethodFixity p fix pr ops)
 > checkMethodDecl env tv (MethodSig p fs ty) =
 >   do
->     ty' <- checkType env p ty
->     let tvs = fv ty'
->     unless (tv `elem` tvs) (errorAt p (ambiguousType tv)) &&>
->       mapE_ (errorAt p . polymorphicMethod) (nub (filter (tv /=) tvs))
+>     ty' <- checkQualType env p ty
+>     unless (tv `elem` fv ty') (errorAt p (ambiguousType tv))
+>     when (tv `elem` constrainedVars ty') (errorAt p (constrainedClassType tv))
 >     return (MethodSig p fs ty')
+>   where constrainedVars (QualTypeExpr cx _) = [tv | ClassAssert _ tv <- cx]
 > checkMethodDecl env _ (MethodDecl p f eqs) =
 >   liftE (MethodDecl p f) (mapE (checkEquation env) eqs)
 > checkMethodDecl _ _ (TrustMethod p tr fs) = return (TrustMethod p tr fs)
@@ -439,10 +447,9 @@ Error messages.
 > ambiguousType tv =
 >   "Method type does not mention type variable " ++ name tv
 
-> polymorphicMethod :: Ident -> String
-> polymorphicMethod tv =
->   "Free type variable " ++ name tv ++ " in method type\n" ++
->   "(Implementation restriction: Polymorphic methods are not yet supported)"
+> constrainedClassType :: Ident -> String
+> constrainedClassType tv =
+>   "Method type context must not constrain type variable " ++ name tv
 
 > notSimpleType :: TypeExpr -> String
 > notSimpleType ty = show $

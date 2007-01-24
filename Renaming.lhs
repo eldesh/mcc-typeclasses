@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2052 2006-12-20 11:37:05Z wlux $
+% $Id: Renaming.lhs 2082 2007-01-24 20:11:46Z wlux $
 %
-% Copyright (c) 1999-2006, Wolfgang Lux
+% Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Renaming.lhs}
@@ -190,7 +190,7 @@ class method.
 > renameMethodDecl tv env _ (MethodSig p fs ty) =
 >   do
 >     env <- bindVars env (filter (tv /=) (fv ty))
->     liftM (MethodSig p fs) (renameType env ty)
+>     liftM (MethodSig p fs) (renameQualType env ty)
 > renameMethodDecl _ _ env' (MethodDecl p f eqs) =
 >   do
 >     f' <- renameVar env' f

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2052 2006-12-20 11:37:05Z wlux $
+% $Id: CurryParser.lhs 2082 2007-01-24 20:11:46Z wlux $
 %
-% Copyright (c) 1999-2006, Wolfgang Lux
+% Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryParser.lhs}
@@ -223,7 +223,7 @@ directory path to the module is ignored.
 > methodSig :: Parser Token (MethodDecl ()) a
 > methodSig =
 >   MethodSig <$> position <*> var `sepBy1` comma
->             <*-> token DoubleColon <*> type0
+>             <*-> token DoubleColon <*> qualType
 
 > methodDecl :: Parser Token (MethodDecl ()) a
 > methodDecl = methodDecl <$> position <*> lhs <*> declRhs
@@ -398,12 +398,14 @@ directory path to the module is ignored.
 >   where f' p = uncurry (uncurry . f p)
 
 > iFunctionDecl :: Parser Token IDecl a
-> iFunctionDecl =
->   IFunctionDecl <$> position <*> qfun <*-> token DoubleColon <*> qualType
+> iFunctionDecl = iFunDecl IFunctionDecl qfun
 
 > iMethodDecl :: Parser Token IMethodDecl a
-> iMethodDecl =
->   IMethodDecl <$> position <*> fun <*-> token DoubleColon <*> type0
+> iMethodDecl = iFunDecl IMethodDecl fun
+
+> iFunDecl :: (Position -> a -> QualTypeExpr -> b) -> Parser Token a c
+>          -> Parser Token b c
+> iFunDecl f fun = f <$> position <*> fun <*-> token DoubleColon <*> qualType
 
 \end{verbatim}
 \paragraph{Types}

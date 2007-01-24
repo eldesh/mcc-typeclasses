@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2079 2007-01-23 14:09:44Z wlux $
+% $Id: TypeCheck.lhs 2082 2007-01-24 20:11:46Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -112,9 +112,9 @@ type synonyms occurring in their types are expanded.
 >           bindConstr NewtypeConstructor m tcEnv cx tc tvs c [ty]
 > bindTypeValues _ _ (TypeDecl _ _ _ _) tyEnv = tyEnv
 > bindTypeValues m tcEnv (ClassDecl _ _ cls tv ds) tyEnv = foldr bind tyEnv ds
->   where cx = [ClassAssert (qualifyWith m cls) tv]
+>   where cls' = qualifyWith m cls
 >         bind (MethodFixity _ _ _ _) = id
->         bind (MethodSig _ fs ty) = bindMethods m tcEnv cx fs ty
+>         bind (MethodSig _ fs ty) = bindMethods m tcEnv cls' tv fs ty
 >         bind (MethodDecl _ _ _) = id
 >         bind (TrustMethod _ _ _) = id
 > bindTypeValues _ _ (InstanceDecl _ _ _ _ _) tyEnv = tyEnv
@@ -127,10 +127,11 @@ type synonyms occurring in their types are expanded.
 >   globalBindTopEnv m c (f (qualifyWith m c) (typeScheme ty))
 >   where ty = expandConstrType tcEnv cx (qualifyWith m tc) tvs tys
 
-> bindMethods :: ModuleIdent -> TCEnv -> [ClassAssert] -> [Ident] -> TypeExpr
->             -> ValueEnv -> ValueEnv
-> bindMethods m tcEnv cx fs ty tyEnv = foldr (bindMethod m ty') tyEnv fs
->   where ty' = typeScheme (expandPolyType tcEnv (QualTypeExpr cx ty))
+> bindMethods :: ModuleIdent -> TCEnv -> QualIdent -> Ident -> [Ident]
+>             -> QualTypeExpr -> ValueEnv -> ValueEnv
+> bindMethods m tcEnv cls tv fs ty tyEnv =
+>   foldr (bindMethod m (typeScheme ty')) tyEnv fs
+>   where ty' = expandMethodType tcEnv cls tv ty
 
 > bindMethod :: ModuleIdent -> TypeScheme -> Ident -> ValueEnv -> ValueEnv
 > bindMethod m ty f = globalBindTopEnv m f (Value (qualifyWith m f) ty)
@@ -463,6 +464,22 @@ signature is composed of its declared type signature and the context
 from the class declaration), but a little bit more complicated for
 instance declarations because the instance type must be substituted
 for the type variable used in the type class declaration.
+
+When checking inferred method types against their expected types, we
+have to be careful because the class' type variable is always assigned
+index 0 in the method types recorded in the type environment. However,
+in the inferred type scheme returned from \texttt{tcMethodDecl}, type
+variables are assigned indices in the order of their occurrence. In
+order to avoid incorrectly reporting errors when the type class
+variable is not the first variable that appears in a method's type,
+\texttt{tcInstMethodDecl} normalizes the expected method type before
+applying \texttt{checkInstMethodType} to it and
+\texttt{checkClassMethodType} uses \texttt{expandPolyType} instead of
+\texttt{expandMethodType} in order to convert the method's type
+signature. Unfortunately, this also means that the compiler has to add
+the class type constraint explicitly to the type signature, which is
+done while collecting the type signatures in the \texttt{ClassDecl}
+case of \texttt{tcTopDecl}.
 \begin{verbatim}
 
 > tcTopDecl :: ModuleIdent -> TCEnv -> TopDecl a -> TcState (TopDecl Type)
@@ -475,12 +492,12 @@ for the type variable used in the type class declaration.
 >   do
 >     vds' <- mapM (tcClassMethodDecl m tcEnv sigs) vds
 >     return (ClassDecl p cx cls tv (map untyped ods ++ vds'))
->   where cx' = [ClassAssert (qualify cls) tv]
->         sigs = foldr (bindTypeSigs . typeSig cx') noSigs ods
+>   where sigs = foldr (bindTypeSigs . typeSig (qualify cls) tv) noSigs ods
 >         (vds,ods) = partition isMethodDecl ds
->         typeSig _ (MethodFixity p fix pr ops) = InfixDecl p fix pr ops
->         typeSig cx (MethodSig p fs ty) = TypeSig p fs (QualTypeExpr cx ty)
->         typeSig _ (TrustMethod p tr fs) = TrustAnnot p tr fs
+>         typeSig _ _ (MethodFixity p fix pr ops) = InfixDecl p fix pr ops
+>         typeSig cls tv (MethodSig p fs (QualTypeExpr cx ty)) =
+>           TypeSig p fs (QualTypeExpr (ClassAssert cls tv : cx) ty)
+>         typeSig _ _ (TrustMethod p tr fs) = TrustAnnot p tr fs
 > tcTopDecl m tcEnv (InstanceDecl p cx cls ty ds) =
 >   do
 >     vds' <- mapM (tcInstMethodDecl m tcEnv cls' ty') vds
@@ -494,9 +511,9 @@ for the type variable used in the type class declaration.
 >                   -> TcState (MethodDecl Type)
 > tcClassMethodDecl m tcEnv sigs d =
 >   do
->     (ty',d') <- tcMethodDecl m tcEnv (expandPolyType tcEnv sigTy) d
->     checkClassMethodType tcEnv sigTy ty' d'
->   where sigTy = classMethodType sigs d
+>     methTy <- liftM (classMethodType qualify d) fetchSt
+>     (ty',d') <- tcMethodDecl m tcEnv methTy d
+>     checkClassMethodType tcEnv (classMethodSig sigs d) ty' d'
 
 > checkClassMethodType :: TCEnv -> QualTypeExpr -> TypeScheme -> Decl Type
 >                      -> TcState (MethodDecl Type)
@@ -510,9 +527,9 @@ for the type variable used in the type class declaration.
 >                  -> MethodDecl a -> TcState (MethodDecl Type)
 > tcInstMethodDecl m tcEnv cls instTy d =
 >   do
->     methTy <- liftM (instMethodType cls instTy d) fetchSt
->     (ty',d') <- tcMethodDecl m tcEnv methTy d
->     checkInstMethodType tcEnv methTy ty' d'
+>     methTy <- liftM (instMethodType (qualifyLike cls) instTy d) fetchSt
+>     (ty',d') <- tcMethodDecl m tcEnv (typeScheme methTy) d
+>     checkInstMethodType tcEnv (normalize 0 methTy) ty' d'
 
 > checkInstMethodType :: TCEnv -> QualType -> TypeScheme -> Decl Type
 >                     -> TcState (MethodDecl Type)
@@ -521,38 +538,29 @@ for the type variable used in the type class declaration.
 >   | otherwise = errorAt p (methodSigTooGeneral tcEnv what methTy sigma)
 >   where what = text "Method:" <+> ppIdent f
 
-\end{verbatim}
-The functions \texttt{classMethodType} and \texttt{instMethodType}
-return the type of a class method and an instance method,
-respectively. While we can simply look up the type of a class method
-among the type signatures of its class declaration, computing the type
-of an instance method is a little bit more complicated. The compiler
-first looks up the method's type in the value type environment and
-then instantiates the class type variable with the instance type. We
-can simply discard the context of the method's type recorded in the
-type environment here (using \texttt{rawType}) because this context is
-trivially satisfied by the instance declaration.
-\begin{verbatim}
-
-> classMethodType :: SigEnv -> MethodDecl a -> QualTypeExpr
-> classMethodType sigs (MethodDecl _ f _) =
->   fromJust (lookupEnv (unRenameIdent f) sigs)
-
-> instMethodType :: QualIdent -> QualType -> MethodDecl a -> ValueEnv
->                -> QualType
-> instMethodType cls (QualType cx ty) (MethodDecl _ f _) =
->   normalize 0 . QualType cx . expandAliasType [ty] . methodType f
->   where methodType f = rawType . funType (qualifyLike cls (unRenameIdent f))
-
-> tcMethodDecl :: ModuleIdent -> TCEnv -> QualType -> MethodDecl a
+> tcMethodDecl :: ModuleIdent -> TCEnv -> TypeScheme -> MethodDecl a
 >              -> TcState (TypeScheme,Decl Type)
 > tcMethodDecl m tcEnv methTy (MethodDecl p f eqs) =
 >   do
->     updateSt_ (bindFun m f methTy')
->     (cx,(ty,d')) <- tcFunctionDecl "method" m tcEnv [] methTy' p f eqs
+>     updateSt_ (bindFun m f methTy)
+>     (cx,(ty,d')) <- tcFunctionDecl "method" m tcEnv [] methTy p f eqs
 >     theta <- liftSt fetchSt
 >     return (gen zeroSet cx (subst theta ty),d')
->   where methTy' = typeScheme methTy
+
+> classMethodSig :: SigEnv -> MethodDecl a -> QualTypeExpr
+> classMethodSig sigs (MethodDecl _ f _) =
+>   fromJust (lookupEnv (unRenameIdent f) sigs)
+
+> classMethodType :: (Ident -> QualIdent) -> MethodDecl a -> ValueEnv
+>                 -> TypeScheme
+> classMethodType qualify (MethodDecl _ f _) tyEnv =
+>   funType (qualify (unRenameIdent f)) tyEnv
+
+> instMethodType :: (Ident -> QualIdent) -> QualType -> MethodDecl a -> ValueEnv
+>                -> QualType
+> instMethodType qualify (QualType cx ty) d tyEnv =
+>   contextMap (cx ++) (instanceType ty (contextMap tail ty'))
+>   where ForAll _ ty' = classMethodType qualify d tyEnv
 
 \end{verbatim}
 \paragraph{Foreign Functions}

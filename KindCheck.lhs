@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2079 2007-01-23 14:09:44Z wlux $
+% $Id: KindCheck.lhs 2082 2007-01-24 20:11:46Z wlux $
 %
-% Copyright (c) 1999-2006, Wolfgang Lux
+% Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{KindCheck.lhs}
@@ -69,9 +69,9 @@ function in any particular order.
 >   where tcEnv' = foldr (bindTC m tcEnv') tcEnv ds
 
 > bindTC :: ModuleIdent -> TCEnv -> TopDecl a -> TCEnv -> TCEnv
-> bindTC m tcEnv (DataDecl _ _ tc tvs cs _) =
+> bindTC m _ (DataDecl _ _ tc tvs cs _) =
 >   globalBindTopEnv m tc (typeCon DataType m tc tvs (map (Just . constr) cs))
-> bindTC m tcEnv (NewtypeDecl _ _ tc tvs nc _) =
+> bindTC m _ (NewtypeDecl _ _ tc tvs nc _) =
 >   globalBindTopEnv m tc (typeCon RenamingType m tc tvs (nconstr nc))
 > bindTC m tcEnv (TypeDecl _ tc tvs ty) =
 >   globalBindTopEnv m tc
@@ -126,7 +126,7 @@ function in any particular order.
 >         free (ClassDecl _ cx _ _ _) = fc m cx
 
 > classDecl :: ModuleIdent -> [TopDecl a] -> Error ()
-> classDecl _ [] = internalError "clasDecl"
+> classDecl _ [] = internalError "classDecl"
 > classDecl m [ClassDecl p cx cls _ _]
 >   | cls `elem` fc m cx = errorAt p (recursiveClasses [cls])
 >   | otherwise = return ()
@@ -153,7 +153,7 @@ Kind checking is applied to all type expressions in the program.
 
 > checkMethodDecl :: TCEnv -> MethodDecl a -> Error ()
 > checkMethodDecl _ (MethodFixity _ _ _ _) = return ()
-> checkMethodDecl tcEnv (MethodSig p _ ty) = checkType tcEnv p ty
+> checkMethodDecl tcEnv (MethodSig p _ ty) = checkQualType tcEnv p ty
 > checkMethodDecl tcEnv (MethodDecl _ _ eqs) = mapE_ (checkEquation tcEnv) eqs
 > checkMethodDecl _ (TrustMethod _ _ _) = return ()
 

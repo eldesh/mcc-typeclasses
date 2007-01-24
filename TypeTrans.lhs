@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2081 2007-01-24 09:59:03Z wlux $
+% $Id: TypeTrans.lhs 2082 2007-01-24 20:11:46Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,9 +10,10 @@ This module implements transformations between the internal and
 external type representations.
 \begin{verbatim}
 
-> module TypeTrans(toType, toTypes, toQualType, toConstrType,
->                  fromType, fromQualType, minContext, maxContext,
->                  expandMonoType, expandConstrType, expandPolyType,
+> module TypeTrans(toType, toTypes, toQualType, toConstrType, toMethodType,
+>                  fromType, fromQualType,
+>                  expandMonoType, expandConstrType, expandMethodType,
+>                  expandPolyType, minContext, maxContext,
 >                  ppType, ppQualType, ppTypeScheme) where
 > import Base
 > import CurryPP
@@ -26,14 +27,21 @@ external type representations.
 \end{verbatim}
 The functions \texttt{toType} and \texttt{toTypes} convert Curry type
 expressions into types. The function \texttt{toQualType} similarly
-converts a qualified type expression into a qualified type. The
-function \texttt{toConstrType} returns the type of a data or newtype
-constructor. It computes the constructor's type from the context, type
-name, and type variables from the left hand side of the type
-declaration and the constructor's argument types. A special feature of
-this function is that it restricts the context to those type variables
-which are free in the argument types as specified in Sect.~4.2.1 of
-the revised Haskell'98 report~\cite{PeytonJones03:Haskell}.
+converts a qualified type expression into a qualified type.
+
+The function \texttt{toConstrType} returns the type of a data or
+newtype constructor. It computes the constructor's type from the
+context, type name, and type variables from the left hand side of the
+type declaration and the constructor's argument types. A special
+feature of this function is that it restricts the context to those
+type variables which are free in the argument types as specified in
+Sect.~4.2.1 of the revised Haskell'98
+report~\cite{PeytonJones03:Haskell}.
+
+The function \texttt{toMethodType} returns the type of a type class
+method. It adds the implicit type class constraint to the method's
+type signature and ensures that the class' type variable is always
+assigned index 0.
 
 The compiler uses only correctly qualified names internally and
 therefore adds the name of the current module to all type constructors
@@ -65,6 +73,9 @@ indices independently in each type expression.
 >              -> [TypeExpr] -> QualType
 > toConstrType m cx tc tvs tys = qualifyQualType m (toConstrType' cx tc tvs tys)
 
+> toMethodType :: ModuleIdent -> QualIdent -> Ident -> QualTypeExpr -> QualType
+> toMethodType m cls tv ty = qualifyQualType m (toMethodType' cls tv ty)
+
 > toType' :: [Ident] -> TypeExpr -> Type
 > toType' tvs ty = toType'' (enumTypeVars tvs ty) ty
 
@@ -77,6 +88,11 @@ indices independently in each type expression.
 >   where tvs' = enumTypeVars tvs tys
 >         cx' = restrictContext tys cx
 >         ty' = foldr ArrowType (ConstructorType tc (map VariableType tvs)) tys
+
+> toMethodType' :: QualIdent -> Ident -> QualTypeExpr -> QualType
+> toMethodType' cls tv (QualTypeExpr cx ty) =
+>   toQualType'' tvs (QualTypeExpr (ClassAssert cls tv : cx) ty)
+>   where tvs = enumTypeVars [tv] (QualTypeExpr cx ty)
 
 > enumTypeVars :: Expr a => [Ident] -> a -> FM Ident Int
 > enumTypeVars tvs ty = fromListFM (zip (tvs ++ tvs') [0..])
@@ -192,7 +208,7 @@ convert (qualified) type expressions into (qualified) types and also
 expand all type synonyms and qualify all type constructors during the
 conversion. In contrast to \texttt{toType}, \texttt{toTypes}, and
 \texttt{toQualType} above, which simply add the given module qualifier
-to all unqualified type constructor identifiers,
+to all unqualified type constructor and type class identifiers,
 \texttt{expandMonoType} and \texttt{expandPolyType} look up the
 correct module qualifiers in the type constructor environment.
 
@@ -201,10 +217,16 @@ newtype constructor from the context, type name, and type variables
 from the left hand side of the type declaration and the constructor's
 argument types. Similar to \texttt{toConstrType}, the type's context
 is restricted to those type variables which are free in the argument
-types, and similar to \texttt{expandMonoType} and
-\texttt{expandPolyType}, type synonyms are expanded and type
-constructors are qualified with the module containing their
+types. However, type synonyms are expanded and type constructors and
+type classes are qualified with the name of the module containing their
 definition.
+
+The function \texttt{expandMethodType} converts the type of a type
+class method. Similar to function \texttt{toMethodType}, the implicit
+type class constraint is added to the method's type and the class'
+type variable is assigned index 0. However, type synonyms are expanded
+and type constructors and type classes are qualified with the name of
+the module containing their definition.
 \begin{verbatim}
 
 > expandMonoType :: TCEnv -> [Ident] -> TypeExpr -> Type
@@ -214,6 +236,10 @@ definition.
 >                  -> [TypeExpr] -> QualType
 > expandConstrType tcEnv cx tc tvs tys =
 >   normalize (length tvs) (expandQualType tcEnv (toConstrType' cx tc tvs tys))
+
+> expandMethodType :: TCEnv -> QualIdent -> Ident -> QualTypeExpr -> QualType
+> expandMethodType tcEnv cls tv ty =
+>   normalize 1 (expandQualType tcEnv (toMethodType' cls tv ty))
 
 > expandPolyType :: TCEnv -> QualTypeExpr -> QualType
 > expandPolyType tcEnv ty = normalize 0 (expandQualType tcEnv (toQualType' ty))

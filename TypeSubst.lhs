@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeSubst.lhs 2003 2006-11-12 14:34:01Z wlux $
+% $Id: TypeSubst.lhs 2082 2007-01-24 20:11:46Z wlux $
 %
-% Copyright (c) 2003-2006, Wolfgang Lux
+% Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeSubst.lhs}
@@ -101,5 +101,18 @@ respectively.
 > normalize n ty = expandAliasType [TypeVariable (occur tv) | tv <- [0..]] ty
 >   where tvs' = zip (nub (filter (>= n) (typeVars ty))) [n..]
 >         occur tv = fromMaybe tv (lookup tv tvs')
+
+\end{verbatim}
+The function \texttt{instanceType} computes an instance of a
+polymorphic type by substituting the first type argument for all
+occurrences of the type variable with index 0 in the second argument.
+The function carefully assigns new indices to all other type variables
+of the second argument so that they do not conflict with the type
+variables of the first argument.
+\begin{verbatim}
+
+> instanceType :: ExpandAliasType a => Type -> a -> a
+> instanceType ty = expandAliasType (ty : map TypeVariable [n..])
+>   where ForAll n _ = polyType ty
 
 \end{verbatim}

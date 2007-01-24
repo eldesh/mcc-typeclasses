@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 2052 2006-12-20 11:37:05Z wlux $
+% $Id: PrecCheck.lhs 2082 2007-01-24 20:11:46Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{PrecCheck.lhs}
@@ -60,7 +60,7 @@ the correct operator precedence is used.
 >         decls (BlockDecl d) = [d]
 >         decls _ = []
 >         decl (MethodFixity p fix pr ops) = InfixDecl p fix pr ops
->         decl (MethodSig p fs ty) = TypeSig p fs (QualTypeExpr [] ty)
+>         decl (MethodSig p fs ty) = TypeSig p fs ty
 >         decl (MethodDecl p f eqs) = FunctionDecl p f eqs
 >         decl (TrustMethod p tr fs) = TrustAnnot p tr fs
 

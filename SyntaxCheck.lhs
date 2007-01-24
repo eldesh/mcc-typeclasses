@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2061 2007-01-05 08:44:13Z wlux $
+% $Id: SyntaxCheck.lhs 2082 2007-01-24 20:11:46Z wlux $
 %
-% Copyright (c) 1999-2006, Wolfgang Lux
+% Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{SyntaxCheck.lhs}
@@ -319,8 +319,7 @@ report~\cite{PeytonJones03:Haskell}).
 > checkMethodDeclLhs :: VarEnv -> MethodDecl a -> Error (Decl a)
 > checkMethodDeclLhs _ (MethodFixity p fix pr ops) =
 >   return (InfixDecl p fix pr ops)
-> checkMethodDeclLhs _ (MethodSig p fs ty) =
->   return (TypeSig p fs (QualTypeExpr [] ty))
+> checkMethodDeclLhs _ (MethodSig p fs ty) = return (TypeSig p fs ty)
 > checkMethodDeclLhs env (MethodDecl p f eqs) = checkEquationLhs True env p eqs
 > checkMethodDeclLhs _ (TrustMethod p tr fs) = return (TrustAnnot p tr fs)
 
@@ -342,8 +341,7 @@ report~\cite{PeytonJones03:Haskell}).
 > checkMethodDeclRhs :: VarEnv -> Decl a -> Error (MethodDecl a)
 > checkMethodDeclRhs _ (InfixDecl p fix pr ops) =
 >   return (MethodFixity p fix pr ops)
-> checkMethodDeclRhs _ (TypeSig p fs (QualTypeExpr _ ty)) =
->   return (MethodSig p fs ty)
+> checkMethodDeclRhs _ (TypeSig p fs ty) = return (MethodSig p fs ty)
 > checkMethodDeclRhs env (FunctionDecl p f eqs) =
 >   checkArity p f eqs &&>
 >   liftE (MethodDecl p f) (mapE (checkEquation env) eqs)

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2081 2007-01-24 09:59:03Z wlux $
+% $Id: IntfCheck.lhs 2082 2007-01-24 20:11:46Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -104,8 +104,7 @@ interface module only. However, this has not been implemented yet.
 >             [qualQualify m cls | ClassAssert cls _ <- cx] == clss' &&
 >             length ds == length fs' &&
 >             and (zipWith (isVisible imethod) ds fs') =
->               Just (mapM_ (checkMethodImport m tyEnv cls cx') (catMaybes ds))
->           where cx' = [ClassAssert cls tv]
+>               Just (mapM_ (checkMethodImport m tyEnv cls tv) (catMaybes ds))
 >         checkClass _ = Nothing
 > checkImport m _ _ _ (IInstanceDecl _ _ _ _) = return ()
 > checkImport m _ _ tyEnv (IFunctionDecl p f ty) =
@@ -140,13 +139,13 @@ interface module only. However, this has not been implemented yet.
 >           qc == c' && length tvs == n' && toConstrType m cx tc tvs [ty] == ty'
 >         checkNewConstr _ = False
 
-> checkMethodImport :: ModuleIdent -> ValueEnv -> QualIdent -> [ClassAssert]
+> checkMethodImport :: ModuleIdent -> ValueEnv -> QualIdent -> Ident
 >                   -> IMethodDecl -> Error ()
-> checkMethodImport m tyEnv cls cx (IMethodDecl p f ty) =
+> checkMethodImport m tyEnv cls tv (IMethodDecl p f ty) =
 >   checkValueInfo "method" checkMethod tyEnv p qf
 >   where qf = qualifyLike cls f
 >         checkMethod (Value f' (ForAll _ ty')) =
->           qf == f' && toQualType m (QualTypeExpr cx ty) == ty'
+>           qf == f' && toMethodType m cls tv ty == ty'
 >         checkMethod _ = False
 
 > checkPrecInfo :: (PrecInfo -> Bool) -> PEnv -> Position

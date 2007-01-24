@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2052 2006-12-20 11:37:05Z wlux $
+% $Id: CurrySyntax.lhs 2082 2007-01-24 20:11:46Z wlux $
 %
-% Copyright (c) 1999-2006, Wolfgang Lux
+% Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurrySyntax.lhs}
@@ -67,7 +67,7 @@ parsed representation of a Curry program.
 
 > data MethodDecl a =
 >     MethodFixity Position Infix Int [Ident]
->   | MethodSig Position [Ident] TypeExpr
+>   | MethodSig Position [Ident] QualTypeExpr
 >   | MethodDecl Position Ident [Equation a]
 >   | TrustMethod Position Trust (Maybe [Ident])
 >   deriving (Eq,Show)
@@ -121,7 +121,7 @@ Interface declarations are restricted to type declarations and signatures.
 >   | IFunctionDecl Position QualIdent QualTypeExpr
 >   deriving (Eq,Show)
 
-> data IMethodDecl = IMethodDecl Position Ident TypeExpr deriving (Eq,Show)
+> data IMethodDecl = IMethodDecl Position Ident QualTypeExpr deriving (Eq,Show)
 
 > imethod :: IMethodDecl -> Ident
 > imethod (IMethodDecl _ f _) = f

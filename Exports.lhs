@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2059 2007-01-03 11:33:52Z wlux $
+% $Id: Exports.lhs 2082 2007-01-24 20:11:46Z wlux $
 %
-% Copyright (c) 2000-2006, Wolfgang Lux
+% Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Exports.lhs}
@@ -117,8 +117,9 @@ declarations which cannot be used in another module because
 >         QualTypeExpr cx' ty' = fromQualType tcEnv (QualType cx ty)
 
 > methodDecl :: TCEnv -> ValueEnv -> QualIdent -> Ident -> IMethodDecl
-> methodDecl tcEnv tyEnv cls f = IMethodDecl noPos f (fromType tcEnv ty)
->   where ForAll _ (QualType _ ty) = funType (qualifyLike cls f) tyEnv
+> methodDecl tcEnv tyEnv cls f =
+>   IMethodDecl noPos f (fromQualType tcEnv (QualType (tail cx) ty))
+>   where ForAll _ (QualType cx ty) = funType (qualifyLike cls f) tyEnv
 
 > funDecl :: ModuleIdent -> TCEnv -> ValueEnv -> Export -> [IDecl] -> [IDecl]
 > funDecl m tcEnv tyEnv (Export f) ds =

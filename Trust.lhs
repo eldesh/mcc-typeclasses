@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Trust.lhs 2059 2007-01-03 11:33:52Z wlux $
+% $Id: Trust.lhs 2082 2007-01-24 20:11:46Z wlux $
 %
-% Copyright (c) 2006, Wolfgang Lux
+% Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Eval.lhs}
@@ -71,7 +71,7 @@ the local functions \texttt{h} and \texttt{i} are trusted, but
 
 >   trustList tr ds = trustDeclGroup tr (map decl ds) ds
 >     where decl (MethodFixity p fix tr ops) = InfixDecl p fix tr ops
->           decl (MethodSig p fs ty) = TypeSig p fs (QualTypeExpr [] ty)
+>           decl (MethodSig p fs ty) = TypeSig p fs ty
 >           decl (MethodDecl p f eqs) = FunctionDecl p f eqs
 >           decl (TrustMethod p tr fs) = TrustAnnot p tr fs
 

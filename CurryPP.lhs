@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2052 2006-12-20 11:37:05Z wlux $
+% $Id: CurryPP.lhs 2082 2007-01-24 20:11:46Z wlux $
 %
-% Copyright (c) 1999-2006, Wolfgang Lux
+% Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryPP.lhs}
@@ -113,7 +113,7 @@ Declarations
 
 > ppMethodDecl :: MethodDecl a -> Doc
 > ppMethodDecl (MethodFixity p fix pr ops) = ppDecl (InfixDecl p fix pr ops)
-> ppMethodDecl (MethodSig p fs ty) = ppDecl (TypeSig p fs (QualTypeExpr [] ty))
+> ppMethodDecl (MethodSig p fs ty) = ppDecl (TypeSig p fs ty)
 > ppMethodDecl (MethodDecl p f eqs) = ppDecl (FunctionDecl p f eqs)
 > ppMethodDecl (TrustMethod p tr fs) = ppDecl (TrustAnnot p tr fs)
 
@@ -216,8 +216,7 @@ Interfaces
 >   | otherwise = ppIBlock head (map (maybe (text "_") ppIMethodDecl) ds)
 
 > ppIMethodDecl :: IMethodDecl -> Doc
-> ppIMethodDecl (IMethodDecl p f ty) =
->   ppIDecl (IFunctionDecl p (qualify f) (QualTypeExpr [] ty))
+> ppIMethodDecl (IMethodDecl p f ty) = ppIDecl (IFunctionDecl p (qualify f) ty)
 
 > ppIBlock :: Doc -> [Doc] -> Doc
 > ppIBlock prefix ds =

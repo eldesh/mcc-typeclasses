@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2079 2007-01-23 14:09:44Z wlux $
+% $Id: TypeTrans.lhs 2081 2007-01-24 09:59:03Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -53,18 +53,29 @@ indices independently in each type expression.
 \begin{verbatim}
 
 > toType :: ModuleIdent -> [Ident] -> TypeExpr -> Type
-> toType m tvs ty = qualifyType m (toType' (enumTypeVars tvs ty) ty)
+> toType m tvs ty = qualifyType m (toType' tvs ty)
 
 > toTypes :: ModuleIdent -> [Ident] -> [TypeExpr] -> [Type]
-> toTypes m tvs tys = map (qualifyType m . toType' (enumTypeVars tvs tys)) tys
+> toTypes m tvs tys = map (qualifyType m . toType'' (enumTypeVars tvs tys)) tys
 
-> toQualType :: ModuleIdent -> [Ident] -> QualTypeExpr -> QualType
-> toQualType m tvs ty = qualifyQualType m (toQualType' (enumTypeVars tvs ty) ty)
+> toQualType :: ModuleIdent -> QualTypeExpr -> QualType
+> toQualType m ty = qualifyQualType m (toQualType' ty)
 
 > toConstrType :: ModuleIdent -> [ClassAssert] -> QualIdent -> [Ident]
 >              -> [TypeExpr] -> QualType
-> toConstrType m cx tc tvs tys = toQualType m tvs (QualTypeExpr cx' ty')
->   where cx' = restrictContext tys cx
+> toConstrType m cx tc tvs tys = qualifyQualType m (toConstrType' cx tc tvs tys)
+
+> toType' :: [Ident] -> TypeExpr -> Type
+> toType' tvs ty = toType'' (enumTypeVars tvs ty) ty
+
+> toQualType' :: QualTypeExpr -> QualType
+> toQualType' ty = toQualType'' (enumTypeVars [] ty) ty
+
+> toConstrType' :: [ClassAssert] -> QualIdent -> [Ident] -> [TypeExpr]
+>               -> QualType
+> toConstrType' cx tc tvs tys = toQualType'' tvs' (QualTypeExpr cx' ty')
+>   where tvs' = enumTypeVars tvs tys
+>         cx' = restrictContext tys cx
 >         ty' = foldr ArrowType (ConstructorType tc (map VariableType tvs)) tys
 
 > enumTypeVars :: Expr a => [Ident] -> a -> FM Ident Int
@@ -76,23 +87,23 @@ indices independently in each type expression.
 >   [ClassAssert cls tv | ClassAssert cls tv <- cx, tv `elem` tvs'']
 >   where tvs'' = nub (fv tys)
 
-> toQualType' :: FM Ident Int -> QualTypeExpr -> QualType
-> toQualType' tvs (QualTypeExpr cx ty) =
->   QualType (nub (map (toTypePred' tvs) cx)) (toType' tvs ty)
+> toQualType'' :: FM Ident Int -> QualTypeExpr -> QualType
+> toQualType'' tvs (QualTypeExpr cx ty) =
+>   QualType (nub (map (toTypePred'' tvs) cx)) (toType'' tvs ty)
 
-> toTypePred' :: FM Ident Int -> ClassAssert -> TypePred
-> toTypePred' tvs (ClassAssert cls tv) =
->   TypePred cls (toType' tvs (VariableType tv))
+> toTypePred'' :: FM Ident Int -> ClassAssert -> TypePred
+> toTypePred'' tvs (ClassAssert cls tv) =
+>   TypePred cls (toType'' tvs (VariableType tv))
 
-> toType' :: FM Ident Int -> TypeExpr -> Type
-> toType' tvs (ConstructorType tc tys) =
->   TypeConstructor tc (map (toType' tvs) tys)
-> toType' tvs (VariableType tv) =
+> toType'' :: FM Ident Int -> TypeExpr -> Type
+> toType'' tvs (ConstructorType tc tys) =
+>   TypeConstructor tc (map (toType'' tvs) tys)
+> toType'' tvs (VariableType tv) =
 >   maybe (internalError ("toType " ++ show tv)) TypeVariable (lookupFM tv tvs)
-> toType' tvs (TupleType tys) = tupleType (map (toType' tvs) tys)
-> toType' tvs (ListType ty) = listType (toType' tvs ty)
-> toType' tvs (ArrowType ty1 ty2) =
->   TypeArrow (toType' tvs ty1) (toType' tvs ty2)
+> toType'' tvs (TupleType tys) = tupleType (map (toType'' tvs) tys)
+> toType'' tvs (ListType ty) = listType (toType'' tvs ty)
+> toType'' tvs (ArrowType ty1 ty2) =
+>   TypeArrow (toType'' tvs ty1) (toType'' tvs ty2)
 
 > qualifyQualType :: ModuleIdent -> QualType -> QualType
 > qualifyQualType m (QualType cx ty) =
@@ -179,35 +190,33 @@ unqualified names.
 The functions \texttt{expandMonoType} and \texttt{expandPolyType}
 convert (qualified) type expressions into (qualified) types and also
 expand all type synonyms and qualify all type constructors during the
-conversion. Qualification and expansion have to be performed at the
-same time since type constructors are recorded in the type constructor
-environment using the names visible in the source code, but the
-expanded types refer to the original names.
+conversion. In contrast to \texttt{toType}, \texttt{toTypes}, and
+\texttt{toQualType} above, which simply add the given module qualifier
+to all unqualified type constructor identifiers,
+\texttt{expandMonoType} and \texttt{expandPolyType} look up the
+correct module qualifiers in the type constructor environment.
 
 The function \texttt{expandConstrType} computes the type of a data or
 newtype constructor from the context, type name, and type variables
 from the left hand side of the type declaration and the constructor's
 argument types. Similar to \texttt{toConstrType}, the type's context
 is restricted to those type variables which are free in the argument
-types.
+types, and similar to \texttt{expandMonoType} and
+\texttt{expandPolyType}, type synonyms are expanded and type
+constructors are qualified with the module containing their
+definition.
 \begin{verbatim}
 
 > expandMonoType :: TCEnv -> [Ident] -> TypeExpr -> Type
-> expandMonoType tcEnv tvs ty =
->   expandType tcEnv (toType' (enumTypeVars tvs ty) ty)
+> expandMonoType tcEnv tvs ty = expandType tcEnv (toType' tvs ty)
 
 > expandConstrType :: TCEnv -> [ClassAssert] -> QualIdent -> [Ident]
 >                  -> [TypeExpr] -> QualType
-> expandConstrType tcEnv cx tc tvs tys = normalize (length tvs) $
->   expandQualType tcEnv $ toQualType' tvs' (QualTypeExpr cx' ty')
->   where tvs' = enumTypeVars tvs tys
->         cx' = restrictContext tys cx
->         ty' = foldr ArrowType (ConstructorType tc (map VariableType tvs)) tys
+> expandConstrType tcEnv cx tc tvs tys =
+>   normalize (length tvs) (expandQualType tcEnv (toConstrType' cx tc tvs tys))
 
 > expandPolyType :: TCEnv -> QualTypeExpr -> QualType
-> expandPolyType tcEnv ty =
->   normalize 0 $ expandQualType tcEnv $ toQualType' tvs ty
->   where tvs = enumTypeVars [] ty
+> expandPolyType tcEnv ty = normalize 0 (expandQualType tcEnv (toQualType' ty))
 
 > expandQualType :: TCEnv -> QualType -> QualType
 > expandQualType tcEnv (QualType cx ty) =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2080 2007-01-23 18:59:50Z wlux $
+% $Id: DictTrans.lhs 2081 2007-01-24 09:59:03Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -132,13 +132,13 @@ generator.
 > liftIntfDecls _ _ _ (IClassDecl p _ cls tv ds) =
 >   classIDecls p cls tv (Just ds) ++ intfMethodStubs cls tv ds
 > liftIntfDecls m tcEnv tyEnv (IInstanceDecl p cx cls ty) =
->   instIDecls tcEnv tyEnv p cls' (toQualType m [] (QualTypeExpr cx ty))
+>   instIDecls tcEnv tyEnv p cls' (toQualType m (QualTypeExpr cx ty))
 >   where cls' = qualQualify m cls
 > liftIntfDecls _ _ _ (IFunctionDecl p f ty) = [IFunctionDecl p f ty]
 
 > dictTransIntfDecl :: ModuleIdent -> TCEnv -> IDecl -> IDecl
 > dictTransIntfDecl m tcEnv (IFunctionDecl p f ty) = IFunctionDecl p f $
->   fromQualType tcEnv (transformQualType tcEnv (toQualType m [] ty))
+>   fromQualType tcEnv (transformQualType tcEnv (toQualType m ty))
 > dictTransIntfDecl _ _ d = d
 
 \end{verbatim}

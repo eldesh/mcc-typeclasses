@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2079 2007-01-23 14:09:44Z wlux $
+% $Id: Imports.lhs 2081 2007-01-24 09:59:03Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -89,7 +89,7 @@ all instance declarations are always imported into the current module.
 > bindInstance :: ModuleIdent -> IDecl -> InstEnv -> InstEnv
 > bindInstance m (IInstanceDecl _ cx cls ty) =
 >   bindEnv (CT (qualQualify m cls) (rootOfType ty')) cx'
->   where QualType cx' ty' = toQualType m [] (QualTypeExpr cx ty)
+>   where QualType cx' ty' = toQualType m (QualTypeExpr cx ty)
 > bindInstance _ _ = id
 
 \end{verbatim}
@@ -172,7 +172,7 @@ following functions.
 > values m (INewtypeDecl _ cx tc tvs nc) =
 >   (newConstr m cx (qualQualify m tc) tvs nc :)
 > values m (IFunctionDecl _ f ty) =
->   qual f (Value (qualQualify m f) (typeScheme (toQualType m [] ty)))
+>   qual f (Value (qualQualify m f) (typeScheme (toQualType m ty)))
 > values m (IClassDecl _ _ cls tv ds) =
 >   (map (classMethod m cls' [ClassAssert cls tv]) (catMaybes ds) ++)
 >   where cls' = qualQualify m cls
@@ -232,7 +232,7 @@ Auxiliary functions:
 >         -> TypeInfo
 > typeCls m cx cls tv =
 >   TypeClass (qualQualify m cls) [cls | TypePred cls _ <- cx']
->   where QualType cx' _ = toQualType m [] (QualTypeExpr cx (VariableType tv))
+>   where QualType cx' _ = toQualType m (QualTypeExpr cx (VariableType tv))
 
 > con :: (QualIdent -> TypeScheme -> a) -> ModuleIdent -> [ClassAssert]
 >     -> QualIdent -> [Ident] -> Ident -> [TypeExpr] -> a
@@ -240,6 +240,6 @@ Auxiliary functions:
 >   f (qualifyLike tc c) (typeScheme (toConstrType m cx tc tvs tys))
 
 > methodType :: ModuleIdent -> [ClassAssert] -> TypeExpr -> TypeScheme
-> methodType m cx ty = typeScheme (toQualType m [] (QualTypeExpr cx ty))
+> methodType m cx ty = typeScheme (toQualType m (QualTypeExpr cx ty))
 
 \end{verbatim}

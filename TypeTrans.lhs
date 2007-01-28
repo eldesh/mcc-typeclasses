@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2082 2007-01-24 20:11:46Z wlux $
+% $Id: TypeTrans.lhs 2083 2007-01-28 19:07:09Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -112,8 +112,10 @@ indices independently in each type expression.
 >   TypePred cls (toType'' tvs (VariableType tv))
 
 > toType'' :: FM Ident Int -> TypeExpr -> Type
-> toType'' tvs (ConstructorType tc tys) =
->   TypeConstructor tc (map (toType'' tvs) tys)
+> toType'' tvs (ConstructorType tc tys)
+>   | tc == qArrowId && length tys == 2 = TypeArrow (tys' !! 0) (tys' !! 1)
+>   | otherwise = TypeConstructor tc tys'
+>   where tys' = map (toType'' tvs) tys
 > toType'' tvs (VariableType tv) =
 >   maybe (internalError ("toType " ++ show tv)) TypeVariable (lookupFM tv tvs)
 > toType'' tvs (TupleType tys) = tupleType (map (toType'' tvs) tys)

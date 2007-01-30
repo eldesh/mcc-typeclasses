@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2082 2007-01-24 20:11:46Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2084 2007-01-30 23:58:36Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -278,27 +278,28 @@ interpret the identifier as such.
 >         (nub [tv | ClassAssert _ tv <- cx, tv `notElem` tvs])
 
 > checkType :: TypeEnv -> Position -> TypeExpr -> Error TypeExpr
-> checkType env p (ConstructorType tc tys) =
->   liftE2 ($)
->          (case qualLookupTopEnv tc env of
->             []
->               | not (isQualified tc) && null tys ->
->                   return (const (VariableType (unqualify tc)))
->               | otherwise -> errorAt p (undefinedType tc)
->             [Data _ _] -> return (ConstructorType tc)
->             [Alias _] -> return (ConstructorType tc)
->             [Class _ _] -> errorAt p (undefinedType tc)
->             rs -> errorAt p (ambiguousIdent rs tc))
->          (mapE (checkType env p) tys)
-> checkType env p (VariableType tv)
+> checkType env p ty = checkTypeApp env p 0 ty
+
+> checkTypeApp :: TypeEnv -> Position -> Int -> TypeExpr -> Error TypeExpr
+> checkTypeApp env p n (ConstructorType tc) =
+>   case qualLookupTopEnv tc env of
+>     []
+>       | not (isQualified tc) && n == 0 -> return (VariableType (unqualify tc))
+>       | otherwise -> errorAt p (undefinedType tc)
+>     [Data _ _] -> return (ConstructorType tc)
+>     [Alias _] -> return (ConstructorType tc)
+>     [Class _ _] -> errorAt p (undefinedType tc)
+>     rs -> errorAt p (ambiguousIdent rs tc)
+> checkTypeApp env p n (VariableType tv)
 >   | tv == anonId = return (VariableType tv)
->   | otherwise = checkType env p (ConstructorType (qualify tv) [])
-> checkType env p (TupleType tys) =
+>   | otherwise = checkTypeApp env p n (ConstructorType (qualify tv))
+> checkTypeApp env p _ (TupleType tys) =
 >   liftE TupleType (mapE (checkType env p) tys)
-> checkType env p (ListType ty) =
->   liftE ListType (checkType env p ty)
-> checkType env p (ArrowType ty1 ty2) =
+> checkTypeApp env p _ (ListType ty) = liftE ListType (checkType env p ty)
+> checkTypeApp env p _ (ArrowType ty1 ty2) =
 >   liftE2 ArrowType (checkType env p ty1) (checkType env p ty2)
+> checkTypeApp env p n (ApplyType ty1 ty2) =
+>   liftE2 ApplyType (checkTypeApp env p (n + 1) ty1) (checkType env p ty2)
 
 > checkClass :: TypeEnv -> Position -> QualIdent -> Error ()
 > checkClass env p cls =
@@ -368,11 +369,12 @@ Auxiliary definitions.
 > instances (BlockDecl _) = []
 
 > isSimpleType :: TypeExpr -> Bool
-> isSimpleType (ConstructorType _ tys) = all isVariableType tys
+> isSimpleType (ConstructorType _) = True
 > isSimpleType (VariableType _) = False
 > isSimpleType (TupleType tys) = all isVariableType tys
 > isSimpleType (ListType ty) = isVariableType ty
 > isSimpleType (ArrowType ty1 ty2) = isVariableType ty1 && isVariableType ty2
+> isSimpleType (ApplyType ty1 ty2) = isSimpleType ty1 && isVariableType ty2
 
 > isTypeSynonym :: TypeEnv -> QualIdent -> Bool
 > isTypeSynonym env tc =
@@ -382,18 +384,20 @@ Auxiliary definitions.
 >     _ -> internalError "isTypeSynonym"
 
 > isVariableType :: TypeExpr -> Bool
-> isVariableType (ConstructorType _ _) = False
+> isVariableType (ConstructorType _) = False
 > isVariableType (VariableType _) = True
 > isVariableType (TupleType _) = False
 > isVariableType (ListType _) = False
 > isVariableType (ArrowType _ _) = False
+> isVariableType (ApplyType _ _) = False
 
 > root :: TypeExpr -> QualIdent
-> root (ConstructorType tc _) = tc
+> root (ConstructorType tc) = tc
 > root (VariableType _) = internalError "root"
 > root (TupleType tys) = qTupleId (length tys)
 > root (ListType _) = qListId
 > root (ArrowType _ _) = qArrowId
+> root (ApplyType ty _) = root ty
 
 \end{verbatim}
 Error messages.

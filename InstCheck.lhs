@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2079 2007-01-23 14:09:44Z wlux $
+% $Id: InstCheck.lhs 2084 2007-01-30 23:58:36Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -141,7 +141,8 @@ environment before instances of their subclasses.
 >             _ -> internalError "inferContext"
 >         cx'' = nub (cx' ++ [TypePred cls (arrowBase ty') | cls <- clss] ++
 >                     [TypePred cls' ty | ty <- arrowArgs ty'])
->         ty'' = ConstructorType (qualify tc) (map VariableType tvs)
+>         ty'' = foldl ApplyType (ConstructorType (qualify tc))
+>                      (map VariableType tvs)
 
 > updateContexts :: InstEnv -> [(CT,Context)] -> Maybe InstEnv
 > updateContexts iEnv cxs = if or upds then Just iEnv' else Nothing
@@ -176,12 +177,12 @@ environment before instances of their subclasses.
 > hasDerivedInstance (BlockDecl _) = False
 
 > ft :: ModuleIdent -> TypeExpr -> [Ident] -> [Ident]
-> ft m (ConstructorType tc tys) tcs =
->   maybe id (:) (localIdent m tc) (foldr (ft m) tcs tys)
+> ft m (ConstructorType tc) tcs = maybe id (:) (localIdent m tc) tcs
 > ft _ (VariableType _) tcs = tcs
 > ft m (TupleType tys) tcs = foldr (ft m) tcs tys
 > ft m (ListType ty) tcs = ft m ty tcs
 > ft m (ArrowType ty1 ty2) tcs = ft m ty1 $ ft m ty2 $ tcs
+> ft m (ApplyType ty1 ty2) tcs = ft m ty1 $ ft m ty2 $ tcs
 
 \end{verbatim}
 Finally, the compiler checks the contexts of all explicit instance

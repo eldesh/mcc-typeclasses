@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: IntfEquiv.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: IntfEquiv.lhs 2084 2007-01-30 23:58:36Z wlux $
 %
-% Copyright (c) 2000-2005, Wolfgang Lux
+% Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{IntfEquiv.lhs}
@@ -131,17 +131,18 @@ by function \texttt{fixInterface} and the associated type class
 >   fix tcs (QualTypeExpr cx ty) = QualTypeExpr cx (fix tcs ty)
 
 > instance FixInterface TypeExpr where
->   fix tcs (ConstructorType tc tys)
->     | not (isQualified tc) && not (isPrimTypeId tc) &&
->       tc' `notElemSet` tcs && null tys = VariableType tc'
->     | otherwise = ConstructorType tc (fix tcs tys)
+>   fix tcs (ConstructorType tc)
+>     | isQualified tc || isPrimTypeId tc || tc' `elemSet` tcs =
+>         ConstructorType tc
+>     | otherwise = VariableType tc'
 >     where tc' = unqualify tc
 >   fix tcs (VariableType tv)
->     | tv `elemSet` tcs = ConstructorType (qualify tv) []
+>     | tv `elemSet` tcs = ConstructorType (qualify tv)
 >     | otherwise = VariableType tv
 >   fix tcs (TupleType tys) = TupleType (fix tcs tys)
 >   fix tcs (ListType ty) = ListType (fix tcs ty)
 >   fix tcs (ArrowType ty1 ty2) = ArrowType (fix tcs ty1) (fix tcs ty2)
+>   fix tcs (ApplyType ty1 ty2) = ApplyType (fix tcs ty1) (fix tcs ty2)
 
 > typeConstructors :: [IDecl] -> [Ident]
 > typeConstructors ds =

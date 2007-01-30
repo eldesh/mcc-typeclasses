@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2063 2007-01-05 14:53:01Z wlux $
+% $Id: Deriving.lhs 2084 2007-01-30 23:58:36Z wlux $
 %
-% Copyright (c) 2006, Wolfgang Lux
+% Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Derive.lhs}
@@ -46,7 +46,7 @@ classes be derived.
 >   liftE (InstanceDecl p (map (toClassAssert tvs) cx) cls ty . trustAll p)
 >         (deriveMethods pEnv tcEnv p (map constr cs) cls)
 >   where cx = fromJust (lookupEnv (CT cls' tc') iEnv)
->         ty = ConstructorType (qualifyWith m tc) (map VariableType tvs)
+>         ty = foldl ApplyType (ConstructorType tc') (map VariableType tvs)
 >         tc' = qualifyWith m tc
 >         cls' = origName (head (qualLookupTopEnv cls tcEnv))
 >         constr (ConstrDecl _ _ c tys) = (qualifyWith m c,length tys)

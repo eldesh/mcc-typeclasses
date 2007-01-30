@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2083 2007-01-28 19:07:09Z wlux $
+% $Id: TypeTrans.lhs 2084 2007-01-30 23:58:36Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -87,7 +87,8 @@ indices independently in each type expression.
 > toConstrType' cx tc tvs tys = toQualType'' tvs' (QualTypeExpr cx' ty')
 >   where tvs' = enumTypeVars tvs tys
 >         cx' = restrictContext tys cx
->         ty' = foldr ArrowType (ConstructorType tc (map VariableType tvs)) tys
+>         ty' = foldr ArrowType ty0 tys
+>         ty0 = foldl ApplyType (ConstructorType tc) (map VariableType tvs)
 
 > toMethodType' :: QualIdent -> Ident -> QualTypeExpr -> QualType
 > toMethodType' cls tv (QualTypeExpr cx ty) =
@@ -112,16 +113,28 @@ indices independently in each type expression.
 >   TypePred cls (toType'' tvs (VariableType tv))
 
 > toType'' :: FM Ident Int -> TypeExpr -> Type
-> toType'' tvs (ConstructorType tc tys)
->   | tc == qArrowId && length tys == 2 = TypeArrow (tys' !! 0) (tys' !! 1)
->   | otherwise = TypeConstructor tc tys'
->   where tys' = map (toType'' tvs) tys
-> toType'' tvs (VariableType tv) =
->   maybe (internalError ("toType " ++ show tv)) TypeVariable (lookupFM tv tvs)
-> toType'' tvs (TupleType tys) = tupleType (map (toType'' tvs) tys)
-> toType'' tvs (ListType ty) = listType (toType'' tvs ty)
-> toType'' tvs (ArrowType ty1 ty2) =
->   TypeArrow (toType'' tvs ty1) (toType'' tvs ty2)
+> toType'' tvs ty = toTypeApp tvs ty []
+
+> toTypeApp :: FM Ident Int -> TypeExpr -> [Type] -> Type
+> toTypeApp tvs (ConstructorType tc) tys
+>   | tc == qArrowId && length tys == 2 = TypeArrow (tys !! 0) (tys !! 1)
+>   | otherwise = TypeConstructor tc tys
+> toTypeApp tvs (VariableType tv) tys
+>   | null tys =
+>       maybe (internalError ("toType " ++ show tv)) TypeVariable
+>             (lookupFM tv tvs)
+>   | otherwise = internalError "toType (VariableType)"
+> toTypeApp tvs (TupleType tys) tys'
+>   | null tys' = tupleType (map (toType'' tvs) tys)
+>   | otherwise = internalError "toType (TupleType)"
+> toTypeApp tvs (ListType ty) tys
+>   | null tys = listType (toType'' tvs ty)
+>   | otherwise = internalError "toType (ListType)"
+> toTypeApp tvs (ArrowType ty1 ty2) tys
+>   | null tys = TypeArrow (toType'' tvs ty1) (toType'' tvs ty2)
+>   | otherwise = internalError "toType (ArrowType)"
+> toTypeApp tvs (ApplyType ty1 ty2) tys =
+>   toTypeApp tvs ty1 (toType'' tvs ty2 : tys)
 
 > qualifyQualType :: ModuleIdent -> QualType -> QualType
 > qualifyQualType m (QualType cx ty) =
@@ -170,7 +183,7 @@ unqualified names.
 > fromType' (TypeConstructor tc tys)
 >   | isQTupleId tc = TupleType tys'
 >   | tc == qListId && length tys == 1 = ListType (head tys')
->   | otherwise = ConstructorType tc tys'
+>   | otherwise = foldl ApplyType (ConstructorType tc) tys'
 >   where tys' = map fromType' tys
 > fromType' (TypeVariable tv) =
 >   VariableType (if tv >= 0 then nameSupply !! tv

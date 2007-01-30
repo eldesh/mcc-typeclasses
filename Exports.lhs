@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2082 2007-01-24 20:11:46Z wlux $
+% $Id: Exports.lhs 2084 2007-01-30 23:58:36Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -194,11 +194,12 @@ not module \texttt{B}.
 >   modules (ClassAssert cls _) = modules cls
 
 > instance HasModule TypeExpr where
->   modules (ConstructorType tc tys) = modules tc . modules tys
+>   modules (ConstructorType tc) = modules tc
 >   modules (VariableType _) = id
 >   modules (TupleType tys) = modules tys
 >   modules (ListType ty) = modules ty
 >   modules (ArrowType ty1 ty2) = modules ty1 . modules ty2
+>   modules (ApplyType ty1 ty2) = modules ty1 . modules ty2
 
 > instance HasModule QualIdent where
 >   modules = maybe id (:) . fst . splitQualIdent
@@ -270,11 +271,12 @@ loading the imported modules.
 >   usedTypes (ClassAssert cls _) = (cls :)
 
 > instance HasType TypeExpr where
->   usedTypes (ConstructorType tc tys) = (tc :) . usedTypes tys
+>   usedTypes (ConstructorType tc) = (tc :)
 >   usedTypes (VariableType _) = id
 >   usedTypes (TupleType tys) = usedTypes tys
 >   usedTypes (ListType ty) = usedTypes ty
 >   usedTypes (ArrowType ty1 ty2) = usedTypes ty1 . usedTypes ty2
+>   usedTypes (ApplyType ty1 ty2) = usedTypes ty1 . usedTypes ty2
 
 \end{verbatim}
 Auxiliary definitions.

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2083 2007-01-28 19:07:09Z wlux $
+% $Id: CurryParser.lhs 2084 2007-01-30 23:58:36Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -179,12 +179,13 @@ directory path to the module is ignored.
 >         identDecl = many type2 <**> (conType <$> opDecl `opt` conDecl)
 >         parenDecl = flip conDecl <$> conSym <*-> rightParen <*> many type2
 >                 <|> tupleType <*-> rightParen <**> opDecl
->                 <|> constrType (gtyconId <*-> rightParen) <**> opDecl
+>                 <|> constrType <$> gtyconId <*-> rightParen <*> many type2
+>                                <**> opDecl
 >         opDecl = conOpDecl <$> conop <*> type1
->         conType f tys c = f (ConstructorType (qualify c) tys)
+>         conType f tys c = f (constrType (qualify c) tys)
 >         conDecl tys c tvs p = ConstrDecl p tvs c tys
 >         conOpDecl op ty2 ty1 tvs p = ConOpDecl p tvs ty1 op ty2
->         constrType p = ConstructorType <$> p <*> many type2
+>         constrType = foldl ApplyType . ConstructorType
 
 > newConstrDecl :: Parser Token NewConstrDecl a
 > newConstrDecl = NewConstrDecl <$> position <*> con <*> type2
@@ -432,7 +433,7 @@ directory path to the module is ignored.
 > type0 = type1 `chainr1` (ArrowType <$-> token RightArrow)
 
 > type1 :: Parser Token TypeExpr a
-> type1 = ConstructorType <$> qtycon <*> many type2
+> type1 = constrType qtycon
 >     <|> leftParen <-*> parenType
 >     <|> leftBracket <-*> bracketType
 >     <|> type2 <\> qtycon <\> leftParen <\> leftBracket
@@ -440,7 +441,7 @@ directory path to the module is ignored.
 >                 <|> constrType (gtyconId <*-> rightParen)
 >         bracketType = ListType <$> type0 <*-> rightBracket
 >                   <|> constrType (qListId <$-> rightBracket)
->         constrType p = ConstructorType <$> p <*> many type2
+>         constrType p = foldl ApplyType . ConstructorType <$> p <*> many type2
 
 > type2 :: Parser Token TypeExpr a
 > type2 = anonType <|> identType <|> parenType <|> listType
@@ -450,18 +451,18 @@ directory path to the module is ignored.
 
 > identType :: Parser Token TypeExpr a
 > identType = VariableType <$> tyvar
->         <|> flip ConstructorType [] <$> qtycon <\> tyvar
+>         <|> ConstructorType <$> qtycon <\> tyvar
 
 > parenType :: Parser Token TypeExpr a
-> parenType = parens (tupleType <|> flip ConstructorType [] <$> gtyconId)
+> parenType = parens (tupleType <|> ConstructorType <$> gtyconId)
 
 > tupleType :: Parser Token TypeExpr a
 > tupleType = type0 <??> (tuple <$> many1 (comma <-*> type0))
->       `opt` ConstructorType qUnitId []
+>       `opt` ConstructorType qUnitId
 >   where tuple tys ty = TupleType (ty:tys)
 
 > listType :: Parser Token TypeExpr a
-> listType = brackets (ListType <$> type0 `opt` ConstructorType qListId [])
+> listType = brackets (ListType <$> type0 `opt` ConstructorType qListId)
 
 > gtyconId :: Parser Token QualIdent a
 > gtyconId = rightArrow <|> tupleCommas

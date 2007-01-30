@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2082 2007-01-24 20:11:46Z wlux $
+% $Id: CurryPP.lhs 2084 2007-01-30 23:58:36Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -240,9 +240,7 @@ Types
 > ppClassAssert (ClassAssert cls tv) = ppQIdent cls <+> ppIdent tv
 
 > ppTypeExpr :: Int -> TypeExpr -> Doc
-> ppTypeExpr p (ConstructorType tc tys) =
->   parenExp (p > 1 && not (null tys))
->            (ppQIdent tc <+> fsep (map (ppTypeExpr 2) tys))
+> ppTypeExpr _ (ConstructorType tc) = ppQIdent tc
 > ppTypeExpr _ (VariableType tv) = ppIdent tv
 > ppTypeExpr _ (TupleType tys) = parenList (map (ppTypeExpr 0) tys)
 > ppTypeExpr _ (ListType ty) = brackets (ppTypeExpr 0 ty)
@@ -251,6 +249,11 @@ Types
 >   where ppArrowType (ArrowType ty1 ty2) =
 >           ppTypeExpr 1 ty1 <+> rarrow : ppArrowType ty2
 >         ppArrowType ty = [ppTypeExpr 0 ty]
+> ppTypeExpr p (ApplyType ty1 ty2) =
+>   parenExp (p > 1) (ppApplyType ty1 [ty2])
+>   where ppApplyType (ApplyType ty1 ty2) tys = ppApplyType ty1 (ty2:tys)
+>         ppApplyType ty tys =
+>            (ppTypeExpr 1 ty <+> fsep (map (ppTypeExpr 2) tys))
 
 \end{verbatim}
 Literals

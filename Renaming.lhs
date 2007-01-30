@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2082 2007-01-24 20:11:46Z wlux $
+% $Id: Renaming.lhs 2084 2007-01-30 23:58:36Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -214,13 +214,14 @@ class method.
 >   liftM (ClassAssert cls) (renameVar env tv)
 
 > renameType :: RenameEnv -> TypeExpr -> RenameState TypeExpr
-> renameType env (ConstructorType tc tys) =
->   liftM (ConstructorType tc) (mapM (renameType env) tys)
+> renameType _ (ConstructorType tc) = return (ConstructorType tc)
 > renameType env (VariableType tv) = liftM VariableType (renameVar env tv)
 > renameType env (TupleType tys) = liftM TupleType (mapM (renameType env) tys)
 > renameType env (ListType ty) = liftM ListType (renameType env ty)
 > renameType env (ArrowType ty1 ty2) =
 >   liftM2 ArrowType (renameType env ty1) (renameType env ty2)
+> renameType env (ApplyType ty1 ty2) =
+>   liftM2 ApplyType (renameType env ty1) (renameType env ty2)
 
 > renameDecl :: RenameEnv -> Decl a -> RenameState (Decl a)
 > renameDecl env (InfixDecl p fix pr ops) =

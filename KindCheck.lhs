@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2082 2007-01-24 20:11:46Z wlux $
+% $Id: KindCheck.lhs 2084 2007-01-30 23:58:36Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -112,12 +112,12 @@ function in any particular order.
 > typeDecl _ [ClassDecl _ _ _ _ _] = return ()
 
 > ft :: ModuleIdent -> TypeExpr -> [Ident] -> [Ident]
-> ft m (ConstructorType tc tys) tcs =
->   maybe id (:) (localIdent m tc) (foldr (ft m) tcs tys)
+> ft m (ConstructorType tc) tcs = maybe id (:) (localIdent m tc) tcs
 > ft _ (VariableType _) tcs = tcs
 > ft m (TupleType tys) tcs = foldr (ft m) tcs tys
 > ft m (ListType ty) tcs = ft m ty tcs
 > ft m (ArrowType ty1 ty2) tcs = ft m ty1 $ ft m ty2 $ tcs
+> ft m (ApplyType ty1 ty2) tcs = ft m ty1 $ ft m ty2 $ tcs
 
 > checkSuperClasses :: ModuleIdent -> [TopDecl a] -> Error ()
 > checkSuperClasses m =
@@ -234,16 +234,26 @@ Kind checking is applied to all type expressions in the program.
 > checkQualType tcEnv p (QualTypeExpr _ ty) = checkType tcEnv p ty
 
 > checkType :: TCEnv -> Position -> TypeExpr -> Error ()
-> checkType tcEnv p (ConstructorType tc tys) =
->   unless (n == n') (errorAt p (wrongArity tc n n')) &&>
->   mapE_ (checkType tcEnv p) tys
->   where n = constrKind tc tcEnv
->         n' = length tys
-> checkType _ _ (VariableType _) = return ()
-> checkType tcEnv p (TupleType tys) = mapE_ (checkType tcEnv p) tys
-> checkType tcEnv p (ListType ty) = checkType tcEnv p ty
-> checkType tcEnv p (ArrowType ty1 ty2) =
->   checkType tcEnv p ty1 &&> checkType tcEnv p ty2
+> checkType tcEnv p ty = checkTypeApp tcEnv p 0 ty
+
+> checkTypeApp :: TCEnv -> Position -> Int -> TypeExpr -> Error ()
+> checkTypeApp tcEnv p n (ConstructorType tc) =
+>   unless (m == n) (errorAt p (wrongArity tc m n))
+>   where m = constrKind tc tcEnv
+> checkTypeApp _ _ n (VariableType tv)
+>   | n == 0 = return ()
+>   | otherwise = internalError "checkTypeApp (VariableType)"
+> checkTypeApp tcEnv p n (TupleType tys)
+>   | n == 0 = mapE_ (checkType tcEnv p) tys
+>   | otherwise = internalError "checkTypeApp (TupleType)"
+> checkTypeApp tcEnv p n (ListType ty)
+>   | n == 0 = checkType tcEnv p ty
+>   | otherwise = internalError "checkTypeApp (ListType)"
+> checkTypeApp tcEnv p n (ArrowType ty1 ty2)
+>   | n == 0 = checkType tcEnv p ty1 &&> checkType tcEnv p ty2
+>   | otherwise = internalError "checkTypeApp (ArrowType)"
+> checkTypeApp tcEnv p n (ApplyType ty1 ty2) =
+>   checkTypeApp tcEnv p (n + 1) ty1 &&> checkType tcEnv p ty2
 
 \end{verbatim}
 Auxiliary functions.

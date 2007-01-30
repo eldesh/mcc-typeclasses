@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2072 2007-01-15 23:02:44Z wlux $
+% $Id: Base.lhs 2084 2007-01-30 23:58:36Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -525,11 +525,12 @@ variables cannot be computed independently for each declaration.
 >   fv (QualTypeExpr _ ty) = fv ty
 
 > instance Expr TypeExpr where
->   fv (ConstructorType _ tys) = fv tys
+>   fv (ConstructorType _) = []
 >   fv (VariableType tv) = [tv]
 >   fv (TupleType tys) = fv tys
 >   fv (ListType ty) = fv ty
 >   fv (ArrowType ty1 ty2) = fv ty1 ++ fv ty2
+>   fv (ApplyType ty1 ty2) = fv ty1 ++ fv ty2
 
 > filterBv :: QuantExpr e => e -> [Ident] -> [Ident]
 > filterBv e = filter (`notElemSet` fromListSet (bv e))

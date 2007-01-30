@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2061 2007-01-05 08:44:13Z wlux $
+% $Id: Qual.lhs 2084 2007-01-30 23:58:36Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Qual.lhs}
@@ -81,13 +81,15 @@ order to compile this module with hbc.
 >     ClassAssert (qualIdent phase tEnv cls) tv
 
 > instance Qual TypeExpr where
->   qual phase tEnv vEnv (ConstructorType c tys) =
->     ConstructorType (qualIdent phase tEnv c) (qual phase tEnv vEnv tys)
+>   qual phase tEnv vEnv (ConstructorType c) =
+>     ConstructorType (qualIdent phase tEnv c)
 >   qual _ _ _ (VariableType tv) = VariableType tv
 >   qual phase tEnv vEnv (TupleType tys) = TupleType (qual phase tEnv vEnv tys)
 >   qual phase tEnv vEnv (ListType ty) = ListType (qual phase tEnv vEnv ty)
 >   qual phase tEnv vEnv (ArrowType ty1 ty2) =
 >     ArrowType (qual phase tEnv vEnv ty1) (qual phase tEnv vEnv ty2)
+>   qual phase tEnv vEnv (ApplyType ty1 ty2) =
+>     ApplyType (qual phase tEnv vEnv ty1) (qual phase tEnv vEnv ty2)
 
 > instance Qual (MethodDecl a) where
 >   qual _ _ _ (MethodFixity p fix pr ops) = MethodFixity p fix pr ops

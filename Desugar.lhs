@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2004 2006-11-12 16:19:26Z wlux $
+% $Id: Desugar.lhs 2085 2007-01-31 16:59:53Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Desugar.lhs}
@@ -161,7 +161,7 @@ hack is no longer needed.}
 >   | otherwise = desugarGoal' tcEnv (bindSuccess tyEnv) p m g vs e' ty
 >   where ty = typeOf e
 >         (vs,e') = liftGoalVars (if null ds then e else Let ds e)
->         isIO (TypeConstructor tc [_]) = tc == qIOId
+>         isIO (TypeApply (TypeConstructor tc) _) = tc == qIOId
 >         isIO _ = False
 
 > desugarGoalIO :: TCEnv -> ValueEnv -> Position -> ModuleIdent
@@ -640,9 +640,7 @@ where the default alternative is redundant.
 >         skipArg (p,prefix,t:ts,rhs) = (p,prefix . (t:),ts,rhs)
 >         dropArg (p,prefix,t:ts,rhs) = (p,prefix,ts,bindVars p v t rhs)
 >         allCases tcEnv (ty,v) ts = length cs == length ts
->           where cs = constructors (root ty) tcEnv
->                 root (TypeConstructor tc _) = tc
->                 root (TypeConstrained tys _) = root (head tys)
+>           where cs = constructors (rootOfType ty) tcEnv
 
 > desugarAlt :: ModuleIdent -> Type -> ([(Type,Ident)] -> [(Type,Ident)])
 >            -> [(Type,Ident)] -> [(ConstrTerm Type,Match Type)]
@@ -814,11 +812,11 @@ Auxiliary definitions
 > consType a = TypeArrow a (TypeArrow (listType a) (listType a))
 
 > elemType :: Type -> Type
-> elemType (TypeConstructor tc [ty]) | tc == qListId = ty
+> elemType (TypeApply (TypeConstructor tc) ty) | tc == qListId = ty
 > elemType ty = internalError ("elemType " ++ show ty)
 
 > ioResType :: Type -> Type
-> ioResType (TypeConstructor tc [ty]) | tc == qIOId = ty
+> ioResType (TypeApply (TypeConstructor tc) ty) | tc == qIOId = ty
 > ioResType ty = internalError ("ioResType " ++ show ty)
 
 \end{verbatim}

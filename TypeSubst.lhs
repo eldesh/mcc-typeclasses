@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSubst.lhs 2082 2007-01-24 20:11:46Z wlux $
+% $Id: TypeSubst.lhs 2085 2007-01-31 16:59:53Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -31,16 +31,17 @@ This module implements substitutions on types.
 >   subst sigma = map (subst sigma)
 
 > instance SubstType Type where
->   subst sigma (TypeConstructor tc tys) =
->     TypeConstructor tc (map (subst sigma) tys)
+>   subst _ (TypeConstructor tc) = TypeConstructor tc
 >   subst sigma (TypeVariable tv) = substVar sigma tv
 >   subst sigma (TypeConstrained tys tv) =
 >     case substVar sigma tv of
 >       TypeVariable tv -> TypeConstrained tys tv
 >       ty -> ty
+>   subst _ (TypeSkolem k) = TypeSkolem k
+>   subst sigma (TypeApply ty1 ty2) =
+>     TypeApply (subst sigma ty1) (subst sigma ty2)
 >   subst sigma (TypeArrow ty1 ty2) =
 >     TypeArrow (subst sigma ty1) (subst sigma ty2)
->   subst sigma (TypeSkolem k) = TypeSkolem k
 
 > instance SubstType TypePred where
 >   subst sigma (TypePred cls ty) = TypePred cls (subst sigma ty)
@@ -54,9 +55,9 @@ This module implements substitutions on types.
 >     ForAll n (QualType cx (subst (foldr unbindSubst sigma [0..n-1]) ty))
 
 > instance SubstType ValueInfo where
->   subst theta (DataConstructor c ty) = DataConstructor c ty
->   subst theta (NewtypeConstructor c ty) = NewtypeConstructor c ty
->   subst theta (Value v ty) = Value v (subst theta ty)
+>   subst _ (DataConstructor c ty) = DataConstructor c ty
+>   subst _ (NewtypeConstructor c ty) = NewtypeConstructor c ty
+>   subst sigma (Value v ty) = Value v (subst sigma ty)
 
 > instance SubstType a => SubstType (TopEnv a) where
 >   subst = fmap . subst
@@ -78,15 +79,16 @@ respectively.
 >   expandAliasType :: [Type] -> t -> t
 
 > instance ExpandAliasType Type where
->   expandAliasType tys (TypeConstructor tc tys') =
->     TypeConstructor tc (map (expandAliasType tys) tys')
+>   expandAliasType _ (TypeConstructor tc) = TypeConstructor tc
 >   expandAliasType tys (TypeVariable n)
 >     | n >= 0 = tys !! n
 >     | otherwise = TypeVariable n
 >   expandAliasType _ (TypeConstrained tys n) = TypeConstrained tys n
+>   expandAliasType _ (TypeSkolem k) = TypeSkolem k
+>   expandAliasType tys (TypeApply ty1 ty2) =
+>     TypeApply (expandAliasType tys ty1) (expandAliasType tys ty2)
 >   expandAliasType tys (TypeArrow ty1 ty2) =
 >     TypeArrow (expandAliasType tys ty1) (expandAliasType tys ty2)
->   expandAliasType _ (TypeSkolem k) = TypeSkolem k
 
 > instance ExpandAliasType TypePred where
 >   expandAliasType tys (TypePred cls ty) =

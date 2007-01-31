@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 2080 2007-01-23 18:59:50Z wlux $
+% $Id: Types.lhs 2085 2007-01-31 16:59:53Z wlux $
 %
-% Copyright (c) 2002-2006, Wolfgang Lux
+% Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Types.lhs}
@@ -15,17 +15,21 @@ of types in the compiler.
 > import List
 
 \end{verbatim}
-A type is either a type variable, an application of a type constructor
-to a list of arguments, or an arrow type. The \texttt{TypeConstrained}
-case is used for representing type variables that are restricted to a
-particular set of types. At present, this is used for typing guard
-expressions, which are restricted to be either of type \texttt{Bool}
-or of type \texttt{Success}, and integer literals in patterns, which
-are restricted to types \texttt{Int} and \texttt{Float}. If the type
-is not restricted, it defaults to the first type from the constraint
-list. The case \texttt{TypeSkolem} is used for handling skolem types,
-which result from matching data constructors with existentially
-quantified types.
+A type is either a type constructor, a type variable, or an
+application of a type to another type. The \texttt{TypeConstrained}
+and \texttt{TypeSkolem} constructors represent two special cases of
+type variables. A \texttt{TypeConstrained} variable represents a type
+variable that is restricted to a particular set of types. At present,
+this is used for typing guard expressions, which are restricted to be
+either of type \texttt{Bool} or of type \texttt{Success}, and integer
+literals in patterns, which are restricted to types \texttt{Int} and
+\texttt{Float}. If the type is not restricted, it defaults to the
+first type from the constraint list. A \texttt{TypeSkolem} variable is
+used for handling skolem types, which result from matching data
+constructors with existentially quantified types. Since arrow types
+are used so frequently, we use \texttt{TypeArrow} $t_1$ $t_2$
+consistently as a shorthand for the application of the arrow type
+constructor \texttt{(->)} to the two types $t_1$ and $t_2$.
 
 Type variables are represented with deBruijn style indices. Universally
 quantified type variables are assigned indices in the order of their
@@ -35,14 +39,18 @@ coincides with equality of the representation.
 
 Note that even though \texttt{TypeConstrained} variables use indices
 as well, these variables must never be quantified.
+
+\ToDo{Use \texttt{TypeApply .\ TypeApply qArrowId} instead of
+  \texttt{TypeArrow}?}
 \begin{verbatim}
 
 > data Type =
->     TypeConstructor QualIdent [Type]
+>     TypeConstructor QualIdent
 >   | TypeVariable Int
 >   | TypeConstrained [Type] Int
->   | TypeArrow Type Type
 >   | TypeSkolem Int
+>   | TypeApply Type Type
+>   | TypeArrow Type Type
 >   deriving (Eq,Ord,Show)
 
 \end{verbatim}
@@ -58,14 +66,16 @@ variable or skolem type.
 > applyType :: QualIdent -> [Type] -> Type
 > applyType tc tys
 >   | tc == qArrowId && length tys == 2 = TypeArrow (tys!!0) (tys!!1)
->   | otherwise = TypeConstructor tc tys
+>   | otherwise = foldl TypeApply (TypeConstructor tc) tys
 
 > unapplyType :: Type -> Maybe (QualIdent,[Type])
-> unapplyType (TypeConstructor tc tys) = Just (tc,tys)
-> unapplyType (TypeVariable _) = Nothing
-> unapplyType (TypeConstrained tys _) = unapplyType (head tys)
-> unapplyType (TypeArrow ty1 ty2) = Just (qArrowId,[ty1,ty2])
-> unapplyType (TypeSkolem _) = Nothing
+> unapplyType ty = unapply ty []
+>   where unapply (TypeConstructor tc) = Just . (,) tc
+>         unapply (TypeVariable _) = const Nothing 
+>         unapply (TypeConstrained tys _) = unapply (head tys)
+>         unapply (TypeSkolem _) = const Nothing
+>         unapply (TypeApply ty1 ty2) = unapply ty1 . (ty2:)
+>         unapply (TypeArrow ty1 ty2) = Just . (,) qArrowId . (ty1:) . (ty2:)
 
 > rootOfType :: Type -> QualIdent
 > rootOfType ty =
@@ -114,17 +124,19 @@ generalized.
 
 > instance IsType Type where
 >   typeVars ty = vars ty []
->     where vars (TypeConstructor _ tys) tvs = foldr vars tvs tys
+>     where vars (TypeConstructor _) tvs = tvs
 >           vars (TypeVariable tv) tvs = tv : tvs
 >           vars (TypeConstrained _ _) tvs = tvs
->           vars (TypeArrow ty1 ty2) tvs = vars ty1 (vars ty2 tvs)
 >           vars (TypeSkolem _) tvs = tvs
+>           vars (TypeApply ty1 ty2) tvs = vars ty1 (vars ty2 tvs)
+>           vars (TypeArrow ty1 ty2) tvs = vars ty1 (vars ty2 tvs)
 >   typeSkolems ty = skolems ty []
->     where skolems (TypeConstructor _ tys) sks = foldr skolems sks tys
+>     where skolems (TypeConstructor _) sks = sks
 >           skolems (TypeVariable _) sks = sks
 >           skolems (TypeConstrained _ _) sks = sks
->           skolems (TypeArrow ty1 ty2) sks = skolems ty1 (skolems ty2 sks)
 >           skolems (TypeSkolem k) sks = k : sks
+>           skolems (TypeApply ty1 ty2) sks = skolems ty1 (skolems ty2 sks)
+>           skolems (TypeArrow ty1 ty2) sks = skolems ty1 (skolems ty2 sks)
 
 \end{verbatim}
 Qualified types represent types with class membership constraints. A
@@ -258,20 +270,20 @@ tuple types must never be qualified with a module prefix.
 > isPrimTypeId tc = tc `elem` [qUnitId,qListId,qArrowId] || isQTupleId tc
 
 > unitType,boolType,charType,intType,floatType,stringType,successType :: Type
-> unitType = TypeConstructor qUnitId []
-> boolType = TypeConstructor qBoolId []
-> charType = TypeConstructor qCharId []
-> intType = TypeConstructor qIntId []
-> floatType = TypeConstructor qFloatId []
+> unitType = TypeConstructor qUnitId
+> boolType = TypeConstructor qBoolId
+> charType = TypeConstructor qCharId
+> intType = TypeConstructor qIntId
+> floatType = TypeConstructor qFloatId
 > stringType = listType charType
-> successType = TypeConstructor qSuccessId []
+> successType = TypeConstructor qSuccessId
 
 > listType,ioType :: Type -> Type
-> listType ty = TypeConstructor qListId [ty]
-> ioType ty = TypeConstructor qIOId [ty]
+> listType = TypeApply (TypeConstructor qListId)
+> ioType = TypeApply (TypeConstructor qIOId)
 
 > tupleType :: [Type] -> Type
-> tupleType tys = TypeConstructor (qTupleId (length tys)) tys
+> tupleType tys = foldl TypeApply (TypeConstructor (qTupleId (length tys))) tys
 
 > typeVar :: Int -> Type
 > typeVar = TypeVariable

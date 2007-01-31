@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2084 2007-01-30 23:58:36Z wlux $
+% $Id: InstCheck.lhs 2085 2007-01-31 16:59:53Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -232,24 +232,28 @@ implied by other predicates in the context are removed.
 
 > reduceTypePred :: InstEnv -> TypePred -> Context
 > reduceTypePred iEnv (TypePred cls ty) =
->   maybe [TypePred cls ty] (reduceTypePreds iEnv) (instContext iEnv cls ty)
+>   maybe [TypePred cls ty] (reduceTypePreds iEnv) (instContext iEnv cls ty [])
 
-> instContext :: InstEnv -> QualIdent -> Type -> Maybe Context
-> instContext iEnv cls (TypeConstructor tc tys) =
+> instContext :: InstEnv -> QualIdent -> Type -> [Type] -> Maybe Context
+> instContext iEnv cls (TypeConstructor tc) tys =
 >   fmap (map (expandAliasType tys)) (lookupEnv (CT cls tc) iEnv)
-> instContext _ _ (TypeVariable _) = Nothing
-> instContext _ _ (TypeConstrained _ _) = Nothing
-> instContext iEnv cls (TypeArrow ty1 ty2) =
->   fmap (map (expandAliasType [ty1,ty2])) (lookupEnv (CT cls qArrowId) iEnv)
-> instContext _ _ (TypeSkolem _) = Nothing
+> instContext _ _ (TypeVariable _) _ = Nothing
+> instContext _ _ (TypeConstrained _ _) _ = Nothing
+> instContext _ _ (TypeSkolem _) _ = Nothing
+> instContext iEnv cls (TypeApply ty1 ty2) tys =
+>   instContext iEnv cls ty1 (ty2:tys)
+> instContext iEnv cls (TypeArrow ty1 ty2) tys =
+>   fmap (map (expandAliasType (ty1:ty2:tys)))
+>        (lookupEnv (CT cls qArrowId) iEnv)
 
 > partitionContext :: Context -> (Context,Context)
 > partitionContext cx = partition (\(TypePred _ ty) -> isTypeVar ty) cx
->   where isTypeVar (TypeConstructor _ _) = False
+>   where isTypeVar (TypeConstructor _) = False
 >         isTypeVar (TypeVariable _) = True
 >         isTypeVar (TypeConstrained _ _) = False
->         isTypeVar (TypeArrow _ _) = False
 >         isTypeVar (TypeSkolem _) = False
+>         isTypeVar (TypeApply _ _) = False
+>         isTypeVar (TypeArrow _ _) = False
 
 > reportMissingInstance :: Position -> String -> Doc -> TCEnv -> TypePred
 >                       -> Error ()

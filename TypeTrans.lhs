@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2084 2007-01-30 23:58:36Z wlux $
+% $Id: TypeTrans.lhs 2085 2007-01-31 16:59:53Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -118,12 +118,11 @@ indices independently in each type expression.
 > toTypeApp :: FM Ident Int -> TypeExpr -> [Type] -> Type
 > toTypeApp tvs (ConstructorType tc) tys
 >   | tc == qArrowId && length tys == 2 = TypeArrow (tys !! 0) (tys !! 1)
->   | otherwise = TypeConstructor tc tys
-> toTypeApp tvs (VariableType tv) tys
->   | null tys =
->       maybe (internalError ("toType " ++ show tv)) TypeVariable
->             (lookupFM tv tvs)
->   | otherwise = internalError "toType (VariableType)"
+>   | otherwise = foldl TypeApply (TypeConstructor tc) tys
+> toTypeApp tvs (VariableType tv) tys =
+>   maybe (internalError ("toType " ++ show tv))
+>         (\tv -> foldl TypeApply (TypeVariable tv) tys)
+>         (lookupFM tv tvs)
 > toTypeApp tvs (TupleType tys) tys'
 >   | null tys' = tupleType (map (toType'' tvs) tys)
 >   | otherwise = internalError "toType (TupleType)"
@@ -145,15 +144,16 @@ indices independently in each type expression.
 >   TypePred (qualQualify m cls) (qualifyType m ty)
 
 > qualifyType :: ModuleIdent -> Type -> Type
-> qualifyType m (TypeConstructor tc tys) =
+> qualifyType m (TypeConstructor tc) =
 >   TypeConstructor (if isPrimTypeId tc then tc else qualQualify m tc)
->                   (map (qualifyType m) tys)
 > qualifyType _ (TypeVariable tv) = TypeVariable tv
 > qualifyType m (TypeConstrained tys tv) =
 >   TypeConstrained (map (qualifyType m) tys) tv
+> qualifyType _ (TypeSkolem k) = TypeSkolem k
+> qualifyType m (TypeApply ty1 ty2) =
+>   TypeApply (qualifyType m ty1) (qualifyType m ty2)
 > qualifyType m (TypeArrow ty1 ty2) =
 >   TypeArrow (qualifyType m ty1) (qualifyType m ty2)
-> qualifyType _ (TypeSkolem k) = TypeSkolem k
 
 \end{verbatim}
 The functions \texttt{fromType} and \texttt{fromQualType} convert a
@@ -180,17 +180,24 @@ unqualified names.
 >     _ -> internalError ("fromTypePred " ++ show ty)
 
 > fromType' :: Type -> TypeExpr
-> fromType' (TypeConstructor tc tys)
->   | isQTupleId tc = TupleType tys'
->   | tc == qListId && length tys == 1 = ListType (head tys')
->   | otherwise = foldl ApplyType (ConstructorType tc) tys'
->   where tys' = map fromType' tys
-> fromType' (TypeVariable tv) =
->   VariableType (if tv >= 0 then nameSupply !! tv
->                            else mkIdent ('_' : show (-tv)))
-> fromType' (TypeConstrained tys _) = fromType' (head tys)
-> fromType' (TypeArrow ty1 ty2) = ArrowType (fromType' ty1) (fromType' ty2)
-> fromType' (TypeSkolem k) = VariableType (mkIdent ("_?" ++ show k))
+> fromType' ty = fromTypeApp ty []
+
+> fromTypeApp :: Type -> [TypeExpr] -> TypeExpr
+> fromTypeApp (TypeConstructor tc) tys
+>   | isQTupleId tc && length tys == qTupleArity tc = TupleType tys
+>   | tc == qListId && length tys == 1 = ListType (head tys)
+>   | otherwise = foldl ApplyType (ConstructorType tc) tys
+> fromTypeApp (TypeVariable tv) tys =
+>   foldl ApplyType
+>         (VariableType (if tv >= 0 then nameSupply !! tv
+>                                   else mkIdent ('_' : show (-tv))))
+>         tys
+> fromTypeApp (TypeConstrained tys _) tys' = fromTypeApp (head tys) tys'
+> fromTypeApp (TypeSkolem k) tys =
+>   foldl ApplyType (VariableType (mkIdent ("_?" ++ show k))) tys
+> fromTypeApp (TypeApply ty1 ty2) tys = fromTypeApp ty1 (fromType' ty2 : tys)
+> fromTypeApp (TypeArrow ty1 ty2) tys =
+>   foldl ApplyType (ArrowType (fromType' ty1) (fromType' ty2)) tys
 
 > unqualifyQualType :: TCEnv -> QualType -> QualType
 > unqualifyQualType tcEnv (QualType cx ty) =
@@ -201,14 +208,16 @@ unqualified names.
 >   TypePred (unqualifyTC tcEnv cls) (unqualifyType tcEnv ty)
 
 > unqualifyType :: TCEnv -> Type -> Type
-> unqualifyType tcEnv (TypeConstructor tc tys) =
->   TypeConstructor (unqualifyTC tcEnv tc) (map (unqualifyType tcEnv) tys)
+> unqualifyType tcEnv (TypeConstructor tc) =
+>   TypeConstructor (unqualifyTC tcEnv tc)
 > unqualifyType _ (TypeVariable tv) = TypeVariable tv
 > unqualifyType tcEnv (TypeConstrained tys tv) =
 >   TypeConstrained (map (unqualifyType tcEnv) tys) tv
+> unqualifyType _ (TypeSkolem k) = TypeSkolem k
+> unqualifyType tcEnv (TypeApply ty1 ty2) =
+>   TypeApply (unqualifyType tcEnv ty1) (unqualifyType tcEnv ty2)
 > unqualifyType tcEnv (TypeArrow ty1 ty2) =
 >   TypeArrow (unqualifyType tcEnv ty1) (unqualifyType tcEnv ty2)
-> unqualifyType _ (TypeSkolem k) = TypeSkolem k
 
 > unqualifyTC :: TCEnv -> QualIdent -> QualIdent
 > unqualifyTC tcEnv tc =
@@ -272,18 +281,25 @@ the module containing their definition.
 >            (expandType tcEnv ty)
 
 > expandType :: TCEnv -> Type -> Type
-> expandType tcEnv (TypeConstructor tc tys) =
+> expandType tcEnv ty = expandTypeApp tcEnv ty []
+
+> expandTypeApp :: TCEnv -> Type -> [Type] -> Type
+> expandTypeApp tcEnv (TypeConstructor tc) tys =
 >   case qualLookupTopEnv tc tcEnv of
->     [DataType tc' _ _] -> TypeConstructor tc' tys'
->     [RenamingType tc' _ _] -> TypeConstructor tc' tys'
->     [AliasType _ _ ty] -> expandAliasType tys' ty
+>     [DataType tc' _ _] -> foldl TypeApply (TypeConstructor tc') tys
+>     [RenamingType tc' _ _] -> foldl TypeApply (TypeConstructor tc') tys
+>     [AliasType _ _ ty] -> expandAliasType tys ty
 >     _ -> internalError ("expandType " ++ show tc)
->   where tys' = map (expandType tcEnv) tys
-> expandType _ (TypeVariable tv) = TypeVariable tv
-> expandType _ (TypeConstrained tys tv) = TypeConstrained tys tv
-> expandType tcEnv (TypeArrow ty1 ty2) =
->   TypeArrow (expandType tcEnv ty1) (expandType tcEnv ty2)
-> expandType _ (TypeSkolem k) = TypeSkolem k
+> expandTypeApp _ (TypeVariable tv) tys = foldl TypeApply (TypeVariable tv) tys
+> expandTypeApp _ (TypeConstrained tys tv) tys' =
+>   foldl TypeApply (TypeConstrained tys tv) tys'
+> expandTypeApp _ (TypeSkolem k) tys = foldl TypeApply (TypeSkolem k) tys
+> expandTypeApp tcEnv (TypeApply ty1 ty2) tys =
+>   expandTypeApp tcEnv ty1 (expandType tcEnv ty2 : tys)
+> expandTypeApp tcEnv (TypeArrow ty1 ty2) tys =
+>   foldl TypeApply
+>         (TypeArrow (expandType tcEnv ty1) (expandType tcEnv ty2))
+>         tys
 
 \end{verbatim}
 The function \texttt{minContext} transforms a context by removing all

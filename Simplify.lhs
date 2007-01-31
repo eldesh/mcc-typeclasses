@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2051 2006-12-20 09:52:53Z wlux $
+% $Id: Simplify.lhs 2085 2007-01-31 16:59:53Z wlux $
 %
-% Copyright (c) 2003-2006, Wolfgang Lux
+% Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Simplify.lhs}
@@ -541,7 +541,7 @@ Auxiliary functions
 >   FunctionDecl p f [Equation p (FunLhs f ts) (SimpleRhs p e [])]
 
 > identityType :: Type -> Type
-> identityType = TypeConstructor qIdentityId . return
+> identityType = TypeApply (TypeConstructor qIdentityId)
 >   where qIdentityId = qualify (mkIdent "Identity")
 
 \end{verbatim}

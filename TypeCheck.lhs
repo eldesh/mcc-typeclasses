@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2082 2007-01-24 20:11:46Z wlux $
+% $Id: TypeCheck.lhs 2085 2007-01-31 16:59:53Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -598,7 +598,7 @@ arbitrary type.
 >   | otherwise = errorAt p (invalidCType "result" tcEnv ty)
 
 > checkCDynCallType :: TCEnv -> Position -> Type -> TcState ()
-> checkCDynCallType tcEnv p (TypeArrow (TypeConstructor tc [ty1]) ty2)
+> checkCDynCallType tcEnv p (TypeArrow (TypeApply (TypeConstructor tc) ty1) ty2)
 >   | tc == qFunPtrId && ty1 == ty2 = checkCCallType tcEnv p ty1
 > checkCDynCallType tcEnv p ty =
 >   errorAt p (invalidCType "dynamic function" tcEnv ty)
@@ -609,17 +609,18 @@ arbitrary type.
 >   | otherwise = errorAt p (invalidCType "static address" tcEnv ty)
 
 > isCArgType :: Type -> Bool
-> isCArgType (TypeConstructor tc []) = tc `elem` cBasicTypeId
-> isCArgType (TypeConstructor tc [_]) = tc `elem` qStablePtrId:cPointerTypeId
+> isCArgType (TypeConstructor tc) = tc `elem` cBasicTypeId
+> isCArgType (TypeApply (TypeConstructor tc) _) =
+>   tc `elem` qStablePtrId:cPointerTypeId
 > isCArgType _ = False
 
 > isCRetType :: Type -> Bool
-> isCRetType (TypeConstructor tc [ty])
+> isCRetType (TypeApply (TypeConstructor tc) ty)
 >   | tc == qIOId = ty == unitType || isCArgType ty
 > isCRetType ty = isCArgType ty
 
 > isCPtrType :: Type -> Bool
-> isCPtrType (TypeConstructor tc [_]) = tc `elem` cPointerTypeId
+> isCPtrType (TypeApply (TypeConstructor tc) _) = tc `elem` cPointerTypeId
 > isCPtrType _ = False
 
 > cBasicTypeId, cPointerTypeId :: [QualIdent]
@@ -1109,22 +1110,25 @@ of~\cite{PeytonJones87:Book}).
 >         tys
 >   where choose (Left _) theta' = theta'
 >         choose (Right theta) _ = Right (bindSubst tv ty theta)
-> unifyTypes tcEnv (TypeConstructor tc1 tys1) (TypeConstructor tc2 tys2)
->   | tc1 == tc2 = unifyTypeLists tcEnv tys1 tys2
-> unifyTypes tcEnv (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) =
->   unifyTypeLists tcEnv [ty11,ty12] [ty21,ty22]
+> unifyTypes _ (TypeConstructor tc1) (TypeConstructor tc2)
+>   | tc1 == tc2 = Right idSubst
 > unifyTypes _ (TypeSkolem k1) (TypeSkolem k2)
 >   | k1 == k2 = Right idSubst
+> unifyTypes tcEnv (TypeApply ty11 ty12) (TypeApply ty21 ty22) =
+>   case unifyTypes tcEnv ty11 ty21 of
+>     Right theta ->
+>       case unifyTypes tcEnv (subst theta ty12) (subst theta ty22) of
+>         Right theta' -> Right (compose theta' theta)
+>         Left msg -> Left msg
+>     Left msg -> Left msg
+> unifyTypes tcEnv (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) =
+>   case unifyTypes tcEnv ty11 ty21 of
+>     Right theta ->
+>       case unifyTypes tcEnv (subst theta ty12) (subst theta ty22) of
+>         Right theta' -> Right (compose theta' theta)
+>         Left msg -> Left msg
+>     Left msg -> Left msg
 > unifyTypes tcEnv ty1 ty2 = Left (incompatibleTypes tcEnv ty1 ty2)
-
-> unifyTypeLists :: TCEnv -> [Type] -> [Type] -> Either Doc TypeSubst
-> unifyTypeLists _ [] _ = Right idSubst
-> unifyTypeLists _ _ [] = Right idSubst
-> unifyTypeLists tcEnv (ty1:tys1) (ty2:tys2) =
->   either Left (unifyTypesTheta tcEnv ty1 ty2) (unifyTypeLists tcEnv tys1 tys2)
->   where unifyTypesTheta tcEnv ty1 ty2 theta =
->           either Left (Right . flip compose theta)
->                  (unifyTypes tcEnv (subst theta ty1) (subst theta ty2))
 
 \end{verbatim}
 After performing a unification, the resulting substitution is applied
@@ -1159,24 +1163,28 @@ may cause a further extension of the current substitution.
 
 > reduceTypePred :: InstEnv -> TypePred -> Context
 > reduceTypePred iEnv (TypePred cls ty) =
->   maybe [TypePred cls ty] (reduceTypePreds iEnv) (instContext iEnv cls ty)
+>   maybe [TypePred cls ty] (reduceTypePreds iEnv) (instContext iEnv cls ty [])
 
-> instContext :: InstEnv -> QualIdent -> Type -> Maybe Context
-> instContext iEnv cls (TypeConstructor tc tys) =
+> instContext :: InstEnv -> QualIdent -> Type -> [Type] -> Maybe Context
+> instContext iEnv cls (TypeConstructor tc) tys =
 >   fmap (map (expandAliasType tys)) (lookupEnv (CT cls tc) iEnv)
-> instContext _ _ (TypeVariable _) = Nothing
-> instContext _ _ (TypeConstrained _ _) = Nothing
-> instContext iEnv cls (TypeArrow ty1 ty2) =
->   fmap (map (expandAliasType [ty1,ty2])) (lookupEnv (CT cls qArrowId) iEnv)
-> instContext _ _ (TypeSkolem _) = Nothing
+> instContext _ _ (TypeVariable _) _ = Nothing
+> instContext _ _ (TypeConstrained _ _) _ = Nothing
+> instContext _ _ (TypeSkolem _) _ = Nothing
+> instContext iEnv cls (TypeApply ty1 ty2) tys =
+>   instContext iEnv cls ty1 (ty2:tys)
+> instContext iEnv cls (TypeArrow ty1 ty2) tys =
+>   fmap (map (expandAliasType (ty1:ty2:tys)))
+>        (lookupEnv (CT cls qArrowId) iEnv)
 
 > partitionContext :: Context -> (Context,Context)
 > partitionContext cx = partition (\(TypePred _ ty) -> isTypeVar ty) cx
->   where isTypeVar (TypeConstructor _ _) = False
+>   where isTypeVar (TypeConstructor _) = False
 >         isTypeVar (TypeVariable _) = True
 >         isTypeVar (TypeConstrained _ _) = False
->         isTypeVar (TypeArrow _ _) = False
 >         isTypeVar (TypeSkolem _) = False
+>         isTypeVar (TypeApply _ _) = False
+>         isTypeVar (TypeArrow _ _) = False
 
 > reportMissingInstance :: Position -> String -> Doc -> TCEnv -> InstEnv
 >                       -> TypeSubst -> TypePred -> TcState TypeSubst
@@ -1193,7 +1201,7 @@ may cause a further extension of the current substitution.
 >       | otherwise -> errorAt p (noInstance what doc tcEnv cls ty')
 
 > hasInstance :: InstEnv -> QualIdent -> Type -> Bool
-> hasInstance iEnv cls ty = isJust (instContext iEnv cls ty)
+> hasInstance iEnv cls ty = isJust (instContext iEnv cls ty [])
 
 \end{verbatim}
 When a constrained type variable that is not free in the type
@@ -1338,8 +1346,7 @@ universally quantified type variables.
 >     tys <- replicateM m freshTypeVar
 >     tys' <- replicateM (n - m) freshSkolem
 >     return (map (expandAliasType tys) cx,expandAliasType (tys ++ tys') ty)
->   where m = arity (arrowBase ty)
->         arity (TypeConstructor _ tys) = length tys
+>   where m = length (snd (fromJust (unapplyType (arrowBase ty))))
 
 \end{verbatim}
 The function \texttt{gen} generalizes a context \emph{cx} and a type

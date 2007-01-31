@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2038 2006-12-06 17:19:07Z wlux $
+% $Id: ILTrans.lhs 2085 2007-01-31 16:59:53Z wlux $
 %
-% Copyright (c) 1999-2006, Wolfgang Lux
+% Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ILTrans.lhs}
@@ -33,7 +33,7 @@ data structures, we can use only a qualified import for the
 At the top-level, the compiler has to translate data type, newtype,
 function, and foreign declarations. When translating data type and
 newtype declarations, we ignore the types in the declarations and
-lookup the types of the constructors in the type environment instead
+look up the types of the constructors in the type environment instead
 because these types are already fully expanded, i.e., they do not
 include any alias types. On the other hand, we introduce new type
 synonyms in place of newtype declarations (see Sect.~\ref{sec:IL}).
@@ -93,7 +93,7 @@ synonyms in place of newtype declarations (see Sect.~\ref{sec:IL}).
 In order to generate code, the compiler also needs to know the tags
 and arities of all imported data constructors. For that reason, we
 compile the data type declarations of all interfaces into the
-intermediate language, too. In this case we do not lookup the
+intermediate language, too. In this case we do not look up the
 types in the environment because the types in the interfaces are
 already fully expanded. Note that we do not translate data types
 which are imported into the interface from another module.
@@ -123,21 +123,28 @@ which are imported into the interface from another module.
 
 \end{verbatim}
 \paragraph{Types}
-The type representation in the intermediate language is the same as
-the internal representation except that it does not support
-constrained type variables and skolem types. The former are fixed and
-the latter are replaced by fresh type constructors.
+In contrast to the internal type representation, the intermediate
+language does not support types with higher order kinds. The type
+transformation therefore has to transform all types to first order
+terms. To that end, we assume the existence of a type synonym
+\texttt{type @ f a = f a}. In addition, the type representation of the
+intermediate language does not support constrained type variables and
+skolem types. The former are fixed and the latter are replaced by
+fresh type constructors.
 \begin{verbatim}
 
 > translType :: Type -> IL.Type
-> translType (TypeConstructor tc tys) =
->   IL.TypeConstructor tc (map translType tys)
-> translType (TypeVariable tv) = IL.TypeVariable tv
-> translType (TypeConstrained tys _) = translType (head tys)
-> translType (TypeArrow ty1 ty2) =
->   IL.TypeArrow (translType ty1) (translType ty2)
-> translType (TypeSkolem k) =
->   IL.TypeConstructor (qualify (mkIdent ("_" ++ show k))) []
+> translType ty = fromType ty []
+>   where fromType (TypeConstructor tc) = IL.TypeConstructor tc
+>         fromType (TypeVariable tv) = foldl appType (IL.TypeVariable tv)
+>         fromType (TypeConstrained tys _) = fromType (head tys)
+>         fromType (TypeSkolem k) =
+>           foldl appType
+>                 (IL.TypeConstructor (qualify (mkIdent ("_" ++ show k))) []) 
+>         fromType (TypeApply ty1 ty2) = fromType ty1 . (translType ty2 :)
+>         fromType (TypeArrow ty1 ty2) =
+>           foldl appType (IL.TypeArrow (translType ty1) (translType ty2))
+>         appType ty1 ty2 = IL.TypeConstructor (qualify (mkIdent "@")) [ty1,ty2]
 
 \end{verbatim}
 \paragraph{Functions}

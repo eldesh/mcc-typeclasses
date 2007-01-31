@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2082 2007-01-24 20:11:46Z wlux $
+% $Id: DictTrans.lhs 2085 2007-01-31 16:59:53Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -744,11 +744,12 @@ check only the first element of the context because
 >   where f' = unqualify f
 
 > isKnownType :: Type -> Bool
-> isKnownType (TypeConstructor _ _) = True
+> isKnownType (TypeConstructor _) = True
 > isKnownType (TypeVariable _) = False
 > isKnownType (TypeConstrained _ _) = True
-> isKnownType (TypeArrow _ _) = True
 > isKnownType (TypeSkolem _) = False
+> isKnownType (TypeApply ty _) = isKnownType ty
+> isKnownType (TypeArrow _ _) = True
 
 \end{verbatim}
 \paragraph{Unification}
@@ -798,24 +799,22 @@ transformation matches the initial arrows of the instance type.
 >     _ -> Nothing
 
 > match :: Type -> Type -> TypeSubst -> TypeSubst
-> match (TypeConstructor tc1 tys1) (TypeConstructor tc2 tys2)
->   | tc1 == tc2 = matchTypes tys1 tys2
+> match (TypeConstructor tc1) (TypeConstructor tc2)
+>   | tc1 == tc2 = id
 > match (TypeVariable tv) ty
 >   | tv >= 0 = bindSubst tv ty
 > match (TypeVariable tv1) (TypeVariable tv2)
 >   | tv1 == tv2 = id
 > match (TypeConstrained _ tv1) (TypeConstrained _ tv2)
 >   | tv1 == tv2 = id
-> match (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) =
->   matchTypes [ty11,ty12] [ty21,ty22]
 > match (TypeSkolem k1) (TypeSkolem k2)
 >   | k1 == k2 = id
+> match (TypeApply ty11 ty12) (TypeApply ty21 ty22) =
+>   match ty11 ty21 . match ty12 ty22
+> match (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) =
+>   match ty11 ty21 . match ty12 ty22
 > match ty1 ty2 =
 >   internalError ("match (" ++ show ty1 ++ ") (" ++ show ty2 ++ ")")
-
-> matchTypes :: [Type] -> [Type] -> TypeSubst -> TypeSubst
-> matchTypes [] [] = id
-> matchTypes (ty1:tys1) (ty2:tys2) = match ty1 ty2 . matchTypes tys1 tys2
 
 > splits :: [a] -> [([a],[a])]
 > splits [] = [([],[])]
@@ -858,11 +857,7 @@ particular module that implements them.
 
 > instFunId :: TypePred -> Ident
 > instFunId (TypePred cls ty) =
->   mkIdent ("_Inst#" ++ qualName cls ++ "#" ++ typeName ty)
->   where typeName (TypeConstructor tc _) = qualName tc
->         typeName (TypeConstrained tys _) = typeName (head tys)
->         typeName (TypeArrow _ _) = name arrowId
->         typeName ty = internalError ("instFunId " ++ show ty)
+>   mkIdent ("_Inst#" ++ qualName cls ++ "#" ++ qualName (rootOfType ty))
 
 > qInstFunId :: TypePred -> QualIdent
 > qInstFunId = qualifyWith instanceMIdent . instFunId
@@ -874,7 +869,7 @@ $C$-$T$ instance.
 \begin{verbatim}
 
 > dictType :: TypePred -> Type
-> dictType (TypePred cls ty) = TypeConstructor (qDictTypeId cls) [ty]
+> dictType (TypePred cls ty) = TypeApply (TypeConstructor (qDictTypeId cls)) ty
 
 > qualDictType :: Context -> TypePred -> QualType
 > qualDictType cx tp = QualType cx (dictType tp)

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2084 2007-01-30 23:58:36Z wlux $
+% $Id: Base.lhs 2085 2007-01-31 16:59:53Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -374,9 +374,10 @@ for the type \verb|a -> b|.
 >   where emptyPEnv = emptyTopEnv Nothing
 
 > initTCEnv :: TCEnv
-> initTCEnv = foldr (uncurry predefTC) emptyTCEnv predefTypes
+> initTCEnv =
+>   foldr (uncurry (predefTC . fromJust . unapplyType)) emptyTCEnv predefTypes
 >   where emptyTCEnv = emptyTopEnv (Just (map fst tuples))
->         predefTC (TypeConstructor tc tys) cs =
+>         predefTC (tc,tys) cs =
 >           predefTopEnv tc (DataType tc (length tys) (map (Just . fst) cs))
 
 > initIEnv :: InstEnv
@@ -393,11 +394,11 @@ for the type \verb|a -> b|.
 >   let a = typeVar 0; b = typeVar 1 in [
 >     (unitType,   [(unitId,unitType)]),
 >     (listType a, [(nilId,nilType a), (consId,consType a)]),
->     (fakeArrowType a b, [])
+>     (arrowType a b, [])
 >   ]
 >   where nilType a = listType a
 >         consType a = TypeArrow a (TypeArrow (listType a) (listType a))
->         fakeArrowType a b = TypeConstructor qArrowId [a,b]
+>         arrowType a b = TypeArrow a b
 
 > tuples :: [(TypeInfo,ValueInfo)]
 > tuples = map tupleInfo [2..]

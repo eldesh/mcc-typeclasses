@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2084 2007-01-30 23:58:36Z wlux $
+% $Id: CurryParser.lhs 2086 2007-02-03 15:39:53Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -178,14 +178,14 @@ directory path to the module is ignored.
 >              <|> type1 <\> conId <\> leftParen <**> opDecl
 >         identDecl = many type2 <**> (conType <$> opDecl `opt` conDecl)
 >         parenDecl = flip conDecl <$> conSym <*-> rightParen <*> many type2
->                 <|> tupleType <*-> rightParen <**> opDecl
->                 <|> constrType <$> gtyconId <*-> rightParen <*> many type2
->                                <**> opDecl
+>                 <|> applyType <$> parenType <*-> rightParen <*> many type2
+>                               <**> opDecl
+>         parenType = tupleType <|> ConstructorType <$> gtyconId
 >         opDecl = conOpDecl <$> conop <*> type1
->         conType f tys c = f (constrType (qualify c) tys)
+>         conType f tys c = f (applyType (ConstructorType (qualify c)) tys)
 >         conDecl tys c tvs p = ConstrDecl p tvs c tys
 >         conOpDecl op ty2 ty1 tvs p = ConOpDecl p tvs ty1 op ty2
->         constrType = foldl ApplyType . ConstructorType
+>         applyType = foldl ApplyType
 
 > newConstrDecl :: Parser Token NewConstrDecl a
 > newConstrDecl = NewConstrDecl <$> position <*> con <*> type2
@@ -433,15 +433,7 @@ directory path to the module is ignored.
 > type0 = type1 `chainr1` (ArrowType <$-> token RightArrow)
 
 > type1 :: Parser Token TypeExpr a
-> type1 = constrType qtycon
->     <|> leftParen <-*> parenType
->     <|> leftBracket <-*> bracketType
->     <|> type2 <\> qtycon <\> leftParen <\> leftBracket
->   where parenType = tupleType <*-> rightParen
->                 <|> constrType (gtyconId <*-> rightParen)
->         bracketType = ListType <$> type0 <*-> rightBracket
->                   <|> constrType (qListId <$-> rightBracket)
->         constrType p = foldl ApplyType . ConstructorType <$> p <*> many type2
+> type1 = foldl ApplyType <$> type2 <*> many type2
 
 > type2 :: Parser Token TypeExpr a
 > type2 = anonType <|> identType <|> parenType <|> listType

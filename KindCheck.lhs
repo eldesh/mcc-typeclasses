@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2084 2007-01-30 23:58:36Z wlux $
+% $Id: KindCheck.lhs 2086 2007-02-03 15:39:53Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -238,20 +238,22 @@ Kind checking is applied to all type expressions in the program.
 
 > checkTypeApp :: TCEnv -> Position -> Int -> TypeExpr -> Error ()
 > checkTypeApp tcEnv p n (ConstructorType tc) =
->   unless (m == n) (errorAt p (wrongArity tc m n))
+>   unless (m == n) (errorAt p (wrongArity "constructor" tc m n))
 >   where m = constrKind tc tcEnv
-> checkTypeApp _ _ n (VariableType tv)
->   | n == 0 = return ()
->   | otherwise = internalError "checkTypeApp (VariableType)"
-> checkTypeApp tcEnv p n (TupleType tys)
->   | n == 0 = mapE_ (checkType tcEnv p) tys
->   | otherwise = internalError "checkTypeApp (TupleType)"
-> checkTypeApp tcEnv p n (ListType ty)
->   | n == 0 = checkType tcEnv p ty
->   | otherwise = internalError "checkTypeApp (ListType)"
-> checkTypeApp tcEnv p n (ArrowType ty1 ty2)
->   | n == 0 = checkType tcEnv p ty1 &&> checkType tcEnv p ty2
->   | otherwise = internalError "checkTypeApp (ArrowType)"
+> checkTypeApp _ p n (VariableType tv) =
+>   unless (n == 0) (errorAt p (wrongArity "variable" (qualify tv) 0 n))
+> checkTypeApp tcEnv p n (TupleType tys) =
+>   unless (n == 0)
+>          (errorAt p (wrongArity "constructor" (qTupleId m) m (m + n))) &&>
+>   mapE_ (checkType tcEnv p) tys
+>   where m = length tys
+> checkTypeApp tcEnv p n (ListType ty) =
+>   unless (n == 0) (errorAt p (wrongArity "constructor" qListId 1 (n + 1))) &&>
+>   checkType tcEnv p ty
+> checkTypeApp tcEnv p n (ArrowType ty1 ty2) =
+>   unless (n == 0)
+>          (errorAt p (wrongArity "constructor" qArrowId 2 (n + 2))) &&>
+>   checkType tcEnv p ty1 &&> checkType tcEnv p ty2
 > checkTypeApp tcEnv p n (ApplyType ty1 ty2) =
 >   checkTypeApp tcEnv p (n + 1) ty1 &&> checkType tcEnv p ty2
 
@@ -283,9 +285,9 @@ Error messages.
 >   where types comma [tc] = comma ++ " and " ++ name tc
 >         types _ (tc:tcs) = ", " ++ name tc ++ types "," tcs
 
-> wrongArity :: QualIdent -> Int -> Int -> String
-> wrongArity tc arity argc = show $
->   hsep [text "Type constructor", ppQIdent tc, text "requires",
+> wrongArity :: String -> QualIdent -> Int -> Int -> String
+> wrongArity what x arity argc = show $
+>   hsep [text ("Type " ++ what), ppQIdent x, text "requires",
 >         int arity, text (plural arity "argument") <> comma,
 >         text "but is applied to", int argc]
 >   where plural n x = if n == 1 then x else x ++ "s"

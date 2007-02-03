@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2085 2007-01-31 16:59:53Z wlux $
+% $Id: DictTrans.lhs 2087 2007-02-03 18:48:39Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -813,6 +813,10 @@ transformation matches the initial arrows of the instance type.
 >   match ty11 ty21 . match ty12 ty22
 > match (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) =
 >   match ty11 ty21 . match ty12 ty22
+> match (TypeApply ty11 ty12) (TypeArrow ty21 ty22) =
+>   match ty11 (TypeApply (TypeConstructor qArrowId) ty21) . match ty12 ty22
+> match (TypeArrow ty11 ty12) (TypeApply ty21 ty22) =
+>   match (TypeApply (TypeConstructor qArrowId) ty11) ty21 . match ty12 ty22
 > match ty1 ty2 =
 >   internalError ("match (" ++ show ty1 ++ ") (" ++ show ty2 ++ ")")
 

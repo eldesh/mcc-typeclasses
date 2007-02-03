@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSubst.lhs 2085 2007-01-31 16:59:53Z wlux $
+% $Id: TypeSubst.lhs 2087 2007-02-03 18:48:39Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -9,7 +9,9 @@
 This module implements substitutions on types.
 \begin{verbatim}
 
-> module TypeSubst(module TypeSubst, idSubst,bindSubst,compose) where
+> module TypeSubst(TypeSubst, SubstType(..), bindVar, substVar,
+>                  ExpandAliasType(..), normalize, instanceType,
+>                  idSubst, bindSubst, compose) where
 > import Base
 > import TopEnv
 > import Maybe
@@ -31,17 +33,27 @@ This module implements substitutions on types.
 >   subst sigma = map (subst sigma)
 
 > instance SubstType Type where
->   subst _ (TypeConstructor tc) = TypeConstructor tc
->   subst sigma (TypeVariable tv) = substVar sigma tv
->   subst sigma (TypeConstrained tys tv) =
->     case substVar sigma tv of
->       TypeVariable tv -> TypeConstrained tys tv
->       ty -> ty
->   subst _ (TypeSkolem k) = TypeSkolem k
->   subst sigma (TypeApply ty1 ty2) =
->     TypeApply (subst sigma ty1) (subst sigma ty2)
->   subst sigma (TypeArrow ty1 ty2) =
->     TypeArrow (subst sigma ty1) (subst sigma ty2)
+>   subst sigma ty = substTypeApp sigma ty []
+
+> substTypeApp :: TypeSubst -> Type -> [Type] -> Type
+> substTypeApp _ (TypeConstructor tc) = foldl TypeApply (TypeConstructor tc)
+> substTypeApp sigma (TypeVariable tv) = typeApply (substVar sigma tv)
+> substTypeApp sigma (TypeConstrained tys tv) =
+>   case substVar sigma tv of
+>     TypeVariable tv -> foldl TypeApply (TypeConstrained tys tv)
+>     ty -> foldl TypeApply ty
+> substTypeApp _ (TypeSkolem k) = foldl TypeApply (TypeSkolem k)
+> substTypeApp sigma (TypeApply ty1 ty2) =
+>   substTypeApp sigma ty1 . (subst sigma ty2 :)
+> substTypeApp sigma (TypeArrow ty1 ty2) =
+>   foldl TypeApply (TypeArrow (subst sigma ty1) (subst sigma ty2))
+
+> typeApply :: Type -> [Type] -> Type
+> typeApply (TypeConstructor tc) tys
+>   | tc == qArrowId && length tys == 2 = TypeArrow (tys!!0) (tys!!1)
+> typeApply (TypeApply (TypeConstructor tc) ty) tys
+>   | tc == qArrowId && length tys == 1 = TypeArrow ty (head tys)
+> typeApply ty tys = foldl TypeApply ty tys
 
 > instance SubstType TypePred where
 >   subst sigma (TypePred cls ty) = TypePred cls (subst sigma ty)
@@ -79,16 +91,21 @@ respectively.
 >   expandAliasType :: [Type] -> t -> t
 
 > instance ExpandAliasType Type where
->   expandAliasType _ (TypeConstructor tc) = TypeConstructor tc
->   expandAliasType tys (TypeVariable n)
->     | n >= 0 = tys !! n
->     | otherwise = TypeVariable n
->   expandAliasType _ (TypeConstrained tys n) = TypeConstrained tys n
->   expandAliasType _ (TypeSkolem k) = TypeSkolem k
->   expandAliasType tys (TypeApply ty1 ty2) =
->     TypeApply (expandAliasType tys ty1) (expandAliasType tys ty2)
->   expandAliasType tys (TypeArrow ty1 ty2) =
->     TypeArrow (expandAliasType tys ty1) (expandAliasType tys ty2)
+>   expandAliasType tys ty = expandTypeApp tys ty []
+
+> expandTypeApp :: [Type] -> Type -> [Type] -> Type
+> expandTypeApp _ (TypeConstructor tc) = foldl TypeApply (TypeConstructor tc)
+> expandTypeApp tys (TypeVariable n)
+>   | n >= 0 = typeApply (tys !! n)
+>   | otherwise = foldl TypeApply (TypeVariable n)
+> expandTypeApp _ (TypeConstrained tys n) =
+>   foldl TypeApply (TypeConstrained tys n)
+> expandTypeApp _ (TypeSkolem k) = foldl TypeApply (TypeSkolem k)
+> expandTypeApp tys (TypeApply ty1 ty2) =
+>   expandTypeApp tys ty1 . (expandAliasType tys ty2 :)
+> expandTypeApp tys (TypeArrow ty1 ty2) =
+>   foldl TypeApply
+>         (TypeArrow (expandAliasType tys ty1) (expandAliasType tys ty2))
 
 > instance ExpandAliasType TypePred where
 >   expandAliasType tys (TypePred cls ty) =

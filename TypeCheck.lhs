@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2085 2007-01-31 16:59:53Z wlux $
+% $Id: TypeCheck.lhs 2087 2007-02-03 18:48:39Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1123,6 +1123,20 @@ of~\cite{PeytonJones87:Book}).
 >     Left msg -> Left msg
 > unifyTypes tcEnv (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) =
 >   case unifyTypes tcEnv ty11 ty21 of
+>     Right theta ->
+>       case unifyTypes tcEnv (subst theta ty12) (subst theta ty22) of
+>         Right theta' -> Right (compose theta' theta)
+>         Left msg -> Left msg
+>     Left msg -> Left msg
+> unifyTypes tcEnv (TypeApply ty11 ty12) (TypeArrow ty21 ty22) =
+>   case unifyTypes tcEnv ty11 (TypeApply (TypeConstructor qArrowId) ty21) of
+>     Right theta ->
+>       case unifyTypes tcEnv (subst theta ty12) (subst theta ty22) of
+>         Right theta' -> Right (compose theta' theta)
+>         Left msg -> Left msg
+>     Left msg -> Left msg
+> unifyTypes tcEnv (TypeArrow ty11 ty12) (TypeApply ty21 ty22) =
+>   case unifyTypes tcEnv (TypeApply (TypeConstructor qArrowId) ty11) ty21 of
 >     Right theta ->
 >       case unifyTypes tcEnv (subst theta ty12) (subst theta ty22) of
 >         Right theta' -> Right (compose theta' theta)

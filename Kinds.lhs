@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Kinds.lhs 2088 2007-02-05 09:27:49Z wlux $
+% $Id: Kinds.lhs 2090 2007-02-05 18:57:27Z wlux $
 %
 % Copyright (c) 2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -59,18 +59,10 @@ occurring in a kind to $\star$.
 
 \end{verbatim}
 The function \texttt{simpleKind} returns the kind of a type
-constructor with arity $n$ whose arguments all have kind $\star$. The
-predicate \texttt{isSimpleKind} checks whether its argument has the
-form returned by \texttt{simpleKind}, i.e., $k = \star \rightarrow
-\dots \rightarrow \star$.
+constructor with arity $n$ whose arguments all have kind $\star$.
 \begin{verbatim}
 
 > simpleKind :: Int -> Kind
 > simpleKind n = foldr KindArrow KindStar (replicate n KindStar)
-
-> isSimpleKind :: Kind -> Bool
-> isSimpleKind KindStar = True
-> isSimpleKind (KindVariable _) = False
-> isSimpleKind (KindArrow k1 k2) = k1 == KindStar && isSimpleKind k2
 
 \end{verbatim}

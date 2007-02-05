@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2088 2007-02-05 09:27:49Z wlux $
+% $Id: IntfCheck.lhs 2090 2007-02-05 18:57:27Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -92,10 +92,9 @@ interface module only. However, this has not been implemented yet.
 >         checkNewtype _ = Nothing
 > checkImport m _ tcEnv _ (ITypeDecl p tc k tvs ty) =
 >   checkTypeInfo "synonym type" checkType tcEnv p tc
->   where checkType (AliasType tc' k' ty')
->           -- FIXME: right hand side type must not necessarily have kind *
+>   where checkType (AliasType tc' n' k' ty')
 >           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' &&
->             toType m tvs ty == ty' =
+>             length tvs == n' && toType m tvs ty == ty' =
 >               Just (return ())
 >         checkType _ = Nothing
 > checkImport m _ tcEnv _ (HidingClassDecl p cx cls k tv) =

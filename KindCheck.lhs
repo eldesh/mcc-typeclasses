@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2088 2007-02-05 09:27:49Z wlux $
+% $Id: KindCheck.lhs 2090 2007-02-05 18:57:27Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -229,12 +229,14 @@ checks that the super class hierarchy is acyclic (in function
 For each declaration group, the kind checker first enters new
 assumptions into the type environment. For a type constructor with
 arity $n$, we enter kind $k_1 \rightarrow \dots \rightarrow k_n
-\rightarrow \star$, where $k_i$ are fresh type variables, and for a
-type class we enter kind $k$, where $k$ is a fresh type variable.
-Next, the kind checker checks the declarations of the group within the
-extended environment, and finally the kind checker instantiates all
-free kind variables to $\star$ (cf.\ Sect.~4.6 of the revised
-Haskell'98 report~\cite{PeytonJones03:Haskell}).
+\rightarrow k$, where $k_i$ are fresh type variables and $k$ is
+$\star$ for data and newtype type constructors and a fresh type
+variable for type synonym type constructors. For a type class we enter
+kind $k$, where $k$ is a fresh type variable. Next, the kind checker
+checks the declarations of the group within the extended environment,
+and finally the kind checker instantiates all free kind variables to
+$\star$ (cf.\ Sect.~4.6 of the revised Haskell'98
+report~\cite{PeytonJones03:Haskell}).
 
 As noted above, type synonyms are fully expanded while they are
 entered into the type environment. Unfortunately, this requires either
@@ -254,10 +256,6 @@ have to do it while instantiating the remaining kind variables in
   where the compiler could look up the definitions of only those type
   identifiers during type inference which are visible in the source
   code.}
-
-\ToDo{The right hand of a type synonym need not have kind $\star$.
-  For instance, \texttt{type List = []} should be a legal type synonym
-  declaration.}
 \begin{verbatim}
 
 > kcDeclGroup :: ModuleIdent -> TCEnv -> [TopDecl a] -> Error TCEnv
@@ -273,12 +271,12 @@ have to do it while instantiating the remaining kind variables in
 
 > bindKind :: ModuleIdent -> TCEnv -> TopDecl a -> KcState TCEnv
 > bindKind m tcEnv (DataDecl _ _ tc tvs cs _) =
->   bindTypeCon DataType m tc tvs (map (Just . constr) cs) tcEnv
+>   bindTypeCon DataType m tc tvs (Just KindStar) (map (Just . constr) cs) tcEnv
 > bindKind m tcEnv (NewtypeDecl _ _ tc tvs nc _) =
->   bindTypeCon RenamingType m tc tvs (nconstr nc) tcEnv
+>   bindTypeCon RenamingType m tc tvs (Just KindStar) (nconstr nc) tcEnv
 > bindKind m tcEnv (TypeDecl _ tc tvs ty) =
->   -- FIXME: the right hand side type must not necessarily have kind *
->   bindTypeCon AliasType m tc tvs (expandMonoType tcEnv tvs ty) tcEnv
+>   bindTypeCon (flip AliasType (length tvs)) m tc tvs Nothing
+>               (expandMonoType tcEnv tvs ty) tcEnv
 > bindKind m tcEnv (ClassDecl _ cx cls tv ds) =
 >   bindTypeClass m cls clss (map Just (concatMap methods ds)) tcEnv
 >   where QualType cx' _ =
@@ -287,12 +285,13 @@ have to do it while instantiating the remaining kind variables in
 > bindKind _ tcEnv (InstanceDecl _ _ _ _ _) = return tcEnv
 > bindKind _ tcEnv (BlockDecl _) = return tcEnv
 
-> bindTypeCon :: (QualIdent -> Kind -> a -> TypeInfo)
->             -> ModuleIdent -> Ident -> [Ident] -> a -> TCEnv -> KcState TCEnv
-> bindTypeCon f m tc tvs x tcEnv =
+> bindTypeCon :: (QualIdent -> Kind -> a -> TypeInfo) -> ModuleIdent -> Ident
+>             -> [Ident] -> Maybe Kind -> a -> TCEnv -> KcState TCEnv
+> bindTypeCon f m tc tvs k x tcEnv =
 >   do
->     k <- liftM (foldr KindArrow KindStar) (mapM (const freshKindVar) tvs)
->     return (globalBindTopEnv m tc (f tc' k x) tcEnv)
+>     k' <- maybe freshKindVar return k
+>     ks <- mapM (const freshKindVar) tvs
+>     return (globalBindTopEnv m tc (f tc' (foldr KindArrow k' ks) x) tcEnv)
 >   where tc' = qualifyWith m tc
 
 > bindTypeClass :: ModuleIdent -> Ident -> [QualIdent] -> [Maybe Ident]
@@ -316,8 +315,8 @@ have to do it while instantiating the remaining kind variables in
 >     _ -> internalError "bindDefaultKind (RenamingDecl)"
 > bindDefaultKind m tcEnv' (TypeDecl _ tc tvs ty) tcEnv =
 >   case lookupTopEnv tc tcEnv of
->     AliasType tc' k _ : _ ->
->       globalRebindTopEnv m tc (AliasType tc' (defaultKind k) ty') tcEnv
+>     AliasType tc' n k _ : _ ->
+>       globalRebindTopEnv m tc (AliasType tc' n (defaultKind k) ty') tcEnv
 >     _ -> internalError "bindDefaultKind (TypeDecl)"
 >   where ty' = expandMonoType tcEnv' tvs ty
 > bindDefaultKind m _ (ClassDecl _ _ cls _ _) tcEnv =
@@ -342,14 +341,13 @@ latter.
 > kcTopDecl :: ModuleIdent -> TCEnv -> TopDecl a -> KcState ()
 > kcTopDecl m tcEnv (DataDecl p cx tc tvs cs _) =
 >   kcContext tcEnv' p cx >> mapM_ (kcConstrDecl tcEnv') cs
->   where tcEnv' = bindTypeVars m tc tvs tcEnv
+>   where tcEnv' = snd (bindTypeVars m tc tvs tcEnv)
 > kcTopDecl m tcEnv (NewtypeDecl p cx tc tvs nc _) =
 >   kcContext tcEnv' p cx >> kcNewConstrDecl tcEnv' nc
->   where tcEnv' = bindTypeVars m tc tvs tcEnv
+>   where tcEnv' = snd (bindTypeVars m tc tvs tcEnv)
 > kcTopDecl m tcEnv (TypeDecl p tc tvs ty) =
->   -- FIXME: the right hand side type must not necessarily have kind *
->   kcValueType tcEnv' p "type declaration" doc ty
->   where tcEnv' = bindTypeVars m tc tvs tcEnv
+>   kcType tcEnv' p "type declaration" doc k ty
+>   where (k,tcEnv') = bindTypeVars m tc tvs tcEnv
 >         doc = ppTopDecl (TypeDecl p tc tvs ty)
 > kcTopDecl m tcEnv (ClassDecl p cx cls tv ds) =
 >   kcContext tcEnv' p cx >> mapM_ (kcMethodDecl tcEnv' (Just tv)) ds
@@ -363,8 +361,8 @@ latter.
 >   where doc = ppTopDecl (InstanceDecl p cx cls ty [])
 > kcTopDecl _ tcEnv (BlockDecl d) = kcDecl tcEnv d
 
-> bindTypeVars :: ModuleIdent -> Ident -> [Ident] -> TCEnv -> TCEnv
-> bindTypeVars m tc tvs tcEnv = snd $
+> bindTypeVars :: ModuleIdent -> Ident -> [Ident] -> TCEnv -> (Kind,TCEnv)
+> bindTypeVars m tc tvs tcEnv =
 >   foldl (\(KindArrow k1 k2,tcEnv) tv -> (k2,bindTypeVar tv k1 tcEnv))
 >         (constrKind (qualifyWith m tc) tcEnv,tcEnv)
 >         tvs
@@ -493,8 +491,8 @@ latter.
 > kcTypeExpr tcEnv p _ _ n (ConstructorType tc) =
 >   case aliasArity tc tcEnv of
 >     Just n'
->       | n == n' -> return (constrKind tc tcEnv)
->       | otherwise -> errorAt p (wrongArity tc n' n)
+>       | n >= n' -> return (constrKind tc tcEnv)
+>       | otherwise -> errorAt p (partialAlias tc n' n)
 >     Nothing -> return (constrKind tc tcEnv)
 > kcTypeExpr tcEnv _ _ _ _ (VariableType tv) = return (varKind tv tcEnv)
 > kcTypeExpr tcEnv p what doc _ (TupleType tys) =
@@ -612,11 +610,11 @@ Error messages.
 >         text "Inferred kind:" <+> ppKind k2,
 >         text "Expected kind:" <+> ppKind k1]
 
-> wrongArity :: QualIdent -> Int -> Int -> String
-> wrongArity tc arity argc = show $
->   hsep [text "Type synonym", ppQIdent tc, text "requires",
+> partialAlias :: QualIdent -> Int -> Int -> String
+> partialAlias tc arity argc = show $
+>   hsep [text "Type synonym", ppQIdent tc, text "requires at least",
 >         int arity, text (plural arity "argument") <> comma,
->         text "but is applied to", int argc]
+>         text "but is applied to only", int argc]
 >   where plural n x = if n == 1 then x else x ++ "s"
 
 \end{verbatim}

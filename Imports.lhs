@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2088 2007-02-05 09:27:49Z wlux $
+% $Id: Imports.lhs 2090 2007-02-05 18:57:27Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -75,7 +75,7 @@ all instance declarations are always imported into the current module.
 >   DataType tc k (map (>>= importMember isVisible) cs)
 > importMembers isVisible (RenamingType tc k nc) =
 >   maybe (DataType tc k []) (RenamingType tc k) (importMember isVisible nc)
-> importMembers isVisible (AliasType tc k ty) = AliasType tc k ty
+> importMembers isVisible (AliasType tc n k ty) = AliasType tc n k ty
 > importMembers isVisible (TypeClass cls k clss fs) =
 >   TypeClass cls k clss (map (>>= importMember isVisible) fs)
 
@@ -161,7 +161,7 @@ following functions.
 > types m (INewtypeDecl _ _ tc k tvs nc) =
 >   qual tc (typeCon RenamingType m tc k tvs (nconstr nc))
 > types m (ITypeDecl _ tc k tvs ty) =
->   qual tc (typeCon AliasType m tc k tvs (toType m tvs ty))
+>   qual tc (typeCon (flip AliasType (length tvs)) m tc k tvs (toType m tvs ty))
 > types m (HidingClassDecl _ cx cls k tv) = qual cls (typeCls m cx cls k tv [])
 > types m (IClassDecl _ cx cls k tv fs) =
 >   qual cls (typeCls m cx cls k tv (map (fmap imethod) fs))

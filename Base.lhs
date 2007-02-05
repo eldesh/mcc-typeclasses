@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2088 2007-02-05 09:27:49Z wlux $
+% $Id: Base.lhs 2090 2007-02-05 18:57:27Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -40,17 +40,26 @@ imported directly or indirectly into the current module.
 \paragraph{Type constructors and type classes}
 For all defined types and type classes, the compiler maintains kind
 information. For algebraic data types and renaming types, the compiler
-also records all data constructors belonging to that type, for alias
-types the expanded right hand side type expression is saved, and for
-type classes the names of their immediate super classes and their
-methods are saved. The list of super classes is always sorted
-according to their names. For type variables, only their kind is
-recorded in the environment. Type classes are recorded in the type
-constructor environment because type constructors and type classes
-share a common name space.
+also records all data constructors belonging to that type, and for
+alias types, their arity and expanded right hand side type expressions
+are saved. Recording the type's arity is necessary for alias types
+because the right hand side type expression can have arbitrary kind
+and therefore the type synonym's arity cannot be determined from its
+own kind. For instance,
+\begin{verbatim}
+  type List = []
+\end{verbatim}
+is explicitly permitted by the revised Haskell'98
+report~\cite{PeytonJones03:Haskell} (see Sect.~4.2.2). For type
+classes, the names of their immediate super classes and their methods
+are saved. The list of super classes is always sorted according to
+their names. Type classes are recorded in the type constructor
+environment because type constructors and type classes share a common
+name space. For type variables, only their kind is recorded in the
+environment.
 
-\ToDo{Might also sort methods of a type class because their order is
-  not relevant.}
+\ToDo{Sort methods of a type class, too, because their order is not
+  relevant?}
 
 Importing and exporting algebraic data types and renaming types is
 complicated by the fact that the constructors of the type may be
@@ -68,7 +77,7 @@ replaced by underscores as well.
 
 > data TypeInfo = DataType QualIdent Kind [Maybe Ident]
 >               | RenamingType QualIdent Kind Ident
->               | AliasType QualIdent Kind Type
+>               | AliasType QualIdent Int Kind Type
 >               | TypeClass QualIdent Kind [QualIdent] [Maybe Ident]
 >               | TypeVar Kind
 >               deriving Show
@@ -76,7 +85,7 @@ replaced by underscores as well.
 > instance Entity TypeInfo where
 >   origName (DataType tc _ _) = tc
 >   origName (RenamingType tc _ _) = tc
->   origName (AliasType tc _ _) = tc
+>   origName (AliasType tc _ _ _) = tc
 >   origName (TypeClass cls _ _ _) = cls
 >   origName (TypeVar _) = internalError "origName TypeVar"
 >   merge (DataType tc1 k cs1) (DataType tc2 _ cs2)
@@ -91,8 +100,8 @@ replaced by underscores as well.
 >     | tc1 == tc2 = Just (RenamingType tc1 k nc)
 >   merge (RenamingType tc1 k nc) (RenamingType tc2 _ _)
 >     | tc1 == tc2 = Just (RenamingType tc1 k nc)
->   merge (AliasType tc1 k ty) (AliasType tc2 _ _)
->     | tc1 == tc2 = Just (AliasType tc1 k ty)
+>   merge (AliasType tc1 n k ty) (AliasType tc2 _ _ _)
+>     | tc1 == tc2 = Just (AliasType tc1 n k ty)
 >   merge (TypeClass cls1 k clss fs1) (TypeClass cls2 _ _ fs2)
 >     | cls1 == cls2 = Just (TypeClass cls1 k clss (zipWith mplus fs1 fs2))
 >   merge _ _ = Nothing
@@ -111,7 +120,7 @@ therefore should not fail.
 >   case qualLookupTopEnv tc tcEnv of
 >     [DataType _ k _] -> k
 >     [RenamingType _ k _] -> k
->     [AliasType _ k _] -> k
+>     [AliasType _ _ k _] -> k
 >     _ -> internalError ("constrKind " ++ show tc)
 
 > constructors :: QualIdent -> TCEnv -> [Maybe Ident]
@@ -119,7 +128,7 @@ therefore should not fail.
 >   case qualLookupTopEnv tc tcEnv of
 >     [DataType _ _ cs] -> cs
 >     [RenamingType _ _ c] -> [Just c]
->     [AliasType _ _ _] -> []
+>     [AliasType _ _ _ _] -> []
 >     _ -> internalError ("constructors " ++ show tc)
 
 > aliasArity :: QualIdent -> TCEnv -> Maybe Int
@@ -127,7 +136,7 @@ therefore should not fail.
 >   case qualLookupTopEnv tc tcEnv of
 >     [DataType _ _ _] -> Nothing
 >     [RenamingType _ _ _] -> Nothing
->     [AliasType _ k _] -> Just (kindArity k)
+>     [AliasType _ n _ _] -> Just n
 >     _ -> internalError ("aliasArity " ++ show tc)
 
 \end{verbatim}
@@ -193,7 +202,7 @@ synonym types on the other side.
 > typeKind :: TypeInfo -> TypeKind
 > typeKind (DataType tc _ cs) = Data tc (catMaybes cs)
 > typeKind (RenamingType tc _ c) = Data tc [c]
-> typeKind (AliasType tc _ _) = Alias tc
+> typeKind (AliasType tc _ _ _) = Alias tc
 > typeKind (TypeClass cls _ _ fs) = Class cls (catMaybes fs)
 > typeKind (TypeVar _) = internalError "typeKind"
 
@@ -372,7 +381,7 @@ The compiler collects trust annotations from the source code in an
 environment. A simple environment mapping unqualified names onto
 annotations is sufficient because trust annotations control how
 function declarations are transformed when generating code for the
-declarative debugger (cf.  Sect.~\ref{sec:dtrans}).
+declarative debugger (cf.\ Sect.~\ref{sec:dtrans}).
 \begin{verbatim}
 
 > type TrustEnv = Env Ident Trust

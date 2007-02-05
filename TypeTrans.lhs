@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2085 2007-01-31 16:59:53Z wlux $
+% $Id: TypeTrans.lhs 2090 2007-02-05 18:57:27Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -19,8 +19,6 @@ external type representations.
 > import CurryPP
 > import List
 > import Map
-> import Maybe
-> import Pretty
 > import TopEnv
 > import TypeSubst
 
@@ -288,7 +286,8 @@ the module containing their definition.
 >   case qualLookupTopEnv tc tcEnv of
 >     [DataType tc' _ _] -> foldl TypeApply (TypeConstructor tc') tys
 >     [RenamingType tc' _ _] -> foldl TypeApply (TypeConstructor tc') tys
->     [AliasType _ _ ty] -> expandAliasType tys ty
+>     [AliasType _ n _ ty] -> typeApply (expandAliasType tys' ty) tys''
+>       where (tys',tys'') = splitAt n tys
 >     _ -> internalError ("expandType " ++ show tc)
 > expandTypeApp _ (TypeVariable tv) tys = foldl TypeApply (TypeVariable tv) tys
 > expandTypeApp _ (TypeConstrained tys tv) tys' =
@@ -300,6 +299,13 @@ the module containing their definition.
 >   foldl TypeApply
 >         (TypeArrow (expandType tcEnv ty1) (expandType tcEnv ty2))
 >         tys
+
+> typeApply :: Type -> [Type] -> Type
+> typeApply (TypeConstructor tc) tys
+>   | tc == qArrowId && length tys == 2 = TypeArrow (tys!!0) (tys!!1)
+> typeApply (TypeApply (TypeConstructor tc) ty) tys
+>   | tc == qArrowId && length tys == 1 = TypeArrow ty (head tys)
+> typeApply ty tys = foldl TypeApply ty tys
 
 \end{verbatim}
 The function \texttt{minContext} transforms a context by removing all

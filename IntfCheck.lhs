@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2082 2007-01-24 20:11:46Z wlux $
+% $Id: IntfCheck.lhs 2088 2007-02-05 09:27:49Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -48,6 +48,7 @@ interface module only. However, this has not been implemented yet.
 > module IntfCheck(intfCheck) where
 > import Base
 > import Error
+> import KindTrans
 > import Maybe
 > import Monad
 > import TopEnv
@@ -61,46 +62,53 @@ interface module only. However, this has not been implemented yet.
 >   checkPrecInfo checkPrec pEnv p op
 >   where checkPrec (PrecInfo op' (OpPrec fix' pr')) =
 >           op == op' && fix == fix' && pr == pr'
-> checkImport _ _ tcEnv _ (HidingDataDecl p tc tvs) =
+> checkImport _ _ tcEnv _ (HidingDataDecl p tc k tvs) =
 >   checkTypeInfo "hidden data type" checkData tcEnv p tc
->   where checkData (DataType tc' n' _)
->           | tc == tc' && length tvs == n' = Just (return ())
->         checkData (RenamingType tc' n' _)
->           | tc == tc' && length tvs == n' = Just (return ())
+>   where checkData (DataType tc' k' _)
+>           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' =
+>               Just (return ())
+>         checkData (RenamingType tc' k' _)
+>           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' =
+>               Just (return ())
 >         checkData _ = Nothing
-> checkImport m _ tcEnv tyEnv (IDataDecl p cx tc tvs cs) =
+> checkImport m _ tcEnv tyEnv (IDataDecl p cx tc k tvs cs) =
 >   checkTypeInfo "data type" checkData tcEnv p tc
->   where checkData (DataType tc' n' cs')
->           | tc == tc' && length tvs == n' &&
+>   where checkData (DataType tc' k' cs')
+>           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' &&
 >             (null cs || length cs == length cs') &&
 >             and (zipWith (isVisible constr) cs cs') = Just $
 >               mapM_ (checkConstrImport m tyEnv cx tc tvs) (catMaybes cs)
->         checkData (RenamingType tc' n' _)
->           | tc == tc' && length tvs == n' && null cs = Just (return ())
+>         checkData (RenamingType tc' k' _)
+>           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' &&
+>             null cs =
+>               Just (return ())
 >         checkData _ = Nothing
-> checkImport m _ tcEnv tyEnv (INewtypeDecl p cx tc tvs nc) =
+> checkImport m _ tcEnv tyEnv (INewtypeDecl p cx tc k tvs nc) =
 >   checkTypeInfo "newtype" checkNewtype tcEnv p tc
->   where checkNewtype (RenamingType tc' n' nc')
->           | tc == tc' && length tvs == n' && nconstr nc == nc' =
+>   where checkNewtype (RenamingType tc' k' nc')
+>           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' &&
+>             nconstr nc == nc' =
 >               Just (checkNewConstrImport m tyEnv cx tc tvs nc)
 >         checkNewtype _ = Nothing
-> checkImport m _ tcEnv _ (ITypeDecl p tc tvs ty) =
+> checkImport m _ tcEnv _ (ITypeDecl p tc k tvs ty) =
 >   checkTypeInfo "synonym type" checkType tcEnv p tc
->   where checkType (AliasType tc' n' ty')
->           | tc == tc' && length tvs == n' && toType m tvs ty == ty' =
+>   where checkType (AliasType tc' k' ty')
+>           -- FIXME: right hand side type must not necessarily have kind *
+>           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' &&
+>             toType m tvs ty == ty' =
 >               Just (return ())
 >         checkType _ = Nothing
-> checkImport m _ tcEnv _ (HidingClassDecl p cx cls tv) =
+> checkImport m _ tcEnv _ (HidingClassDecl p cx cls k tv) =
 >   checkTypeInfo "hidden type class" checkClass tcEnv p cls
->   where checkClass (TypeClass cls' clss' _)
->           | cls == cls' &&
+>   where checkClass (TypeClass cls' k' clss' _)
+>           | cls == cls' && maybe KindStar toKind k == k' &&
 >             [qualQualify m cls | ClassAssert cls _ <- cx] == clss' =
->             Just (return ())
+>               Just (return ())
 >         checkClass _ = Nothing
-> checkImport m _ tcEnv tyEnv (IClassDecl p cx cls tv ds) =
+> checkImport m _ tcEnv tyEnv (IClassDecl p cx cls k tv ds) =
 >   checkTypeInfo "type class" checkClass tcEnv p cls
->   where checkClass (TypeClass cls' clss' fs')
->           | cls == cls' &&
+>   where checkClass (TypeClass cls' k' clss' fs')
+>           | cls == cls' && maybe KindStar toKind k == k' &&
 >             [qualQualify m cls | ClassAssert cls _ <- cx] == clss' &&
 >             length ds == length fs' &&
 >             and (zipWith (isVisible imethod) ds fs') =

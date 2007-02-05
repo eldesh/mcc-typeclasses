@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2085 2007-01-31 16:59:53Z wlux $
+% $Id: ILTrans.lhs 2088 2007-02-05 09:27:49Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -103,7 +103,7 @@ which are imported into the interface from another module.
 > ilTransIntf (Interface m _ ds) = foldr (translIntfDecl m) [] ds
 
 > translIntfDecl :: ModuleIdent -> IDecl -> [IL.Decl] -> [IL.Decl]
-> translIntfDecl m (IDataDecl _ _ tc tvs cs) ds
+> translIntfDecl m (IDataDecl _ _ tc _ tvs cs) ds
 >   | not (isQualified tc) = translIntfData m (unqualify tc) tvs cs : ds
 > translIntfDecl _ _ ds = ds
 

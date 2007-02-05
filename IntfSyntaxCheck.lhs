@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2086 2007-02-03 15:39:53Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2088 2007-02-05 09:27:49Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -39,13 +39,14 @@ The latter must not occur in type expressions in interfaces.
 
 > bindType :: IDecl -> TypeEnv -> TypeEnv
 > bindType (IInfixDecl _ _ _ _) = id
-> bindType (HidingDataDecl _ tc _) = qualBindTopEnv tc (Data tc [])
-> bindType (IDataDecl _ _ tc _ cs) =
+> bindType (HidingDataDecl _ tc _ _) = qualBindTopEnv tc (Data tc [])
+> bindType (IDataDecl _ _ tc _ _ cs) =
 >   qualBindTopEnv tc (Data tc (map constr (catMaybes cs)))
-> bindType (INewtypeDecl _ _ tc _ nc) = qualBindTopEnv tc (Data tc [nconstr nc])
-> bindType (ITypeDecl _ tc _ _) = qualBindTopEnv tc (Alias tc)
-> bindType (HidingClassDecl _ _ cls _) = qualBindTopEnv cls (Class cls [])
-> bindType (IClassDecl _ cx cls _ ds) =
+> bindType (INewtypeDecl _ _ tc _ _ nc) =
+>   qualBindTopEnv tc (Data tc [nconstr nc])
+> bindType (ITypeDecl _ tc _ _ _) = qualBindTopEnv tc (Alias tc)
+> bindType (HidingClassDecl _ _ cls _ _) = qualBindTopEnv cls (Class cls [])
+> bindType (IClassDecl _ cx cls _ _ ds) =
 >   qualBindTopEnv cls (Class cls (map imethod (catMaybes ds)))
 > bindType (IInstanceDecl _ _ _ _) = id
 > bindType (IFunctionDecl _ _ _) = id
@@ -57,25 +58,25 @@ during syntax checking of type expressions.
 
 > checkIDecl :: TypeEnv -> IDecl -> Error IDecl
 > checkIDecl _ (IInfixDecl p fix pr op) = return (IInfixDecl p fix pr op)
-> checkIDecl env (HidingDataDecl p tc tvs) =
+> checkIDecl env (HidingDataDecl p tc k tvs) =
 >   checkTypeLhs env p [] tvs &&>
->   return (HidingDataDecl p tc tvs)
-> checkIDecl env (IDataDecl p cx tc tvs cs) =
+>   return (HidingDataDecl p tc k tvs)
+> checkIDecl env (IDataDecl p cx tc k tvs cs) =
 >   checkTypeLhs env p cx tvs &&>
->   liftE (IDataDecl p cx tc tvs)
+>   liftE (IDataDecl p cx tc k tvs)
 >         (mapE (liftMaybe (checkConstrDecl env tvs)) cs)
-> checkIDecl env (INewtypeDecl p cx tc tvs nc) =
+> checkIDecl env (INewtypeDecl p cx tc k tvs nc) =
 >   checkTypeLhs env p cx tvs &&>
->   liftE (INewtypeDecl p cx tc tvs) (checkNewConstrDecl env tvs nc)
-> checkIDecl env (ITypeDecl p tc tvs ty) =
+>   liftE (INewtypeDecl p cx tc k tvs) (checkNewConstrDecl env tvs nc)
+> checkIDecl env (ITypeDecl p tc k tvs ty) =
 >   checkTypeLhs env p [] tvs &&>
->   liftE (ITypeDecl p tc tvs) (checkClosedType env p tvs ty)
-> checkIDecl env (HidingClassDecl p cx cls tv) =
+>   liftE (ITypeDecl p tc k tvs) (checkClosedType env p tvs ty)
+> checkIDecl env (HidingClassDecl p cx cls k tv) =
 >   checkTypeLhs env p cx [tv] &&>
->   return (HidingClassDecl p cx cls tv)
-> checkIDecl env (IClassDecl p cx cls tv ds) =
+>   return (HidingClassDecl p cx cls k tv)
+> checkIDecl env (IClassDecl p cx cls k tv ds) =
 >   checkTypeLhs env p cx [tv] &&>
->   liftE (IClassDecl p cx cls tv)
+>   liftE (IClassDecl p cx cls k tv)
 >         (mapE (liftMaybe (checkIMethodDecl env tv)) ds)
 > checkIDecl env (IInstanceDecl p cx cls ty) =
 >   checkClass env p cls &&>

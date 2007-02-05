@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2086 2007-02-03 15:39:53Z wlux $
+% $Id: CurryParser.lhs 2088 2007-02-05 09:27:49Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -350,11 +350,13 @@ directory path to the module is ignored.
 > iHidingDecl :: Parser Token IDecl a
 > iHidingDecl =
 >   position <*-> token Id_hiding <**> (dataDecl <|> classDecl <|> funcDecl)
->   where dataDecl = hiddenData <$-> token KW_data <*> qtycon <*> many tyvar
->         classDecl = hiddenClass <$> classInstHead KW_class qtycls tyvar
+>   where dataDecl =
+>           hidingData <$-> token KW_data <*> withKind qtycon <*> many tyvar
+>         classDecl =
+>           hidingClass <$> classInstHead KW_class (withKind qtycls) tyvar
 >         funcDecl = hidingFunc <$-> token DoubleColon <*> qualType
->         hiddenData tc tvs p = HidingDataDecl p tc tvs
->         hiddenClass (cx,(cls,tv)) p = HidingClassDecl p cx cls tv
+>         hidingData (tc,k) tvs p = HidingDataDecl p tc k tvs
+>         hidingClass (cx,((cls,k),tv)) p = HidingClassDecl p cx cls k tv
 >         hidingFunc ty p = IFunctionDecl p hidingId ty
 >         hidingId = qualify (mkIdent "hiding")
 
@@ -372,25 +374,29 @@ directory path to the module is ignored.
 >   iDataDeclLhs INewtypeDecl KW_newtype <*-> equals <*> newConstrDecl
 
 > iTypeDecl :: Parser Token IDecl a
-> iTypeDecl =
->   iTypeDeclLhs (uncurry . ITypeDecl) KW_type id <*-> equals <*> type0
+> iTypeDecl = iTypeDeclLhs typeDecl KW_type id <*-> equals <*> type0
+>   where typeDecl = uncurry . uncurry . ITypeDecl
 
-> iDataDeclLhs :: (Position -> [ClassAssert] -> QualIdent -> [Ident] -> a)
+> iDataDeclLhs :: (Position -> [ClassAssert] -> QualIdent -> Maybe KindExpr
+>                  -> [Ident] -> a)
 >              -> Category -> Parser Token a b
 > iDataDeclLhs f kw = iTypeDeclLhs f' kw (withContext (,))
->   where f' p = uncurry (uncurry . f p)
+>   where f' p = uncurry (uncurry . uncurry . f p)
 
 > iTypeDeclLhs :: (Position -> a -> b) -> Category
->               -> (Parser Token (QualIdent,[Ident]) c -> Parser Token a c)
->               -> Parser Token b c
+>              -> (Parser Token ((QualIdent,Maybe KindExpr),[Ident]) c
+>                  -> Parser Token a c)
+>              -> Parser Token b c
 > iTypeDeclLhs f kw g =
->   f <$> position <*-> token kw <*> g ((,) <$> qtycon <*> many tyvar)
+>   f <$> position <*-> token kw <*> g ((,) <$> withKind qtycon <*> many tyvar)
 
 > iClassDecl :: Parser Token IDecl a
-> iClassDecl = iClassInstDecl IClassDecl KW_class qtycls tyvar <*> methodDefs
->   where methodDefs = token KW_where <-*> braces (methodDecl `sepBy` semicolon)
+> iClassDecl =
+>   iClassInstDecl classDecl KW_class (withKind qtycls) tyvar <*> methodDefs
+>   where classDecl p = uncurry . IClassDecl p
+>         methodDefs = token KW_where <-*> braces (methodDecl `sepBy` semicolon)
 >                `opt` []
->         methodDecl = maybeHidden iMethodDecl 
+>         methodDecl = maybeHidden iMethodDecl
 
 > iInstanceDecl :: Parser Token IDecl a
 > iInstanceDecl = iClassInstDecl IInstanceDecl KW_instance qtycls type2
@@ -409,6 +415,23 @@ directory path to the module is ignored.
 > iFunDecl :: (Position -> a -> QualTypeExpr -> b) -> Parser Token a c
 >          -> Parser Token b c
 > iFunDecl f fun = f <$> position <*> fun <*-> token DoubleColon <*> qualType
+
+\end{verbatim}
+\paragraph{Kinds}
+\begin{verbatim}
+
+> withKind :: Parser Token a b -> Parser Token (a,Maybe KindExpr) b
+> withKind p = implicitKind <$> p
+>          <|> parens (explicitKind <$> p <*-> token DoubleColon <*> kind0)
+>   where implicitKind x = (x,Nothing)
+>         explicitKind x k = (x,Just k)
+
+> kind0 :: Parser Token KindExpr a
+> kind0 = kind1 `chainr1` (ArrowKind <$-> token RightArrow)
+
+> kind1 :: Parser Token KindExpr a
+> kind1 = Star <$-> token Sym_Star
+>     <|> parens kind0
 
 \end{verbatim}
 \paragraph{Types}
@@ -770,7 +793,7 @@ prefix of a let expression.
 > specialIdents, specialSyms :: [Category]
 > specialIdents = [Id_as,Id_ccall,Id_forall,Id_hiding,Id_interface,
 >                  Id_primitive,Id_qualified,Id_safe,Id_unsafe]
-> specialSyms = [Sym_Dot,Sym_Minus]
+> specialSyms = [Sym_Dot,Sym_Minus,Sym_Star]
 
 > ident :: Parser Token Ident a
 > ident = mkIdent . sval <$> tokens (Id : specialIdents)

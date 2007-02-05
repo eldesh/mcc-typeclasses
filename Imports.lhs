@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2082 2007-01-24 20:11:46Z wlux $
+% $Id: Imports.lhs 2088 2007-02-05 09:27:49Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -13,6 +13,7 @@ interfaces into the current module.
 > module Imports(importInterface,importInterfaceIntf,importUnifyData) where
 > import Base
 > import Env
+> import KindTrans
 > import Maybe
 > import Map
 > import Set
@@ -46,12 +47,12 @@ all instance declarations are always imported into the current module.
 
 > isHiddenDecl :: IDecl -> Bool
 > isHiddenDecl (IInfixDecl _ _ _ _) = False
-> isHiddenDecl (HidingDataDecl _ _ _) = True 
-> isHiddenDecl (IDataDecl _ _ _ _ _) = False
-> isHiddenDecl (INewtypeDecl _ _ _ _ _) = False
-> isHiddenDecl (ITypeDecl _ _ _ _) = False
-> isHiddenDecl (HidingClassDecl _ _ _ _) = True
-> isHiddenDecl (IClassDecl _ _ _ _ _) = False
+> isHiddenDecl (HidingDataDecl _ _ _ _) = True 
+> isHiddenDecl (IDataDecl _ _ _ _ _ _) = False
+> isHiddenDecl (INewtypeDecl _ _ _ _ _ _) = False
+> isHiddenDecl (ITypeDecl _ _ _ _ _) = False
+> isHiddenDecl (HidingClassDecl _ _ _ _ _) = True
+> isHiddenDecl (IClassDecl _ _ _ _ _ _) = False
 > isHiddenDecl (IInstanceDecl _ _ _ _) = False
 > isHiddenDecl (IFunctionDecl _ _ _) = False
 
@@ -70,13 +71,13 @@ all instance declarations are always imported into the current module.
 >         [(x,f y) | (x,y) <- foldr (bind m') [] ds, isVisible x]
 
 > importMembers :: (Ident -> Bool) -> TypeInfo -> TypeInfo
-> importMembers isVisible (DataType tc n cs) =
->   DataType tc n (map (>>= importMember isVisible) cs)
-> importMembers isVisible (RenamingType tc n nc) =
->   maybe (DataType tc n []) (RenamingType tc n) (importMember isVisible nc)
-> importMembers isVisible (AliasType tc n ty) = AliasType tc n ty
-> importMembers isVisible (TypeClass cls clss fs) =
->   TypeClass cls clss (map (>>= importMember isVisible) fs)
+> importMembers isVisible (DataType tc k cs) =
+>   DataType tc k (map (>>= importMember isVisible) cs)
+> importMembers isVisible (RenamingType tc k nc) =
+>   maybe (DataType tc k []) (RenamingType tc k) (importMember isVisible nc)
+> importMembers isVisible (AliasType tc k ty) = AliasType tc k ty
+> importMembers isVisible (TypeClass cls k clss fs) =
+>   TypeClass cls k clss (map (>>= importMember isVisible) fs)
 
 > importMember :: (Ident -> Bool) -> Ident -> Maybe Ident
 > importMember isVisible c
@@ -128,12 +129,12 @@ instances imported from another module.
 
 > entity :: IDecl -> QualIdent
 > entity (IInfixDecl _ _ _ op) = op
-> entity (HidingDataDecl _ tc _) = tc
-> entity (IDataDecl _ _ tc _ _) = tc
-> entity (INewtypeDecl _ _ tc _ _) = tc
-> entity (ITypeDecl _ tc _ _) = tc
-> entity (HidingClassDecl _ _ cls _) = cls
-> entity (IClassDecl _ _ cls _ _) = cls
+> entity (HidingDataDecl _ tc _ _) = tc
+> entity (IDataDecl _ _ tc _ _ _) = tc
+> entity (INewtypeDecl _ _ tc _ _ _) = tc
+> entity (ITypeDecl _ tc _ _ _) = tc
+> entity (HidingClassDecl _ _ cls _ _) = cls
+> entity (IClassDecl _ _ cls _ _ _) = cls
 > entity (IInstanceDecl _ _ _ _) = qualify anonId
 > entity (IFunctionDecl _ f _) = f
 
@@ -154,26 +155,26 @@ following functions.
 > precs _ _ = id
 
 > types :: ModuleIdent -> IDecl -> [I TypeInfo] -> [I TypeInfo]
-> types m (HidingDataDecl _ tc tvs) = qual tc (typeCon DataType m tc tvs [])
-> types m (IDataDecl _ _ tc tvs cs) =
->   qual tc (typeCon DataType m tc tvs (map (fmap constr) cs))
-> types m (INewtypeDecl _ _ tc tvs nc) =
->   qual tc (typeCon RenamingType m tc tvs (nconstr nc))
-> types m (ITypeDecl _ tc tvs ty) =
->   qual tc (typeCon AliasType m tc tvs (toType m tvs ty))
-> types m (HidingClassDecl _ cx cls tv) = qual cls (typeCls m cx cls tv [])
-> types m (IClassDecl _ cx cls tv fs) =
->   qual cls (typeCls m cx cls tv (map (fmap imethod) fs))
+> types m (HidingDataDecl _ tc k tvs) = qual tc (typeCon DataType m tc k tvs [])
+> types m (IDataDecl _ _ tc k tvs cs) =
+>   qual tc (typeCon DataType m tc k tvs (map (fmap constr) cs))
+> types m (INewtypeDecl _ _ tc k tvs nc) =
+>   qual tc (typeCon RenamingType m tc k tvs (nconstr nc))
+> types m (ITypeDecl _ tc k tvs ty) =
+>   qual tc (typeCon AliasType m tc k tvs (toType m tvs ty))
+> types m (HidingClassDecl _ cx cls k tv) = qual cls (typeCls m cx cls k tv [])
+> types m (IClassDecl _ cx cls k tv fs) =
+>   qual cls (typeCls m cx cls k tv (map (fmap imethod) fs))
 > types _ _ = id
 
 > values :: ModuleIdent -> IDecl -> [I ValueInfo] -> [I ValueInfo]
-> values m (IDataDecl _ cx tc tvs cs) =
+> values m (IDataDecl _ cx tc _ tvs cs) =
 >   (map (dataConstr m cx (qualQualify m tc) tvs) (catMaybes cs) ++)
-> values m (INewtypeDecl _ cx tc tvs nc) =
+> values m (INewtypeDecl _ cx tc _ tvs nc) =
 >   (newConstr m cx (qualQualify m tc) tvs nc :)
 > values m (IFunctionDecl _ f ty) =
 >   qual f (Value (qualQualify m f) (typeScheme (toQualType m ty)))
-> values m (IClassDecl _ _ cls tv ds) =
+> values m (IClassDecl _ _ cls _ tv ds) =
 >   (map (classMethod m (qualQualify m cls) tv) (catMaybes ds) ++)
 > values _ _ = id
 
@@ -223,13 +224,16 @@ Auxiliary functions:
 > addValue (ImportTypeWith _ xs) fs = foldr addToSet fs xs
 > addValue (ImportTypeAll _) _ = internalError "addValue"
 
-> typeCon :: (QualIdent -> Int -> a) -> ModuleIdent -> QualIdent -> [Ident] -> a
-> typeCon f m tc tvs = f (qualQualify m tc) (length tvs)
+> typeCon :: (QualIdent -> Kind -> a) -> ModuleIdent -> QualIdent
+>         -> Maybe KindExpr -> [Ident] -> a
+> typeCon f m tc k tvs =
+>   f (qualQualify m tc) (maybe (simpleKind (length tvs)) toKind k)
 
-> typeCls :: ModuleIdent -> [ClassAssert] -> QualIdent -> Ident -> [Maybe Ident]
->         -> TypeInfo
-> typeCls m cx cls tv =
->   TypeClass (qualQualify m cls) [cls | TypePred cls _ <- cx']
+> typeCls :: ModuleIdent -> [ClassAssert] -> QualIdent -> Maybe KindExpr
+>         -> Ident -> [Maybe Ident] -> TypeInfo
+> typeCls m cx cls k tv =
+>   TypeClass (qualQualify m cls) (maybe KindStar toKind k)
+>             [cls | TypePred cls _ <- cx']
 >   where QualType cx' _ = toQualType m (QualTypeExpr cx (VariableType tv))
 
 > con :: (QualIdent -> TypeScheme -> a) -> ModuleIdent -> [ClassAssert]

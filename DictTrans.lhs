@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2087 2007-02-03 18:48:39Z wlux $
+% $Id: DictTrans.lhs 2088 2007-02-05 09:27:49Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -122,15 +122,15 @@ generator.
 
 > liftIntfDecls :: ModuleIdent -> TCEnv -> ValueEnv -> IDecl -> [IDecl]
 > liftIntfDecls _ _ _ (IInfixDecl p fix pr op) = [IInfixDecl p fix pr op]
-> liftIntfDecls _ _ _ (HidingDataDecl p tc tvs) = [HidingDataDecl p tc tvs]
-> liftIntfDecls _ _ _ (IDataDecl p _ tc tvs cs) = [IDataDecl p [] tc tvs cs]
-> liftIntfDecls _ _ _ (INewtypeDecl p _ tc tvs nc) =
->   [INewtypeDecl p [] tc tvs nc]
-> liftIntfDecls _ _ _ (ITypeDecl p tc tvs ty) = [ITypeDecl p tc tvs ty]
-> liftIntfDecls m tcEnv _ (HidingClassDecl p _ cls tv) =
->   classIDecls m tcEnv p cls tv Nothing
-> liftIntfDecls m tcEnv _ (IClassDecl p _ cls tv ds) =
->   classIDecls m tcEnv p cls tv (Just ds) ++ intfMethodStubs cls tv ds
+> liftIntfDecls _ _ _ (HidingDataDecl p tc k tvs) = [HidingDataDecl p tc k tvs]
+> liftIntfDecls _ _ _ (IDataDecl p _ tc k tvs cs) = [IDataDecl p [] tc k tvs cs]
+> liftIntfDecls _ _ _ (INewtypeDecl p _ tc k tvs nc) =
+>   [INewtypeDecl p [] tc k tvs nc]
+> liftIntfDecls _ _ _ (ITypeDecl p tc k tvs ty) = [ITypeDecl p tc k tvs ty]
+> liftIntfDecls m tcEnv _ (HidingClassDecl p _ cls k tv) =
+>   classIDecls m tcEnv p cls k tv Nothing
+> liftIntfDecls m tcEnv _ (IClassDecl p _ cls k tv ds) =
+>   classIDecls m tcEnv p cls k tv (Just ds) ++ intfMethodStubs cls tv ds
 > liftIntfDecls m tcEnv tyEnv (IInstanceDecl p cx cls ty) =
 >   instIDecls tcEnv tyEnv p cls' (toQualType m (QualTypeExpr cx ty))
 >   where cls' = qualQualify m cls
@@ -194,8 +194,9 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 
 > bindDictTypes :: TCEnv -> TCEnv
 > bindDictTypes = fmap transInfo
->   where transInfo (TypeClass cls _ _) =
->           DataType (qDictTypeId cls) 1 [Just (dictConstrId (unqualify cls))]
+>   where transInfo (TypeClass cls k _ _) =
+>           DataType (qDictTypeId cls) (KindArrow k KindStar)
+>                    [Just (dictConstrId (unqualify cls))]
 >         transInfo ti = ti
 
 > bindClassDecls :: ModuleIdent -> TCEnv -> ValueEnv -> ValueEnv
@@ -203,7 +204,7 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 >   foldr (bindClassEntities m tcEnv) tyEnv (allEntities tcEnv)
 
 > bindClassEntities :: ModuleIdent -> TCEnv -> TypeInfo -> ValueEnv -> ValueEnv
-> bindClassEntities m tcEnv (TypeClass cls _ fs) tyEnv =
+> bindClassEntities m tcEnv (TypeClass cls _ _ fs) tyEnv =
 >   foldr ($) tyEnv
 >         (zipWith3 (bindClassEntity m)
 >                   (DataConstructor : repeat Value)
@@ -230,10 +231,10 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 >         tys' = map (expandMethodType tcEnv (qualify cls) tv) tys
 >         vds' = orderMethodDecls (map Just fs) vds
 
-> classIDecls :: ModuleIdent -> TCEnv -> Position -> QualIdent -> Ident
->             -> Maybe [Maybe IMethodDecl] -> [IDecl]
-> classIDecls m tcEnv p cls tv (Just ds) =
->   IDataDecl p [] (qDictTypeId cls) [tv]
+> classIDecls :: ModuleIdent -> TCEnv -> Position -> QualIdent -> Maybe KindExpr
+>             -> Ident -> Maybe [Maybe IMethodDecl] -> [IDecl]
+> classIDecls m tcEnv p cls k tv (Just ds) =
+>   IDataDecl p [] (qDictTypeId cls) (fmap (`ArrowKind` Star) k) [tv]
 >             [Just (dictConstrDecl tcEnv p (unqualify cls) tys')] :
 >   zipWith3 (intfMethodDecl cls tv)
 >            (map (maybe p pos) ds)
@@ -243,8 +244,8 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 >         tys' = map (toMethodType m cls tv) tys
 >         pos (IMethodDecl p _ _) = p
 >         methodType (IMethodDecl _ _ ty) = ty
-> classIDecls _ _ p cls tv Nothing =
->   [HidingDataDecl p (qDictTypeId cls) [tv]]
+> classIDecls _ _ p cls k tv Nothing =
+>   [HidingDataDecl p (qDictTypeId cls) (fmap (`ArrowKind` Star) k) [tv]]
 
 > classDictType :: TCEnv -> ValueEnv -> QualIdent -> [Maybe Ident] -> Type
 > classDictType tcEnv tyEnv cls =
@@ -406,7 +407,8 @@ of method $f_i$ in class $C$.
 >                  (qualDictType cx' tp : map (instMethodType tyEnv cx tp) fs))
 >   where m = instanceMIdent
 >         tp = TypePred cls (applyType tc tvs)
->         tvs = take (constrKind tc tcEnv) (map TypeVariable [0..])
+>         n = kindArity (constrKind tc tcEnv) - kindArity (classKind cls tcEnv)
+>         tvs = take n (map TypeVariable [0..])
 >         cx' = maxContext tcEnv cx
 >         fs = classMethods cls tcEnv
 

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2084 2007-01-30 23:58:36Z wlux $
+% $Id: CurrySyntax.lhs 2088 2007-02-05 09:27:49Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -111,12 +111,15 @@ Interface declarations are restricted to type declarations and signatures.
 
 > data IDecl =
 >     IInfixDecl Position Infix Int QualIdent
->   | HidingDataDecl Position QualIdent [Ident]
->   | IDataDecl Position [ClassAssert] QualIdent [Ident] [Maybe ConstrDecl]
->   | INewtypeDecl Position [ClassAssert] QualIdent [Ident] NewConstrDecl
->   | ITypeDecl Position QualIdent [Ident] TypeExpr
->   | HidingClassDecl Position [ClassAssert] QualIdent Ident
->   | IClassDecl Position [ClassAssert] QualIdent Ident [Maybe IMethodDecl]
+>   | HidingDataDecl Position QualIdent (Maybe KindExpr) [Ident]
+>   | IDataDecl Position [ClassAssert] QualIdent (Maybe KindExpr) [Ident]
+>               [Maybe ConstrDecl]
+>   | INewtypeDecl Position [ClassAssert] QualIdent (Maybe KindExpr) [Ident]
+>                  NewConstrDecl
+>   | ITypeDecl Position QualIdent (Maybe KindExpr) [Ident] TypeExpr
+>   | HidingClassDecl Position [ClassAssert] QualIdent (Maybe KindExpr) Ident
+>   | IClassDecl Position [ClassAssert] QualIdent (Maybe KindExpr) Ident
+>                [Maybe IMethodDecl]
 >   | IInstanceDecl Position [ClassAssert] QualIdent TypeExpr
 >   | IFunctionDecl Position QualIdent QualTypeExpr
 >   deriving (Eq,Show)
@@ -125,6 +128,12 @@ Interface declarations are restricted to type declarations and signatures.
 
 > imethod :: IMethodDecl -> Ident
 > imethod (IMethodDecl _ f _) = f
+
+\end{verbatim}
+\paragraph{Kinds}
+\begin{verbatim}
+
+> data KindExpr = Star | ArrowKind KindExpr KindExpr deriving (Eq,Show)
 
 \end{verbatim}
 \paragraph{Types}

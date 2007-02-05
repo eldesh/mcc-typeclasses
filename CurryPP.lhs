@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2084 2007-01-30 23:58:36Z wlux $
+% $Id: CurryPP.lhs 2088 2007-02-05 09:27:49Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -73,10 +73,9 @@ Declarations
 > ppTopDecl (TypeDecl _ tc tvs ty) =
 >   sep [ppTypeDeclLhs "type" [] tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
 > ppTopDecl (ClassDecl _ cx cls tv ds) =
->   ppClassInstDecl (ppClassInstHead "class" cx (qualify cls) (VariableType tv))
->                   (map ppMethodDecl ds)
+>   ppClassInstDecl (ppClassHead cx (ppIdent cls) tv) (map ppMethodDecl ds)
 > ppTopDecl (InstanceDecl _ cx cls ty ds) =
->   ppClassInstDecl (ppClassInstHead "instance" cx cls ty) (map ppMethodDecl ds)
+>   ppClassInstDecl (ppInstanceHead cx cls ty) (map ppMethodDecl ds)
 > ppTopDecl (BlockDecl d) = ppDecl d
 
 > ppTypeDeclLhs :: String -> [ClassAssert] -> Ident -> [Ident] -> Doc
@@ -102,9 +101,12 @@ Declarations
 > ppDeriving [cls] = text "deriving" <+> ppQIdent cls
 > ppDeriving clss = text "deriving" <+> parenList (map ppQIdent clss)
 
-> ppClassInstHead :: String -> [ClassAssert] -> QualIdent -> TypeExpr -> Doc
-> ppClassInstHead kw cx cls ty =
->   text kw <+> sep [ppContext cx,ppQIdent cls <+> ppTypeExpr 2 ty]
+> ppClassHead :: [ClassAssert] -> Doc -> Ident -> Doc
+> ppClassHead cx cls tv = text "class" <+> sep [ppContext cx,cls <+> ppIdent tv]
+
+> ppInstanceHead :: [ClassAssert] -> QualIdent -> TypeExpr -> Doc
+> ppInstanceHead cx cls ty =
+>   text "instance" <+> sep [ppContext cx,ppQIdent cls <+> ppTypeExpr 2 ty]
 
 > ppClassInstDecl :: Doc -> [Doc] -> Doc
 > ppClassInstDecl head ds
@@ -188,27 +190,34 @@ Interfaces
 
 > ppIDecl :: IDecl -> Doc
 > ppIDecl (IInfixDecl _ fix p op) = ppPrec fix p <+> ppQInfixOp op
-> ppIDecl (HidingDataDecl _ tc tvs) =
->   text "hiding" <+> ppITypeDeclLhs "data" [] tc tvs
-> ppIDecl (IDataDecl _ cx tc tvs cs) =
->   sep (ppITypeDeclLhs "data" cx tc tvs :
+> ppIDecl (HidingDataDecl _ tc k tvs) =
+>   text "hiding" <+> ppITypeDeclLhs "data" [] tc k tvs
+> ppIDecl (IDataDecl _ cx tc k tvs cs) =
+>   sep (ppITypeDeclLhs "data" cx tc k tvs :
 >        map indent (zipWith (<+>) (equals : repeat vbar) (map ppIConstr cs)))
 >   where ppIConstr = maybe (char '_') ppConstr
-> ppIDecl (INewtypeDecl _ cx tc tvs nc) =
->   sep [ppITypeDeclLhs "newtype" cx tc tvs <+> equals,indent (ppNewConstr nc)]
-> ppIDecl (ITypeDecl _ tc tvs ty) =
->   sep [ppITypeDeclLhs "type" [] tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
-> ppIDecl (HidingClassDecl p cx cls tv) =
->   text "hiding" <+> ppIDecl (IClassDecl p cx cls tv [])
-> ppIDecl (IClassDecl _ cx cls tv ds) =
->   ppIClassDecl (ppClassInstHead "class" cx cls (VariableType tv)) ds
-> ppIDecl (IInstanceDecl _ cx cls ty) = ppClassInstHead "instance" cx cls ty
+> ppIDecl (INewtypeDecl _ cx tc k tvs nc) =
+>   sep [ppITypeDeclLhs "newtype" cx tc k tvs <+> equals,
+>        indent (ppNewConstr nc)]
+> ppIDecl (ITypeDecl _ tc k tvs ty) =
+>   sep [ppITypeDeclLhs "type" [] tc k tvs <+> equals,indent (ppTypeExpr 0 ty)]
+> ppIDecl (HidingClassDecl p cx cls k tv) =
+>   text "hiding" <+> ppIDecl (IClassDecl p cx cls k tv [])
+> ppIDecl (IClassDecl _ cx cls k tv ds) =
+>   ppIClassDecl (ppClassHead cx (ppITypeIdent cls k) tv) ds
+> ppIDecl (IInstanceDecl _ cx cls ty) = ppInstanceHead cx cls ty
 > ppIDecl (IFunctionDecl _ f ty) =
 >   ppQIdent f <+> text "::" <+> ppQualTypeExpr ty
 
-> ppITypeDeclLhs :: String -> [ClassAssert] -> QualIdent -> [Ident] -> Doc
-> ppITypeDeclLhs kw cx tc tvs =
->   text kw <+> sep [ppContext cx,ppQIdent tc <+> hsep (map ppIdent tvs)]
+> ppITypeDeclLhs :: String -> [ClassAssert] -> QualIdent -> Maybe KindExpr
+>                -> [Ident] -> Doc
+> ppITypeDeclLhs kw cx tc k tvs =
+>   text kw <+> sep [ppContext cx,ppITypeIdent tc k <+> hsep (map ppIdent tvs)]
+
+> ppITypeIdent :: QualIdent -> Maybe KindExpr -> Doc
+> ppITypeIdent tc (Just k) =
+>   parens (ppQIdent tc <+> text "::" <+> ppKindExpr 0 k)
+> ppITypeIdent tc Nothing = ppQIdent tc
 
 > ppIClassDecl :: Doc -> [Maybe IMethodDecl] -> Doc
 > ppIClassDecl head ds
@@ -223,6 +232,18 @@ Interfaces
 >   prefix <+> text "where" <+> lbrace $$
 >   vcat (punctuate semi ds) $$
 >   rbrace
+
+\end{verbatim}
+Kinds
+\begin{verbatim}
+
+> ppKindExpr :: Int -> KindExpr -> Doc
+> ppKindExpr _ Star = char '*'
+> ppKindExpr p (ArrowKind k1 k2) =
+>   parenExp (p > 0) (fsep (ppArrowKind (ArrowKind k1 k2)))
+>   where ppArrowKind Star = [ppKindExpr 0 Star]
+>         ppArrowKind (ArrowKind k1 k2) =
+>           ppKindExpr 1 k1 <+> rarrow : ppArrowKind k2
 
 \end{verbatim}
 Types

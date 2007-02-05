@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2085 2007-01-31 16:59:53Z wlux $
+% $Id: InstCheck.lhs 2088 2007-02-05 09:27:49Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -137,7 +137,7 @@ environment before instances of their subclasses.
 >         tc' = qualifyWith m tc
 >         (cls',clss) =
 >           case qualLookupTopEnv cls tcEnv of
->             [TypeClass cls' clss _] -> (cls',clss)
+>             [TypeClass cls' _ clss _] -> (cls',clss)
 >             _ -> internalError "inferContext"
 >         cx'' = nub (cx' ++ [TypePred cls (arrowBase ty') | cls <- clss] ++
 >                     [TypePred cls' ty | ty <- arrowArgs ty'])

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2085 2007-01-31 16:59:53Z wlux $
+% $Id: Base.lhs 2088 2007-02-05 09:27:49Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,11 +10,12 @@ The module \texttt{Base} provides definitions that are commonly used
 in various phases of the compiler.
 \begin{verbatim}
 
-> module Base(module Base,module Ident,module Position,module Types,
->             module CurrySyntax) where
+> module Base(module Base, module Ident, module Position, module CurrySyntax,
+>             module Kinds, module Types) where
 > import Ident
 > import Position
 > import CurrySyntax
+> import Kinds
 > import Types
 > import Env
 > import TopEnv
@@ -37,18 +38,14 @@ imported directly or indirectly into the current module.
 
 \end{verbatim}
 \paragraph{Type constructors and type classes}
-For all defined types and type classes, the compiler must maintain
-kind information. At present, the compiler does not support higher
-order type classes. Therefore, its type language is first order and
-the only information that must be recorded is the arity of each type.
-For algebraic data types and renaming types, the compiler also records
-all data constructors belonging to that type, for alias types the
-expanded right hand side type expression is saved, and for type
-classes the names of their immediate super classes and the type class
-methods are saved. No kind information is saved for type classes
-because only single parameter type classes are supported and instance
-types must have kind $\ast$. The list of super classes is always
-sorted by their names. Type classes are recorded in the type
+For all defined types and type classes, the compiler maintains kind
+information. For algebraic data types and renaming types, the compiler
+also records all data constructors belonging to that type, for alias
+types the expanded right hand side type expression is saved, and for
+type classes the names of their immediate super classes and their
+methods are saved. The list of super classes is always sorted
+according to their names. For type variables, only their kind is
+recorded in the environment. Type classes are recorded in the type
 constructor environment because type constructors and type classes
 share a common name space.
 
@@ -69,37 +66,39 @@ replaced by underscores as well.
 
 > type TCEnv = TopEnv TypeInfo
 
-> data TypeInfo = DataType QualIdent Int [Maybe Ident]
->               | RenamingType QualIdent Int Ident
->               | AliasType QualIdent Int Type
->               | TypeClass QualIdent [QualIdent] [Maybe Ident]
+> data TypeInfo = DataType QualIdent Kind [Maybe Ident]
+>               | RenamingType QualIdent Kind Ident
+>               | AliasType QualIdent Kind Type
+>               | TypeClass QualIdent Kind [QualIdent] [Maybe Ident]
+>               | TypeVar Kind
 >               deriving Show
 
 > instance Entity TypeInfo where
 >   origName (DataType tc _ _) = tc
 >   origName (RenamingType tc _ _) = tc
 >   origName (AliasType tc _ _) = tc
->   origName (TypeClass cls _ _) = cls
->   merge (DataType tc1 n cs1) (DataType tc2 _ cs2)
->     | tc1 == tc2 = Just (DataType tc1 n (mergeData cs1 cs2))
+>   origName (TypeClass cls _ _ _) = cls
+>   origName (TypeVar _) = internalError "origName TypeVar"
+>   merge (DataType tc1 k cs1) (DataType tc2 _ cs2)
+>     | tc1 == tc2 = Just (DataType tc1 k (mergeData cs1 cs2))
 >     where mergeData cs1 cs2
 >             | null cs1 = cs2
 >             | null cs2 = cs1
 >             | otherwise = zipWith mplus cs1 cs2
->   merge (DataType tc1 n _) (RenamingType tc2 _ nc)
->     | tc1 == tc2 = Just (RenamingType tc1 n nc)
->   merge (RenamingType tc1 n nc) (DataType tc2 _ _)
->     | tc1 == tc2 = Just (RenamingType tc1 n nc)
->   merge (RenamingType tc1 n nc) (RenamingType tc2 _ _)
->     | tc1 == tc2 = Just (RenamingType tc1 n nc)
->   merge (AliasType tc1 n ty) (AliasType tc2 _ _)
->     | tc1 == tc2 = Just (AliasType tc1 n ty)
->   merge (TypeClass cls1 clss fs1) (TypeClass cls2 _ fs2)
->     | cls1 == cls2 = Just (TypeClass cls1 clss (zipWith mplus fs1 fs2))
+>   merge (DataType tc1 k _) (RenamingType tc2 _ nc)
+>     | tc1 == tc2 = Just (RenamingType tc1 k nc)
+>   merge (RenamingType tc1 k nc) (DataType tc2 _ _)
+>     | tc1 == tc2 = Just (RenamingType tc1 k nc)
+>   merge (RenamingType tc1 k nc) (RenamingType tc2 _ _)
+>     | tc1 == tc2 = Just (RenamingType tc1 k nc)
+>   merge (AliasType tc1 k ty) (AliasType tc2 _ _)
+>     | tc1 == tc2 = Just (AliasType tc1 k ty)
+>   merge (TypeClass cls1 k clss fs1) (TypeClass cls2 _ _ fs2)
+>     | cls1 == cls2 = Just (TypeClass cls1 k clss (zipWith mplus fs1 fs2))
 >   merge _ _ = Nothing
 
 \end{verbatim}
-The function \texttt{constrKind} returns the arity of a type
+The function \texttt{constrKind} returns the kind of a type
 constructor from the type constructor environment and the function
 \texttt{constructors} returns the names of the data and newtype
 constructors of a type. Both functions are supposed to be used only
@@ -107,12 +106,12 @@ after checking for undefined and ambiguous type identifiers and
 therefore should not fail.
 \begin{verbatim}
 
-> constrKind :: QualIdent -> TCEnv -> Int
+> constrKind :: QualIdent -> TCEnv -> Kind
 > constrKind tc tcEnv =
 >   case qualLookupTopEnv tc tcEnv of
->     [DataType _ n _] -> n
->     [RenamingType _ n _] -> n
->     [AliasType _ n _] -> n
+>     [DataType _ k _] -> k
+>     [RenamingType _ k _] -> k
+>     [AliasType _ k _] -> k
 >     _ -> internalError ("constrKind " ++ show tc)
 
 > constructors :: QualIdent -> TCEnv -> [Maybe Ident]
@@ -123,19 +122,35 @@ therefore should not fail.
 >     [AliasType _ _ _] -> []
 >     _ -> internalError ("constructors " ++ show tc)
 
+> aliasArity :: QualIdent -> TCEnv -> Maybe Int
+> aliasArity tc tcEnv =
+>   case qualLookupTopEnv tc tcEnv of
+>     [DataType _ _ _] -> Nothing
+>     [RenamingType _ _ _] -> Nothing
+>     [AliasType _ k _] -> Just (kindArity k)
+>     _ -> internalError ("aliasArity " ++ show tc)
+
 \end{verbatim}
-The function \texttt{superClasses} returns a list of all immediate
-super classes of a type class. The function \texttt{allSuperClasses}
-returns a list of all direct and indirect super classes of a class
-including the class itself, i.e., it computes the reflexive transitive
-closure of \texttt{superClasses}. The function \texttt{classMethods}
-returns the methods defined by a class.
+The function \texttt{classKind} returns the kind of a type class'
+instance type from the type environment. The function
+\texttt{superClasses} returns a list of all immediate super classes of
+a type class. The function \texttt{allSuperClasses} returns a list of
+all direct and indirect super classes of a class including the class
+itself, i.e., it computes the reflexive transitive closure of
+\texttt{superClasses}. The function \texttt{classMethods} returns the
+methods defined by a class.
 \begin{verbatim}
+
+> classKind :: QualIdent -> TCEnv -> Kind
+> classKind tc tcEnv =
+>   case qualLookupTopEnv tc tcEnv of
+>     [TypeClass _ k _ _] -> k
+>     _ -> internalError ("classKind " ++ show tc)
 
 > superClasses :: QualIdent -> TCEnv -> [QualIdent]
 > superClasses cls clsEnv =
 >   case qualLookupTopEnv cls clsEnv of
->     [TypeClass _ clss _] -> clss
+>     [TypeClass _ _ clss _] -> clss
 >     _ -> internalError ("superClasses " ++ show cls)
 
 > allSuperClasses :: QualIdent -> TCEnv -> [QualIdent]
@@ -145,8 +160,18 @@ returns the methods defined by a class.
 > classMethods :: QualIdent -> TCEnv -> [Maybe Ident]
 > classMethods cls clsEnv =
 >   case qualLookupTopEnv cls clsEnv of
->     [TypeClass _ _ fs] -> fs
+>     [TypeClass _ _ _ fs] -> fs
 >     _ -> internalError ("classMethods " ++ show cls)
+
+\end{verbatim}
+The function \texttt{varKind} returns the kind of a type variable.
+\begin{verbatim}
+
+> varKind :: Ident -> TCEnv -> Kind
+> varKind tc tcEnv =
+>   case lookupTopEnv tc tcEnv of
+>     [TypeVar k] -> k
+>     _ -> internalError ("varKind " ++ show tc)
 
 \end{verbatim}
 A simpler environment is used for checking the syntax of type
@@ -169,7 +194,8 @@ synonym types on the other side.
 > typeKind (DataType tc _ cs) = Data tc (catMaybes cs)
 > typeKind (RenamingType tc _ c) = Data tc [c]
 > typeKind (AliasType tc _ _) = Alias tc
-> typeKind (TypeClass cls _ fs) = Class cls (catMaybes fs)
+> typeKind (TypeClass cls _ _ fs) = Class cls (catMaybes fs)
+> typeKind (TypeVar _) = internalError "typeKind"
 
 > instance Entity TypeKind where
 >   origName (Data tc _) = tc
@@ -378,7 +404,8 @@ for the type \verb|a -> b|.
 >   foldr (uncurry (predefTC . fromJust . unapplyType)) emptyTCEnv predefTypes
 >   where emptyTCEnv = emptyTopEnv (Just (map fst tuples))
 >         predefTC (tc,tys) cs =
->           predefTopEnv tc (DataType tc (length tys) (map (Just . fst) cs))
+>           predefTopEnv tc (DataType tc k (map (Just . fst) cs))
+>           where k = simpleKind (length tys)
 
 > initIEnv :: InstEnv
 > initIEnv = emptyEnv
@@ -404,7 +431,7 @@ for the type \verb|a -> b|.
 > tuples = map tupleInfo [2..]
 >   where tvs = map typeVar [0..]
 >         tupleInfo n =
->           (DataType c n [Just (unqualify c)],
+>           (DataType c (simpleKind n) [Just (unqualify c)],
 >            DataConstructor c (ForAll n (tupleConstrType (take n tvs))))
 >           where c = qTupleId n
 >         tupleConstrType tys = qualType (foldr TypeArrow (tupleType tys) tys)

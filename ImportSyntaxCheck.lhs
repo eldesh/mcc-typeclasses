@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ImportSyntaxCheck.lhs 2031 2006-11-30 10:06:13Z wlux $
+% $Id: ImportSyntaxCheck.lhs 2088 2007-02-05 09:27:49Z wlux $
 %
-% Copyright (c) 2000-2006, Wolfgang Lux
+% Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ImportSyntaxCheck.lhs}
@@ -35,20 +35,20 @@ declarations.
 > type ExpFunEnv = Env Ident ValueKind
 
 > bindType :: ModuleIdent -> IDecl -> ExpTypeEnv -> ExpTypeEnv
-> bindType m (IDataDecl _ _ tc _ cs) =
+> bindType m (IDataDecl _ _ tc _ _ cs) =
 >   bindUnqual tc (Data (qualQualify m tc) (map constr (catMaybes cs)))
-> bindType m (INewtypeDecl _ _ tc _ nc) =
+> bindType m (INewtypeDecl _ _ tc _ _ nc) =
 >   bindUnqual tc (Data (qualQualify m tc) [nconstr nc])
-> bindType m (ITypeDecl _ tc _ _) = bindUnqual tc (Alias (qualQualify m tc))
-> bindType m (IClassDecl _ _ cls _ ds) =
+> bindType m (ITypeDecl _ tc _ _ _) = bindUnqual tc (Alias (qualQualify m tc))
+> bindType m (IClassDecl _ _ cls _ _ ds) =
 >   bindUnqual cls (Class (qualQualify m cls) (map imethod (catMaybes ds)))
 > bindType _ _ = id
 
 > bindValue :: ModuleIdent -> IDecl -> ExpFunEnv -> ExpFunEnv
-> bindValue m (IDataDecl _ _ tc _ cs) =
+> bindValue m (IDataDecl _ _ tc _ _ cs) =
 >   flip (foldr (bindConstr (qualQualify m tc))) (catMaybes cs)
-> bindValue m (INewtypeDecl _ _ tc _ nc) = bindNewConstr (qualQualify m tc) nc
-> bindValue m (IClassDecl _ _ cls _ ds) =
+> bindValue m (INewtypeDecl _ _ tc _ _ nc) = bindNewConstr (qualQualify m tc) nc
+> bindValue m (IClassDecl _ _ cls _ _ ds) =
 >   flip (foldr (bindMethod (qualQualify m cls))) (catMaybes ds)
 > bindValue m (IFunctionDecl _ f _) = bindUnqual f (Var (qualQualify m f))
 > bindValue _ _ = id

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: io_monad.nw 1872 2006-03-16 10:11:43Z wlux $
+% $Id: io_monad.nw 2089 2007-02-05 13:44:23Z wlux $
 %
 % Copyright (c) 2001-2005, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -199,26 +199,15 @@ fail_with(const char *format, ...)
 }
 
 @
-The code for the primitive I/O actions \texttt{done}, \texttt{return},
-\texttt{(>>)}, and \texttt{(>>=)} is implemented in this file, too.
-The functions \texttt{done} and \texttt{(>>)} could be defined as
-prelude functions but we can implement them more efficiently here.
-Note that all functions take an additional argument due to the
-underlying representation of the \texttt{IO} monad. Also note that
-\texttt{return} does not evaluate its argument because of the lazy IO
-monad semantics.
+The code for the primitive I/O actions \texttt{return}, \texttt{(>>)},
+and \texttt{(>>=)} is implemented in this file, too. The function
+\texttt{(>>)} could be defined as prelude function but we can
+implement it more efficiently here. Note that all functions take an
+additional argument due to the underlying representation of the
+\texttt{IO} monad. Also note that \texttt{return} does not evaluate
+its argument because of the lazy IO monad semantics.
 
 <<io_monad.c>>=
-DECLARE_ENTRYPOINT(__done);
-
-FUNCTION(__done)
-{
-    EXPORT_LABEL(__done)
- ENTRY_LABEL(__done)
-    sp += 1;
-    RETURN(unit);
-}
-
 DECLARE_ENTRYPOINT(__return);
 
 FUNCTION(__return)

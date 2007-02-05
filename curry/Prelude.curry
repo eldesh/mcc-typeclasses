@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2042 2006-12-13 09:50:04Z wlux $
+-- $Id: Prelude.curry 2089 2007-02-05 13:44:23Z wlux $
 module Prelude where
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -186,6 +186,23 @@ class Show a where
   showList (x:xs) = showChar '[' . shows x . showl xs
     where showl []     = showChar ']'
           showl (x:xs) = showChar ',' . shows x . showl xs
+
+
+-- Monadic classes
+
+class Functor f where
+  fmap :: (a -> b) -> f a -> f b
+
+class Monad m where
+  return :: a -> m a
+  (>>=)  :: m a -> (a -> m b) -> m b
+  (>>)   :: m a -> m b -> m b
+  fail   :: String -> m a
+
+  -- Minimal complete definition:
+  -- return, (>>=)
+  m >> k = m >>= \_ -> k
+  fail s = error s
 
 
 -- Boolean values
@@ -480,6 +497,13 @@ instance Ord a => Ord [a] where
 	  GT -> GT
 instance Show a => Show [a] where
   showsPrec _ = showList
+instance Functor [] where
+  fmap = map
+instance Monad [] where
+  return x = [x]
+  xs >>= f = concatMap f xs
+  fail _   = []
+
 
 --- Evaluates the argument to spine form and returns it.
 --- Suspends until the result is bound to a non-variable spine.
@@ -1010,6 +1034,16 @@ c1 &> c2 | c1 = c2
 -- Maybe type
 
 data Maybe a = Nothing | Just a deriving (Eq,Ord,Show)
+instance Functor Maybe where
+  fmap f (Just x) = Just (f x)
+  fmap _ Nothing = Nothing
+instance Monad Maybe where
+  return x      = Just x
+  Just x  >>= f = f x
+  Nothing >>= _ = Nothing
+  Just _  >> y	= y
+  Nothing >> _	= Nothing
+  fail _     	= Nothing
 
 maybe		   :: b -> (a -> b) -> Maybe a -> b
 maybe z _ Nothing  = z
@@ -1028,13 +1062,22 @@ either _ g (Right y) = g y
 -- Monadic IO
 
 data IO a  -- conceptually: World -> (a,World)
+instance Functor IO where
+  fmap f x = x >>= \y -> return (f y)
+instance Monad IO where
+  return = primReturn
+    where foreign import primitive "return" primReturn :: a -> IO a
+  (>>=) = primBind
+    where foreign import primitive ">>=" primBind :: IO a -> (a -> IO b) -> IO b
+  (>>) = primBind_
+    where foreign import primitive ">>" primBind_ :: IO a -> IO b -> IO b
+  fail s = ioError s
 
 type FilePath = String
 
-foreign import primitive done   :: IO ()
-foreign import primitive return :: a -> IO a
-foreign import primitive (>>)   :: IO a -> IO b        -> IO b
-foreign import primitive (>>=)  :: IO a -> (a -> IO b) -> IO b
+--- The empty action that returns nothing.
+done :: Monad m => m ()
+done = return ()
 
 --- Action that (lazily) reads file and returns its contents.
 foreign import primitive readFile   :: FilePath -> IO String
@@ -1079,26 +1122,40 @@ doSolve :: Success -> IO ()
 doSolve constraint | constraint = done
 
 
--- IO monad auxiliary functions
+-- Auxiliary monad functions
 
---- Execute a sequence of I/O actions and collect all results in a list
-sequenceIO :: [IO a] -> IO [a]
-sequenceIO = foldr mcons (return [])
+--- Execute a sequence of actions and collect all results in a list
+sequence :: Monad m => [m a] -> m [a]
+sequence = foldr mcons (return [])
   where mcons m ms = do x <- m; xs <- ms; return (x:xs)
 
---- Execute a sequence of I/O actions and ignore the result
-sequenceIO_ :: [IO a] -> IO ()
-sequenceIO_ = foldr (>>) done
+--- Execute a sequence of actions and ignore the result
+sequence_ :: Monad m => [m a] -> m ()
+sequence_ = foldr (>>) done
 
---- Map an I/O action function on a list of elements.
+--- Map an action function on a list of elements.
 --- The results are of all I/O actions are collected in a list.
-mapIO :: (a -> IO b) -> [a] -> IO [b]
-mapIO f ms = sequenceIO (map f ms)
+mapM :: Monad m => (a -> m b) -> [a] -> m [b]
+mapM f ms = sequence (map f ms)
 
---- Map an I/O action function on a list of elements.
+--- Map an action function on a list of elements.
 --- The results are of all I/O actions are ignored.
+mapM_ :: Monad m => (a -> m b) -> [a] -> m ()
+mapM_ f ms = sequence_ (map f ms)
+
+-- NB sequenceIO, sequenceIO_, mapIO, map_IO currently retained for
+--    backward compatibility
+sequenceIO :: [IO a] -> IO [a]
+sequenceIO = sequence
+
+sequenceIO_ :: [IO a] -> IO ()
+sequenceIO_ = sequence_
+
+mapIO :: (a -> IO b) -> [a] -> IO [b]
+mapIO = mapM
+
 mapIO_ :: (a -> IO b) -> [a] -> IO ()
-mapIO_ f ms = sequenceIO_ (map f ms)
+mapIO_ = mapM_
 
 
 -- IO Exceptions

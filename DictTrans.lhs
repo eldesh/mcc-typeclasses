@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2088 2007-02-05 09:27:49Z wlux $
+% $Id: DictTrans.lhs 2089 2007-02-05 13:44:23Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -638,9 +638,13 @@ the concrete type at which $f$ is used in the application.
 >            (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) ds)
 >            (dictTrans m tcEnv iEnv tyEnv dictEnv e)
 >   dictTrans m tcEnv iEnv tyEnv dictEnv (Do sts e) =
->     liftM2 Do
->            (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) sts)
->            (dictTrans m tcEnv iEnv tyEnv dictEnv e)
+>     dictTrans m tcEnv iEnv tyEnv dictEnv
+>               (foldr (desugarStmt (typeOf e)) e sts)
+>     where desugarStmt ty (StmtExpr e) =
+>             Apply (Apply (prelBind_ (typeOf e) ty) e)
+>           desugarStmt ty (StmtBind t e) =
+>             Apply (Apply (prelBind (typeOf e) (typeOf t) ty) e) . Lambda [t]
+>           desugarStmt _ (StmtDecl ds) = Let ds
 >   dictTrans m tcEnv iEnv tyEnv dictEnv (IfThenElse e1 e2 e3) =
 >     liftM3 IfThenElse
 >            (dictTrans m tcEnv iEnv tyEnv dictEnv e1)
@@ -969,6 +973,16 @@ Prelude entities.
 > prelFromFloat a =
 >   Variable (floatType `TypeArrow` a)
 >            (qualifyWith preludeMIdent (mkIdent "fromFloat"))
+
+> prelBind :: Type -> Type -> Type -> Expression Type
+> prelBind ma a mb =
+>   Variable (ma `TypeArrow` ((a `TypeArrow` mb) `TypeArrow` mb))
+>            (qualifyWith preludeMIdent (mkIdent ">>="))
+
+> prelBind_ :: Type -> Type -> Expression Type
+> prelBind_ ma mb =
+>   Variable (ma `TypeArrow` (mb `TypeArrow` mb))
+>            (qualifyWith preludeMIdent (mkIdent ">>"))
 
 > prelUndefined :: Type -> Expression Type
 > prelUndefined a = Variable a (qualifyWith preludeMIdent (mkIdent "undefined"))

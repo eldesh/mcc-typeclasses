@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2087 2007-02-03 18:48:39Z wlux $
+% $Id: TypeCheck.lhs 2089 2007-02-05 13:44:23Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -941,11 +941,12 @@ Note that overloaded literals are not supported in patterns.
 >     return (cx ++ cx',ty,Let ds' e')
 > tcExpr m tcEnv p (Do sts e) =
 >   do
->     (cxs,sts') <- liftM unzip $ mapM (tcStmt m tcEnv p) sts
->     ty <- liftM ioType freshTypeVar
->     (cx,e') <-
+>     (cx,mTy) <- freshMonadType
+>     (cxs,sts') <- liftM unzip $ mapM (tcStmt m tcEnv p mTy) sts
+>     ty <- liftM (TypeApply mTy) freshTypeVar
+>     (cx',e') <-
 >       tcExpr m tcEnv p e >>= unify p "statement" (ppExpr 0 e) tcEnv ty
->     return (concat cxs ++ cx,ty,Do sts' e')
+>     return (cx ++ concat cxs ++ cx',ty,Do sts' e')
 > tcExpr m tcEnv p e@(IfThenElse e1 e2 e3) =
 >   do
 >     (cx,e1') <-
@@ -997,24 +998,24 @@ Note that overloaded literals are not supported in patterns.
 >     (cx,ds') <- tcDecls m tcEnv ds
 >     return (cx,StmtDecl ds')
 
-> tcStmt :: ModuleIdent -> TCEnv -> Position -> Statement a
+> tcStmt :: ModuleIdent -> TCEnv -> Position -> Type -> Statement a
 >        -> TcState (Context,Statement Type)
-> tcStmt m tcEnv p (StmtExpr e) =
+> tcStmt m tcEnv p mTy (StmtExpr e) =
 >   do
 >     alpha <- freshTypeVar
 >     (cx',e') <-
 >       tcExpr m tcEnv p e >>=
->       unify p "statement" (ppExpr 0 e) tcEnv (ioType alpha)
+>       unify p "statement" (ppExpr 0 e) tcEnv (TypeApply mTy alpha)
 >     return (cx',StmtExpr e')
-> tcStmt m tcEnv p st@(StmtBind t e) =
+> tcStmt m tcEnv p mTy st@(StmtBind t e) =
 >   do
 >     (cx,ty,t') <- tcConstrTerm (tcVariable m) tcEnv p t
 >     (cx',e') <-
 >       tcExpr m tcEnv p e >>=
 >       unify p "statement" (ppStmt st $-$ text "Term:" <+> ppExpr 0 e)
->             tcEnv (ioType ty)
+>             tcEnv (TypeApply mTy ty)
 >     return (cx ++ cx',StmtBind t' e')
-> tcStmt m tcEnv p (StmtDecl ds) =
+> tcStmt m tcEnv p _ (StmtDecl ds) =
 >   do
 >     (cx,ds') <- tcDecls m tcEnv ds
 >     return (cx,StmtDecl ds')
@@ -1322,16 +1323,17 @@ We use negative offsets for fresh type variables.
 > freshTypeVar :: TcState Type
 > freshTypeVar = freshVar TypeVariable
 
-> freshQualType :: [QualIdent] -> TcState (Context,Type)
-> freshQualType clss =
+> freshQualType :: QualIdent -> TcState (Context,Type)
+> freshQualType cls =
 >   do
 >     tv <- freshTypeVar
->     return ([TypePred cls tv | cls <- clss],tv)
+>     return ([TypePred cls tv],tv)
 
 > freshEnumType, freshNumType, freshFracType :: TcState (Context,Type)
-> freshEnumType = freshQualType [qEnumId]
-> freshNumType = freshQualType [qNumId]
-> freshFracType = freshQualType [qFractionalId]
+> freshEnumType = freshQualType qEnumId
+> freshNumType = freshQualType qNumId
+> freshFracType = freshQualType qFractionalId
+> freshMonadType = freshQualType qMonadId
 
 > freshConstrained :: [Type] -> TcState Type
 > freshConstrained tys = freshVar (TypeConstrained tys)

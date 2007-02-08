@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2089 2007-02-05 13:44:23Z wlux $
+% $Id: TypeCheck.lhs 2091 2007-02-08 17:00:30Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -511,7 +511,7 @@ case of \texttt{tcTopDecl}.
 >                   -> TcState (MethodDecl Type)
 > tcClassMethodDecl m tcEnv sigs d =
 >   do
->     methTy <- liftM (classMethodType qualify d) fetchSt
+>     methTy <- liftM (classMethodType (qualifyWith m) d) fetchSt
 >     (ty',d') <- tcMethodDecl m tcEnv methTy d
 >     checkClassMethodType tcEnv (classMethodSig sigs d) ty' d'
 
@@ -630,14 +630,6 @@ arbitrary type.
 \end{verbatim}
 \paragraph{Patterns and Expressions}
 Note that overloaded literals are not supported in patterns.
-
-\ToDo{Do not fix the type of integer literals in patterns prematurely.
-  Even though we cannot handle overloaded literals in patterns, the
-  compiler should accept the expression \texttt{(\char`\\ 0}
-  $\rightarrow$ \texttt{success)} \texttt{::} \texttt{Float}
-  $\rightarrow$ \texttt{Success} just like it accepts
-  \texttt{(\char`\\ \_} $\rightarrow$ \texttt{0)} \texttt{::}
-  \texttt{a} $\rightarrow$ \texttt{Float}.}
 \begin{verbatim}
 
 > tcLiteral :: Bool -> Literal -> TcState (Context,Type)

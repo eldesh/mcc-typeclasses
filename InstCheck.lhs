@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2088 2007-02-05 09:27:49Z wlux $
+% $Id: InstCheck.lhs 2092 2007-02-08 21:30:37Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -132,7 +132,7 @@ environment before instances of their subclasses.
 >     cx''' <- reduceContext p what doc tcEnv iEnv cx''
 >     return (CT cls' tc',sort cx''')
 >   where what = "derived instance"
->         doc = ppTopDecl (InstanceDecl p [] cls ty'' [])
+>         doc = ppInstance tcEnv (TypePred cls (arrowBase ty'))
 >         QualType cx' ty' = expandConstrType tcEnv cx tc' tvs tys
 >         tc' = qualifyWith m tc
 >         (cls',clss) =
@@ -141,8 +141,6 @@ environment before instances of their subclasses.
 >             _ -> internalError "inferContext"
 >         cx'' = nub (cx' ++ [TypePred cls (arrowBase ty') | cls <- clss] ++
 >                     [TypePred cls' ty | ty <- arrowArgs ty'])
->         ty'' = foldl ApplyType (ConstructorType (qualify tc))
->                      (map VariableType tvs)
 
 > updateContexts :: InstEnv -> [(CT,Context)] -> Maybe InstEnv
 > updateContexts iEnv cxs = if or upds then Just iEnv' else Nothing
@@ -201,10 +199,10 @@ satisfied by \emph{cx}.
 > checkInstance tcEnv iEnv (InstanceDecl p cx cls ty ds) =
 >   do
 >     cx''' <- reduceContext p what doc tcEnv iEnv cx''
->     mapE_ (reportMissingInstance p what doc tcEnv)
+>     mapE_ (errorAt p . noInstance what doc tcEnv)
 >           (filter (`notElem` maxContext tcEnv cx') cx''')
 >   where what = "instance declaration"
->         doc = ppTopDecl (InstanceDecl p cx cls ty [])
+>         doc = ppInstance tcEnv (TypePred cls ty')
 >         QualType cx' ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
 >         cx'' = [TypePred cls ty' | cls <- superClasses cls tcEnv]
 > checkInstance _ _ _ = return ()
@@ -222,7 +220,7 @@ implied by other predicates in the context are removed.
 >               -> Error Context
 > reduceContext p what doc tcEnv iEnv cx =
 >   do
->     mapE_ (reportMissingInstance p what doc tcEnv) cx2
+>     mapE_ (errorAt p . noInstance what doc tcEnv) cx2
 >     return cx1
 >   where (cx1,cx2) =
 >           partitionContext (minContext tcEnv (reduceTypePreds iEnv cx))
@@ -255,11 +253,6 @@ implied by other predicates in the context are removed.
 >         isTypeVar (TypeApply _ _) = False
 >         isTypeVar (TypeArrow _ _) = False
 
-> reportMissingInstance :: Position -> String -> Doc -> TCEnv -> TypePred
->                       -> Error ()
-> reportMissingInstance p what doc tcEnv (TypePred cls ty) =
->   errorAt p (noInstance what doc tcEnv cls ty)
-
 \end{verbatim}
 The function \texttt{constrTypes} extracts the argument types of a
 data constructor from its declaration.
@@ -273,14 +266,10 @@ data constructor from its declaration.
 Error functions.
 \begin{verbatim}
 
-> noInstance :: String -> Doc -> TCEnv -> QualIdent -> Type -> String
-> noInstance what doc tcEnv cls ty = show $
->   vcat [sep [text "Missing instance for",
->              ppQIdent cls' <+> ppTypeExpr 2 ty',
->              text "in" <+> text what],
->         doc]
->   where QualTypeExpr [ClassAssert cls' _] ty' =
->           fromQualType tcEnv (QualType [TypePred cls (TypeVariable 0)] ty)
+> noInstance :: String -> Doc -> TCEnv -> TypePred -> String
+> noInstance what doc tcEnv tp = show $
+>   text "Missing" <+> ppInstance tcEnv tp <+> text "instance" $$
+>   text "in" <+> text what <+> doc
 
 > noAbstractDerive :: String
 > noAbstractDerive = "Instances cannot be derived for abstract types"

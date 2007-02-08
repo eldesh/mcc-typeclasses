@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2090 2007-02-05 18:57:27Z wlux $
+% $Id: TypeTrans.lhs 2092 2007-02-08 21:30:37Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -14,11 +14,12 @@ external type representations.
 >                  fromType, fromQualType,
 >                  expandMonoType, expandConstrType, expandMethodType,
 >                  expandPolyType, minContext, maxContext,
->                  ppType, ppQualType, ppTypeScheme) where
+>                  ppType, ppQualType, ppTypeScheme, ppInstance) where
 > import Base
 > import CurryPP
 > import List
 > import Map
+> import Pretty
 > import TopEnv
 > import TypeSubst
 
@@ -339,5 +340,9 @@ converting them into type expressions.
 
 > ppTypeScheme :: TCEnv -> TypeScheme -> Doc
 > ppTypeScheme tcEnv (ForAll _ ty) = ppQualType tcEnv ty
+
+> ppInstance :: TCEnv -> TypePred -> Doc
+> ppInstance tcEnv (TypePred cls ty) =
+>   ppQIdent (unqualifyTC tcEnv cls) <+> ppTypeExpr 2 (fromType tcEnv ty)
 
 \end{verbatim}

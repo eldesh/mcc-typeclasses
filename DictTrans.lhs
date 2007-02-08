@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2089 2007-02-05 13:44:23Z wlux $
+% $Id: DictTrans.lhs 2092 2007-02-08 21:30:37Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -220,13 +220,14 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 > classDecls :: TCEnv -> ValueEnv -> Position -> Ident -> Ident
 >            -> [MethodDecl Type] -> [TopDecl Type]
 > classDecls tcEnv tyEnv p cls tv ds =
->   DataDecl p [] (dictTypeId cls) [tv] [dictConstrDecl tcEnv p cls tys'] [] :
+>   dictDataDecl p cls [dictConstrDecl tcEnv p cls tys'] :
 >   zipWith4 funDecl
 >            ps
 >            (defaultMethodIds cls)
 >            (repeat [])
 >            (zipWith (defaultMethodExpr tyEnv) fs vds')
->   where (vds,ods) = partition isMethodDecl ds
+>   where VariableType tv' = fromType tcEnv (TypeVariable 0)
+>         (vds,ods) = partition isMethodDecl ds
 >         (ps,fs,tys) = unzip3 [(p,f,ty) | MethodSig p fs ty <- ods, f <- fs]
 >         tys' = map (expandMethodType tcEnv (qualify cls) tv) tys
 >         vds' = orderMethodDecls (map Just fs) vds
@@ -234,8 +235,8 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 > classIDecls :: ModuleIdent -> TCEnv -> Position -> QualIdent -> Maybe KindExpr
 >             -> Ident -> Maybe [Maybe IMethodDecl] -> [IDecl]
 > classIDecls m tcEnv p cls k tv (Just ds) =
->   IDataDecl p [] (qDictTypeId cls) (fmap (`ArrowKind` Star) k) [tv]
->             [Just (dictConstrDecl tcEnv p (unqualify cls) tys')] :
+>   dictIDataDecl IDataDecl p cls k
+>                 [Just (dictConstrDecl tcEnv p (unqualify cls) tys')] :
 >   zipWith3 (intfMethodDecl cls tv)
 >            (map (maybe p pos) ds)
 >            (qDefaultMethodIds cls)
@@ -244,8 +245,8 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 >         tys' = map (toMethodType m cls tv) tys
 >         pos (IMethodDecl p _ _) = p
 >         methodType (IMethodDecl _ _ ty) = ty
-> classIDecls _ _ p cls k tv Nothing =
->   [HidingDataDecl p (qDictTypeId cls) (fmap (`ArrowKind` Star) k) [tv]]
+> classIDecls _ _ p cls k _ Nothing =
+>   [dictIDataDecl (const . HidingDataDecl) p cls k]
 
 > classDictType :: TCEnv -> ValueEnv -> QualIdent -> [Maybe Ident] -> Type
 > classDictType tcEnv tyEnv cls =
@@ -257,6 +258,17 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 > classMethodType tyEnv cls (Just f) = funType (qualifyLike cls f) tyEnv
 > classMethodType _ cls Nothing = ForAll 1 (QualType [TypePred cls ty] ty)
 >   where ty = TypeVariable 0
+
+> dictDataDecl :: Position -> Ident -> [ConstrDecl] -> TopDecl a
+> dictDataDecl p cls cs = DataDecl p [] (dictTypeId cls) [tv] cs []
+>   where VariableType tv = fromType initTCEnv (TypeVariable 0)
+
+> dictIDataDecl :: (Position -> [ClassAssert] -> QualIdent -> Maybe KindExpr
+>                   -> [Ident] -> a)
+>               -> Position -> QualIdent -> Maybe KindExpr -> a
+> dictIDataDecl f p cls k =
+>   f p [] (qDictTypeId cls) (fmap (`ArrowKind` Star) k) [tv]
+>   where VariableType tv = fromType initTCEnv (TypeVariable 0)
 
 > dictConstrDecl :: TCEnv -> Position -> Ident -> [QualType] -> ConstrDecl
 > dictConstrDecl tcEnv p cls tys =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2091 2007-02-08 17:00:30Z wlux $
+% $Id: TypeCheck.lhs 2092 2007-02-08 21:30:37Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1477,11 +1477,9 @@ Error functions.
 
 > noInstance :: String -> Doc -> TCEnv -> QualIdent -> Type -> String
 > noInstance what doc tcEnv cls ty = show $
->   vcat [sep [text "Missing instance for",
->              ppQIdent cls' <+> ppTypeExpr 2 ty',
->              text "in" <+> text what],
+>   vcat [text "Missing" <+> ppInstance tcEnv tp <+> text "instance",
+>         text "in" <+> text what,
 >         doc]
->   where QualTypeExpr [ClassAssert cls' _] ty' =
->           fromQualType tcEnv (QualType [TypePred cls (TypeVariable 0)] ty)
+>   where tp = TypePred cls ty
 
 \end{verbatim}

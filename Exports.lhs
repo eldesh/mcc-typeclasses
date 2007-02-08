@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2092 2007-02-08 21:30:37Z wlux $
+% $Id: Exports.lhs 2093 2007-02-08 23:15:17Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -144,8 +144,8 @@ declarations which cannot be used in another module because
 >   | otherwise = IInstanceDecl noPos cx' (qualUnqualify m cls) ty' : ds
 >   where n = kindArity (constrKind tc tcEnv) - kindArity (classKind cls tcEnv)
 >         tvs = take n (map TypeVariable [0..])
->         QualTypeExpr cx' ty' =
->           fromQualType tcEnv (QualType cx (applyType tc tvs))
+>         QualTypeExpr cx' ty' = fromQualType tcEnv $
+>           QualType cx (applyType (TypeConstructor tc) tvs)
 
 \end{verbatim}
 The compiler determines the list of imported modules from the set of

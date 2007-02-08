@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2092 2007-02-08 21:30:37Z wlux $
+% $Id: InstCheck.lhs 2093 2007-02-08 23:15:17Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -230,19 +230,14 @@ implied by other predicates in the context are removed.
 
 > reduceTypePred :: InstEnv -> TypePred -> Context
 > reduceTypePred iEnv (TypePred cls ty) =
->   maybe [TypePred cls ty] (reduceTypePreds iEnv) (instContext iEnv cls ty [])
+>   maybe [TypePred cls ty] (reduceTypePreds iEnv) (instContext iEnv cls ty)
 
-> instContext :: InstEnv -> QualIdent -> Type -> [Type] -> Maybe Context
-> instContext iEnv cls (TypeConstructor tc) tys =
->   fmap (map (expandAliasType tys)) (lookupEnv (CT cls tc) iEnv)
-> instContext _ _ (TypeVariable _) _ = Nothing
-> instContext _ _ (TypeConstrained _ _) _ = Nothing
-> instContext _ _ (TypeSkolem _) _ = Nothing
-> instContext iEnv cls (TypeApply ty1 ty2) tys =
->   instContext iEnv cls ty1 (ty2:tys)
-> instContext iEnv cls (TypeArrow ty1 ty2) tys =
->   fmap (map (expandAliasType (ty1:ty2:tys)))
->        (lookupEnv (CT cls qArrowId) iEnv)
+> instContext :: InstEnv -> QualIdent -> Type -> Maybe Context
+> instContext iEnv cls ty =
+>   case unapplyType False ty of
+>     (TypeConstructor tc,tys) ->
+>       fmap (map (expandAliasType tys)) (lookupEnv (CT cls tc) iEnv)
+>     _ -> Nothing
 
 > partitionContext :: Context -> (Context,Context)
 > partitionContext cx = partition (\(TypePred _ ty) -> isTypeVar ty) cx

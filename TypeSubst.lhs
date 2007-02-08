@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSubst.lhs 2087 2007-02-03 18:48:39Z wlux $
+% $Id: TypeSubst.lhs 2093 2007-02-08 23:15:17Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -37,7 +37,7 @@ This module implements substitutions on types.
 
 > substTypeApp :: TypeSubst -> Type -> [Type] -> Type
 > substTypeApp _ (TypeConstructor tc) = foldl TypeApply (TypeConstructor tc)
-> substTypeApp sigma (TypeVariable tv) = typeApply (substVar sigma tv)
+> substTypeApp sigma (TypeVariable tv) = applyType (substVar sigma tv)
 > substTypeApp sigma (TypeConstrained tys tv) =
 >   case substVar sigma tv of
 >     TypeVariable tv -> foldl TypeApply (TypeConstrained tys tv)
@@ -47,13 +47,6 @@ This module implements substitutions on types.
 >   substTypeApp sigma ty1 . (subst sigma ty2 :)
 > substTypeApp sigma (TypeArrow ty1 ty2) =
 >   foldl TypeApply (TypeArrow (subst sigma ty1) (subst sigma ty2))
-
-> typeApply :: Type -> [Type] -> Type
-> typeApply (TypeConstructor tc) tys
->   | tc == qArrowId && length tys == 2 = TypeArrow (tys!!0) (tys!!1)
-> typeApply (TypeApply (TypeConstructor tc) ty) tys
->   | tc == qArrowId && length tys == 1 = TypeArrow ty (head tys)
-> typeApply ty tys = foldl TypeApply ty tys
 
 > instance SubstType TypePred where
 >   subst sigma (TypePred cls ty) = TypePred cls (subst sigma ty)
@@ -96,7 +89,7 @@ respectively.
 > expandTypeApp :: [Type] -> Type -> [Type] -> Type
 > expandTypeApp _ (TypeConstructor tc) = foldl TypeApply (TypeConstructor tc)
 > expandTypeApp tys (TypeVariable n)
->   | n >= 0 = typeApply (tys !! n)
+>   | n >= 0 = applyType (tys !! n)
 >   | otherwise = foldl TypeApply (TypeVariable n)
 > expandTypeApp _ (TypeConstrained tys n) =
 >   foldl TypeApply (TypeConstrained tys n)

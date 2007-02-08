@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2090 2007-02-05 18:57:27Z wlux $
+% $Id: Base.lhs 2093 2007-02-08 23:15:17Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -410,9 +410,9 @@ for the type \verb|a -> b|.
 
 > initTCEnv :: TCEnv
 > initTCEnv =
->   foldr (uncurry (predefTC . fromJust . unapplyType)) emptyTCEnv predefTypes
+>   foldr (uncurry (predefTC . unapplyType True)) emptyTCEnv predefTypes
 >   where emptyTCEnv = emptyTopEnv (Just (map fst tuples))
->         predefTC (tc,tys) cs =
+>         predefTC (TypeConstructor tc,tys) cs =
 >           predefTopEnv tc (DataType tc k (map (Just . fst) cs))
 >           where k = simpleKind (length tys)
 

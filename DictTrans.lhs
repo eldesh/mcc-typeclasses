@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2092 2007-02-08 21:30:37Z wlux $
+% $Id: DictTrans.lhs 2093 2007-02-08 23:15:17Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -418,7 +418,7 @@ of method $f_i$ in class $C$.
 >                  (instFunId tp : instMethodIds tp)
 >                  (qualDictType cx' tp : map (instMethodType tyEnv cx tp) fs))
 >   where m = instanceMIdent
->         tp = TypePred cls (applyType tc tvs)
+>         tp = TypePred cls (applyType (TypeConstructor tc) tvs)
 >         n = kindArity (constrKind tc tcEnv) - kindArity (classKind cls tcEnv)
 >         tvs = take n (map TypeVariable [0..])
 >         cx' = maxContext tcEnv cx
@@ -714,13 +714,13 @@ computed for the context instantiated at the appropriate types.
 
 > instContext :: TCEnv -> InstEnv -> TypePred -> Context
 > instContext tcEnv iEnv (TypePred cls ty) =
->   case unapplyType ty of
->     Just (tc,tys) -> 
+>   case unapplyType True ty of
+>     (TypeConstructor tc,tys) ->
 >       case lookupEnv (CT cls tc) iEnv of
 >         Just cx -> map (expandAliasType tys) (maxContext tcEnv cx)
 >         Nothing ->
 >           internalError ("instContext " ++ show cls ++ " " ++ show tc)
->     Nothing ->
+>     _ ->
 >       internalError ("instContext " ++ show cls ++ " " ++ showsPrec 11 ty "")
 
 > transformType :: QualType -> Type

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2092 2007-02-08 21:30:37Z wlux $
+% $Id: TypeCheck.lhs 2093 2007-02-08 23:15:17Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1170,19 +1170,14 @@ may cause a further extension of the current substitution.
 
 > reduceTypePred :: InstEnv -> TypePred -> Context
 > reduceTypePred iEnv (TypePred cls ty) =
->   maybe [TypePred cls ty] (reduceTypePreds iEnv) (instContext iEnv cls ty [])
+>   maybe [TypePred cls ty] (reduceTypePreds iEnv) (instContext iEnv cls ty)
 
-> instContext :: InstEnv -> QualIdent -> Type -> [Type] -> Maybe Context
-> instContext iEnv cls (TypeConstructor tc) tys =
->   fmap (map (expandAliasType tys)) (lookupEnv (CT cls tc) iEnv)
-> instContext _ _ (TypeVariable _) _ = Nothing
-> instContext _ _ (TypeConstrained _ _) _ = Nothing
-> instContext _ _ (TypeSkolem _) _ = Nothing
-> instContext iEnv cls (TypeApply ty1 ty2) tys =
->   instContext iEnv cls ty1 (ty2:tys)
-> instContext iEnv cls (TypeArrow ty1 ty2) tys =
->   fmap (map (expandAliasType (ty1:ty2:tys)))
->        (lookupEnv (CT cls qArrowId) iEnv)
+> instContext :: InstEnv -> QualIdent -> Type -> Maybe Context
+> instContext iEnv cls ty =
+>   case unapplyType False ty of
+>     (TypeConstructor tc,tys) ->
+>       fmap (map (expandAliasType tys)) (lookupEnv (CT cls tc) iEnv)
+>     _ -> Nothing
 
 > partitionContext :: Context -> (Context,Context)
 > partitionContext cx = partition (\(TypePred _ ty) -> isTypeVar ty) cx
@@ -1208,7 +1203,7 @@ may cause a further extension of the current substitution.
 >       | otherwise -> errorAt p (noInstance what doc tcEnv cls ty')
 
 > hasInstance :: InstEnv -> QualIdent -> Type -> Bool
-> hasInstance iEnv cls ty = isJust (instContext iEnv cls ty [])
+> hasInstance iEnv cls ty = isJust (instContext iEnv cls ty)
 
 \end{verbatim}
 When a constrained type variable that is not free in the type
@@ -1354,7 +1349,7 @@ universally quantified type variables.
 >     tys <- replicateM m freshTypeVar
 >     tys' <- replicateM (n - m) freshSkolem
 >     return (map (expandAliasType tys) cx,expandAliasType (tys ++ tys') ty)
->   where m = length (snd (fromJust (unapplyType (arrowBase ty))))
+>   where m = length (snd (unapplyType True (arrowBase ty)))
 
 \end{verbatim}
 The function \texttt{gen} generalizes a context \emph{cx} and a type

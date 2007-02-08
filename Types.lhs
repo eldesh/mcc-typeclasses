@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 2085 2007-01-31 16:59:53Z wlux $
+% $Id: Types.lhs 2093 2007-02-08 23:15:17Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -54,32 +54,44 @@ as well, these variables must never be quantified.
 >   deriving (Eq,Ord,Show)
 
 \end{verbatim}
-The function \texttt{applyType} applies a type constructor to a list
-of argument types. The function \texttt{unapplyType} decomposes a type
-into a type constructor and a list of type arguments. The function
-\texttt{rootOfType} returns the type constructor at the root of a
-type. These functions may be used to compose and decompose arrow
-types. However, \texttt{rootOfType} must not be applied to a type
-variable or skolem type.
+The function \texttt{applyType} applies a type to a list of argument
+types. Note that it carefully converts an application of the arrow
+type constructor to two argument types into an arrow type. The
+function \texttt{unapplyType} decomposes a type into a root type and a
+list of argument types such that the root type is either a type
+constructor, a type variable, or a skolem type. If the \texttt{dflt}
+argument of \texttt{unapplyType} is \texttt{True}, constrained type
+variables are fixed to their first alternative, otherwise they are
+regarded as type variables. The function \texttt{rootOfType} returns
+the name of the type constructor at the root of a type. This function
+must not be applied to a type whose root is a type variable or a
+skolem type.
 \begin{verbatim}
 
-> applyType :: QualIdent -> [Type] -> Type
-> applyType tc tys
+> applyType :: Type -> [Type] -> Type
+> applyType (TypeConstructor tc) tys
 >   | tc == qArrowId && length tys == 2 = TypeArrow (tys!!0) (tys!!1)
->   | otherwise = foldl TypeApply (TypeConstructor tc) tys
+> applyType (TypeApply (TypeConstructor tc) ty) tys
+>   | tc == qArrowId && length tys == 1 = TypeArrow ty (head tys)
+> applyType ty tys = foldl TypeApply ty tys
 
-> unapplyType :: Type -> Maybe (QualIdent,[Type])
-> unapplyType ty = unapply ty []
->   where unapply (TypeConstructor tc) = Just . (,) tc
->         unapply (TypeVariable _) = const Nothing 
->         unapply (TypeConstrained tys _) = unapply (head tys)
->         unapply (TypeSkolem _) = const Nothing
->         unapply (TypeApply ty1 ty2) = unapply ty1 . (ty2:)
->         unapply (TypeArrow ty1 ty2) = Just . (,) qArrowId . (ty1:) . (ty2:)
+> unapplyType :: Bool -> Type -> (Type,[Type])
+> unapplyType dflt ty = unapply ty []
+>   where unapply (TypeConstructor tc) tys = (TypeConstructor tc,tys)
+>         unapply (TypeVariable tv) tys = (TypeVariable tv,tys)
+>         unapply (TypeConstrained tys tv) tys'
+>           | dflt = unapply (head tys) tys'
+>           | otherwise = (TypeConstrained tys tv,tys')
+>         unapply (TypeSkolem k) tys = (TypeSkolem k,tys)
+>         unapply (TypeApply ty1 ty2) tys = unapply ty1 (ty2:tys)
+>         unapply (TypeArrow ty1 ty2) tys =
+>           (TypeConstructor qArrowId,ty1:ty2:tys)
 
 > rootOfType :: Type -> QualIdent
 > rootOfType ty =
->   maybe (error "internal error: rootOfType") fst (unapplyType ty)
+>   case fst (unapplyType True ty) of
+>     TypeConstructor tc -> tc
+>     _ -> error "internal error: rootOfType"
 
 \end{verbatim}
 The function \texttt{isArrowType} checks whether a type $\tau = \tau_1

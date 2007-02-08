@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2092 2007-02-08 21:30:37Z wlux $
+% $Id: TypeTrans.lhs 2093 2007-02-08 23:15:17Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -287,7 +287,7 @@ the module containing their definition.
 >   case qualLookupTopEnv tc tcEnv of
 >     [DataType tc' _ _] -> foldl TypeApply (TypeConstructor tc') tys
 >     [RenamingType tc' _ _] -> foldl TypeApply (TypeConstructor tc') tys
->     [AliasType _ n _ ty] -> typeApply (expandAliasType tys' ty) tys''
+>     [AliasType _ n _ ty] -> applyType (expandAliasType tys' ty) tys''
 >       where (tys',tys'') = splitAt n tys
 >     _ -> internalError ("expandType " ++ show tc)
 > expandTypeApp _ (TypeVariable tv) tys = foldl TypeApply (TypeVariable tv) tys
@@ -300,13 +300,6 @@ the module containing their definition.
 >   foldl TypeApply
 >         (TypeArrow (expandType tcEnv ty1) (expandType tcEnv ty2))
 >         tys
-
-> typeApply :: Type -> [Type] -> Type
-> typeApply (TypeConstructor tc) tys
->   | tc == qArrowId && length tys == 2 = TypeArrow (tys!!0) (tys!!1)
-> typeApply (TypeApply (TypeConstructor tc) ty) tys
->   | tc == qArrowId && length tys == 1 = TypeArrow ty (head tys)
-> typeApply ty tys = foldl TypeApply ty tys
 
 \end{verbatim}
 The function \texttt{minContext} transforms a context by removing all

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2093 2007-02-08 23:15:17Z wlux $
+% $Id: Exports.lhs 2094 2007-02-09 17:23:39Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -112,10 +112,9 @@ declarations which cannot be used in another module because
 
 > constrDecl :: TCEnv -> ValueEnv -> QualIdent -> [Ident] -> Ident
 >            -> ([ClassAssert],ConstrDecl)
-> constrDecl tcEnv tyEnv tc tvs c =
->   (cx',
->    ConstrDecl noPos (filter (`notElem` tvs) (nub (fv ty'))) c (argTypes ty'))
->   where ForAll _ (QualType cx ty) = conType (qualifyLike tc c) tyEnv
+> constrDecl tcEnv tyEnv tc tvs c = (cx',ConstrDecl noPos evs c (argTypes ty'))
+>   where evs = filter (`notElem` tvs) (nub (fv ty'))
+>         ForAll _ (QualType cx ty) = conType (qualifyLike tc c) tyEnv
 >         QualTypeExpr cx' ty' = fromQualType tcEnv (QualType cx ty)
 
 > newConstrDecl :: TCEnv -> ValueEnv -> QualIdent -> Ident
@@ -259,8 +258,8 @@ loading the imported modules.
 >   usedTypes xs tcs = foldr usedTypes tcs xs
 
 > instance HasType IDecl where
->   usedTypes (IDataDecl _ _ _ _ _ cs) = usedTypes cs
->   usedTypes (INewtypeDecl _ _ _ _ _ nc) = usedTypes nc
+>   usedTypes (IDataDecl _ cx _ _ _ cs) = usedTypes cx . usedTypes cs
+>   usedTypes (INewtypeDecl _ cx _ _ _ nc) = usedTypes cx . usedTypes nc
 >   usedTypes (ITypeDecl _ _ _ _ ty) = usedTypes ty
 >   usedTypes (IClassDecl _ cx _ _ _ ds) = usedTypes cx . usedTypes ds
 >   usedTypes (IInstanceDecl _ cx cls ty) =

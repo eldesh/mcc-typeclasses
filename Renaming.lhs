@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2084 2007-01-30 23:58:36Z wlux $
+% $Id: Renaming.lhs 2095 2007-02-13 17:34:10Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -210,8 +210,8 @@ class method.
 >   liftM2 QualTypeExpr (mapM (renameClassAssert env) cx) (renameType env ty)
 
 > renameClassAssert :: RenameEnv -> ClassAssert -> RenameState ClassAssert
-> renameClassAssert env (ClassAssert cls tv) =
->   liftM (ClassAssert cls) (renameVar env tv)
+> renameClassAssert env (ClassAssert cls tv tys) =
+>   liftM2 (ClassAssert cls) (renameVar env tv) (mapM (renameType env) tys)
 
 > renameType :: RenameEnv -> TypeExpr -> RenameState TypeExpr
 > renameType _ (ConstructorType tc) = return (ConstructorType tc)

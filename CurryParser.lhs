@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2088 2007-02-05 09:27:49Z wlux $
+% $Id: CurryParser.lhs 2095 2007-02-13 17:34:10Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -450,7 +450,9 @@ directory path to the module is ignored.
 >       <|> parens (classAssert `sepBy` comma)
 
 > classAssert :: Parser Token ClassAssert a
-> classAssert = ClassAssert <$> qtycls <*> tyvar
+> classAssert = (uncurry . ClassAssert) <$> qtycls <*> classType
+>   where classType = flip (,) [] <$> tyvar
+>                 <|> parens ((,) <$> tyvar <*> many1 type2)
 
 > type0 :: Parser Token TypeExpr a
 > type0 = type1 `chainr1` (ArrowType <$-> token RightArrow)

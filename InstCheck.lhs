@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2093 2007-02-08 23:15:17Z wlux $
+% $Id: InstCheck.lhs 2095 2007-02-13 17:34:10Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -130,6 +130,7 @@ environment before instances of their subclasses.
 > inferContext m tcEnv iEnv p cx tc tvs tys cls =
 >   do
 >     cx''' <- reduceContext p what doc tcEnv iEnv cx''
+>     mapE_ (reportUndecidable p what doc tcEnv) cx'''
 >     return (CT cls' tc',sort cx''')
 >   where what = "derived instance"
 >         doc = ppInstance tcEnv (TypePred cls (arrowBase ty'))
@@ -245,8 +246,34 @@ implied by other predicates in the context are removed.
 >         isTypeVar (TypeVariable _) = True
 >         isTypeVar (TypeConstrained _ _) = False
 >         isTypeVar (TypeSkolem _) = False
->         isTypeVar (TypeApply _ _) = False
+>         isTypeVar (TypeApply ty _) = isTypeVar ty
 >         isTypeVar (TypeArrow _ _) = False
+
+\end{verbatim}
+Constraints in instance contexts are restricted to the form $C\,u$,
+where $u$ is a type variable. The rationale behind this restriction is
+that it ensures termination of context reduction. To see the problem
+consider the definition
+\begin{verbatim}
+  data T f a = U a | T (f (T f a))
+\end{verbatim}
+The derived \texttt{Eq} instance declaration for this type would have
+context \texttt{(Eq a, Eq (f (T f a)))}. Now consider that this
+equality instance is used for $\texttt{f}=\texttt{[]}$. Whenever, the
+constraint \texttt{Eq (T [] a)} is reduced, a new \texttt{Eq (T [] a)}
+constraint enters the context.
+
+In order to prevent such infinite recursion, we comply strictly to the
+revised Haskell'98 report~\cite{PeytonJones03:Haskell} (cf.\ 
+Sect.~4.3.2) and report an error when an constraint that does not have
+the form $C\,u$ is found in the context of a derived instance.
+\begin{verbatim}
+
+> reportUndecidable :: Position -> String -> Doc -> TCEnv -> TypePred-> Error ()
+> reportUndecidable p what doc tcEnv (TypePred cls ty) =
+>   case ty of
+>     TypeVariable _ -> return ()
+>     _ -> errorAt p (invalidConstraint what doc tcEnv (TypePred cls ty))
 
 \end{verbatim}
 The function \texttt{constrTypes} extracts the argument types of a
@@ -264,6 +291,11 @@ Error functions.
 > noInstance :: String -> Doc -> TCEnv -> TypePred -> String
 > noInstance what doc tcEnv tp = show $
 >   text "Missing" <+> ppInstance tcEnv tp <+> text "instance" $$
+>   text "in" <+> text what <+> doc
+
+> invalidConstraint :: String -> Doc -> TCEnv -> TypePred -> String
+> invalidConstraint what doc tcEnv tp = show $
+>   text "Illegal class constraint" <+> ppInstance tcEnv tp $$
 >   text "in" <+> text what <+> doc
 
 > noAbstractDerive :: String

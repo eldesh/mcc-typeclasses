@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2090 2007-02-05 18:57:27Z wlux $
+% $Id: KindCheck.lhs 2095 2007-02-13 17:34:10Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -124,7 +124,7 @@ declarations.
 >   fts _ (TrustAnnot _ _ _) = id
 
 > instance HasType ClassAssert where
->   fts m (ClassAssert cls _) = fts m cls
+>   fts m (ClassAssert cls _ tys) = fts m cls . fts m tys
 
 > instance HasType QualTypeExpr where
 >   fts m (QualTypeExpr cx ty) = fts m cx . fts m ty
@@ -223,7 +223,7 @@ checks that the super class hierarchy is acyclic (in function
 
 > fc :: ModuleIdent -> [ClassAssert] -> [Ident]
 > fc m cx =
->   foldr (\(ClassAssert cls _) -> maybe id (:) (localIdent m cls)) [] cx
+>   foldr (\(ClassAssert cls _ _) -> maybe id (:) (localIdent m cls)) [] cx
 
 \end{verbatim}
 For each declaration group, the kind checker first enters new
@@ -346,9 +346,8 @@ latter.
 >   kcContext tcEnv' p cx >> kcNewConstrDecl tcEnv' nc
 >   where tcEnv' = snd (bindTypeVars m tc tvs tcEnv)
 > kcTopDecl m tcEnv (TypeDecl p tc tvs ty) =
->   kcType tcEnv' p "type declaration" doc k ty
+>   kcType tcEnv' p "type declaration" (ppTopDecl (TypeDecl p tc tvs ty)) k ty
 >   where (k,tcEnv') = bindTypeVars m tc tvs tcEnv
->         doc = ppTopDecl (TypeDecl p tc tvs ty)
 > kcTopDecl m tcEnv (ClassDecl p cx cls tv ds) =
 >   kcContext tcEnv' p cx >> mapM_ (kcMethodDecl tcEnv' (Just tv)) ds
 >   where tcEnv' = bindTypeVar tv (classKind (qualifyWith m cls) tcEnv) tcEnv
@@ -473,9 +472,10 @@ latter.
 > kcContext tcEnv p = mapM_ (kcClassAssert tcEnv p)
 
 > kcClassAssert :: TCEnv -> Position -> ClassAssert -> KcState ()
-> kcClassAssert tcEnv p (ClassAssert cls tv) =
->   kcType tcEnv p "assertion" doc (classKind cls tcEnv) (VariableType tv)
->   where doc = ppClassAssert (ClassAssert cls tv)
+> kcClassAssert tcEnv p (ClassAssert cls tv tys) =
+>   kcType tcEnv p "class constraint" (ppClassAssert (ClassAssert cls tv tys))
+>          (classKind cls tcEnv)
+>          (foldl ApplyType (VariableType tv) tys)
 
 > kcValueType :: TCEnv -> Position -> String -> Doc -> TypeExpr -> KcState ()
 > kcValueType tcEnv p what doc = kcType tcEnv p what doc KindStar

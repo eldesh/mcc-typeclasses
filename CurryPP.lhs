@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2088 2007-02-05 09:27:49Z wlux $
+% $Id: CurryPP.lhs 2095 2007-02-13 17:34:10Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -258,7 +258,9 @@ Types
 > ppContext cas = parenList (map ppClassAssert cas) <+> text "=>"
 
 > ppClassAssert :: ClassAssert -> Doc
-> ppClassAssert (ClassAssert cls tv) = ppQIdent cls <+> ppIdent tv
+> ppClassAssert (ClassAssert cls tv tys) =
+>   ppQIdent cls <+>
+>   parenExp (not (null tys)) (ppIdent tv <+> fsep (map (ppTypeExpr 2) tys))
 
 > ppTypeExpr :: Int -> TypeExpr -> Doc
 > ppTypeExpr _ (ConstructorType tc) = ppQIdent tc

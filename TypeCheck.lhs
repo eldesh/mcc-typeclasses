@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2093 2007-02-08 23:15:17Z wlux $
+% $Id: TypeCheck.lhs 2095 2007-02-13 17:34:10Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -496,7 +496,7 @@ case of \texttt{tcTopDecl}.
 >         (vds,ods) = partition isMethodDecl ds
 >         typeSig _ _ (MethodFixity p fix pr ops) = InfixDecl p fix pr ops
 >         typeSig cls tv (MethodSig p fs (QualTypeExpr cx ty)) =
->           TypeSig p fs (QualTypeExpr (ClassAssert cls tv : cx) ty)
+>           TypeSig p fs (QualTypeExpr (ClassAssert cls tv [] : cx) ty)
 >         typeSig _ _ (TrustMethod p tr fs) = TrustAnnot p tr fs
 > tcTopDecl m tcEnv (InstanceDecl p cx cls ty ds) =
 >   do
@@ -1185,7 +1185,7 @@ may cause a further extension of the current substitution.
 >         isTypeVar (TypeVariable _) = True
 >         isTypeVar (TypeConstrained _ _) = False
 >         isTypeVar (TypeSkolem _) = False
->         isTypeVar (TypeApply _ _) = False
+>         isTypeVar (TypeApply ty _) = isTypeVar ty
 >         isTypeVar (TypeArrow _ _) = False
 
 > reportMissingInstance :: Position -> String -> Doc -> TCEnv -> InstEnv
@@ -1221,20 +1221,23 @@ because the compiler cannot determine which \texttt{Read} and
 \texttt{Show} instances to use.
 
 In the case of expressions with an ambiguous numeric type, i.e., a
-type that must be an instance of the \texttt{Num} class, the compiler
-tries to resolve the ambiguity by choosing the first type from the set
-$\left\{ \texttt{Int}, \texttt{Float} \right\}$ that satisfies all
-constraints for the ambiguous type variable. An error is reported if
-no such type exists.
+type that must be an instance of \texttt{Num} or one of its
+subclasses, the compiler tries to resolve the ambiguity by choosing
+the first type from the set $\left\{ \texttt{Int}, \texttt{Float}
+\right\}$ that satisfies all constraints for the ambiguous type
+variable. An error is reported if no such type exists.
 
 This is similar to Haskell's default rules, except that the user can
 specify the set of types used for resolving ambiguous numeric types
-with a default declaration. Furthermore, Haskell resolves ambiguous
-types only if all classes involved are defined in the Haskell Prelude
-or a standard library (cf.\ Sect.~4.3.4 of the revised Haskell'98
-report~\cite{PeytonJones03:Haskell}).
+with a default declaration in Haskell. Furthermore, in Haskell an
+ambiguous type variable $v$ is resolved only if it appears solely in
+constraints of the form $C\,v$ and all of these classes are defined in
+the Prelude or a standard library (cf.\ Sect.~4.3.4 of the revised
+Haskell'98 report~\cite{PeytonJones03:Haskell}).
 
 \ToDo{Support default declarations.}
+
+\ToDo{Adopt Haskell's restrictions?}
 \begin{verbatim}
 
 > applyDefaults :: Position -> String -> Doc -> TCEnv -> Set Int -> Context
@@ -1242,45 +1245,44 @@ report~\cite{PeytonJones03:Haskell}).
 > applyDefaults p what doc tcEnv fvs cx ty =
 >   do
 >     iEnv <- liftSt (liftSt envRt)
->     let theta = foldr (bindDefault tcEnv iEnv) idSubst tpss
->         lcx' = fst (partitionContext (subst theta lcx))
+>     let theta =
+>           foldr (bindDefault tcEnv iEnv cx) idSubst
+>                 (nub [tv | TypePred cls (TypeVariable tv) <- cx,
+>                            tv `notElemSet` fvs, isNumClass tcEnv cls])
+>         cx' = fst (partitionContext (subst theta cx))
 >         ty' = subst theta ty
->     unless (null lcx')
->            (errorAt p (ambiguousType what doc tcEnv lcx' (QualType gcx ty')))
+>         tvs' = nub [tv | TypePred _ ty <- cx', tv <- typeVars ty,
+>                          tv `notElemSet` fvs]
+>     unless (null tvs') (errorAt p (ambiguousType what doc tcEnv tvs' cx' ty'))
 >     liftSt (updateSt_ (compose theta))
->     return gcx
->   where (gcx,lcx) = splitContext fvs cx
->         tpss = groupBy sameType (sort lcx)
->         sameType (TypePred _ ty1) (TypePred _ ty2) = ty1 == ty2
+>     return cx'
 
-> bindDefault :: TCEnv -> InstEnv -> [TypePred] -> TypeSubst -> TypeSubst
-> bindDefault tcEnv iEnv tps =
->   case defaultType tcEnv iEnv tps of
->     Just ty -> bindSubst (head [tv | TypePred _ (TypeVariable tv) <- tps]) ty
->     Nothing -> id
+> bindDefault :: TCEnv -> InstEnv -> [TypePred] -> Int -> TypeSubst -> TypeSubst
+> bindDefault tcEnv iEnv cx tv =
+>   case foldr (defaultType tcEnv iEnv tv) numTypes cx of
+>     [] -> id
+>     ty:_ -> bindSubst tv ty
 
-> defaultType :: TCEnv -> InstEnv -> [TypePred] -> Maybe Type
-> defaultType tcEnv iEnv tps =
->   case [ty | ty <- defaultTypes, all (flip (hasInstance iEnv) ty) clss] of
->     [] -> Nothing
->     ty:_ -> Just ty
->   where clss = [cls | TypePred cls _ <- maxContext tcEnv tps]
->         defaultTypes
->           | qNumId `elem` clss = numTypes
->           | qFractionalId `elem` clss = fracTypes
->           | otherwise = []
+> defaultType :: TCEnv -> InstEnv -> Int -> TypePred -> [Type] -> [Type]
+> defaultType tcEnv iEnv tv (TypePred cls (TypeVariable tv'))
+>   | tv == tv' = filter (hasInstance iEnv cls)
+>   | otherwise = id
+> defaultType _ _ _ _ = id
+
+> isNumClass :: TCEnv -> QualIdent -> Bool
+> isNumClass tcEnv cls = qNumId `elem` allSuperClasses cls tcEnv
 
 \end{verbatim}
 The function \texttt{splitContext} splits a context
-$\overline{C_n\,\alpha_n}$ into a pair of contexts
-$(\overline{C_{n_1}\alpha_{n_1}}, \overline{C_{n_2}\alpha_{n_2}})$
-such that all type variables $\overline{\alpha_{n_1}}$ are elements of
-a given set of type variables.
+$\overline{C_n\,t_n}$ into a pair of contexts
+$(\overline{C_{n_1}\,t_{n_1}}, \overline{C_{n_2}\,t_{n_2}})$ such that
+all type variables that appear in the types $\overline{t_{n_1}}$ are
+elements of a given set of type variables.
 \begin{verbatim}
 
 > splitContext :: Set Int -> Context -> (Context,Context)
 > splitContext fvs =
->   partition (\(TypePred _ (TypeVariable tv)) -> tv `elemSet` fvs)
+>   partition (\(TypePred _ ty) -> all (`elemSet` fvs) (typeVars ty))
 
 \end{verbatim}
 For each function declaration, the type checker ensures that no skolem
@@ -1458,14 +1460,14 @@ Error functions.
 >        nest 2 (text "and" <+> ppType tcEnv ty2),
 >        text "are incompatible"]
 
-> ambiguousType :: String -> Doc -> TCEnv -> Context -> QualType -> String
-> ambiguousType what doc tcEnv cx' (QualType cx ty) = show $
+> ambiguousType :: String -> Doc -> TCEnv -> [Int] -> Context -> Type
+>               -> String
+> ambiguousType what doc tcEnv tvs cx ty = show $
 >   vcat [text "Ambiguous type variable" <> plural tvs <+>
->           list (map (ppType tcEnv) tvs) <+> text "in type",
->         ppQualType tcEnv (canonType (QualType (cx' ++ cx) ty)),
+>           list (map (ppType tcEnv . TypeVariable) tvs) <+> text "in type",
+>         ppQualType tcEnv (canonType (QualType cx ty)),
 >         text "inferred for" <+> text what, doc]
->   where tvs = nub [ty | TypePred _ ty <- cx']
->         plural (_:xs) = if null xs then empty else char 's'
+>   where plural (_:xs) = if null xs then empty else char 's'
 >         list [x] = x
 >         list [x1,x2] = x1 <+> text "and" <+> x2
 >         list xs = hsep (map (<> comma) (init xs)) <+> text "and" <+> last xs

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2088 2007-02-05 09:27:49Z wlux $
+% $Id: CurrySyntax.lhs 2095 2007-02-13 17:34:10Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -140,7 +140,7 @@ Interface declarations are restricted to type declarations and signatures.
 \begin{verbatim}
 
 > data QualTypeExpr = QualTypeExpr [ClassAssert] TypeExpr deriving (Eq,Show)
-> data ClassAssert = ClassAssert QualIdent Ident deriving (Eq,Show)
+> data ClassAssert = ClassAssert QualIdent Ident [TypeExpr] deriving (Eq,Show)
 > data TypeExpr =
 >     ConstructorType QualIdent
 >   | VariableType Ident

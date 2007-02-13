@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2093 2007-02-08 23:15:17Z wlux $
+% $Id: Base.lhs 2095 2007-02-13 17:34:10Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -560,6 +560,9 @@ variables cannot be computed independently for each declaration.
 
 > instance Expr QualTypeExpr where
 >   fv (QualTypeExpr _ ty) = fv ty
+
+> instance Expr ClassAssert where
+>   fv (ClassAssert _ tv tys) = tv : fv tys
 
 > instance Expr TypeExpr where
 >   fv (ConstructorType _) = []

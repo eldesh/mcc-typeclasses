@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2086 2007-02-03 15:39:53Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2095 2007-02-13 17:34:10Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -74,24 +74,40 @@ signatures.
 
 > checkTopDecl :: TypeEnv -> TopDecl a -> Error (TopDecl a)
 > checkTopDecl env (DataDecl p cx tc tvs cs clss) =
->   checkTypeLhs env p cx tvs &&>
->   mapE_ (checkClass env p) clss &&>
->   liftE (flip (DataDecl p cx tc tvs) clss) (mapE (checkConstrDecl env tvs) cs)
+>   do
+>     cx' <- checkTypeLhs env p cx tvs
+>     cs' <-
+>       liftE const (mapE (checkConstrDecl env tvs) cs) &&&
+>       mapE_ (checkClass env p) clss
+>     return (DataDecl p cx' tc tvs cs' clss)
 > checkTopDecl env (NewtypeDecl p cx tc tvs nc clss) =
->   checkTypeLhs env p cx tvs &&>
->   mapE_ (checkClass env p) clss &&>
->   liftE (flip (NewtypeDecl p cx tc tvs) clss) (checkNewConstrDecl env tvs nc)
+>   do
+>     cx' <- checkTypeLhs env p cx tvs
+>     nc' <-
+>       liftE const (checkNewConstrDecl env tvs nc) &&&
+>       mapE_ (checkClass env p) clss
+>     return (NewtypeDecl p cx' tc tvs nc' clss)
 > checkTopDecl env (TypeDecl p tc tvs ty) =
->   checkTypeLhs env p [] tvs &&>
->   liftE (TypeDecl p tc tvs) (checkClosedType env p tvs ty)
+>   do
+>     checkTypeLhs env p [] tvs
+>     ty' <- checkClosedType env p tvs ty
+>     return (TypeDecl p tc tvs ty')
 > checkTopDecl env (ClassDecl p cx cls tv ds) =
->   checkTypeLhs env p cx [tv] &&>
->   liftE (ClassDecl p cx cls tv) (mapE (checkMethodDecl env tv) ds)
+>   do
+>     cx' <- checkTypeLhs env p cx [tv]
+>     ds' <-
+>       mapE_ (checkSimpleConstraint "class" doc p) cx' &&>
+>       mapE (checkMethodDecl env tv) ds
+>     return (ClassDecl p cx' cls tv ds')
+>   where doc = ppIdent cls <+> ppIdent tv
 > checkTopDecl env (InstanceDecl p cx cls ty ds) =
->   checkClass env p cls &&>
->   liftE2 (InstanceDecl p cx cls)
->          (checkInstType env p cx ty)
->          (mapE (checkMethodDecl env anonId) ds)
+>   do
+>     (cx',ty') <- checkClass env p cls &&> checkInstType env p cx ty
+>     ds' <-
+>       mapE_ (checkSimpleConstraint "instance" doc p) cx' &&>
+>       mapE (checkMethodDecl env anonId) ds
+>     return (InstanceDecl p cx' cls ty' ds')
+>   where doc = ppQIdent cls <+> ppTypeExpr 2 ty
 > checkTopDecl env (BlockDecl d) = liftE BlockDecl (checkDecl env d)
 
 > checkGoal :: TypeEnv -> Goal a -> Error (Goal a)
@@ -115,7 +131,7 @@ not contain any additional constraints for that type variable
 >     unless (tv `elem` fv ty') (errorAt p (ambiguousType tv))
 >     when (tv `elem` constrainedVars ty') (errorAt p (constrainedClassType tv))
 >     return (MethodSig p fs ty')
->   where constrainedVars (QualTypeExpr cx _) = [tv | ClassAssert _ tv <- cx]
+>   where constrainedVars (QualTypeExpr cx _) = [tv | ClassAssert _ tv _ <- cx]
 > checkMethodDecl env _ (MethodDecl p f eqs) =
 >   liftE (MethodDecl p f) (mapE (checkEquation env) eqs)
 > checkMethodDecl _ _ (TrustMethod p tr fs) = return (TrustMethod p tr fs)
@@ -133,17 +149,25 @@ not contain any additional constraints for that type variable
 > checkDecl _ (FreeDecl p vs) = return (FreeDecl p vs)
 > checkDecl _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
 
-> checkTypeLhs :: TypeEnv -> Position -> [ClassAssert] -> [Ident] -> Error ()
+> checkTypeLhs :: TypeEnv -> Position -> [ClassAssert] -> [Ident]
+>              -> Error [ClassAssert]
 > checkTypeLhs env p cx tvs =
 >   do
->     mapE_ (errorAt p . noVariable "left hand side of type declaration")
->           (nub tcs) &&>
->       mapE_ (checkClassAssert env p) cx &&>
+>     cx' <-
+>       mapE_ (errorAt p . noVariable "left hand side of type declaration")
+>             (nub tcs) &&>
 >       mapE_ (errorAt p . nonLinear "left hand side of type declaration". fst)
->             (duplicates (filter (anonId /=) tvs'))
->     checkClosedContext p cx tvs
+>             (duplicates (filter (anonId /=) tvs')) &&>
+>       mapE (checkClassAssert env p) cx
+>     checkClosedContext p cx' tvs
+>     return cx'
 >   where (tcs,tvs') = partition isTypeConstr tvs
 >         isTypeConstr tv = not (null (lookupTopEnv tv env))
+
+> checkSimpleConstraint :: String -> Doc -> Position -> ClassAssert -> Error ()
+> checkSimpleConstraint what doc p (ClassAssert cls tv tys) =
+>   unless (null tys)
+>          (errorAt p (invalidConstraint what doc (ClassAssert cls tv tys)))
 
 > checkConstrDecl :: TypeEnv -> [Ident] -> ConstrDecl -> Error ConstrDecl
 > checkConstrDecl env tvs (ConstrDecl p evs c tys) =
@@ -250,32 +274,33 @@ interpret the identifier as such.
 >     return ty'
 
 > checkInstType :: TypeEnv -> Position -> [ClassAssert] -> TypeExpr
->               -> Error TypeExpr
+>               -> Error ([ClassAssert],TypeExpr)
 > checkInstType env p cx ty =
 >   do
->     QualTypeExpr _ ty' <- checkQualType env p (QualTypeExpr cx ty)
+>     QualTypeExpr cx' ty' <- checkQualType env p (QualTypeExpr cx ty)
 >     unless (isSimpleType ty' && not (isTypeSynonym env (root ty')) &&
 >             null (duplicates (filter (anonId /=) (fv ty'))))
 >            (errorAt p (notSimpleType ty'))
->     return ty'
+>     return (cx',ty')
 
 > checkQualType :: TypeEnv -> Position -> QualTypeExpr -> Error QualTypeExpr
 > checkQualType env p (QualTypeExpr cx ty) =
 >   do
->     ty' <- mapE_ (checkClassAssert env p) cx &&> checkType env p ty
->     checkClosedContext p cx (fv ty')
->     return (QualTypeExpr cx ty')
+>     (cx',ty') <-
+>       liftE (,) (mapE (checkClassAssert env p) cx) &&& checkType env p ty
+>     checkClosedContext p cx' (fv ty')
+>     return (QualTypeExpr cx' ty')
 
-> checkClassAssert :: TypeEnv -> Position -> ClassAssert -> Error ()
-> checkClassAssert env p (ClassAssert cls tv) =
+> checkClassAssert :: TypeEnv -> Position -> ClassAssert -> Error ClassAssert
+> checkClassAssert env p (ClassAssert cls tv tys) =
 >   checkClass env p cls &&>
 >   unless (null (lookupTopEnv tv env))
->          (errorAt p (noVariable "class assertion" tv))
+>          (errorAt p (noVariable "class constraint" tv)) &&>
+>   liftE (ClassAssert cls tv) (mapE (checkType env p) tys)
 
 > checkClosedContext :: Position -> [ClassAssert] -> [Ident] -> Error ()
 > checkClosedContext p cx tvs =
->   mapE_ (errorAt p . unboundVariable)
->         (nub [tv | ClassAssert _ tv <- cx, tv `notElem` tvs])
+>   mapE_ (errorAt p . unboundVariable) (nub (filter (`notElem` tvs) (fv cx)))
 
 > checkType :: TypeEnv -> Position -> TypeExpr -> Error TypeExpr
 > checkType env p (ConstructorType tc) =
@@ -450,6 +475,13 @@ Error messages.
 > constrainedClassType :: Ident -> String
 > constrainedClassType tv =
 >   "Method type context must not constrain type variable " ++ name tv
+
+> invalidConstraint :: String -> Doc -> ClassAssert -> String
+> invalidConstraint what doc ca = show $
+>   vcat [text "Illegal class constraint" <+> ppClassAssert ca,
+>         text "in" <+> text what <+> text "declaration" <+> doc,
+>         text "Constraints in class and instance declarations must be of the",
+>         text "form C u, where u is a type variable."]
 
 > notSimpleType :: TypeExpr -> String
 > notSimpleType ty = show $

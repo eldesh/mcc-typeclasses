@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2094 2007-02-09 17:23:39Z wlux $
+% $Id: Exports.lhs 2095 2007-02-13 17:34:10Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -200,7 +200,7 @@ not module \texttt{B}.
 >   modules (QualTypeExpr cx ty) = modules cx . modules ty
 
 > instance HasModule ClassAssert where
->   modules (ClassAssert cls _) = modules cls
+>   modules (ClassAssert cls _ tys) = modules cls . modules tys
 
 > instance HasModule TypeExpr where
 >   modules (ConstructorType tc) = modules tc
@@ -280,7 +280,7 @@ loading the imported modules.
 >   usedTypes (QualTypeExpr cx ty) = usedTypes cx . usedTypes ty
 
 > instance HasType ClassAssert where
->   usedTypes (ClassAssert cls _) = (cls :)
+>   usedTypes (ClassAssert cls _ tys) = (cls :) . usedTypes tys
 
 > instance HasType TypeExpr where
 >   usedTypes (ConstructorType tc) = (tc :)
@@ -300,7 +300,7 @@ Auxiliary definitions.
 > orderContext :: [Ident] -> [ClassAssert] -> [ClassAssert]
 > orderContext [] _ = []
 > orderContext (tv:tvs) cx = cx' ++ orderContext tvs cx''
->   where (cx',cx'') = partition (\(ClassAssert _ tv') -> tv == tv') cx
+>   where (cx',cx'') = partition (\(ClassAssert _ tv' _) -> tv == tv') cx
 
 > argTypes :: TypeExpr -> [TypeExpr]
 > argTypes (ArrowType ty1 ty2) = ty1 : argTypes ty2

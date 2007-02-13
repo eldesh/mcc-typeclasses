@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2084 2007-01-30 23:58:36Z wlux $
+% $Id: Deriving.lhs 2095 2007-02-13 17:34:10Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -32,9 +32,9 @@ This module implements the code generating derived instance declarations.
 > deriveInstances _ _ _ _ _ = return []
 
 \end{verbatim}
-Note that instances can be derived only for a set of predefined
-classes. An error is reported if the user asks for instances of other
-classes be derived.
+Instances can be derived only for a set of predefined classes. An
+error is reported if the user asks for instances of other classes be
+derived.
 \begin{verbatim}
 
 > type Constr = (QualIdent,Int)
@@ -52,7 +52,7 @@ classes be derived.
 >         constr (ConstrDecl _ _ c tys) = (qualifyWith m c,length tys)
 >         constr (ConOpDecl _ _ _ op _) = (qualifyWith m op,2)
 >         toClassAssert tvs (TypePred cls (TypeVariable n)) =
->           ClassAssert cls (tvs !! n)
+>           ClassAssert cls (tvs !! n) []
 >         trustAll p ds = TrustMethod p Trust Nothing : ds
 
 > deriveMethods :: PEnv -> TCEnv -> Position -> [Constr] -> QualIdent

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2093 2007-02-08 23:15:17Z wlux $
+% $Id: TypeTrans.lhs 2095 2007-02-13 17:34:10Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -85,31 +85,30 @@ indices independently in each type expression.
 >               -> QualType
 > toConstrType' cx tc tvs tys = toQualType'' tvs' (QualTypeExpr cx' ty')
 >   where tvs' = enumTypeVars tvs tys
->         cx' = restrictContext tys cx
+>         cx' = restrictContext (nub (fv tys)) cx
 >         ty' = foldr ArrowType ty0 tys
 >         ty0 = foldl ApplyType (ConstructorType tc) (map VariableType tvs)
 
 > toMethodType' :: QualIdent -> Ident -> QualTypeExpr -> QualType
 > toMethodType' cls tv (QualTypeExpr cx ty) =
->   toQualType'' tvs (QualTypeExpr (ClassAssert cls tv : cx) ty)
+>   toQualType'' tvs (QualTypeExpr (ClassAssert cls tv [] : cx) ty)
 >   where tvs = enumTypeVars [tv] (QualTypeExpr cx ty)
 
 > enumTypeVars :: Expr a => [Ident] -> a -> FM Ident Int
 > enumTypeVars tvs ty = fromListFM (zip (tvs ++ tvs') [0..])
 >   where tvs' = [tv | tv <- nub (fv ty), tv `notElem` tvs]
 
-> restrictContext :: [TypeExpr] -> [ClassAssert] -> [ClassAssert]
-> restrictContext tys cx =
->   [ClassAssert cls tv | ClassAssert cls tv <- cx, tv `elem` tvs'']
->   where tvs'' = nub (fv tys)
+> restrictContext :: [Ident] -> [ClassAssert] -> [ClassAssert]
+> restrictContext tvs cx =
+>   [ClassAssert cls tv tys | ClassAssert cls tv tys <- cx, tv `elem` tvs]
 
 > toQualType'' :: FM Ident Int -> QualTypeExpr -> QualType
 > toQualType'' tvs (QualTypeExpr cx ty) =
 >   QualType (nub (map (toTypePred'' tvs) cx)) (toType'' tvs ty)
 
 > toTypePred'' :: FM Ident Int -> ClassAssert -> TypePred
-> toTypePred'' tvs (ClassAssert cls tv) =
->   TypePred cls (toType'' tvs (VariableType tv))
+> toTypePred'' tvs (ClassAssert cls tv tys) =
+>   TypePred cls (toType'' tvs (foldl ApplyType (VariableType tv) tys))
 
 > toType'' :: FM Ident Int -> TypeExpr -> Type
 > toType'' tvs ty = toTypeApp tvs ty []
@@ -174,9 +173,11 @@ unqualified names.
 
 > fromTypePred' :: TypePred -> ClassAssert
 > fromTypePred' (TypePred cls ty) =
->   case fromType' ty of
->     VariableType tv -> ClassAssert cls tv
+>   case unapply (fromType' ty) [] of
+>     (VariableType tv,tys) -> ClassAssert cls tv tys
 >     _ -> internalError ("fromTypePred " ++ show ty)
+>   where unapply (ApplyType ty1 ty2) tys = unapply ty1 (ty2:tys)
+>         unapply ty tys = (ty,tys)
 
 > fromType' :: Type -> TypeExpr
 > fromType' ty = fromTypeApp ty []
@@ -194,7 +195,8 @@ unqualified names.
 > fromTypeApp (TypeConstrained tys _) tys' = fromTypeApp (head tys) tys'
 > fromTypeApp (TypeSkolem k) tys =
 >   foldl ApplyType (VariableType (mkIdent ("_?" ++ show k))) tys
-> fromTypeApp (TypeApply ty1 ty2) tys = fromTypeApp ty1 (fromType' ty2 : tys)
+> fromTypeApp (TypeApply ty1 ty2) tys =
+>   fromTypeApp ty1 (fromType' ty2 : tys)
 > fromTypeApp (TypeArrow ty1 ty2) tys =
 >   foldl ApplyType (ArrowType (fromType' ty1) (fromType' ty2)) tys
 

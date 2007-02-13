@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfEquiv.lhs 2088 2007-02-05 09:27:49Z wlux $
+% $Id: IntfEquiv.lhs 2095 2007-02-13 17:34:10Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -107,14 +107,17 @@ by function \texttt{fixInterface} and the associated type class
 > instance FixInterface IDecl where
 >   fix tcs (IInfixDecl p fix pr op) = IInfixDecl p fix pr op
 >   fix tcs (HidingDataDecl p tc k tvs) = HidingDataDecl p tc k tvs
->   fix tcs (IDataDecl p cx tc k tvs cs) = IDataDecl p cx tc k tvs (fix tcs cs)
+>   fix tcs (IDataDecl p cx tc k tvs cs) =
+>     IDataDecl p (fix tcs cx) tc k tvs (fix tcs cs)
 >   fix tcs (INewtypeDecl p cx tc k tvs nc) =
->     INewtypeDecl p cx tc k tvs (fix tcs nc)
+>     INewtypeDecl p (fix tcs cx) tc k tvs (fix tcs nc)
 >   fix tcs (ITypeDecl p tc k tvs ty) = ITypeDecl p tc k tvs (fix tcs ty)
->   fix tcs (HidingClassDecl p cx cls k tv) = HidingClassDecl p cx cls k tv
+>   fix tcs (HidingClassDecl p cx cls k tv) =
+>     HidingClassDecl p (fix tcs cx) cls k tv
 >   fix tcs (IClassDecl p cx cls k tv ds) =
->     IClassDecl p cx cls k tv (fix tcs ds)
->   fix tcs (IInstanceDecl p cx cls ty) = IInstanceDecl p cx cls (fix tcs ty)
+>     IClassDecl p (fix tcs cx) cls k tv (fix tcs ds)
+>   fix tcs (IInstanceDecl p cx cls ty) =
+>     IInstanceDecl p (fix tcs cx) cls (fix tcs ty)
 >   fix tcs (IFunctionDecl p f ty) = IFunctionDecl p f (fix tcs ty)
 
 > instance FixInterface ConstrDecl where
@@ -129,7 +132,10 @@ by function \texttt{fixInterface} and the associated type class
 >   fix tcs (IMethodDecl p f ty) = IMethodDecl p f (fix tcs ty)
 
 > instance FixInterface QualTypeExpr where
->   fix tcs (QualTypeExpr cx ty) = QualTypeExpr cx (fix tcs ty)
+>   fix tcs (QualTypeExpr cx ty) = QualTypeExpr (fix tcs cx) (fix tcs ty)
+
+> instance FixInterface ClassAssert where
+>   fix tcs (ClassAssert cls tv tys) = ClassAssert cls tv (fix tcs tys)
 
 > instance FixInterface TypeExpr where
 >   fix tcs (ConstructorType tc)

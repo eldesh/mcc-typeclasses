@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2093 2007-02-08 23:15:17Z wlux $
+% $Id: DictTrans.lhs 2095 2007-02-13 17:34:10Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -360,7 +360,7 @@ functions.
 > intfMethodDecl :: QualIdent -> Ident -> Position -> QualIdent -> QualTypeExpr
 >                -> IDecl
 > intfMethodDecl cls tv p f (QualTypeExpr cx ty) =
->   IFunctionDecl p f (QualTypeExpr (ClassAssert cls tv : cx) ty)
+>   IFunctionDecl p f (QualTypeExpr (ClassAssert cls tv [] : cx) ty)
 
 > dictPattern :: Type -> QualIdent -> [(Type,Ident)] -> ConstrTerm Type
 > dictPattern ty cls vs =
@@ -463,7 +463,7 @@ of method $f_i$ in class $C$.
 >         fs = classMethods cls tcEnv
 
 > instIDecl :: TCEnv -> Position -> QualIdent -> QualType -> IDecl
-> instIDecl tcEnv p f = IFunctionDecl p f . fromQualType tcEnv
+> instIDecl tcEnv p f ty = IFunctionDecl p f (fromQualType tcEnv ty)
 
 > instDictType :: TCEnv -> ValueEnv -> TypePred -> [Maybe Ident] -> Type
 > instDictType tcEnv tyEnv (TypePred cls ty) fs =

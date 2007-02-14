@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2095 2007-02-13 17:34:10Z wlux $
+% $Id: TypeCheck.lhs 2096 2007-02-14 16:50:32Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -312,11 +312,11 @@ general than the type signature.
 > tcEquation m tcEnv fs ty f eq@(Equation p lhs rhs) =
 >   do
 >     tyEnv0 <- fetchSt
->     cx <-
+>     (cx,eq') <-
 >       tcEqn m tcEnv p lhs rhs >>=
 >       unifyDecl p "function declaration" (ppEquation eq) tcEnv tyEnv0 [] ty
->     checkSkolems p tcEnv (text "Function:" <+> ppIdent f) fs ty
->     return cx
+>     checkSkolems p tcEnv (text "Function:" <+> ppIdent f) fs cx ty
+>     return (cx,eq')
 
 > tcEqn :: ModuleIdent -> TCEnv -> Position -> Lhs a -> Rhs a
 >       -> TcState (Context,Type,Equation Type)
@@ -338,7 +338,7 @@ general than the type signature.
 >     theta <- liftSt fetchSt
 >     let ty = subst theta alpha
 >         tvs = if forEval then zeroSet else fromListSet (typeVars ty)
->     checkSkolems p tcEnv (text "Goal:" <+> ppExpr 0 e) tvs ty
+>     checkSkolems p tcEnv (text "Goal:" <+> ppExpr 0 e) tvs cx ty
 >     cx' <- applyDefaults p "goal" (ppExpr 0 e) tcEnv tvs cx ty
 >     return (cx',Goal p e' ds')
 
@@ -1291,12 +1291,14 @@ algorithm in~\cite{LauferOdersky94:AbstractTypes}, which checks for
 escaping skolems at every let binding, but is still sound.
 \begin{verbatim}
 
-> checkSkolems :: Position -> TCEnv -> Doc -> Set Int -> Type -> TcState ()
-> checkSkolems p tcEnv what fs ty =
+> checkSkolems :: Position -> TCEnv -> Doc -> Set Int -> Context -> Type
+>              -> TcState ()
+> checkSkolems p tcEnv what fs cx ty =
 >   do
 >     ty' <- liftM (flip subst ty) (liftSt fetchSt)
->     unless (all (`elemSet` fs) (typeSkolems ty'))
->            (errorAt p (skolemEscapingScope tcEnv what ty'))
+>     let tvs = concatMap typeSkolems (ty' : [ty | TypePred _ ty <- cx])
+>     unless (all (`elemSet` fs) tvs)
+>            (errorAt p (skolemEscapingScope tcEnv what (QualType cx ty')))
 
 \end{verbatim}
 \paragraph{Instantiation and Generalization}
@@ -1441,10 +1443,10 @@ Error functions.
 >         text "Expected type:" <+> ppType tcEnv ty1,
 >         reason]
 
-> skolemEscapingScope :: TCEnv -> Doc -> Type -> String
+> skolemEscapingScope :: TCEnv -> Doc -> QualType -> String
 > skolemEscapingScope tcEnv what ty = show $
 >   vcat [text "Existential type escapes out of its scope", what,
->         text "Type:" <+> ppType tcEnv ty]
+>         text "Type:" <+> ppQualType tcEnv ty]
 
 > invalidCType :: String -> TCEnv -> Type -> String
 > invalidCType what tcEnv ty = show $

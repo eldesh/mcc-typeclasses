@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryLexer.lhs 2088 2007-02-05 09:27:49Z wlux $
+% $Id: CurryLexer.lhs 2099 2007-02-18 10:59:53Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -285,7 +285,7 @@ Lexing functions
 >         skipBlanks p ('\t':s) bol = skipBlanks (tab p) s bol
 >         skipBlanks p ('\n':s) _ = skipBlanks (nl p) s True
 >         skipBlanks p ('-':'-':s) _ =
->           skipBlanks (nl p) (tail' (dropWhile (/= '\n') s)) True
+>           skipBlanks (nl p) (drop 1 (dropWhile (/= '\n') s)) True
 >         skipBlanks p ('{':'-':'#':s) bol =
 >           (if bol then pragmaBOL p ('{':'-':'#':s) else pragma)
 >             (success p) (nestedComment p skipBlanks fail) (incr p 3) s bol
@@ -295,8 +295,6 @@ Lexing functions
 >           | isSpace c = skipBlanks (next p) s bol
 >           | otherwise =
 >               (if bol then lexBOL else lexToken) success fail p (c:s) bol
->         tail' [] = []
->         tail' (_:tl) = tl
 
 > nestedComment :: Position -> L a -> FailL a -> L a
 > nestedComment p0 _ fail p [] =
@@ -333,13 +331,13 @@ backs up to the beginning of the pragma in that case so that
 
 > pragmaBOL :: Position -> String -> (Token -> L a) -> L a -> L a
 > pragmaBOL _ _ success noPragma p s _ [] = pragma success noPragma p s False []
-> pragmaBOL p0 s0 success noPragma p s _ ctxt@(n:rest)
+> pragmaBOL p0 s0 success noPragma p s _ ctxt@(n:_)
 >   | col < n = pragma insertRightBrace noPragma p s True ctxt
 >   | col == n = pragma insertSemicolon noPragma p s True ctxt
 >   | otherwise =
 >       pragma (\t p s _ -> success t p s False) noPragma p s True ctxt
 >   where col = column p0
->         insertRightBrace _ _ _ _ _ = success (tok VRightBrace) p0 s0 True rest
+>         insertRightBrace _ _ _ _ = success (tok VRightBrace) p0 s0 True
 >         insertSemicolon _ _ _ _ = success (tok VSemicolon) p0 s0 False
 
 > pragma :: (Token -> L a) -> L a -> L a
@@ -358,8 +356,8 @@ backs up to the beginning of the pragma in that case so that
 
 > lexBOL :: SuccessL a -> FailL a -> L a
 > lexBOL success fail p s _ [] = lexToken success fail p s False []
-> lexBOL success fail p s _ ctxt@(n:rest)
->   | col < n = success p (tok VRightBrace) p s True rest
+> lexBOL success fail p s _ ctxt@(n:_)
+>   | col < n = success p (tok VRightBrace) p s True ctxt
 >   | col == n = success p (tok VSemicolon) p s False ctxt
 >   | otherwise = lexToken success fail p s False ctxt
 >   where col = column p
@@ -376,7 +374,7 @@ backs up to the beginning of the pragma in that case so that
 >   | c == '_' = token Underscore
 >   | c == '`' = token Backquote
 >   | c == '{' = token LeftBrace
->   | c == '}' = \bol -> token RightBrace bol . drop 1
+>   | c == '}' = token RightBrace
 >   | c == '\'' = lexChar p success fail (next p) s
 >   | c == '\"' = lexString p success fail (next p) s
 >   | isAlpha c = lexIdent (success p) p (c:s)
@@ -504,7 +502,7 @@ backs up to the beginning of the pragma in that case so that
 >   | c == '\t' = lexStringRest p0 success fail (c:s0) (tab p) s
 >   | otherwise = lexStringRest p0 success fail (c:s0) (next p) s
 
-> lexStringEscape ::  Position -> (String -> L a) -> FailL a -> String -> L a
+> lexStringEscape :: Position -> (String -> L a) -> FailL a -> String -> L a
 > lexStringEscape p0 success fail s0 p [] = lexEscape p0 undefined fail p []
 > lexStringEscape p0 success fail s0 p (c:s)
 >   | c == '&' = success s0 (next p) s

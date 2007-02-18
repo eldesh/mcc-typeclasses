@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2095 2007-02-13 17:34:10Z wlux $
+% $Id: CurryParser.lhs 2099 2007-02-18 10:59:53Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -832,15 +832,21 @@ prefix of a let expression.
 \begin{verbatim}
 
 > layout :: Parser Token a b -> Parser Token a b
-> layout p = layoutOff <-*> braces p
->        <|> layoutOn <-*> p <*-> (token VRightBrace <|> layoutEnd)
+> layout p = braces p
+>        <|> layoutOn <-*> p <*-> layoutEnd
+>                     <*-> (token VRightBrace `opt` NoAttributes)
 
 \end{verbatim}
 \paragraph{More combinators}
+Note that the \texttt{braces} combinator turns off layout processing
+at the opening brace and restores the current layout mode at the
+closing brace. Due to the one token look-ahead of the parsing
+combinators, layout processing must be changed \emph{before} consuming
+the opening and closing brace, respectively.
 \begin{verbatim}
 
 > braces, brackets, parens, backquotes :: Parser Token a b -> Parser Token a b
-> braces p = bracket leftBrace p rightBrace
+> braces p = bracket (layoutOff <-*> leftBrace) p (layoutEnd <-*> rightBrace)
 > brackets p = bracket leftBracket p rightBracket
 > parens p = bracket leftParen p rightParen
 > backquotes p = bracket backquote p checkBackquote

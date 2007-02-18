@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2095 2007-02-13 17:34:10Z wlux $
+% $Id: DictTrans.lhs 2097 2007-02-18 09:45:02Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -103,10 +103,11 @@ from a dictionary.
 > doTrans :: (ModuleIdent -> TCEnv -> ValueEnv -> a -> DictState b) -> TCEnv
 >         -> InstEnv -> ValueEnv -> ModuleIdent -> a -> (TCEnv,ValueEnv,b)
 > doTrans f tcEnv iEnv tyEnv m x =
->   run (f m tcEnv tyEnv' x >>= \x' -> fetchSt >>= \tyEnv'' ->
->        return (bindDictTypes tcEnv,tyEnv'',x'))
->       (rebindFuns tcEnv tyEnv')
->   where tyEnv' = bindClassDecls m tcEnv (bindInstDecls tcEnv iEnv tyEnv)
+>   run (f m tcEnv' tyEnv' x >>= \x' -> fetchSt >>= \tyEnv'' ->
+>        return (tcEnv',tyEnv'',x'))
+>       (rebindFuns tcEnv' tyEnv')
+>   where tcEnv' = bindDictTypes m tcEnv
+>         tyEnv' = bindClassDecls m tcEnv' (bindInstDecls tcEnv' iEnv tyEnv)
 
 \end{verbatim}
 Besides the source code definitions, the compiler must also transform
@@ -117,8 +118,9 @@ generator.
 
 > dictTransInterface :: TCEnv -> ValueEnv -> Interface -> Interface
 > dictTransInterface tcEnv tyEnv (Interface m is ds) =
->   Interface m is (map (dictTransIntfDecl m tcEnv) dss)
->   where dss = concatMap (liftIntfDecls m tcEnv tyEnv) ds
+>   Interface m is (map (dictTransIntfDecl m tcEnv') dss)
+>   where dss = concatMap (liftIntfDecls m tcEnv' tyEnv) ds
+>         tcEnv' = bindDictTypes m tcEnv
 
 > liftIntfDecls :: ModuleIdent -> TCEnv -> ValueEnv -> IDecl -> [IDecl]
 > liftIntfDecls _ _ _ (IInfixDecl p fix pr op) = [IInfixDecl p fix pr op]
@@ -159,9 +161,7 @@ a dictionary type declaration
 \end{displaymath}
 where $T=\emph{dictTypeId}(C)$ and $C'=\emph{dictConstrId}(C)$, is
 added to the source code and the type constructor and value type
-environments are updated accordingly. Since type classes and type
-constructors share a common name space, we simply use the identity
-function for \emph{dictTypeId}.
+environments are updated accordingly.
 
 In case of polymorphic methods, we have to cheat a little bit, since
 our type representation does not support polymorphic components. We
@@ -192,12 +192,15 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
   as default implementation for omitted methods?}
 \begin{verbatim}
 
-> bindDictTypes :: TCEnv -> TCEnv
-> bindDictTypes = fmap transInfo
->   where transInfo (TypeClass cls k _ _) =
->           DataType (qDictTypeId cls) (KindArrow k KindStar)
->                    [Just (dictConstrId (unqualify cls))]
->         transInfo ti = ti
+> bindDictTypes :: ModuleIdent -> TCEnv -> TCEnv
+> bindDictTypes m tcEnv = foldr (bindDictType m) tcEnv (allEntities tcEnv)
+
+> bindDictType :: ModuleIdent -> TypeInfo -> TCEnv -> TCEnv
+> bindDictType m (TypeClass cls k _ _) =
+>   bindEntity m tc (DataType tc (KindArrow k KindStar) [Just c])
+>   where tc = qDictTypeId cls
+>         c = dictConstrId (unqualify cls)
+> bindDictType _ _ = id
 
 > bindClassDecls :: ModuleIdent -> TCEnv -> ValueEnv -> ValueEnv
 > bindClassDecls m tcEnv tyEnv =
@@ -846,24 +849,23 @@ transformation matches the initial arrows of the instance type.
 \paragraph{Auxiliary Functions}
 The functions \texttt{dictTypeId} and \texttt{dictConstrId} return the
 names of the dictionary type and data constructors for a class,
-respectively. The function \texttt{qDictTypeId} and
-\texttt{qDictConstrId} are variants of these functions that use
-qualified names. Since type classes and type constructors share a
-common name space, we simply reuse the type class name for its
-dictionary type.
+respectively. For simplicity, we use the same identifier for the
+dictionary type and its data constructor. The functions
+\texttt{qDictTypeId} and \texttt{qDictConstrId} are variants of these
+functions that transform qualified names.
 \begin{verbatim}
 
 > dictTypeId :: Ident -> Ident
-> dictTypeId = id
+> dictTypeId cls = mkIdent ("_Dict#" ++ name cls)
 
 > qDictTypeId :: QualIdent -> QualIdent
 > qDictTypeId cls = qualifyLike cls (dictTypeId (unqualify cls))
 
 > dictConstrId :: Ident -> Ident
-> dictConstrId cls = mkIdent ("_Dict#" ++ name cls)
+> dictConstrId = dictTypeId
 
 > qDictConstrId :: QualIdent -> QualIdent
-> qDictConstrId cls = qualifyLike cls (dictConstrId (unqualify cls))
+> qDictConstrId = qDictTypeId
 
 \end{verbatim}
 The functions \texttt{instFunId} and \texttt{qInstFunId} return the

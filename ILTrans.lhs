@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2088 2007-02-05 09:27:49Z wlux $
+% $Id: ILTrans.lhs 2159 2007-04-22 12:06:13Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -153,12 +153,12 @@ intermediate language. The arguments of the function are renamed such
 that all variables occurring in the same position (in different
 equations) have the same name. This is necessary in order to
 facilitate the translation of pattern matching into \texttt{case}
-expressions. We use the following simple convention here: The top-level
-arguments of the function are named from left to right \texttt{\_1},
-\texttt{\_2}, and so on. The names of nested arguments are constructed
-by appending \texttt{\_1}, \texttt{\_2}, etc. from left to right to
-the name that were assigned to a variable occurring at the position of
-the constructor term.
+expressions. We use the following simple convention here: The
+outermost arguments of the function are named \texttt{\_1},
+\texttt{\_2}, and so on from left to right. The names of inner
+arguments are constructed by appending \texttt{\_1}, \texttt{\_2},
+etc. from left to right to the name that would be assigned to a
+variable occurring at the position of the constructor term.
 
 Some special care is needed for the selector functions introduced by
 the compiler in place of pattern bindings. In order to generate the
@@ -185,7 +185,8 @@ rather than invariably adding the name of the current module.
 >                   (match IL.Flex vs (map (translEquation tyEnv vs vs'') eqs))
 >   where Value f' (ForAll _ (QualType _ ty)) : _ = lookupTopEnv f tyEnv
 >         vs = if isSelectorId f then translArgs eqs vs' else vs'
->         (vs',vs'') = splitAt (arrowArity ty) (argNames (mkIdent ""))
+>         (vs',vs'') = splitAt (arity eqs) (argNames (mkIdent ""))
+>         arity (Equation _ (FunLhs _ ts) _ : _) = length ts
 
 > translArgs :: [Equation a] -> [Ident] -> [Ident]
 > translArgs [Equation _ (FunLhs _ (t:ts)) _] (v:_) =

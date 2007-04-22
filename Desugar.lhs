@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2117 2007-03-09 12:19:21Z wlux $
+% $Id: Desugar.lhs 2159 2007-04-22 12:06:13Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -121,14 +121,14 @@ of a module.
 >   where (tds,vds) = partition isTypeDecl ds
 
 \end{verbatim}
-While a goal of type \texttt{IO \_} is executed directly by the
-runtime system, all other goals are evaluated under an interactive
-top-level which displays the solutions of the goal and in particular
+Goals with type \texttt{IO \_} are executed directly by the runtime
+system. All other goals are evaluated under control of an interactive
+top-level, which displays the solutions of the goal and in particular
 the bindings of the free variables. For this reason, the free
 variables declared in the \texttt{where} clause of a goal are
-translated into free variables of the goal. In addition, the goal
-is transformed into a first order expression by performing a
-unification with another variable. Thus, a goal
+translated into free variables of the goal. In addition, the goal is
+transformed into a first order expression by performing a unification
+with another variable. Thus, a goal
 \begin{quote}
  \emph{expr}
  \texttt{where} $v_1$,\dots,$v_n$ \texttt{free}; \emph{decls}
@@ -140,26 +140,19 @@ translated into the function
     $v_0$ \texttt{=:=} \emph{expr}
     \texttt{where} \emph{decls}
 \end{quote}
-where $v_0$ is a fresh variable.
-
-\textbf{Note:} The debugger assumes that the goal is always a nullary
-function. This means that we must not $\eta$-expand functional goal
-expressions. In order to avoid the $\eta$-expansion we cheat a little
-bit here and change the type of the goal into $\forall\alpha.\alpha$
-if it really has a functional type.
-
-\ToDo{Fix the debugger to handle functional goals so that this
-hack is no longer needed.}
+where $v_0$ is a fresh variable. This transformation is not performed
+when generating code for the declarative debugger since the debugging
+transformation will supply its own main function (see
+Sect.~\ref{sec:dtrans}).
 \begin{verbatim}
 
 > desugarGoal :: Bool -> TCEnv -> ValueEnv -> ModuleIdent -> Ident -> Goal Type
 >             -> (Maybe [Ident],Module Type,ValueEnv)
 > desugarGoal debug tcEnv tyEnv m g (Goal p e ds)
->   | debug || isIO ty =
->       desugarGoalIO tcEnv (bindSuccess tyEnv) p m g (Let ds e)
->         (if debug && arrowArity ty > 0 then typeVar 0 else ty)
->   | otherwise = desugarGoal' tcEnv (bindSuccess tyEnv) p m g vs e' ty
+>   | debug || isIO ty = desugarGoalIO tcEnv tyEnv' p m g (Let ds e) ty
+>   | otherwise = desugarGoal' tcEnv tyEnv' p m g vs e' ty
 >   where ty = typeOf e
+>         tyEnv' = bindSuccess tyEnv
 >         (vs,e') = liftGoalVars (if null ds then e else Let ds e)
 >         isIO (TypeApply (TypeConstructor tc) _) = tc == qIOId
 >         isIO _ = False

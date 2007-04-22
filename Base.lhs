@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2095 2007-02-13 17:34:10Z wlux $
+% $Id: Base.lhs 2161 2007-04-22 14:48:33Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -217,7 +217,12 @@ In order to test type correctness of a module, the compiler needs to
 determine the type of every data constructor, function, and variable
 in the module. For the purpose of type checking, there is no need to
 distinguish variables and functions. For all objects, their original
-names and their types are saved.
+names and their types are saved. In addition, the compiler also saves
+the arity of functions and data constructors. For constructors, the
+arity could be computed from the constructor's type. However, this is
+not possible in general for functions. Note that the arity of a
+newtype constructor is always one, so there is no need to save it
+explicitly.
 
 Even though value declarations may be nested, the compiler uses a flat
 environment for saving type information. This is possible because all
@@ -227,21 +232,21 @@ information.
 
 > type ValueEnv = TopEnv ValueInfo
 
-> data ValueInfo = DataConstructor QualIdent TypeScheme
+> data ValueInfo = DataConstructor QualIdent Int TypeScheme
 >                | NewtypeConstructor QualIdent TypeScheme
->                | Value QualIdent TypeScheme
+>                | Value QualIdent Int TypeScheme
 >                deriving Show
 
 > instance Entity ValueInfo where
->   origName (DataConstructor origName _) = origName
+>   origName (DataConstructor origName _ _) = origName
 >   origName (NewtypeConstructor origName _) = origName
->   origName (Value origName _) = origName
+>   origName (Value origName _ _) = origName
 
-> bindFun :: ModuleIdent -> Ident -> TypeScheme -> ValueEnv -> ValueEnv
-> bindFun m f ty = bindTopEnv m f (Value (qualifyWith m f) ty)
+> bindFun :: ModuleIdent -> Ident -> Int -> TypeScheme -> ValueEnv -> ValueEnv
+> bindFun m f n ty = bindTopEnv m f (Value (qualifyWith m f) n ty)
 
-> rebindFun :: ModuleIdent -> Ident -> TypeScheme -> ValueEnv -> ValueEnv
-> rebindFun m f ty = rebindTopEnv m f (Value (qualifyWith m f) ty)
+> rebindFun :: ModuleIdent -> Ident -> Int -> TypeScheme -> ValueEnv -> ValueEnv
+> rebindFun m f n ty = rebindTopEnv m f (Value (qualifyWith m f) n ty)
 
 \end{verbatim}
 The functions \texttt{conType}, \texttt{varType}, and \texttt{funType}
@@ -254,26 +259,44 @@ The function \texttt{varType} can handle ambiguous identifiers and
 returns the first available type. This makes it possible to use
 \texttt{varType} in order to determine the type of a locally defined
 function even though the function's name may be ambiguous.
+
+The function \texttt{arity} returns the arity of a constructor or
+function and the function \texttt{changeArity} changes the arity of a
+(local) function.
 \begin{verbatim}
 
 > conType :: QualIdent -> ValueEnv -> TypeScheme
 > conType c tyEnv =
 >   case qualLookupTopEnv c tyEnv of
->     [DataConstructor _ ty] -> ty
+>     [DataConstructor _ _ ty] -> ty
 >     [NewtypeConstructor _ ty] -> ty
 >     _ -> internalError ("conType " ++ show c)
 
 > varType :: Ident -> ValueEnv -> TypeScheme
 > varType v tyEnv =
 >   case lookupTopEnv v tyEnv of
->     Value _ ty : _ -> ty
+>     Value _ _ ty : _ -> ty
 >     _ -> internalError ("varType " ++ show v)
 
 > funType :: QualIdent -> ValueEnv -> TypeScheme
 > funType f tyEnv =
 >   case qualLookupTopEnv f tyEnv of
->     [Value _ ty] -> ty
+>     [Value _ _ ty] -> ty
 >     _ -> internalError ("funType " ++ show f)
+
+> arity :: QualIdent -> ValueEnv -> Int
+> arity x tyEnv =
+>   case qualLookupTopEnv x tyEnv of
+>     [DataConstructor _ n _] -> n
+>     [NewtypeConstructor _ _] -> 1
+>     [Value _ n _] -> n
+>     _ -> internalError ("arity " ++ show x)
+
+> changeArity :: ModuleIdent -> Ident -> Int -> ValueEnv -> ValueEnv
+> changeArity m f n tyEnv =
+>   case lookupTopEnv f tyEnv of
+>     Value _ n' ty : _ -> if n /= n' then rebindFun m f n ty tyEnv else tyEnv
+>     _ -> internalError ("changeArity " ++ show f)
 
 \end{verbatim}
 The function \texttt{isNewtypeConstr} uses the value type environment
@@ -283,7 +306,7 @@ in order to distinguish data and newtype constructors.
 > isNewtypeConstr :: ValueEnv -> QualIdent -> Bool
 > isNewtypeConstr tyEnv c =
 >   case qualLookupTopEnv c tyEnv of
->     [DataConstructor _ _] -> False
+>     [DataConstructor _ _ _] -> False
 >     [NewtypeConstructor _ _] -> True
 >     _ -> internalError ("isNewtypeConstr: " ++ show c)
 
@@ -301,9 +324,9 @@ used in order to check the export list of a module.
 > data ValueKind = Constr QualIdent | Var QualIdent deriving (Eq,Show)
 
 > valueKind :: ValueInfo -> ValueKind
-> valueKind (DataConstructor c _) = Constr c
+> valueKind (DataConstructor c _ _) = Constr c
 > valueKind (NewtypeConstructor c _) = Constr c
-> valueKind (Value v _) = Var v
+> valueKind (Value v _ _) = Var v
 
 > instance Entity ValueKind where
 >   origName (Constr c) = c
@@ -422,7 +445,8 @@ for the type \verb|a -> b|.
 > initDCEnv :: ValueEnv
 > initDCEnv = foldr (uncurry predefDC) emptyDCEnv (concatMap snd predefTypes)
 >   where emptyDCEnv = emptyTopEnv (Just (map snd tuples))
->         predefDC c ty = predefTopEnv c' (DataConstructor c' (polyType ty))
+>         predefDC c ty =
+>           predefTopEnv c' (DataConstructor c' (arrowArity ty) (polyType ty))
 >           where c' = qualify c
 
 > predefTypes :: [(Type,[(Ident,Type)])]
@@ -441,7 +465,7 @@ for the type \verb|a -> b|.
 >   where tvs = map typeVar [0..]
 >         tupleInfo n =
 >           (DataType c (simpleKind n) [Just (unqualify c)],
->            DataConstructor c (ForAll n (tupleConstrType (take n tvs))))
+>            DataConstructor c n (ForAll n (tupleConstrType (take n tvs))))
 >           where c = qTupleId n
 >         tupleConstrType tys = qualType (foldr TypeArrow (tupleType tys) tys)
 

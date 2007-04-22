@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2095 2007-02-13 17:34:10Z wlux $
+% $Id: IntfCheck.lhs 2161 2007-04-22 14:48:33Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -116,7 +116,7 @@ interface module only. However, this has not been implemented yet.
 > checkImport m _ _ _ (IInstanceDecl _ _ _ _) = return ()
 > checkImport m _ _ tyEnv (IFunctionDecl p f ty) =
 >   checkValueInfo "function" checkFun tyEnv p f
->   where checkFun (Value f' (ForAll _ ty')) =
+>   where checkFun (Value f' _ (ForAll _ ty')) =
 >           f == f' && toQualType m ty == ty'
 >         checkFun _ = False
 
@@ -125,14 +125,14 @@ interface module only. However, this has not been implemented yet.
 > checkConstrImport m tyEnv cx tc tvs (ConstrDecl p evs c tys) =
 >   checkValueInfo "data constructor" checkConstr tyEnv p qc
 >   where qc = qualifyLike tc c
->         checkConstr (DataConstructor c' (ForAll n' ty')) =
+>         checkConstr (DataConstructor c' _ (ForAll n' ty')) =
 >           qc == c' && length (tvs ++ evs) == n' &&
 >           toConstrType m cx tc tvs tys == ty'
 >         checkConstr _ = False
 > checkConstrImport m tyEnv cx tc tvs (ConOpDecl p evs ty1 op ty2) =
 >   checkValueInfo "data constructor" checkConstr tyEnv p qc
 >   where qc = qualifyLike tc op
->         checkConstr (DataConstructor c' (ForAll n' ty')) =
+>         checkConstr (DataConstructor c' _ (ForAll n' ty')) =
 >           qc == c' && length (tvs ++ evs) == n' &&
 >           toConstrType m cx tc tvs [ty1,ty2] == ty'
 >         checkConstr _ = False
@@ -151,7 +151,7 @@ interface module only. However, this has not been implemented yet.
 > checkMethodImport m tyEnv cls tv (IMethodDecl p f ty) =
 >   checkValueInfo "method" checkMethod tyEnv p qf
 >   where qf = qualifyLike cls f
->         checkMethod (Value f' (ForAll _ ty')) =
+>         checkMethod (Value f' _ (ForAll _ ty')) =
 >           qf == f' && toMethodType m cls tv ty == ty'
 >         checkMethod _ = False
 

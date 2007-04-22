@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2097 2007-02-18 09:45:02Z wlux $
+% $Id: DictTrans.lhs 2161 2007-04-22 14:48:33Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -216,9 +216,10 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 >                    map (classMethodType tyEnv cls) fs))
 > bindClassEntities _ _ _ tyEnv = tyEnv
 
-> bindClassEntity :: ModuleIdent -> (QualIdent -> TypeScheme -> ValueInfo)
+> bindClassEntity :: ModuleIdent
+>                 -> (QualIdent -> Int -> TypeScheme -> ValueInfo)
 >                 -> QualIdent -> TypeScheme -> ValueEnv -> ValueEnv
-> bindClassEntity m f x ty = bindEntity m x (f x ty)
+> bindClassEntity m f x ty = bindEntity m x (f x (arrowArity (rawType ty)) ty)
 
 > classDecls :: TCEnv -> ValueEnv -> Position -> Ident -> Ident
 >            -> [MethodDecl Type] -> [TopDecl Type]
@@ -429,7 +430,9 @@ of method $f_i$ in class $C$.
 
 > bindInstFun :: ModuleIdent -> Ident -> QualType -> ValueEnv -> ValueEnv
 > bindInstFun m f ty =
->   importTopEnv False m f (Value (qualifyWith m f) (typeScheme ty))
+>   importTopEnv False m f
+>                (Value (qualifyWith m f) (arrowArity (rawType ty')) ty')
+>   where ty' = typeScheme ty
 
 > instDecls :: TCEnv -> ValueEnv -> Position -> QualIdent -> QualType
 >           -> [MethodDecl Type] -> [TopDecl Type] 
@@ -513,9 +516,11 @@ function applications in $f$'s body.
 
 > rebindFuns :: TCEnv -> ValueEnv -> ValueEnv
 > rebindFuns tcEnv = fmap transInfo
->   where transInfo (Value f (ForAll n ty)) =
->           Value f (ForAll n (transformQualType tcEnv ty))
+>   where transInfo (Value f n ty) = Value f n' ty'
+>           where n' = n + arrowArity (rawType ty') - arrowArity (rawType ty)
+>                 ty' = transType ty
 >         transInfo vi = vi
+>         transType (ForAll n ty) = ForAll n (transformQualType tcEnv ty)
 
 > class DictTrans a where
 >   dictTrans :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv -> DictEnv
@@ -921,7 +926,7 @@ records it in the type environment.
 > freshVar m pre ty =
 >   do
 >     x <- liftM (mkIdent . (pre ++) . show) (liftSt (updateSt (1 +)))
->     updateSt_ (localBindTopEnv x (Value (qualifyWith m x) (monoType ty)))
+>     updateSt_ (localBindTopEnv x (Value (qualifyWith m x) 0 (monoType ty)))
 >     return (ty,x)
 
 \end{verbatim}

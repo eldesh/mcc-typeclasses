@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2090 2007-02-05 18:57:27Z wlux $
+% $Id: Imports.lhs 2161 2007-04-22 14:48:33Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -173,7 +173,8 @@ following functions.
 > values m (INewtypeDecl _ cx tc _ tvs nc) =
 >   (newConstr m cx (qualQualify m tc) tvs nc :)
 > values m (IFunctionDecl _ f ty) =
->   qual f (Value (qualQualify m f) (typeScheme (toQualType m ty)))
+>   qual f (Value (qualQualify m f) (arrowArity (rawType ty')) ty')
+>   where ty' = typeScheme (toQualType m ty)
 > values m (IClassDecl _ _ cls _ tv ds) =
 >   (map (classMethod m (qualQualify m cls) tv) (catMaybes ds) ++)
 > values _ _ = id
@@ -188,11 +189,12 @@ following functions.
 > newConstr :: ModuleIdent -> [ClassAssert] -> QualIdent -> [Ident]
 >           -> NewConstrDecl -> I ValueInfo
 > newConstr m cx tc tvs (NewConstrDecl _ c ty) =
->   (c,con NewtypeConstructor m cx tc tvs c [ty])
+>   (c,con (const . NewtypeConstructor) m cx tc tvs c [ty])
 
 > classMethod :: ModuleIdent -> QualIdent -> Ident -> IMethodDecl -> I ValueInfo
 > classMethod m cls tv (IMethodDecl _ f ty) =
->   (f,Value (qualifyLike cls f) (typeScheme (toMethodType m cls tv ty)))
+>   (f,Value (qualifyLike cls f) (arrowArity (rawType ty')) ty')
+>   where ty' = typeScheme (toMethodType m cls tv ty)
 
 > qual :: QualIdent -> a -> [I a] -> [I a]
 > qual x y = ((unqualify x,y) :)
@@ -236,9 +238,9 @@ Auxiliary functions:
 >             [cls | TypePred cls _ <- cx']
 >   where QualType cx' _ = toQualType m (QualTypeExpr cx (VariableType tv))
 
-> con :: (QualIdent -> TypeScheme -> a) -> ModuleIdent -> [ClassAssert]
+> con :: (QualIdent -> Int -> TypeScheme -> a) -> ModuleIdent -> [ClassAssert]
 >     -> QualIdent -> [Ident] -> Ident -> [TypeExpr] -> a
 > con f m cx tc tvs c tys =
->   f (qualifyLike tc c) (typeScheme (toConstrType m cx tc tvs tys))
+>   f (qualifyLike tc c) (length tys) (typeScheme (toConstrType m cx tc tvs tys))
 
 \end{verbatim}

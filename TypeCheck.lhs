@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2160 2007-04-22 13:37:26Z wlux $
+% $Id: TypeCheck.lhs 2161 2007-04-22 14:48:33Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -109,7 +109,7 @@ type synonyms occurring in their types are expanded.
 >           bindConstr DataConstructor m tcEnv cx tc tvs op [ty1,ty2]
 > bindTypeValues m tcEnv (NewtypeDecl _ cx tc tvs nc _) tyEnv = bind nc tyEnv
 >   where bind (NewConstrDecl _ c ty) =
->           bindConstr NewtypeConstructor m tcEnv cx tc tvs c [ty]
+>           bindConstr (const . NewtypeConstructor) m tcEnv cx tc tvs c [ty]
 > bindTypeValues _ _ (TypeDecl _ _ _ _) tyEnv = tyEnv
 > bindTypeValues m tcEnv (ClassDecl _ _ cls tv ds) tyEnv = foldr bind tyEnv ds
 >   where cls' = qualifyWith m cls
@@ -120,11 +120,11 @@ type synonyms occurring in their types are expanded.
 > bindTypeValues _ _ (InstanceDecl _ _ _ _ _) tyEnv = tyEnv
 > bindTypeValues _ _ (BlockDecl _) tyEnv = tyEnv
 
-> bindConstr :: (QualIdent -> TypeScheme -> ValueInfo) -> ModuleIdent
+> bindConstr :: (QualIdent -> Int -> TypeScheme -> ValueInfo) -> ModuleIdent
 >            -> TCEnv -> [ClassAssert] -> Ident -> [Ident] -> Ident
 >            -> [TypeExpr] -> ValueEnv -> ValueEnv
 > bindConstr f m tcEnv cx tc tvs c tys =
->   globalBindTopEnv m c (f (qualifyWith m c) (typeScheme ty))
+>   globalBindTopEnv m c (f (qualifyWith m c) (length tys) (typeScheme ty))
 >   where ty = expandConstrType tcEnv cx (qualifyWith m tc) tvs tys
 
 > bindMethods :: ModuleIdent -> TCEnv -> QualIdent -> Ident -> [Ident]
@@ -134,7 +134,8 @@ type synonyms occurring in their types are expanded.
 >   where ty' = expandMethodType tcEnv cls tv ty
 
 > bindMethod :: ModuleIdent -> TypeScheme -> Ident -> ValueEnv -> ValueEnv
-> bindMethod m ty f = globalBindTopEnv m f (Value (qualifyWith m f) ty)
+> bindMethod m ty f =
+>   globalBindTopEnv m f (Value (qualifyWith m f) (arrowArity (rawType ty)) ty)
 
 \end{verbatim}
 \paragraph{Type Signatures}
@@ -254,10 +255,14 @@ general than the type signature.
 >         mergeContext cx1 theta (cx2,ty,d) = (cx1 ++ cx2,subst theta ty,d)
 
 > bindDecl :: ModuleIdent -> TCEnv -> SigEnv -> Decl a -> TcState ()
-> bindDecl m tcEnv sigs (FunctionDecl p f _) =
+> bindDecl m tcEnv sigs (FunctionDecl p f eqs) =
 >   case lookupEnv f sigs of
->     Just ty -> updateSt_ (bindFun m f (typeScheme (expandPolyType tcEnv ty)))
->     Nothing -> bindLambdaVar m f
+>     Just ty ->
+>       updateSt_ (bindFun m f n (typeScheme (expandPolyType tcEnv ty)))
+>     Nothing ->
+>       replicateM (n + 1) freshTypeVar >>=
+>       updateSt_ . bindFun m f n . monoType . foldr1 TypeArrow
+>   where n = eqnArity (head eqs)
 > bindDecl m tcEnv sigs (PatternDecl p t _) = bindDeclVars m tcEnv sigs p (bv t)
 
 > bindDeclVars :: ModuleIdent -> TCEnv -> SigEnv -> Position -> [Ident]
@@ -269,9 +274,9 @@ general than the type signature.
 > bindDeclVar m tcEnv sigs p v =
 >   case lookupEnv v sigs of
 >     Just ty
->        | null (fv ty) ->
->            updateSt_ (bindFun m v (typeScheme (expandPolyType tcEnv ty)))
->        | otherwise -> errorAt p (polymorphicVar v)
+>       | null (fv ty) ->
+>           updateSt_ (bindFun m v 0 (typeScheme (expandPolyType tcEnv ty)))
+>       | otherwise -> errorAt p (polymorphicVar v)
 >     Nothing -> bindLambdaVar m v
 
 > tcDecl :: ModuleIdent -> TCEnv -> Context -> Decl a
@@ -330,7 +335,7 @@ general than the type signature.
 > bindLambdaVars m t = mapM_ (bindLambdaVar m) (bv t)
 
 > bindLambdaVar :: ModuleIdent -> Ident -> TcState ()
-> bindLambdaVar m v = freshTypeVar >>= updateSt_ . bindFun m v . monoType
+> bindLambdaVar m v = freshTypeVar >>= updateSt_ . bindFun m v 0 . monoType
 
 > tcGoal :: Bool -> ModuleIdent -> TCEnv -> Goal a
 >        -> TcState (Context,Goal Type)
@@ -446,12 +451,12 @@ in \texttt{bindDeclVar} above.
 
 > genDecl :: ModuleIdent -> TCEnv -> SigEnv -> TypeScheme -> Decl a
 >         -> TcState ()
-> genDecl m tcEnv sigs sigma (FunctionDecl p f _) =
+> genDecl m tcEnv sigs sigma (FunctionDecl p f eqs) =
 >   case lookupEnv f sigs of
 >     Just sigTy
 >       | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma -> return ()
 >       | otherwise -> errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
->     Nothing -> updateSt_ (rebindFun m f sigma)
+>     Nothing -> updateSt_ (rebindFun m f (eqnArity (head eqs)) sigma)
 >   where what = text "Function:" <+> ppIdent f
 > genDecl _ _ _ _ (PatternDecl _ _ _) = return ()
 
@@ -548,7 +553,7 @@ case of \texttt{tcTopDecl}.
 >              -> TcState (TypeScheme,Decl Type)
 > tcMethodDecl m tcEnv methTy (MethodDecl p f eqs) =
 >   do
->     updateSt_ (bindFun m f methTy)
+>     updateSt_ (bindFun m f (eqnArity (head eqs)) methTy)
 >     (cx,(ty,d')) <- tcFunctionDecl "method" m tcEnv [] methTy p f eqs
 >     theta <- liftSt fetchSt
 >     return (gen zeroSet cx (subst theta ty),d')
@@ -586,11 +591,11 @@ arbitrary type.
 >                -> Maybe String -> Ident -> TypeExpr -> TcState ()
 > tcForeignFunct m tcEnv p cc ie f ty =
 >   do
->     checkForeignType cc ty'
->     updateSt_ (bindFun m f (typeScheme ty'))
->   where ty' = expandPolyType tcEnv (QualTypeExpr [] ty)
+>     checkForeignType cc (rawType ty')
+>     updateSt_ (bindFun m f (arrowArity (rawType ty')) ty')
+>   where ty' = typeScheme (expandPolyType tcEnv (QualTypeExpr [] ty))
 >         checkForeignType CallConvPrimitive _ = return ()
->         checkForeignType CallConvCCall (QualType _ ty)
+>         checkForeignType CallConvCCall ty
 >           | ie == Just "dynamic" = checkCDynCallType tcEnv p ty
 >           | maybe False ('&' `elem`) ie = checkCAddrType tcEnv p ty
 >           | otherwise = checkCCallType tcEnv p ty
@@ -1383,7 +1388,7 @@ here because we know that they are closed.
 > fsEnv tyEnv = fromListSet (concatMap typeSkolems (localTypes tyEnv))
 
 > localTypes :: ValueEnv -> [TypeScheme]
-> localTypes tyEnv = [ty | (_,Value _ ty) <- localBindings tyEnv]
+> localTypes tyEnv = [ty | (_,Value _ _ ty) <- localBindings tyEnv]
 
 \end{verbatim}
 The function \texttt{untyped} is used when transforming annotated

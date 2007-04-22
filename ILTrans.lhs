@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2159 2007-04-22 12:06:13Z wlux $
+% $Id: ILTrans.lhs 2161 2007-04-22 14:48:33Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -183,10 +183,9 @@ rather than invariably adding the name of the current module.
 > translFunction tyEnv f eqs =
 >   IL.FunctionDecl f' vs (translType ty)
 >                   (match IL.Flex vs (map (translEquation tyEnv vs vs'') eqs))
->   where Value f' (ForAll _ (QualType _ ty)) : _ = lookupTopEnv f tyEnv
+>   where Value f' n (ForAll _ (QualType _ ty)) : _ = lookupTopEnv f tyEnv
 >         vs = if isSelectorId f then translArgs eqs vs' else vs'
->         (vs',vs'') = splitAt (arity eqs) (argNames (mkIdent ""))
->         arity (Equation _ (FunLhs _ ts) _ : _) = length ts
+>         (vs',vs'') = splitAt n (argNames (mkIdent ""))
 
 > translArgs :: [Equation a] -> [Ident] -> [Ident]
 > translArgs [Equation _ (FunLhs _ (t:ts)) _] (v:_) =
@@ -345,13 +344,13 @@ further possibilities for this transformation.
 > translExpr tyEnv _ env (Variable _ v) =
 >   case lookupVar v env of
 >     Just v' -> IL.Variable v'
->     Nothing -> IL.Function v (arrowArity (rawType (funType v tyEnv)))
+>     Nothing -> IL.Function v (arity v tyEnv)
 >   where lookupVar v env
 >           | isQualified v = Nothing
 >           | otherwise = lookupEnv (unqualify v) env
 > translExpr tyEnv _ _ (Constructor _ c)
 >   | isNewtypeConstr tyEnv c = IL.Function c 1
->   | otherwise = IL.Constructor c (arrowArity (rawType (conType c tyEnv)))
+>   | otherwise = IL.Constructor c (arity c tyEnv)
 > translExpr tyEnv vs env (Apply e1 e2) =
 >   case e1 of
 >     Constructor _ c | isNewtypeConstr tyEnv c -> translExpr tyEnv vs env e2

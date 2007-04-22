@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2095 2007-02-13 17:34:10Z wlux $
+% $Id: CurrySyntax.lhs 2161 2007-04-22 14:48:33Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -167,6 +167,9 @@ Interface declarations are restricted to type declarations and signatures.
 > data CondExpr a =
 >   CondExpr Position (Expression a) (Expression a)
 >   deriving (Eq,Show)
+
+> eqnArity :: Equation a -> Int
+> eqnArity (Equation _ lhs _) = length (snd (flatLhs lhs))
 
 > flatLhs :: Lhs a -> (Ident,[ConstrTerm a])
 > flatLhs lhs = flat lhs []

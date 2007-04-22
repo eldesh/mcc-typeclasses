@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2159 2007-04-22 12:06:13Z wlux $
+% $Id: Desugar.lhs 2161 2007-04-22 14:48:33Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -94,7 +94,7 @@ incompatible with the Curry report, which deliberately defines
 > bindSuccess :: ValueEnv -> ValueEnv
 > bindSuccess = localBindTopEnv successId successCon
 >   where successCon =
->           DataConstructor (qualify successId) (polyType successType)
+>           DataConstructor (qualify successId) 0 (polyType successType)
 
 \end{verbatim}
 The desugaring phase keeps only the type, function, and value
@@ -163,7 +163,7 @@ Sect.~\ref{sec:dtrans}).
 > desugarGoalIO tcEnv tyEnv p m g e ty =
 >   (Nothing,
 >    Module m Nothing [] [goalDecl p g [] e'],
->    bindFun m g (polyType ty) tyEnv')
+>    bindFun m g 0 (polyType ty) tyEnv')
 >   where (e',tyEnv') = run (desugarGoalExpr m e) tcEnv tyEnv
 
 > desugarGoal' :: TCEnv -> ValueEnv -> Position -> ModuleIdent
@@ -174,12 +174,13 @@ Sect.~\ref{sec:dtrans}).
 >    Module m Nothing []
 >           [goalDecl p g (zip (ty:tys') (v0:vs'))
 >                     (apply (prelUnif ty) [mkVar ty v0,e'])],
->    bindFun m v0 (monoType ty) (bindFun m g (polyType ty') tyEnv'))
+>    bindFun m v0 0 (monoType ty) (bindFun m g n (polyType ty') tyEnv'))
 >   where (e',tyEnv') = run (desugarGoalExpr m e) tcEnv tyEnv
 >         v0 = anonId
 >         vs' = filter (`elem` qfv m e') vs
 >         tys' = map (rawType . flip varType tyEnv) vs'
 >         ty' = foldr TypeArrow successType (ty:tys')
+>         n = 1 + length vs'
 
 > goalDecl :: Position -> Ident -> [(Type,Ident)] -> Expression Type
 >          -> TopDecl Type
@@ -232,7 +233,10 @@ imported function.
 
 > desugarDeclRhs :: ModuleIdent -> Decl Type -> DesugarState (Decl Type)
 > desugarDeclRhs m (FunctionDecl p f eqs) =
->   liftM (FunctionDecl p f) (mapM (desugarEquation m) eqs)
+>   do
+>     fetchSt >>=
+>       updateSt_ . changeArity m f . length . arrowArgs . rawType . varType f
+>     liftM (FunctionDecl p f) (mapM (desugarEquation m) eqs)
 > desugarDeclRhs _ (ForeignDecl p cc ie f ty) =
 >   return (ForeignDecl p cc (desugarImpEnt cc ie) f ty)
 >   where desugarImpEnt CallConvPrimitive ie = ie `mplus` Just (name f)
@@ -260,7 +264,7 @@ imported function.
 >                 -> DesugarState (Equation Type)
 > desugarEquation m (Equation p lhs rhs) =
 >   do
->     vs <- mapM (freshIdent m "_#eta" . monoType) tys
+>     vs <- mapM (freshIdent m "_#eta" 0 . monoType) tys
 >     (ds',ts') <- mapAccumM (desugarTerm m p) [] ts
 >     rhs' <- desugarRhs m p (addDecls ds' rhs)
 >     return (Equation p (FunLhs f (ts' ++ zipWith VariablePattern tys vs))
@@ -439,7 +443,7 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 >   where TypeArrow ty1 (TypeArrow ty2 ty3) = typeOf (infixOp op)
 > desugarExpr m p (Lambda ts e) =
 >   do
->     (ty,f) <- freshVar m "_#lambda" (Lambda ts e)
+>     (ty,f) <- freshFun m "_#lambda" (length ts) (Lambda ts e)
 >     desugarExpr m p (Let [funDecl p f ts e] (mkVar ty f))
 > desugarExpr m p (Let ds e) =
 >   do
@@ -724,17 +728,22 @@ instead of \texttt{(++)} and \texttt{map} in place of
 Generation of fresh names
 \begin{verbatim}
 
-> freshIdent :: ModuleIdent -> String -> TypeScheme -> DesugarState Ident
-> freshIdent m prefix ty =
+> freshIdent :: ModuleIdent -> String -> Int -> TypeScheme -> DesugarState Ident
+> freshIdent m prefix n ty =
 >   do
 >     x <- liftM (mkName prefix) (liftSt (liftRt (updateSt (1 +))))
->     updateSt_ (bindFun m x ty)
+>     updateSt_ (bindFun m x n ty)
 >     return x
 >   where mkName pre n = mkIdent (pre ++ show n)
 
 > freshVar :: Typeable a => ModuleIdent -> String -> a
 >          -> DesugarState (Type,Ident)
-> freshVar m prefix x = liftM ((,) ty) (freshIdent m prefix (monoType ty))
+> freshVar m prefix x = liftM ((,) ty) (freshIdent m prefix 0 (monoType ty))
+>   where ty = typeOf x
+
+> freshFun :: Typeable a => ModuleIdent -> String -> Int -> a
+>          -> DesugarState (Type,Ident)
+> freshFun m prefix n x = liftM ((,) ty) (freshIdent m prefix n (polyType ty))
 >   where ty = typeOf x
 
 \end{verbatim}

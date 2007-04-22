@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2085 2007-01-31 16:59:53Z wlux $
+% $Id: Simplify.lhs 2161 2007-04-22 14:48:33Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -60,22 +60,22 @@ Currently, the following optimizations are implemented:
 After simplifying the right hand side of an equation, the compiler
 transforms declarations of the form
 \begin{quote}\tt
-  $f\;t_1\dots t_{k-k'}\;x_{k-k'+1}\dots x_{k}$ =
-    let $f'\;t'_1\dots t'_{k'}$ = $e$ in
-    $f'\;x_1\dots x_{k'}$
+  $f\;t_1\dots t_{k}\;x_{k+1}\dots x_{n}$ =
+    let $g\;t_{k+1}\dots t_{n}$ = $e$ in
+    $g\;x_{k+1}\dots x_{n}$
 \end{quote}
 into the equivalent definition
 \begin{quote}\tt
-  $f\;t_1\dots t_{k-k'}\;(x_{k-k'+1}$@$t'_1)\dots(x_k$@$t'_{k'})$ = $e$
+  $f\;t_1\dots t_{k}\;(x_{k+1}$@$t_{k+1})\dots(x_n$@$t_{n})$ = $e$
 \end{quote}
-where the arities of $f$ and $f'$ are $k$ and $k'$, respectively, and
-$x_{k-k'+1},\dots,x_{k}$ are variables. This optimization was
+where the arities of $f$ and $g$ are $n$ and $n-k$, respectively,
+and $x_{k+1},\dots,x_{n}$ are variables. This optimization was
 introduced in order to avoid an auxiliary function being generated for
 definitions whose right-hand side is a $\lambda$-expression, e.g.,
 \verb|f . g = \x -> f (g x)|. This declaration is transformed into
 \verb|(.) f g x = let lambda x = f (g x) in lambda x| by desugaring
 and in turn is optimized into \verb|(.) f g x = f (g x)|, here. The
-transformation can obviously be generalized to the case where $f'$ is
+transformation can obviously be generalized to the case where $g$ is
 defined by more than one equation.
 
 We have to be careful with this optimization in conjunction with
@@ -134,9 +134,9 @@ in Curry expressions.
 > inlineFun :: ModuleIdent -> ValueEnv -> TrustEnv -> Position -> Lhs Type
 >           -> Rhs Type -> [Equation Type]
 > inlineFun m tyEnv trEnv p (FunLhs f ts)
->           (SimpleRhs _ (Let [FunctionDecl _ f' eqs'] e) _)
->   | f' `notElem` qfv m eqs' && e' == Variable (typeOf e') (qualify f') &&
->     n == arrowArity (rawType (varType f' tyEnv)) && trustedFun trEnv f' =
+>           (SimpleRhs _ (Let [FunctionDecl _ g eqs'] e) _)
+>   | g `notElem` qfv m eqs' && e' == Variable (typeOf e') (qualify g) &&
+>     n == arity (qualify g) tyEnv && trustedFun trEnv g =
 >     map (merge p f ts' vs') eqs'
 >   where n :: Int                      -- type signature necessary for nhc
 >         (n,vs',ts',e') = etaReduce 0 [] (reverse ts) e
@@ -284,10 +284,7 @@ functions to access the pattern variables.
 >   where canInline (Literal _ _) = True
 >         canInline (Constructor _ _) = True
 >         canInline (Variable _ v')
->           -- NB Looking up a function's type in the environment is necessary
->           --    so that undefined and unknown don't get inlined if they are
->           --    used at a function type.
->           | isQualified v' = arrowArity (rawType (funType v' tyEnv)) > 0
+>           | isQualified v' = arity v' tyEnv > 0
 >           | otherwise = v /= unqualify v'
 >         canInline _ = False
 > inlineVars _ _ env = env
@@ -440,29 +437,6 @@ performing this transformation here instead of in the \texttt{Desugar}
 module. The selector functions are defined in a local declaration on
 the right hand side of a projection declaration so that there is
 exactly one declaration for each used variable.
-
-Another problem of the translation scheme is the handling of pattern
-variables with higher-order types, e.g.,
-\begin{verbatim}
-  strange :: [a->a] -> Maybe (a->a)
-  strange xs = Just x
-    where (x:_) = xs
-\end{verbatim}
-By reusing the types of the pattern variables, the selector function
-\verb|f (x:_) = x| has type \texttt{[a->a] -> a -> a} and therefore
-seems to be binary function. Thus, in the goal \verb|strange []| the
-selector is only applied partially and not evaluated. Note that this
-goal will fail without the type annotation. In order to ensure that a
-selector function is always evaluated when the corresponding variable
-is used, we assume that the projection declarations -- ignoring the
-additional arguments to prevent the space leak -- are actually defined
-by $f_i$~$t$~\texttt{= I}~$v_i$, using a private renaming type
-\begin{verbatim}
-  newtype Identity a = I a
-\end{verbatim}
-As newtype constructors are completely transparent to the compiler,
-this does not change the generated code, but only the types of the
-selector functions.
 \begin{verbatim}
 
 > sharePatternRhs :: ModuleIdent -> Decl Type -> SimplifyState [Decl Type]
@@ -484,15 +458,15 @@ selector functions.
 >     VariablePattern _ _ -> return [PatternDecl p t (SimpleRhs p' e [])]
 >     _ ->
 >       do
->         fs <- mapM (freshIdent m selectorId . polyType) selectorTys
+>         fs <- mapM (freshIdent m selectorId n . polyType) selectorTys
 >         return (zipWith3 (projectionDecl p t e) selectorTys fs
 >                          (shuffle (zip tys vs)))
->       where vs = filter (`elem` fvs) (bv t)
+>       where n = length vs
+>             vs = filter (`elem` fvs) (bv t)
 >             ty = typeOf t
 >             tys = map (rawType . flip varType tyEnv) vs
 >             selectorTys = map (selectorType ty) (shuffle tys)
->             selectorType ty0 (ty:tys) =
->               foldr TypeArrow (identityType ty) (ty0:tys)
+>             selectorType ty0 (ty:tys) = foldr TypeArrow ty (ty0:tys)
 >             selectorDecl p f t (v:vs) =
 >               funDecl p f (t:map (uncurry VariablePattern) vs)
 >                       (uncurry mkVar v)
@@ -509,17 +483,17 @@ Auxiliary functions
 > trustedFun :: TrustEnv -> Ident -> Bool
 > trustedFun trEnv f = maybe True (Trust ==) (lookupEnv f trEnv)
 
-> freshIdent :: ModuleIdent -> (Int -> Ident) -> TypeScheme
+> freshIdent :: ModuleIdent -> (Int -> Ident) -> Int -> TypeScheme
 >            -> SimplifyState Ident
-> freshIdent m f ty =
+> freshIdent m f n ty =
 >   do
 >     x <- liftM f (liftSt (liftRt (updateSt (1 +))))
->     updateSt_ (bindFun m x ty)
+>     updateSt_ (bindFun m x n ty)
 >     return x
 
 > freshVar :: Typeable a => ModuleIdent -> (Int -> Ident) -> a
 >          -> SimplifyState (Type,Ident)
-> freshVar m f x = liftM ((,) ty) (freshIdent m f (monoType ty))
+> freshVar m f x = liftM ((,) ty) (freshIdent m f 0 (monoType ty))
 >   where ty = typeOf x
 
 > shuffle :: [a] -> [[a]]
@@ -539,9 +513,5 @@ Auxiliary functions
 > funDecl :: Position -> Ident -> [ConstrTerm a] -> Expression a -> Decl a
 > funDecl p f ts e =
 >   FunctionDecl p f [Equation p (FunLhs f ts) (SimpleRhs p e [])]
-
-> identityType :: Type -> Type
-> identityType = TypeApply (TypeConstructor qIdentityId)
->   where qIdentityId = qualify (mkIdent "Identity")
 
 \end{verbatim}

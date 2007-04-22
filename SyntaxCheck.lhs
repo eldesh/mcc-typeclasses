@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2082 2007-01-24 20:11:46Z wlux $
+% $Id: SyntaxCheck.lhs 2161 2007-04-22 14:48:33Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -23,6 +23,7 @@ single definition.
 > import Error
 > import List
 > import Maybe
+> import Monad
 > import TopEnv
 > import NestEnv
 > import Pretty
@@ -278,10 +279,8 @@ top-level.
 > checkDeclRhs _ d = return d
 
 > checkArity :: Position -> Ident -> [Equation a] -> Error ()
-> checkArity p f eqs
->   | null (tail (nub (map arity eqs))) = return ()
->   | otherwise = errorAt p (differentArity f)
->   where arity (Equation _ lhs _) = length (snd (flatLhs lhs))
+> checkArity p f eqs = unless (sameArity eqs) (errorAt p (differentArity f))
+>   where sameArity = null . tail . nub . map eqnArity
 
 > joinEquations :: [Decl a] -> [Decl a]
 > joinEquations [] = []

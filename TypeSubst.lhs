@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSubst.lhs 2093 2007-02-08 23:15:17Z wlux $
+% $Id: TypeSubst.lhs 2161 2007-04-22 14:48:33Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -60,9 +60,9 @@ This module implements substitutions on types.
 >     ForAll n (QualType cx (subst (foldr unbindSubst sigma [0..n-1]) ty))
 
 > instance SubstType ValueInfo where
->   subst _ (DataConstructor c ty) = DataConstructor c ty
+>   subst _ (DataConstructor c n ty) = DataConstructor c n ty
 >   subst _ (NewtypeConstructor c ty) = NewtypeConstructor c ty
->   subst sigma (Value v ty) = Value v (subst sigma ty)
+>   subst sigma (Value v n ty) = Value v n (subst sigma ty)
 
 > instance SubstType a => SubstType (TopEnv a) where
 >   subst = fmap . subst

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2163 2007-04-24 11:56:51Z wlux $
+% $Id: Modules.lhs 2164 2007-04-24 13:07:52Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -77,7 +77,7 @@ declaration to the module.
 > compileModule :: Options -> FilePath -> ErrorT IO ()
 > compileModule opts fn =
 >   do
->     (mEnv,tcEnv,iEnv,tyEnv,m,intf) <- loadModule id paths cm ws fn
+>     (mEnv,tcEnv,iEnv,tyEnv,m,intf) <- loadModule paths cm ws fn
 >     mEnv' <- importDebugPrelude paths dbg fn mEnv
 >     let (ccode,dumps) = transModule split dbg tr mEnv' tcEnv iEnv tyEnv m
 >     liftErr $ mapM_ (doDump opts) dumps >>
@@ -90,13 +90,12 @@ declaration to the module.
 >         cm = caseMode opts
 >         ws = warn opts
 
-> loadModule :: (Module () -> Module ()) -> [FilePath] -> CaseMode -> [Warn]
->            -> FilePath
+> loadModule :: [FilePath] -> CaseMode -> [Warn] -> FilePath
 >            -> ErrorT IO (ModuleEnv,TCEnv,InstEnv,ValueEnv,
 >                          Module Type,Interface)
-> loadModule f paths caseMode warn fn =
+> loadModule paths caseMode warn fn =
 >   do
->     m <- liftM f $ liftErr (readFile fn) >>= okM . parseModule fn
+>     m <- liftErr (readFile fn) >>= okM . parseModule fn
 >     mEnv <- loadInterfaces paths m
 >     (tcEnv,iEnv,tyEnv,m',intf) <- okM $ checkModule mEnv m
 >     liftErr $ mapM_ putErrLn $ warnModule caseMode warn m'
@@ -165,7 +164,7 @@ declaration to the module.
 >            (DumpDict,ppModule dict),
 >            (DumpLifted,ppModule lifted),
 >            (DumpIL,ILPP.ppModule il)] ++
->           [(DumpTransformed,ILPP.ppModule ilDbg) | debug ] ++
+>           [(DumpTransformed,ILPP.ppModule ilDbg) | debug] ++
 >           [(DumpNormalized,ILPP.ppModule ilNormal),
 >            (DumpCam,CamPP.ppModule cam)]
 
@@ -248,31 +247,29 @@ compilation of a goal is similar to that of a module.
 >          -> ErrorT IO (ModuleEnv,TCEnv,InstEnv,ValueEnv,Context,Goal Type)
 > loadGoal forEval paths caseMode warn g fn =
 >   do
->     (mEnv,m,is) <- loadGoalModule paths g fn
+>     (mEnv,m) <- loadGoalModule paths fn
 >     (tcEnv,iEnv,tyEnv,cx,g') <-
->       okM $ maybe (return mainGoal) parseGoal g >>= checkGoal forEval mEnv is
+>       okM $ maybe (return mainGoal) parseGoal g >>=
+>             checkGoal forEval mEnv (map importModule [m,preludeMIdent])
 >     liftErr $ mapM_ putErrLn $ warnGoal caseMode warn g'
 >     return (mEnv,tcEnv,iEnv,tyEnv,cx,g')
->   where mainGoal = Goal (first "") (Variable () (qualify mainId)) []
-
-> loadGoalModule :: [FilePath] -> Maybe String -> Maybe FilePath
->                -> ErrorT IO (ModuleEnv,ModuleIdent,[ImportDecl])
-> loadGoalModule paths (Just _) (Just fn) =
->   do
->     (mEnv,_,_,_,Module m _ is _,_) <-
->       loadModule transparent paths FreeMode [] fn
->     return (mEnv,m,is ++ [importDecl (first "") m])
->   where transparent (Module m _ is ds) = Module m Nothing is ds
-> loadGoalModule paths Nothing (Just fn) =
->   do
->     (mEnv,m) <- compileInterface paths [] emptyEnv (interfaceName fn)
->     return (mEnv,emptyMIdent,[importDecl (first "") m])
-> loadGoalModule paths _ Nothing =
->   do
->     mEnv <- loadInterface paths [] emptyEnv (P p m)
->     return (mEnv,emptyMIdent,[importDecl p m])
 >   where p = first ""
->         m = preludeMIdent
+>         mainGoal = Goal p (Variable () (qualify mainId)) []
+>         importModule m = importDecl p m
+
+> loadGoalModule :: [FilePath] -> Maybe FilePath
+>                -> ErrorT IO (ModuleEnv,ModuleIdent)
+> loadGoalModule paths fn =
+>   do
+>     mEnv <- loadInterface paths [] emptyEnv (P (first "") preludeMIdent)
+>     (mEnv',m) <- loadGoalInterface paths mEnv fn
+>     return (mEnv',m)
+
+> loadGoalInterface :: [FilePath] -> ModuleEnv -> Maybe FilePath
+>                   -> ErrorT IO (ModuleEnv,ModuleIdent)
+> loadGoalInterface paths mEnv (Just fn) =
+>   compileInterface paths [] mEnv (interfaceName fn)
+> loadGoalInterface _ mEnv Nothing = return (mEnv,preludeMIdent)
 
 > checkGoal :: Bool -> ModuleEnv -> [ImportDecl] -> Goal ()
 >           -> Error (TCEnv,InstEnv,ValueEnv,Context,Goal Type)
@@ -336,7 +333,7 @@ compilation of a goal is similar to that of a module.
 >            (DumpDict,ppModule dict),
 >            (DumpLifted,ppModule lifted),
 >            (DumpIL,ILPP.ppModule il)] ++
->           [(DumpTransformed,ILPP.ppModule ilDbg) | debug ] ++
+>           [(DumpTransformed,ILPP.ppModule ilDbg) | debug] ++
 >           [(DumpNormalized,ILPP.ppModule ilNormal),
 >            (DumpCam,CamPP.ppModule cam)]
 

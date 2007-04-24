@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2095 2007-02-13 17:34:10Z wlux $
+% $Id: Exports.lhs 2169 2007-04-24 16:07:42Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -34,9 +34,9 @@ declarations which cannot be used in another module because
 > import TopEnv
 > import TypeTrans
 
-> exportInterface :: ModuleIdent -> ExportSpec
->                 -> PEnv -> TCEnv -> InstEnv -> ValueEnv -> Interface
-> exportInterface m (Exporting _ es) pEnv tcEnv iEnv tyEnv =
+> exportInterface :: Module a -> PEnv -> TCEnv -> InstEnv -> ValueEnv
+>                 -> Interface
+> exportInterface (Module m (Just (Exporting _ es)) _ _) pEnv tcEnv iEnv tyEnv =
 >   Interface m imports (precs ++ hidden ++ ds)
 >   where imports = map (IImportDecl noPos) (usedModules ds)
 >         precs = foldr (infixDecl m pEnv) [] es

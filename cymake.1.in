@@ -4,7 +4,7 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cymake.1.in 1885 2006-04-05 21:23:18Z wlux $
+.\" $Id: cymake.1.in 2165 2007-04-24 13:19:56Z wlux $
 .\"
 .\" Copyright (c) 2004-2006, Wolfgang Lux
 .\" See LICENSE for the full license.
@@ -111,6 +111,13 @@ Add directory
 to the list of paths used to locate imported modules. By default, the
 compiler searches only the current directory for source files. Note
 that the current directory is always searched first.
+.Pp
+The directory
+.Ar dir
+is also added to the list of paths used to locate C header files, as
+if
+.Fl I Ar dir
+was present on the command line.
 .It Fl P Ar dir
 Add directory
 .Ar dir
@@ -118,6 +125,15 @@ to the list of paths used to locate interface files for library
 modules. By default, the compiler searches for interface files in its
 standard library directory
 .Pa @libdir@/curry .
+.Pp
+The directory
+.Ar dir
+is also added to the lists of paths used to locate C header files and
+libraries, respectively, as if
+.Fl I Ar dir
+and
+.Fl L Ar dir
+were present on the command line.
 .Pp
 The compiler scans the directories specified with
 .Fl P

@@ -3,7 +3,7 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 2167 2007-04-24 13:46:23Z wlux $
+# $Id: cyi.in 2168 2007-04-24 13:50:40Z wlux $
 #
 # Copyright (c) 2002-2006, Wolfgang Lux
 # See LICENSE for the full license.
@@ -24,6 +24,9 @@ libdir=@libdir@
 srcdir="@srcdir@"
 @in_place_config@
 # DO NOT DELETE: End of in-place configuration
+: ${CURRY_PATH=$libdir/curry}
+: ${CURRY_IMPORT_PATH=$CURRY_PATH}
+export CURRY_PATH CURRY_IMPORT_PATH
 
 echo "    _____ __ __"
 echo "   / ___/ |  / _               Muenster Curry Compiler"
@@ -142,6 +145,12 @@ run_goal ( ) {
   rm -f /tmp/cyi$$@EXEEXT@
 }
 
+set_prompt ( ) {
+    read line < $1.icurry
+    set -- $line
+    prompt="$2> "
+}
+
 load ( ) {
   eval set -- $1
   case $# in
@@ -165,12 +174,27 @@ load ( ) {
         * ) f=`echo $1 | tr '.' '/'`
             if test -f "$f.lcurry"; then
               srcdir=`pwd`; source="$f.lcurry"
-            else if test -f "$f.curry"; then
+            elif test -f "$f.curry"; then
               srcdir=`pwd`; source="$f.curry"
             else
-              echo "missing source file for $1"
+	      ifs=$IFS
+	      IFS=:
+	      for d in $CURRY_IMPORT_PATH; do
+		if test -f "$d/$f.icurry"; then
+		  IFS=$ifs
+		  srcdir=.
+		  source=
+		  interfaces=-M$f
+		  objects=
+		  dobjects=
+		  set_prompt "$d/$f"
+		  return
+		fi
+	      done
+	      IFS=$ifs
+	      echo "missing source file for $1"
 	      return
-            fi; fi
+            fi
             ;;
       esac
       reload
@@ -197,9 +221,7 @@ reload ( ) {
       *.lcurry ) stem=`expr "$source" : '\(.*\).lcurry'`;;
       * ) echo 2>&1 "$cyi: internal error: unknown source extension"; return;;
     esac
-    read line < $stem.icurry
-    set -- $line
-    prompt="$2> "
+    set_prompt "$stem"
   fi
 }
 

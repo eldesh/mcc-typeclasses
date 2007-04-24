@@ -4,7 +4,7 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cyi.1.in 2167 2007-04-24 13:46:23Z wlux $
+.\" $Id: cyi.1.in 2168 2007-04-24 13:50:40Z wlux $
 .\"
 .\" Copyright (c) 2004-2006, Wolfgang Lux
 .\" See LICENSE for the full license.
@@ -91,7 +91,14 @@ the name of its source file (ending in
 .Pa .lcurry
 or
 .Pa .curry )
-or a plain module name.
+or a plain module name. In the latter case,
+.Nm
+will first look for a source file for
+.Ar module
+in the current directory, and then look for an interface file for
+.Ar module
+using the search path determined by the environment variable
+.Ev CURRY_IMPORT_PATH .
 .Nm
 displays the name of the current module in its prompt.
 .It Ic :load
@@ -145,6 +152,28 @@ All commands, except for
 and
 .Ic :clean ,
 may be abbreviated to their first letter.
+.Sh ENVIRONMENT
+.Bl -tag -width -indent -compact
+.It Ev EDITOR
+.It Ev VISUAL
+If defined, these environment variables determine the name of the
+editor command that is invoked instead of
+.Pa /usr/bin/vi
+by the
+.Ic :edit
+command. If both environment variables are defined,
+.Ev VISUAL
+is used.
+.Pp
+.It Ev CURRY_IMPORT_PATH
+The environment variable
+.Ev CURRY_IMPORT_PATH
+contains a colon-separated list of directories that are searched for
+library modules, which can be loaded with the
+.Ic :load
+command. The default value is
+.Pa @libdir@/curry .
+.El
 .Sh FILES
 .Bl -tag -width -indent -compact
 .It Pa .cyirc
@@ -199,3 +228,9 @@ command of the shell, which executes the
 script. This is available only for Gnu Bash and Korn shells except for
 the public domain version. Command line editing also works for the Z
 shell, but without history.
+.Pp
+Changing the compiler's search path for library modules with the
+.Ic :set
+command does not change the search path used by the
+.Ic :load
+command.

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Options.lhs 1991 2006-11-01 18:15:48Z wlux $
+% $Id: Options.lhs 2163 2007-04-24 11:56:51Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -66,9 +66,9 @@ all compiler options.
 > data Dump =
 >     DumpRenamed                       -- dump source after renaming
 >   | DumpTypes                         -- dump types after typechecking
->   | DumpDict                          -- dump source with dictionaries
 >   | DumpDesugared                     -- dump source after desugaring
 >   | DumpSimplified                    -- dump source after simplification
+>   | DumpDict                          -- dump source with dictionaries
 >   | DumpLifted                        -- dump source after lambda-lifting
 >   | DumpIL                            -- dump IL code after translation
 >   | DumpTransformed                   -- dump transformed code
@@ -138,12 +138,12 @@ recognized by the compiler.
 >            "dump source code after renaming",
 >     Option "" ["dump-types"] (NoArg (Dump [DumpTypes]))
 >            "dump types after type-checking",
->     Option "" ["dump-dict"] (NoArg (Dump [DumpDict]))
->            "dump source code with dictionaries",
 >     Option "" ["dump-desugared"] (NoArg (Dump [DumpDesugared]))
 >            "dump source code after desugaring",
 >     Option "" ["dump-simplified"] (NoArg (Dump [DumpSimplified]))
 >            "dump source code after simplification",
+>     Option "" ["dump-dict"] (NoArg (Dump [DumpDict]))
+>            "dump source code with dictionaries",
 >     Option "" ["dump-lifted"] (NoArg (Dump [DumpLifted]))
 >            "dump source code after lambda-lifting",
 >     Option "" ["dump-il"] (NoArg (Dump [DumpIL]))

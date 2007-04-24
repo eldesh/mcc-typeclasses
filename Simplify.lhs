@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2161 2007-04-22 14:48:33Z wlux $
+% $Id: Simplify.lhs 2163 2007-04-24 11:56:51Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -45,8 +45,18 @@ Currently, the following optimizations are implemented:
 >     return (Module m es is ds',tyEnv)
 
 > simplifyTopDecl :: ModuleIdent -> TopDecl Type -> SimplifyState (TopDecl Type)
+> simplifyTopDecl m (ClassDecl p cx cls tv ds) =
+>   liftM (ClassDecl p cx cls tv) (mapM (simplifyMethodDecl m) ds)
+> simplifyTopDecl m (InstanceDecl p cx cls ty ds) =
+>   liftM (InstanceDecl p cx cls ty) (mapM (simplifyMethodDecl m) ds)
 > simplifyTopDecl m (BlockDecl d) = liftM BlockDecl (simplifyDecl m emptyEnv d)
 > simplifyTopDecl _ d = return d
+
+> simplifyMethodDecl :: ModuleIdent -> MethodDecl Type
+>                    -> SimplifyState (MethodDecl Type)
+> simplifyMethodDecl m (MethodDecl p f eqs) =
+>   liftM (MethodDecl p f . concat) (mapM (simplifyEquation m emptyEnv) eqs)
+> simplifyMethodDecl _ d = return d
 
 > simplifyDecl :: ModuleIdent -> InlineEnv -> Decl Type
 >              -> SimplifyState (Decl Type)

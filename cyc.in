@@ -3,7 +3,7 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 2165 2007-04-24 13:19:56Z wlux $
+# $Id: cyc.in 2167 2007-04-24 13:46:23Z wlux $
 #
 # Copyright (c) 2002-2006, Wolfgang Lux
 # See LICENSE for the full license.
@@ -48,12 +48,11 @@ trace=
 saveTemps=
 libs=
 dbglib=
-curry=
 files=
 temps=
 linkfiles=
 imports=
-main=
+modules=
 goal=
 typeIt=
 ofile=
@@ -123,8 +122,8 @@ while test $# -gt 0; do
     -trusted | --trusted ) cyccopts="$cyccopts --trusted";;
 
     # goal options
-    -M ) main=$2; shift;;
-    -M* ) main=`expr "$1" : '-M\(.*\)'`;;
+    -M ) modules="$modules $2"; shift;;
+    -M* ) modules=$modules\ `expr "$1" : '-M\(.*\)'`;;
     -e ) goal=$2; shift;;
     -e* ) goal=`expr "$1" : '-e\(.*\)'`;;
     -T ) typeIt=$2; shift;;
@@ -141,7 +140,7 @@ while test $# -gt 0; do
     -I ) ccopts="$ccopts -I$2"; shift;;
     -I* ) ccopts="$ccopts $1";;
     -i ) ccopts="$ccopts -I$2"; imports="$imports -i $2"; shift;;
-    -i* ) ccopts="$ccopts -I`expr "$1" : '-i\(.*\)'`"; imports="$imports $1";;
+    -i* ) ccopts=$ccopts\ -I`expr "$1" : '-i\(.*\)'`; imports="$imports $1";;
     -P )
       ccopts="$ccopts -I$1"; ldopts="$ldopts -L$2"
       imports="$imports -i $2"; shift;;
@@ -236,13 +235,13 @@ if test -n "$ofile" -a -n "$toC$toS$toO" -a $# -gt 1; then
 fi
 
 if test -n "$typeIt"; then
-  if test $# -gt 1; then
-    echo 1>&2 "$cyc: cannot specify -T with multiple input files"
-    exit 1
-  fi
-
-  test -n "$verbose" && echo 1>&2 $cycc $imports -t \"$typeIt\" $cyccopts ${1-$main}
-  $exec $cycc $imports -t "$typeIt" $cyccopts ${1-$main}
+  for f in $files; do
+    case $f in
+      *.curry | *.lcurry ) modules="$modules $f";;
+    esac
+  done
+  test -n "$verbose" && echo 1>&2 $cycc $imports -t \"$typeIt\" $cyccopts $modules
+  $exec $cycc $imports -t "$typeIt" $cyccopts $modules
   exit $?
 fi
 
@@ -256,7 +255,7 @@ for f in $files; do
   case $f in
     *.curry | *.lcurry )
       curry_ccopts=-I`dirname $f`
-      curry=$f
+      modules="$modules $f"
       stem=`expr "$f" : '\(.*\)\.curry'`
       stem=$stem`expr "$f" : '\(.*\)\.lcurry'`
       if test -n "$toC"; then
@@ -321,12 +320,6 @@ done
 # Eventually link the program
 if test -z "$toC$toS$toO"; then
   temps="$temps /tmp/cyc$$.c"
-  case $main in
-    "" ) main="$curry";;
-    *.curry | *.lcurry ) ;;
-    * ) test -f $main.curry && main=$main.curry
-	test -f $main.lcurry && main=$main.lcurry;;
-  esac
   target=/tmp/cyc$$.c
   # Cygpath workaround: converts path to Windows-style
   if test -n "@USE_CYGPATH_WORKAROUND@"; then
@@ -334,8 +327,8 @@ if test -z "$toC$toS$toO"; then
   else
     target2=$target
   fi
-  test -n "$verbose" && echo 1>&2 $cycc $imports -e\"$goal\" $cyccopts $main -o $target2
-  $exec $cycc $imports $cyccopts -e"$goal" $main -o $target2 || exit $?
+  test -n "$verbose" && echo 1>&2 $cycc $imports -e\"$goal\" $cyccopts $modules -o $target2
+  $exec $cycc $imports $cyccopts -e"$goal" $modules -o $target2 || exit $?
 
   test -n "$hsize" && ldopts="$ldopts -DDEFAULT_HEAPSIZE=$hsize"
   test -n "$ssize" && ldopts="$ldopts -DDEFAULT_STACKSIZE=$ssize"

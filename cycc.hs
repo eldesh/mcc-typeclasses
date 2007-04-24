@@ -1,4 +1,4 @@
--- $Id: cycc.hs 1912 2006-05-03 14:53:33Z wlux $
+-- $Id: cycc.hs 2167 2007-04-24 13:46:23Z wlux $
 --
 -- Copyright (c) 1999-2006, Wolfgang Lux
 -- See LICENSE for the full license.
@@ -53,17 +53,13 @@ processFiles opts prog files =
     Just g
       | isJust (goal opts) ->
           badUsage prog ["only one of -e and -t must be specified\n"]
-      | length files > 1 ->
-          badUsage prog ["cannot specify -t with multiple input files\n"]
-      | otherwise -> compile (typeGoal opts g (listToMaybe files))
+      | otherwise -> compile (typeGoal opts g files)
     Nothing ->
       case goal opts of
         Just g
           | isNothing (output opts) ->
               badUsage prog ["must specify -e with an output file\n"]
-          | length files > 1 ->
-              badUsage prog ["cannot specify -e with multiple input files\n"]
-          | otherwise -> compile (compileGoal opts g (listToMaybe files))
+          | otherwise -> compile (compileGoal opts g files)
 	Nothing
           | null files -> badUsage prog ["no input files\n"]
           | isJust (output opts) && length files > 1 ->

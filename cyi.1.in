@@ -4,9 +4,9 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cyi.1.in 1915 2006-05-07 14:48:36Z wlux $
+.\" $Id: cyi.1.in 2167 2007-04-24 13:46:23Z wlux $
 .\"
-.\" Copyright (c) 2004-2005, Wolfgang Lux
+.\" Copyright (c) 2004-2006, Wolfgang Lux
 .\" See LICENSE for the full license.
 .\"
 .Dd 17.11.05               \" DATE 
@@ -33,11 +33,23 @@ in your home directory otherwise, and then loads either the first
 module specified on the command line or the Curry prelude.
 .Pp
 .Ss Goals
-A goal is a Curry expression optionally followed by a where-clause
-that can be used for providing local definitions for the goal. All
-free variables of the goal must be declared either in the where clause
-or by using a let expression as goal. The bindings of the free
-variables are displayed together with the normal form of the goal
+A goal is a Curry expression optionally followed by a where-clause,
+which can be used for providing local definitions for the goal.
+.Pp
+All entities exported from the
+.Li Prelude
+and the module specified in the last
+.Ic :load
+command are in scope with unqualified and qualified names unless they
+are shadowed by one of the declarations from the where-clause.
+Entities from modules that are imported directly or indirectly from
+the module specified in the last
+.Ic :load
+command are also in scope, but only with qualified names.
+.Pp
+All free variables of the goal must be declared either in the
+where-clause or by using a let expression as goal. The bindings of the
+free variables are displayed together with the normal form of the goal
 after successful evaluation unless the goal is of type
 .Li IO Ar t .
 .Pp

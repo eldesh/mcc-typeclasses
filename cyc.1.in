@@ -4,7 +4,7 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cyc.1.in 2165 2007-04-24 13:19:56Z wlux $
+.\" $Id: cyc.1.in 2167 2007-04-24 13:46:23Z wlux $
 .\"
 .\" Copyright (c) 2004-2006, Wolfgang Lux
 .\" See LICENSE for the full license.
@@ -349,42 +349,60 @@ instead of
 .Li main .
 The
 .Ar goal
-is evaluated with respect to the Curry module specified explicitly
-with the
+is evaluated with respect to the modules specified with
 .Fl M
-option, the last module occurring on the command line, or the
+options and the Curry source files appearing on the command line. All
+entities exported from the
 .Li Prelude
-otherwise.
+and the Curry source file that appears last on the command line or
+the last module specified with a
+.Fl M
+option, if there are no source file arguments, are in scope with
+unqualified and qualified names. The exported entities of all other
+modules are in scope with qualified names only.
 .It Fl T Ar goal
 Compute the type of
 .Ar goal .
 The
 .Ar goal Ns No 's
-type is computed with respect to the Curry module specified explicitly
-with the
+type is computed with respect to the modules specified with
 .Fl M
-option, the last module occurring on the command line, or the
+options and the Curry source files appearing on the command line. All
+entities exported from the
 .Li Prelude
-otherwise.
+and the Curry source file that appears last on the command line or
+the last module specified with a
+.Fl M
+option, if there are no source file arguments, are in scope with
+unqualified and qualified names. The exported entities of all other
+modules are in scope with qualified names only.
 .It Fl M Ar module
-Use
+Brings all entities exported from
 .Ar module
-as main module of the program. An explicit goal specified with the
+into scope with their qualified names for a goal specified with the
 .Fl e
-option is evaluated in the context of
-.Ar module .
-By default, the compiler assumes that the last Curry source file
-appearing on the command line contains the main module of the
-program. It may be necessary to specify the main module explicitly
-when there are no source file arguments.
+and
+.Fl T
+options. By default, only the entities exported from the
+.Li Prelude
+and the Curry source files occurring on the command line are in
+scope. The entities exported from the
+.Li Prelude
+and the last source file appearing on the command line or specified
+with the last
+.Fl M
+option, if there are no source file arguments, are brought into scope
+with their unqualified names, too.
 .Pp
 .Ar Module
 is either the name of a source file (ending in 
 .Pa .lcurry
 or
-.Pa .curry )
-or the name of a module whose source can be located in the current
-directory.
+.Pa .curry ) ,
+the name of an interface file (ending in
+.Pa .icurry ) ,
+or the name of a module whose interface can be located in the
+interface search path.
 .It Fl L Ar dir
 Add directory
 .Ar dir

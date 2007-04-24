@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryDeps.lhs 1912 2006-05-03 14:53:33Z wlux $
+% $Id: CurryDeps.lhs 2167 2007-04-24 13:46:23Z wlux $
 %
-% Copyright (c) 2002-2004, Wolfgang Lux
+% Copyright (c) 2002-2006, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryDeps.lhs}
@@ -40,7 +40,7 @@ Makefile.
 
 > buildScript :: Bool -> Bool -> Bool -> [FilePath] -> [FilePath]
 >             -> Maybe FilePath -> FilePath -> IO [String]
-> buildScript clean debug linkAlways paths libPaths ofn fn =
+> buildScript clean debug linkAlways paths libPaths target fn =
 >   do
 >     (ms,es) <-
 >       fmap (flattenDeps . sortDeps)
@@ -49,19 +49,19 @@ Makefile.
 >     return es
 >   where outputFile
 >           | extension fn `elem` moduleExts ++ [oExt] = Nothing
->           | otherwise = ofn `mplus` Just fn
+>           | otherwise = target `mplus` Just fn
 >         makeScript clean = if clean then makeCleanScript else makeBuildScript
 
 > makeDepend :: [FilePath] -> [FilePath] -> Maybe FilePath -> [FilePath]
 >            -> IO ()
-> makeDepend paths libPaths ofn ms =
+> makeDepend paths libPaths target ms =
 >   foldM (deps paths (filter (`notElem` paths) libPaths)) emptyEnv ms >>=
->   maybe putStr writeFile ofn . makeDeps
+>   maybe putStr writeFile target . makeDeps
 
 > deps :: [FilePath] -> [FilePath] -> SourceEnv -> FilePath -> IO SourceEnv
 > deps paths libPaths mEnv fn
 >   | e `elem` sourceExts = sourceDeps paths libPaths (mkMIdent [r]) mEnv fn
->   | e == icurryExt = return emptyEnv
+>   | e == icurryExt = return mEnv
 >   | e == oExt = targetDeps paths libPaths mEnv r
 >   | otherwise = targetDeps paths libPaths mEnv fn
 >   where r = rootname fn
@@ -210,21 +210,25 @@ first error.
 
 > makeBuildScript :: Bool -> Bool -> Maybe FilePath -> [(ModuleIdent,Source)]
 >                 -> String
-> makeBuildScript debug linkAlways ofn mEnv =
+> makeBuildScript debug linkAlways target mEnv =
 >   unlines ("set -e" : concatMap (compCommands . snd) mEnv ++
->            maybe [] linkCommands ofn)
+>            maybe [] linkCommands target)
 >   where compCommands (Source fn ms) =
 >           [newer ofn (fn : catMaybes (map interf ms)) ++ " || \\",compile fn]
 >           where ofn = objectName debug fn
 >         compCommands (Interface _) = []
 >         compCommands Unknown = []
 >         linkCommands fn
->           | linkAlways = [link fn os]
->           | otherwise = [newer fn os ++ " || \\", link fn os]
->           where os = reverse (catMaybes (map (object . snd) mEnv))
+>           | linkAlways = [link fn ms os]
+>           | otherwise = [newer fn os ++ " || \\", link fn ms os]
+>           where ms = catMaybes (map modul mEnv)
+>                 os = reverse (catMaybes (map (object . snd) mEnv))
 >         newer fn fns = unwords ("$CURRY_PATH/newer" : fn : fns)
 >         compile fn = unwords ["compile","-c",fn,"-o",objectName debug fn]
->         link fn os = unwords ("link" : "-o" : fn : os)
+>         link fn ms os = unwords ("link" : "-o" : fn : ms ++ os)
+>         modul (_,Source fn _) = Just ("-M" ++ fn)
+>         modul (m,Interface _) = Just ("-M" ++ moduleName m)
+>         modul (_,Unknown) = Nothing
 >         interf m =
 >           case lookup m mEnv of
 >             Just (Source fn _) -> Just (interfName fn)
@@ -244,8 +248,8 @@ reasonable value in the environment where the script is executed.
 
 > makeCleanScript :: Bool -> Bool -> Maybe FilePath -> [(ModuleIdent,Source)]
 >                 -> String
-> makeCleanScript debug _ ofn mEnv =
->   unwords ("remove" : foldr files (maybe [] return ofn) (map snd mEnv))
+> makeCleanScript debug _ target mEnv =
+>   unwords ("remove" : foldr (files . snd) (maybeToList target) mEnv)
 >   where d = if debug then 2 else 0
 >         files (Source fn _) fs =
 >           drop d [interfName fn,objectName False fn,objectName True fn] ++ fs
@@ -260,13 +264,13 @@ file.
 \begin{verbatim}
 
 > interfName :: FilePath -> FilePath
-> interfName sfn = rootname sfn ++ icurryExt
+> interfName fn = rootname fn ++ icurryExt
 
 > objectName :: Bool -> FilePath -> FilePath
 > objectName debug = name (if debug then debugExt else oExt)
 >   where name ext fn = rootname fn ++ ext
 
-> curryExt, lcurryExt, icurryExt, oExt :: String
+> curryExt, lcurryExt, icurryExt, oExt, debugExt :: String
 > curryExt = ".curry"
 > lcurryExt = ".lcurry"
 > icurryExt = ".icurry"

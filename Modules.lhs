@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2164 2007-04-24 13:07:52Z wlux $
+% $Id: Modules.lhs 2167 2007-04-24 13:46:23Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -62,6 +62,7 @@ This module controls the compilation of modules.
 > import Pretty
 > import TypeTrans
 > import Typing
+> import Utils
 
 \end{verbatim}
 The function \texttt{compileModule} is the main entry point of this
@@ -221,10 +222,10 @@ parsed and type checked before the goal can be compiled. Otherwise,
 compilation of a goal is similar to that of a module.
 \begin{verbatim}
 
-> compileGoal :: Options -> Maybe String -> Maybe FilePath -> ErrorT IO ()
-> compileGoal opts g fn =
+> compileGoal :: Options -> Maybe String -> [FilePath] -> ErrorT IO ()
+> compileGoal opts g fns =
 >   do
->     (mEnv,tcEnv,iEnv,tyEnv,_,g') <- loadGoal True paths cm ws g fn
+>     (mEnv,tcEnv,iEnv,tyEnv,_,g') <- loadGoal True paths cm ws g fns
 >     mEnv' <- importDebugPrelude paths dbg "" mEnv
 >     let (ccode,dumps) = transGoal dbg tr mEnv' tcEnv iEnv tyEnv g'
 >     liftErr $ mapM_ (doDump opts) dumps >>
@@ -235,41 +236,53 @@ compilation of a goal is similar to that of a module.
 >         cm = caseMode opts
 >         ws = warn opts
 
-> typeGoal :: Options -> String -> Maybe FilePath -> ErrorT IO ()
-> typeGoal opts g fn =
+> typeGoal :: Options -> String -> [FilePath] -> ErrorT IO ()
+> typeGoal opts g fns =
 >   do
->     (_,tcEnv,_,tyEnv,cx,Goal _ e _) <-
->       loadGoal False (importPath opts) (caseMode opts) (warn opts) (Just g) fn
+>     (_,tcEnv,_,tyEnv,cx,Goal _ e _) <- loadGoal False paths cm ws (Just g) fns
 >     liftErr $ print (ppQualType tcEnv (QualType cx (typeOf e)))
+>   where paths = importPath opts
+>         cm = caseMode opts
+>         ws = warn opts
 
 > loadGoal :: Bool -> [FilePath] -> CaseMode -> [Warn]
->          -> Maybe String -> Maybe FilePath
+>          -> Maybe String -> [FilePath]
 >          -> ErrorT IO (ModuleEnv,TCEnv,InstEnv,ValueEnv,Context,Goal Type)
-> loadGoal forEval paths caseMode warn g fn =
+> loadGoal forEval paths caseMode warn g fns =
 >   do
->     (mEnv,m) <- loadGoalModule paths fn
+>     (mEnv,ms) <- loadGoalModules paths fns
+>     let m = last ms
 >     (tcEnv,iEnv,tyEnv,cx,g') <-
 >       okM $ maybe (return mainGoal) parseGoal g >>=
->             checkGoal forEval mEnv (map importModule [m,preludeMIdent])
+>             checkGoal forEval mEnv (map (importModule [m,preludeMIdent]) ms)
 >     liftErr $ mapM_ putErrLn $ warnGoal caseMode warn g'
 >     return (mEnv,tcEnv,iEnv,tyEnv,cx,g')
 >   where p = first ""
 >         mainGoal = Goal p (Variable () (qualify mainId)) []
->         importModule m = importDecl p m
+>         importModule ms m = importDecl p m (m `notElem` ms)
 
-> loadGoalModule :: [FilePath] -> Maybe FilePath
->                -> ErrorT IO (ModuleEnv,ModuleIdent)
-> loadGoalModule paths fn =
+> loadGoalModules :: [FilePath] -> [FilePath]
+>                 -> ErrorT IO (ModuleEnv,[ModuleIdent])
+> loadGoalModules paths fns =
 >   do
 >     mEnv <- loadInterface paths [] emptyEnv (P (first "") preludeMIdent)
->     (mEnv',m) <- loadGoalInterface paths mEnv fn
->     return (mEnv',m)
+>     (mEnv',ms) <- mapAccumM (loadGoalInterface paths) mEnv fns
+>     return (mEnv',preludeMIdent:ms)
 
-> loadGoalInterface :: [FilePath] -> ModuleEnv -> Maybe FilePath
+> loadGoalInterface :: [FilePath] -> ModuleEnv -> FilePath
 >                   -> ErrorT IO (ModuleEnv,ModuleIdent)
-> loadGoalInterface paths mEnv (Just fn) =
->   compileInterface paths [] mEnv (interfaceName fn)
-> loadGoalInterface _ mEnv Nothing = return (mEnv,preludeMIdent)
+> loadGoalInterface paths mEnv fn
+>   | extension fn `elem` [srcExt,litExt,intfExt] || pathSep `elem` fn =
+>       compileInterface paths [] mEnv (interfaceName fn)
+>   | otherwise =
+>       do
+>         mEnv' <- loadInterface paths [] mEnv (P (first "") m)
+>         return (mEnv',m)
+>   where m = mkMIdent (components ('.':fn))
+>         components [] = []
+>         components (_:cs) =
+>           case break ('.' ==) cs of
+>             (cs',cs'') -> cs' : components cs''
 
 > checkGoal :: Bool -> ModuleEnv -> [ImportDecl] -> Goal ()
 >           -> Error (TCEnv,InstEnv,ValueEnv,Context,Goal Type)
@@ -372,10 +385,10 @@ no import declaration is added to the prelude itself.
 > importPrelude fn (Module m es is ds) = Module m es is' ds
 >   where is'
 >           | preludeMIdent `elem` (m : [m | ImportDecl _ m _ _ _ <- is]) = is
->           | otherwise = importDecl (first fn) preludeMIdent : is
+>           | otherwise = importDecl (first fn) preludeMIdent False : is
 
-> importDecl :: Position -> ModuleIdent -> ImportDecl
-> importDecl p m = ImportDecl p m False Nothing Nothing
+> importDecl :: Position -> ModuleIdent -> Qualified -> ImportDecl
+> importDecl p m q = ImportDecl p m q Nothing Nothing
 
 \end{verbatim}
 The module \texttt{DebugPrelude} is loaded automatically when the
@@ -556,8 +569,9 @@ Various filename extensions.
 \begin{verbatim}
 
 > cExt = ".c"
-> intfExt = ".icurry"
+> srcExt = ".curry"
 > litExt = ".lcurry"
+> intfExt = ".icurry"
 
 \end{verbatim}
 Auxiliary functions. Unfortunately, hbc's \texttt{IO} module lacks a

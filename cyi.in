@@ -3,7 +3,7 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 2166 2007-04-24 13:25:35Z wlux $
+# $Id: cyi.in 2167 2007-04-24 13:46:23Z wlux $
 #
 # Copyright (c) 2002-2006, Wolfgang Lux
 # See LICENSE for the full license.
@@ -38,6 +38,7 @@ editor=${VISUAL-${EDITOR-/usr/bin/vi}}
 srcdir=
 source=
 cyopts=
+interfaces=
 objects=
 dobjects=
 prompt='> '
@@ -119,7 +120,7 @@ compile_source ( ) {
 }
 
 compile_target ( ) {
-  (cd "$srcdir" && $cyc $cyopts -M "$source" "$@")
+  (cd "$srcdir" && $cyc $cyopts $interfaces -M "$source" "$@")
 }
 
 set_goal ( ) {
@@ -147,6 +148,7 @@ load ( ) {
     0 )
       srcdir=.
       source=
+      interfaces=
       objects=
       dobjects=
       prompt="Prelude> "
@@ -180,6 +182,14 @@ load ( ) {
 reload ( ) {
   if test -n "$source"; then
     compile_source || return
+    set -- `compile_source -M | sed 's/.*\.curry / /;s/.*\.lcurry / /'`
+    interfaces=
+    for m in $*; do
+      case "$interfaces " in
+        *" -M$m "* ) ;;
+        * ) interfaces="$interfaces -M$m";;
+      esac
+    done
     objects=`compile_source -M | sed 's/:.*$//'`
     dobjects=
     case $source in

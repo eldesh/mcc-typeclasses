@@ -3,7 +3,7 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 2165 2007-04-24 13:19:56Z wlux $
+# $Id: cymake.in 2167 2007-04-24 13:46:23Z wlux $
 #
 # Copyright (c) 2002-2006, Wolfgang Lux
 # See LICENSE for the full license.
@@ -41,7 +41,6 @@ typeIt=
 output=
 clean=
 depend=
-target=
 imports=
 libs=
 files=
@@ -50,20 +49,13 @@ temps=
 # Functions
 noecho ( ) { return 0; }
 
-get_source ( ) {
-  if test -z "$2"; then
-    stem=$1
-  else
-    stem=`expr "$1" : '\(.*\)'$2`
-  fi
-  for suffix in .lcurry .curry; do
-    if test -f "$stem$suffix"; then
-      echo "$stem$suffix"
-      return 0
-    fi
+check_source ( ) {
+  stem=`expr "$1" : '\(.*\)'$2`
+  for suffix in $3; do
+    if test -f "$stem$suffix"; then return 0; fi
   done
   echo 1>&2 "$cymake: missing source file for $1"
-  exit 1
+  return 1
 }
 
 remove ( ) {
@@ -82,14 +74,14 @@ compile ( ) {
 
 link ( ) {
   if test -n "$goal"; then
-    $echo $cyc $cyopts $ldopts -e "$goal" -M "$target" "$@" $libs
-    $exec $cyc $cyopts $ldopts -e "$goal" -M "$target" "$@" $libs
+    $echo $cyc $cyopts $ldopts -e "$goal" "$@" $libs
+    $exec $cyc $cyopts $ldopts -e "$goal" "$@" $libs
   elif test -n "$typeIt"; then
-    $echo $cyc $cyopts -T "$typeIt" -M "$target"
-    $exec $cyc $cyopts -T "$typeIt" -M "$target"
+    $echo $cyc $cyopts -T "$typeIt" "$@"
+    $exec $cyc $cyopts -T "$typeIt" "$@"
   else
-    $echo $cyc $cyopts $ldopts -M "$target" "$@" $libs
-    $exec $cyc $cyopts $ldopts -M "$target" "$@" $libs
+    $echo $cyc $cyopts $ldopts "$@" $libs
+    $exec $cyc $cyopts $ldopts "$@" $libs
   fi
 }
 
@@ -203,11 +195,14 @@ if test $# -eq 0; then
 fi
 
 for f in $files; do
+  suffixes=".lcurry .curry"
   case $f in
-    *.curry | *.lcurry ) target=$f;;
-    *.o ) target=`get_source "$f" .o` || exit $?;;
-    * ) target=`get_source "$f"` || exit $?;;
+    *.curry ) suffix=.curry suffixes=.curry;;
+    *.lcurry ) suffix=.lcurry suffixes=.lcurry;;
+    *.o ) suffix=.o;;
+    * ) suffix=;;
   esac
+  check_source "$f" "$suffix" "$suffixes" || exit $?
   test -n "$verbose" && echo 1>&2 $cymk $clean $mkopts $imports $f
   $cymk $clean $mkopts $imports $f > /tmp/cymake$$
 

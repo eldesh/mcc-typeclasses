@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryLexer.lhs 2099 2007-02-18 10:59:53Z wlux $
+% $Id: CurryLexer.lhs 2170 2007-04-24 16:21:59Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -183,9 +183,14 @@ all tokens in their source representation.
 >   showsPrec _ (Token Id_qualified _) = showString "identifier `qualified'"
 >   showsPrec _ (Token Id_safe _) = showString "identifier `safe'"
 >   showsPrec _ (Token Id_unsafe _) = showString "identifier `unsafe'"
->   showsPrec _ (Token (PragmaBegin _) a) = shows a
+>   showsPrec _ (Token (PragmaBegin p) _) =
+>     showString "`{-# " . shows p . showString "'"
 >   showsPrec _ (Token PragmaEnd _) = showString "`#-}'"
 >   showsPrec _ (Token EOF _) = showString "<end-of-file>"
+
+> instance Show Pragma where
+>   showsPrec _ SuspectPragma = showString "SUSPECT"
+>   showsPrec _ TrustPragma = showString "TRUST"
 
 \end{verbatim}
 Tables for reserved operators, special identifiers, and supported

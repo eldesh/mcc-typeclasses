@@ -3,7 +3,7 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 1920 2006-05-10 17:58:33Z wlux $
+# $Id: cyi.in 2166 2007-04-24 13:25:35Z wlux $
 #
 # Copyright (c) 2002-2006, Wolfgang Lux
 # See LICENSE for the full license.
@@ -37,9 +37,9 @@ cymake=$bindir/cymake
 editor=${VISUAL-${EDITOR-/usr/bin/vi}}
 srcdir=
 source=
-target=
-module=
 cyopts=
+objects=
+dobjects=
 prompt='> '
 goal=
 
@@ -115,18 +115,11 @@ help ( ) {
 }
 
 compile_source ( ) {
-  test -n "$source" && (cd "$srcdir" && $cymake $* $cyopts $source)
+  test -z "$source" || (cd "$srcdir" && $cymake $* $cyopts $source)
 }
 
-msg_comp ( ) {
-  echo $echo_n "[Compiling ...$echo_c"
-}
-
-msg_done ( ) {
-  case "$TERM" in
-    "" | dumb | emacs ) echo "]";;
-    * ) echo $echo_n "              $echo_c";;
-  esac
+compile_target ( ) {
+  (cd "$srcdir" && $cyc $cyopts -M "$source" "$@")
 }
 
 set_goal ( ) {
@@ -144,10 +137,7 @@ set_goal ( ) {
 
 trap 'rm -f /tmp/cyi$$@EXEEXT@' 0 1 2 3 15
 run_goal ( ) {
-  msg_comp && 
-  (cd "$srcdir" && $cymake $cyopts -q $1 -a $module -e "$goal" -o /tmp/cyi$$) && 
-  msg_done &&
-  /tmp/cyi$$
+  compile_target -e "$goal" $* -o /tmp/cyi$$ && /tmp/cyi$$
   rm -f /tmp/cyi$$@EXEEXT@
 }
 
@@ -157,8 +147,8 @@ load ( ) {
     0 )
       srcdir=.
       source=
-      target=
-      module=
+      objects=
+      dobjects=
       prompt="Prelude> "
       ;;
     1 )
@@ -188,20 +178,23 @@ load ( ) {
 }
 
 reload ( ) {
-  compile_source || return
-  target=$source
-  case $target in
-    *.curry ) module=`expr "$target" : '\(.*\).curry'`;;
-    *.lcurry ) module=`expr "$target" : '\(.*\).lcurry'`;;
-  esac
-  read line < $module.icurry
-  set -- $line
-  prompt="$2> "
+  if test -n "$source"; then
+    compile_source || return
+    objects=`compile_source -M | sed 's/:.*$//'`
+    dobjects=
+    case $source in
+      *.curry ) stem=`expr "$source" : '\(.*\).curry'`;;
+      *.lcurry ) stem=`expr "$source" : '\(.*\).lcurry'`;;
+      * ) echo 2>&1 "$cyi: internal error: unknown source extension"; return;;
+    esac
+    read line < $stem.icurry
+    set -- $line
+    prompt="$2> "
+  fi
 }
 
 clean ( ) {
-  test -n "$target" || return
-  (cd "$srcdir" && $cymake -q --clean $cyopts $target)
+  compile_source -q --clean
 }
 
 edit ( ) {
@@ -215,19 +208,22 @@ edit ( ) {
 }
 
 evaluate ( ) {
-  set_goal "$1" && run_goal
+  set_goal "$1" && run_goal $objects
 }
 
 debug ( ) {
-  set_goal "$1" && run_goal -g
+  if test -n "$source"; then
+    echo "Preparing $source for debugging; this may take some time..."
+    if test -z "$dobjects"; then
+      compile_source -g || return
+      dobjects=`compile_source -M | sed 's/\.o:.*$/.d.o/'`
+    fi
+  fi
+  set_goal "$1" && run_goal -g $dobjects
 }
 
 type_goal ( ) {
-  set_goal "$1" &&
-  msg_comp && 
-  { test -z "$target" || (cd "$srcdir" && $cymake $cyopts -q $target); } &&
-  msg_done &&
-  (cd "$srcdir"; $cyc $cyopts -m "$target" -T "$goal")
+  set_goal "$1" && compile_target -T "$goal"
 }
 
 show_options ( ) {

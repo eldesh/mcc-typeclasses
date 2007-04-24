@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 2000 2006-11-11 16:21:14Z wlux $
+% $Id: Typing.lhs 2162 2007-04-24 09:19:29Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -62,20 +62,19 @@ perform any (non-trivial) unifications.
 > exprType (UnaryMinus e) = exprType e
 > exprType (Apply f e) =
 >   case exprType f of
->     TypeArrow ty1 ty2 | ty1 == exprType e -> ty2
+>     TypeArrow _ ty -> ty
 >     _ -> internalError "exprType (Apply)"
 > exprType (InfixApply e1 op e2) =
 >   case exprType (infixOp op) of
->     TypeArrow ty1 (TypeArrow ty2 ty3)
->       | ty1 == exprType e1 && ty2 == exprType e2 -> ty3
+>     TypeArrow _ (TypeArrow _ ty) -> ty
 >     _ -> internalError "exprType (InfixApply)"
 > exprType (LeftSection e op) =
 >   case exprType (infixOp op) of
->     TypeArrow ty1 ty2 | ty1 == exprType e -> ty2
+>     TypeArrow _ ty -> ty
 >     _ -> internalError "exprType (LeftSection)"
 > exprType (RightSection op e) =
 >   case exprType (infixOp op) of
->     TypeArrow ty1 (TypeArrow ty2 ty3) | ty2 == exprType e -> TypeArrow ty1 ty3
+>     TypeArrow ty1 (TypeArrow _ ty2) -> TypeArrow ty1 ty2
 >     _ -> internalError "exprType (RightSection)"
 > exprType (Lambda ts e) = foldr TypeArrow (exprType e) (map argType ts)
 > exprType (Let _ e) = exprType e

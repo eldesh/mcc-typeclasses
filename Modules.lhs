@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2161 2007-04-22 14:48:33Z wlux $
+% $Id: Modules.lhs 2162 2007-04-24 09:19:29Z wlux $
 %
-% Copyright (c) 1999-2006, Wolfgang Lux
+% Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Modules.lhs}
@@ -34,8 +34,8 @@ This module controls the compilation of modules.
 > import Exports(exportInterface)
 > import Trust(trustEnv,trustEnvGoal)
 > import Qual(qual1,qual2)
-> import DictTrans(dictTransModule,dictTransInterface,dictTransGoal)
 > import Desugar(desugar,desugarGoal)
+> import DictTrans(dictTransModule,dictTransInterface)
 > import Simplify(simplify)
 > import Lift(lift)
 > import qualified IL
@@ -143,10 +143,9 @@ declaration to the module.
 > transModule split debug tr mEnv tcEnv iEnv tyEnv m = (ccode,dumps)
 >   where trEnv = if debug then trustEnv tr m else emptyEnv
 >         mEnv' = fmap (dictTransInterface tcEnv tyEnv) mEnv
->         (tcEnv',tyEnv',dict) =
->           dictTransModule tcEnv iEnv tyEnv m
->         (desugared,tyEnv'') = desugar tcEnv' tyEnv' dict
->         (simplified,tyEnv''') = simplify tyEnv'' trEnv desugared
+>         (desugared,tyEnv') = desugar tcEnv tyEnv m
+>         (tcEnv',tyEnv'',dict) = dictTransModule tcEnv iEnv tyEnv' desugared
+>         (simplified,tyEnv''') = simplify tyEnv'' trEnv dict
 >         (lifted,tyEnv'''',trEnv') = lift tyEnv''' trEnv simplified
 >         il = ilTrans tyEnv'''' lifted
 >         ilDbg
@@ -161,8 +160,8 @@ declaration to the module.
 >         dumps =
 >           [(DumpRenamed,ppModule m),
 >            (DumpTypes,ppTypes tcEnv (localBindings tyEnv)),
->            (DumpDict, ppModule dict),
 >            (DumpDesugared,ppModule desugared),
+>            (DumpDict,ppModule dict),
 >            (DumpSimplified,ppModule simplified),
 >            (DumpLifted,ppModule lifted),
 >            (DumpIL,ILPP.ppModule il)] ++
@@ -316,9 +315,9 @@ compilation of a goal is similar to that of a module.
 >           | debug = bindEnv goalId Suspect (trustEnvGoal tr g)
 >           | otherwise = emptyEnv
 >         mEnv' = fmap (dictTransInterface tcEnv tyEnv) mEnv
->         (tcEnv',tyEnv',dict) = dictTransGoal tcEnv iEnv tyEnv m g
->         (vs,desugared,tyEnv'') = desugarGoal debug tcEnv' tyEnv' m goalId dict
->         (simplified,tyEnv''') = simplify tyEnv'' trEnv desugared
+>         (vs,desugared,tyEnv') = desugarGoal debug tcEnv tyEnv m goalId g
+>         (tcEnv',tyEnv'',dict) = dictTransModule tcEnv iEnv tyEnv' desugared
+>         (simplified,tyEnv''') = simplify tyEnv'' trEnv dict
 >         (lifted,tyEnv'''',trEnv') = lift tyEnv''' trEnv simplified
 >         il = ilTrans tyEnv'''' lifted
 >         ilDbg
@@ -332,8 +331,8 @@ compilation of a goal is similar to that of a module.
 >         dumps =
 >           [(DumpRenamed,ppGoal g),
 >            (DumpTypes,ppTypes tcEnv (localBindings tyEnv)),
->            (DumpDict,ppGoal dict),
 >            (DumpDesugared,ppModule desugared),
+>            (DumpDict,ppModule dict),
 >            (DumpSimplified,ppModule simplified),
 >            (DumpLifted,ppModule lifted),
 >            (DumpIL,ILPP.ppModule il)] ++

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2161 2007-04-22 14:48:33Z wlux $
+% $Id: Desugar.lhs 2162 2007-04-24 09:19:29Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -115,10 +115,11 @@ of a module.
 >               -> DesugarState ([TopDecl Type],ValueEnv)
 > desugarModule m ds =
 >   do
+>     tds' <- mapM (desugarTopDecl m) tds
 >     vds' <- desugarDeclGroup m [d | BlockDecl d <- vds]
 >     tyEnv' <- fetchSt
->     return (tds ++ map BlockDecl vds',tyEnv')
->   where (tds,vds) = partition isTypeDecl ds
+>     return (tds' ++ map BlockDecl vds',tyEnv')
+>   where (vds,tds) = partition isBlockDecl ds
 
 \end{verbatim}
 Goals with type \texttt{IO \_} are executed directly by the runtime
@@ -199,6 +200,35 @@ Sect.~\ref{sec:dtrans}).
 > liftGoalVars (Let ds e) = (concat [vs | FreeDecl _ vs <- vds],Let ds' e)
 >   where (vds,ds') = partition isFreeDecl ds
 > liftGoalVars e = ([],e)
+
+\end{verbatim}
+At the top-level, we have to desugar the method declarations of each
+class and instance declaration. The type declarations are not affected
+by desugaring.
+\begin{verbatim}
+
+> desugarTopDecl :: ModuleIdent -> TopDecl Type -> DesugarState (TopDecl Type)
+> desugarTopDecl _ (DataDecl p cx tc tvs cs clss) =
+>   return (DataDecl p cx tc tvs cs clss)
+> desugarTopDecl _ (NewtypeDecl p cx tc tvs nc clss) =
+>   return (NewtypeDecl p cx tc tvs nc clss)
+> desugarTopDecl _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
+> desugarTopDecl m (ClassDecl p cx cls tv ds) =
+>   liftM (ClassDecl p cx cls tv) (mapM (desugarMethodDecl m) ds)
+> desugarTopDecl m (InstanceDecl p cx cls ty ds) =
+>   liftM (InstanceDecl p cx cls ty) (mapM (desugarMethodDecl m) ds)
+
+> desugarMethodDecl :: ModuleIdent -> MethodDecl Type
+>                   -> DesugarState (MethodDecl Type)
+> desugarMethodDecl _ (MethodFixity p fix pr ops) =
+>   return (MethodFixity p fix pr ops)
+> desugarMethodDecl _ (MethodSig p fs ty) = return (MethodSig p fs ty)
+> desugarMethodDecl m (MethodDecl p f eqs) =
+>   do
+>     fetchSt >>=
+>       updateSt_ . changeArity m f . length . arrowArgs . rawType . varType f
+>     liftM (MethodDecl p f) (mapM (desugarEquation m) eqs)
+> desugarMethodDecl _ (TrustMethod p tr fs) = return (TrustMethod p tr fs)
 
 \end{verbatim}
 Within a declaration group, all fixity declarations, type signatures
@@ -282,23 +312,25 @@ $t$ is a variable or an as-pattern are replaced by $t$ in combination
 with a local declaration for $v$.
 \begin{verbatim}
 
-> desugarLiteral :: Type -> Literal -> Either Literal [(Type,Literal)]
-> desugarLiteral _ (Char c) = Left (Char c)
-> desugarLiteral ty (Int i) = Left (fixLiteral ty i)
+> desugarLiteralTerm :: ModuleIdent -> Position -> [Decl Type] -> Type
+>                    -> Literal -> DesugarState ([Decl Type],ConstrTerm Type)
+> desugarLiteralTerm _ _ ds ty (Char c) = return (ds,LiteralPattern ty (Char c))
+> desugarLiteralTerm _ _ ds ty (Int i) =
+>   return (ds,LiteralPattern ty (fixLiteral ty i))
 >   where fixLiteral (TypeConstrained tys _) = fixLiteral (head tys)
 >         fixLiteral ty
 >           | ty == intType = Int
 >           | ty == floatType = Float . fromIntegral
->           | otherwise = internalError "desugarLiteral"
-> desugarLiteral _ (Float f) = Left (Float f)
-> desugarLiteral _ (String cs) = Right [(charType,Char c) | c <- cs]
+>           | otherwise = internalError "desugarLiteralTerm"
+> desugarLiteralTerm _ _ ds ty (Float f) =
+>   return (ds,LiteralPattern ty (Float f))
+> desugarLiteralTerm m p ds ty (String cs) =
+>   desugarTerm m p ds
+>               (ListPattern ty (map (LiteralPattern charType . Char) cs))
 
 > desugarTerm :: ModuleIdent -> Position -> [Decl Type] -> ConstrTerm Type
 >             -> DesugarState ([Decl Type],ConstrTerm Type)
-> desugarTerm m p ds (LiteralPattern ty l) =
->   either (return . (,) ds . LiteralPattern ty)
->          (desugarTerm m p ds . ListPattern ty . map (uncurry LiteralPattern))
->          (desugarLiteral ty l)
+> desugarTerm m p ds (LiteralPattern ty l) = desugarLiteralTerm m p ds ty l
 > desugarTerm m p ds (NegativePattern ty l) =
 >   desugarTerm m p ds (LiteralPattern ty (negateLiteral l))
 >   where negateLiteral (Int i) = Int (-i)
@@ -380,12 +412,26 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 > booleanGuards [] = False
 > booleanGuards (CondExpr _ g _ : es) = not (null es) || typeOf g == boolType
 
+> desugarLiteral :: ModuleIdent -> Position -> Type -> Literal
+>                -> DesugarState (Expression Type)
+> desugarLiteral _ _ ty (Char c) = return (Literal ty (Char c))
+> desugarLiteral _ _ ty (Int i) = return (fixLiteral ty i)
+>   where fixLiteral (TypeConstrained tys _) = fixLiteral (head tys)
+>         fixLiteral ty'
+>           | ty' == intType = Literal ty . Int
+>           | ty' == floatType = Literal ty . Float . fromIntegral
+>           | otherwise = Apply (prelFromInt ty) . Literal intType . Int
+> desugarLiteral _ _ ty (Float f) = return (fixLiteral ty (Float f))
+>   where fixLiteral (TypeConstrained tys _) = fixLiteral (head tys)
+>         fixLiteral ty'
+>           | ty' == floatType = Literal ty
+>           | otherwise = Apply (prelFromFloat ty) . Literal floatType
+> desugarLiteral m p ty (String cs) =
+>   desugarExpr m p (List ty (map (Literal charType . Char) cs))
+
 > desugarExpr :: ModuleIdent -> Position -> Expression Type
 >             -> DesugarState (Expression Type)
-> desugarExpr m p (Literal ty l) =
->   either (return . Literal ty)
->          (desugarExpr m p . List ty . map (uncurry Literal))
->          (desugarLiteral ty l)
+> desugarExpr m p (Literal ty l) = desugarLiteral m p ty l
 > desugarExpr _ _ (Variable ty v) = return (Variable ty v)
 > desugarExpr _ _ (Constructor ty c) = return (Constructor ty c)
 > desugarExpr m p (Paren e) = desugarExpr m p e
@@ -452,11 +498,9 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 >     return (if null ds' then e' else Let ds' e')
 > desugarExpr m p (Do sts e) = desugarExpr m p (foldr desugarStmt e sts)
 >   where desugarStmt (StmtExpr e) e' =
->           apply (prelBind_ (ioResType (typeOf e)) (ioResType (typeOf e')))
->                 [e,e']
+>           apply (prelBind_ (typeOf e) (typeOf e')) [e,e']
 >         desugarStmt (StmtBind t e) e' =
->           apply (prelBind (typeOf t) (ioResType (typeOf e')))
->                 [e,Lambda [t] e']
+>           apply (prelBind (typeOf e) (typeOf t) (typeOf e')) [e,Lambda [t] e']
 >         desugarStmt (StmtDecl ds) e' = Let ds e'
 > desugarExpr m p (IfThenElse e1 e2 e3) =
 >   do
@@ -751,8 +795,10 @@ Prelude entities
 \begin{verbatim}
 
 > prelUnif a = preludeFun [a,a] successType "=:="
-> prelBind a b = preludeFun [ioType a,a `TypeArrow` ioType b] (ioType b) ">>="
-> prelBind_ a b = preludeFun [ioType a,ioType b] (ioType b) ">>"
+> prelFromInt a = preludeFun [intType] a "fromInt"
+> prelFromFloat a = preludeFun [floatType] a "fromFloat"
+> prelBind ma a mb = preludeFun [ma,a `TypeArrow` mb] mb ">>="
+> prelBind_ ma mb = preludeFun [ma,mb] mb ">>"
 > prelFlip a b c = preludeFun [a `TypeArrow` (b `TypeArrow` c),b,a] c "flip"
 > prelEnumFrom a = preludeFun [a] (listType a) "enumFrom"
 > prelEnumFromTo a = preludeFun [a,a] (listType a) "enumFromTo"

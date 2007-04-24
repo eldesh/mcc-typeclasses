@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2161 2007-04-22 14:48:33Z wlux $
+% $Id: CurrySyntax.lhs 2171 2007-04-24 21:53:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -121,7 +121,7 @@ Interface declarations are restricted to type declarations and signatures.
 >   | IClassDecl Position [ClassAssert] QualIdent (Maybe KindExpr) Ident
 >                [Maybe IMethodDecl]
 >   | IInstanceDecl Position [ClassAssert] QualIdent TypeExpr
->   | IFunctionDecl Position QualIdent QualTypeExpr
+>   | IFunctionDecl Position QualIdent (Maybe Int) QualTypeExpr
 >   deriving (Eq,Show)
 
 > data IMethodDecl = IMethodDecl Position Ident QualTypeExpr deriving (Eq,Show)

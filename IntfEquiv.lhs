@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfEquiv.lhs 2095 2007-02-13 17:34:10Z wlux $
+% $Id: IntfEquiv.lhs 2171 2007-04-24 21:53:08Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -67,7 +67,8 @@ inadvertently mix up these cases.
 >     cx1 == cx2 && cls1 == cls2 && k1 == k2 && ds1 `eqvList` ds2
 >   IInstanceDecl _ cx1 cls1 ty1 =~= IInstanceDecl _ cx2 cls2 ty2 =
 >     cx1 == cx2 && cls1 == cls2 && ty1 == ty2
->   IFunctionDecl _ f1 ty1 =~= IFunctionDecl _ f2 ty2 = f1 == f2 && ty1 == ty2
+>   IFunctionDecl _ f1 n1 ty1 =~= IFunctionDecl _ f2 n2 ty2 =
+>     f1 == f2 && n1 == n2 && ty1 == ty2
 >   _ =~= _ = False
 
 > instance IntfEquiv ConstrDecl where
@@ -118,7 +119,7 @@ by function \texttt{fixInterface} and the associated type class
 >     IClassDecl p (fix tcs cx) cls k tv (fix tcs ds)
 >   fix tcs (IInstanceDecl p cx cls ty) =
 >     IInstanceDecl p (fix tcs cx) cls (fix tcs ty)
->   fix tcs (IFunctionDecl p f ty) = IFunctionDecl p f (fix tcs ty)
+>   fix tcs (IFunctionDecl p f n ty) = IFunctionDecl p f n (fix tcs ty)
 
 > instance FixInterface ConstrDecl where
 >   fix tcs (ConstrDecl p evs c tys) = ConstrDecl p evs c (fix tcs tys)
@@ -162,6 +163,6 @@ by function \texttt{fixInterface} and the associated type class
 >         tcs (HidingClassDecl _ _ _ _ _) tcs = tcs
 >         tcs (IClassDecl _ _ _ _ _ _) tcs = tcs
 >         tcs (IInstanceDecl _ _ _ _) tcs = tcs
->         tcs (IFunctionDecl _ _ _) tcs = tcs
+>         tcs (IFunctionDecl _ _ _ _) tcs = tcs
 
 \end{verbatim}

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2169 2007-04-24 16:07:42Z wlux $
+% $Id: Modules.lhs 2171 2007-04-24 21:53:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -573,7 +573,7 @@ from the type environment.
 >           ppIDecl (mkDecl c ty) <+> text "-- newtype constructor"
 >         ppInfo (x,Value _ _ (ForAll _ ty)) = ppIDecl (mkDecl x ty)
 >         mkDecl f ty =
->           IFunctionDecl undefined (qualify f) (fromQualType tcEnv ty)
+>           IFunctionDecl undefined (qualify f) Nothing (fromQualType tcEnv ty)
 
 \end{verbatim}
 Various filename extensions.

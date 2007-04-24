@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2095 2007-02-13 17:34:10Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2171 2007-04-24 21:53:08Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -49,7 +49,7 @@ The latter must not occur in type expressions in interfaces.
 > bindType (IClassDecl _ cx cls _ _ ds) =
 >   qualBindTopEnv cls (Class cls (map imethod (catMaybes ds)))
 > bindType (IInstanceDecl _ _ _ _) = id
-> bindType (IFunctionDecl _ _ _) = id
+> bindType (IFunctionDecl _ _ _ _) = id
 
 \end{verbatim}
 The checks applied to the interface are similar to those performed
@@ -97,8 +97,8 @@ during syntax checking of type expressions.
 >     mapE_ (checkSimpleConstraint "instance" doc p) cx
 >     return (IInstanceDecl p cx' cls ty')
 >   where doc = ppQIdent cls <+> ppTypeExpr 2 ty
-> checkIDecl env (IFunctionDecl p f ty) =
->   liftE (IFunctionDecl p f) (checkQualType env p ty)
+> checkIDecl env (IFunctionDecl p f n ty) =
+>   liftE (IFunctionDecl p f n) (checkQualType env p ty)
 
 > checkTypeLhs :: TypeEnv -> Position -> [ClassAssert] -> [Ident]
 >              -> Error [ClassAssert]

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2095 2007-02-13 17:34:10Z wlux $
+% $Id: CurryPP.lhs 2171 2007-04-24 21:53:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -206,8 +206,9 @@ Interfaces
 > ppIDecl (IClassDecl _ cx cls k tv ds) =
 >   ppIClassDecl (ppClassHead cx (ppITypeIdent cls k) tv) ds
 > ppIDecl (IInstanceDecl _ cx cls ty) = ppInstanceHead cx cls ty
-> ppIDecl (IFunctionDecl _ f ty) =
->   ppQIdent f <+> text "::" <+> ppQualTypeExpr ty
+> ppIDecl (IFunctionDecl _ f n ty) =
+>   ppQIdent f <+> text "::" <+> maybePP ppArity n <+> ppQualTypeExpr ty
+>   where ppArity n = ppPragma (text "ARITY" <+> int n)
 
 > ppITypeDeclLhs :: String -> [ClassAssert] -> QualIdent -> Maybe KindExpr
 >                -> [Ident] -> Doc
@@ -225,7 +226,8 @@ Interfaces
 >   | otherwise = ppIBlock head (map (maybe (text "_") ppIMethodDecl) ds)
 
 > ppIMethodDecl :: IMethodDecl -> Doc
-> ppIMethodDecl (IMethodDecl p f ty) = ppIDecl (IFunctionDecl p (qualify f) ty)
+> ppIMethodDecl (IMethodDecl p f ty) =
+>   ppIDecl (IFunctionDecl p (qualify f) Nothing ty)
 
 > ppIBlock :: Doc -> [Doc] -> Doc
 > ppIBlock prefix ds =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2162 2007-04-24 09:19:29Z wlux $
+% $Id: DictTrans.lhs 2171 2007-04-24 21:53:08Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -146,11 +146,15 @@ generator.
 > liftIntfDecls m tcEnv tyEnv (IInstanceDecl p cx cls ty) =
 >   instIDecls tcEnv tyEnv p cls' (toQualType m (QualTypeExpr cx ty))
 >   where cls' = qualQualify m cls
-> liftIntfDecls _ _ _ (IFunctionDecl p f ty) = [IFunctionDecl p f ty]
+> liftIntfDecls _ _ _ (IFunctionDecl p f n ty) = [IFunctionDecl p f n ty]
 
 > dictTransIntfDecl :: ModuleIdent -> TCEnv -> IDecl -> IDecl
-> dictTransIntfDecl m tcEnv (IFunctionDecl p f ty) = IFunctionDecl p f $
->   fromQualType tcEnv (transformQualType tcEnv (toQualType m ty))
+> dictTransIntfDecl m tcEnv (IFunctionDecl p f n ty) =
+>   IFunctionDecl p f (fmap (+ d) n) (fromQualType tcEnv ty'')
+>   where ty' = toQualType m ty
+>         ty'' = transformQualType tcEnv ty'
+>         d = arrowArity (rawType (typeScheme ty'')) -
+>             arrowArity (rawType (typeScheme ty'))
 > dictTransIntfDecl _ _ d = d
 
 > transformQualType :: TCEnv -> QualType -> QualType
@@ -375,7 +379,7 @@ functions.
 > intfMethodDecl :: QualIdent -> Ident -> Position -> QualIdent -> QualTypeExpr
 >                -> IDecl
 > intfMethodDecl cls tv p f (QualTypeExpr cx ty) =
->   IFunctionDecl p f (QualTypeExpr (ClassAssert cls tv [] : cx) ty)
+>   IFunctionDecl p f Nothing (QualTypeExpr (ClassAssert cls tv [] : cx) ty)
 
 > dictPattern :: Type -> QualIdent -> [(Type,Ident)] -> ConstrTerm Type
 > dictPattern ty cls vs =
@@ -480,7 +484,7 @@ of method $f_i$ in class $C$.
 >         fs = classMethods cls tcEnv
 
 > instIDecl :: TCEnv -> Position -> QualIdent -> QualType -> IDecl
-> instIDecl tcEnv p f ty = IFunctionDecl p f (fromQualType tcEnv ty)
+> instIDecl tcEnv p f ty = IFunctionDecl p f Nothing (fromQualType tcEnv ty)
 
 > instDictType :: TCEnv -> ValueEnv -> TypePred -> [Maybe Ident] -> Type
 > instDictType tcEnv tyEnv (TypePred cls ty) fs =

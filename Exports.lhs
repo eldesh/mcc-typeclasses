@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2169 2007-04-24 16:07:42Z wlux $
+% $Id: Exports.lhs 2171 2007-04-24 21:53:08Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -131,8 +131,11 @@ declarations which cannot be used in another module because
 
 > funDecl :: ModuleIdent -> TCEnv -> ValueEnv -> Export -> [IDecl] -> [IDecl]
 > funDecl m tcEnv tyEnv (Export f) ds =
->   IFunctionDecl noPos (qualUnqualify m f) (fromQualType tcEnv ty) : ds
->   where ForAll _ ty = funType f tyEnv
+>   IFunctionDecl noPos (qualUnqualify m f) n' (fromQualType tcEnv ty) : ds
+>   where n = arity f tyEnv
+>         n' =
+>           if arrowArity (rawType (ForAll u ty)) == n then Nothing else Just n
+>         ForAll u ty = funType f tyEnv
 > funDecl _ _ _ (ExportTypeWith _ _) ds = ds
 
 > instDecl :: ModuleIdent -> TCEnv -> [QualIdent] -> CT -> Context -> [IDecl]
@@ -184,7 +187,7 @@ not module \texttt{B}.
 >   modules (ITypeDecl _ tc _ _ ty) = modules tc . modules ty
 >   modules (IClassDecl _ cx cls _ _ ds) = modules cx . modules cls . modules ds
 >   modules (IInstanceDecl _ cx cls ty) = modules cx . modules cls . modules ty
->   modules (IFunctionDecl _ f ty) = modules f . modules ty
+>   modules (IFunctionDecl _ f _ ty) = modules f . modules ty
 
 > instance HasModule ConstrDecl where
 >   modules (ConstrDecl _ _ _ tys) = modules tys
@@ -246,7 +249,7 @@ loading the imported modules.
 > definedType (ITypeDecl _ tc _ _ _) tcs = tc : tcs
 > definedType (IClassDecl _ _ cls _ _ _) tcs = cls : tcs
 > definedType (IInstanceDecl _ _ _ _) tcs = tcs
-> definedType (IFunctionDecl _ _ _)  tcs = tcs
+> definedType (IFunctionDecl _ _ _ _)  tcs = tcs
 
 > class HasType a where
 >   usedTypes :: a -> [QualIdent] -> [QualIdent]
@@ -264,7 +267,7 @@ loading the imported modules.
 >   usedTypes (IClassDecl _ cx _ _ _ ds) = usedTypes cx . usedTypes ds
 >   usedTypes (IInstanceDecl _ cx cls ty) =
 >     usedTypes cx . (cls :) . usedTypes ty
->   usedTypes (IFunctionDecl _ _ ty) = usedTypes ty
+>   usedTypes (IFunctionDecl _ _ _ ty) = usedTypes ty
 
 > instance HasType ConstrDecl where
 >   usedTypes (ConstrDecl _ _ _ tys) = usedTypes tys

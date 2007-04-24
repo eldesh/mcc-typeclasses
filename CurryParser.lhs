@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2100 2007-02-18 11:02:00Z wlux $
+% $Id: CurryParser.lhs 2171 2007-04-24 21:53:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -354,10 +354,11 @@ directory path to the module is ignored.
 >           hidingData <$-> token KW_data <*> withKind qtycon <*> many tyvar
 >         classDecl =
 >           hidingClass <$> classInstHead KW_class (withKind qtycls) tyvar
->         funcDecl = hidingFunc <$-> token DoubleColon <*> qualType
+>         funcDecl =
+>           hidingFunc <$-> token DoubleColon <*> iFunctionArity <*> qualType
 >         hidingData (tc,k) tvs p = HidingDataDecl p tc k tvs
 >         hidingClass (cx,((cls,k),tv)) p = HidingClassDecl p cx cls k tv
->         hidingFunc ty p = IFunctionDecl p hidingId ty
+>         hidingFunc n ty p = IFunctionDecl p hidingId n ty
 >         hidingId = qualify (mkIdent "hiding")
 
 > iDataDecl :: Parser Token IDecl a
@@ -407,14 +408,17 @@ directory path to the module is ignored.
 >   where f' p = uncurry (uncurry . f p)
 
 > iFunctionDecl :: Parser Token IDecl a
-> iFunctionDecl = iFunDecl IFunctionDecl qfun
+> iFunctionDecl = IFunctionDecl <$> position <*> qfun <*-> token DoubleColon
+>                               <*> iFunctionArity <*> qualType
 
 > iMethodDecl :: Parser Token IMethodDecl a
-> iMethodDecl = iFunDecl IMethodDecl fun
+> iMethodDecl = IMethodDecl <$> position <*> fun <*-> token DoubleColon
+>                           <*> qualType
 
-> iFunDecl :: (Position -> a -> QualTypeExpr -> b) -> Parser Token a c
->          -> Parser Token b c
-> iFunDecl f fun = f <$> position <*> fun <*-> token DoubleColon <*> qualType
+> iFunctionArity :: Parser Token (Maybe Int) a
+> iFunctionArity = Just <$-> token (PragmaBegin ArityPragma) <*> int
+>                       <*-> token PragmaEnd
+>            `opt` Nothing
 
 \end{verbatim}
 \paragraph{Kinds}

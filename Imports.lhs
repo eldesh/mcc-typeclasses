@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2161 2007-04-22 14:48:33Z wlux $
+% $Id: Imports.lhs 2171 2007-04-24 21:53:08Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -54,7 +54,7 @@ all instance declarations are always imported into the current module.
 > isHiddenDecl (HidingClassDecl _ _ _ _ _) = True
 > isHiddenDecl (IClassDecl _ _ _ _ _ _) = False
 > isHiddenDecl (IInstanceDecl _ _ _ _) = False
-> isHiddenDecl (IFunctionDecl _ _ _) = False
+> isHiddenDecl (IFunctionDecl _ _ _ _) = False
 
 > isVisible :: (Import -> Set Ident -> Set Ident) -> Maybe ImportSpec
 >           -> Ident -> Bool
@@ -136,7 +136,7 @@ instances imported from another module.
 > entity (HidingClassDecl _ _ cls _ _) = cls
 > entity (IClassDecl _ _ cls _ _ _) = cls
 > entity (IInstanceDecl _ _ _ _) = qualify anonId
-> entity (IFunctionDecl _ f _) = f
+> entity (IFunctionDecl _ f _ _) = f
 
 > importEntitiesIntf :: Entity a
 >                    => (ModuleIdent -> IDecl -> [I a] -> [I a])
@@ -172,9 +172,10 @@ following functions.
 >   (map (dataConstr m cx (qualQualify m tc) tvs) (catMaybes cs) ++)
 > values m (INewtypeDecl _ cx tc _ tvs nc) =
 >   (newConstr m cx (qualQualify m tc) tvs nc :)
-> values m (IFunctionDecl _ f ty) =
->   qual f (Value (qualQualify m f) (arrowArity (rawType ty')) ty')
->   where ty' = typeScheme (toQualType m ty)
+> values m (IFunctionDecl _ f n ty) =
+>   qual f (Value (qualQualify m f) n' ty')
+>   where n' = fromMaybe (arrowArity (rawType ty')) n
+>         ty' = typeScheme (toQualType m ty)
 > values m (IClassDecl _ _ cls _ tv ds) =
 >   (map (classMethod m (qualQualify m cls) tv) (catMaybes ds) ++)
 > values _ _ = id

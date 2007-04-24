@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2161 2007-04-22 14:48:33Z wlux $
+% $Id: IntfCheck.lhs 2171 2007-04-24 21:53:08Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -114,10 +114,10 @@ interface module only. However, this has not been implemented yet.
 >               Just (mapM_ (checkMethodImport m tyEnv cls tv) (catMaybes ds))
 >         checkClass _ = Nothing
 > checkImport m _ _ _ (IInstanceDecl _ _ _ _) = return ()
-> checkImport m _ _ tyEnv (IFunctionDecl p f ty) =
+> checkImport m _ _ tyEnv (IFunctionDecl p f n ty) =
 >   checkValueInfo "function" checkFun tyEnv p f
->   where checkFun (Value f' _ (ForAll _ ty')) =
->           f == f' && toQualType m ty == ty'
+>   where checkFun (Value f' n' (ForAll _ ty')) =
+>           f == f' && maybe True (n' ==) n && toQualType m ty == ty'
 >         checkFun _ = False
 
 > checkConstrImport :: ModuleIdent -> ValueEnv -> [ClassAssert] -> QualIdent

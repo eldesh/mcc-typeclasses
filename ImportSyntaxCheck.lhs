@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ImportSyntaxCheck.lhs 2088 2007-02-05 09:27:49Z wlux $
+% $Id: ImportSyntaxCheck.lhs 2171 2007-04-24 21:53:08Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -50,7 +50,7 @@ declarations.
 > bindValue m (INewtypeDecl _ _ tc _ _ nc) = bindNewConstr (qualQualify m tc) nc
 > bindValue m (IClassDecl _ _ cls _ _ ds) =
 >   flip (foldr (bindMethod (qualQualify m cls))) (catMaybes ds)
-> bindValue m (IFunctionDecl _ f _) = bindUnqual f (Var (qualQualify m f))
+> bindValue m (IFunctionDecl _ f _ _) = bindUnqual f (Var (qualQualify m f))
 > bindValue _ _ = id
 
 > bindConstr :: QualIdent -> ConstrDecl -> ExpFunEnv -> ExpFunEnv

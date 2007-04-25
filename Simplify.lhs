@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2163 2007-04-24 11:56:51Z wlux $
+% $Id: Simplify.lhs 2174 2007-04-25 23:36:53Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -17,6 +17,7 @@ Currently, the following optimizations are implemented:
 \item Remove unused declarations.
 \item Inline simple constants.
 \item Compute minimal binding groups.
+\item Apply $\eta$-expansion to function definitions when possible.
 \item Under certain conditions, inline local function definitions.
 \end{itemize}
 \begin{verbatim}
@@ -55,19 +56,138 @@ Currently, the following optimizations are implemented:
 > simplifyMethodDecl :: ModuleIdent -> MethodDecl Type
 >                    -> SimplifyState (MethodDecl Type)
 > simplifyMethodDecl m (MethodDecl p f eqs) =
->   liftM (MethodDecl p f . concat) (mapM (simplifyEquation m emptyEnv) eqs)
+>   liftM (MethodDecl p f) (mapM (simplifyEquation m emptyEnv) eqs)
 > simplifyMethodDecl _ d = return d
 
 > simplifyDecl :: ModuleIdent -> InlineEnv -> Decl Type
 >              -> SimplifyState (Decl Type)
 > simplifyDecl m env (FunctionDecl p f eqs) =
->   liftM (FunctionDecl p f . concat) (mapM (simplifyEquation m env) eqs)
+>   liftM (FunctionDecl p f)
+>         (mapM (simplifyEquation m env) eqs >>= etaExpand m >>= inlineBodies m)
 > simplifyDecl m env (PatternDecl p t rhs) =
 >   liftM (PatternDecl p t) (simplifyRhs m env rhs)
 > simplifyDecl _ _ d = return d
 
+> simplifyEquation :: ModuleIdent -> InlineEnv -> Equation Type
+>                  -> SimplifyState (Equation Type)
+> simplifyEquation m env (Equation p lhs rhs) =
+>   liftM (Equation p lhs) (simplifyRhs m env rhs)
+
+> simplifyRhs :: ModuleIdent -> InlineEnv -> Rhs Type
+>             -> SimplifyState (Rhs Type)
+> simplifyRhs m env (SimpleRhs p e _) =
+>   do
+>     e' <- simplifyApp m p e [] >>= simplifyExpr m env
+>     return (SimpleRhs p e' [])
+
 \end{verbatim}
-After simplifying the right hand side of an equation, the compiler
+After transforming the bodies of each equation defining a function,
+the compiler tries to $\eta$-expand the definition. Using
+$\eta$-expanded definitions has the advantage that the compiler can
+avoid intermediate lazy applications. For instance, if the
+\texttt{map} function were defined as follows
+\begin{verbatim}
+  map f = foldr (\x -> (f x :)) []
+\end{verbatim}
+the compiler would compile the application \texttt{map (1+) [0..]}
+into an expression that is equivalent to
+\begin{verbatim}
+  let a1 = map (1+) in a1 [0..]
+\end{verbatim}
+whereas the $\eta$-expanded version of \texttt{map} could be applied
+directly to both arguments.
+
+However, one must be careful with $\eta$-expansion because it can have
+an effect on sharing and thus can change the semantics of a program.
+For instance, consider the functions
+\begin{verbatim}
+  f1 g h    = filter (g ? h)
+  f2 g h xs = filter (g ? h) xs
+\end{verbatim}
+and the goals \texttt{map (f1 even odd) [[0,1], [2,3]]} and
+\texttt{map (f2 even odd) [[0,1], [2,3]]}. The first of these has only
+two solutions, namely \texttt{[[0],[2]]} and \texttt{[[1],[3]]},
+because the expression \texttt{(even ?\ odd)} is evaluated only once,
+whereas the second has four solutions because the expression
+\texttt{(even ?\ odd)} is evaluated independently for the two argument
+lists \texttt{[0,1]} and \texttt{[2,3]}.
+
+Obviously, $\eta$-expansion of an equation \texttt{$f\,t_1\dots t_n$ =
+  $e$} is safe if the two expressions \texttt{($f\,x_1\dots x_n$,
+  $f\,x_1\dots x_n$)} and \texttt{let a = $f\,x_1\dots x_n$ in (a,a)}
+are equivalent. In order to find a safe approximation of definitions
+for which this property holds, we introduce the distinction between
+expansive and non-expansive expressions. An expression is
+non-expansive if it is either
+\begin{itemize}
+\item a literal,
+\item a variable,
+\item an application of a constructor with arity $n$ to at most $n$
+  non-expansive expressions,
+\item an application of a function with arity $n$ to at most $n-1$
+  non-expansive expressions, or
+\item a let expression whose body is a non-expansive expression and
+  whose local declarations are either function declarations or
+  variable declarations of the form \texttt{$v$=$e$} where $e$ is a
+  non-expansive expression.
+\end{itemize}
+A function definition then can be $\eta$-expanded safely if it has
+only a single equation whose body is a non-expansive expression and
+whose arguments are all plain variables. The latter restriction is
+necessary in order to ensure that no arguments need to be evaluated in
+order to compute the equation's body.
+\begin{verbatim}
+
+> etaExpand :: ModuleIdent -> [Equation Type] -> SimplifyState [Equation Type]
+> etaExpand m [eq] = fetchSt >>= \tyEnv -> etaEquation m tyEnv eq
+> etaExpand m eqs = return eqs
+
+> etaEquation :: ModuleIdent -> ValueEnv -> Equation Type
+>             -> SimplifyState [Equation Type]
+> etaEquation m tyEnv (Equation p1 (FunLhs f ts) (SimpleRhs p2 e _))
+>   | all isVariablePattern ts && isNonExpansive tyEnv 0 e && not (null tys) =
+>       do
+>         vs <- mapM (freshVar m etaId) tys
+>         updateSt_ (changeArity m f (length ts + length tys))
+>         return [Equation p1 (FunLhs f (ts ++ map (uncurry VariablePattern) vs))
+>                          (SimpleRhs p2 (etaApply e (map (uncurry mkVar) vs)) [])]
+>   | otherwise = return [Equation p1 (FunLhs f ts) (SimpleRhs p2 e [])]
+>   where ty = typeOf e
+>         tys = take (exprArity tyEnv e) (arrowArgs ty)
+>         etaId n = mkIdent ("_#eta" ++ show n)
+>         etaApply (Let ds e) es = Let ds (etaApply e es)
+>         etaApply e es = apply e es
+
+> isNonExpansive :: ValueEnv -> Int -> Expression a -> Bool
+> isNonExpansive _ _ (Literal _ _) = True
+> isNonExpansive tyEnv n (Variable _ x)
+>   | not (isQualified x) = n == 0 || n < arity x tyEnv
+>   | otherwise = n < arity x tyEnv
+> isNonExpansive _ _ (Constructor _ _) = True
+> isNonExpansive tyEnv n (Apply e1 e2) =
+>   isNonExpansive tyEnv (n + 1) e1 && isNonExpansive tyEnv 0 e2
+> isNonExpansive tyEnv n (Let ds e) =
+>   all (isNonExpansiveDecl tyEnv) ds && isNonExpansive tyEnv n e
+> isNonExpansive tyEnv n (Case _ _) = False
+
+> isNonExpansiveDecl :: ValueEnv -> Decl a -> Bool
+> isNonExpansiveDecl _ (FunctionDecl _ _ _) = True
+> isNonExpansiveDecl _ (ForeignDecl _ _ _ _ _) = True
+> isNonExpansiveDecl tyEnv (PatternDecl _ _ (SimpleRhs _ e _)) =
+>   isNonExpansive tyEnv 0 e
+> isNonExpansiveDecl _ (FreeDecl _ _) = False
+
+> exprArity :: ValueEnv -> Expression a -> Int
+> exprArity _ (Literal _ _) = 0
+> exprArity tyEnv (Variable _ x) = arity x tyEnv
+> exprArity tyEnv (Constructor _ c) = arity c tyEnv
+> exprArity tyEnv (Apply e _) = exprArity tyEnv e - 1
+> exprArity tyEnv (Let _ e) = exprArity tyEnv e
+> exprArity _ (Case _ _) = 0
+
+\end{verbatim}
+After simplifying the right hand sides of all equations of a function
+and $\eta$-expanding the definition if possible, the compiler finally
 transforms declarations of the form
 \begin{quote}\tt
   $f\;t_1\dots t_{k}\;x_{k+1}\dots x_{n}$ =
@@ -132,19 +252,18 @@ because it would require representing pattern matching code explicitly
 in Curry expressions.
 \begin{verbatim}
 
-> simplifyEquation :: ModuleIdent -> InlineEnv -> Equation Type
->                  -> SimplifyState [Equation Type]
-> simplifyEquation m env (Equation p lhs rhs) =
+> inlineBodies :: ModuleIdent -> [Equation Type]
+>              -> SimplifyState [Equation Type]
+> inlineBodies m eqs =
 >   do
->     rhs' <- simplifyRhs m env rhs
 >     tyEnv <- fetchSt
 >     trEnv <- liftSt envRt
->     return (inlineFun m tyEnv trEnv p lhs rhs')
+>     return (concatMap (inlineBody m tyEnv trEnv) eqs)
 
-> inlineFun :: ModuleIdent -> ValueEnv -> TrustEnv -> Position -> Lhs Type
->           -> Rhs Type -> [Equation Type]
-> inlineFun m tyEnv trEnv p (FunLhs f ts)
->           (SimpleRhs _ (Let [FunctionDecl _ g eqs'] e) _)
+> inlineBody :: ModuleIdent -> ValueEnv -> TrustEnv -> Equation Type
+>            -> [Equation Type]
+> inlineBody m tyEnv trEnv
+>     (Equation p (FunLhs f ts) (SimpleRhs _ (Let [FunctionDecl _ g eqs'] e) _))
 >   | g `notElem` qfv m eqs' && e' == Variable (typeOf e') (qualify g) &&
 >     n == arity (qualify g) tyEnv && trustedFun trEnv g =
 >     map (merge p f ts' vs') eqs'
@@ -155,14 +274,7 @@ in Curry expressions.
 >         etaReduce n vs (VariablePattern _ v : ts) (Apply e (Variable _ v'))
 >           | qualify v == v' = etaReduce (n+1) (v:vs) ts e
 >         etaReduce n vs ts e = (n,vs,reverse ts,e)
-> inlineFun _ _ _ p lhs rhs = [Equation p lhs rhs]
-
-> simplifyRhs :: ModuleIdent -> InlineEnv -> Rhs Type
->             -> SimplifyState (Rhs Type)
-> simplifyRhs m env (SimpleRhs p e _) =
->   do
->     e' <- simplifyApp m p e [] >>= simplifyExpr m env
->     return (SimpleRhs p e' [])
+> inlineBody _ _ _ eq = [eq]
 
 \end{verbatim}
 Before other optimizations are applied to expressions, the simplifier
@@ -523,5 +635,9 @@ Auxiliary functions
 > funDecl :: Position -> Ident -> [ConstrTerm a] -> Expression a -> Decl a
 > funDecl p f ts e =
 >   FunctionDecl p f [Equation p (FunLhs f ts) (SimpleRhs p e [])]
+
+> isVariablePattern :: ConstrTerm a -> Bool
+> isVariablePattern (VariablePattern _ _) = True
+> isVariablePattern _ = False
 
 \end{verbatim}

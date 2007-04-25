@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2173 2007-04-25 19:03:57Z wlux $
+% $Id: DictTrans.lhs 2175 2007-04-25 23:40:53Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -809,6 +809,10 @@ newtypes lazily.
 > match1 nEnv (TypeArrow ty11 ty12) (TypeApply ty21 ty22) sigma =
 >   match nEnv (TypeApply (TypeConstructor qArrowId) ty11) ty21 sigma >>=
 >   match nEnv ty12 ty22
+> match1 _ ty1 (TypeConstrained (ty2:_) tv2) sigma
+>   | ty1 == ty2 = Just (bindSubst tv2 ty1 sigma)
+> match1 _ (TypeConstrained (ty1:_) tv1) ty2 sigma
+>   | ty1 == ty2 = Just (bindSubst tv1 ty2 sigma)
 > match1 _ ty1 ty2 sigma = Nothing
 
 > splits :: [a] -> [([a],[a])]

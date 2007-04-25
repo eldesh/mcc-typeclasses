@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2171 2007-04-24 21:53:08Z wlux $
+% $Id: Imports.lhs 2173 2007-04-25 19:03:57Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -194,8 +194,7 @@ following functions.
 
 > classMethod :: ModuleIdent -> QualIdent -> Ident -> IMethodDecl -> I ValueInfo
 > classMethod m cls tv (IMethodDecl _ f ty) =
->   (f,Value (qualifyLike cls f) (arrowArity (rawType ty')) ty')
->   where ty' = typeScheme (toMethodType m cls tv ty)
+>   (f,Value (qualifyLike cls f) 0 (typeScheme (toMethodType m cls tv ty)))
 
 > qual :: QualIdent -> a -> [I a] -> [I a]
 > qual x y = ((unqualify x,y) :)

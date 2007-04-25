@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2171 2007-04-24 21:53:08Z wlux $
+% $Id: DictTrans.lhs 2173 2007-04-25 19:03:57Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -78,46 +78,25 @@ from a dictionary.
 >                 -> (TCEnv,ValueEnv,Module Type)
 > dictTransModule tcEnv iEnv tyEnv (Module m es is ds) =
 >   run (do
->          dss <- mapM (liftDecls m tcEnv tyEnv') ds
+>          ds' <- mapM (dictTrans m tcEnv' nEnv iEnv tyEnv' emptyEnv)
+>                      (concatMap (liftDecls tcEnv tyEnv') ds)
+>          dss <- mapM (methodStubs m tcEnv' tyEnv') ds
 >          tyEnv'' <- fetchSt
->          updateSt_ (rebindFuns tcEnv')
->          ds' <-
->            mapM (dictTrans m tcEnv' nEnv iEnv tyEnv'' emptyEnv) (concat dss)
->          dss' <- mapM (methodStubs m tcEnv' tyEnv'') ds
->          tyEnv''' <- fetchSt
->          return (tcEnv',tyEnv''',Module m es is (ds' ++ concat dss')))
->       tyEnv'
+>          return (tcEnv',tyEnv'',Module m es is (ds' ++ concat dss)))
+>       (rebindFuns tcEnv' tyEnv')
 >   where tcEnv' = bindDictTypes m tcEnv
 >         tyEnv' = bindClassDecls m tcEnv' (bindInstDecls tcEnv' iEnv tyEnv)
 >         nEnv = newtypeEnv tyEnv
 
-
-> liftDecls :: ModuleIdent -> TCEnv -> ValueEnv -> TopDecl Type
->           -> DictState [TopDecl Type]
-> liftDecls _ _ _ (DataDecl p _ tc tvs cs _) =
->   return [DataDecl p [] tc tvs cs []]
-> liftDecls _ _ _ (NewtypeDecl p _ tc tvs nc _) =
->   return [NewtypeDecl p [] tc tvs nc []]
-> liftDecls _ _ _ (TypeDecl p tc tvs ty) = return [TypeDecl p tc tvs ty]
-> liftDecls m tcEnv tyEnv (ClassDecl p _ cls tv ds) =
->   mapM (etaExpand m tyEnv) (classDecls tcEnv tyEnv p cls tv ds)
-> liftDecls m tcEnv tyEnv (InstanceDecl p cx cls ty ds) =
->   mapM (etaExpand m tyEnv)
->        (instDecls tcEnv tyEnv p cls
->                   (expandPolyType tcEnv (QualTypeExpr cx ty)) ds)
-> liftDecls _ _ _ (BlockDecl d) = return [BlockDecl d]
-
-> etaExpand :: ModuleIdent -> ValueEnv -> TopDecl Type
->           -> DictState (TopDecl Type)
-> etaExpand m tyEnv (BlockDecl (FunctionDecl p f eqs)) =
->   do
->     vs <- mapM (freshVar m "_#eta_") (drop (eqnArity (head eqs)) tys)
->     return (BlockDecl (FunctionDecl p f (map (expand vs) eqs)))
->   where tys = arrowArgs (rawType (varType f tyEnv))
->         expand vs (Equation p1 (FunLhs f ts) (SimpleRhs p2 e ds)) =
->           Equation p1 (FunLhs f (ts ++ map (uncurry VariablePattern) vs))
->                    (SimpleRhs p2 (apply e (map (uncurry mkVar) vs)) ds)
-> etaExpand m tyEnv d = return d
+> liftDecls :: TCEnv -> ValueEnv -> TopDecl Type -> [TopDecl Type]
+> liftDecls _ _ (DataDecl p _ tc tvs cs _) = [DataDecl p [] tc tvs cs []]
+> liftDecls _ _ (NewtypeDecl p _ tc tvs nc _) = [NewtypeDecl p [] tc tvs nc []]
+> liftDecls _ _ (TypeDecl p tc tvs ty) = [TypeDecl p tc tvs ty]
+> liftDecls tcEnv tyEnv (ClassDecl p _ cls tv ds) =
+>   classDecls tcEnv tyEnv p cls tv ds
+> liftDecls tcEnv tyEnv (InstanceDecl p cx cls ty ds) =
+>   instDecls tcEnv tyEnv p cls (expandPolyType tcEnv (QualTypeExpr cx ty)) ds
+> liftDecls _ _ (BlockDecl d) = [BlockDecl d]
 
 \end{verbatim}
 Besides the source code definitions, the compiler must also transform
@@ -223,17 +202,18 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 > bindClassEntities :: ModuleIdent -> TCEnv -> TypeInfo -> ValueEnv -> ValueEnv
 > bindClassEntities m tcEnv (TypeClass cls _ _ fs) tyEnv =
 >   foldr ($) tyEnv
->         (zipWith3 (bindClassEntity m)
+>         (zipWith4 (bindClassEntity m)
 >                   (DataConstructor : repeat Value)
 >                   (qDictConstrId cls : qDefaultMethodIds cls)
->                   (polyType (classDictType tcEnv tyEnv cls fs) :
->                    map (classMethodType tyEnv cls) fs))
+>                   (arrowArity (rawType ty) : repeat 0)
+>                   (ty : map (classMethodType tyEnv cls) fs))
+>   where ty = polyType (classDictType tcEnv tyEnv cls fs)
 > bindClassEntities _ _ _ tyEnv = tyEnv
 
 > bindClassEntity :: ModuleIdent
 >                 -> (QualIdent -> Int -> TypeScheme -> ValueInfo)
->                 -> QualIdent -> TypeScheme -> ValueEnv -> ValueEnv
-> bindClassEntity m f x ty = bindEntity m x (f x (arrowArity (rawType ty)) ty)
+>                 -> QualIdent -> Int -> TypeScheme -> ValueEnv -> ValueEnv
+> bindClassEntity m f x n ty = bindEntity m x (f x n ty)
 
 > classDecls :: TCEnv -> ValueEnv -> Position -> Ident -> Ident
 >            -> [MethodDecl Type] -> [TopDecl Type]
@@ -349,6 +329,27 @@ dictionary transformation and therefore the stub function has three
 arguments rather than one. This is necessary because the compiler may
 not always be able to distinguish class methods from overloaded
 functions.
+
+Polymorphic methods with type class constraints add a little
+complication. For instance, consider the class
+\begin{verbatim}
+  class T a where
+    f :: Eq b => b -> a -> a
+\end{verbatim}
+Since \texttt{f} effectively has two dictionary arguments, the
+compiler will expect its method stub to be a binary function. However,
+the method stub must use only the first of these dictionaries in order
+to determine the instance method and pass on the second dictionary
+argument to the implementation method. Therefore, \texttt{f}'s method
+stub must be similar to
+\begin{verbatim}
+  f dict_T dict_Eq =
+    case dict_T of { _Dict_T f -> f dict_Eq }
+\end{verbatim}
+Obviously, each method stub must use its own list of dictionary
+arguments for the class constraints appearing in its method
+declaration. On the other hand, the dictionary arguments for the
+method's class can be shared among all method stubs of that class.
 \begin{verbatim}
 
 > methodStubs :: ModuleIdent -> TCEnv -> ValueEnv -> TopDecl a
@@ -356,12 +357,15 @@ functions.
 > methodStubs m tcEnv tyEnv (ClassDecl _ _ cls tv ds) =
 >   do
 >     us <- mapM (freshVar m "_#dict" . dictType) cx
+>     uss <- mapM (mapM (freshVar m "_#dict")) tyss
 >     vs <- mapM (freshVar m "_#method") tys
->     let ts = map (uncurry VariablePattern) us
->         es = zipWith (methodStubExpr (us!!n) (dictPattern ty cls' vs)) ps vs
->     tyEnv' <- fetchSt
->     mapM (etaExpand m tyEnv') (zipWith4 funDecl ps fs (repeat ts) es)
+>     let t = dictPattern ty cls' vs
+>         ts = map (uncurry VariablePattern) us
+>         tss = map ((ts ++) . map (uncurry VariablePattern)) uss
+>         es = zipWith3 (methodStubExpr (us!!n) t) ps vs uss
+>     return (zipWith4 funDecl ps fs tss es)
 >   where (tys,ty) = arrowUnapply (classDictType tcEnv tyEnv cls' (map Just fs))
+>         tyss = zipWith (methodDictTypes tyEnv) fs tys
 >         cls' = qualifyWith m cls
 >         tp = TypePred cls' (TypeVariable 0)
 >         cx = maxContext tcEnv [tp]
@@ -381,14 +385,20 @@ functions.
 > intfMethodDecl cls tv p f (QualTypeExpr cx ty) =
 >   IFunctionDecl p f Nothing (QualTypeExpr (ClassAssert cls tv [] : cx) ty)
 
+> methodDictTypes :: ValueEnv -> Ident -> Type -> [Type]
+> methodDictTypes tyEnv f ty =
+>   take (length tys - arrowArity (rawType (varType f tyEnv))) tys
+>   where tys = arrowArgs ty
+
 > dictPattern :: Type -> QualIdent -> [(Type,Ident)] -> ConstrTerm Type
 > dictPattern ty cls vs =
 >   ConstructorPattern ty (qDictConstrId cls) (map (uncurry VariablePattern) vs)
 
 > methodStubExpr :: (Type,Ident) -> ConstrTerm Type -> Position -> (Type,Ident)
->                -> Expression Type
-> methodStubExpr u t p v =
->   Case (uncurry mkVar u) [caseAlt p t (uncurry mkVar v)]
+>                -> [(Type,Ident)] -> Expression Type
+> methodStubExpr u t p v us =
+>   Case (uncurry mkVar u)
+>        [caseAlt p t (apply (uncurry mkVar v) (map (uncurry mkVar) us))]
 
 \end{verbatim}
 \paragraph{Instance Declarations}
@@ -445,9 +455,7 @@ of method $f_i$ in class $C$.
 
 > bindInstFun :: ModuleIdent -> Ident -> QualType -> ValueEnv -> ValueEnv
 > bindInstFun m f ty =
->   importTopEnv False m f
->                (Value (qualifyWith m f) (arrowArity (rawType ty')) ty')
->   where ty' = typeScheme ty
+>   importTopEnv False m f (Value (qualifyWith m f) 0 (typeScheme ty))
 
 > instDecls :: TCEnv -> ValueEnv -> Position -> QualIdent -> QualType
 >           -> [MethodDecl Type] -> [TopDecl Type] 

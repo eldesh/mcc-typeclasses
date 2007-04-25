@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2161 2007-04-22 14:48:33Z wlux $
+% $Id: TypeCheck.lhs 2173 2007-04-25 19:03:57Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -134,8 +134,7 @@ type synonyms occurring in their types are expanded.
 >   where ty' = expandMethodType tcEnv cls tv ty
 
 > bindMethod :: ModuleIdent -> TypeScheme -> Ident -> ValueEnv -> ValueEnv
-> bindMethod m ty f =
->   globalBindTopEnv m f (Value (qualifyWith m f) (arrowArity (rawType ty)) ty)
+> bindMethod m ty f = globalBindTopEnv m f (Value (qualifyWith m f) 0 ty)
 
 \end{verbatim}
 \paragraph{Type Signatures}

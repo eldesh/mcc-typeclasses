@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2173 2007-04-25 19:03:57Z wlux $
+% $Id: TypeCheck.lhs 2177 2007-04-27 16:42:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -165,30 +165,72 @@ types of all defined functions are generalized. The generalization
 step will also check that the type signatures given by the user match
 the inferred types.
 
-Since expressions can contain shared logical variables, one has to be
-careful when generalizing the types of local variables. For instance,
-if the types of local variables were always generalized, the unsound
-function
+The presence of unbound logical variables necessitates a monomorphism
+restriction that prohibits unsound functions like
 \begin{verbatim}
-  bug = x =:= 1 & x =:= 'a' where x = unknown
+  bug = x =:= 1 & x =:= 'a' where x free
 \end{verbatim}
-would be accepted because the type $\forall\alpha.\alpha$ would be
-assigned to \verb|x|.\footnote{The function \texttt{unknown = x where
-    x free} is defined in the Curry prelude and has type
-  $\forall\alpha.\alpha$.} In order to reject such unsound programs,
-the type checker does not generalize the types of local variables.
-Note that by this policy, some perfectly valid declarations like,
-e.g.,
+This declaration would be accepted by the type checker if \verb|x|'s
+type were generalized to $\forall\alpha.\alpha$. Curry's type system
+(cf.\ Sect.~4.2 of~\cite{Hanus:Report}) is presently defined for
+programs that have been transformed into a set of global, possibly
+mutually recursive function declarations, where local declarations are
+used only to introduce logical variables. Under this transformation,
+the types of all local variables are monomorphic because the
+Hindley-Milner type system does not generalize the types of
+lambda-bound variables and logical variables are required to be
+monomorphic by the existential rule of Curry's type system.
+
+While sound, Curry's present type system is overly restrictive. Some
+perfectly valid declarations like
 \begin{verbatim}
   ok = (1:nil, 'a':nil) where nil = []
 \end{verbatim}
-are rejected. This could be avoided by adopting ML's value
-restriction~\cite{WrightFelleisen94:TypeSoundness,
-  Garrigue04:ValueRestriction}. However, in contrast to ML, the
-distinction between expansive and non-expansive expressions cannot be
-purely syntactic in Curry because it is possible to define nullary
-functions at the top-level. An expression $f$ would be expansive if
-$f$ is a nullary function and non-expansive otherwise.
+are rejected by the compiler. A safe extension of Curry's type system
+would allow polymorphic generalization for variables that are bound to
+expressions containing no free variables. Yet, identifying ground
+terms in general requires a complex semantic analysis and therefore
+should not be a prerequisite for type checking. A good compromise is
+to allow polymorphic generalization for variables that are bound to
+expressions for which the compiler can easily prove that they do not
+contain free variables. The distinction between expansive and
+non-expansive expressions comes to help here, which is used by ML-like
+languages in order to ensure type soundness in the presence of
+imperative effects~\cite{WrightFelleisen94:TypeSoundness}. In Curry, a
+non-expansive expression is either
+\begin{itemize}\label{non-expansive}
+\item a literal,
+\item a variable,
+\item an application of a constructor with arity $n$ to at most $n$
+  non-expansive expressions,
+\item an application of a function with arity $n$ to at most $n-1$
+  non-expansive expressions, or
+\item a let expression whose body is a non-expansive expression and
+  whose local declarations are either function declarations or
+  variable declarations of the form \texttt{$x$=$e$} where $e$ is a
+  non-expansive expression, or
+\item an expression whose desugared form is one of the above.
+\end{itemize}
+At first it may seem strange that variables are included in the list
+above because a variable may be bound to a logical variable. However,
+this is no problem because type variables that are present among the
+typing assumptions of the environment enclosing a let expression
+cannot be generalized.
+
+Recently, Garrigue has shown that ML's value restriction can be lifted
+a bit and that generalizing type variables that appear only in
+covariant positions is sound~\cite{Garrigue04:ValueRestriction}.
+Obviously, this generalization does not hold for Curry with
+\texttt{let x = unknown in x} being the canonical counter-example.
+
+While generalizing the types of variables bound to a non-expansive
+expression, we must be careful not to quantify any type variables
+with type class constraints. The technical reason for this
+restriction, which is just Haskell's monomorphism restriction
+(cf.\ Sect.~4.5.5 of~\cite{PeytonJones03:Haskell}), is that only a
+single dictionary can be used for each overloaded type variable on the
+right hand side of a pattern declaration. As in Haskell, this
+restriction can be overridden with an explicit type signature.
 
 Within a group of mutually recursive declarations, all type variables
 that appear in the types of the variables defined in the group must
@@ -244,14 +286,21 @@ general than the type signature.
 >     (cx',ds') <- mapAccumM (tcDecl m tcEnv) cx ds
 >     tyEnv <- fetchSt
 >     theta <- liftSt fetchSt
->     let tvss = map (typeVars . subst theta . flip varType tyEnv) vs
->         fvs = foldr addToSet (fvEnv (subst theta tyEnv0)) (concat tvss)
+>     let vs = [v | PatternDecl _ t rhs <- ds,
+>                   not (isVariablePattern t && isNonExpansive tcEnv tyEnv rhs),
+>                   v <- bv t]
+>         vs' = [v | PatternDecl _ (VariablePattern _ v) rhs <- ds,
+>                    isNonExpansive tcEnv tyEnv rhs]
+>         tvs = concatMap (typeVars . subst theta . flip varType tyEnv) vs
+>         tvs' = concatMap (typeVars . subst theta . flip varType tyEnv) vs'
+>         cvs = concatMap (\(TypePred _ ty) -> typeVars ty) cx'
+>         fvs = foldr addToSet (fvEnv (subst theta tyEnv0))
+>                     (tvs ++ filter (`elem` cvs) tvs')
 >         (gcx,lcx) = splitContext fvs cx'
 >     ds'' <- mapM (uncurry3 (dfltDecl tcEnv) . mergeContext lcx theta) ds'
->     mapM_ (uncurry3 (\cx -> genDecl m tcEnv sigs . gen fvs cx)) ds''
->     return (gcx,map thd3 ds'')
->   where vs = [v | PatternDecl _ t _ <- ds, v <- bv t]
->         mergeContext cx1 theta (cx2,ty,d) = (cx1 ++ cx2,subst theta ty,d)
+>     ds''' <- mapM (uncurry3 (genDecl m tcEnv tyEnv sigs fvs)) ds''
+>     return (gcx,ds''')
+>   where mergeContext cx1 theta (cx2,ty,d) = (cx1 ++ cx2,subst theta ty,d)
 
 > bindDecl :: ModuleIdent -> TCEnv -> SigEnv -> Decl a -> TcState ()
 > bindDecl m tcEnv sigs (FunctionDecl p f eqs) =
@@ -262,18 +311,21 @@ general than the type signature.
 >       replicateM (n + 1) freshTypeVar >>=
 >       updateSt_ . bindFun m f n . monoType . foldr1 TypeArrow
 >   where n = eqnArity (head eqs)
-> bindDecl m tcEnv sigs (PatternDecl p t _) = bindDeclVars m tcEnv sigs p (bv t)
+> bindDecl m tcEnv sigs (PatternDecl p t _) =
+>   case t of
+>     VariablePattern _ v -> bindDeclVar True m tcEnv sigs p v
+>     _ -> bindDeclVars m tcEnv sigs p (bv t)
 
 > bindDeclVars :: ModuleIdent -> TCEnv -> SigEnv -> Position -> [Ident]
 >              -> TcState ()
-> bindDeclVars m tcEnv sigs p = mapM_ (bindDeclVar m tcEnv sigs p)
+> bindDeclVars m tcEnv sigs p = mapM_ (bindDeclVar False m tcEnv sigs p)
 
-> bindDeclVar :: ModuleIdent -> TCEnv -> SigEnv -> Position -> Ident
+> bindDeclVar :: Bool -> ModuleIdent -> TCEnv -> SigEnv -> Position -> Ident
 >             -> TcState ()
-> bindDeclVar m tcEnv sigs p v =
+> bindDeclVar poly m tcEnv sigs p v =
 >   case lookupEnv v sigs of
 >     Just ty
->       | null (fv ty) ->
+>       | poly || null (fv ty) ->
 >           updateSt_ (bindFun m v 0 (typeScheme (expandPolyType tcEnv ty)))
 >       | otherwise -> errorAt p (polymorphicVar v)
 >     Nothing -> bindLambdaVar m v
@@ -442,26 +494,117 @@ be more specific. Therefore, if the inferred type does not match the
 type signature, the declared type must be too general. Note that it is
 possible that the inferred context is only a subset of the declared
 context because the context of a function's type signature is
-(deliberately) ignored in \texttt{tcFunctionDecl} above. No check is
-necessary for the variables in variable and other pattern declarations
-because the types of variables must be monomorphic, which is checked
-in \texttt{bindDeclVar} above.
+(deliberately) ignored in \texttt{tcFunctionDecl} above.
+
+As in Haskell, the restriction that the of constrained type variables
+in the type of a variable declaration \texttt{$x$=$e$} cannot be
+generalized, can be overridden with an explicit type signature.
+However, this also means that the result of expression $e$ can no
+longer be shared among the different occurrences of variable $x$,
+i.e., the declaration \texttt{$x$=$e$} must be interpreted as a
+(nullary) function definition. The variable declaration case of
+\texttt{genDecl} takes care of this.
+
+Note that the transformation of a variable declaration into a nullary
+function declaration breaks the invariant that nullary functions can
+be defined only at the top-level. However, keep in mind that this can
+happen only if the variable declaration's right hand side is
+non-expansive and that for a non-expansive expression is does not
+matter whether it its evaluation is shared or not.
+
+\ToDo{Strictly speaking this is not true for numeric literals, which
+  are just abbreviations for \texttt{Prelude.fromInt}~$i$ and
+  \texttt{Prelude.fromFloat}~$f$, respectively. Therefore, the
+  compiler should either consider numeric literals expansive or ensure
+  that the \texttt{fromInt} and \texttt{fromFloat} instance method
+  definitions are deterministic.}
 \begin{verbatim}
 
-> genDecl :: ModuleIdent -> TCEnv -> SigEnv -> TypeScheme -> Decl a
->         -> TcState ()
-> genDecl m tcEnv sigs sigma (FunctionDecl p f eqs) =
+> genDecl :: ModuleIdent -> TCEnv -> ValueEnv -> SigEnv -> Set Int -> Context
+>         -> Type -> Decl a -> TcState (Decl a)
+> genDecl m tcEnv _ sigs fvs cx ty d@(FunctionDecl p f eqs) =
 >   case lookupEnv f sigs of
 >     Just sigTy
->       | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma -> return ()
+>       | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma -> return d
 >       | otherwise -> errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
->     Nothing -> updateSt_ (rebindFun m f (eqnArity (head eqs)) sigma)
+>     Nothing ->
+>       updateSt_ (rebindFun m f (eqnArity (head eqs)) sigma) >> return d
 >   where what = text "Function:" <+> ppIdent f
-> genDecl _ _ _ _ (PatternDecl _ _ _) = return ()
+>         sigma = gen fvs cx ty
+> genDecl m tcEnv tyEnv sigs fvs cx ty d@(PatternDecl p t rhs) =
+>   case t of
+>     VariablePattern _ v ->
+>       case lookupEnv v sigs of
+>         Just sigTy
+>           | sigma == typeScheme (expandPolyType tcEnv sigTy) ->
+>               return (if null cx then d else funDecl p v rhs)
+>           | otherwise -> errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
+>           where funDecl p f rhs =
+>                   FunctionDecl p f [Equation p (FunLhs f []) rhs]
+>         Nothing
+>           | poly -> updateSt_ (rebindFun m v 0 sigma) >> return d
+>           | otherwise -> return d
+>       where what = text "Variable: " <+> ppIdent v
+>             poly = isNonExpansive tcEnv tyEnv rhs
+>             sigma = if poly then gen fvs cx ty else monoType ty
+>     _ -> return d
 
 > checkTypeSig :: TCEnv -> QualType -> TypeScheme -> Bool
 > checkTypeSig tcEnv (QualType sigCx sigTy) (ForAll _ (QualType cx ty)) =
 >   ty == sigTy && all (`elem` maxContext tcEnv sigCx) cx
+
+> class Binding a where
+>   isNonExpansive :: TCEnv -> ValueEnv -> a -> Bool
+
+> instance Binding a => Binding [a] where
+>   isNonExpansive tcEnv tyEnv = all (isNonExpansive tcEnv tyEnv)
+
+> instance Binding (Decl a) where
+>   isNonExpansive _ _ (InfixDecl _ _ _ _) = True
+>   isNonExpansive _ _ (TypeSig _ _ _) = True
+>   isNonExpansive _ _ (FunctionDecl _ _ (eq:eqs)) = eqnArity eq > 0
+>   isNonExpansive tcEnv _ (ForeignDecl _ _ _ _ ty) =
+>     arrowArity (rawType ty') > 0
+>     where ty' = typeScheme (expandPolyType tcEnv (QualTypeExpr [] ty))
+>   isNonExpansive tcEnv tyEnv (PatternDecl _ t rhs) =
+>     isVariablePattern t && isNonExpansive tcEnv tyEnv rhs
+>   isNonExpansive _ _ (FreeDecl _ _) = False
+>   isNonExpansive _ _ (TrustAnnot _ _ _) = True
+
+> instance Binding (Rhs a) where
+>   isNonExpansive tcEnv tyEnv (SimpleRhs _ e ds) =
+>     isNonExpansive tcEnv tyEnv ds && isNonExpansive tcEnv tyEnv e
+>   isNonExpansive _ _ (GuardedRhs _ _) = False
+
+> instance Binding (Expression a) where
+>   isNonExpansive tcEnv tyEnv = isNonExpansiveApp tcEnv tyEnv 0
+
+> isNonExpansiveApp :: TCEnv -> ValueEnv -> Int -> (Expression a) -> Bool
+> isNonExpansiveApp _ _ _ (Literal _ _) = True
+> isNonExpansiveApp _ tyEnv n (Variable _ v)
+>   | isRenamed (unqualify v) = n == 0 || n < arity v tyEnv
+>   | otherwise = n < arity v tyEnv
+> isNonExpansiveApp _ _ _ (Constructor _ _) = True
+> isNonExpansiveApp tcEnv tyEnv n (Paren e) =
+>   isNonExpansiveApp tcEnv tyEnv n e
+> isNonExpansiveApp tcEnv tyEnv n (Typed e _) =
+>   isNonExpansiveApp tcEnv tyEnv n e
+> isNonExpansiveApp tcEnv tyEnv _ (Tuple es) =
+>   isNonExpansive tcEnv tyEnv es
+> isNonExpansiveApp tcEnv tyEnv _ (List _ es) =
+>   isNonExpansive tcEnv tyEnv es
+> isNonExpansiveApp tcEnv tyEnv n (Apply f e) =
+>   isNonExpansive tcEnv tyEnv e && isNonExpansiveApp tcEnv tyEnv (n + 1) f
+> isNonExpansiveApp tcEnv tyEnv n (InfixApply e1 op e2) =
+>   isNonExpansiveApp tcEnv tyEnv (n + 2) (infixOp op) &&
+>   isNonExpansive tcEnv tyEnv e1 && isNonExpansive tcEnv tyEnv e2
+> isNonExpansiveApp tcEnv tyEnv n (LeftSection e op) =
+>   isNonExpansiveApp tcEnv tyEnv (n + 1) (infixOp op) &&
+>   isNonExpansive tcEnv tyEnv e
+> isNonExpansiveApp _ _ n (Lambda ts _) = n < length ts
+> isNonExpansiveApp tcEnv tyEnv n (Let ds e) =
+>   isNonExpansive tcEnv tyEnv ds && isNonExpansiveApp tcEnv tyEnv n e
+> isNonExpansiveApp _ _ _ _ = False
 
 \end{verbatim}
 \paragraph{Class and instance declarations}
@@ -1374,6 +1517,13 @@ latter is given by \texttt{gen}'s first argument.
 
 \end{verbatim}
 \paragraph{Auxiliary Functions}
+\begin{verbatim}
+
+> isVariablePattern :: ConstrTerm a -> Bool
+> isVariablePattern (VariablePattern _ _) = True
+> isVariablePattern _ = False
+
+\end{verbatim}
 The functions \texttt{fvEnv} and \texttt{fsEnv} compute the set of
 free type variables and free skolems of a type environment,
 respectively. We ignore the types of data and newtype constructors

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2172 2007-04-25 09:12:53Z wlux $
+% $Id: Desugar.lhs 2177 2007-04-27 16:42:08Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -241,10 +241,16 @@ further declarations to the group that must be desugared as well.
 
 > desugarDeclLhs :: ModuleIdent -> Decl Type -> DesugarState [Decl Type]
 > desugarDeclLhs m (PatternDecl p t rhs) =
->   do
->     (ds',t') <- desugarTerm m p [] t
->     dss' <- mapM (desugarDeclLhs m) ds'
->     return (PatternDecl p t' rhs : concat dss')
+>   case (t,rhs) of
+>     (VariablePattern _ f,SimpleRhs _ e@(Lambda _ _) ds) ->
+>       do
+>         dss' <- mapM (desugarDeclLhs m) ds
+>         return (funDecl p f [] e : concat dss')
+>     _ ->
+>         do
+>           (ds',t') <- desugarTerm m p [] t
+>           dss' <- mapM (desugarDeclLhs m) ds'
+>           return (PatternDecl p t' rhs : concat dss')
 > desugarDeclLhs _ d = return [d]
 
 \end{verbatim}

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2174 2007-04-25 23:36:53Z wlux $
+% $Id: Simplify.lhs 2177 2007-04-27 16:42:08Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -116,9 +116,12 @@ Obviously, $\eta$-expansion of an equation \texttt{$f\,t_1\dots t_n$ =
   $e$} is safe if the two expressions \texttt{($f\,x_1\dots x_n$,
   $f\,x_1\dots x_n$)} and \texttt{let a = $f\,x_1\dots x_n$ in (a,a)}
 are equivalent. In order to find a safe approximation of definitions
-for which this property holds, we introduce the distinction between
-expansive and non-expansive expressions. An expression is
-non-expansive if it is either
+for which this property holds, the distinction between expansive and
+non-expansive expressions is useful again, which was introduced in
+order to identify let-bound variables for which polymorphic
+generalization is safe (see p.~\pageref{non-expansive} in
+Sect.~\ref{non-expansive}). An expression is non-expansive if it is
+either
 \begin{itemize}
 \item a literal,
 \item a variable,
@@ -128,7 +131,7 @@ non-expansive if it is either
   non-expansive expressions, or
 \item a let expression whose body is a non-expansive expression and
   whose local declarations are either function declarations or
-  variable declarations of the form \texttt{$v$=$e$} where $e$ is a
+  variable declarations of the form \texttt{$x$=$e$} where $e$ is a
   non-expansive expression.
 \end{itemize}
 A function definition then can be $\eta$-expanded safely if it has
@@ -339,8 +342,12 @@ functions in later phases of the compiler.
 > simplifyExpr _ _ (Literal ty l) = return (Literal ty l)
 > simplifyExpr m env (Variable ty v)
 >   | isQualified v = return (Variable ty v)
->   | otherwise = maybe (return (Variable ty v)) (simplifyExpr m env)
+>   | otherwise = maybe (return (Variable ty v))
+>                       (simplifyExpr m env . fixType ty)
 >                       (lookupEnv (unqualify v) env)
+>   where fixType ty (Literal _ l) = Literal ty l
+>         fixType ty (Variable _ v) = Variable ty v
+>         fixType ty (Constructor _ c) = Constructor ty c
 > simplifyExpr _ _ (Constructor ty c) = return (Constructor ty c)
 > simplifyExpr m env (Apply e1 e2) =
 >   do

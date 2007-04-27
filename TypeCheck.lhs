@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2177 2007-04-27 16:42:08Z wlux $
+% $Id: TypeCheck.lhs 2178 2007-04-27 16:48:58Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -293,9 +293,8 @@ general than the type signature.
 >                    isNonExpansive tcEnv tyEnv rhs]
 >         tvs = concatMap (typeVars . subst theta . flip varType tyEnv) vs
 >         tvs' = concatMap (typeVars . subst theta . flip varType tyEnv) vs'
->         cvs = concatMap (\(TypePred _ ty) -> typeVars ty) cx'
 >         fvs = foldr addToSet (fvEnv (subst theta tyEnv0))
->                     (tvs ++ filter (`elem` cvs) tvs')
+>                     (tvs ++ filter (`elem` concatMap typeVars cx') tvs')
 >         (gcx,lcx) = splitContext fvs cx'
 >     ds'' <- mapM (uncurry3 (dfltDecl tcEnv) . mergeContext lcx theta) ds'
 >     ds''' <- mapM (uncurry3 (genDecl m tcEnv tyEnv sigs fvs)) ds''
@@ -1395,8 +1394,7 @@ Haskell'98 report~\cite{PeytonJones03:Haskell}).
 >                            tv `notElemSet` fvs, isNumClass tcEnv cls])
 >         cx' = fst (partitionContext (subst theta cx))
 >         ty' = subst theta ty
->         tvs' = nub [tv | TypePred _ ty <- cx', tv <- typeVars ty,
->                          tv `notElemSet` fvs]
+>         tvs' = nub (filter (`notElemSet` fvs) (concatMap typeVars cx'))
 >     unless (null tvs') (errorAt p (ambiguousType what doc tcEnv tvs' cx' ty'))
 >     liftSt (updateSt_ (compose theta))
 >     return cx'
@@ -1425,8 +1423,7 @@ elements of a given set of type variables.
 \begin{verbatim}
 
 > splitContext :: Set Int -> Context -> (Context,Context)
-> splitContext fvs =
->   partition (\(TypePred _ ty) -> all (`elemSet` fvs) (typeVars ty))
+> splitContext fvs = partition (all (`elemSet` fvs) . typeVars)
 
 \end{verbatim}
 For each function declaration, the type checker ensures that no skolem
@@ -1440,8 +1437,7 @@ escaping skolems at every let binding, but is still sound.
 > checkSkolems p tcEnv what fs cx ty =
 >   do
 >     ty' <- liftM (flip subst ty) (liftSt fetchSt)
->     let tvs = concatMap typeSkolems (ty' : [ty | TypePred _ ty <- cx])
->     unless (all (`elemSet` fs) tvs)
+>     unless (all (`elemSet` fs) (typeSkolems ty' ++ concatMap typeSkolems cx))
 >            (errorAt p (skolemEscapingScope tcEnv what (QualType cx ty')))
 
 \end{verbatim}

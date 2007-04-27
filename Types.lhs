@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 2093 2007-02-08 23:15:17Z wlux $
+% $Id: Types.lhs 2178 2007-04-27 16:48:58Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -202,6 +202,10 @@ only variables that are free in the type itself.
 > instance IsType QualType where
 >   typeVars (QualType _ ty) = typeVars ty
 >   typeSkolems (QualType _ ty) = typeSkolems ty
+
+> instance IsType TypePred where
+>   typeVars (TypePred _ ty) = typeVars ty
+>   typeSkolems (TypePred _ ty) = typeSkolems ty
 
 \end{verbatim}
 Type schemes $\forall\overline{\alpha} . \emph{cx} \Rightarrow \tau$

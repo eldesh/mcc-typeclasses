@@ -1,18 +1,17 @@
 % -*- LaTeX -*-
-% $Id: ILLift.lhs 1817 2005-11-06 23:42:07Z wlux $
+% $Id: ILLift.lhs 2185 2007-04-30 16:06:53Z wlux $
 %
-% Copyright (c) 2000-2005, Wolfgang Lux
+% Copyright (c) 2000-2006, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ILLift.lhs}
 \section{Normalization}
 Before the intermediate language code is translated into abstract
-machine code, all complex expressions in argument positions -- i.e.,
-everything which is not a constant, variable, function, or application
--- are lifted into global functions.
+machine code, all case and or expressions occurring in argument
+positions are lifted into global functions.
 \begin{verbatim}
 
-> module ILLift where
+> module ILLift(liftProg) where
 > import IL
 > import Ident
 > import Combined
@@ -25,18 +24,18 @@ everything which is not a constant, variable, function, or application
 
 > liftProg :: Module -> Module
 > liftProg (Module m is ds) =
->   Module m is (concat (runSt (mapM lift ds) nameSupply))
+>   Module m is (concat (runSt (mapM liftDecl ds) nameSupply))
 >   where nameSupply =
 >           [qualifyWith m (mkIdent ("_app#" ++ (show i))) | i <- [1..]]
 
-> lift :: Decl -> LiftState [Decl]
-> lift (DataDecl tc n cs) = return [DataDecl tc n cs]
-> lift (TypeDecl tc n ty) = return [TypeDecl tc n ty]
-> lift (FunctionDecl f vs ty e) =
+> liftDecl :: Decl -> LiftState [Decl]
+> liftDecl (DataDecl tc n cs) = return [DataDecl tc n cs]
+> liftDecl (TypeDecl tc n ty) = return [TypeDecl tc n ty]
+> liftDecl (FunctionDecl f vs ty e) =
 >   do
 >     (e',ds') <- liftExpr e
 >     return (FunctionDecl f vs ty e' : ds')
-> lift (ForeignDecl f cc ie ty) = return [ForeignDecl f cc ie ty]
+> liftDecl (ForeignDecl f cc ie ty) = return [ForeignDecl f cc ie ty]
 
 > liftExpr :: Expression -> LiftState (Expression,[Decl])
 > liftExpr (Literal l) = return (Literal l,[])
@@ -48,11 +47,11 @@ everything which is not a constant, variable, function, or application
 >     (f',ds) <- liftExpr f
 >     (e',ds') <- liftArg e
 >     return (Apply f' e',ds ++ ds')
-> liftExpr (Case ev e alts) =
+> liftExpr (Case ev e as) =
 >   do
 >     (e',ds) <- liftExpr e
->     (alts',ds') <- mapLift liftAlt alts
->     return (Case ev e' alts',ds ++ ds')
+>     (as',ds') <- mapLift liftAlt as
+>     return (Case ev e' as',ds ++ ds')
 > liftExpr (Or e1 e2) =
 >   do
 >     (e1',ds) <- liftExpr e1
@@ -83,13 +82,33 @@ everything which is not a constant, variable, function, or application
 >     (f',ds) <- liftArg f
 >     (e',ds') <- liftArg e
 >     return (Apply f' e',ds ++ ds')
-> liftArg e =
+> liftArg (Case ev e as) = lift (Case ev e as)
+> liftArg (Or e1 e2) = lift (Or e1 e2)
+> liftArg (Exist v e) =
+>   do
+>     (e',ds) <- liftArg e
+>     return (Exist v e',ds)
+> liftArg (Let b e) =
+>   do
+>     (b',ds) <- liftBinding b
+>     (e',ds') <- liftArg e
+>     return (Let b' e',ds ++ ds')
+> liftArg (Letrec bs e) =
+>   do
+>     (bs',ds) <- mapLift liftBinding bs
+>     (e',ds') <- liftArg e
+>     return (Letrec bs' e',ds ++ ds')
+
+> lift :: Expression -> LiftState (Expression,[Decl])
+> lift e =
 >   do
 >     f <- uniqueName
->     ds <- lift (FunctionDecl f fvs ty e)
->     return (foldl Apply (Function f (length fvs)) (map Variable fvs),ds)
+>     (e',ds') <- liftExpr e
+>     return (foldl Apply (Function f n) (map Variable fvs),
+>             FunctionDecl f fvs ty e' : ds')
 >   where fvs = nub (fv e)
->         ty = foldr1 TypeArrow $ map TypeVariable $ [0 .. length fvs]
+>         n = length fvs
+>         ty = foldr1 TypeArrow (map TypeVariable [0..n])
 
 \end{verbatim}
 \ToDo{The type of lifted functions is too general ($\forall
@@ -124,11 +143,7 @@ everything which is not a constant, variable, function, or application
 > fv (Function _ _) = []
 > fv (Constructor _ _) = []
 > fv (Apply f e) = fv f ++ fv e
-> fv (Case _ e alts) = fv e ++ concatMap fvAlt alts
->   where fvAlt (Alt t e) = filter (`notElem` bv t) (fv e)
->         bv (LiteralPattern _) = []
->         bv (ConstructorPattern _ vs) = vs
->         bv (VariablePattern v) = [v]
+> fv (Case _ e as) = fv e ++ concatMap fvAlt as
 > fv (Or e1 e2) = fv e1 ++ fv e2
 > fv (Exist v e) = filter (v /=) (fv e)
 > fv (Let (Binding v e1) e2) = fv e1 ++ filter (v /=) (fv e2)
@@ -136,18 +151,10 @@ everything which is not a constant, variable, function, or application
 >   filter (`notElem` bvs) ([v | Binding _ e <- bs, v <- fv e] ++ fv e)
 >   where bvs = [v | Binding v _ <- bs]
 
-> normalize :: Type -> Type
-> normalize ty = rename (nub (tv ty)) ty
->   where rename tvs (TypeConstructor c tys) =
->           TypeConstructor c (map (rename tvs) tys)
->         rename tvs (TypeVariable tv) =
->           TypeVariable (fromJust (elemIndex tv tvs))
->         rename tvs (TypeArrow ty1 ty2) =
->           TypeArrow (rename tvs ty1) (rename tvs ty2)
-
-> tv :: Type -> [Int]
-> tv (TypeConstructor _ tys) = concatMap tv tys
-> tv (TypeVariable tv) = [tv]
-> tv (TypeArrow ty1 ty2) = tv ty1 ++ tv ty2
+> fvAlt :: Alt -> [Ident]
+> fvAlt (Alt t e) = filter (`notElem` bv t) (fv e)
+>   where bv (LiteralPattern _) = []
+>         bv (ConstructorPattern _ vs) = vs
+>         bv (VariablePattern v) = [v]
 
 \end{verbatim}

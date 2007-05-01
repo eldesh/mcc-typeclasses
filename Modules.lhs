@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2186 2007-05-01 13:12:03Z wlux $
+% $Id: Modules.lhs 2188 2007-05-01 14:34:19Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -225,7 +225,7 @@ declaration to the module.
 
 > splitModule :: Module a -> [Module a]
 > splitModule (Module m es is ds) = [Module m es is [d] | d <- ds, isCodeDecl d]
->   where isCodeDecl (DataDecl _ _ _ _ _ _) = True
+>   where isCodeDecl (DataDecl _ _ _ _ cs _) = not (null cs)
 >         isCodeDecl (NewtypeDecl _ _ _ _ _ _) = True
 >         isCodeDecl (TypeDecl _ _ _ _) = False
 >         isCodeDecl (ClassDecl _ _ _ _ _) = True
@@ -272,7 +272,8 @@ compilation of a goal is similar to that of a module.
 > compileGoal opts g fns =
 >   do
 >     (mEnv,tcEnv,iEnv,tyEnv,_,g') <- loadGoal True paths cm ws g fns
->     let (vs,tyEnv',trEnv,m',dumps) = transGoal dbg tr tcEnv tyEnv m mainId g'
+>     let (vs,tyEnv',trEnv,m',dumps) =
+>           transGoal dbg tr tcEnv iEnv tyEnv m mainId g'
 >     liftErr $ mapM_ (doDump opts) dumps
 >     mEnv' <- importDebugPrelude paths dbg "" mEnv
 >     let (mEnv'',tyEnv'',m'',dumps) = dictTrans mEnv' tcEnv iEnv tyEnv' m'
@@ -368,10 +369,10 @@ compilation of a goal is similar to that of a module.
 >   caseCheckGoal caseMode g ++ unusedCheckGoal warn g ++
 >   shadowCheckGoal warn g ++ overlapCheckGoal warn g
 
-> transGoal :: Bool -> Trust -> TCEnv -> ValueEnv
+> transGoal :: Bool -> Trust -> TCEnv -> InstEnv -> ValueEnv
 >           -> ModuleIdent -> Ident -> Goal Type
 >           -> (Maybe [Ident],ValueEnv,TrustEnv,Module Type,[(Dump,Doc)])
-> transGoal debug tr tcEnv tyEnv m goalId g =
+> transGoal debug tr tcEnv iEnv tyEnv m goalId g =
 >   (vs,tyEnv'',trEnv,simplified,dumps)
 >   where trEnv
 >           | debug = bindEnv goalId Suspect (trustEnvGoal tr g)

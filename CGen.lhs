@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 1900 2006-04-19 17:44:40Z wlux $
+% $Id: CGen.lhs 2186 2007-05-01 13:12:03Z wlux $
 %
 % Copyright (c) 1998-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -8,7 +8,7 @@
 \section{Generating C Code}
 \begin{verbatim}
 
-> module CGen(genMain,genModule,genSplitModule) where
+> module CGen(genMain,genModule) where
 > import Cam
 > import CCode
 > import CPS
@@ -76,7 +76,7 @@ type declarations and code generated for the function definitions of
 the module. Code generation is complicated by a few special cases that
 need to be handled. In particular, the compiler must provide
 definitions for those tuples that are used in the module and for the
-functions \texttt{@}$_n$ that implement applications of a higher-order
+functions \texttt{@}$_n$ that implement applications of a higher order
 variable to $n$ arguments.\footnote{Only functions with $n\geq2$ are
 generated. Instead of \texttt{@}$_1$, the function \texttt{@}, which
 is implemented in the runtime system, is used.} These functions cannot
@@ -141,21 +141,6 @@ function because there is not much chance for them to be shared.
 > flexNodes sts = [node t | Switch Flex _ cs <- sts, Case t _ <- cs]
 >   where node (LitCase l) = Lit l
 >         node (ConstrCase c vs) = Constr c vs
-
-\end{verbatim}
-The function \texttt{genSplitModule} generates separate C files for
-each data type -- except abstract types, i.e., data types with an
-empty data constructor list -- and function defined in a module. This
-is used for building archive files from the standard library.
-\begin{verbatim}
-
-> genSplitModule :: [Decl] -> Module -> [CFile]
-> genSplitModule impDs cam =
->   [genModule ms' [DataDecl t vs cs] | (t,vs,cs) <- ds, not (null cs)] ++
->   [genModule (impDs ++ ds') [FunctionDecl f vs st] | (f,vs,st) <- fs]
->   where (ms,ds,fs) = splitCam cam
->         ms' = map ImportDecl ms
->         ds' = map (uncurry3 DataDecl) ds
 
 \end{verbatim}
 \subsection{Data Types and Constants}

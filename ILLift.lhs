@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ILLift.lhs 2185 2007-04-30 16:06:53Z wlux $
+% $Id: ILLift.lhs 2186 2007-05-01 13:12:03Z wlux $
 %
-% Copyright (c) 2000-2006, Wolfgang Lux
+% Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ILLift.lhs}
@@ -16,26 +16,22 @@ positions are lifted into global functions.
 > import Ident
 > import Combined
 > import List
-> import Maybe
 > import Monad
 > import Utils
 
 > type LiftState a = St [QualIdent] a
 
 > liftProg :: Module -> Module
-> liftProg (Module m is ds) =
->   Module m is (concat (runSt (mapM liftDecl ds) nameSupply))
->   where nameSupply =
->           [qualifyWith m (mkIdent ("_app#" ++ (show i))) | i <- [1..]]
+> liftProg (Module m is ds) = Module m is (concatMap liftDecl ds)
 
-> liftDecl :: Decl -> LiftState [Decl]
-> liftDecl (DataDecl tc n cs) = return [DataDecl tc n cs]
-> liftDecl (TypeDecl tc n ty) = return [TypeDecl tc n ty]
-> liftDecl (FunctionDecl f vs ty e) =
->   do
->     (e',ds') <- liftExpr e
->     return (FunctionDecl f vs ty e' : ds')
-> liftDecl (ForeignDecl f cc ie ty) = return [ForeignDecl f cc ie ty]
+> liftDecl :: Decl -> [Decl]
+> liftDecl (DataDecl tc n cs) = [DataDecl tc n cs]
+> liftDecl (TypeDecl tc n ty) = [TypeDecl tc n ty]
+> liftDecl (FunctionDecl f vs ty e) = FunctionDecl f vs ty e' : ds'
+>   where (e',ds') = runSt (liftExpr e) nameSupply
+>         nameSupply = map (qualifyLike f . appIdent (name (unqualify f))) [1..]
+>         appIdent f i = mkIdent (f ++ "._#app" ++ show i)
+> liftDecl (ForeignDecl f cc ie ty) = [ForeignDecl f cc ie ty]
 
 > liftExpr :: Expression -> LiftState (Expression,[Decl])
 > liftExpr (Literal l) = return (Literal l,[])

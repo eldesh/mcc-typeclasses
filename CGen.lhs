@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2186 2007-05-01 13:12:03Z wlux $
+% $Id: CGen.lhs 2187 2007-05-01 14:20:55Z wlux $
 %
-% Copyright (c) 1998-2006, Wolfgang Lux
+% Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CGen.lhs}
@@ -301,26 +301,26 @@ is generated.
 >   [instFunction CPrivate c n | (c,n) <- flexTuples] ++
 >   -- (private) @ functions
 >   [entryDecl CPrivate (apName n) | n <- [3..maxApArity]] ++
->   [evalDef CPrivate f n | f <- apClos, let n = apArity f, n > 2] ++
->   [lazyDef CPrivate f n | f <- apLazy, let n = apArity f, n > 2] ++
+>   concat [evalDef CPrivate f n | f <- apClos, let n = apArity f, n > 2] ++
+>   concat [lazyDef CPrivate f n | f <- apLazy, let n = apArity f, n > 2] ++
 >   concat [apFunction (apName n) n | n <- [3..maxApArity]] ++
 >   -- (private) auxiliary functions for partial applications of tuples
 >   map (entryDecl CPrivate) tuplePapp ++
->   [pappDef CPrivate f (tupleArity f) | f <- tuplePapp] ++
->   [fun0Def CPrivate f (tupleArity f) | f <- tupleFun0] ++
+>   concat [pappDef CPrivate f (tupleArity f) | f <- tuplePapp] ++
+>   concat [fun0Def CPrivate f (tupleArity f) | f <- tupleFun0] ++
 >   concat [conFunction CPrivate f (tupleArity f) | f <- tuplePapp] ++
 >   -- auxiliary functions for partial applications of data constructors
 >   map (entryDecl CPublic . fst) cs ++
->   concat [[pappDecl c,pappDef CPublic c n] | (c,n) <- cs, n > 0] ++
->   concat [[fun0Decl c,fun0Def CPublic c n] | (c,n) <- cs, n > 0] ++
+>   concat [pappDef CPublic c n | (c,n) <- cs, n > 0] ++
+>   concat [fun0Def CPublic c n | (c,n) <- cs, n > 0] ++
 >   concat [conFunction CPublic c n | (c,n) <- cs, n > 0] ++
 >   -- local function declarations
->   map (entryDecl CPublic . fst3) fs ++
->   concat [[pappDecl f,pappDef CPublic f n] | (f,n) <- fs', n > 0] ++
->   concat [[evalDecl f,evalDef CPublic f n] | (f,n) <- fs'] ++
->   concat [[lazyDecl f,lazyDef CPublic f n] | (f,n) <- fs'] ++
->   concat [[fun0Decl f,fun0Def CPublic f n] | (f,n) <- fs'] ++
->   concat [function CPublic f vs st | (f,vs,st) <- fs]
+>   [entryDecl (public f) f | (f,_,_) <- fs] ++
+>   concat [pappDef (public f) f n | (f,n) <- papp', n > 0] ++
+>   concat [evalDef (public f) f n | (f,n) <- clos'] ++
+>   concat [lazyDef (public f) f n | (f,n) <- lazy'] ++
+>   concat [fun0Def (public f) f n | (f,n) <- fun0'] ++
+>   concat [function (public f) f vs st | (f,vs,st) <- fs]
 >   where nonLocal = filter (`notElem` map fst3 fs)
 >         nonLocalData = filter (`notElem` map fst cs)
 >         (tuplePapp,papp) = partition isTuple (nub [f | Papp f _ <- ns])
@@ -333,14 +333,19 @@ is generated.
 >         maxApArity = maximum (0 : map apArity (apCall ++ apClos ++ apLazy))
 >         cs = [constr c | c <- concatMap thd3 ds]
 >         fs' = [(f,n) | (f,vs,_) <- fs, let n = length vs, (f,n) `notElem` cs]
->         closArities = nub (filter (> 2) (map apArity apClos) ++ arities)
->         lazyArities = nub (filter (> 2) (map apArity apLazy) ++ arities)
->         arities = map snd fs'
+>         papp' = filter (used papp . fst) fs'
+>         clos' = filter (used clos . fst) fs'
+>         lazy' = filter (used lazy . fst) fs'
+>         fun0' = filter (used fun0 . fst) fs'
+>         closArities = nub (filter (> 2) (map apArity apClos) ++ map snd clos')
+>         lazyArities = nub (filter (> 2) (map apArity apLazy) ++ map snd lazy')
 >         ts = [t | Switch Flex _ cs <- sts, Case t _ <- cs]
 >         flexLits = nub [l | LitCase l <- ts]
 >         (flexTuples,flexData) =
 >           partition (isTuple . fst)
 >                     (nub [(c,length vs) | ConstrCase c vs <- ts])
+>         used fs f = isPublic f || f `elem` fs
+>         public f = if isPublic f then CPublic else CPrivate
 
 > entryDecl :: CVisibility -> Name -> CTopDecl
 > entryDecl vb f = CFuncDecl vb (cName f)
@@ -369,20 +374,25 @@ is generated.
 > fun0Decl :: Name -> CTopDecl
 > fun0Decl f = CExternVarDecl (CConstType "struct closure_node") (constFunc f)
 
-> pappDef :: CVisibility -> Name -> Int -> CTopDecl
+> pappDef :: CVisibility -> Name -> Int -> [CTopDecl]
 > pappDef vb f n =
->   CArrayDef vb nodeInfoType (pappInfoTable f) [pappInfo f i n | i <- [0..n-1]]
+>   [pappDecl f | vb == CPublic] ++
+>   [CArrayDef vb nodeInfoType (pappInfoTable f)
+>              [pappInfo f i n | i <- [0..n-1]]]
 
-> evalDef :: CVisibility -> Name -> Int -> CTopDecl
-> evalDef vb f n = CVarDef vb nodeInfoType (nodeInfo f) (funInfo f n)
+> evalDef :: CVisibility -> Name -> Int -> [CTopDecl]
+> evalDef vb f n =
+>   [evalDecl f | vb == CPublic] ++
+>   [CVarDef vb nodeInfoType (nodeInfo f) (funInfo f n)]
 
-> lazyDef :: CVisibility -> Name -> Int -> CTopDecl
+> lazyDef :: CVisibility -> Name -> Int -> [CTopDecl]
 > lazyDef vb f n =
->   CppCondDecls (CExpr "!COPY_SEARCH_SPACE")
->     [CArrayDef vb nodeInfoType (lazyInfoTable f)
->                (map (CStruct . map CInit) [suspinfo,queuemeinfo,indirinfo])]
->     [CArrayDef vb nodeInfoType (lazyInfoTable f)
->                [CStruct (map CInit suspinfo)]]
+>   [lazyDecl f | vb == CPublic] ++
+>   [CppCondDecls (CExpr "!COPY_SEARCH_SPACE")
+>      [CArrayDef vb nodeInfoType (lazyInfoTable f)
+>                 (map (CStruct . map CInit) [suspinfo,queuemeinfo,indirinfo])]
+>      [CArrayDef vb nodeInfoType (lazyInfoTable f)
+>                 [CStruct (map CInit suspinfo)]]]
 >   where suspinfo =
 >           [CExpr "LAZY_KIND",CExpr "UPD_TAG",suspendNodeSize n,
 >            gcPointerTable,CString (undecorate (demangle f)),
@@ -394,10 +404,11 @@ is generated.
 >           [CExpr "INDIR_KIND",CInt 0,suspendNodeSize n,
 >            gcPointerTable,noName,CExpr "eval_indir",noEntry,notFinalized]
 
-> fun0Def :: CVisibility -> Name -> Int -> CTopDecl
+> fun0Def :: CVisibility -> Name -> Int -> [CTopDecl]
 > fun0Def vb f n =
->   CVarDef vb (CConstType "struct closure_node") (constFunc f)
->           (CStruct [CInit (info f n),CStruct [CInit CNull]])
+>   [fun0Decl f | vb == CPublic] ++
+>   [CVarDef vb (CConstType "struct closure_node") (constFunc f)
+>            (CStruct [CInit (info f n),CStruct [CInit CNull]])]
 >   where info f n
 >           | n == 0 = CAddr (CExpr (nodeInfo f))
 >           | otherwise = CExpr (pappInfoTable f)
@@ -1244,6 +1255,31 @@ unqualified name.
 >             (cs','#':cs'')
 >               | all isDigit cs'' -> cs'
 >               | otherwise -> cs' ++ '#' : dropSuffix cs''
+
+\end{verbatim}
+The function \texttt{isPublic} is a workaround for distinguishing
+private and exported functions without an explicit export list, which
+is not yet part of the abstract machine code syntax. This function
+uses the following heuristics. All entities whose (demangled) name
+ends with a suffix \texttt{.}$n$, where $n$ is a non-empty sequence of
+decimal digits are considered private, since that suffix can occur
+only for renamed identifiers, and all entities whose (demangled) name
+contains one of the substrings \verb"_#lambda" an \verb"_#app" are
+considered private, too. These names are used by the compiler for
+naming lambda abstractions and the implicit functions introduced for
+lifted argument expressions.
+\begin{verbatim}
+
+> isPublic, isPrivate :: Name -> Bool
+> isPublic x = not (isPrivate x)
+> isPrivate (Name x) =
+>   any (\cs -> any (`isPrefixOf` cs) [app,lambda]) (tails x) ||
+>   case span isDigit (reverse x) of
+>     ([],_) -> False
+>     (_:_,cs) -> reverse dot `isPrefixOf` cs
+>   where Name dot = mangle "."
+>         Name app = mangle "_#app"
+>         Name lambda = mangle "_#lambda"
 
 \end{verbatim}
 In order to avoid some trivial name conflicts with the standard C

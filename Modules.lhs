@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2188 2007-05-01 14:34:19Z wlux $
+% $Id: Modules.lhs 2189 2007-05-01 16:26:51Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -34,7 +34,7 @@ This module controls the compilation of modules.
 > import Exports(exportInterface)
 > import Trust(trustEnv,trustEnvGoal)
 > import Qual(qual1,qual2)
-> import Desugar(desugar,desugarGoal)
+> import Desugar(desugar,goalModule)
 > import Simplify(simplify)
 > import DictTrans(dictTransModule,dictTransInterface)
 > import Lift(lift)
@@ -272,13 +272,14 @@ compilation of a goal is similar to that of a module.
 > compileGoal opts g fns =
 >   do
 >     (mEnv,tcEnv,iEnv,tyEnv,_,g') <- loadGoal True paths cm ws g fns
->     let (vs,tyEnv',trEnv,m',dumps) =
->           transGoal dbg tr tcEnv iEnv tyEnv m mainId g'
+>     let (vs,m',tyEnv') = goalModule dbg tyEnv m mainId g'
+>     let (tyEnv'',trEnv,m'',dumps) = transModule dbg tr tcEnv tyEnv' m'
+>     let trEnv' = if dbg then bindEnv mainId Suspect trEnv else trEnv
 >     liftErr $ mapM_ (doDump opts) dumps
 >     mEnv' <- importDebugPrelude paths dbg "" mEnv
->     let (mEnv'',tyEnv'',m'',dumps) = dictTrans mEnv' tcEnv iEnv tyEnv' m'
+>     let (mEnv'',tyEnv''',m''',dumps) = dictTrans mEnv' tcEnv iEnv tyEnv'' m''
 >     liftErr $ mapM_ (doDump opts) dumps
->     let (il,dumps) = ilTransModule1 (dAddMain mainId) dbg tyEnv'' trEnv m''
+>     let (il,dumps) = ilTransModule1 (dAddMain mainId) dbg tyEnv''' trEnv' m'''
 >     liftErr $ mapM_ (doDump opts) dumps
 >     let (ccode,dumps) = genCodeGoal mEnv'' (qualifyWith m mainId) vs il
 >     liftErr $ mapM_ (doDump opts) dumps >>
@@ -368,22 +369,6 @@ compilation of a goal is similar to that of a module.
 > warnGoal caseMode warn g =
 >   caseCheckGoal caseMode g ++ unusedCheckGoal warn g ++
 >   shadowCheckGoal warn g ++ overlapCheckGoal warn g
-
-> transGoal :: Bool -> Trust -> TCEnv -> InstEnv -> ValueEnv
->           -> ModuleIdent -> Ident -> Goal Type
->           -> (Maybe [Ident],ValueEnv,TrustEnv,Module Type,[(Dump,Doc)])
-> transGoal debug tr tcEnv iEnv tyEnv m goalId g =
->   (vs,tyEnv'',trEnv,simplified,dumps)
->   where trEnv
->           | debug = bindEnv goalId Suspect (trustEnvGoal tr g)
->           | otherwise = emptyEnv
->         (vs,desugared,tyEnv') = desugarGoal debug tcEnv tyEnv m goalId g
->         (simplified,tyEnv'') = simplify tyEnv' trEnv desugared
->         dumps =
->           [(DumpRenamed,ppGoal g),
->            (DumpTypes,ppTypes tcEnv (localBindings tyEnv)),
->            (DumpDesugared,ppModule desugared),
->            (DumpSimplified,ppModule simplified)]
 
 > genCodeGoal :: ModuleEnv -> QualIdent -> Maybe [Ident] -> IL.Module
 >             -> (CFile,[(Dump,Doc)])

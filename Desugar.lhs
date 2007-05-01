@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2177 2007-04-27 16:42:08Z wlux $
+% $Id: Desugar.lhs 2189 2007-05-01 16:26:51Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -48,7 +48,7 @@ of using the syntax tree from \texttt{CurrySyntax}.}
 all names must be properly qualified before calling this module.}
 \begin{verbatim}
 
-> module Desugar(desugar,desugarGoal) where
+> module Desugar(desugar,goalModule) where
 > import Base
 > import Combined
 > import List
@@ -121,6 +121,8 @@ of a module.
 >   where (vds,tds) = partition isBlockDecl ds
 
 \end{verbatim}
+Goals are desugared by converting them into a module containing just a
+single function declaration and desugaring the resulting module.
 Goals with type \texttt{IO \_} are executed directly by the runtime
 system. All other goals are evaluated under control of an interactive
 top-level, which displays the solutions of the goal and in particular
@@ -146,54 +148,32 @@ transformation will supply its own main function (see
 Sect.~\ref{sec:dtrans}).
 \begin{verbatim}
 
-> desugarGoal :: Bool -> TCEnv -> ValueEnv -> ModuleIdent -> Ident -> Goal Type
->             -> (Maybe [Ident],Module Type,ValueEnv)
-> desugarGoal debug tcEnv tyEnv m g (Goal p e ds)
->   | debug || isIO ty = desugarGoalIO tcEnv tyEnv' p m g (Let ds e) ty
->   | otherwise = desugarGoal' tcEnv tyEnv' p m g vs e' ty
+> goalModule :: Bool -> ValueEnv -> ModuleIdent -> Ident -> Goal Type
+>            -> (Maybe [Ident],Module Type,ValueEnv)
+> goalModule debug tyEnv m g (Goal p e ds)
+>   | debug || isIO ty =
+>       (Nothing,
+>        mkModule m p g [] (Let ds e),
+>        bindFun m g 0 (polyType ty) tyEnv)
+>   | otherwise =
+>       (Just vs,
+>        mkModule m p g (zip (ty:tys) (v0:vs))
+>                 (apply (prelUnif ty) [mkVar ty v0,e']),
+>        bindFun m v0 0 (monoType ty) (bindFun m g n (polyType ty') tyEnv))
 >   where ty = typeOf e
->         tyEnv' = bindSuccess tyEnv
+>         v0 = anonId
 >         (vs,e') = liftGoalVars (if null ds then e else Let ds e)
+>         tys = map (rawType . flip varType tyEnv) vs
+>         ty' = foldr TypeArrow successType (ty:tys)
+>         n = 1 + length vs
 >         isIO (TypeApply (TypeConstructor tc) _) = tc == qIOId
 >         isIO _ = False
 
-> desugarGoalIO :: TCEnv -> ValueEnv -> Position -> ModuleIdent
->               -> Ident -> Expression Type -> Type
->               -> (Maybe [Ident],Module Type,ValueEnv)
-> desugarGoalIO tcEnv tyEnv p m g e ty =
->   (Nothing,
->    Module m Nothing [] [goalDecl p g [] e'],
->    bindFun m g 0 (polyType ty) tyEnv')
->   where (e',tyEnv') = run (desugarGoalExpr m e) tcEnv tyEnv
-
-> desugarGoal' :: TCEnv -> ValueEnv -> Position -> ModuleIdent
->              -> Ident -> [Ident] -> Expression Type -> Type
->              -> (Maybe [Ident],Module Type,ValueEnv)
-> desugarGoal' tcEnv tyEnv p m g vs e ty =
->   (Just vs',
+> mkModule :: ModuleIdent -> Position -> Ident -> [(Type,Ident)]
+>          -> Expression Type -> Module Type
+> mkModule m p g vs e =
 >    Module m Nothing []
->           [goalDecl p g (zip (ty:tys') (v0:vs'))
->                     (apply (prelUnif ty) [mkVar ty v0,e'])],
->    bindFun m v0 0 (monoType ty) (bindFun m g n (polyType ty') tyEnv'))
->   where (e',tyEnv') = run (desugarGoalExpr m e) tcEnv tyEnv
->         v0 = anonId
->         vs' = filter (`elem` qfv m e') vs
->         tys' = map (rawType . flip varType tyEnv) vs'
->         ty' = foldr TypeArrow successType (ty:tys')
->         n = 1 + length vs'
-
-> goalDecl :: Position -> Ident -> [(Type,Ident)] -> Expression Type
->          -> TopDecl Type
-> goalDecl p g vs e =
->   BlockDecl (funDecl p g (map (uncurry VariablePattern) vs) e)
-
-> desugarGoalExpr :: ModuleIdent -> Expression Type
->                 -> DesugarState (Expression Type,ValueEnv)
-> desugarGoalExpr m e =
->   do
->     e' <- desugarExpr m (first "") e
->     tyEnv' <- fetchSt
->     return (e',tyEnv')
+>           [BlockDecl (funDecl p g (map (uncurry VariablePattern) vs) e)]
 
 > liftGoalVars :: Expression Type -> ([Ident],Expression Type)
 > liftGoalVars (Let ds e) = (concat [vs | FreeDecl _ vs <- vds],Let ds' e)

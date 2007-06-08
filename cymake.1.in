@@ -4,7 +4,7 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cymake.1.in 2165 2007-04-24 13:19:56Z wlux $
+.\" $Id: cymake.1.in 2233 2007-06-08 09:57:47Z wlux $
 .\"
 .\" Copyright (c) 2004-2006, Wolfgang Lux
 .\" See LICENSE for the full license.
@@ -13,7 +13,7 @@
 .Dt cymake 1      \" Program name and manual section number 
 .Os
 .Sh NAME                 \" Section Header - required - don't modify 
-.Nm cymake
+.Nm cymake , cymake-@version@
 .Nd A make like build tool for Curry programs.
 .Sh SYNOPSIS             \" Section Header - required - don't modify
 .Nm
@@ -124,7 +124,7 @@ Add directory
 to the list of paths used to locate interface files for library
 modules. By default, the compiler searches for interface files in its
 standard library directory
-.Pa @libdir@/curry .
+.Pa @libdir@/curry-@version@ .
 .Pp
 The directory
 .Ar dir
@@ -164,7 +164,7 @@ The environment variable
 is used to locate the auxiliary executables used by
 .Nm .
 The default value is
-.Pa @libdir@/curry .
+.Pa @libdir@/curry-@version@ .
 .Pp
 .It Ev CURRY_IMPORT_PATH
 .It Ev CURRY_INCLUDE_PATH
@@ -181,13 +181,13 @@ respectively. Their default value is
 .El                      
 .Sh FILES                \" File used or created by the topic of the man page
 .Bl -tag -width -indent
-.It Pa @bindir@/cyc
+.It Pa @bindir@/cyc-@version@
 The Curry compiler.
-.It Pa @libdir@/curry/cymk
+.It Pa @libdir@/curry-@version@/cymk
 Dependency generator for Curry programs.
-.It Pa @libdir@/curry/newer
+.It Pa @libdir@/curry-@version@/newer
 Helper program to determine if a target of out of date.
-.It Pa @libdir@/curry/*.icurry
+.It Pa @libdir@/curry-@version@/*.icurry
 Interface files for the standard library.
 .El
 .Sh SEE ALSO 

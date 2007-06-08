@@ -1,6 +1,6 @@
 # Makefile for the Curry compiler
 #
-# $Id: Makefile.in 2163 2007-04-24 11:56:51Z wlux $
+# $Id: Makefile.in 2233 2007-06-08 09:57:47Z wlux $
 #
 # Copyright (c) 2000-2007 Wolfgang Lux
 # See LICENSE for the full license.
@@ -33,6 +33,7 @@ INSTALL = @INSTALL@
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_DIR = @INSTALL_DIR@
+LN_S = @LN_S@
 
 # file lists
 PROGRAMS = cycc cymk newer @CAM2C@ @MACH@
@@ -239,7 +240,8 @@ mans: $(man_MANS)
 
 man_edit = sed \
 	-e 's,@bindir\@,$(bindir),g' \
-	-e 's,@libdir\@,$(libdir),g'
+	-e 's,@libdir\@,$(libdir),g' \
+	-e 's,@version\@,$(VERSION),g'
 
 cyc.1: Makefile $(srcdir)/cyc.1.in
 	rm -f cyc.1
@@ -290,31 +292,40 @@ install: install-dir install-subdirs
 install-dir: scripts cycc cymk newer mans
 	$(INSTALL_DIR) $(DESTDIR)$(bindir)
 	$(INSTALL_DIR) $(DESTDIR)$(libdir)
-	$(INSTALL_DIR) $(DESTDIR)$(libdir)/curry
+	$(INSTALL_DIR) $(DESTDIR)$(libdir)/curry-$(VERSION)
 	$(INSTALL_DIR) $(DESTDIR)$(mandir)
 	$(INSTALL_DIR) $(DESTDIR)$(mandir)/man1
-	-rm -f $(DESTDIR)$(bindir)/cycc $(DESTDIR)$(libdir)/curry/cyc
 	$(install_edit) cyc > /tmp/cyc
-	$(INSTALL_PROGRAM) /tmp/cyc $(DESTDIR)$(bindir)
+	$(INSTALL_PROGRAM) /tmp/cyc $(DESTDIR)$(bindir)/cyc-$(VERSION)
+	cd $(DESTDIR)$(bindir) && rm -f cyc && $(LN_S) cyc-$(VERSION) cyc
 	@rm -f /tmp/cyc
 	$(install_edit) cymake > /tmp/cymake
-	$(INSTALL_PROGRAM) /tmp/cymake $(DESTDIR)$(bindir)
+	$(INSTALL_PROGRAM) /tmp/cymake $(DESTDIR)$(bindir)/cymake-$(VERSION)
+	cd $(DESTDIR)$(bindir) && rm -f cymake && $(LN_S) cymake-$(VERSION) cymake
 	@rm -f /tmp/cymake
 	$(install_edit) cyi > /tmp/cyi
-	$(INSTALL_PROGRAM) /tmp/cyi $(DESTDIR)$(bindir)
+	$(INSTALL_PROGRAM) /tmp/cyi $(DESTDIR)$(bindir)/cyi-$(VERSION)
+	cd $(DESTDIR)$(bindir) && rm -f cyi && $(LN_S) cyi-$(VERSION) cyi
 	@rm -f /tmp/cyi
-	$(INSTALL_PROGRAM) -s cycc $(DESTDIR)$(libdir)/curry
-	$(INSTALL_PROGRAM) -s cymk $(DESTDIR)$(libdir)/curry
-	$(INSTALL_PROGRAM) -s newer $(DESTDIR)$(libdir)/curry
-	$(INSTALL_DATA) cyc.1 $(DESTDIR)$(mandir)/man1
-	$(INSTALL_DATA) cymake.1 $(DESTDIR)$(mandir)/man1
-	$(INSTALL_DATA) cyi.1 $(DESTDIR)$(mandir)/man1
+	$(INSTALL_PROGRAM) -s cycc $(DESTDIR)$(libdir)/curry-$(VERSION)
+	$(INSTALL_PROGRAM) -s cymk $(DESTDIR)$(libdir)/curry-$(VERSION)
+	$(INSTALL_PROGRAM) -s newer $(DESTDIR)$(libdir)/curry-$(VERSION)
+	$(INSTALL_DATA) cyc.1 $(DESTDIR)$(mandir)/man1/cyc-$(VERSION).1
+	echo '.so man1/cyc-$(VERSION).1' > $(DESTDIR)$(mandir)/man1/cyc.1
+	$(INSTALL_DATA) cymake.1 $(DESTDIR)$(mandir)/man1/cymake-$(VERSION).1
+	echo '.so man1/cymake-$(VERSION).1' > $(DESTDIR)$(mandir)/man1/cymake.1
+	$(INSTALL_DATA) cyi.1 $(DESTDIR)$(mandir)/man1/cyi-$(VERSION).1
+	echo '.so man1/cyi-$(VERSION).1' > $(DESTDIR)$(mandir)/man1/cyi.1
 install-subdirs: runtime curry
 
 uninstall:
-	rm -f $(DESTDIR)$(bindir)/cyc $(DESTDIR)$(bindir)/cymake $(DESTDIR)$(bindir)/cyi $(DESTDIR)$(bindir)/cycc
-	rm -rf $(DESTDIR)$(libdir)/curry
-	rm -f $(DESTDIR)$(mandir)/man1/cyc.1 $(DESTDIR)$(mandir)/man1/cymake.1 $(DESTDIR)$(mandir)/man1/cyi.1
+	rm -f $(DESTDIR)$(bindir)/cyc $(DESTDIR)$(bindir)/cyc-$(VERSION)
+	rm -f $(DESTDIR)$(bindir)/cymake $(DESTDIR)$(bindir)/cymake-$(VERSION)
+	rm -f $(DESTDIR)$(bindir)/cyi $(DESTDIR)$(bindir)/cyi-$(VERSION)
+	rm -rf $(DESTDIR)$(libdir)/curry-$(VERSION)
+	rm -f $(DESTDIR)$(mandir)/man1/cyc.1 $(DESTDIR)$(mandir)/man1/cyc-$(VERSION).1
+	rm -f $(DESTDIR)$(mandir)/man1/cymake.1 $(DESTDIR)$(mandir)/man1/cymake-$(VERSION).1
+	rm -f $(DESTDIR)$(mandir)/man1/cyi.1 $(DESTDIR)$(mandir)/man1/cyi-$(VERSION).1
 
 # build the distributions
 distdir    = $(PACKAGE)-$(VERSION)

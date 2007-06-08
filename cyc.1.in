@@ -4,7 +4,7 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cyc.1.in 2167 2007-04-24 13:46:23Z wlux $
+.\" $Id: cyc.1.in 2233 2007-06-08 09:57:47Z wlux $
 .\"
 .\" Copyright (c) 2004-2006, Wolfgang Lux
 .\" See LICENSE for the full license.
@@ -13,7 +13,7 @@
 .Dt cyc 1      \" Program name and manual section number 
 .Os
 .Sh NAME                 \" Section Header - required - don't modify 
-.Nm cyc
+.Nm cyc , cyc-@version@
 .Nd A native code compiler for Curry.
 .Sh SYNOPSIS             \" Section Header - required - don't modify
 .Nm
@@ -173,7 +173,7 @@ Add directory
 to the list of paths used to locate interface files. By default, the
 compiler searches for interface files in the current directory and in
 its standard library directory
-.Pa @libdir@/curry .
+.Pa @libdir@/curry-@version@ .
 .Pp
 The directory
 .Ar dir
@@ -187,7 +187,7 @@ Add directory
 to the list of paths used to locate interface files. By default, the
 compiler searches for interface files in the current directory and in
 its standard library directory
-.Pa @libdir@/curry .
+.Pa @libdir@/curry-@version@ .
 .Pp
 The directory
 .Ar dir
@@ -274,7 +274,7 @@ Add directory
 .Ar dir
 to the list of paths used to locate header files. The standard library
 directory
-.Pa ( @libdir@/curry )
+.Pa ( @libdir@/curry-@version@ )
 is always included in this list.
 .It Fl O
 equivalent to
@@ -409,7 +409,7 @@ Add directory
 to the list of paths used to locate libraries specified with
 .Fl l
 options. The standard library directory
-.Pa @libdir@/curry
+.Pa @libdir@/curry-@version@
 is always included in this list.
 .It Fl l Ar lib
 Search the library named
@@ -531,7 +531,7 @@ output may be excessively large.
 The environment variable
 .Ev CURRY_PATH
 is used to locate the compiler executables. The default value is
-.Pa @libdir@/curry .
+.Pa @libdir@/curry-@version@ .
 .Pp
 .It Ev CURRY_IMPORT_PATH
 .It Ev CURRY_INCLUDE_PATH
@@ -548,14 +548,14 @@ respectively. Their default value is
 .El                      
 .Sh FILES                \" File used or created by the topic of the man page
 .Bl -tag -width -indent
-.It Pa @libdir@/curry/cycc
+.It Pa @libdir@/curry-@version@/cycc
 The Curry to C compiler.
-.It Pa @libdir@/curry/*.icurry , @libdir@/curry/*.h
+.It Pa @libdir@/curry-@version@/*.icurry , @libdir@/curry-@version@/*.h
 Interface and header files for the standard library and runtime
 system of the Curry compiler.
-.It Pa @libdir@/curry/libcurry.a
+.It Pa @libdir@/curry-@version@/libcurry.a
 The runtime system and standard library.
-.It Pa @libdir@/curry/libcurry_g.a
+.It Pa @libdir@/curry-@version@/libcurry_g.a
 Standard library prepared for debugging. All library modules have
 been compiled with
 .Fl -trusted .

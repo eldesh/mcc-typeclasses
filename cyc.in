@@ -3,7 +3,7 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 2167 2007-04-24 13:46:23Z wlux $
+# $Id: cyc.in 2233 2007-06-08 09:57:47Z wlux $
 #
 # Copyright (c) 2002-2006, Wolfgang Lux
 # See LICENSE for the full license.
@@ -21,7 +21,7 @@ libdir=@libdir@
 srcdir="@srcdir@"
 @in_place_config@
 # DO NOT DELETE: End of in-place configuration
-: ${CURRY_PATH=$libdir/curry}
+: ${CURRY_PATH=$libdir/curry-$version}
 : ${CURRY_IMPORT_PATH=$CURRY_PATH}
 : ${CURRY_INCLUDE_PATH=$CURRY_PATH}
 : ${CURRY_LIBRARY_PATH=$CURRY_PATH}

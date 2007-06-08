@@ -18,4 +18,6 @@ case $srcdir in
   * ) srcdir=$bindir/../$srcdir;;
 esac
 
+: ${CYC=$bindir/cyc}
+: ${CYMAKE=$bindir/cymake}
 : ${CURRY_PATH=$srcdir/lib}

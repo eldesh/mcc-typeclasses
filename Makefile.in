@@ -1,6 +1,6 @@
 # Makefile for the Curry compiler
 #
-# $Id: Makefile.in 2233 2007-06-08 09:57:47Z wlux $
+# $Id: Makefile.in 2234 2007-06-08 09:59:19Z wlux $
 #
 # Copyright (c) 2000-2007 Wolfgang Lux
 # See LICENSE for the full license.
@@ -319,13 +319,18 @@ install-dir: scripts cycc cymk newer mans
 install-subdirs: runtime curry
 
 uninstall:
-	rm -f $(DESTDIR)$(bindir)/cyc $(DESTDIR)$(bindir)/cyc-$(VERSION)
-	rm -f $(DESTDIR)$(bindir)/cymake $(DESTDIR)$(bindir)/cymake-$(VERSION)
-	rm -f $(DESTDIR)$(bindir)/cyi $(DESTDIR)$(bindir)/cyi-$(VERSION)
+	cd $(DESTDIR)$(bindir) && for f in $(SCRIPTS); do \
+		cmp -s $$f $$f-$(VERSION) && rm -f $$f; \
+		rm -f $$f-$(VERSION); \
+	done
 	rm -rf $(DESTDIR)$(libdir)/curry-$(VERSION)
-	rm -f $(DESTDIR)$(mandir)/man1/cyc.1 $(DESTDIR)$(mandir)/man1/cyc-$(VERSION).1
-	rm -f $(DESTDIR)$(mandir)/man1/cymake.1 $(DESTDIR)$(mandir)/man1/cymake-$(VERSION).1
-	rm -f $(DESTDIR)$(mandir)/man1/cyi.1 $(DESTDIR)$(mandir)/man1/cyi-$(VERSION).1
+	for f in $(man_MANS); do \
+		man=`basename $$f .1`; \
+		echo ".so man1/$$man-$(VERSION).1" | \
+			cmp -s - $(DESTDIR)$(mandir)/man1/$$man.1 && \
+			rm -f $(DESTDIR)$(mandir)/man1/$$man.1; \
+		rm -f $(DESTDIR)$(mandir)/man1/$$man-$(VERSION).1; \
+	done
 
 # build the distributions
 distdir    = $(PACKAGE)-$(VERSION)

@@ -1,6 +1,6 @@
 # Makefile for the binary distribution of the Curry compiler -*- makefile -*-
 #
-# $Id: Makefile-bin.in 2233 2007-06-08 09:57:47Z wlux $
+# $Id: Makefile-bin.in 2234 2007-06-08 09:59:19Z wlux $
 #
 # Copyright (c) 2002-2007, Wolfgang Lux
 #
@@ -93,12 +93,16 @@ install: $(man1_MANS)
 uninstall:
 	cd $(bindir) && for f in $(bin_SCRIPTS); do \
 		cmd=`basename $$f`; \
-		rm -f $$cmd $$cmd-$(VERSION); \
+		cmp -s $$cmd $$cmd-$(VERSION) && rm -f $$cmd; \
+		rm -f $$cmd-$(VERSION); \
 	done
 	rm -rf $(libdir)/curry-$(VERSION)
 	for f in $(man1_MANS); do \
 		man=`basename $$f .1`; \
-		rm -f $(mandir)/man1/$$man.1 $(mandir)/man1/$$man-$(VERSION).1; \
+		echo ".so man1/$$man-$(VERSION).1" | \
+			cmp -s - $(mandir)/man1/$$man.1 && \
+			rm -f $(mandir)/man1/$$man.1; \
+		rm -f $(mandir)/man1/$$man-$(VERSION).1; \
 	done
 
 # automatic reconfiguration

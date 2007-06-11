@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: refs.nw 2011 2006-11-16 12:17:25Z wlux $
+% $Id: refs.nw 2244 2007-06-11 17:28:16Z wlux $
 %
 % Copyright (c) 2004, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -68,7 +68,7 @@ FUNCTION(__primEqIORef_1)
 {
     Node *r;
  ENTRY_LABEL(__primEqIORef_1)
-    EVAL_RIGID_IOREF(__primEqIORef);
+    EVAL_RIGID_IOREF(__primEqIORef_1);
     r	= sp[1] == sp[0] ? Prelude_True : Prelude_False;
     sp += 2;
     RETURN(r);

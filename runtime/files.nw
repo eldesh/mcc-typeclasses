@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2011 2006-11-16 12:17:25Z wlux $
+% $Id: files.nw 2244 2007-06-11 17:28:16Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -174,7 +174,7 @@ FUNCTION(__primEqHandle_1)
 {
     Node *r;
  ENTRY_LABEL(__primEqHandle_1)
-    EVAL_RIGID_FILE(__primEqHandle);
+    EVAL_RIGID_FILE(__primEqHandle_1);
     r	= sp[1] == sp[0] ? Prelude_True : Prelude_False;
     sp += 2;
     RETURN(r);

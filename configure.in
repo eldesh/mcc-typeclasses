@@ -1,4 +1,4 @@
-dnl $Id: configure.in 1920 2006-05-10 17:58:33Z wlux $
+dnl $Id: configure.in 2246 2007-06-14 08:44:16Z wlux $
 dnl
 dnl Copyright (c) 2002-2006, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -182,7 +182,7 @@ elif test -n "$NHC"; then
   hc=nhc HC="$NHC"
   IOExts_lhs=nhc/IOExts.lhs
 else
-  AC_MSG_ERROR([Sorry, you need a Haskell 98 compiler])
+  AC_MSG_ERROR([No Haskell 98 compiler found])
 fi
 
 CURRY_HC_PATH_STYLE
@@ -196,12 +196,20 @@ fi
 
 
 dnl Check for noweb programs
+dnl These must be present if building from the repository, but are not
+dnl required for building from a source distribution. We assume building
+dnl from a source distribution if config.h.in is present.
 AC_CHECK_PROG(TANGLE, notangle, notangle)
 AC_CHECK_PROG(WEAVE, noweave, noweave)
 AC_CHECK_PROG(CPIF, cpif, cpif)
 
-if test -z "$TANGLE" || test -z "$CPIF"; then TANGLE=':' CPIF=':'; fi
-if test -z "$WEAVE"; then WEAVE=': \#'; fi
+if test -f $srcdir/config.h.in; then
+  if test -z "$TANGLE" || test -z "$CPIF"; then TANGLE=':' CPIF=':'; fi
+  if test -z "$WEAVE"; then WEAVE=': \#'; fi
+elif test -z "$TANGLE" || test -z "$CPIF" || test -z "$WEAVE"; then
+  AC_MSG_ERROR([Noweb not found.  If not installed on your machine, you can
+download noweb from http://www.eecs.harvard.edu/~nr/noweb/])
+fi
 
 
 dnl Checks for libraries.

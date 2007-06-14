@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2178 2007-04-27 16:48:58Z wlux $
+% $Id: TypeCheck.lhs 2247 2007-06-14 12:57:40Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -70,11 +70,11 @@ or a going to generate code for the goal, the compiler will allow a
 non-empty context for the goal's type or not.
 \begin{verbatim}
 
-> typeCheckGoal :: Bool -> TCEnv -> InstEnv -> ValueEnv -> Goal a
+> typeCheckGoal :: Bool -> ModuleIdent -> TCEnv -> InstEnv -> ValueEnv -> Goal a
 >               -> Error (ValueEnv,Context,Goal Type)
-> typeCheckGoal forEval tcEnv iEnv tyEnv g =
+> typeCheckGoal forEval m tcEnv iEnv tyEnv g =
 >   run (do
->          (cx,g') <- tcGoal forEval emptyMIdent tcEnv g
+>          (cx,g') <- tcGoal forEval m tcEnv g
 >          tyEnv' <- fetchSt
 >          theta <- liftSt fetchSt
 >          return (subst theta tyEnv',cx,fmap (subst theta) g'))

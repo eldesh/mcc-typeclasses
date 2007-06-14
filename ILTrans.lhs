@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2161 2007-04-22 14:48:33Z wlux $
+% $Id: ILTrans.lhs 2247 2007-06-14 12:57:40Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -358,7 +358,7 @@ further possibilities for this transformation.
 > translExpr tyEnv vs env (Let ds e) =
 >   case ds of
 >     [FreeDecl _ vs] -> foldr IL.Exist e' vs
->     [d] | all (`notElem` bv d) (qfv emptyMIdent d) ->
+>     [d] | all (`notElem` bv d) (qfv (mkMIdent []) d) ->
 >       IL.Let (translBinding env' d) e'
 >     _ -> IL.Letrec (map (translBinding env') ds) e'
 >   where e' = translExpr tyEnv vs env' e

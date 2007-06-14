@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 2082 2007-01-24 20:11:46Z wlux $
+% $Id: PrecCheck.lhs 2247 2007-06-14 12:57:40Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -64,11 +64,10 @@ the correct operator precedence is used.
 >         decl (MethodDecl p f eqs) = FunctionDecl p f eqs
 >         decl (TrustMethod p tr fs) = TrustAnnot p tr fs
 
-> precCheckGoal :: PEnv -> Goal a -> Error (Goal a)
-> precCheckGoal pEnv (Goal p e ds) =
+> precCheckGoal :: ModuleIdent -> PEnv -> Goal a -> Error (Goal a)
+> precCheckGoal m pEnv (Goal p e ds) =
 >   liftE2 (Goal p) (checkExpr m p pEnv' e) (mapE (checkDecl m pEnv') ds)
->   where m = emptyMIdent
->         pEnv' = bindPrecs m ds pEnv
+>   where pEnv' = bindPrecs m ds pEnv
 
 > checkTopDecl :: ModuleIdent -> PEnv -> TopDecl a -> Error (TopDecl a)
 > checkTopDecl m pEnv (ClassDecl p cx cls tv ds) =

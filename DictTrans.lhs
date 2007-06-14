@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2175 2007-04-25 23:40:53Z wlux $
+% $Id: DictTrans.lhs 2247 2007-06-14 12:57:40Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -851,7 +851,7 @@ particular module that implements them.
 \begin{verbatim}
 
 > instanceMIdent :: ModuleIdent
-> instanceMIdent = emptyMIdent
+> instanceMIdent = mkMIdent []
 
 > instFunId :: TypePred -> Ident
 > instFunId (TypePred cls ty) =

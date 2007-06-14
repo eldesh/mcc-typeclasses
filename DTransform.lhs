@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 1849 2006-02-07 14:17:31Z wlux $
+% $Id: DTransform.lhs 2247 2007-06-14 12:57:40Z wlux $
 %
 % 2002/04/10 19:00:00 Added emptyNode as constructor in type cTree
 \nwfilename{DTransform.lhs}
@@ -263,13 +263,13 @@ We have to introduce an auxiliary function for the lambda in the intermediate co
 \begin{verbatim}
 
 > dAddMain :: Ident -> Module -> Module
-> dAddMain goalId (Module m is ds) = Module m is (newMain goalId ++ ds)
+> dAddMain goalId (Module m is ds) = Module m is (newMain m goalId ++ ds)
 
-> newMain :: Ident -> [Decl]
-> newMain f = [fMain,auxMain]
+> newMain :: ModuleIdent -> Ident -> [Decl]
+> newMain m f = [fMain,auxMain]
 >       where 
 >       fMain = FunctionDecl fId [] fType fBody
->       fId   = qualifyWith emptyMIdent f
+>       fId   = qualifyWith m f
 >       fType = TypeVariable 0
 >       fBody = Apply (Function debugFunctionqId 1) (Function debugAuxMainId 1)
 >       fType' = debugTypeMainAux
@@ -288,8 +288,8 @@ We have to introduce an auxiliary function for the lambda in the intermediate co
 >       alt      = Alt (ConstructorPattern debugIdentPair [r,ct']) caseExpr
 >       fBody'   = Case Rigid  (Function debugOldMainId 0) [alt]
 >       auxMain = FunctionDecl debugAuxMainId [param] fType' fBody'
->       debugOldMainId = qualifyWith emptyMIdent (debugRenameId "" f)
->       debugAuxMainId = qualifyWith emptyMIdent (debugRenameId "#Aux" f)
+>       debugOldMainId = qualifyWith m (debugRenameId "" f)
+>       debugAuxMainId = qualifyWith m (debugRenameId "#Aux" f)
 
 
 

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2189 2007-05-01 16:26:51Z wlux $
+% $Id: Modules.lhs 2247 2007-06-14 12:57:40Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -271,7 +271,7 @@ compilation of a goal is similar to that of a module.
 > compileGoal :: Options -> Maybe String -> [FilePath] -> ErrorT IO ()
 > compileGoal opts g fns =
 >   do
->     (mEnv,tcEnv,iEnv,tyEnv,_,g') <- loadGoal True paths cm ws g fns
+>     (mEnv,tcEnv,iEnv,tyEnv,_,g') <- loadGoal True paths cm ws m g fns
 >     let (vs,m',tyEnv') = goalModule dbg tyEnv m mainId g'
 >     let (tyEnv'',trEnv,m'',dumps) = transModule dbg tr tcEnv tyEnv' m'
 >     let trEnv' = if dbg then bindEnv mainId Suspect trEnv else trEnv
@@ -284,7 +284,7 @@ compilation of a goal is similar to that of a module.
 >     let (ccode,dumps) = genCodeGoal mEnv'' (qualifyWith m mainId) vs il
 >     liftErr $ mapM_ (doDump opts) dumps >>
 >               writeGoalCode (output opts) ccode
->   where m = emptyMIdent
+>   where m = mkMIdent []
 >         paths = importPath opts
 >         dbg = debug opts
 >         tr = if trusted opts then Trust else Suspect
@@ -294,23 +294,24 @@ compilation of a goal is similar to that of a module.
 > typeGoal :: Options -> String -> [FilePath] -> ErrorT IO ()
 > typeGoal opts g fns =
 >   do
->     (_,tcEnv,_,tyEnv,cx,Goal _ e _) <- loadGoal False paths cm ws (Just g) fns
+>     (_,tcEnv,_,tyEnv,cx,Goal _ e _) <-
+>       loadGoal False paths cm ws (mkMIdent []) (Just g) fns
 >     liftErr $ print (ppQualType tcEnv (QualType cx (typeOf e)))
 >   where paths = importPath opts
 >         cm = caseMode opts
 >         ws = warn opts
 
 > loadGoal :: Bool -> [FilePath] -> CaseMode -> [Warn]
->          -> Maybe String -> [FilePath]
+>          -> ModuleIdent -> Maybe String -> [FilePath]
 >          -> ErrorT IO (ModuleEnv,TCEnv,InstEnv,ValueEnv,Context,Goal Type)
-> loadGoal forEval paths caseMode warn g fns =
+> loadGoal forEval paths caseMode warn m g fns =
 >   do
 >     (mEnv,ms) <- loadGoalModules paths fns
->     let m = last ms
->     (tcEnv,iEnv,tyEnv,cx,g') <-
->       okM $ maybe (return mainGoal) parseGoal g >>=
->             checkGoal forEval mEnv (map (importModule [m,preludeMIdent]) ms)
->     liftErr $ mapM_ putErrLn $ warnGoal caseMode warn g'
+>     let m' = last ms
+>     (tcEnv,iEnv,tyEnv,cx,g') <- okM $
+>       maybe (return mainGoal) parseGoal g >>=
+>       checkGoal forEval mEnv m (map (importModule [m',preludeMIdent]) ms)
+>     liftErr $ mapM_ putErrLn $ warnGoal caseMode warn m g'
 >     return (mEnv,tcEnv,iEnv,tyEnv,cx,g')
 >   where p = first ""
 >         mainGoal = Goal p (Variable () (qualify mainId)) []
@@ -339,20 +340,20 @@ compilation of a goal is similar to that of a module.
 >           case break ('.' ==) cs of
 >             (cs',cs'') -> cs' : components cs''
 
-> checkGoal :: Bool -> ModuleEnv -> [ImportDecl] -> Goal ()
+> checkGoal :: Bool -> ModuleEnv -> ModuleIdent -> [ImportDecl] -> Goal ()
 >           -> Error (TCEnv,InstEnv,ValueEnv,Context,Goal Type)
-> checkGoal forEval mEnv is g =
+> checkGoal forEval mEnv m is g =
 >   do
 >     (pEnv,tcEnv,iEnv,tyEnv) <- importModules mEnv is
 >     (tEnv,g') <- typeSyntaxCheckGoal tcEnv g
 >     (vEnv,g'') <- syntaxCheckGoal tyEnv g'
 >     let (k1,g''') = renameGoal k0 g''
 >     let (pEnv',tcEnv',tyEnv') = qualifyEnv1 mEnv is pEnv tcEnv tyEnv
->     g'''' <- precCheckGoal pEnv' (qual1 tEnv vEnv g''')
+>     g'''' <- precCheckGoal m pEnv' (qual1 tEnv vEnv g''')
 >     (tyEnv'',cx,g''''') <- kindCheckGoal tcEnv' g'''' >>
->                          typeCheckGoal forEval tcEnv' iEnv tyEnv' g''''
+>                          typeCheckGoal forEval m tcEnv' iEnv tyEnv' g''''
 >     let (_,tcEnv'',tyEnv''') =
->           qualifyGoalEnv forEval mEnv emptyMIdent pEnv' tcEnv' tyEnv''
+>           qualifyGoalEnv forEval mEnv m pEnv' tcEnv' tyEnv''
 >     return (tcEnv'',iEnv,tyEnv''',cx,qualifyGoal forEval tEnv vEnv g''''')
 
 > qualifyGoalEnv :: Bool -> ModuleEnv -> ModuleIdent
@@ -365,9 +366,9 @@ compilation of a goal is similar to that of a module.
 > qualifyGoal True tEnv vEnv = qual2 tEnv vEnv
 > qualifyGoal False _ _ = id
 
-> warnGoal :: CaseMode -> [Warn] -> Goal Type -> [String]
-> warnGoal caseMode warn g =
->   caseCheckGoal caseMode g ++ unusedCheckGoal warn g ++
+> warnGoal :: CaseMode -> [Warn] -> ModuleIdent -> Goal Type -> [String]
+> warnGoal caseMode warn m g =
+>   caseCheckGoal caseMode g ++ unusedCheckGoal warn m g ++
 >   shadowCheckGoal warn g ++ overlapCheckGoal warn g
 
 > genCodeGoal :: ModuleEnv -> QualIdent -> Maybe [Ident] -> IL.Module

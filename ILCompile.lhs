@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 1866 2006-03-02 17:34:02Z wlux $
+% $Id: ILCompile.lhs 2250 2007-06-15 14:31:09Z wlux $
 %
 % Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -240,10 +240,17 @@ normal form, is passed as an additional argument to
 >     return (Cam.Seq (v Cam.:<- st1) st2)
 > compileStrict hnfs (Case ev e as) vs =
 >   do
->     v <- freshName
 >     st <- compileStrict hnfs e []
->     as' <- mapM (flip (compileCase hnfs v) vs) as
->     return (Cam.Seq (v Cam.:<- st) (Cam.Switch (rf ev) v as'))
+>     case as of
+>       [Alt (VariablePattern v) e]
+>         | ev == Flex ->
+>             liftM (Cam.Seq (var v Cam.:<- st)) (compileStrict (v:hnfs') e vs)
+>       _ ->
+>         do
+>           v <- freshName
+>           as' <- mapM (flip (compileCase hnfs' v) vs) as
+>           return (Cam.Seq (v Cam.:<- st) (Cam.Switch (rf ev) v as'))
+>   where hnfs' = noteHnf e hnfs
 > compileStrict hnfs (Or e1 e2) vs =
 >   do
 >     sts <- mapM (flip (compileStrict hnfs) vs) (branches e1 ++ branches e2)
@@ -269,6 +276,18 @@ normal form, is passed as an additional argument to
 > literal (Char c) = Cam.Char c
 > literal (Int i) = Cam.Int i
 > literal (Float f) = Cam.Float f
+
+> noteHnf :: Expression -> [Ident] -> [Ident]
+> noteHnf (Literal _) hnfs = hnfs
+> noteHnf (Variable v) hnfs = v : hnfs
+> noteHnf (Function _ _) hnfs = hnfs
+> noteHnf (Constructor _ _) hnfs = hnfs
+> noteHnf (Apply f _) hnfs = noteHnf f hnfs
+> noteHnf (Case _ e _) hnfs = noteHnf e hnfs
+> noteHnf (Or e1 e2) hnfs = intersect (noteHnf e1 hnfs) (noteHnf e2 hnfs)
+> noteHnf (Exist _ e) hnfs = noteHnf e hnfs
+> noteHnf (Let _ e) hnfs = noteHnf e hnfs
+> noteHnf (Letrec _ e) hnfs = noteHnf e hnfs
 
 > addHnfs :: [Binding] -> [Ident] -> [Ident]
 > addHnfs bds hnfs = [v | Binding v e <- bds, isHnf hnfs e] ++ hnfs
@@ -300,7 +319,10 @@ normal form, is passed as an additional argument to
 
 > compileCase :: [Ident] -> Cam.Name -> Alt -> [Cam.Name] -> CompState Cam.Case
 > compileCase hnfs v (Alt t e) vs =
->   liftM (caseTag v t) (compileStrict hnfs e vs)
+>   liftM (caseTag v t) (compileStrict (addHnf t hnfs) e vs)
+>   where addHnf (LiteralPattern _) hnfs = hnfs
+>         addHnf (ConstructorPattern _ _) hnfs = hnfs
+>         addHnf (VariablePattern v) hnfs = v:hnfs
 
 > caseTag :: Cam.Name -> ConstrTerm -> Cam.Stmt -> Cam.Case
 > caseTag _ (LiteralPattern l) = Cam.Case (Cam.LitCase (literal l))

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2247 2007-06-14 12:57:40Z wlux $
+% $Id: ILTrans.lhs 2250 2007-06-15 14:31:09Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -9,12 +9,12 @@
 After desugaring and lifting have been performed, the source code is
 translated into the intermediate language. Besides translating from
 source terms and expressions into intermediate language terms and
-expressions this phase in particular has to implement the pattern
-matching algorithm for equations and case expressions.
+expressions, this phase in particular implements the pattern matching
+algorithm for equations.
 
 Because of name conflicts between the source and intermediate language
-data structures, we can use only a qualified import for the
-\texttt{IL} module.
+representations, we can only use a qualified import of the \texttt{IL}
+module.
 \begin{verbatim}
 
 > module ILTrans(ilTrans,ilTransIntf) where
@@ -313,29 +313,29 @@ position in the remaining arguments. If one is found,
 >         vars _ = []
 
 \end{verbatim}
-The translation of a \texttt{case}-expression, on the other hand, is
-very straight forward because the desugar module has expanded case
-expression such that nested patterns are matched with nested case
-expressions. The only thing that remains to be done here is to remove
-as-patterns that are still present in the code. This is done by
-introducing let expressions around the case expression.
+Note that pattern matching in case expressions has been performed in
+the \texttt{Desugar} module already, where case expressions with
+nested patterns were transformed into nested case expressions with
+flat patterns.
 
-\ToDo{Extend the intermediate language to support as-patterns directly.}
-\begin{verbatim}
-
-\end{verbatim}
 \paragraph{Expressions}
-Unfortunately, the intermediate language does not support as-patterns.
-Therefore, if an as-pattern occurs in at least one left hand side of a
-case alternative and the variable is used in the corresponding right
-hand side, the compiler introduces a new let expression around the
-case expression and binds the scrutinized expression to a fresh
-variable.
+The translation of expressions from desugared Curry source code into
+the intermediate language is very straight forward. A minor
+complication arises for the translation of as-patterns, which are not
+supported in the intermediate language. They are transformed into an
+outer, flexible case expression that evaluates the scrutinized
+expression and binds the as-pattern variable,\footnote{Recall that
+  case expressions in the intermediate language always evaluate the
+  scrutinized expression.} and an inner case expression that matches
+this variable against the actual pattern. We always use a flexible
+match for the outer case expression because the compiler would
+generate a redundant switch statement during the translation of the
+intermediate language into abstract machine code otherwise.
 
 We also replace applications of newtype constructors by their
-arguments. This transformation was already performed during
+arguments. This transformation was performed already during
 desugaring, but $\eta$-expansion and optimization may introduce
-further possibilities for this transformation.
+further possibilities to apply this transformation.
 \begin{verbatim}
 
 > translExpr :: ValueEnv -> [Ident] -> RenameEnv -> Expression a
@@ -370,7 +370,9 @@ further possibilities for this transformation.
 >   caseExpr (translExpr tyEnv vs env e) (map (translAlt tyEnv vs env v) alts)
 >   where caseExpr e alts
 >           | v `elem` fv alts =
->               IL.Let (IL.Binding v e) (IL.Case IL.Rigid (IL.Variable v) alts)
+>               IL.Case IL.Flex e
+>                       [IL.Alt (IL.VariablePattern v)
+>                               (IL.Case IL.Rigid (IL.Variable v) alts)]
 >           | otherwise = IL.Case IL.Rigid e alts
 > translExpr _ _ _ _ = internalError "translExpr"
 

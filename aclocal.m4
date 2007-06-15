@@ -1,6 +1,6 @@
-# $Id: aclocal.m4 1833 2005-11-12 14:39:21Z wlux $
+# $Id: aclocal.m4 2253 2007-06-15 17:47:50Z wlux $
 #
-# Copyright (c) 2002-2005, Wolfgang Lux
+# Copyright (c) 2002-2006, Wolfgang Lux
 #
 
 ########################################################################
@@ -353,7 +353,8 @@ AC_DEFUN([CURRY_C_DYNAMIC_NO_PIC],
     AC_MSG_CHECKING([whether $CC accepts -mdynamic-no-pic])
     save_CC=$CC
     CC="$CC -mdynamic-no-pic"
-    AC_COMPILE_IFELSE([AC_LANG_SOURCE([[int foo() { return 0; }]])],
+    AC_COMPILE_IFELSE([AC_LANG_SOURCE([[extern void bar(void);
+                                        int foo() { bar(); return 0; }]])],
                       [AC_MSG_RESULT(yes)],
                       [CC=$save_CC
 		       AC_MSG_RESULT(no)]);;

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CPS.lhs 1857 2006-02-19 15:14:33Z wlux $
+% $Id: CPS.lhs 2251 2007-06-15 14:36:17Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,7 +10,7 @@
 
 > module CPS(CPSFunction(..), CPSCont(..),
 >            CaseBlock(..), CPSTag(..), CPSStmt(..),
->            cpsFunction, cpsApply, cpsInst, cpsVars, contVars) where
+>            cpsFunction, cpsApply, cpsInst, cpsEnv, contVars) where
 > import Cam
 > import List
 > import Set
@@ -38,11 +38,15 @@ abstract machine code function. By convention, the CPS function that
 corresponds to the entry point of an abstract machine code function is
 always assigned key 0.
 
-No free variables can occur in CPS functions, i.e., their argument
-lists must name all variables that are used in the bodies.
+A CPS function has two argument lists. The first contains the proper
+arguments of the function and the second the free variables of the
+function's body. Note that neither \texttt{CPSJump} nor
+\texttt{CPSChoices} allow passing arguments to their continuations, so
+these continuation must not have proper function arguments (cf.
+\texttt{cpsInst} below).
 \begin{verbatim}
 
-> data CPSFunction = CPSFunction Name Int [Name] CPSStmt deriving Show
+> data CPSFunction = CPSFunction Name Int [Name] [Name] CPSStmt deriving Show
 > data CPSStmt =
 >     CPSJump CPSCont
 >   | CPSReturn Expr
@@ -69,17 +73,17 @@ lists must name all variables that are used in the bodies.
 >   deriving Show
 
 > instance Eq CPSFunction where
->   CPSFunction f1 n1 _ _ == CPSFunction f2 n2 _ _ = f1 == f2 && n1 == n2
+>   CPSFunction f1 n1 _ _ _ == CPSFunction f2 n2 _ _ _ = f1 == f2 && n1 == n2
 > instance Ord CPSFunction where
->   CPSFunction f1 n1 _ _ `compare` CPSFunction f2 n2 _ _ =
+>   CPSFunction f1 n1 _ _ _ `compare` CPSFunction f2 n2 _ _ _ =
 >     case f1 `compare` f2 of
 >       EQ -> n1 `compare` n2
 >       ne -> ne
 
 > instance Show CPSCont where
->   showsPrec p (CPSCont (CPSFunction f n vs _)) = showParen (p > 10) $
+>   showsPrec p (CPSCont (CPSFunction f n _ ws _)) = showParen (p > 10) $
 >     showString "CPSCont " . shows f . showChar ' ' . shows n .
->     showChar ' ' . showList vs
+>     showChar ' ' . showList ws
 >   showsPrec p (CPSInst v t) = showParen (p > 10) $
 >     showString "CPSInst " . shows v . showChar ' ' . showsPrec 11 t
 
@@ -87,19 +91,19 @@ lists must name all variables that are used in the bodies.
 > cpsFunction f vs st = linearize (snd (cps f Nothing vs 0 st))
 
 > cpsApply :: Name -> [Name] -> [CPSFunction]
-> cpsApply f vs@(v:vs') = [k0,k1]
->   where k0 = CPSFunction f 0 vs (CPSWithCont (CPSCont k1) (CPSEnter v))
->         k1 = CPSFunction f 1 vs
+> cpsApply f (v:vs) = [k0,k1]
+>   where k0 = CPSFunction f 0 (v:vs) [] (CPSWithCont (CPSCont k1) (CPSEnter v))
+>         k1 = CPSFunction f 1 [v] vs
 >                (CPSSwitch False v
 >                   [CaseBlock CPSFreeCase
 >                              (CPSWithCont (CPSCont k1) (CPSDelay v)),
->                    CaseBlock CPSDefaultCase (CPSApply v vs')])
+>                    CaseBlock CPSDefaultCase (CPSApply v vs)])
 
 > cpsInst :: Name -> Name -> Tag -> CPSFunction
-> cpsInst f v t = CPSFunction f 0 [v] (cpsFresh v t)
+> cpsInst f v t = CPSFunction f 0 [] [v] (cpsFresh v t)
 
-> cpsVars :: CPSFunction -> [Name]
-> cpsVars (CPSFunction _ _ vs _) = vs
+> cpsEnv :: CPSFunction -> [Name]
+> cpsEnv (CPSFunction _ _ _ ws _) = ws
 
 \end{verbatim}
 The transformation into CPS code is implemented by a top-down
@@ -135,8 +139,9 @@ when transforming a CPS graph into a linear sequence of CPS functions.
 \begin{verbatim}
 
 > cps :: Name -> Maybe CPSCont -> [Name] -> Int -> Stmt -> (Int,CPSFunction)
-> cps f k ws n st = (n',f')
->   where f' = CPSFunction f n (nub (ws ++ freeVars st k)) st'
+> cps f k vs n st = (n',f')
+>   where f' = CPSFunction f n vs ws st'
+>         ws = filter (`notElem` vs) (nub (freeVars st k))
 >         (n',st') = cpsStmt f (Just (CPSCont f')) k (n + 1) st
 
 > cpsCase :: Name -> Maybe CPSCont -> Int -> Case -> (Int,CaseBlock)
@@ -174,15 +179,17 @@ when transforming a CPS graph into a linear sequence of CPS functions.
 >             free (Bind _ n) = exprVars n
 > cpsStmt f k0 k n (Switch rf v cases) =
 >   maybe (cpsJumpSwitch f) (cpsSwitch f) k0 k n rf v cases
-> cpsStmt f _ k n (Choices alts) = (n',CPSChoices Nothing (map CPSCont ks))
->   where (n',ks) = mapAccumL (cps f k vs) n alts
->         vs = nub (freeVars (Choices alts) k)
+> cpsStmt f _ k n (Choices alts) =
+>   (n',CPSChoices Nothing (map (CPSCont . updEnv ws) ks))
+>   where (n',ks) = mapAccumL (cps f k []) n alts
+>         ws = nub (freeVars (Choices alts) k)
+>         updEnv ws (CPSFunction f n vs _ st) = CPSFunction f n vs ws st
 
 > cpsJumpSwitch :: Name -> Maybe CPSCont -> Int -> RF -> Name -> [Case]
 >               -> (Int,CPSStmt)
-> cpsJumpSwitch f k n rf v cases = (n',CPSJump k')
->   where k' = CPSCont (CPSFunction f n vs st')
->         vs = nub (v : freeVars (Switch rf v cases) k)
+> cpsJumpSwitch f k n rf v cases = (n',CPSWithCont k' (CPSReturn (Var v)))
+>   where k' = CPSCont (CPSFunction f n [v] ws st')
+>         ws = filter (v /=) (nub (freeVars (Switch rf v cases) k))
 >         (n',st') = cpsSwitch f k' k (n + 1) rf v cases
 
 > cpsSwitch :: Name -> CPSCont -> Maybe CPSCont -> Int -> RF -> Name -> [Case]
@@ -218,11 +225,11 @@ when transforming a CPS graph into a linear sequence of CPS functions.
 > unboxedSwitch (DefaultCase : cases) = unboxedSwitch cases
 
 > contVars :: CPSCont -> [Name]
-> contVars (CPSCont k) = cpsVars k
+> contVars (CPSCont k) = cpsEnv k
 > contVars (CPSInst v _) = [v]
 
 > freeVars :: Stmt -> Maybe CPSCont -> [Name]
-> freeVars st k = stmtVars st (maybe [] (tail . contVars) k)
+> freeVars st k = stmtVars st (maybe [] contVars k)
 
 > stmtVars :: Stmt -> [Name] -> [Name]
 > stmtVars (Return e) vs = exprVars e ++ vs
@@ -274,8 +281,8 @@ duplication of shared continuations.
 > linearize = linearizeFun minBound
 
 > linearizeFun :: Int -> CPSFunction -> [CPSFunction]
-> linearizeFun n0 (CPSFunction f n vs st)
->   | n > n0 = CPSFunction f n vs st : linearizeStmt n st
+> linearizeFun n0 (CPSFunction f n vs ws st)
+>   | n > n0 = CPSFunction f n vs ws st : linearizeStmt n st
 >   | otherwise = []
 
 > linearizeCont :: Int -> CPSCont -> [CPSFunction]

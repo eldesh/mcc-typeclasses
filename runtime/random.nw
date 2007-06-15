@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: random.nw 2252 2007-06-15 17:45:09Z wlux $
+% $Id: random.nw 2254 2007-06-15 18:42:06Z wlux $
 %
-% Copyright (c) 2004-2005, Wolfgang Lux
+% Copyright (c) 2004-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Random Numbers}
@@ -47,7 +47,7 @@ moving nodes around, and are released when their [[StdGen]] nodes
 becomes garbage.
 
 <<random.c>>=
-#define EVAL_RIGID_STDGEN(l)	EVAL_RIGID_ABSTRACT(l)
+#define MATCH_RIGID_STDGEN(l)	MATCH_RIGID_ABSTRACT(l)
 #define stdgen_node_size	wordsof(StdGen)
 
 static void finalize_stdgen(Node *);
@@ -80,13 +80,21 @@ number generator so as to not disrupt its operation.
 
 <<random.c>>=
 DECLARE_LABEL(extern, __mkStdGen);
+DECLARE_LABEL(static, __mkStdGen_1);
 
 FUNCTION(__mkStdGen)
 {
+ ENTRY_LABEL(extern, __mkStdGen)
+    EVAL(__mkStdGen_1);
+}
+
+static
+FUNCTION(__mkStdGen_1)
+{
     unsigned long seed;
     StdGen	  *rng;
- ENTRY_LABEL(extern, __mkStdGen)
-    EVAL_RIGID_INT(__mkStdGen);
+ ENTRY_LABEL(static, __mkStdGen_1)
+    MATCH_RIGID_INT(__mkStdGen_1);
 
     seed = long_val(sp[0]);
     sp	+= 1;
@@ -134,6 +142,7 @@ DECLARE_LABEL(extern, __nextStdGen);
 DECLARE_LABEL(extern, __nextRStdGen);
 DECLARE_LABEL(static, __nextRStdGen_1);
 DECLARE_LABEL(static, __nextRStdGen_2);
+DECLARE_LABEL(static, __nextRStdGen_3);
 
 static const struct int_node minInt_node = { &int_info, LONG_MIN };
 static const struct int_node maxInt_node = { &int_info, LONG_MAX };
@@ -149,36 +158,35 @@ FUNCTION(__nextStdGen)
     sp[0] = sp[2];
     sp[1] = minInt;
     sp[2] = maxInt;
-    GOTO(__nextRStdGen_2);
+    EVAL_BOXED(__nextRStdGen_3);
 }
 
 FUNCTION(__nextRStdGen)
 {
-    Node *lo, *hi;
  ENTRY_LABEL(extern, __nextRStdGen)
-    EVAL_RIGID_INT(__nextRStdGen);
-    lo	  = sp[0];
-    hi	  = sp[1];
-    sp[0] = hi;
-    sp[1] = lo;
-    GOTO(__nextRStdGen_1);
+    EVAL(__nextRStdGen_1);
 }
 
 static
 FUNCTION(__nextRStdGen_1)
 {
-    Node *rng, *hi;
  ENTRY_LABEL(static, __nextRStdGen_1)
-    EVAL_RIGID_INT(__nextRStdGen_1);
-    hi	  = sp[0];
-    rng	  = sp[2];
-    sp[0] = rng;
-    sp[2] = hi;
-    GOTO(__nextRStdGen_2);
+    MATCH_RIGID_INT(__nextRStdGen_1);
+    SWAPn(1);
+    EVAL(__nextRStdGen_2);
 }
 
 static
 FUNCTION(__nextRStdGen_2)
+{
+ ENTRY_LABEL(static, __nextRStdGen_2)
+    MATCH_RIGID_INT(__nextRStdGen_2);
+    SWAPn(2);
+    EVAL_BOXED(__nextRStdGen_3);
+}
+
+static
+FUNCTION(__nextRStdGen_3)
 {
     char   *o;
     int    bits;
@@ -186,9 +194,8 @@ FUNCTION(__nextRStdGen_2)
     unsigned long diff, mask;
     StdGen *rng;
     Node   *p, *i;
-
- ENTRY_LABEL(static, __nextRStdGen_2)
-    EVAL_RIGID_STDGEN(__nextRStdGen_2);
+ ENTRY_LABEL(static, __nextRStdGen_3)
+    MATCH_RIGID_STDGEN(__nextRStdGen_3);
 
     CHECK_HEAP(pair_node_size + int_node_size);
 
@@ -297,11 +304,19 @@ static StdGen *stdGen;
 } while (0)
 
 DECLARE_LABEL(extern, __setStdGen);
+DECLARE_LABEL(static, __setStdGen_1);
 
 FUNCTION(__setStdGen)
 {
  ENTRY_LABEL(extern, __setStdGen)
-    EVAL_RIGID_STDGEN(__setStdGen);
+    EVAL_BOXED(__setStdGen_1);
+}
+
+static
+FUNCTION(__setStdGen_1)
+{
+ ENTRY_LABEL(static, __setStdGen_1)
+    MATCH_RIGID_STDGEN(__setStdGen_1);
     if ( stdGen == 0 )
 	add_global_root((Node **)&stdGen);
     DET_CHECK("Random.stdGen");

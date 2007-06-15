@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: search.nw 2252 2007-06-15 17:45:09Z wlux $
+% $Id: search.nw 2254 2007-06-15 18:42:06Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -118,12 +118,20 @@ are shared instead of allocating fresh nodes.
 
 <<search.c>>=
 DECLARE_LABEL(extern, __try);
+DECLARE_LABEL(static, __try_1);
 
 FUNCTION(__try)
 {
-    Node *susp, *list, *sc, *var;
  ENTRY_LABEL(extern, __try)
-    EVAL_RIGID_PAPP(__try);
+    EVAL_BOXED(__try_1);
+}
+
+static
+FUNCTION(__try_1)
+{
+    Node *susp, *list, *sc, *var;
+ ENTRY_LABEL(static, __try_1)
+    MATCH_RIGID_PAPP(__try_1);
     assert(sp[0]->info->tag == 1);
 
     /* return immediately when applied to a solved search goal */

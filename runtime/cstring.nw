@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cstring.nw 2252 2007-06-15 17:45:09Z wlux $
+% $Id: cstring.nw 2254 2007-06-15 18:42:06Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -120,7 +120,7 @@ FUNCTION(nf_string)
     CHECK_STACK1();
     sp	 -= 1;
     sp[0] = sp[1];
-    GOTO(nf_string_1);
+    EVAL_BOXED(nf_string_1);
 }
 
 static
@@ -128,7 +128,7 @@ FUNCTION(nf_string_1)
 {
     Node *list;
  ENTRY_LABEL(static, nf_string_1)
-    EVAL_RIGID_DATA(nf_string_1);
+    MATCH_RIGID_DATA(nf_string_1);
     list = sp[0];
     switch ( node_tag(list) )
     {
@@ -141,7 +141,7 @@ FUNCTION(nf_string_1)
 	sp   -= 1;
 	sp[0] = list->c.args[0];
 	sp[1] = list->c.args[1];
-	GOTO(nf_string_2);
+	EVAL_BOXED(nf_string_2);
     default:
 	unexpected_tag("nf_string", node_tag(list));
     }
@@ -151,16 +151,16 @@ static
 FUNCTION(nf_string_2)
 {
  ENTRY_LABEL(static, nf_string_2)
-    EVAL_RIGID_CHAR(nf_string_2);
+    MATCH_RIGID_CHAR(nf_string_2);
     sp++;
 
     /* continue to evaluate the tail of the string */
-    GOTO(nf_string_1);
+    EVAL_BOXED(nf_string_1);
 }
 
 @ 
 The function [[string_length]] returns the length of a Curry string.
-The function [[copy_string]] copies a Curry string into a string 
+The function [[copy_string]] copies a Curry string into a string
 buffer terminated with a final [['\0']] character. The buffer must be
 large enough to hold the string including the terminator
 character. Finally, the function [[to_string]] uses [[malloc]] to
@@ -320,17 +320,26 @@ to [[__peekCString]]. This allows converting C strings with embedded
 
 <<cstring.c>>=
 DECLARE_LABEL(extern, __peekCString);
+DECLARE_LABEL(static, __peekCString_1);
 
 DECLARE_LABEL(extern, __peekCStringLen);
 DECLARE_LABEL(static, __peekCStringLen_1);
 DECLARE_LABEL(static, __peekCStringLen_2);
+DECLARE_LABEL(static, __peekCStringLen_3);
 
 FUNCTION(__peekCString)
 {
+ ENTRY_LABEL(extern, __peekCString)
+    EVAL_BOXED(__peekCString_1);
+}
+
+static
+FUNCTION(__peekCString_1)
+{
     char *cp;
     Node *r;
- ENTRY_LABEL(extern, __peekCString)
-    EVAL_RIGID_PTR(__peekCString);
+ ENTRY_LABEL(static, __peekCString_1)
+    MATCH_RIGID_PTR(__peekCString_1);
     cp = (char *)sp[0]->p.ptr;
     if ( cp == NULL )
     {
@@ -345,34 +354,38 @@ FUNCTION(__peekCString)
 FUNCTION(__peekCStringLen)
 {
  ENTRY_LABEL(extern, __peekCStringLen)
-    EVAL_RIGID_DATA(__peekCStringLen);
-    CHECK_STACK1();
-    sp	 -= 1;
-    sp[0] = sp[1]->c.args[0];
-    sp[1] = sp[1]->c.args[1];
-    GOTO(__peekCStringLen_1);
+    EVAL_BOXED(__peekCStringLen_1);
 }
 
 static
 FUNCTION(__peekCStringLen_1)
 {
-    Node *aux;
  ENTRY_LABEL(static, __peekCStringLen_1)
-    EVAL_RIGID_PTR(__peekCStringLen_1);
-    aux	  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = aux;
-    GOTO(__peekCStringLen_2);
+    MATCH_RIGID_DATA(__peekCStringLen_1);
+    CHECK_STACK1();
+    sp	 -= 1;
+    sp[0] = sp[1]->c.args[0];
+    sp[1] = sp[1]->c.args[1];
+    EVAL_BOXED(__peekCStringLen_2);
 }
 
 static
 FUNCTION(__peekCStringLen_2)
 {
+ ENTRY_LABEL(static, __peekCStringLen_2)
+    MATCH_RIGID_PTR(__peekCStringLen_2);
+    SWAPn(1);
+    EVAL(__peekCStringLen_3);
+}
+
+static
+FUNCTION(__peekCStringLen_3)
+{
     char *cp;
     long l;
     Node *r;
- ENTRY_LABEL(static, __peekCStringLen_2)
-    EVAL_RIGID_INT(__peekCStringLen_2);
+ ENTRY_LABEL(static, __peekCStringLen_3)
+    MATCH_RIGID_INT(__peekCStringLen_3);
     l = long_val(sp[0]);
     if ( l > 0 )
     {

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2252 2007-06-15 17:45:09Z wlux $
+% $Id: unify.nw 2254 2007-06-15 18:42:06Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -62,19 +62,15 @@ FUNCTION(___61__58__61_)
 {
  ENTRY_LABEL(extern, ___61__58__61_)
     TRACE_FUN("=:=", 2);
-    GOTO(___61__58__61__1);
+    EVAL(___61__58__61__1);
 }
 
 static
 FUNCTION(___61__58__61__1)
 {
-    Node *aux;
  ENTRY_LABEL(static, ___61__58__61__1)
-    EVAL_FLEX_POLY(___61__58__61__1);
-    aux	  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = aux;
-    GOTO(___61__58__61__2);
+    SWAPn(1);
+    EVAL(___61__58__61__2);
 }
 
 static
@@ -82,7 +78,6 @@ FUNCTION(___61__58__61__2)
 {
     Node *arg1, *arg2;
  ENTRY_LABEL(static, ___61__58__61__2)
-    EVAL_FLEX_POLY(___61__58__61__2);
     arg1 = sp[1];
     arg2 = sp[0];
 
@@ -638,11 +633,7 @@ FUNCTION(unify_var)
     {
 	if ( is_boxed(sp[1]) && is_variable_node(sp[1])
 	     && is_local_space(sp[1]->v.spc) )
-	{
-	    next  = sp[0];
-	    sp[0] = sp[1];
-	    sp[1] = next;
-	}
+	    SWAPn(1);
 	else
 	{
 	    CHECK_STACK1();
@@ -776,7 +767,7 @@ variable may be instantiated already. This may happen if a search
 strategy applies the search continuation to some non-variable term in
 order to restrict the search space, as in the following example:
 \begin{verbatim}
-  main = concatMap try $ map (`inject` nonNull) $ try goal 
+  main = concatMap try $ map (`inject` nonNull) $ try goal
   goal xs = length xs =:= 1
   nonNull (_:_) = success
 \end{verbatim}

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2252 2007-06-15 17:45:09Z wlux $
+% $Id: eval.nw 2254 2007-06-15 18:42:06Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -432,7 +432,7 @@ FUNCTION(___64_)
 {
  ENTRY_LABEL(extern, ___64_)
     TRACE_FUN("@", 2);
-    GOTO(___64__1);
+    EVAL_BOXED(___64__1);
 }
 
 static
@@ -442,8 +442,7 @@ FUNCTION(___64__1)
     Node	 *clos;
     NodeInfo	 *fInfo;
  ENTRY_LABEL(static, ___64__1)
-    /* evaluate the function argument to head normal form */
-    EVAL_RIGID_PAPP(___64__1);
+    MATCH_RIGID_PAPP(___64__1);
     clos = sp[0];
 
     /* check the number of missing arguments */
@@ -492,12 +491,19 @@ head normal form starting with the left argument.
 
 <<eval.c>>=
 DECLARE_LABEL(extern, __seq);
+DECLARE_LABEL(static, __seq_1);
 
 FUNCTION(__seq)
 {
-    Node *node;
  ENTRY_LABEL(extern, __seq)
-    EVAL_FLEX_POLY(__seq);
+    EVAL(__seq_1);
+}
+
+static
+FUNCTION(__seq_1)
+{
+    Node *node;
+ ENTRY_LABEL(static, __seq_1)
     node = sp[1];
     if ( is_boxed(node) )
     {
@@ -531,12 +537,19 @@ DECLARE_CONST(__Prelude__True);
 DECLARE_CONST(__Prelude__False);
 
 DECLARE_LABEL(extern, __isVar);
+DECLARE_LABEL(static, __isVar_1);
 
 FUNCTION(__isVar)
 {
-    Node *r;
  ENTRY_LABEL(extern, __isVar)
-    EVAL_FLEX_POLY(__isVar);
+    EVAL(__isVar_1);
+}
+
+static
+FUNCTION(__isVar_1)
+{
+    Node *r;
+ ENTRY_LABEL(static, __isVar_1)
     r	= is_boxed(sp[0]) && is_variable_node(sp[0]) ? CONST(__Prelude__True)
 						     : CONST(__Prelude__False);
     sp += 1;
@@ -550,12 +563,20 @@ non-variable term.
 
 <<eval.c>>=
 DECLARE_LABEL(extern, __ensureNotFree);
+DECLARE_LABEL(static, __ensureNotFree_1);
 
 FUNCTION(__ensureNotFree)
 {
-    Node *node;
  ENTRY_LABEL(extern, __ensureNotFree)
-    EVAL_RIGID_POLY(__ensureNotFree);
+    EVAL(__ensureNotFree_1);
+}
+
+static
+FUNCTION(__ensureNotFree_1)
+{
+    Node *node;
+ ENTRY_LABEL(static, __ensureNotFree_1)
+    MATCH_RIGID(__ensureNotFree_1);
     node = *sp++;
     RETURN(node);
 }
@@ -633,7 +654,7 @@ FUNCTION(__ensureGround)
 {
  ENTRY_LABEL(extern, __ensureGround)
     TRACE_FUN("ensureGround", 1);
-    GOTO(__ensureGround_1);
+    EVAL(__ensureGround_1);
 }
 
 static
@@ -645,7 +666,7 @@ FUNCTION(__ensureGround_1)
     static NodeInfo ensureGround_lazy_info_table[] =
 	LAZYINFO("ensureGround", __ensureGround, 1);
  ENTRY_LABEL(static, __ensureGround_1)
-    EVAL_RIGID_POLY(__ensureGround_1);
+    MATCH_RIGID(__ensureGround_1);
     node = sp[0];
     if ( is_boxed(node) )
     {
@@ -677,7 +698,7 @@ FUNCTION(__ensureGround_1)
 	    memcpy(node, sp[0], sz * word_size);
 
 	    for ( argp = is_vect ? node->a.args : node->c.args;
-		  n > 0; 
+		  n > 0;
 		  argp++, n-- )
 	    {
 		susp		= (Node *)hp;

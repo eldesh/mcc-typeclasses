@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2252 2007-06-15 17:45:09Z wlux $
+% $Id: files.nw 2254 2007-06-15 18:42:06Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -67,7 +67,7 @@ should not be blocked until the process really terminates,
 [[finalize_process]] calls [[waitpid]] with the [[WNOHANG]] flag.
 
 <<files.c>>=
-#define EVAL_RIGID_FILE(l)	EVAL_RIGID_ABSTRACT(l)
+#define MATCH_RIGID_FILE(l)	MATCH_RIGID_ABSTRACT(l)
 
 enum file_flags { readable, writable };
 #define mask(flag) (1<<(flag))
@@ -156,24 +156,29 @@ DECLARE_CONST(__Prelude__True);
 
 DECLARE_LABEL(extern, __primEqHandle);
 DECLARE_LABEL(static, __primEqHandle_1);
+DECLARE_LABEL(static, __primEqHandle_2);
 
 FUNCTION(__primEqHandle)
 {
-    Node *aux;
  ENTRY_LABEL(extern, __primEqHandle)
-    EVAL_RIGID_FILE(__primEqHandle);
-    aux	  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = aux;
-    GOTO(__primEqHandle_1);
+    EVAL_BOXED(__primEqHandle_1);
 }
 
 static
 FUNCTION(__primEqHandle_1)
 {
-    Node *r;
  ENTRY_LABEL(static, __primEqHandle_1)
-    EVAL_RIGID_FILE(__primEqHandle_1);
+    MATCH_RIGID_FILE(__primEqHandle_1);
+    SWAPn(1);
+    EVAL_BOXED(__primEqHandle_2);
+}
+
+static
+FUNCTION(__primEqHandle_2)
+{
+    Node *r;
+ ENTRY_LABEL(static, __primEqHandle_2)
+    MATCH_RIGID_FILE(__primEqHandle_2);
     r	= sp[1] == sp[0] ? Prelude_True : Prelude_False;
     sp += 2;
     RETURN(r);
@@ -271,12 +276,9 @@ FUNCTION(__openFile)
 static
 FUNCTION(__openFile_1)
 {
-    Node *fn;
  ENTRY_LABEL(static, __openFile_1)
-    fn	  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = fn;
-    GOTO(__openFile_2);
+    SWAPn(1);
+    EVAL_BOXED(__openFile_2);
 }
 
 static
@@ -288,7 +290,7 @@ FUNCTION(__openFile_2)
     Handle     *file;
  ENTRY_LABEL(static, __openFile_2)
     /* determine the access mode */
-    EVAL_RIGID_DATA(__openFile_2);
+    MATCH_RIGID_DATA(__openFile_2);
     switch ( node_tag(sp[0]) )
     {
     case ReadMode_tag:
@@ -352,19 +354,16 @@ FUNCTION(__openFd)
 {
  ENTRY_LABEL(extern, __openFd)
     TRACE_FUN("openFd", 3);
-    GOTO(__openFd_1);
+    EVAL(__openFd_1);
 }
 
 static
 FUNCTION(__openFd_1)
 {
-    Node *fd;
  ENTRY_LABEL(static, __openFd_1)
-    EVAL_RIGID_INT(__openFd_1);
-    fd	  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = fd;
-    GOTO(__openFd_2);
+    MATCH_RIGID_INT(__openFd_1);
+    SWAPn(1);
+    EVAL_BOXED(__openFd_2);
 }
 
 static
@@ -376,7 +375,7 @@ FUNCTION(__openFd_2)
     Handle     *file;
  ENTRY_LABEL(static, __openFd_2)
     /* determine the access mode */
-    EVAL_RIGID_DATA(__openFd_2);
+    MATCH_RIGID_DATA(__openFd_2);
     switch ( node_tag(sp[0]) )
     {
     case ReadMode_tag:
@@ -431,11 +430,19 @@ closed file handle has no effect.
 
 <<files.c>>=
 DECLARE_LABEL(extern, __hClose);
+DECLARE_LABEL(static, __hClose_1);
 
 FUNCTION(__hClose)
 {
  ENTRY_LABEL(extern, __hClose)
-    EVAL_RIGID_FILE(__hClose);
+    EVAL_BOXED(__hClose_1);
+}
+
+static
+FUNCTION(__hClose_1)
+{
+ ENTRY_LABEL(static, __hClose_1)
+    MATCH_RIGID_FILE(__hClose_1);
     close_handle((Handle *)sp[0]);
     sp += 2;
     RETURN(unit);
@@ -449,16 +456,32 @@ apply to a file handle. Note that for a semi-closed handle neither
 
 <<files.c>>=
 DECLARE_LABEL(extern, __hIsOpen);
+DECLARE_LABEL(static, __hIsOpen_1);
+
 DECLARE_LABEL(extern, __hIsClosed);
+DECLARE_LABEL(static, __hIsClosed_1);
+
 DECLARE_LABEL(extern, __hIsReadable);
+DECLARE_LABEL(static, __hIsReadable_1);
+
 DECLARE_LABEL(extern, __hIsWritable);
+DECLARE_LABEL(static, __hIsWritable_1);
+
 DECLARE_LABEL(extern, __hIsSeekable);
+DECLARE_LABEL(static, __hIsSeekable_1);
 
 FUNCTION(__hIsOpen)
 {
-    Node   *r;
  ENTRY_LABEL(extern, __hIsOpen)
-    EVAL_RIGID_FILE(__hIsOpen);
+    EVAL_BOXED(__hIsOpen_1);
+}
+
+static
+FUNCTION(__hIsOpen_1)
+{
+    Node   *r;
+ ENTRY_LABEL(static, __hIsOpen_1)
+    MATCH_RIGID_FILE(__hIsOpen_1);
     r	= is_open((Handle *)sp[0]) ? Prelude_True : Prelude_False;
     sp += 2;
     RETURN(r);
@@ -466,9 +489,16 @@ FUNCTION(__hIsOpen)
 
 FUNCTION(__hIsClosed)
 {
-    Node   *r;
  ENTRY_LABEL(extern, __hIsClosed)
-    EVAL_RIGID_FILE(__hIsClosed);
+    EVAL_BOXED(__hIsClosed_1);
+}
+
+static
+FUNCTION(__hIsClosed_1)
+{
+    Node   *r;
+ ENTRY_LABEL(static, __hIsClosed_1)
+    MATCH_RIGID_FILE(__hIsClosed_1);
     r	= ((Handle *)sp[0])->fp == NULL ? Prelude_True : Prelude_False;
     sp += 2;
     RETURN(r);
@@ -476,9 +506,16 @@ FUNCTION(__hIsClosed)
 
 FUNCTION(__hIsReadable)
 {
-    Node   *r;
  ENTRY_LABEL(extern, __hIsReadable)
-    EVAL_RIGID_FILE(__hIsReadable);
+    EVAL_BOXED(__hIsReadable_1);
+}
+
+static
+FUNCTION(__hIsReadable_1)
+{
+    Node   *r;
+ ENTRY_LABEL(static, __hIsReadable_1)
+    MATCH_RIGID_FILE(__hIsReadable_1);
     r	= is_readable((Handle *)sp[0]) ? Prelude_True : Prelude_False;
     sp += 2;
     RETURN(r);
@@ -486,9 +523,16 @@ FUNCTION(__hIsReadable)
 
 FUNCTION(__hIsWritable)
 {
-    Node   *r;
  ENTRY_LABEL(extern, __hIsWritable)
-    EVAL_RIGID_FILE(__hIsWritable);
+    EVAL_BOXED(__hIsWritable_1);
+}
+
+static
+FUNCTION(__hIsWritable_1)
+{
+    Node   *r;
+ ENTRY_LABEL(static, __hIsWritable_1)
+    MATCH_RIGID_FILE(__hIsWritable_1);
     r	= is_writable((Handle *)sp[0]) ? Prelude_True : Prelude_False;
     sp += 2;
     RETURN(r);
@@ -496,10 +540,17 @@ FUNCTION(__hIsWritable)
 
 FUNCTION(__hIsSeekable)
 {
+ ENTRY_LABEL(extern, __hIsSeekable)
+    EVAL_BOXED(__hIsSeekable_1);
+}
+
+static
+FUNCTION(__hIsSeekable_1)
+{
     Handle *file;
     Node   *r;
- ENTRY_LABEL(extern, __hIsSeekable)
-    EVAL_RIGID_FILE(__hIsSeekable);
+ ENTRY_LABEL(static, __hIsSeekable_1)
+    MATCH_RIGID_FILE(__hIsSeekable_1);
     file = (Handle *)sp[0];
     sp	+= 2;
 
@@ -532,6 +583,7 @@ program until the next character is available.
 <<files.c>>=
 DECLARE_LABEL(extern, __isEOF);
 DECLARE_LABEL(extern, __hIsEOF);
+DECLARE_LABEL(static, __hIsEOF_1);
 
 FUNCTION(__isEOF)
 {
@@ -539,16 +591,23 @@ FUNCTION(__isEOF)
     CHECK_STACK(1);
     sp	 -= 1;
     sp[0] = (Node *)&stdin_node;
-    GOTO(__hIsEOF);
+    GOTO(__hIsEOF_1);
 }
 
 FUNCTION(__hIsEOF)
 {
+ ENTRY_LABEL(extern, __hIsEOF)
+    EVAL_BOXED(__hIsEOF_1);
+}
+
+static
+FUNCTION(__hIsEOF_1)
+{
     int	   c;
     Node   *r;
     Handle *file;
- ENTRY_LABEL(extern, __hIsEOF)
-    EVAL_RIGID_FILE(__hIsEOF);
+ ENTRY_LABEL(static, __hIsEOF_1)
+    MATCH_RIGID_FILE(__hIsEOF_1);
     file = (Handle *)sp[0];
 
     if ( !is_readable(file) )
@@ -583,6 +642,7 @@ semi-closed state after [[hGetContents]] has been applied to it.
 <<files.c>>=
 DECLARE_LABEL(extern, __getChar);
 DECLARE_LABEL(extern, __hGetChar);
+DECLARE_LABEL(static, __hGetChar_1);
 
 FUNCTION(__getChar)
 {
@@ -590,16 +650,23 @@ FUNCTION(__getChar)
     CHECK_STACK(1);
     sp	 -= 1;
     sp[0] = (Node *)&stdin_node;
-    GOTO(__hGetChar);
+    GOTO(__hGetChar_1);
 }
 
 FUNCTION(__hGetChar)
 {
+ ENTRY_LABEL(extern, __hGetChar)
+    EVAL_BOXED(__hGetChar_1);
+}
+
+static
+FUNCTION(__hGetChar_1)
+{
     int	   c;
     Node   *r;
     Handle *file;
- ENTRY_LABEL(extern, __hGetChar)
-    EVAL_RIGID_FILE(__hGetChar);
+ ENTRY_LABEL(static, __hGetChar_1)
+    MATCH_RIGID_FILE(__hGetChar_1);
     file = (Handle *)sp[0];
 
     if ( !is_readable(file) )
@@ -627,14 +694,22 @@ file without removing it from the input stream.
 
 <<files.c>>=
 DECLARE_LABEL(extern, __hLookAhead);
+DECLARE_LABEL(static, __hLookAhead_1);
 
 FUNCTION(__hLookAhead)
+{
+ ENTRY_LABEL(extern, __hLookAhead)
+    EVAL_BOXED(__hLookAhead_1);
+}
+
+static
+FUNCTION(__hLookAhead_1)
 {
     int	   c;
     Node   *r;
     Handle *file;
- ENTRY_LABEL(extern, __hLookAhead)
-    EVAL_RIGID_FILE(__hLookAhead);
+ ENTRY_LABEL(static, __hLookAhead_1)
+    MATCH_RIGID_FILE(__hLookAhead_1);
     file = (Handle *)sp[0];
 
     if ( !is_readable(file) )
@@ -681,6 +756,7 @@ system.
 <<files.c>>=
 DECLARE_LABEL(extern, __getLine);
 DECLARE_LABEL(extern, __hGetLine);
+DECLARE_LABEL(static, __hGetLine_1);
 
 FUNCTION(__getLine)
 {
@@ -688,16 +764,23 @@ FUNCTION(__getLine)
     CHECK_STACK(1);
     sp	 -= 1;
     sp[0] = (Node *)&stdin_node;
-    GOTO(__hGetLine);
+    GOTO(__hGetLine_1);
 }
 
 FUNCTION(__hGetLine)
 {
+ ENTRY_LABEL(extern, __hGetLine)
+    EVAL_BOXED(__hGetLine_1);
+}
+
+static
+FUNCTION(__hGetLine_1)
+{
     char buf[256], *cp;
     Node *line, *tail;
     FILE *fp;
- ENTRY_LABEL(extern, __hGetLine)
-    EVAL_RIGID_FILE(__hGetLine);
+ ENTRY_LABEL(static, __hGetLine_1)
+    MATCH_RIGID_FILE(__hGetLine_1);
 
     if ( !is_readable((Handle *)sp[0]) )
     {
@@ -786,6 +869,7 @@ because the representation of the world would be a simple constant
 DECLARE_LABEL(extern, __readFile);
 DECLARE_LABEL(extern, __getContents);
 DECLARE_LABEL(extern, __hGetContents);
+DECLARE_LABEL(static, __hGetContents_1);
 DECLARE_LABEL(static, lazyRead);
 
 DECLARE_LABEL(static, eval_lazy_1);
@@ -861,7 +945,7 @@ FUNCTION(__readFile)
     sp[0] = fn;
     sp[1] = CONST(__IO__ReadMode);
     sp[2] = world;
-    sp[3] = (Node *)__hGetContents;
+    sp[3] = (Node *)__hGetContents_1;
     GOTO(__openFile);
 }
 
@@ -871,15 +955,22 @@ FUNCTION(__getContents)
     CHECK_STACK(1);
     sp	 -= 1;
     sp[0] = (Node *)&stdin_node;
-    GOTO(__hGetContents);
+    GOTO(__hGetContents_1);
 }
 
 FUNCTION(__hGetContents)
 {
+ ENTRY_LABEL(extern, __hGetContents)
+    EVAL_BOXED(__hGetContents_1);
+}
+
+static
+FUNCTION(__hGetContents_1)
+{
     Node   *susp;
     Handle *file;
- ENTRY_LABEL(extern, __hGetContents)
-    EVAL_RIGID_FILE(__hGetContents);
+ ENTRY_LABEL(static, __hGetContents_1)
+    MATCH_RIGID_FILE(__hGetContents_1);
     file = (Handle *)sp[0];
 
     if ( !is_readable(file) )
@@ -954,6 +1045,7 @@ the specified handle, where [[putChar]] is an abbreviation for
 DECLARE_LABEL(extern, __putChar);
 DECLARE_LABEL(extern, __hPutChar);
 DECLARE_LABEL(static, __hPutChar_1);
+DECLARE_LABEL(static, __hPutChar_2);
 
 FUNCTION(__putChar)
 {
@@ -962,26 +1054,30 @@ FUNCTION(__putChar)
     sp	 -= 1;
     sp[0] = sp[1];
     sp[1] = (Node *)&stdout_node;
-    GOTO(__hPutChar_1);
+    EVAL_BOXED(__hPutChar_2);
 }
 
 FUNCTION(__hPutChar)
 {
-    Node *file;
  ENTRY_LABEL(extern, __hPutChar)
-    EVAL_RIGID_FILE(__hPutChar);
-    file  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = file;
-    GOTO(__hPutChar_1);
+    EVAL_BOXED(__hPutChar_1);
 }
 
 static
 FUNCTION(__hPutChar_1)
 {
-    Handle *file;
  ENTRY_LABEL(static, __hPutChar_1)
-    EVAL_RIGID_CHAR(__hPutChar_1);
+    MATCH_RIGID_FILE(__hPutChar_1);
+    SWAPn(1);
+    EVAL_BOXED(__hPutChar_2);
+}
+
+static
+FUNCTION(__hPutChar_2)
+{
+    Handle *file;
+ ENTRY_LABEL(static, __hPutChar_2)
+    MATCH_RIGID_CHAR(__hPutChar_2);
     file = (Handle *)sp[1];
 
     if ( !is_writable(file) )
@@ -1010,6 +1106,7 @@ DECLARE_LABEL(extern, __putStr);
 DECLARE_LABEL(extern, __hPutStr);
 DECLARE_LABEL(static, __hPutStr_1);
 DECLARE_LABEL(static, __hPutStr_2);
+DECLARE_LABEL(static, __hPutStr_3);
 
 FUNCTION(__putStr)
 {
@@ -1018,33 +1115,36 @@ FUNCTION(__putStr)
     sp	 -= 1;
     sp[0] = sp[1];
     sp[1] = (Node *)&stdout_node;
-    GOTO(__hPutStr_1);
+    EVAL_BOXED(__hPutStr_2);
 }
 
 FUNCTION(__hPutStr)
 {
-    Node *file;
  ENTRY_LABEL(extern, __hPutStr)
-    EVAL_RIGID_FILE(__hPutStr);
-    file = sp[0];
-
-    if ( !is_writable((Handle *)file) )
-    {
-	*++sp = from_string("hPutStr: handle not writable");
-	GOTO(__ioError);
-    }
-
-    sp[0] = sp[1];
-    sp[1] = file;
-    GOTO(__hPutStr_1);
+    EVAL_BOXED(__hPutStr_1);
 }
 
 static
 FUNCTION(__hPutStr_1)
 {
-    Node *list;
  ENTRY_LABEL(static, __hPutStr_1)
-    EVAL_RIGID_DATA(__hPutStr_1);
+    MATCH_RIGID_FILE(__hPutStr_1);
+    if ( !is_writable((Handle *)sp[0]) )
+    {
+	*++sp = from_string("hPutStr: handle not writable");
+	GOTO(__ioError);
+    }
+
+    SWAPn(1);
+    EVAL_BOXED(__hPutStr_2);
+}
+
+static
+FUNCTION(__hPutStr_2)
+{
+    Node *list;
+ ENTRY_LABEL(static, __hPutStr_2)
+    MATCH_RIGID_DATA(__hPutStr_2);
     list = sp[0];
     switch ( node_tag(list) )
     {
@@ -1056,18 +1156,18 @@ FUNCTION(__hPutStr_1)
 	sp   -= 1;
 	sp[0] = list->c.args[0];
 	sp[1] = list->c.args[1];
-	GOTO(__hPutStr_2);
+	EVAL_BOXED(__hPutStr_3);
     default:
 	unexpected_tag("hPutStr", node_tag(list));
     }
 }
 
 static
-FUNCTION(__hPutStr_2)
+FUNCTION(__hPutStr_3)
 {
     Handle *file;
- ENTRY_LABEL(static, __hPutStr_2)
-    EVAL_RIGID_CHAR(__hPutStr_2);
+ ENTRY_LABEL(static, __hPutStr_3)
+    MATCH_RIGID_CHAR(__hPutStr_3);
 
     file = (Handle *)sp[2];
     if ( fputc(sp[0]->ch.ch, file->fp) == EOF )
@@ -1078,7 +1178,7 @@ FUNCTION(__hPutStr_2)
     }
 
     sp += 1;
-    GOTO(__hPutStr_1);
+    EVAL_BOXED(__hPutStr_2);
 }
 
 @ 
@@ -1094,7 +1194,7 @@ calls [[hPutStr]] and then closes the file handle.
 <<files.c>>=
 DECLARE_LABEL(extern, __writeFile);
 DECLARE_LABEL(extern, __appendFile);
-DECLARE_LABEL(extern, __hPutContents);
+DECLARE_LABEL(static, __hPutContents);
 DECLARE_LABEL(static, __hPutContents_1);
 
 FUNCTION(__writeFile)
@@ -1129,10 +1229,11 @@ FUNCTION(__appendFile)
     GOTO(__openFile);
 }
 
+static
 FUNCTION(__hPutContents)
 {
     Node *file, *str, *world;
- ENTRY_LABEL(extern, __hPutContents)
+ ENTRY_LABEL(static, __hPutContents)
     file  = sp[0];
     str	  = sp[1];
     world = sp[2];
@@ -1161,14 +1262,22 @@ provided that the file is seekable.
 
 <<files.c>>=
 DECLARE_LABEL(extern, __hFileSize);
+DECLARE_LABEL(static, __hFileSize_1);
 
 FUNCTION(__hFileSize)
+{
+ ENTRY_LABEL(extern, __hFileSize)
+    EVAL_BOXED(__hFileSize_1);
+}
+
+static
+FUNCTION(__hFileSize_1)
 {
     long   curpos, endpos;
     Node   *r;
     Handle *file;
- ENTRY_LABEL(extern, __hFileSize)
-    EVAL_RIGID_FILE(__hFileSize);
+ ENTRY_LABEL(static, __hFileSize_1)
+    MATCH_RIGID_FILE(__hFileSize_1);
     file = (Handle *)sp[0];
 
     if ( !is_open(file) )
@@ -1215,13 +1324,21 @@ handle is connected to a terminal and [[False]] otherwise. We use the
 
 <<files.c>>=
 DECLARE_LABEL(extern, __hIsTerminalDevice);
+DECLARE_LABEL(static, __hIsTerminalDevice_1);
 
 FUNCTION(__hIsTerminalDevice)
 {
+ ENTRY_LABEL(extern, __hIsTerminalDevice)
+    EVAL_BOXED(__hIsTerminalDevice_1);
+}
+
+static
+FUNCTION(__hIsTerminalDevice_1)
+{
     Node   *r;
     Handle *file;
- ENTRY_LABEL(extern, __hIsTerminalDevice)
-    EVAL_RIGID_FILE(__hIsTerminalDevice);
+ ENTRY_LABEL(static, __hIsTerminalDevice_1)
+    MATCH_RIGID_FILE(__hIsTerminalDevice_1);
     file = (Handle *)sp[0];
 
     if ( !is_open(file) )
@@ -1262,16 +1379,24 @@ DECLARE_CONST(__IO__NoBuffering);
 DECLARE_CONST(__IO__LineBuffering);
 DECLARE_DATA(__IO__BlockBuffering);
 
-DECLARE_LABEL(extern, __hGetBuffering); 
+DECLARE_LABEL(extern, __hGetBuffering);
+DECLARE_LABEL(static, __hGetBuffering_1);
 
 FUNCTION(__hGetBuffering)
+{
+ ENTRY_LABEL(extern, __hGetBuffering)
+    EVAL_BOXED(__hGetBuffering_1);
+}
+
+static
+FUNCTION(__hGetBuffering_1)
 {
     short  bmode;
     long   bsize;
     Node   *size, *r;
     Handle *file;
- ENTRY_LABEL(extern, __hGetBuffering)
-    EVAL_RIGID_FILE(__hGetBuffering);
+ ENTRY_LABEL(static, __hGetBuffering_1)
+    MATCH_RIGID_FILE(__hGetBuffering_1);
     file = (Handle *)sp[0];
 
     if ( !is_open(file) )
@@ -1344,25 +1469,30 @@ DECLARE_LABEL(extern, __hSetBuffering);
 DECLARE_LABEL(static, __hSetBuffering_1);
 DECLARE_LABEL(static, __hSetBuffering_2);
 DECLARE_LABEL(static, __hSetBuffering_3);
+DECLARE_LABEL(static, __hSetBuffering_4);
 
 FUNCTION(__hSetBuffering)
 {
-    Node *file;
  ENTRY_LABEL(extern, __hSetBuffering)
-    EVAL_RIGID_FILE(__hSetBuffering);
-    file  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = file;
-    GOTO(__hSetBuffering_1);
+    EVAL_BOXED(__hSetBuffering_1);
 }
 
 static
 FUNCTION(__hSetBuffering_1)
 {
+ ENTRY_LABEL(static, __hSetBuffering_1)
+    MATCH_RIGID_FILE(__hSetBuffering_1);
+    SWAPn(1);
+    EVAL_BOXED(__hSetBuffering_2);
+}
+
+static
+FUNCTION(__hSetBuffering_2)
+{
     short  bmode;
     Handle *file;
- ENTRY_LABEL(static, __hSetBuffering_1)
-    EVAL_RIGID_DATA(__hSetBuffering_1);
+ ENTRY_LABEL(static, __hSetBuffering_2)
+    MATCH_RIGID_DATA(__hSetBuffering_2);
     switch ( node_tag(sp[0]) )
     {
     case NoBuffering_tag:
@@ -1373,7 +1503,7 @@ FUNCTION(__hSetBuffering_1)
 	break;
     case BlockBuffering_tag:
 	sp[0] = sp[0]->c.args[0];
-	GOTO(__hSetBuffering_2);
+	EVAL_BOXED(__hSetBuffering_3);
     default:
 	unexpected_tag("hSetBuffering", node_tag(sp[0]));
     }
@@ -1402,18 +1532,18 @@ FUNCTION(__hSetBuffering_1)
 }
 
 static
-FUNCTION(__hSetBuffering_2)
+FUNCTION(__hSetBuffering_3)
 {
     Handle *file;
- ENTRY_LABEL(static, __hSetBuffering_2)
-    EVAL_RIGID_DATA(__hSetBuffering_2);
+ ENTRY_LABEL(static, __hSetBuffering_3)
+    MATCH_RIGID_DATA(__hSetBuffering_3);
     switch ( node_tag(sp[0]) )
     {
     case Nothing_tag:
 	break;
     case Just_tag:
 	sp[0] = sp[0]->c.args[0];
-	GOTO(__hSetBuffering_3);
+	EVAL(__hSetBuffering_4);
     default:
 	unexpected_tag("hSetBuffering (mode)", node_tag(sp[0]));
     }
@@ -1442,14 +1572,14 @@ FUNCTION(__hSetBuffering_2)
 }
 
 static
-FUNCTION(__hSetBuffering_3)
+FUNCTION(__hSetBuffering_4)
 {
     long   bsize;
     char   *buffer;
     Handle *file;
- ENTRY_LABEL(static, __hSetBuffering_3)
-    EVAL_RIGID_INT(__hSetBuffering_3);
-    file  = (Handle *)sp[1];
+ ENTRY_LABEL(static, __hSetBuffering_4)
+    MATCH_RIGID_INT(__hSetBuffering_4);
+    file = (Handle *)sp[1];
     if ( !is_open(file) )
     {
 	*++sp = from_string("hSetBuffering: handle not open");
@@ -1489,12 +1619,20 @@ the specified handle.
 
 <<files.c>>=
 DECLARE_LABEL(extern, __hFlush);
+DECLARE_LABEL(static, __hFlush_1);
 
 FUNCTION(__hFlush)
 {
-    Handle *file;
  ENTRY_LABEL(extern, __hFlush)
-    EVAL_RIGID_FILE(__hFlush);
+    EVAL_BOXED(__hFlush_1);
+}
+
+static
+FUNCTION(__hFlush_1)
+{
+    Handle *file;
+ ENTRY_LABEL(static, __hFlush_1)
+    MATCH_RIGID_FILE(__hFlush_1);
     file = (Handle *)sp[0];
 
     if ( !is_writable(file) )
@@ -1520,14 +1658,22 @@ associated with the specified handle.
 
 <<files.c>>=
 DECLARE_LABEL(extern, __hTell);
+DECLARE_LABEL(static, __hTell_1);
 
 FUNCTION(__hTell)
+{
+ ENTRY_LABEL(extern, __hTell)
+    EVAL_BOXED(__hTell_1);
+}
+
+static
+FUNCTION(__hTell_1)
 {
     long   curpos;
     Node   *r;
     Handle *file;
- ENTRY_LABEL(extern, __hTell)
-    EVAL_RIGID_FILE(__hTell);
+ ENTRY_LABEL(static, __hTell_1)
+    MATCH_RIGID_FILE(__hTell_1);
     file = (Handle *)sp[0];
 
     if ( !is_open(file) )
@@ -1578,37 +1724,39 @@ DECLARE_CONST(__IO__SeekFromEnd);
 DECLARE_LABEL(extern, __hSeek);
 DECLARE_LABEL(static, __hSeek_1);
 DECLARE_LABEL(static, __hSeek_2);
+DECLARE_LABEL(static, __hSeek_3);
 
 FUNCTION(__hSeek)
 {
-    Node *file;
  ENTRY_LABEL(extern, __hSeek)
-    EVAL_RIGID_FILE(__hSeek);
-    file  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = file;
-    GOTO(__hSeek_1);
+    EVAL_BOXED(__hSeek_1);
 }
 
 static
 FUNCTION(__hSeek_1)
 {
-    Node *mode;
  ENTRY_LABEL(static, __hSeek_1)
-    EVAL_RIGID_DATA(__hSeek_1);
-    mode  = sp[0];
-    sp[0] = sp[2];
-    sp[2] = mode;
-    GOTO(__hSeek_2);
+    MATCH_RIGID_FILE(__hSeek_1);
+    SWAPn(1);
+    EVAL_BOXED(__hSeek_2);
 }
 
 static
 FUNCTION(__hSeek_2)
 {
+ ENTRY_LABEL(static, __hSeek_2)
+    MATCH_RIGID_DATA(__hSeek_2);
+    SWAPn(2);
+    EVAL(__hSeek_3);
+}
+
+static
+FUNCTION(__hSeek_3)
+{
     int	   smode;
     Handle *file;
- ENTRY_LABEL(static, __hSeek_2)
-    EVAL_RIGID_INT(__hSeek_2);
+ ENTRY_LABEL(static, __hSeek_3)
+    MATCH_RIGID_INT(__hSeek_3);
 
     file = (Handle *)sp[1];
     if ( !is_open(file) )
@@ -1645,7 +1793,6 @@ FUNCTION(__hSeek_2)
     RETURN(unit);
 }
 
-
 @ 
 The function [[openProcess]] executes a shell command and returns a
 file descriptor connected to the standard input and output of the
@@ -1670,13 +1817,10 @@ FUNCTION(__openProcess)
 static
 FUNCTION(__openProcess_1)
 {
-    Node *cmd;
  ENTRY_LABEL(static, __openProcess_1)
     CHECK_STACK(1);
-    cmd	  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = cmd;
-    GOTO(__openProcess_2);
+    SWAPn(1);
+    EVAL_BOXED(__openProcess_2);
 }
 
 static
@@ -1689,7 +1833,7 @@ FUNCTION(__openProcess_2)
     ProcessHandle *proc;
  ENTRY_LABEL(static, __openProcess_2)
     /* determine the access mode */
-    EVAL_RIGID_DATA(__openProcess_2);
+    MATCH_RIGID_DATA(__openProcess_2);
     cmd = to_string(sp[1]);
     switch ( node_tag(sp[0]) )
     {
@@ -1805,14 +1949,22 @@ by [[openProcess]].
 
 <<files.c>>=
 DECLARE_LABEL(extern, __pClose);
+DECLARE_LABEL(static, __pClose_1);
 
 FUNCTION(__pClose)
+{
+ ENTRY_LABEL(extern, __pClose)
+    EVAL_BOXED(__pClose_1);
+}
+
+static
+FUNCTION(__pClose_1)
 {
     int		  res;
     ProcessHandle *proc;
     Node	  *r;
- ENTRY_LABEL(extern, __pClose)
-    EVAL_RIGID_FILE(__pClose);
+ ENTRY_LABEL(static, __pClose_1)
+    MATCH_RIGID_FILE(__pClose_1);
     proc = (ProcessHandle *)sp[0];
     if ( proc->info != &process_info )
     {
@@ -1884,24 +2036,18 @@ FUNCTION(__connectTcpSocket)
 static
 FUNCTION(__connectTcpSocket_1)
 {
-    Node *host;
  ENTRY_LABEL(static, __connectTcpSocket_1)
-    host  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = host;
-    GOTO(__connectTcpSocket_2);
+    SWAPn(1);
+    EVAL(__connectTcpSocket_2);
 }
 
 static
 FUNCTION(__connectTcpSocket_2)
 {
-    Node *port;
  ENTRY_LABEL(static, __connectTcpSocket_2)
-    EVAL_RIGID_INT(__connectTcpSocket_2)
-    port  = sp[0];
-    sp[0] = sp[2];
-    sp[2] = port;
-    GOTO(__connectTcpSocket_3);
+    MATCH_RIGID_INT(__connectTcpSocket_2)
+    SWAPn(2);
+    EVAL_BOXED(__connectTcpSocket_3);
 }
 
 static
@@ -1914,7 +2060,7 @@ FUNCTION(__connectTcpSocket_3)
     struct hostent     *hostent;
     struct sockaddr_in addr;
  ENTRY_LABEL(static, __connectTcpSocket_3)
-    EVAL_RIGID_DATA(__connectTcpSocket_3)
+    MATCH_RIGID_DATA(__connectTcpSocket_3)
     host = to_string(sp[1]);
     port = long_val(sp[2]);
     switch ( node_tag(sp[0]) )

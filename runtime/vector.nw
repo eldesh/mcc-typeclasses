@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: vector.nw 2252 2007-06-15 17:45:09Z wlux $
+% $Id: vector.nw 2254 2007-06-15 18:42:06Z wlux $
 %
-% Copyright (c) 2002-2005, Wolfgang Lux
+% Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Array Library}
@@ -48,24 +48,29 @@ DECLARE_CONST(__Prelude__True);
 
 DECLARE_LABEL(extern, __primEqIOVector);
 DECLARE_LABEL(static, __primEqIOVector_1);
+DECLARE_LABEL(static, __primEqIOVector_2);
 
 FUNCTION(__primEqIOVector)
 {
-    Node *aux;
  ENTRY_LABEL(extern, __primEqIOVector)
-    EVAL_RIGID_VECTOR(__primEqIOVector);
-    aux	  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = aux;
-    GOTO(__primEqIOVector_1);
+    EVAL_BOXED(__primEqIOVector_1);
 }
 
 static
 FUNCTION(__primEqIOVector_1)
 {
-    Node *r;
  ENTRY_LABEL(static, __primEqIOVector_1)
-    EVAL_RIGID_VECTOR(__primEqIOVector_1);
+    MATCH_RIGID_VECTOR(__primEqIOVector_1);
+    SWAPn(1);
+    EVAL_BOXED(__primEqIOVector_2);
+}
+
+static
+FUNCTION(__primEqIOVector_2)
+{
+    Node *r;
+ ENTRY_LABEL(static, __primEqIOVector_2)
+    MATCH_RIGID_VECTOR(__primEqIOVector_2);
     r	= sp[1] == sp[0] ? Prelude_True : Prelude_False;
     sp += 2;
     RETURN(r);
@@ -77,13 +82,21 @@ size and assigns an initial value to every element of the vector.
 
 <<vector.c>>=
 DECLARE_LABEL(extern, __newIOVector);
+DECLARE_LABEL(static, __newIOVector_1);
 
 FUNCTION(__newIOVector)
 {
+ ENTRY_LABEL(extern, __newIOVector)
+    EVAL(__newIOVector_1);
+}
+
+static
+FUNCTION(__newIOVector_1)
+{
     long i, n;
     Node *init, *vec;
- ENTRY_LABEL(extern, __newIOVector)
-    EVAL_RIGID_INT(__newIOVector);
+ ENTRY_LABEL(static, __newIOVector_1)
+    MATCH_RIGID_INT(__newIOVector_1);
     n = long_val(sp[0]);
     if ( n < 0 )
 	fail_with("newIOVector: negative length (%ld)", n);
@@ -115,12 +128,20 @@ be copied.
 
 <<vector.c>>=
 DECLARE_LABEL(extern, __copyIOVector);
+DECLARE_LABEL(static, __copyIOVector_1);
 
 FUNCTION(__copyIOVector)
 {
-    Node *vec;
  ENTRY_LABEL(extern, __copyIOVector)
-    EVAL_RIGID_VECTOR(__copyIOVector);
+    EVAL_BOXED(__copyIOVector_1);
+}
+
+static
+FUNCTION(__copyIOVector_1)
+{
+    Node *vec;
+ ENTRY_LABEL(static, __copyIOVector_1)
+    MATCH_RIGID_VECTOR(__copyIOVector_1);
 
     vec = sp[0];
     if ( vector_argc(vec) > 0 )
@@ -144,25 +165,30 @@ monad is lazy.
 <<vector.c>>=
 DECLARE_LABEL(extern, __readIOVector);
 DECLARE_LABEL(static, __readIOVector_1);
+DECLARE_LABEL(static, __readIOVector_2);
 
 FUNCTION(__readIOVector)
 {
-    Node *aux;
  ENTRY_LABEL(extern, __readIOVector)
-    EVAL_RIGID_VECTOR(__readIOVector);
-    aux	  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = aux;
-    GOTO(__readIOVector_1);
+    EVAL_BOXED(__readIOVector_1);
 }
 
 static
 FUNCTION(__readIOVector_1)
 {
+ ENTRY_LABEL(static, __readIOVector_1)
+    MATCH_RIGID_VECTOR(__readIOVector_1);
+    SWAPn(1);
+    EVAL(__readIOVector_2);
+}
+
+static
+FUNCTION(__readIOVector_2)
+{
     long  i;
     Node *vec, *r;
- ENTRY_LABEL(static, __readIOVector_1)
-    EVAL_RIGID_INT(__readIOVector_1);
+ ENTRY_LABEL(static, __readIOVector_2)
+    MATCH_RIGID_INT(__readIOVector_2);
 
     i	= long_val(sp[0]);
     vec = sp[1];
@@ -182,25 +208,30 @@ function.
 <<vector.c>>=
 DECLARE_LABEL(extern, __writeIOVector);
 DECLARE_LABEL(static, __writeIOVector_1);
+DECLARE_LABEL(static, __writeIOVector_2);
 
 FUNCTION(__writeIOVector)
 {
-    Node *aux;
  ENTRY_LABEL(extern, __writeIOVector)
-    EVAL_RIGID_VECTOR(__writeIOVector);
-    aux	  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = aux;
-    GOTO(__writeIOVector_1);
+    EVAL_BOXED(__writeIOVector_1);
 }
 
 static
 FUNCTION(__writeIOVector_1)
 {
+ ENTRY_LABEL(static, __writeIOVector_1)
+    MATCH_RIGID_VECTOR(__writeIOVector_1);
+    SWAPn(1);
+    EVAL(__writeIOVector_2);
+}
+
+static
+FUNCTION(__writeIOVector_2)
+{
     long i;
     Node *vec, *node;
- ENTRY_LABEL(static, __writeIOVector_1)
-    EVAL_RIGID_INT(__writeIOVector_1);
+ ENTRY_LABEL(static, __writeIOVector_2)
+    MATCH_RIGID_INT(__writeIOVector_2);
 
     i	 = long_val(sp[0]);
     vec	 = sp[1];
@@ -223,13 +254,21 @@ change.
 
 <<vector.c>>=
 DECLARE_LABEL(extern, __lengthIOVector);
+DECLARE_LABEL(static, __lengthIOVector_1);
 
 FUNCTION(__lengthIOVector)
 {
+ ENTRY_LABEL(extern, __lengthIOVector)
+    EVAL_BOXED(__lengthIOVector_1);
+}
+
+static
+FUNCTION(__lengthIOVector_1)
+{
     int  n;
     Node *r;
- ENTRY_LABEL(extern, __lengthIOVector)
-    EVAL_RIGID_VECTOR(__lengthIOVector);
+ ENTRY_LABEL(static, __lengthIOVector_1)
+    MATCH_RIGID_VECTOR(__lengthIOVector_1);
 
     n	= vector_argc(sp[0]);
     sp += 1;

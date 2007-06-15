@@ -1,36 +1,81 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cam.nw 1869 2006-03-05 17:28:46Z wlux $
+% $Id: cam.nw 2254 2007-06-15 18:42:06Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
-\subsection{Abstract Machine Instruction Macros}
+\subsection{Abstract Machine Code Macros}
 The header file [[cam.h]] defines a few useful macros for writing
 external functions.
 
 @
-The [[RETURN]] and [[ENTER]] macros return a value on the top of the
+The [[RETURN]] and [[ENTER]] macros return the value on the top of the
 stack to the caller of the current function. [[RETURN]] must be used
-only if the value is known to be in head normal form. Otherwise the
-[[ENTER]] macro must be used which starts the evaluation of the node
-if it is not in head normal form with a tail call to the evaluation
-code.
+only if the value is known to be in head normal form. Otherwise, the
+[[ENTER]] macro must be used, which starts the evaluation of the node
+with a tail call to its evaluation method unless the node is already
+in head normal form.
 
 <<cam.h>>=
-#define RETURN(_res) { \
+#define RETURN(_res) {		 \
     Label ret_ip = (Label)sp[0]; \
-    sp[0] = (_res); \
-    GOTO(ret_ip); \
+    sp[0] = (_res);		 \
+    GOTO(ret_ip);		 \
 }
 
-#define ENTER(_node) { \
-    if ( is_boxed(_node) ) { \
-	CHECK_STACK1(); \
-	*--sp = (_node); \
+#define ENTER(_node) {		   \
+    if ( is_boxed(_node) ) {	   \
+	CHECK_STACK1();		   \
+	*--sp = (_node);	   \
 	GOTO((_node)->info->eval); \
-    } \
-    RETURN(_node); \
+    }				   \
+    RETURN(_node);		   \
 }
+
+@ 
+The macros [[EVAL]] and [[EVAL_BOXED]] evaluate the node on the top of
+the stack and continue execution at the specified label after the node
+is evaluated to head normal form.
+
+<<cam.h>>=
+#define EVAL(l)	do {							\
+    for (;;) {								\
+	if ( is_boxed(sp[0]) )						\
+	    switch ( sp[0]->info->kind ) {				\
+	    case INDIR_KIND: sp[0] = sp[0]->n.node; continue;		\
+	    case LAZY_KIND:						\
+		CHECK_STACK1(); sp -= 1; sp[0] = sp[1]; sp[1] = (Node *)(l); \
+		GOTO(sp[0]->info->eval);				\
+	    }								\
+	break;								\
+    }									\
+    GOTO(l);								\
+} while ( 0 )
+
+#define EVAL_BOXED(l) do {						\
+    for (;;) {								\
+	switch ( sp[0]->info->kind ) {					\
+	case INDIR_KIND: sp[0] = sp[0]->n.node; continue;		\
+	case LAZY_KIND:							\
+	    CHECK_STACK1(); sp -= 1; sp[0] = sp[1]; sp[1] = (Node *)(l); \
+	    GOTO(sp[0]->info->eval);					\
+	}								\
+	break;								\
+    }									\
+    GOTO(l);								\
+} while ( 0 )
+
+@ 
+The macro [[SWAPn]] exchanges the nodes at the top of the stack and at
+offset $n$. This is useful for functions with two or more arguments
+that must be evaluated.
+
+<<cam.h>>=
+#define SWAPn(n) do {		\
+	Node *aux = sp[0];	\
+	sp[0]	  = sp[n];	\
+	sp[n]	  = aux;	\
+    } while ( 0 )
 
 @
 The [[FAIL]] macro invokes the current failure handler.
@@ -39,84 +84,60 @@ The [[FAIL]] macro invokes the current failure handler.
 #define FAIL() GOTO(nondet_handlers->fail)
 
 @
-The following macros implement evaluation of the node on the top of
-the stack. All macros except [[EVAL_FLEX_POLY]] also suspend the
-current thread until the node is not an unbound variable.
-[[EVAL_RIGID_INT]], [[EVAL_FLEX_POLY]], and [[EVAL_RIGID_POLY]]
-carefully check for unboxed values while the other macros assume that
-the node on the top of the stack is always boxed. The argument of all
-macros is the label where execution continues after the node has been
-evaluated or after resuming the current thread. In general this is the
-entry point of the function that uses the [[EVAL]] macro.
+The following macros implement (kind) matching of the node on the top
+of the stack, which is expected to be in head normal form already.
+[[MATCH_RIGID_INT]] and [[MATCH_RIGID]] carefully check for unboxed
+values while the other macros assume that the node on the top of the
+stack is always boxed. The argument of all macros is the label where
+execution is resumed after an unbound variable has been instantiated.
+In general this is the entry point of the function that uses the
+[[MATCH]] macro.
 
 <<cam.h>>=
-#define EVAL_RIGID(what, l) \
-for (;;) { \
-    switch ( sp[0]->info->kind ) { \
-    case INDIR_KIND: sp[0] = sp[0]->n.node; continue; \
-    case LAZY_KIND: \
-	CHECK_STACK1(); sp -= 1; sp[0] = sp[1]; sp[1] = (Node *)(l); \
-	GOTO(sp[0]->info->eval); \
-    case LVAR_KIND: \
-	CHECK_STACK1(); sp -= 1; sp[0] = sp[1]; sp[1] = (Node *)(l); \
-	GOTO(sync_var); \
-    case what##_KIND: break; \
-    default: invalid_arg(#l, sp[0]->info->kind); \
-    } \
-    break; \
-}
+#define MATCH_RIGID_BOXED(what, l)					\
+    for (;;) {								\
+	switch ( sp[0]->info->kind ) {					\
+	case INDIR_KIND: sp[0] = sp[0]->n.node; continue;		\
+	case LVAR_KIND:							\
+	    CHECK_STACK1(); sp -= 1; sp[0] = sp[1]; sp[1] = (Node *)(l); \
+	    GOTO(sync_var);						\
+	case what##_KIND: break;					\
+	default: invalid_arg(#l, sp[0]->info->kind);			\
+	}								\
+	break;								\
+    }
 
-#define EVAL_RIGID_CHAR(l)		EVAL_RIGID(CHAR, l)
-#define EVAL_RIGID_FLOAT(l)		EVAL_RIGID(FLOAT, l)
-#define EVAL_RIGID_PTR(l)		EVAL_RIGID(PTR, l)
-#define EVAL_RIGID_FOREIGN_PTR(l)	EVAL_RIGID(FOREIGN_PTR, l)
-#define EVAL_RIGID_DATA(l)		EVAL_RIGID(CAPP, l)
-#define EVAL_RIGID_PAPP(l)		EVAL_RIGID(PAPP, l)
-#define EVAL_RIGID_VECTOR(l)		EVAL_RIGID(VECTOR, l)
-#define EVAL_RIGID_ABSTRACT(l)		EVAL_RIGID(ABSTRACT, l)
+#define MATCH_RIGID_CHAR(l)		MATCH_RIGID_BOXED(CHAR, l)
+#define MATCH_RIGID_FLOAT(l)		MATCH_RIGID_BOXED(FLOAT, l)
+#define MATCH_RIGID_PTR(l)		MATCH_RIGID_BOXED(PTR, l)
+#define MATCH_RIGID_FOREIGN_PTR(l)	MATCH_RIGID_BOXED(FOREIGN_PTR, l)
+#define MATCH_RIGID_DATA(l)		MATCH_RIGID_BOXED(CAPP, l)
+#define MATCH_RIGID_PAPP(l)		MATCH_RIGID_BOXED(PAPP, l)
+#define MATCH_RIGID_VECTOR(l)		MATCH_RIGID_BOXED(VECTOR, l)
+#define MATCH_RIGID_ABSTRACT(l)		MATCH_RIGID_BOXED(ABSTRACT, l)
 
-#define EVAL_RIGID_INT(l) \
-for (;;) { \
-    if ( is_boxed(sp[0]) ) \
-	switch ( sp[0]->info->kind ) { \
-	case INDIR_KIND: sp[0] = sp[0]->n.node; continue; \
-	case LAZY_KIND: \
-	    CHECK_STACK1(); sp -= 1; sp[0] = sp[1]; sp[1] = (Node *)(l); \
-	    GOTO(sp[0]->info->eval); \
-	case LVAR_KIND: \
-	    CHECK_STACK1(); sp -= 1; sp[0] = sp[1]; sp[1] = (Node *)(l); \
-	    GOTO(sync_var); \
-	case INT_KIND: break; \
-	default: invalid_arg(#l, sp[0]->info->kind); \
-	} \
-    break; \
-}
+#define MATCH_RIGID_INT(l)						\
+    for (;;) {								\
+	if ( is_boxed(sp[0]) )						\
+	    switch ( sp[0]->info->kind ) {				\
+	    case INDIR_KIND: sp[0] = sp[0]->n.node; continue;		\
+	    case LVAR_KIND:						\
+		CHECK_STACK1(); sp -= 1; sp[0] = sp[1]; sp[1] = (Node *)(l); \
+		GOTO(sync_var);						\
+	    case INT_KIND: break;					\
+	    default: invalid_arg(#l, sp[0]->info->kind);		\
+	    }								\
+	break;								\
+    }
 
-#define EVAL_FLEX_POLY(l) \
-for (;;) { \
-    if ( is_boxed(sp[0]) ) \
-	switch ( sp[0]->info->kind ) { \
-	case INDIR_KIND: sp[0] = sp[0]->n.node; continue; \
-	case LAZY_KIND: \
-	    CHECK_STACK1(); sp -= 1; sp[0] = sp[1]; sp[1] = (Node *)(l); \
-	    GOTO(sp[0]->info->eval); \
-	default: break; \
-	} \
-    break; \
-}
-
-#define EVAL_RIGID_POLY(l) \
-for (;;) { \
-    if ( is_boxed(sp[0]) ) \
-	switch ( sp[0]->info->kind ) { \
-	case INDIR_KIND: sp[0] = sp[0]->n.node; continue; \
-	case LAZY_KIND: \
-	    CHECK_STACK1(); sp -= 1; sp[0] = sp[1]; sp[1] = (Node *)(l); \
-	    GOTO(sp[0]->info->eval); \
-	case LVAR_KIND: \
-	    CHECK_STACK1(); sp -= 1; sp[0] = sp[1]; sp[1] = (Node *)(l); \
-	    GOTO(sync_var); \
-	default: break; \
-	} \
-    break; \
-}
+#define MATCH_RIGID(l)							\
+    for (;;) {								\
+	if ( is_boxed(sp[0]) )						\
+	    switch ( sp[0]->info->kind ) {				\
+	    case INDIR_KIND: sp[0] = sp[0]->n.node; continue;		\
+	    case LVAR_KIND:						\
+		CHECK_STACK1(); sp -= 1; sp[0] = sp[1]; sp[1] = (Node *)(l); \
+		GOTO(sync_var);						\
+	    }								\
+	break;								\
+    }

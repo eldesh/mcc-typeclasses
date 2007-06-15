@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: refs.nw 2252 2007-06-15 17:45:09Z wlux $
+% $Id: refs.nw 2254 2007-06-15 18:42:06Z wlux $
 %
-% Copyright (c) 2004, Wolfgang Lux
+% Copyright (c) 2004-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Mutable References}
@@ -24,7 +24,7 @@ which are defined in this file.
 #include "data.h"
 #include "cam.h"
 
-#define EVAL_RIGID_IOREF(l)	EVAL_RIGID_ABSTRACT(l)
+#define MATCH_RIGID_IOREF(l)	MATCH_RIGID_ABSTRACT(l)
 
 typedef struct ioref_node {
     NodeInfo *info;
@@ -50,24 +50,29 @@ DECLARE_CONST(__Prelude__True);
 
 DECLARE_LABEL(extern, __primEqIORef);
 DECLARE_LABEL(static, __primEqIORef_1);
+DECLARE_LABEL(static, __primEqIORef_2);
 
 FUNCTION(__primEqIORef)
 {
-    Node *aux;
  ENTRY_LABEL(extern, __primEqIORef)
-    EVAL_RIGID_IOREF(__primEqIORef);
-    aux	  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = aux;
-    GOTO(__primEqIORef_1);
+    EVAL_BOXED(__primEqIORef_1);
 }
 
 static
 FUNCTION(__primEqIORef_1)
 {
-    Node *r;
  ENTRY_LABEL(static, __primEqIORef_1)
-    EVAL_RIGID_IOREF(__primEqIORef_1);
+    MATCH_RIGID_IOREF(__primEqIORef_1);
+    SWAPn(1);
+    EVAL_BOXED(__primEqIORef_2);
+}
+
+static
+FUNCTION(__primEqIORef_2)
+{
+    Node *r;
+ ENTRY_LABEL(static, __primEqIORef_2)
+    MATCH_RIGID_IOREF(__primEqIORef_2);
     r	= sp[1] == sp[0] ? Prelude_True : Prelude_False;
     sp += 2;
     RETURN(r);
@@ -89,7 +94,7 @@ FUNCTION(__newIORef)
     ref->info = &ioref_info;
     ref->ref  = sp[0];
     hp	     += ioref_node_size;
-    
+
     sp += 2;
     RETURN((Node *)ref);
 }
@@ -101,12 +106,20 @@ to head normal form because the \texttt{IO} monad is lazy.
 
 <<refs.c>>=
 DECLARE_LABEL(extern, __readIORef);
+DECLARE_LABEL(static, __readIORef_1);
 
 FUNCTION(__readIORef)
 {
-    IORef *ref;
  ENTRY_LABEL(extern, __readIORef)
-    EVAL_RIGID_IOREF(__readIORef);
+    EVAL_BOXED(__readIORef_1);
+}
+
+static
+FUNCTION(__readIORef_1)
+{
+    IORef *ref;
+ ENTRY_LABEL(static, __readIORef_1)
+    MATCH_RIGID_IOREF(__readIORef_1);
     ref = (IORef *)sp[0];
     sp += 2;
     RETURN(ref->ref);
@@ -123,12 +136,20 @@ even across different branches of a non-deterministic search.
 
 <<refs.c>>=
 DECLARE_LABEL(extern, __writeIORef);
+DECLARE_LABEL(static, __writeIORef_1);
 
 FUNCTION(__writeIORef)
 {
-    IORef *ref;
  ENTRY_LABEL(extern, __writeIORef)
-    EVAL_RIGID_IOREF(__writeIORef);
+    EVAL_BOXED(__writeIORef_1);
+}
+
+static
+FUNCTION(__writeIORef_1)
+{
+    IORef *ref;
+ ENTRY_LABEL(static, __writeIORef_1)
+    MATCH_RIGID_IOREF(__writeIORef_1);
     ref = (IORef *)sp[0];
     SAVE(ref, ref);
     ref->ref = sp[1];

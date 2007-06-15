@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: equal.nw 2252 2007-06-15 17:45:09Z wlux $
+% $Id: equal.nw 2254 2007-06-15 18:42:06Z wlux $
 %
-% Copyright (c) 2001-2004, Wolfgang Lux
+% Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Strict Equality}
@@ -49,19 +49,16 @@ FUNCTION(___61__61_)
 {
  ENTRY_LABEL(extern, ___61__61_)
     TRACE_FUN("==", 2);
-    GOTO(___61__61__1);
+    EVAL(___61__61__1);
 }
 
 static
 FUNCTION(___61__61__1)
 {
-    Node *aux;
  ENTRY_LABEL(static, ___61__61__1)
-    EVAL_RIGID_POLY(___61__61__1);
-    aux	  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = aux;
-    GOTO(___61__61__2);
+    MATCH_RIGID(___61__61__1);
+    SWAPn(1);
+    EVAL(___61__61__2);
 }
 
 static
@@ -73,7 +70,7 @@ FUNCTION(___61__61__2)
     Node	 *next, *arglist;
     Node	 **argp1, **argp2;
  ENTRY_LABEL(static, ___61__61__2)
-    EVAL_RIGID_POLY(___61__61__2);
+    MATCH_RIGID(___61__61__2);
 
     n	 = 0;
     arg1 = sp[1];

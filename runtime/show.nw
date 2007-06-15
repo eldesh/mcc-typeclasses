@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2252 2007-06-15 17:45:09Z wlux $
+% $Id: show.nw 2254 2007-06-15 18:42:06Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -47,10 +47,13 @@ DECLARE_LABEL(static, showInfix);
 DECLARE_LABEL(static, showTuple);
 DECLARE_LABEL(static, showTupleArgs);
 DECLARE_LABEL(static, showList);
+DECLARE_LABEL(static, showList_1);
 DECLARE_LABEL(static, showTail);
 DECLARE_LABEL(static, showTail_1);
 DECLARE_LABEL(static, showString);
+DECLARE_LABEL(static, showString_1);
 DECLARE_LABEL(static, showStringTail);
+DECLARE_LABEL(static, showStringTail_1);
 
 #if ONLY_BOXED_OBJECTS
 static const struct int_node zero_node = { &int_info, 0 };
@@ -263,7 +266,9 @@ FUNCTION(showp)
 {
  ENTRY_LABEL(static, showp)
     TRACE_FUN("showp", 4);
-    GOTO(showp_1);
+    if ( sp[2] == zero )
+	GOTO(showp_1);
+    EVAL(showp_1);
 }
 
 static
@@ -302,14 +307,6 @@ FUNCTION(showp_1)
 	    goto again;
 
 	case LAZY_KIND:
-	    if ( show != zero )
-	    {
-		CHECK_STACK1();
-		sp   -= 1;
-		sp[0] = node;
-		sp[1] = (Node *)showp_1;
-		GOTO(node->info->eval);
-	    }
 	    str = "_";
 	    break;
 
@@ -806,8 +803,17 @@ is_string(Node *node)
 static
 FUNCTION(showList)
 {
-    Node *hd, *tl, *susp, *susp2, *cons, *tail, *show;
  ENTRY_LABEL(static, showList)
+    if ( sp[2] == zero )
+	GOTO(showList_1);
+    EVAL(showList_1);
+}
+
+static
+FUNCTION(showList_1)
+{
+    Node *hd, *tl, *susp, *susp2, *cons, *tail, *show;
+ ENTRY_LABEL(static, showList_1)
     hd	 = sp[0];
     show = sp[2];
     for (;;)
@@ -818,23 +824,13 @@ FUNCTION(showList)
 	    case INDIR_KIND:
 		hd = hd->n.node;
 		continue;
-	    case LAZY_KIND:
-		if ( show != zero )
-		{
-		    CHECK_STACK1();
-		    sp   -= 1;
-		    sp[0] = hd;
-		    sp[1] = (Node *)showList;
-		    GOTO(hd->info->eval);
-		}
-		break;
 	    case LVAR_KIND:
 		if ( show != zero )
 		{
 		    CHECK_STACK1();
 		    sp	 -= 1;
 		    sp[0] = hd;
-		    sp[1] = (Node *)showList;
+		    sp[1] = (Node *)showList_1;
 		    GOTO(sync_var);
 		}
 		break;
@@ -915,7 +911,9 @@ FUNCTION(showTail)
 {
  ENTRY_LABEL(static, showTail)
     TRACE_FUN("showTail", 3);
-    GOTO(showTail_1);
+    if ( sp[1] == zero )
+	GOTO(showTail_1);
+    EVAL_BOXED(showTail_1);
 }
 
 static
@@ -932,17 +930,6 @@ FUNCTION(showTail_1)
 	list = list->n.node;
 	goto again;
 
-    case LAZY_KIND:
-	if ( show != zero )
-	{
-	    CHECK_STACK1();
-	    sp -= 1;
-	    sp[0] = list;
-	    sp[1] = (Node *)showTail_1;
-	    GOTO(list->info->eval);
-	}
-	goto make_tail;
-
     case LVAR_KIND:
 	if ( show != zero )
 	{
@@ -952,7 +939,8 @@ FUNCTION(showTail_1)
 	    sp[1] = (Node *)showTail_1;
 	    GOTO(sync_var);
 	}
-    make_tail:
+	/* FALL THROUGH!!! */
+    case LAZY_KIND:
 	sp[0] = list;
 	CHECK_HEAP(suspend_node_size(4) + 2 * cons_node_size);
 	list = sp[0];
@@ -1051,17 +1039,24 @@ that character. It will then continue to display the remaining string.
 static
 FUNCTION(showString)
 {
+ ENTRY_LABEL(static, showString)
+    EVAL_BOXED(showString_1);
+}
+
+static
+FUNCTION(showString_1)
+{
     char buf[8];
     Node *hd, *tl, *prev, *tail, *susp, *cons;
- ENTRY_LABEL(static, showString);
-    EVAL_RIGID_CHAR(showString);
+ ENTRY_LABEL(static, showString_1)
+    MATCH_RIGID_CHAR(showString_1);
     CHECK_HEAP(suspend_node_size(3));
 
     hd	 = sp[0];
     tl	 = sp[1];
     prev = sp[2];
     tail = sp[3];
-    sp	     += 4;
+    sp  += 4;
 
     susp	    = (Node *)hp;
     susp->info	    = showStringTail_lazy_info_table;
@@ -1078,9 +1073,16 @@ FUNCTION(showString)
 static
 FUNCTION(showStringTail)
 {
-    Node *cons;
  ENTRY_LABEL(static, showStringTail)
-    EVAL_RIGID_POLY(showStringTail);
+    EVAL_BOXED(showStringTail_1);
+}
+
+static
+FUNCTION(showStringTail_1)
+{
+    Node *cons;
+ ENTRY_LABEL(static, showStringTail_1)
+    MATCH_RIGID_DATA(showStringTail_1);
 
     if ( sp[0] == nil )
     {
@@ -1115,32 +1117,37 @@ digits for the result.
 <<show.c>>=
 DECLARE_LABEL(extern, __showEFloat);
 DECLARE_LABEL(static, __showEFloat_1);
+DECLARE_LABEL(static, __showEFloat_2);
 
 DECLARE_LABEL(extern, __showFFloat);
 DECLARE_LABEL(static, __showFFloat_1);
+DECLARE_LABEL(static, __showFFloat_2);
 
 FUNCTION(__showEFloat)
 {
-    Node *p, *d;
  ENTRY_LABEL(extern, __showEFloat)
-    EVAL_RIGID_INT(__showEFloat);
-    p	  = sp[0];
-    d	  = sp[1];
-    sp[0] = d;
-    sp[1] = p;
-    GOTO(__showEFloat_1);
+    EVAL(__showEFloat_1);
 }
 
 static
 FUNCTION(__showEFloat_1)
+{
+ ENTRY_LABEL(static, __showEFloat_1)
+    MATCH_RIGID_INT(__showEFloat_1);
+    SWAPn(1);
+    EVAL_BOXED(__showEFloat_2);
+}
+
+static
+FUNCTION(__showEFloat_2)
 {
     int	       p, n;
     double     d;
     char       fmt[20], *buf;
     const char *loc;
     Node       *str;
- ENTRY_LABEL(static, __showEFloat_1)
-    EVAL_RIGID_FLOAT(__showEFloat_1);
+ ENTRY_LABEL(static, __showEFloat_2)
+    MATCH_RIGID_FLOAT(__showEFloat_2);
     get_double_val(d, sp[0]->f);
     p   = long_val(sp[1]);
     str = sp[2];
@@ -1165,26 +1172,29 @@ FUNCTION(__showEFloat_1)
 
 FUNCTION(__showFFloat)
 {
-    Node *p, *d;
  ENTRY_LABEL(extern, __showFFloat)
-    EVAL_RIGID_INT(__showFFloat);
-    p	  = sp[0];
-    d	  = sp[1];
-    sp[0] = d;
-    sp[1] = p;
-    GOTO(__showFFloat_1);
+    EVAL(__showFFloat_1);
 }
 
 static
 FUNCTION(__showFFloat_1)
+{
+ ENTRY_LABEL(static, __showFFloat_1)
+    MATCH_RIGID_INT(__showFFloat_1);
+    SWAPn(1);
+    EVAL_BOXED(__showFFloat_2);
+}
+
+static
+FUNCTION(__showFFloat_2)
 {
     int	       p, n;
     double     d;
     char       fmt[20], *buf;
     const char *loc;
     Node       *str;
- ENTRY_LABEL(static, __showFFloat_1)
-    EVAL_RIGID_FLOAT(__showFFloat_1);
+ ENTRY_LABEL(static, __showFFloat_2)
+    MATCH_RIGID_FLOAT(__showFFloat_2);
     get_double_val(d, sp[0]->f);
     p   = long_val(sp[1]);
     str = sp[2];

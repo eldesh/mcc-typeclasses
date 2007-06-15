@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: foreign.nw 2252 2007-06-15 17:45:09Z wlux $
+% $Id: foreign.nw 2254 2007-06-15 18:42:06Z wlux $
 %
-% Copyright (c) 2005, Wolfgang Lux
+% Copyright (c) 2005-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Finalized Foreign Pointers}\label{sec:foreign}
@@ -123,12 +123,20 @@ respectively.
 
 <<foreign.c>>=
 DECLARE_LABEL(extern, __newForeignPtr);
+DECLARE_LABEL(static, __newForeignPtr_1);
 
 FUNCTION(__newForeignPtr)
 {
-    Node *fp;
  ENTRY_LABEL(extern, __newForeignPtr)
-    EVAL_RIGID_PTR(__newForeignPtr);
+    EVAL_BOXED(__newForeignPtr_1);
+}
+
+static
+FUNCTION(__newForeignPtr_1)
+{
+    Node *fp;
+ ENTRY_LABEL(static, __newForeignPtr_1)
+    MATCH_RIGID_PTR(__newForeignPtr_1);
 
     CHECK_HEAP(foreign_ptr_node_size);
     fp		= (Node *)hp;
@@ -155,28 +163,34 @@ finalized foreign pointer node was created.
 <<foreign.c>>=
 DECLARE_LABEL(extern, __addForeignPtrFinalizer);
 DECLARE_LABEL(static, __addForeignPtrFinalizer_1);
+DECLARE_LABEL(static, __addForeignPtrFinalizer_2);
 
 DECLARE_LABEL(extern, __addForeignPtrFinalizerEnv);
 DECLARE_LABEL(static, __addForeignPtrFinalizerEnv_1);
 DECLARE_LABEL(static, __addForeignPtrFinalizerEnv_2);
+DECLARE_LABEL(static, __addForeignPtrFinalizerEnv_3);
 
 FUNCTION(__addForeignPtrFinalizer)
 {
-    Node *aux;
  ENTRY_LABEL(extern, __addForeignPtrFinalizer)
-    EVAL_RIGID_PTR(__addForeignPtrFinalizer);
-    aux	  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = aux;
-    GOTO(__addForeignPtrFinalizer_1);
+    EVAL_BOXED(__addForeignPtrFinalizer_1);
 }
 
 static
 FUNCTION(__addForeignPtrFinalizer_1)
 {
-    union finalizer_list *fptr;
  ENTRY_LABEL(static, __addForeignPtrFinalizer_1)
-    EVAL_RIGID_FOREIGN_PTR(__addForeignPtrFinalizer_1);
+    MATCH_RIGID_PTR(__addForeignPtrFinalizer_1);
+    SWAPn(1);
+    EVAL_BOXED(__addForeignPtrFinalizer_2);
+}
+
+static
+FUNCTION(__addForeignPtrFinalizer_2)
+{
+    union finalizer_list *fptr;
+ ENTRY_LABEL(static, __addForeignPtrFinalizer_2)
+    MATCH_RIGID_FOREIGN_PTR(__addForeignPtrFinalizer_2);
     if ( sp[0]->fp.spc != ss )
 	fail_with("addForeignPtrFinalizer: non-local pointer");
 
@@ -194,33 +208,34 @@ FUNCTION(__addForeignPtrFinalizer_1)
 
 FUNCTION(__addForeignPtrFinalizerEnv)
 {
-    Node *aux;
  ENTRY_LABEL(extern, __addForeignPtrFinalizerEnv)
-    EVAL_RIGID_PTR(__addForeignPtrFinalizerEnv);
-    aux	  = sp[0];
-    sp[0] = sp[1];
-    sp[1] = aux;
-    GOTO(__addForeignPtrFinalizerEnv_1);
+    EVAL_BOXED(__addForeignPtrFinalizerEnv_1);
 }
 
 static
 FUNCTION(__addForeignPtrFinalizerEnv_1)
 {
-    Node *aux;
  ENTRY_LABEL(static, __addForeignPtrFinalizerEnv_1)
-    EVAL_RIGID_PTR(__addForeignPtrFinalizerEnv_1);
-    aux	  = sp[0];
-    sp[0] = sp[2];
-    sp[2] = aux;
-    GOTO(__addForeignPtrFinalizerEnv_2);
+    MATCH_RIGID_PTR(__addForeignPtrFinalizerEnv_1);
+    SWAPn(1);
+    EVAL_BOXED(__addForeignPtrFinalizerEnv_2);
 }
 
 static
 FUNCTION(__addForeignPtrFinalizerEnv_2)
 {
-    union finalizer_list *fptr;
  ENTRY_LABEL(static, __addForeignPtrFinalizerEnv_2)
-    EVAL_RIGID_FOREIGN_PTR(__addForeignPtrFinalizerEnv_2);
+    MATCH_RIGID_PTR(__addForeignPtrFinalizerEnv_2);
+    SWAPn(2);
+    EVAL_BOXED(__addForeignPtrFinalizerEnv_3);
+}
+
+static
+FUNCTION(__addForeignPtrFinalizerEnv_3)
+{
+    union finalizer_list *fptr;
+ ENTRY_LABEL(static, __addForeignPtrFinalizerEnv_3)
+    MATCH_RIGID_FOREIGN_PTR(__addForeignPtrFinalizerEnv_3);
     if ( sp[0]->fp.spc != ss )
 	fail_with("addForeignPtrFinalizerEnv: non-local pointer");
 
@@ -245,12 +260,20 @@ reference to the foreign pointer node itself.
 
 <<foreign.c>>=
 DECLARE_LABEL(extern, __unsafeForeignPtrToPtr);
+DECLARE_LABEL(static, __unsafeForeignPtrToPtr_1);
 
 FUNCTION(__unsafeForeignPtrToPtr)
 {
-    Node *p;
  ENTRY_LABEL(extern, __unsafeForeignPtrToPtr)
-    EVAL_RIGID_FOREIGN_PTR(__unsafeForeignPtrToPtr);
+    EVAL_BOXED(__unsafeForeignPtrToPtr_1);
+}
+
+static
+FUNCTION(__unsafeForeignPtrToPtr_1)
+{
+    Node *p;
+ ENTRY_LABEL(static, __unsafeForeignPtrToPtr_1)
+    MATCH_RIGID_FOREIGN_PTR(__unsafeForeignPtrToPtr_1);
     if ( sp[0]->fp.ptr )
     {
 	CHECK_HEAP(ptr_node_size);

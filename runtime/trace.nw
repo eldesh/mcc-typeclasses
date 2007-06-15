@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: trace.nw 1869 2006-03-05 17:28:46Z wlux $
+% $Id: trace.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -66,7 +66,7 @@ static void trace_showaddr(Node *node);
 static void trace_shownode(int depth, Node *node);
 static void trace_showapp(int depth, Node *node, unsigned argc, Node **argv);
 
-DECLARE_LABEL(trace_return);
+DECLARE_LABEL(static, trace_return);
 
 void
 trace(const char *fmt, ...)
@@ -284,7 +284,7 @@ FUNCTION(trace_return)
 {
     Node  *r;
     Label ret_ip;
- ENTRY_LABEL(trace_return)
+ ENTRY_LABEL(static, trace_return)
     r = *sp++;
     trace("%I return %N\n", r);
     ret_ip = (Label)sp[0];

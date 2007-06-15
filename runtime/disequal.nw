@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 1872 2006-03-16 10:11:43Z wlux $
+% $Id: disequal.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2002-2005, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -20,7 +20,7 @@ typedef struct diseq_constraint {
 The primitive function [[=/=]] implements disequality constraints.
 
 <<disequal.h>>=
-DECLARE_ENTRYPOINT(___61__47__61_);
+DECLARE_LABEL(extern, ___61__47__61_);
 
 @ 
 <<disequal.c>>=
@@ -45,15 +45,15 @@ DECLARE_ENTRYPOINT(___61__47__61_);
 
 DECLARE_CONST(__Prelude__True);
 
-DECLARE_LABEL(___61__47__61__1);
-DECLARE_LABEL(___61__47__61__2);
-DECLARE_LABEL(diseq_var);
-DECLARE_LABEL(diseq_args);
-DECLARE_LABEL(diseq_args_1);
-DECLARE_LABEL(diseq_args_2);
-DECLARE_LABEL(diseq_papp_args);
-DECLARE_LABEL(diseq_papp_args_1);
-DECLARE_LABEL(check_diseq);
+DECLARE_LABEL(static, ___61__47__61__1);
+DECLARE_LABEL(static, ___61__47__61__2);
+DECLARE_LABEL(static, diseq_var);
+DECLARE_LABEL(static, diseq_args);
+DECLARE_LABEL(static, diseq_args_1);
+DECLARE_LABEL(static, diseq_args_2);
+DECLARE_LABEL(static, diseq_papp_args);
+DECLARE_LABEL(static, diseq_papp_args_1);
+DECLARE_LABEL(static, check_diseq);
 
 #define diseq_constraint_size wordsof(Disequality)
 NodeInfo diseq_constraint_info = {
@@ -62,8 +62,7 @@ NodeInfo diseq_constraint_info = {
 
 FUNCTION(___61__47__61_)
 {
-    EXPORT_LABEL(___61__47__61_)
- ENTRY_LABEL(___61__47__61_)
+ ENTRY_LABEL(extern, ___61__47__61_)
     TRACE_FUN("=/=", 2);
     GOTO(___61__47__61__1);
 }
@@ -72,7 +71,7 @@ static
 FUNCTION(___61__47__61__1)
 {
     Node *aux;
- ENTRY_LABEL(___61__47__61__1)
+ ENTRY_LABEL(static, ___61__47__61__1)
     EVAL_FLEX_POLY(___61__47__61__1);
     aux	  = sp[0];
     sp[0] = sp[1];
@@ -84,7 +83,7 @@ static
 FUNCTION(___61__47__61__2)
 {
     Node *arg1, *arg2;
- ENTRY_LABEL(___61__47__61__2)
+ ENTRY_LABEL(static, ___61__47__61__2)
     EVAL_FLEX_POLY(___61__47__61__2);
     arg1 = sp[1];
     arg2 = sp[0];
@@ -185,7 +184,7 @@ FUNCTION(diseq_var)
     boolean	nf;
     Node	*aux;
     Disequality *cstr;
- ENTRY_LABEL(diseq_var)
+ ENTRY_LABEL(static, diseq_var)
     if ( !is_local_space(sp[0]->v.spc) )
     {
 	if ( is_boxed(sp[1]) && is_variable_node(sp[1])
@@ -258,7 +257,7 @@ static
 FUNCTION(diseq_args)
 {
     static const Label diseq_args_choices[] = { diseq_args_1, diseq_args_2, 0 };
- ENTRY_LABEL(diseq_args)
+ ENTRY_LABEL(static, diseq_args)
     if ( sp[0]->c.args[2] == nil )
 	GOTO(diseq_args_1);
 
@@ -276,7 +275,7 @@ static
 FUNCTION(diseq_args_1)
 {
     Node *arglist;
- ENTRY_LABEL(diseq_args_1)
+ ENTRY_LABEL(static, diseq_args_1)
     CHECK_STACK1();
     arglist = sp[0];
     sp	   -= 1;
@@ -288,7 +287,7 @@ FUNCTION(diseq_args_1)
 static
 FUNCTION(diseq_args_2)
 {
- ENTRY_LABEL(diseq_args_2)
+ ENTRY_LABEL(static, diseq_args_2)
     sp[0] = sp[0]->c.args[2];
     GOTO(diseq_args);
 }
@@ -314,7 +313,7 @@ static
 FUNCTION(diseq_papp_args)
 {
     Node *arg1, *arg2, *arglist;
- ENTRY_LABEL(diseq_papp_args)
+ ENTRY_LABEL(static, diseq_papp_args)
     arglist = sp[0];
     arg1    = arglist->c.args[0];
     arg2    = arglist->c.args[1];
@@ -332,7 +331,7 @@ FUNCTION(diseq_papp_args)
 static
 FUNCTION(diseq_papp_args_1)
 {
- ENTRY_LABEL(diseq_papp_args_1)
+ ENTRY_LABEL(static, diseq_papp_args_1)
     if ( *sp++ != CONST(__Prelude__True) )
     {
 	sp += 1;
@@ -352,7 +351,7 @@ with a given constraint.
 static
 FUNCTION(check_diseq)
 {
- ENTRY_LABEL(check_diseq)
+ ENTRY_LABEL(static, check_diseq)
     sp[1] = ((Disequality *)sp[1])->node;
     GOTO(___61__47__61_);
 }

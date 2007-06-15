@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: threads.nw 1899 2006-04-19 10:50:11Z wlux $
+% $Id: threads.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -185,7 +185,7 @@ and [[tq2]].
 
 <<threads.h>>=
 extern void start_thread(unsigned int n);
-DECLARE_ENTRYPOINT(stop_thread);
+DECLARE_LABEL(extern, stop_thread);
 extern Label suspend_thread(Label l, Node *n);
 extern Label delay_thread(Label l, Node *n);
 extern Label yield_thread(Label l);
@@ -275,8 +275,7 @@ tries to activate the next thread from the ready queue.
 <<threads.c>>=
 FUNCTION(stop_thread)
 {
-    EXPORT_LABEL(stop_thread)
- ENTRY_LABEL(stop_thread)
+ ENTRY_LABEL(extern, stop_thread)
     TRACE(("%I terminated\n"));
     terminate_thread();
     GOTO(activate_thread());

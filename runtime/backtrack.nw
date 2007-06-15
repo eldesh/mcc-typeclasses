@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 1899 2006-04-19 10:50:11Z wlux $
+% $Id: backtrack.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -32,10 +32,10 @@ extern int curry_eval(NodeInfo *goal_info, const char *fv_names[],
 #include "vars.h"
 #include "stats.h"
 
-DECLARE_LABEL(start);
-DECLARE_LABEL(stop);
-DECLARE_LABEL(choices);
-DECLARE_LABEL(fail);
+DECLARE_LABEL(static, start);
+DECLARE_LABEL(static, stop);
+DECLARE_LABEL(static, choices);
+DECLARE_LABEL(static, fail);
 
 @
 In this file, we also provide the handler functions for
@@ -65,7 +65,7 @@ FUNCTION(choices)
     Choicepoint	 *oldBp;
     unsigned int cp_sz, stk_sz;
     const Label	 *choice_conts;
- ENTRY_LABEL(choices)
+ ENTRY_LABEL(static, choices)
     choice_conts = (const Label *)*sp++;
     assert(choice_conts[1] != 0);
 
@@ -111,7 +111,7 @@ FUNCTION(fail)
 {
     unsigned int stk_sz;
     const Label	 *choice_conts;
- ENTRY_LABEL(fail)
+ ENTRY_LABEL(static, fail)
     TRACE(("%I fail\n"));
 
     /* if no alternatives are available terminate the program */
@@ -435,7 +435,7 @@ FUNCTION(start)
 {
     Node  *susp, *goal;
     Label eval;
- ENTRY_LABEL(start)
+ ENTRY_LABEL(static, start)
     nondet_handlers = &global_handlers;
     TRACE(("start program\n"));
 
@@ -456,7 +456,7 @@ FUNCTION(start)
 static
 FUNCTION(stop)
 {
- ENTRY_LABEL(stop)
+ ENTRY_LABEL(static, stop)
     cid = 0;
     halt();
 }

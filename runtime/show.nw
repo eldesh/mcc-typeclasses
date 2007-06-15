@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 1916 2006-05-08 21:36:20Z wlux $
+% $Id: show.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -38,19 +38,19 @@ declarative debugger.
 #include "cam.h"
 #include "trace.h"
 
-DECLARE_ENTRYPOINT(__shows);
-DECLARE_ENTRYPOINT(__dvals);
-DECLARE_LABEL(showp);
-DECLARE_LABEL(showp_1);
-DECLARE_LABEL(showArgs);
-DECLARE_LABEL(showInfix);
-DECLARE_LABEL(showTuple);
-DECLARE_LABEL(showTupleArgs);
-DECLARE_LABEL(showList);
-DECLARE_LABEL(showTail);
-DECLARE_LABEL(showTail_1);
-DECLARE_LABEL(showString);
-DECLARE_LABEL(showStringTail);
+DECLARE_LABEL(extern, __shows);
+DECLARE_LABEL(extern, __dvals);
+DECLARE_LABEL(static, showp);
+DECLARE_LABEL(static, showp_1);
+DECLARE_LABEL(static, showArgs);
+DECLARE_LABEL(static, showInfix);
+DECLARE_LABEL(static, showTuple);
+DECLARE_LABEL(static, showTupleArgs);
+DECLARE_LABEL(static, showList);
+DECLARE_LABEL(static, showTail);
+DECLARE_LABEL(static, showTail_1);
+DECLARE_LABEL(static, showString);
+DECLARE_LABEL(static, showStringTail);
 
 #if ONLY_BOXED_OBJECTS
 static const struct int_node zero_node = { &int_info, 0 };
@@ -75,8 +75,8 @@ static const struct int_node two_node  = { &int_info, 2 };
 #define bar	 (Node *)(char_table + '|')
 #define dblquote (Node *)(char_table + '\"')
 
-DECLARE_LABEL(eval_lazy_3);
-DECLARE_LABEL(eval_lazy_4);
+DECLARE_LABEL(static, eval_lazy_3);
+DECLARE_LABEL(static, eval_lazy_4);
 
 static NodeInfo showp_lazy_info_table[] = LAZYINFO("showp", showp, 4);
 static NodeInfo showArgs_lazy_info_table[] = LAZYINFO("showArgs", showArgs, 4);
@@ -92,7 +92,7 @@ FUNCTION(eval_lazy_3)
     boolean local;
     Node    *susp, *x, *y, *z;
     Label   entry;
- ENTRY_LABEL(eval_lazy_3)
+ ENTRY_LABEL(static, eval_lazy_3)
     /* suspend the search if the node is not local */
     local = is_local_space(sp[0]->s.spc);
     if ( !local )
@@ -156,7 +156,7 @@ FUNCTION(eval_lazy_4)
     boolean local;
     Node    *susp, *x, *y, *z, *t;
     Label   entry;
- ENTRY_LABEL(eval_lazy_4)
+ ENTRY_LABEL(static, eval_lazy_4)
     /* suspend the search if the node is not local */
     local = is_local_space(sp[0]->s.spc);
     if ( !local )
@@ -230,8 +230,7 @@ position, which is the way \texttt{dvals} is used by the debugger.
 <<show.c>>=
 FUNCTION(__shows)
 {
-    EXPORT_LABEL(__shows)
- ENTRY_LABEL(__shows)
+ ENTRY_LABEL(extern, __shows)
     CHECK_STACK(2);
     sp	 -= 2;
     sp[0] = sp[2];
@@ -242,8 +241,7 @@ FUNCTION(__shows)
 
 FUNCTION(__dvals)
 {
-    EXPORT_LABEL(__dvals)
- ENTRY_LABEL(__dvals)
+ ENTRY_LABEL(extern, __dvals)
     CHECK_STACK(2);
     sp	 -= 2;
     sp[0] = sp[2];
@@ -263,7 +261,7 @@ structures with arguments.
 static
 FUNCTION(showp)
 {
- ENTRY_LABEL(showp)
+ ENTRY_LABEL(static, showp)
     TRACE_FUN("showp", 4);
     GOTO(showp_1);
 }
@@ -278,7 +276,7 @@ FUNCTION(showp_1)
     double	 d;
     Node	 *node, *susp, *cons, *tail, *arglist, **argp, *prec, *show;
 
- ENTRY_LABEL(showp_1)
+ ENTRY_LABEL(static, showp_1)
 
     str	  = buf;
     argc  = 0;
@@ -491,7 +489,7 @@ static
 FUNCTION(showArgs)
 {
     Node *arglist, *susp, *susp2, *cons, *tail, *prec, *show;
- ENTRY_LABEL(showArgs)
+ ENTRY_LABEL(static, showArgs)
     TRACE_FUN("showArgs", 4);
 
     CHECK_HEAP(2 * suspend_node_size(4) + cons_node_size);
@@ -562,7 +560,7 @@ FUNCTION(showInfix)
 {
     long prec;
     Node *node, *tail, *show, *cons, *susp;
- ENTRY_LABEL(showInfix)
+ ENTRY_LABEL(static, showInfix)
     CHECK_HEAP(2 * cons_node_size + suspend_node_size(4));
     node = sp[0];
     prec = long_val(sp[1]);
@@ -648,7 +646,7 @@ FUNCTION(showTuple)
 {
     unsigned int i, argc;
     Node	 *tuple, *susp, *cons, *tail, *arglist, **argp, *show;
- ENTRY_LABEL(showTuple)
+ ENTRY_LABEL(static, showTuple)
     argc = is_vector_node(sp[0]) ? vector_argc(sp[0]) : closure_argc(sp[0]);
     CHECK_HEAP(argc * cons_node_size + suspend_node_size(3)
 	       + suspend_node_size(4));
@@ -706,7 +704,7 @@ static
 FUNCTION(showTupleArgs)
 {
     Node *arglist, *susp, *susp2, *cons, *tail, *show;
- ENTRY_LABEL(showTupleArgs)
+ ENTRY_LABEL(static, showTupleArgs)
     TRACE_FUN("showTupleArgs", 3);
 
     CHECK_HEAP(suspend_node_size(3) + suspend_node_size(4) + cons_node_size);
@@ -809,7 +807,7 @@ static
 FUNCTION(showList)
 {
     Node *hd, *tl, *susp, *susp2, *cons, *tail, *show;
- ENTRY_LABEL(showList)
+ ENTRY_LABEL(static, showList)
     hd	 = sp[0];
     show = sp[2];
     for (;;)
@@ -915,7 +913,7 @@ FUNCTION(showList)
 static
 FUNCTION(showTail)
 {
- ENTRY_LABEL(showTail)
+ ENTRY_LABEL(static, showTail)
     TRACE_FUN("showTail", 3);
     GOTO(showTail_1);
 }
@@ -924,7 +922,7 @@ static
 FUNCTION(showTail_1)
 {
     Node *list, *susp, *susp2, *cons, *tail, *show;
- ENTRY_LABEL(showTail_1)
+ ENTRY_LABEL(static, showTail_1)
     list = sp[0];
     show = sp[1];
  again:
@@ -1055,7 +1053,7 @@ FUNCTION(showString)
 {
     char buf[8];
     Node *hd, *tl, *prev, *tail, *susp, *cons;
- ENTRY_LABEL(showString);
+ ENTRY_LABEL(static, showString);
     EVAL_RIGID_CHAR(showString);
     CHECK_HEAP(suspend_node_size(3));
 
@@ -1081,7 +1079,7 @@ static
 FUNCTION(showStringTail)
 {
     Node *cons;
- ENTRY_LABEL(showStringTail)
+ ENTRY_LABEL(static, showStringTail)
     EVAL_RIGID_POLY(showStringTail);
 
     if ( sp[0] == nil )
@@ -1115,17 +1113,16 @@ precision argument is not negative, it specifies the number of decimal
 digits for the result.
 
 <<show.c>>=
-DECLARE_ENTRYPOINT(__showEFloat);
-DECLARE_ENTRYPOINT(__showFFloat);
+DECLARE_LABEL(extern, __showEFloat);
+DECLARE_LABEL(static, __showEFloat_1);
 
-DECLARE_LABEL(__showEFloat_1);
-DECLARE_LABEL(__showFFloat_1);
+DECLARE_LABEL(extern, __showFFloat);
+DECLARE_LABEL(static, __showFFloat_1);
 
 FUNCTION(__showEFloat)
 {
     Node *p, *d;
-    EXPORT_LABEL(__showEFloat)
- ENTRY_LABEL(__showEFloat)
+ ENTRY_LABEL(extern, __showEFloat)
     EVAL_RIGID_INT(__showEFloat);
     p	  = sp[0];
     d	  = sp[1];
@@ -1142,7 +1139,7 @@ FUNCTION(__showEFloat_1)
     char       fmt[20], *buf;
     const char *loc;
     Node       *str;
- ENTRY_LABEL(__showEFloat_1)
+ ENTRY_LABEL(static, __showEFloat_1)
     EVAL_RIGID_FLOAT(__showEFloat_1);
     get_double_val(d, sp[0]->f);
     p   = long_val(sp[1]);
@@ -1169,8 +1166,7 @@ FUNCTION(__showEFloat_1)
 FUNCTION(__showFFloat)
 {
     Node *p, *d;
-    EXPORT_LABEL(__showFFloat)
- ENTRY_LABEL(__showFFloat)
+ ENTRY_LABEL(extern, __showFFloat)
     EVAL_RIGID_INT(__showFFloat);
     p	  = sp[0];
     d	  = sp[1];
@@ -1187,7 +1183,7 @@ FUNCTION(__showFFloat_1)
     char       fmt[20], *buf;
     const char *loc;
     Node       *str;
- ENTRY_LABEL(__showFFloat_1)
+ ENTRY_LABEL(static, __showFFloat_1)
     EVAL_RIGID_FLOAT(__showFFloat_1);
     get_double_val(d, sp[0]->f);
     p   = long_val(sp[1]);
@@ -1222,13 +1218,12 @@ floating-point number. The conversion is based on the C function
 [[strtod]].
 
 <<show.c>>=
-DECLARE_ENTRYPOINT(__convertToFloat);
-DECLARE_LABEL(__convertToFloat_1);
+DECLARE_LABEL(extern, __convertToFloat);
+DECLARE_LABEL(static, __convertToFloat_1);
 
 FUNCTION(__convertToFloat)
 {
-    EXPORT_LABEL(__convertToFloat)
- ENTRY_LABEL(__convertToFloat)
+ ENTRY_LABEL(extern, __convertToFloat)
     CHECK_STACK(1);
     sp	 -= 1;
     sp[0] = sp[1];
@@ -1243,7 +1238,7 @@ FUNCTION(__convertToFloat_1)
     const char *loc;
     double     d;
     Node       *s, *r;
- ENTRY_LABEL(__convertToFloat_1)
+ ENTRY_LABEL(static, __convertToFloat_1)
     /* drop leading zeros */
     s = *sp++;
     while ( is_indir_node(s) )

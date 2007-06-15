@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: refs.nw 2244 2007-06-11 17:28:16Z wlux $
+% $Id: refs.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2004, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -48,14 +48,13 @@ DECLARE_CONST(__Prelude__True);
 #define Prelude_False CONST(__Prelude__False)
 #define Prelude_True  CONST(__Prelude__True)
 
-DECLARE_ENTRYPOINT(__primEqIORef);
-DECLARE_LABEL(__primEqIORef_1);
+DECLARE_LABEL(extern, __primEqIORef);
+DECLARE_LABEL(static, __primEqIORef_1);
 
 FUNCTION(__primEqIORef)
 {
     Node *aux;
-    EXPORT_LABEL(__primEqIORef)
- ENTRY_LABEL(__primEqIORef)
+ ENTRY_LABEL(extern, __primEqIORef)
     EVAL_RIGID_IOREF(__primEqIORef);
     aux	  = sp[0];
     sp[0] = sp[1];
@@ -67,7 +66,7 @@ static
 FUNCTION(__primEqIORef_1)
 {
     Node *r;
- ENTRY_LABEL(__primEqIORef_1)
+ ENTRY_LABEL(static, __primEqIORef_1)
     EVAL_RIGID_IOREF(__primEqIORef_1);
     r	= sp[1] == sp[0] ? Prelude_True : Prelude_False;
     sp += 2;
@@ -79,13 +78,12 @@ The function [[newIORef]] creates a new [[IORef]] and initializes it
 with the specified value.
 
 <<refs.c>>=
-DECLARE_ENTRYPOINT(__newIORef);
+DECLARE_LABEL(extern, __newIORef);
 
 FUNCTION(__newIORef)
 {
     IORef *ref;
-    EXPORT_LABEL(__newIORef)
- ENTRY_LABEL(__newIORef)
+ ENTRY_LABEL(extern, __newIORef)
     CHECK_HEAP(ioref_node_size);
     ref	      = (IORef *)hp;
     ref->info = &ioref_info;
@@ -102,13 +100,12 @@ in a mutable reference. Note that the value is \emph{not} evaluated
 to head normal form because the \texttt{IO} monad is lazy.
 
 <<refs.c>>=
-DECLARE_ENTRYPOINT(__readIORef);
+DECLARE_LABEL(extern, __readIORef);
 
 FUNCTION(__readIORef)
 {
     IORef *ref;
-    EXPORT_LABEL(__readIORef)
- ENTRY_LABEL(__readIORef)
+ ENTRY_LABEL(extern, __readIORef)
     EVAL_RIGID_IOREF(__readIORef);
     ref = (IORef *)sp[0];
     sp += 2;
@@ -125,13 +122,12 @@ references for generating globally unique indices that are different
 even across different branches of a non-deterministic search.
 
 <<refs.c>>=
-DECLARE_ENTRYPOINT(__writeIORef);
+DECLARE_LABEL(extern, __writeIORef);
 
 FUNCTION(__writeIORef)
 {
     IORef *ref;
-    EXPORT_LABEL(__writeIORef)
- ENTRY_LABEL(__writeIORef)
+ ENTRY_LABEL(extern, __writeIORef)
     EVAL_RIGID_IOREF(__writeIORef);
     ref = (IORef *)sp[0];
     SAVE(ref, ref);

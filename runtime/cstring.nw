@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cstring.nw 1916 2006-05-08 21:36:20Z wlux $
+% $Id: cstring.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -22,7 +22,7 @@ extern char	*to_string(Node *);
 extern char *lit_char(char *buf, int c0, int c, int q);
 extern char *lit_double(char *buf, double d);
 
-DECLARE_ENTRYPOINT(nf_string);
+DECLARE_LABEL(extern, nf_string);
 
 @ 
 <<cstring.c>>=
@@ -110,13 +110,12 @@ we have to evaluate the string to a ground normal form first. The
 Curry code [[nf_string]] can be used to handle this.
 
 <<cstring.c>>=
-DECLARE_LABEL(nf_string_1);
-DECLARE_LABEL(nf_string_2);
+DECLARE_LABEL(static, nf_string_1);
+DECLARE_LABEL(static, nf_string_2);
 
 FUNCTION(nf_string)
 {
-    EXPORT_LABEL(nf_string)
- ENTRY_LABEL(nf_string)
+ ENTRY_LABEL(extern, nf_string)
     TRACE_FUN("nf_string", 1);
     CHECK_STACK1();
     sp	 -= 1;
@@ -128,7 +127,7 @@ static
 FUNCTION(nf_string_1)
 {
     Node *list;
- ENTRY_LABEL(nf_string_1)
+ ENTRY_LABEL(static, nf_string_1)
     EVAL_RIGID_DATA(nf_string_1);
     list = sp[0];
     switch ( node_tag(list) )
@@ -151,7 +150,7 @@ FUNCTION(nf_string_1)
 static
 FUNCTION(nf_string_2)
 {
- ENTRY_LABEL(nf_string_2)
+ ENTRY_LABEL(static, nf_string_2)
     EVAL_RIGID_CHAR(nf_string_2);
     sp++;
 
@@ -234,19 +233,18 @@ Curry string into a heap allocated C string. In addition,
 [[__newCStringLen]] also returns the length of the string.
 
 <<cstring.c>>=
-DECLARE_ENTRYPOINT(__newCString);
-DECLARE_ENTRYPOINT(__newCStringLen);
+DECLARE_LABEL(extern, __newCString);
+DECLARE_LABEL(static, __newCString_1);
 
-DECLARE_LABEL(__newCString_1);
-DECLARE_LABEL(__newCStringLen_1);
+DECLARE_LABEL(extern, __newCStringLen);
+DECLARE_LABEL(static, __newCStringLen_1);
 
 #define pair_node_size closure_node_size(2)
 static DEFINE_DATA(pair, "(,)", 0, 2);
 
 FUNCTION(__newCString)
 {
-    EXPORT_LABEL(__newCString)
- ENTRY_LABEL(__newCString)
+ ENTRY_LABEL(extern, __newCString)
     sp[1] = (Node *)__newCString_1;
     GOTO(nf_string);
 }
@@ -256,7 +254,7 @@ FUNCTION(__newCString_1)
 {
     char *cp;
     Node *p;
- ENTRY_LABEL(__newCString_1)
+ ENTRY_LABEL(static, __newCString_1)
     cp = to_string(*sp++);
 
     CHECK_HEAP(ptr_node_size);
@@ -270,8 +268,7 @@ FUNCTION(__newCString_1)
 
 FUNCTION(__newCStringLen)
 {
-    EXPORT_LABEL(__newCStringLen)
- ENTRY_LABEL(__newCStringLen)
+ ENTRY_LABEL(extern, __newCStringLen)
     sp[1] = (Node *)__newCStringLen_1;
     GOTO(nf_string);
 }
@@ -282,7 +279,7 @@ FUNCTION(__newCStringLen_1)
     unsigned int l;
     char	 *cp;
     Node	 *p, *i, *r;
- ENTRY_LABEL(__newCStringLen_1)
+ ENTRY_LABEL(static, __newCStringLen_1)
     l  = string_length(sp[0]);
     cp = (char *)malloc(l + 1);
     if ( cp == NULL )
@@ -322,18 +319,17 @@ to [[__peekCString]]. This allows converting C strings with embedded
 \verb|\NUL| characters as well as substrings.
 
 <<cstring.c>>=
-DECLARE_ENTRYPOINT(__peekCString);
-DECLARE_ENTRYPOINT(__peekCStringLen);
+DECLARE_LABEL(extern, __peekCString);
 
-DECLARE_LABEL(__peekCStringLen_1);
-DECLARE_LABEL(__peekCStringLen_2);
+DECLARE_LABEL(extern, __peekCStringLen);
+DECLARE_LABEL(static, __peekCStringLen_1);
+DECLARE_LABEL(static, __peekCStringLen_2);
 
 FUNCTION(__peekCString)
 {
     char *cp;
     Node *r;
-    EXPORT_LABEL(__peekCString)
- ENTRY_LABEL(__peekCString)
+ ENTRY_LABEL(extern, __peekCString)
     EVAL_RIGID_PTR(__peekCString);
     cp = (char *)sp[0]->p.ptr;
     if ( cp == NULL )
@@ -348,8 +344,7 @@ FUNCTION(__peekCString)
 
 FUNCTION(__peekCStringLen)
 {
-    EXPORT_LABEL(__peekCStringLen)
- ENTRY_LABEL(__peekCStringLen)
+ ENTRY_LABEL(extern, __peekCStringLen)
     EVAL_RIGID_DATA(__peekCStringLen);
     CHECK_STACK1();
     sp	 -= 1;
@@ -362,7 +357,7 @@ static
 FUNCTION(__peekCStringLen_1)
 {
     Node *aux;
- ENTRY_LABEL(__peekCStringLen_1)
+ ENTRY_LABEL(static, __peekCStringLen_1)
     EVAL_RIGID_PTR(__peekCStringLen_1);
     aux	  = sp[0];
     sp[0] = sp[1];
@@ -376,7 +371,7 @@ FUNCTION(__peekCStringLen_2)
     char *cp;
     long l;
     Node *r;
- ENTRY_LABEL(__peekCStringLen_2)
+ ENTRY_LABEL(static, __peekCStringLen_2)
     EVAL_RIGID_INT(__peekCStringLen_2);
     l = long_val(sp[0]);
     if ( l > 0 )

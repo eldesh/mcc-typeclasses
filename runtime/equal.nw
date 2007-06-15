@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: equal.nw 2011 2006-11-16 12:17:25Z wlux $
+% $Id: equal.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2001-2004, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -15,7 +15,7 @@ between data terms with existentially quantified types.
 \ToDo{Get rid of this primitive.}
 
 <<equal.h>>=
-DECLARE_ENTRYPOINT(___61__61_);
+DECLARE_LABEL(extern, ___61__61_);
 
 @ 
 <<equal.c>>=
@@ -30,6 +30,7 @@ DECLARE_ENTRYPOINT(___61__61_);
 #include "eval.h"
 #include "threads.h"
 #include "data.h"
+#include "equal.h"
 #include "unify.h"
 #include "cam.h"
 #include "trace.h"
@@ -40,16 +41,13 @@ DECLARE_CONST(__Prelude__False);
 #define pair_cons_node_size closure_node_size(3)
 static DEFINE_DATA(pair_cons, ",:", CONS_TAG, 3);
 
-DECLARE_ENTRYPOINT(___61__61_);
-
-DECLARE_LABEL(___61__61__1);
-DECLARE_LABEL(___61__61__2);
-DECLARE_LABEL(___61__61__3);
+DECLARE_LABEL(static, ___61__61__1);
+DECLARE_LABEL(static, ___61__61__2);
+DECLARE_LABEL(static, ___61__61__3);
 
 FUNCTION(___61__61_)
 {
-    EXPORT_LABEL(___61__61_)
- ENTRY_LABEL(___61__61_)
+ ENTRY_LABEL(extern, ___61__61_)
     TRACE_FUN("==", 2);
     GOTO(___61__61__1);
 }
@@ -58,7 +56,7 @@ static
 FUNCTION(___61__61__1)
 {
     Node *aux;
- ENTRY_LABEL(___61__61__1)
+ ENTRY_LABEL(static, ___61__61__1)
     EVAL_RIGID_POLY(___61__61__1);
     aux	  = sp[0];
     sp[0] = sp[1];
@@ -74,7 +72,7 @@ FUNCTION(___61__61__2)
     Node	 *arg1, *arg2;
     Node	 *next, *arglist;
     Node	 **argp1, **argp2;
- ENTRY_LABEL(___61__61__2)
+ ENTRY_LABEL(static, ___61__61__2)
     EVAL_RIGID_POLY(___61__61__2);
 
     n	 = 0;
@@ -129,7 +127,7 @@ static
 FUNCTION(___61__61__3)
 {
     Node *eq, *arg1, *arg2, *arglist;
- ENTRY_LABEL(___61__61__3)
+ ENTRY_LABEL(static, ___61__61__3)
     eq = sp[0];
     if ( eq != CONST(__Prelude__True) )
     {

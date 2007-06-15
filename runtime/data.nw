@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: data.nw 2041 2006-12-13 09:43:43Z wlux $
+% $Id: data.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -64,15 +64,14 @@ There is no corresponding function for type [[Success]] because its
 constructor is hidden and cannot be instantiated in a flexible match.
 
 <<data.h>>=
-DECLARE_ENTRYPOINT(___40__41__unify);
-DECLARE_ENTRYPOINT(___91__93__unify);
-DECLARE_ENTRYPOINT(___58__unify);
+DECLARE_LABEL(extern, ___40__41__unify);
+DECLARE_LABEL(extern, ___91__93__unify);
+DECLARE_LABEL(extern, ___58__unify);
 
 <<data.c>>=
 FUNCTION(___40__41__unify)
 {
-    EXPORT_LABEL(___40__41__unify)
- ENTRY_LABEL(___40__41__unify)
+ ENTRY_LABEL(extern, ___40__41__unify)
     CHECK_STACK1();
     sp	 -= 1;
     sp[0] = CONST(___40__41_);
@@ -81,8 +80,7 @@ FUNCTION(___40__41__unify)
 
 FUNCTION(___91__93__unify)
 {
-    EXPORT_LABEL(___91__93__unify)
- ENTRY_LABEL(___91__93__unify)
+ ENTRY_LABEL(extern, ___91__93__unify)
     CHECK_STACK1();
     sp	 -= 1;
     sp[0] = CONST(___91__93_);
@@ -92,8 +90,7 @@ FUNCTION(___91__93__unify)
 FUNCTION(___58__unify)
 {
     Node *v1, *v2, *n;
-    EXPORT_LABEL(___58__unify)
- ENTRY_LABEL(___58__unify)
+ ENTRY_LABEL(extern, ___58__unify)
     CHECK_STACK1();
     CHECK_HEAP(2 * variable_node_size + cons_node_size);
 
@@ -133,7 +130,7 @@ extern const struct closure_node ___58__function;
 
 @ 
 <<data.c>>=
-DECLARE_LABEL(___58_);
+DECLARE_LABEL(static, ___58_);
 NodeInfo ___58__papp_info_table[] = {
     PAPPINFO(":", 0, ___58_, 2)
     PAPPINFO(":", 1, ___58_, 2)
@@ -144,7 +141,7 @@ static
 FUNCTION(___58_)
 {
     Node *cons;
- ENTRY_LABEL(___58_)
+ ENTRY_LABEL(static, ___58_)
     TRACE_FUN(":", 2);
 
     CHECK_HEAP(cons_node_size);

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: foreign.nw 1865 2006-03-01 22:30:38Z wlux $
+% $Id: foreign.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2005, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -122,13 +122,12 @@ with [[__addForeignPtrFinalizer]] and [[__addForeignPtrFinalizerEnv]],
 respectively.
 
 <<foreign.c>>=
-DECLARE_ENTRYPOINT(__newForeignPtr);
+DECLARE_LABEL(extern, __newForeignPtr);
 
 FUNCTION(__newForeignPtr)
 {
     Node *fp;
-    EXPORT_LABEL(__newForeignPtr)
- ENTRY_LABEL(__newForeignPtr)
+ ENTRY_LABEL(extern, __newForeignPtr)
     EVAL_RIGID_PTR(__newForeignPtr);
 
     CHECK_HEAP(foreign_ptr_node_size);
@@ -154,18 +153,17 @@ functions must be executed in the same search space where the
 finalized foreign pointer node was created.
 
 <<foreign.c>>=
-DECLARE_ENTRYPOINT(__addForeignPtrFinalizer);
-DECLARE_ENTRYPOINT(__addForeignPtrFinalizerEnv);
+DECLARE_LABEL(extern, __addForeignPtrFinalizer);
+DECLARE_LABEL(static, __addForeignPtrFinalizer_1);
 
-DECLARE_LABEL(__addForeignPtrFinalizer_1);
-DECLARE_LABEL(__addForeignPtrFinalizerEnv_1);
-DECLARE_LABEL(__addForeignPtrFinalizerEnv_2);
+DECLARE_LABEL(extern, __addForeignPtrFinalizerEnv);
+DECLARE_LABEL(static, __addForeignPtrFinalizerEnv_1);
+DECLARE_LABEL(static, __addForeignPtrFinalizerEnv_2);
 
 FUNCTION(__addForeignPtrFinalizer)
 {
     Node *aux;
-    EXPORT_LABEL(__addForeignPtrFinalizer)
- ENTRY_LABEL(__addForeignPtrFinalizer)
+ ENTRY_LABEL(extern, __addForeignPtrFinalizer)
     EVAL_RIGID_PTR(__addForeignPtrFinalizer);
     aux	  = sp[0];
     sp[0] = sp[1];
@@ -177,7 +175,7 @@ static
 FUNCTION(__addForeignPtrFinalizer_1)
 {
     union finalizer_list *fptr;
- ENTRY_LABEL(__addForeignPtrFinalizer_1)
+ ENTRY_LABEL(static, __addForeignPtrFinalizer_1)
     EVAL_RIGID_FOREIGN_PTR(__addForeignPtrFinalizer_1);
     if ( sp[0]->fp.spc != ss )
 	fail_with("addForeignPtrFinalizer: non-local pointer");
@@ -197,8 +195,7 @@ FUNCTION(__addForeignPtrFinalizer_1)
 FUNCTION(__addForeignPtrFinalizerEnv)
 {
     Node *aux;
-    EXPORT_LABEL(__addForeignPtrFinalizerEnv)
- ENTRY_LABEL(__addForeignPtrFinalizerEnv)
+ ENTRY_LABEL(extern, __addForeignPtrFinalizerEnv)
     EVAL_RIGID_PTR(__addForeignPtrFinalizerEnv);
     aux	  = sp[0];
     sp[0] = sp[1];
@@ -210,7 +207,7 @@ static
 FUNCTION(__addForeignPtrFinalizerEnv_1)
 {
     Node *aux;
- ENTRY_LABEL(__addForeignPtrFinalizerEnv_1)
+ ENTRY_LABEL(static, __addForeignPtrFinalizerEnv_1)
     EVAL_RIGID_PTR(__addForeignPtrFinalizerEnv_1);
     aux	  = sp[0];
     sp[0] = sp[2];
@@ -222,7 +219,7 @@ static
 FUNCTION(__addForeignPtrFinalizerEnv_2)
 {
     union finalizer_list *fptr;
- ENTRY_LABEL(__addForeignPtrFinalizerEnv_2)
+ ENTRY_LABEL(static, __addForeignPtrFinalizerEnv_2)
     EVAL_RIGID_FOREIGN_PTR(__addForeignPtrFinalizerEnv_2);
     if ( sp[0]->fp.spc != ss )
 	fail_with("addForeignPtrFinalizerEnv: non-local pointer");
@@ -247,13 +244,12 @@ finalized and therefore become invalid when the program retains no
 reference to the foreign pointer node itself.
 
 <<foreign.c>>=
-DECLARE_ENTRYPOINT(__unsafeForeignPtrToPtr);
+DECLARE_LABEL(extern, __unsafeForeignPtrToPtr);
 
 FUNCTION(__unsafeForeignPtrToPtr)
 {
     Node *p;
-    EXPORT_LABEL(__unsafeForeignPtrToPtr)
- ENTRY_LABEL(__unsafeForeignPtrToPtr)
+ ENTRY_LABEL(extern, __unsafeForeignPtrToPtr)
     EVAL_RIGID_FOREIGN_PTR(__unsafeForeignPtrToPtr);
     if ( sp[0]->fp.ptr )
     {
@@ -277,12 +273,11 @@ foreign pointer node on the stack, the function can simply ignore its
 argument and return to the caller.
 
 <<foreign.c>>=
-DECLARE_ENTRYPOINT(__touchForeignPtr);
+DECLARE_LABEL(extern, __touchForeignPtr);
 
 FUNCTION(__touchForeignPtr)
 {
-    EXPORT_LABEL(__touchForeignPtr)
- ENTRY_LABEL(__touchForeignPtr)
+ ENTRY_LABEL(extern, __touchForeignPtr)
     sp += 2;
     RETURN(unit);
 }
@@ -294,11 +289,10 @@ function, but can take advantage of the fact that it is always passed
 a boxed object.
 
 <<foreign.c>>=
-DECLARE_ENTRYPOINT(__castForeignPtr);
+DECLARE_LABEL(extern, __castForeignPtr);
 
 FUNCTION(__castForeignPtr)
 {
-    EXPORT_LABEL(__castForeignPtr)
- ENTRY_LABEL(__castForeignPtr)
+ ENTRY_LABEL(extern, __castForeignPtr)
     GOTO(sp[0]->info->eval);
 }

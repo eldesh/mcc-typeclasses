@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2244 2007-06-11 17:28:16Z wlux $
+% $Id: files.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -154,14 +154,13 @@ DECLARE_CONST(__Prelude__True);
 #define Prelude_False CONST(__Prelude__False)
 #define Prelude_True  CONST(__Prelude__True)
 
-DECLARE_ENTRYPOINT(__primEqHandle);
-DECLARE_LABEL(__primEqHandle_1);
+DECLARE_LABEL(extern, __primEqHandle);
+DECLARE_LABEL(static, __primEqHandle_1);
 
 FUNCTION(__primEqHandle)
 {
     Node *aux;
-    EXPORT_LABEL(__primEqHandle)
- ENTRY_LABEL(__primEqHandle)
+ ENTRY_LABEL(extern, __primEqHandle)
     EVAL_RIGID_FILE(__primEqHandle);
     aux	  = sp[0];
     sp[0] = sp[1];
@@ -173,7 +172,7 @@ static
 FUNCTION(__primEqHandle_1)
 {
     Node *r;
- ENTRY_LABEL(__primEqHandle_1)
+ ENTRY_LABEL(static, __primEqHandle_1)
     EVAL_RIGID_FILE(__primEqHandle_1);
     r	= sp[1] == sp[0] ? Prelude_True : Prelude_False;
     sp += 2;
@@ -205,28 +204,25 @@ static Handle stderr_node = {
 };
 
 
-DECLARE_ENTRYPOINT(__stdin);
-DECLARE_ENTRYPOINT(__stdout);
-DECLARE_ENTRYPOINT(__stderr);
+DECLARE_LABEL(extern, __stdin);
+DECLARE_LABEL(extern, __stdout);
+DECLARE_LABEL(extern, __stderr);
 
 FUNCTION(__stdin)
 {
-    EXPORT_LABEL(__stdin)
- ENTRY_LABEL(__stdin)
+ ENTRY_LABEL(extern, __stdin)
     RETURN((Node *)&stdin_node);
 }
 
 FUNCTION(__stdout)
 {
-    EXPORT_LABEL(__stdout)
- ENTRY_LABEL(__stdout)
+ ENTRY_LABEL(extern, __stdout)
     RETURN((Node *)&stdout_node);
 }
 
 FUNCTION(__stderr)
 {
-    EXPORT_LABEL(__stderr)
- ENTRY_LABEL(__stderr)
+ ENTRY_LABEL(extern, __stderr)
     RETURN((Node *)&stderr_node);
 }
 
@@ -257,15 +253,13 @@ DECLARE_CONST(__IO__WriteMode);
 DECLARE_CONST(__IO__AppendMode);
 DECLARE_CONST(__IO__ReadWriteMode);
 
-DECLARE_ENTRYPOINT(__openFile);
-DECLARE_LABEL(__openFile_1);
-DECLARE_LABEL(__openFile_2);
-
+DECLARE_LABEL(extern, __openFile);
+DECLARE_LABEL(static, __openFile_1);
+DECLARE_LABEL(static, __openFile_2);
 
 FUNCTION(__openFile)
 {
-    EXPORT_LABEL(__openFile)
- ENTRY_LABEL(__openFile)
+ ENTRY_LABEL(extern, __openFile)
     TRACE_FUN("openFile", 3);
     CHECK_STACK(1);
     sp	 -= 1;
@@ -278,7 +272,7 @@ static
 FUNCTION(__openFile_1)
 {
     Node *fn;
- ENTRY_LABEL(__openFile_1)
+ ENTRY_LABEL(static, __openFile_1)
     fn	  = sp[0];
     sp[0] = sp[1];
     sp[1] = fn;
@@ -292,7 +286,7 @@ FUNCTION(__openFile_2)
     int	       flags;
     FILE       *fp;
     Handle     *file;
- ENTRY_LABEL(__openFile_2)
+ ENTRY_LABEL(static, __openFile_2)
     /* determine the access mode */
     EVAL_RIGID_DATA(__openFile_2);
     switch ( node_tag(sp[0]) )
@@ -350,15 +344,13 @@ The function [[openFd]] is a variant of [[openFile]] that creates a
 new file node for a file descriptor.
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__openFd);
-DECLARE_LABEL(__openFd_1);
-DECLARE_LABEL(__openFd_2);
-
+DECLARE_LABEL(extern, __openFd);
+DECLARE_LABEL(static, __openFd_1);
+DECLARE_LABEL(static, __openFd_2);
 
 FUNCTION(__openFd)
 {
-    EXPORT_LABEL(__openFd)
- ENTRY_LABEL(__openFd)
+ ENTRY_LABEL(extern, __openFd)
     TRACE_FUN("openFd", 3);
     GOTO(__openFd_1);
 }
@@ -367,7 +359,7 @@ static
 FUNCTION(__openFd_1)
 {
     Node *fd;
- ENTRY_LABEL(__openFd_1)
+ ENTRY_LABEL(static, __openFd_1)
     EVAL_RIGID_INT(__openFd_1);
     fd	  = sp[0];
     sp[0] = sp[1];
@@ -382,7 +374,7 @@ FUNCTION(__openFd_2)
     int	       flags;
     FILE       *fp;
     Handle     *file;
- ENTRY_LABEL(__openFd_2)
+ ENTRY_LABEL(static, __openFd_2)
     /* determine the access mode */
     EVAL_RIGID_DATA(__openFd_2);
     switch ( node_tag(sp[0]) )
@@ -438,12 +430,11 @@ The function [[hClose]] closes a file handle. Calling [[hClose]] for a
 closed file handle has no effect.
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__hClose);
+DECLARE_LABEL(extern, __hClose);
 
 FUNCTION(__hClose)
 {
-    EXPORT_LABEL(__hClose)
- ENTRY_LABEL(__hClose)
+ ENTRY_LABEL(extern, __hClose)
     EVAL_RIGID_FILE(__hClose);
     close_handle((Handle *)sp[0]);
     sp += 2;
@@ -457,17 +448,16 @@ apply to a file handle. Note that for a semi-closed handle neither
 [[hIsOpen]] nor [[hIsClosed]] returns \texttt{True}.
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__hIsOpen);
-DECLARE_ENTRYPOINT(__hIsClosed);
-DECLARE_ENTRYPOINT(__hIsReadable);
-DECLARE_ENTRYPOINT(__hIsWritable);
-DECLARE_ENTRYPOINT(__hIsSeekable);
+DECLARE_LABEL(extern, __hIsOpen);
+DECLARE_LABEL(extern, __hIsClosed);
+DECLARE_LABEL(extern, __hIsReadable);
+DECLARE_LABEL(extern, __hIsWritable);
+DECLARE_LABEL(extern, __hIsSeekable);
 
 FUNCTION(__hIsOpen)
 {
     Node   *r;
-    EXPORT_LABEL(__hIsOpen)
- ENTRY_LABEL(__hIsOpen)
+ ENTRY_LABEL(extern, __hIsOpen)
     EVAL_RIGID_FILE(__hIsOpen);
     r	= is_open((Handle *)sp[0]) ? Prelude_True : Prelude_False;
     sp += 2;
@@ -477,8 +467,7 @@ FUNCTION(__hIsOpen)
 FUNCTION(__hIsClosed)
 {
     Node   *r;
-    EXPORT_LABEL(__hIsClosed)
- ENTRY_LABEL(__hIsClosed)
+ ENTRY_LABEL(extern, __hIsClosed)
     EVAL_RIGID_FILE(__hIsClosed);
     r	= ((Handle *)sp[0])->fp == NULL ? Prelude_True : Prelude_False;
     sp += 2;
@@ -488,8 +477,7 @@ FUNCTION(__hIsClosed)
 FUNCTION(__hIsReadable)
 {
     Node   *r;
-    EXPORT_LABEL(__hIsReadable)
- ENTRY_LABEL(__hIsReadable)
+ ENTRY_LABEL(extern, __hIsReadable)
     EVAL_RIGID_FILE(__hIsReadable);
     r	= is_readable((Handle *)sp[0]) ? Prelude_True : Prelude_False;
     sp += 2;
@@ -499,8 +487,7 @@ FUNCTION(__hIsReadable)
 FUNCTION(__hIsWritable)
 {
     Node   *r;
-    EXPORT_LABEL(__hIsWritable)
- ENTRY_LABEL(__hIsWritable)
+ ENTRY_LABEL(extern, __hIsWritable)
     EVAL_RIGID_FILE(__hIsWritable);
     r	= is_writable((Handle *)sp[0]) ? Prelude_True : Prelude_False;
     sp += 2;
@@ -511,8 +498,7 @@ FUNCTION(__hIsSeekable)
 {
     Handle *file;
     Node   *r;
-    EXPORT_LABEL(__hIsSeekable)
- ENTRY_LABEL(__hIsSeekable)
+ ENTRY_LABEL(extern, __hIsSeekable)
     EVAL_RIGID_FILE(__hIsSeekable);
     file = (Handle *)sp[0];
     sp	+= 2;
@@ -544,13 +530,12 @@ and puts it back with [[ungetc]]. Unfortunately, this may block the
 program until the next character is available.
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__isEOF);
-DECLARE_ENTRYPOINT(__hIsEOF);
+DECLARE_LABEL(extern, __isEOF);
+DECLARE_LABEL(extern, __hIsEOF);
 
 FUNCTION(__isEOF)
 {
-    EXPORT_LABEL(__isEOF)
- ENTRY_LABEL(__isEOF)
+ ENTRY_LABEL(extern, __isEOF)
     CHECK_STACK(1);
     sp	 -= 1;
     sp[0] = (Node *)&stdin_node;
@@ -562,8 +547,7 @@ FUNCTION(__hIsEOF)
     int	   c;
     Node   *r;
     Handle *file;
-    EXPORT_LABEL(__hIsEOF)
- ENTRY_LABEL(__hIsEOF)
+ ENTRY_LABEL(extern, __hIsEOF)
     EVAL_RIGID_FILE(__hIsEOF);
     file = (Handle *)sp[0];
 
@@ -597,13 +581,12 @@ reading. Note that this also happens when the handle is in a
 semi-closed state after [[hGetContents]] has been applied to it.
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__getChar);
-DECLARE_ENTRYPOINT(__hGetChar);
+DECLARE_LABEL(extern, __getChar);
+DECLARE_LABEL(extern, __hGetChar);
 
 FUNCTION(__getChar)
 {
-    EXPORT_LABEL(__getChar)
- ENTRY_LABEL(__getChar)
+ ENTRY_LABEL(extern, __getChar)
     CHECK_STACK(1);
     sp	 -= 1;
     sp[0] = (Node *)&stdin_node;
@@ -615,8 +598,7 @@ FUNCTION(__hGetChar)
     int	   c;
     Node   *r;
     Handle *file;
-    EXPORT_LABEL(__hGetChar)
- ENTRY_LABEL(__hGetChar)
+ ENTRY_LABEL(extern, __hGetChar)
     EVAL_RIGID_FILE(__hGetChar);
     file = (Handle *)sp[0];
 
@@ -644,15 +626,14 @@ The function [[hLookAhead]] returns the next character from the input
 file without removing it from the input stream.
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__hLookAhead);
+DECLARE_LABEL(extern, __hLookAhead);
 
 FUNCTION(__hLookAhead)
 {
     int	   c;
     Node   *r;
     Handle *file;
-    EXPORT_LABEL(__hLookAhead)
- ENTRY_LABEL(__hLookAhead)
+ ENTRY_LABEL(extern, __hLookAhead)
     EVAL_RIGID_FILE(__hLookAhead);
     file = (Handle *)sp[0];
 
@@ -698,13 +679,12 @@ that this destructive update does not have to be trailed because
 system.
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__getLine);
-DECLARE_ENTRYPOINT(__hGetLine);
+DECLARE_LABEL(extern, __getLine);
+DECLARE_LABEL(extern, __hGetLine);
 
 FUNCTION(__getLine)
 {
-    EXPORT_LABEL(__getLine)
- ENTRY_LABEL(__getLine)
+ ENTRY_LABEL(extern, __getLine)
     CHECK_STACK(1);
     sp	 -= 1;
     sp[0] = (Node *)&stdin_node;
@@ -716,8 +696,7 @@ FUNCTION(__hGetLine)
     char buf[256], *cp;
     Node *line, *tail;
     FILE *fp;
-    EXPORT_LABEL(__hGetLine)
- ENTRY_LABEL(__hGetLine)
+ ENTRY_LABEL(extern, __hGetLine)
     EVAL_RIGID_FILE(__hGetLine);
 
     if ( !is_readable((Handle *)sp[0]) )
@@ -804,12 +783,12 @@ because the representation of the world would be a simple constant
 (cf. p.~\pageref{eq:monadic-io} in Sect.~\ref{sec:io-monad}).
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__readFile);
-DECLARE_ENTRYPOINT(__getContents);
-DECLARE_ENTRYPOINT(__hGetContents);
-DECLARE_LABEL(lazyRead);
+DECLARE_LABEL(extern, __readFile);
+DECLARE_LABEL(extern, __getContents);
+DECLARE_LABEL(extern, __hGetContents);
+DECLARE_LABEL(static, lazyRead);
 
-DECLARE_LABEL(eval_lazy_1);
+DECLARE_LABEL(static, eval_lazy_1);
 
 static NodeInfo lazyRead_lazy_info_table[] = LAZYINFO("lazyRead", lazyRead, 1);
 
@@ -819,7 +798,7 @@ FUNCTION(eval_lazy_1)
     boolean local;
     Node    *susp, *x;
     Label   entry;
- ENTRY_LABEL(eval_lazy_1)
+ ENTRY_LABEL(static, eval_lazy_1)
     /* suspend the search if the node is not local */
     local = is_local_space(sp[0]->s.spc);
     if ( !local )
@@ -873,8 +852,7 @@ FUNCTION(eval_lazy_1)
 FUNCTION(__readFile)
 {
     Node *fn, *world;
-    EXPORT_LABEL(__readFile)
- ENTRY_LABEL(__readFile)
+ ENTRY_LABEL(extern, __readFile)
     fn	  = sp[0];
     world = sp[1];
 
@@ -889,8 +867,7 @@ FUNCTION(__readFile)
 
 FUNCTION(__getContents)
 {
-    EXPORT_LABEL(__getContents)
- ENTRY_LABEL(__getContents)
+ ENTRY_LABEL(extern, __getContents)
     CHECK_STACK(1);
     sp	 -= 1;
     sp[0] = (Node *)&stdin_node;
@@ -901,8 +878,7 @@ FUNCTION(__hGetContents)
 {
     Node   *susp;
     Handle *file;
-    EXPORT_LABEL(__hGetContents)
- ENTRY_LABEL(__hGetContents)
+ ENTRY_LABEL(extern, __hGetContents)
     EVAL_RIGID_FILE(__hGetContents);
     file = (Handle *)sp[0];
 
@@ -933,7 +909,7 @@ FUNCTION(lazyRead)
     int	   c;
     Node   *list, *tail;
     Handle *file;
- ENTRY_LABEL(lazyRead)
+ ENTRY_LABEL(static, lazyRead)
     TRACE_FUN("lazyRead", 1);
 
     file = (Handle *)sp[0];
@@ -975,14 +951,13 @@ the specified handle, where [[putChar]] is an abbreviation for
 [[hPutChar stdout]].
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__putChar);
-DECLARE_ENTRYPOINT(__hPutChar);
-DECLARE_LABEL(__hPutChar_1);
+DECLARE_LABEL(extern, __putChar);
+DECLARE_LABEL(extern, __hPutChar);
+DECLARE_LABEL(static, __hPutChar_1);
 
 FUNCTION(__putChar)
 {
-    EXPORT_LABEL(__putChar)
- ENTRY_LABEL(__putChar)
+ ENTRY_LABEL(extern, __putChar)
     CHECK_STACK(1);
     sp	 -= 1;
     sp[0] = sp[1];
@@ -993,8 +968,7 @@ FUNCTION(__putChar)
 FUNCTION(__hPutChar)
 {
     Node *file;
-    EXPORT_LABEL(__hPutChar)
- ENTRY_LABEL(__hPutChar)
+ ENTRY_LABEL(extern, __hPutChar)
     EVAL_RIGID_FILE(__hPutChar);
     file  = sp[0];
     sp[0] = sp[1];
@@ -1006,7 +980,7 @@ static
 FUNCTION(__hPutChar_1)
 {
     Handle *file;
- ENTRY_LABEL(__hPutChar_1)
+ ENTRY_LABEL(static, __hPutChar_1)
     EVAL_RIGID_CHAR(__hPutChar_1);
     file = (Handle *)sp[1];
 
@@ -1032,15 +1006,14 @@ The functions [[putStr]] and [[hPutStr]] write a string to a file
 handle, with [[putStr]] being an abbreviation for [[hPutStr stdout]].
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__putStr);
-DECLARE_ENTRYPOINT(__hPutStr);
-DECLARE_LABEL(__hPutStr_1);
-DECLARE_LABEL(__hPutStr_2);
+DECLARE_LABEL(extern, __putStr);
+DECLARE_LABEL(extern, __hPutStr);
+DECLARE_LABEL(static, __hPutStr_1);
+DECLARE_LABEL(static, __hPutStr_2);
 
 FUNCTION(__putStr)
 {
-    EXPORT_LABEL(__putStr)
- ENTRY_LABEL(__putStr)
+ ENTRY_LABEL(extern, __putStr)
     CHECK_STACK(1);
     sp	 -= 1;
     sp[0] = sp[1];
@@ -1051,8 +1024,7 @@ FUNCTION(__putStr)
 FUNCTION(__hPutStr)
 {
     Node *file;
-    EXPORT_LABEL(__hPutStr)
- ENTRY_LABEL(__hPutStr)
+ ENTRY_LABEL(extern, __hPutStr)
     EVAL_RIGID_FILE(__hPutStr);
     file = sp[0];
 
@@ -1071,7 +1043,7 @@ static
 FUNCTION(__hPutStr_1)
 {
     Node *list;
- ENTRY_LABEL(__hPutStr_1)
+ ENTRY_LABEL(static, __hPutStr_1)
     EVAL_RIGID_DATA(__hPutStr_1);
     list = sp[0];
     switch ( node_tag(list) )
@@ -1094,7 +1066,7 @@ static
 FUNCTION(__hPutStr_2)
 {
     Handle *file;
- ENTRY_LABEL(__hPutStr_2)
+ ENTRY_LABEL(static, __hPutStr_2)
     EVAL_RIGID_CHAR(__hPutStr_2);
 
     file = (Handle *)sp[2];
@@ -1120,16 +1092,15 @@ The functions make use of an auxiliary function [[hPutContents]] that
 calls [[hPutStr]] and then closes the file handle.
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__writeFile);
-DECLARE_ENTRYPOINT(__appendFile);
-DECLARE_ENTRYPOINT(__hPutContents);
-DECLARE_LABEL(__hPutContents_1);
+DECLARE_LABEL(extern, __writeFile);
+DECLARE_LABEL(extern, __appendFile);
+DECLARE_LABEL(extern, __hPutContents);
+DECLARE_LABEL(static, __hPutContents_1);
 
 FUNCTION(__writeFile)
 {
     Node *fn, *world;
-    EXPORT_LABEL(__writeFile)
- ENTRY_LABEL(__writeFile)
+ ENTRY_LABEL(extern, __writeFile)
     fn	  = sp[0];
     world = sp[2];
 
@@ -1145,8 +1116,7 @@ FUNCTION(__writeFile)
 FUNCTION(__appendFile)
 {
     Node *fn, *world;
-    EXPORT_LABEL(__appendFile)
- ENTRY_LABEL(__appendFile)
+ ENTRY_LABEL(extern, __appendFile)
     fn	  = sp[0];
     world = sp[2];
 
@@ -1162,8 +1132,7 @@ FUNCTION(__appendFile)
 FUNCTION(__hPutContents)
 {
     Node *file, *str, *world;
-    EXPORT_LABEL(__hPutContents)
- ENTRY_LABEL(__hPutContents)
+ ENTRY_LABEL(extern, __hPutContents)
     file  = sp[0];
     str	  = sp[1];
     world = sp[2];
@@ -1181,7 +1150,7 @@ FUNCTION(__hPutContents)
 static
 FUNCTION(__hPutContents_1)
 {
- ENTRY_LABEL(__hPutContents_1)
+ ENTRY_LABEL(static, __hPutContents_1)
     sp += 1;
     GOTO(__hClose);
 }
@@ -1191,15 +1160,14 @@ The function [[hFileSize]] returns the size of a file in bytes,
 provided that the file is seekable.
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__hFileSize);
+DECLARE_LABEL(extern, __hFileSize);
 
 FUNCTION(__hFileSize)
 {
     long   curpos, endpos;
     Node   *r;
     Handle *file;
-    EXPORT_LABEL(__hFileSize)
- ENTRY_LABEL(__hFileSize)
+ ENTRY_LABEL(extern, __hFileSize)
     EVAL_RIGID_FILE(__hFileSize);
     file = (Handle *)sp[0];
 
@@ -1246,14 +1214,13 @@ handle is connected to a terminal and [[False]] otherwise. We use the
 [[isatty]] function for testing this property.
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__hIsTerminalDevice);
+DECLARE_LABEL(extern, __hIsTerminalDevice);
 
 FUNCTION(__hIsTerminalDevice)
 {
     Node   *r;
     Handle *file;
-    EXPORT_LABEL(__hIsTerminalDevice)
- ENTRY_LABEL(__hIsTerminalDevice)
+ ENTRY_LABEL(extern, __hIsTerminalDevice)
     EVAL_RIGID_FILE(__hIsTerminalDevice);
     file = (Handle *)sp[0];
 
@@ -1295,7 +1262,7 @@ DECLARE_CONST(__IO__NoBuffering);
 DECLARE_CONST(__IO__LineBuffering);
 DECLARE_DATA(__IO__BlockBuffering);
 
-DECLARE_ENTRYPOINT(__hGetBuffering); 
+DECLARE_LABEL(extern, __hGetBuffering); 
 
 FUNCTION(__hGetBuffering)
 {
@@ -1303,8 +1270,7 @@ FUNCTION(__hGetBuffering)
     long   bsize;
     Node   *size, *r;
     Handle *file;
-    EXPORT_LABEL(__hGetBuffering)
- ENTRY_LABEL(__hGetBuffering)
+ ENTRY_LABEL(extern, __hGetBuffering)
     EVAL_RIGID_FILE(__hGetBuffering);
     file = (Handle *)sp[0];
 
@@ -1374,16 +1340,15 @@ The function [[hSetBuffering]] changes the current buffering mode of a
 file handle.
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__hSetBuffering);
-DECLARE_LABEL(__hSetBuffering_1);
-DECLARE_LABEL(__hSetBuffering_2);
-DECLARE_LABEL(__hSetBuffering_3);
+DECLARE_LABEL(extern, __hSetBuffering);
+DECLARE_LABEL(static, __hSetBuffering_1);
+DECLARE_LABEL(static, __hSetBuffering_2);
+DECLARE_LABEL(static, __hSetBuffering_3);
 
 FUNCTION(__hSetBuffering)
 {
     Node *file;
-    EXPORT_LABEL(__hSetBuffering)
- ENTRY_LABEL(__hSetBuffering)
+ ENTRY_LABEL(extern, __hSetBuffering)
     EVAL_RIGID_FILE(__hSetBuffering);
     file  = sp[0];
     sp[0] = sp[1];
@@ -1396,7 +1361,7 @@ FUNCTION(__hSetBuffering_1)
 {
     short  bmode;
     Handle *file;
- ENTRY_LABEL(__hSetBuffering_1)
+ ENTRY_LABEL(static, __hSetBuffering_1)
     EVAL_RIGID_DATA(__hSetBuffering_1);
     switch ( node_tag(sp[0]) )
     {
@@ -1440,7 +1405,7 @@ static
 FUNCTION(__hSetBuffering_2)
 {
     Handle *file;
- ENTRY_LABEL(__hSetBuffering_2)
+ ENTRY_LABEL(static, __hSetBuffering_2)
     EVAL_RIGID_DATA(__hSetBuffering_2);
     switch ( node_tag(sp[0]) )
     {
@@ -1482,7 +1447,7 @@ FUNCTION(__hSetBuffering_3)
     long   bsize;
     char   *buffer;
     Handle *file;
- ENTRY_LABEL(__hSetBuffering_3)
+ ENTRY_LABEL(static, __hSetBuffering_3)
     EVAL_RIGID_INT(__hSetBuffering_3);
     file  = (Handle *)sp[1];
     if ( !is_open(file) )
@@ -1523,13 +1488,12 @@ The function [[hFlush]] flushes the output buffer associated with
 the specified handle.
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__hFlush);
+DECLARE_LABEL(extern, __hFlush);
 
 FUNCTION(__hFlush)
 {
     Handle *file;
-    EXPORT_LABEL(__hFlush)
- ENTRY_LABEL(__hFlush)
+ ENTRY_LABEL(extern, __hFlush)
     EVAL_RIGID_FILE(__hFlush);
     file = (Handle *)sp[0];
 
@@ -1555,15 +1519,14 @@ The function [[hTell]] returns the current I/O position of the file
 associated with the specified handle.
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__hTell); 
+DECLARE_LABEL(extern, __hTell);
 
 FUNCTION(__hTell)
 {
     long   curpos;
     Node   *r;
     Handle *file;
-    EXPORT_LABEL(__hTell)
- ENTRY_LABEL(__hTell)
+ ENTRY_LABEL(extern, __hTell)
     EVAL_RIGID_FILE(__hTell);
     file = (Handle *)sp[0];
 
@@ -1612,15 +1575,14 @@ DECLARE_CONST(__IO__AbsoluteSeek);
 DECLARE_CONST(__IO__RelativeSeek);
 DECLARE_CONST(__IO__SeekFromEnd);
 
-DECLARE_ENTRYPOINT(__hSeek);
-DECLARE_LABEL(__hSeek_1);
-DECLARE_LABEL(__hSeek_2);
+DECLARE_LABEL(extern, __hSeek);
+DECLARE_LABEL(static, __hSeek_1);
+DECLARE_LABEL(static, __hSeek_2);
 
 FUNCTION(__hSeek)
 {
     Node *file;
-    EXPORT_LABEL(__hSeek)
- ENTRY_LABEL(__hSeek)
+ ENTRY_LABEL(extern, __hSeek)
     EVAL_RIGID_FILE(__hSeek);
     file  = sp[0];
     sp[0] = sp[1];
@@ -1632,7 +1594,7 @@ static
 FUNCTION(__hSeek_1)
 {
     Node *mode;
- ENTRY_LABEL(__hSeek_1)
+ ENTRY_LABEL(static, __hSeek_1)
     EVAL_RIGID_DATA(__hSeek_1);
     mode  = sp[0];
     sp[0] = sp[2];
@@ -1645,7 +1607,7 @@ FUNCTION(__hSeek_2)
 {
     int	   smode;
     Handle *file;
- ENTRY_LABEL(__hSeek_2)
+ ENTRY_LABEL(static, __hSeek_2)
     EVAL_RIGID_INT(__hSeek_2);
 
     file = (Handle *)sp[1];
@@ -1691,14 +1653,13 @@ subprocess. We cannot use [[popen]] here, as using it with the [[r+]]
 mode is a non-portable extension.
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__openProcess);
-DECLARE_LABEL(__openProcess_1);
-DECLARE_LABEL(__openProcess_2);
+DECLARE_LABEL(extern, __openProcess);
+DECLARE_LABEL(static, __openProcess_1);
+DECLARE_LABEL(static, __openProcess_2);
 
 FUNCTION(__openProcess)
 {
-    EXPORT_LABEL(__openProcess)
- ENTRY_LABEL(__openProcess)
+ ENTRY_LABEL(extern, __openProcess)
     CHECK_STACK(1);
     sp	 -= 1;
     sp[0] = sp[1];
@@ -1710,7 +1671,7 @@ static
 FUNCTION(__openProcess_1)
 {
     Node *cmd;
- ENTRY_LABEL(__openProcess_1)
+ ENTRY_LABEL(static, __openProcess_1)
     CHECK_STACK(1);
     cmd	  = sp[0];
     sp[0] = sp[1];
@@ -1726,7 +1687,7 @@ FUNCTION(__openProcess_2)
     const char	  *cmd, *mode;
     FILE	  *fp;
     ProcessHandle *proc;
- ENTRY_LABEL(__openProcess_2)
+ ENTRY_LABEL(static, __openProcess_2)
     /* determine the access mode */
     EVAL_RIGID_DATA(__openProcess_2);
     cmd = to_string(sp[1]);
@@ -1843,15 +1804,14 @@ safe to call [[pClose]] more than once for a handle that was created
 by [[openProcess]].
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__pClose);
+DECLARE_LABEL(extern, __pClose);
 
 FUNCTION(__pClose)
 {
     int		  res;
     ProcessHandle *proc;
     Node	  *r;
-    EXPORT_LABEL(__pClose)
- ENTRY_LABEL(__pClose)
+ ENTRY_LABEL(extern, __pClose)
     EVAL_RIGID_FILE(__pClose);
     proc = (ProcessHandle *)sp[0];
     if ( proc->info != &process_info )
@@ -1906,15 +1866,14 @@ The function [[connectTcpSocket]] creates a socket that is connected
 to a specified port at a given host.
 
 <<files.c>>=
-DECLARE_ENTRYPOINT(__connectTcpSocket);
-DECLARE_LABEL(__connectTcpSocket_1);
-DECLARE_LABEL(__connectTcpSocket_2);
-DECLARE_LABEL(__connectTcpSocket_3);
+DECLARE_LABEL(extern, __connectTcpSocket);
+DECLARE_LABEL(static, __connectTcpSocket_1);
+DECLARE_LABEL(static, __connectTcpSocket_2);
+DECLARE_LABEL(static, __connectTcpSocket_3);
 
 FUNCTION(__connectTcpSocket)
 {
-    EXPORT_LABEL(__connectTcpSocket)
- ENTRY_LABEL(__connectTcpSocket)
+ ENTRY_LABEL(extern, __connectTcpSocket)
     CHECK_STACK(1);
     sp	 -= 1;
     sp[0] = sp[1];
@@ -1926,7 +1885,7 @@ static
 FUNCTION(__connectTcpSocket_1)
 {
     Node *host;
- ENTRY_LABEL(__connectTcpSocket_1)
+ ENTRY_LABEL(static, __connectTcpSocket_1)
     host  = sp[0];
     sp[0] = sp[1];
     sp[1] = host;
@@ -1937,7 +1896,7 @@ static
 FUNCTION(__connectTcpSocket_2)
 {
     Node *port;
- ENTRY_LABEL(__connectTcpSocket_2)
+ ENTRY_LABEL(static, __connectTcpSocket_2)
     EVAL_RIGID_INT(__connectTcpSocket_2)
     port  = sp[0];
     sp[0] = sp[2];
@@ -1954,7 +1913,7 @@ FUNCTION(__connectTcpSocket_3)
     Handle	       *sock;
     struct hostent     *hostent;
     struct sockaddr_in addr;
- ENTRY_LABEL(__connectTcpSocket_3)
+ ENTRY_LABEL(static, __connectTcpSocket_3)
     EVAL_RIGID_DATA(__connectTcpSocket_3)
     host = to_string(sp[1]);
     port = long_val(sp[2]);

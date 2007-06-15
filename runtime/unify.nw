@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 1899 2006-04-19 10:50:11Z wlux $
+% $Id: unify.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -12,8 +12,8 @@ does not return [[Success]], but the node to which the variable was
 bound.
 
 <<unify.h>>=
-DECLARE_ENTRYPOINT(___61__58__61_);
-DECLARE_ENTRYPOINT(bind_var);
+DECLARE_LABEL(extern, ___61__58__61_);
+DECLARE_LABEL(extern, bind_var);
 
 #if NO_OCCURS_CHECK
 # define occurs(var,arg,nf)	(*(nf) = is_unboxed(arg), false)
@@ -48,20 +48,19 @@ static DEFINE_DATA(pair_cons, ",:", CONS_TAG, 3);
 
 DECLARE_CONST(__Prelude__True);
 
-DECLARE_LABEL(___61__58__61__1);
-DECLARE_LABEL(___61__58__61__2);
-DECLARE_LABEL(unify_var);
-DECLARE_LABEL(unify_var_1);
-DECLARE_LABEL(unify_args);
-DECLARE_LABEL(unify_args_1);
-DECLARE_LABEL(unify_args_2);
-DECLARE_LABEL(unify_papp_args);
-DECLARE_LABEL(unify_papp_args_1);
+DECLARE_LABEL(static, ___61__58__61__1);
+DECLARE_LABEL(static, ___61__58__61__2);
+DECLARE_LABEL(static, unify_var);
+DECLARE_LABEL(static, unify_var_1);
+DECLARE_LABEL(static, unify_args);
+DECLARE_LABEL(static, unify_args_1);
+DECLARE_LABEL(static, unify_args_2);
+DECLARE_LABEL(static, unify_papp_args);
+DECLARE_LABEL(static, unify_papp_args_1);
 
 FUNCTION(___61__58__61_)
 {
-    EXPORT_LABEL(___61__58__61_)
- ENTRY_LABEL(___61__58__61_)
+ ENTRY_LABEL(extern, ___61__58__61_)
     TRACE_FUN("=:=", 2);
     GOTO(___61__58__61__1);
 }
@@ -70,7 +69,7 @@ static
 FUNCTION(___61__58__61__1)
 {
     Node *aux;
- ENTRY_LABEL(___61__58__61__1)
+ ENTRY_LABEL(static, ___61__58__61__1)
     EVAL_FLEX_POLY(___61__58__61__1);
     aux	  = sp[0];
     sp[0] = sp[1];
@@ -82,7 +81,7 @@ static
 FUNCTION(___61__58__61__2)
 {
     Node *arg1, *arg2;
- ENTRY_LABEL(___61__58__61__2)
+ ENTRY_LABEL(static, ___61__58__61__2)
     EVAL_FLEX_POLY(___61__58__61__2);
     arg1 = sp[1];
     arg2 = sp[0];
@@ -138,7 +137,7 @@ FUNCTION(___61__58__61__2)
 
 @ 
 The implementation of strict equality is based on the two functions
-[[eq_root]] and [[eq_args]]. The function [[eq_roots]] computes
+[[eq_root]] and [[eq_args]]. The function [[eq_root]] computes
 whether the root nodes of two terms are equal. The function
 [[eq_args]] constructs a list of argument pairs from the two nodes,
 for which equality still needs to be checked.
@@ -438,7 +437,7 @@ static
 FUNCTION(unify_args)
 {
     Node *susp, *arglist;
- ENTRY_LABEL(unify_args)
+ ENTRY_LABEL(static, unify_args)
     CHECK_STACK(6);
     CHECK_HEAP(queueMe_node_size);
 
@@ -474,7 +473,7 @@ static
 FUNCTION(unify_args_1)
 {
     Node *r;
- ENTRY_LABEL(unify_args_1)
+ ENTRY_LABEL(static, unify_args_1)
     for ( r = sp[0]; node_kind(r) == INDIR_KIND; r = r->n.node )
 	;
 
@@ -496,7 +495,7 @@ static
 FUNCTION(unify_args_2)
 {
     Node *r;
- ENTRY_LABEL(unify_args_2)
+ ENTRY_LABEL(static, unify_args_2)
     ASSERT(node_kind(sp[0]) == CAPP_KIND);
     for ( r = sp[1]; node_kind(r) == INDIR_KIND; r = r->n.node )
 	;
@@ -534,7 +533,7 @@ static
 FUNCTION(unify_papp_args)
 {
     Node *arg1, *arg2, *arglist;
- ENTRY_LABEL(unify_papp_args)
+ ENTRY_LABEL(static, unify_papp_args)
     ASSERT(sp[0]->info == INFO(pair_cons));
     arglist = sp[0];
     arg1    = arglist->c.args[0];
@@ -553,7 +552,7 @@ FUNCTION(unify_papp_args)
 static
 FUNCTION(unify_papp_args_1)
 {
- ENTRY_LABEL(unify_papp_args_1)
+ ENTRY_LABEL(static, unify_papp_args_1)
     if ( *sp++ != CONST(__Prelude__True) )
 	FAIL();
 
@@ -634,7 +633,7 @@ FUNCTION(unify_var)
     boolean	 nf, is_vect;
     unsigned int i, n, sz;
     Node	 *var, *arg, *next, *arglist, **argp;
- ENTRY_LABEL(unify_var)
+ ENTRY_LABEL(static, unify_var)
     if ( !is_local_space(sp[0]->v.spc) )
     {
 	if ( is_boxed(sp[1]) && is_variable_node(sp[1])
@@ -741,7 +740,7 @@ static
 FUNCTION(unify_var_1)
 {
     Node *arglist;
- ENTRY_LABEL(unify_var_1)
+ ENTRY_LABEL(static, unify_var_1)
     arglist = sp[1];
     if ( arglist == nil )
     {
@@ -785,10 +784,10 @@ In this case, [[bind_var]] is implicitly transformed into a
 unification between the two values.
 
 <<unify.c>>=
-DECLARE_LABEL(check_constraints);
-DECLARE_LABEL(check_constraints_1);
-DECLARE_LABEL(wake);
-DECLARE_LABEL(bind_var_1);
+DECLARE_LABEL(static, check_constraints);
+DECLARE_LABEL(static, check_constraints_1);
+DECLARE_LABEL(static, wake);
+DECLARE_LABEL(static, bind_var_1);
 
 FUNCTION(bind_var)
 {
@@ -796,8 +795,7 @@ FUNCTION(bind_var)
     Node	*var, *node;
     Constraint	*cstrs;
     ThreadQueue	wq;
-    EXPORT_LABEL(bind_var)
- ENTRY_LABEL(bind_var)
+ ENTRY_LABEL(extern, bind_var)
     node = sp[0];
     var	 = sp[1];
 
@@ -906,7 +904,7 @@ static
 FUNCTION(bind_var_1)
 {
     Node *node;
- ENTRY_LABEL(bind_var_1)
+ ENTRY_LABEL(static, bind_var_1)
     node = sp[1];
     sp	+= 2;
     RETURN(node);
@@ -917,7 +915,7 @@ FUNCTION(check_constraints)
 {
     Node       *node;
     Constraint *cstrs;
- ENTRY_LABEL(check_constraints)
+ ENTRY_LABEL(static, check_constraints)
     node  = sp[0];
     cstrs = (Constraint *)sp[1];
     ASSERT(cstrs != 0);
@@ -936,7 +934,7 @@ FUNCTION(check_constraints_1)
 {
     Node       *node;
     Constraint *cstrs;
- ENTRY_LABEL(check_constraints_1)
+ ENTRY_LABEL(static, check_constraints_1)
     /* XXX check for suspended constraints? */
     cstrs = (Constraint *)sp[2];
     if ( cstrs )
@@ -956,7 +954,7 @@ FUNCTION(wake)
     Node	*node;
     Label	ret_ip;
     ThreadQueue	wq;
- ENTRY_LABEL(wake)
+ ENTRY_LABEL(static, wake)
     /* handle the wait queue of the variable */
     node   = sp[0];
     wq	   = (ThreadQueue)sp[1];

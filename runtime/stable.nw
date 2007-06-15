@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: stable.nw 1856 2006-02-19 10:36:44Z wlux $
+% $Id: stable.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2005, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -38,13 +38,12 @@ stable pointer for its first argument.
   itself.}
 
 <<stable.c>>=
-DECLARE_ENTRYPOINT(__newStablePtr);
+DECLARE_LABEL(extern, __newStablePtr);
 
 FUNCTION(__newStablePtr)
 {
     Node *ptr, **sptr;
-    EXPORT_LABEL(__newStablePtr)
- ENTRY_LABEL(__newStablePtr)
+ ENTRY_LABEL(extern, __newStablePtr)
     sptr = (Node **)malloc(sizeof(Node *));
     if ( sptr == NULL )
 	sys_error("newStablePtr");
@@ -74,13 +73,12 @@ have been released. In order to prevent crashing the runtime system,
 the garbage collector sets global roots to [[0]] in such cases.
 
 <<stable.c>>=
-DECLARE_ENTRYPOINT(__deRefStablePtr);
+DECLARE_LABEL(extern, __deRefStablePtr);
 
 FUNCTION(__deRefStablePtr)
 {
     Node **sptr;
-    EXPORT_LABEL(__deRefStablePtr)
- ENTRY_LABEL(__deRefStablePtr)
+ ENTRY_LABEL(extern, __deRefStablePtr)
     EVAL_RIGID_PTR(__deRefStablePtr);
     sptr = (Node **)sp[0]->p.ptr;
     if ( *sptr == 0 )
@@ -94,13 +92,12 @@ The primitive [[__freeStablePtr]] releases a stable pointer and annuls
 its registration as a global root.
 
 <<stable.c>>=
-DECLARE_ENTRYPOINT(__freeStablePtr);
+DECLARE_LABEL(extern, __freeStablePtr);
 
 FUNCTION(__freeStablePtr)
 {
     Node **sptr;
-    EXPORT_LABEL(__freeStablePtr)
- ENTRY_LABEL(__freeStablePtr)
+ ENTRY_LABEL(extern, __freeStablePtr)
     EVAL_RIGID_PTR(__freeStablePtr);
     sptr = (Node **)sp[0]->p.ptr;
 

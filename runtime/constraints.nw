@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: constraints.nw 1869 2006-03-05 17:28:46Z wlux $
+% $Id: constraints.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2002-2005, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -24,12 +24,11 @@ constraint \texttt{=:=} is defined in section~\ref{sec:unification}.
 #include "data.h"
 #include "cam.h"
 
-DECLARE_ENTRYPOINT(__success);
+DECLARE_LABEL(extern, __success);
 
 FUNCTION(__success)
 {
-    EXPORT_LABEL(__success)
- ENTRY_LABEL(__success)
+ ENTRY_LABEL(extern, __success)
     RETURN(Success);
 }
 
@@ -58,15 +57,14 @@ when both arguments are unbound variables.
   variables is instantiated.}
 
 <<constraints.c>>=
-DECLARE_ENTRYPOINT(___38_);
-DECLARE_LABEL(___38__1);
-DECLARE_LABEL(___38__2);
+DECLARE_LABEL(extern, ___38_);
+DECLARE_LABEL(static, ___38__1);
+DECLARE_LABEL(static, ___38__2);
 
 FUNCTION(___38_)
 {
     Node *c1, *c2, *aux;
-    EXPORT_LABEL(___38_)
- ENTRY_LABEL(___38_)
+ ENTRY_LABEL(extern, ___38_)
     for ( c1 = sp[0]; node_kind(c1) == INDIR_KIND; c1 = c1->n.node )
 	;
     for ( c2 = sp[1]; node_kind(c2) == INDIR_KIND; c2 = c2->n.node )
@@ -212,7 +210,7 @@ static
 FUNCTION(___38__1)
 {
     Node *c1, *c2;
- ENTRY_LABEL(___38__1)
+ ENTRY_LABEL(static, ___38__1)
     for ( c1 = sp[0]; node_kind(c1) == INDIR_KIND; c1 = c1->n.node )
 	;
     for ( c2 = sp[1]; node_kind(c2) == INDIR_KIND; c2 = c2->n.node )
@@ -264,7 +262,7 @@ static
 FUNCTION(___38__2)
 {
     Node *c1, *c2;
- ENTRY_LABEL(___38__2)
+ ENTRY_LABEL(static, ___38__2)
     for ( c1 = sp[0]; node_kind(c1) == INDIR_KIND; c1 = c1->n.node )
 	;
     for ( c2 = sp[1]; node_kind(c2) == INDIR_KIND; c2 = c2->n.node )
@@ -283,14 +281,13 @@ compatibility with PAKCS. No new thread is started when the first
 argument is already in head normal form.
 
 <<constraints.c>>=
-DECLARE_ENTRYPOINT(__spawnConstraint);
-DECLARE_LABEL(__spawnConstraint_1);
+DECLARE_LABEL(extern, __spawnConstraint);
+DECLARE_LABEL(static, __spawnConstraint_1);
 
 FUNCTION(__spawnConstraint)
 {
     Node *c;
-    EXPORT_LABEL(__spawnConstraint)
- ENTRY_LABEL(__spawnConstraint)
+ ENTRY_LABEL(extern, __spawnConstraint)
     for ( c = sp[0]; node_kind(c) == INDIR_KIND; c = c->n.node )
 	;
     if ( node_kind(c) == LAZY_KIND && node_tag(c) != QUEUEME_TAG )
@@ -311,7 +308,7 @@ static
 FUNCTION(__spawnConstraint_1)
 {
     Node *r;
- ENTRY_LABEL(__spawnConstraint_1)
+ ENTRY_LABEL(static, __spawnConstraint_1)
     r = sp[0];
     if ( is_boxed(r) )
 	GOTO(r->info->eval);

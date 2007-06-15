@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CPretty.lhs 1822 2005-11-07 22:50:22Z wlux $
+% $Id: CPretty.lhs 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2002-2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -36,33 +36,31 @@ program formatter.\footnote{For instance, on Unix systems
 >          | null ds = empty
 >          | otherwise = text "#else" $+$ vsep (map ppTopDecl ds)
 > ppTopDecl (CppDefine v e) = text "#define" <+> text v <+> ppExpr 0 e
-> ppTopDecl (CExternVarDecl ty v) = text "extern" <+> varDecl ty v <> semi
-> ppTopDecl (CExternArrayDecl ty v) = text "extern" <+> arrayDecl ty v <> semi
+> ppTopDecl (CExternVarDecl ty v) =
+>   ppLinkage True CPublic <+> varDecl ty v <> semi
+> ppTopDecl (CExternArrayDecl ty v) =
+>   ppLinkage True CPublic <+> arrayDecl ty v <> semi
 > ppTopDecl (CEnumDecl cs)
 >   | null cs = empty
 >   | otherwise = text "enum" $+$ block (list ppConst cs) <> semi
-> ppTopDecl (CFuncDecl vb f) = ppFunCall (decl vb) [text f] <> semi
->   where decl CPublic = "DECLARE_ENTRYPOINT"
->         decl CPrivate = "DECLARE_LABEL"
+> ppTopDecl (CFuncDecl vb f) =
+>   ppFunCall "DECLARE_LABEL" [ppLinkage True vb,text f] <> semi
 > ppTopDecl (CVarDef vb ty v (CInit x)) =
->   ppVisi vb <+> varDecl ty v <> equals <> ppExpr 0 x <> semi
+>   ppLinkage False vb <+> varDecl ty v <> equals <> ppExpr 0 x <> semi
 > ppTopDecl (CVarDef vb ty v (CStruct xs)) =
->   ppVisi vb <+> varDecl ty v <> equals $+$ ppInits xs <> semi
+>   ppLinkage False vb <+> varDecl ty v <> equals $+$ ppInits xs <> semi
 > ppTopDecl (CArrayDef vb ty v xs) =
->   ppVisi vb <+> arrayDecl ty v <> equals $+$ ppInits xs <> semi
+>   ppLinkage False vb <+> arrayDecl ty v <> equals $+$ ppInits xs <> semi
 > ppTopDecl (CFuncDef vb f sts) =
->   ppVisi vb <+> ppFunCall "FUNCTION" [text f] $+$
->   ppBlock (exportLabel vb f $+$ entryLabel f) sts
->   where entryLabel f = ppFunCall "ENTRY_LABEL" [text f]
->         exportLabel CPublic f = ppFunCall "EXPORT_LABEL" [text f]
->         exportLabel CPrivate _ = empty
+>   ppLinkage False vb <+> ppFunCall "FUNCTION" [text f] $+$
+>   ppBlock (ppFunCall "ENTRY_LABEL" [ppLinkage True vb,text f]) sts
 > ppTopDecl (CMainDecl f xs) =
->   text "extern" <+> ppHeader (text f) xs <> semi
+>   ppLinkage True CPublic <+> ppHeader (text f) xs <> semi
 >   where ppHeader f xs =
 >           ppDeclarator 0 (CFunctionType retType (zipWith const argTypes xs)) f
 >           where CFunctionType retType argTypes = cMainType
 > ppTopDecl (CMainFunc f xs sts) =
->   ppVisi CPublic <+> ppHeader f xs $+$ ppBlock empty sts
+>   ppLinkage False CPublic <+> ppHeader f xs $+$ ppBlock empty sts
 >   where ppHeader f xs =
 >           ppDeclarator 0 retType (ppFunCall f (zipWith varDecl argTypes xs))
 >           where CFunctionType retType argTypes = cMainType
@@ -72,9 +70,9 @@ program formatter.\footnote{For instance, on Unix systems
 >   where intType = CType "int"
 >         pStrType = CPointerType (CPointerType (CType "char"))
 
-> ppVisi :: CVisibility -> Doc
-> ppVisi CPublic = empty
-> ppVisi CPrivate = text "static"
+> ppLinkage :: Bool -> CVisibility -> Doc
+> ppLinkage decl CPublic = if decl then text "extern" else empty
+> ppLinkage _ CPrivate = text "static"
 
 > ppConst :: CConst -> Doc
 > ppConst (CConst c x) = text c <> maybe empty (\i -> equals <> int i) x

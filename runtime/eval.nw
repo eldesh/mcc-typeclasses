@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 1899 2006-04-19 10:50:11Z wlux $
+% $Id: eval.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -34,14 +34,13 @@ evaluated at all. The entry point [[no_eval]] aborts the program if
 such a node is ever entered.
 
 <<eval.h>>=
-DECLARE_ENTRYPOINT(no_eval);
+DECLARE_LABEL(extern, no_eval);
 
 @
 <<eval.c>>=
 FUNCTION(no_eval)
 {
-    EXPORT_LABEL(no_eval)
- ENTRY_LABEL(no_eval)
+ ENTRY_LABEL(extern, no_eval)
     curry_panic("internal error: no_eval entered\n");
 }
 
@@ -51,15 +50,14 @@ already in weak head normal form.  Their evaluation code,
 [[eval_whnf]], simply returns the node to the caller.
 
 <<eval.h>>=
-DECLARE_ENTRYPOINT(eval_whnf);
+DECLARE_LABEL(extern, eval_whnf);
 
 @
 <<eval.c>>=
 FUNCTION(eval_whnf)
 {
     Node *self;
-    EXPORT_LABEL(eval_whnf)
- ENTRY_LABEL(eval_whnf)
+ ENTRY_LABEL(extern, eval_whnf)
     self = *sp++;
     RETURN(self);
 }
@@ -72,15 +70,14 @@ the referenced node is itself an indirection node.  If the referenced
 node is an unboxed integer number we return immediately to the caller.
 
 <<eval.h>>=
-DECLARE_ENTRYPOINT(eval_indir);
+DECLARE_LABEL(extern, eval_indir);
 
 @
 <<eval.c>>=
 FUNCTION(eval_indir)
 {
     Node *node;
-    EXPORT_LABEL(eval_indir)
- ENTRY_LABEL(eval_indir)
+ ENTRY_LABEL(extern, eval_indir)
     node = sp[0];
     ASSERT(is_boxed(node) && is_indir_node(node));
 
@@ -115,7 +112,7 @@ As a minor optimization, if the current thread would return to
 with its result, the current thread is terminated immediately.
 
 <<eval.h>>=
-DECLARE_ENTRYPOINT(eval_queueMe);
+DECLARE_LABEL(extern, eval_queueMe);
 
 @
 <<eval.c>>=
@@ -124,8 +121,7 @@ FUNCTION(eval_queueMe)
     Node	*susp, *susp2;
     Label	cont_ip;
     ThreadQueue wq;
-    EXPORT_LABEL(eval_queueMe)
- ENTRY_LABEL(eval_queueMe)
+ ENTRY_LABEL(extern, eval_queueMe)
     susp = sp[0];
     if ( (Label)sp[1] == update )
     {
@@ -181,7 +177,7 @@ weak head normal form when [[resume]] is entered. Therefore, it is
 safe to return to the caller without entering the result.
 
 <<eval.h>>=
-DECLARE_ENTRYPOINT(resume);
+DECLARE_LABEL(extern, resume);
 
 @ 
 <<eval.c>>=
@@ -189,8 +185,7 @@ FUNCTION(resume)
 {
     Node  *result;
     Label ret_ip;
-    EXPORT_LABEL(resume)
- ENTRY_LABEL(resume)
+ ENTRY_LABEL(extern, resume)
     /* dereference the indirection */
     result = sp[0];
     ret_ip = (Label)sp[1];
@@ -209,7 +204,7 @@ because they also tried to evaluate the application are woken, but the
 current thread is not interrupted.
 
 <<eval.h>>=
-DECLARE_ENTRYPOINT(update);
+DECLARE_LABEL(extern, update);
 
 @
 <<eval.c>>=
@@ -218,8 +213,7 @@ FUNCTION(update)
     Node       *result, *susp;
     Label       ret_ip;
     ThreadQueue wq;
-    EXPORT_LABEL(update)
- ENTRY_LABEL(update)
+ ENTRY_LABEL(extern, update)
     result = sp[0];
     susp   = sp[1];
     ret_ip = (Label)sp[2];
@@ -255,7 +249,7 @@ the runtime system code [[sync_var]], which also ensures that the
 bound variable node will be dereferenced after the thread is resumed.
 
 <<eval.h>>=
-DECLARE_ENTRYPOINT(sync_var);
+DECLARE_LABEL(extern, sync_var);
 
 @ 
 <<eval.c>>=
@@ -263,8 +257,7 @@ FUNCTION(sync_var)
 {
     Node  *var;
     Label cont_ip;
-    EXPORT_LABEL(sync_var)
- ENTRY_LABEL(sync_var)
+ ENTRY_LABEL(extern, sync_var)
     var	    = sp[0];
     cont_ip = resume;
     if ( !is_local_space(var->v.spc) )
@@ -290,7 +283,7 @@ the stack.
 
 <<eval.h>>=
 #if YIELD_NONDET
-DECLARE_ENTRYPOINT(flex_yield_resume);
+DECLARE_LABEL(extern, flex_yield_resume);
 #endif
 
 @ 
@@ -300,8 +293,7 @@ FUNCTION(flex_yield_resume)
 {
     Node  *node;
     Label cont_ip;
-    EXPORT_LABEL(flex_yield_resume)
- ENTRY_LABEL(flex_yield_resume)
+ ENTRY_LABEL(extern, flex_yield_resume)
     node = sp[1];
     for (;;)
     {
@@ -348,13 +340,13 @@ Note that we do not provide a function info table for [[@]] because
 this function is never applied partially.
 
 <<eval.h>>=
-DECLARE_ENTRYPOINT(___64_);
+DECLARE_LABEL(extern, ___64_);
 extern NodeInfo ___64__info, ___64__lazy_info_table[];
 
 @ 
 <<eval.c>>=
-DECLARE_LABEL(eval_clos_2);
-DECLARE_LABEL(eval_lazy_2);
+DECLARE_LABEL(static, eval_clos_2);
+DECLARE_LABEL(static, eval_lazy_2);
 
 NodeInfo ___64__info		  = FUNINFO("@", ___64_, 2);
 NodeInfo ___64__lazy_info_table[] = LAZYINFO("@", ___64_, 2);
@@ -363,7 +355,7 @@ static
 FUNCTION(eval_clos_2)
 {
     Node *clos;
- ENTRY_LABEL(eval_clos_2)
+ ENTRY_LABEL(static, eval_clos_2)
     CHECK_STACK1();
     clos  = sp[0];
     sp	 -= 1;
@@ -378,7 +370,7 @@ FUNCTION(eval_lazy_2)
     boolean local;
     Node    *susp, *x, *y;
     Label   entry;
- ENTRY_LABEL(eval_lazy_2)
+ ENTRY_LABEL(static, eval_lazy_2)
     /* suspend the search if the node is not local */
     local = is_local_space(sp[0]->s.spc);
     if ( !local )
@@ -434,12 +426,11 @@ FUNCTION(eval_lazy_2)
     GOTO(entry);
 }
 
-DECLARE_LABEL(___64__1);
+DECLARE_LABEL(static, ___64__1);
 
 FUNCTION(___64_)
 {
-    EXPORT_LABEL(___64_)
- ENTRY_LABEL(___64_)
+ ENTRY_LABEL(extern, ___64_)
     TRACE_FUN("@", 2);
     GOTO(___64__1);
 }
@@ -450,7 +441,7 @@ FUNCTION(___64__1)
     unsigned int argc;
     Node	 *clos;
     NodeInfo	 *fInfo;
- ENTRY_LABEL(___64__1)
+ ENTRY_LABEL(static, ___64__1)
     /* evaluate the function argument to head normal form */
     EVAL_RIGID_PAPP(___64__1);
     clos = sp[0];
@@ -500,13 +491,12 @@ The primitive function \texttt{seq} evaluates both of its argument to
 head normal form starting with the left argument.
 
 <<eval.c>>=
-DECLARE_ENTRYPOINT(__seq);
+DECLARE_LABEL(extern, __seq);
 
 FUNCTION(__seq)
 {
     Node *node;
-    EXPORT_LABEL(__seq)
- ENTRY_LABEL(__seq)
+ ENTRY_LABEL(extern, __seq)
     EVAL_FLEX_POLY(__seq);
     node = sp[1];
     if ( is_boxed(node) )
@@ -523,12 +513,11 @@ The primitive function \texttt{failed} simply invokes the current
 failure handler.
 
 <<eval.c>>=
-DECLARE_ENTRYPOINT(__failed);
+DECLARE_LABEL(extern, __failed);
 
 FUNCTION(__failed)
 {
-    EXPORT_LABEL(__failed)
- ENTRY_LABEL(__failed)
+ ENTRY_LABEL(extern, __failed)
     FAIL();
 }
 
@@ -541,13 +530,12 @@ implemented only for compatibility with PAKCS.
 DECLARE_CONST(__Prelude__True);
 DECLARE_CONST(__Prelude__False);
 
-DECLARE_ENTRYPOINT(__isVar);
+DECLARE_LABEL(extern, __isVar);
 
 FUNCTION(__isVar)
 {
     Node *r;
-    EXPORT_LABEL(__isVar)
- ENTRY_LABEL(__isVar)
+ ENTRY_LABEL(extern, __isVar)
     EVAL_FLEX_POLY(__isVar);
     r	= is_boxed(sp[0]) && is_variable_node(sp[0]) ? CONST(__Prelude__True)
 						     : CONST(__Prelude__False);
@@ -561,13 +549,12 @@ to head normal form and suspends until it is instantiated to a
 non-variable term.
 
 <<eval.c>>=
-DECLARE_ENTRYPOINT(__ensureNotFree);
+DECLARE_LABEL(extern, __ensureNotFree);
 
 FUNCTION(__ensureNotFree)
 {
     Node *node;
-    EXPORT_LABEL(__ensureNotFree)
- ENTRY_LABEL(__ensureNotFree)
+ ENTRY_LABEL(extern, __ensureNotFree)
     EVAL_RIGID_POLY(__ensureNotFree);
     node = *sp++;
     RETURN(node);
@@ -580,10 +567,10 @@ that \texttt{ensureGround} is semantically equivalent to
 \texttt{Prelude.id} otherwise.
 
 <<eval.c>>=
-DECLARE_ENTRYPOINT(__ensureGround);
-DECLARE_LABEL(__ensureGround_1);
+DECLARE_LABEL(extern, __ensureGround);
+DECLARE_LABEL(static, __ensureGround_1);
 
-DECLARE_LABEL(eval_lazy_1);
+DECLARE_LABEL(static, eval_lazy_1);
 
 static
 FUNCTION(eval_lazy_1)
@@ -591,7 +578,7 @@ FUNCTION(eval_lazy_1)
     boolean local;
     Node    *susp, *x;
     Label   entry;
- ENTRY_LABEL(eval_lazy_1)
+ ENTRY_LABEL(static, eval_lazy_1)
     /* suspend the search if the node is not local */
     local = is_local_space(sp[0]->s.spc);
     if ( !local )
@@ -644,8 +631,7 @@ FUNCTION(eval_lazy_1)
 
 FUNCTION(__ensureGround)
 {
-    EXPORT_LABEL(__ensureGround)
- ENTRY_LABEL(__ensureGround)
+ ENTRY_LABEL(extern, __ensureGround)
     TRACE_FUN("ensureGround", 1);
     GOTO(__ensureGround_1);
 }
@@ -658,7 +644,7 @@ FUNCTION(__ensureGround_1)
     Node	    *node, **argp, *susp;
     static NodeInfo ensureGround_lazy_info_table[] =
 	LAZYINFO("ensureGround", __ensureGround, 1);
- ENTRY_LABEL(__ensureGround_1)
+ ENTRY_LABEL(static, __ensureGround_1)
     EVAL_RIGID_POLY(__ensureGround_1);
     node = sp[0];
     if ( is_boxed(node) )

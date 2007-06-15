@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: vector.nw 2244 2007-06-11 17:28:16Z wlux $
+% $Id: vector.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2002-2005, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -46,14 +46,13 @@ DECLARE_CONST(__Prelude__True);
 #define Prelude_False CONST(__Prelude__False)
 #define Prelude_True  CONST(__Prelude__True)
 
-DECLARE_ENTRYPOINT(__primEqIOVector);
-DECLARE_LABEL(__primEqIOVector_1);
+DECLARE_LABEL(extern, __primEqIOVector);
+DECLARE_LABEL(static, __primEqIOVector_1);
 
 FUNCTION(__primEqIOVector)
 {
     Node *aux;
-    EXPORT_LABEL(__primEqIOVector)
- ENTRY_LABEL(__primEqIOVector)
+ ENTRY_LABEL(extern, __primEqIOVector)
     EVAL_RIGID_VECTOR(__primEqIOVector);
     aux	  = sp[0];
     sp[0] = sp[1];
@@ -65,7 +64,7 @@ static
 FUNCTION(__primEqIOVector_1)
 {
     Node *r;
- ENTRY_LABEL(__primEqIOVector_1)
+ ENTRY_LABEL(static, __primEqIOVector_1)
     EVAL_RIGID_VECTOR(__primEqIOVector_1);
     r	= sp[1] == sp[0] ? Prelude_True : Prelude_False;
     sp += 2;
@@ -77,14 +76,13 @@ The action [[newIOVector]] allocates a new vector with a specified
 size and assigns an initial value to every element of the vector.
 
 <<vector.c>>=
-DECLARE_ENTRYPOINT(__newIOVector);
+DECLARE_LABEL(extern, __newIOVector);
 
 FUNCTION(__newIOVector)
 {
     long i, n;
     Node *init, *vec;
-    EXPORT_LABEL(__newIOVector)
- ENTRY_LABEL(__newIOVector)
+ ENTRY_LABEL(extern, __newIOVector)
     EVAL_RIGID_INT(__newIOVector);
     n = long_val(sp[0]);
     if ( n < 0 )
@@ -116,13 +114,12 @@ contain any information, the empty vector can be shared and need not
 be copied.
 
 <<vector.c>>=
-DECLARE_ENTRYPOINT(__copyIOVector);
+DECLARE_LABEL(extern, __copyIOVector);
 
 FUNCTION(__copyIOVector)
 {
     Node *vec;
-    EXPORT_LABEL(__copyIOVector)
- ENTRY_LABEL(__copyIOVector)
+ ENTRY_LABEL(extern, __copyIOVector)
     EVAL_RIGID_VECTOR(__copyIOVector);
 
     vec = sp[0];
@@ -145,14 +142,13 @@ The element is \emph{not} evaluated to head normal form as the IO
 monad is lazy.
 
 <<vector.c>>=
-DECLARE_ENTRYPOINT(__readIOVector);
-DECLARE_LABEL(__readIOVector_1);
+DECLARE_LABEL(extern, __readIOVector);
+DECLARE_LABEL(static, __readIOVector_1);
 
 FUNCTION(__readIOVector)
 {
     Node *aux;
-    EXPORT_LABEL(__readIOVector)
- ENTRY_LABEL(__readIOVector)
+ ENTRY_LABEL(extern, __readIOVector)
     EVAL_RIGID_VECTOR(__readIOVector);
     aux	  = sp[0];
     sp[0] = sp[1];
@@ -165,7 +161,7 @@ FUNCTION(__readIOVector_1)
 {
     long  i;
     Node *vec, *r;
- ENTRY_LABEL(__readIOVector_1)
+ ENTRY_LABEL(static, __readIOVector_1)
     EVAL_RIGID_INT(__readIOVector_1);
 
     i	= long_val(sp[0]);
@@ -184,14 +180,13 @@ for [[readIOVector]], the index must be checked before calling this
 function.
 
 <<vector.c>>=
-DECLARE_ENTRYPOINT(__writeIOVector);
-DECLARE_LABEL(__writeIOVector_1);
+DECLARE_LABEL(extern, __writeIOVector);
+DECLARE_LABEL(static, __writeIOVector_1);
 
 FUNCTION(__writeIOVector)
 {
     Node *aux;
-    EXPORT_LABEL(__writeIOVector)
- ENTRY_LABEL(__writeIOVector)
+ ENTRY_LABEL(extern, __writeIOVector)
     EVAL_RIGID_VECTOR(__writeIOVector);
     aux	  = sp[0];
     sp[0] = sp[1];
@@ -204,7 +199,7 @@ FUNCTION(__writeIOVector_1)
 {
     long i;
     Node *vec, *node;
- ENTRY_LABEL(__writeIOVector_1)
+ ENTRY_LABEL(static, __writeIOVector_1)
     EVAL_RIGID_INT(__writeIOVector_1);
 
     i	 = long_val(sp[0]);
@@ -227,14 +222,13 @@ is not a monadic action because the length of a vector does not
 change.
 
 <<vector.c>>=
-DECLARE_ENTRYPOINT(__lengthIOVector);
+DECLARE_LABEL(extern, __lengthIOVector);
 
 FUNCTION(__lengthIOVector)
 {
     int  n;
     Node *r;
-    EXPORT_LABEL(__lengthIOVector)
- ENTRY_LABEL(__lengthIOVector)
+ ENTRY_LABEL(extern, __lengthIOVector)
     EVAL_RIGID_VECTOR(__lengthIOVector);
 
     n	= vector_argc(sp[0]);

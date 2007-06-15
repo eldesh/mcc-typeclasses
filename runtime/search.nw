@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: search.nw 1899 2006-04-19 10:50:11Z wlux $
+% $Id: search.nw 2252 2007-06-15 17:45:09Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -24,14 +24,14 @@ extern void suspend_search(Label, Node *, SearchSpace *);
 static void push_search_context(void);
 static void pop_search_context(void);
 
-DECLARE_LABEL(solved_goal);
-DECLARE_LABEL(search_goal_success);
-DECLARE_LABEL(search_cont);
-DECLARE_LABEL(search_goal_proceed);
-DECLARE_LABEL(resume_search);
-DECLARE_LABEL(choices_search);
-DECLARE_LABEL(deadlock_search);
-DECLARE_LABEL(fail_search);
+DECLARE_LABEL(static, solved_goal);
+DECLARE_LABEL(static, search_goal_success);
+DECLARE_LABEL(static, search_cont);
+DECLARE_LABEL(static, search_goal_proceed);
+DECLARE_LABEL(static, resume_search);
+DECLARE_LABEL(static, choices_search);
+DECLARE_LABEL(static, deadlock_search);
+DECLARE_LABEL(static, fail_search);
 
 static const struct nondet_handlers search_handlers = {
     choices_search, deadlock_search, fail_search
@@ -117,13 +117,12 @@ solved search goal, the goal variable and queue-me node of that goal
 are shared instead of allocating fresh nodes.
 
 <<search.c>>=
-DECLARE_ENTRYPOINT(__try);
+DECLARE_LABEL(extern, __try);
 
 FUNCTION(__try)
 {
     Node *susp, *list, *sc, *var;
-    EXPORT_LABEL(__try)
- ENTRY_LABEL(__try)
+ ENTRY_LABEL(extern, __try)
     EVAL_RIGID_PAPP(__try);
     assert(sp[0]->info->tag == 1);
 
@@ -221,7 +220,7 @@ static
 FUNCTION(solved_goal)
 {
     Node  *cont, *res, *arg;
- ENTRY_LABEL(solved_goal)
+ ENTRY_LABEL(static, solved_goal)
     cont = sp[0];
     res	 = copy_graph(cont->sc.var, cont->sc.spc);
 
@@ -246,7 +245,7 @@ FUNCTION(solved_goal)
 static
 FUNCTION(search_goal_success)
 {
- ENTRY_LABEL(search_goal_success)
+ ENTRY_LABEL(static, search_goal_success)
     sp += 1;
     RETURN(Success);
 }
@@ -288,7 +287,7 @@ static
 FUNCTION(search_cont)
 {
     Node *arg, *cont;
- ENTRY_LABEL(search_cont)
+ ENTRY_LABEL(static, search_cont)
     cont = sp[0];
     if ( !inject_search_space(cont->sc.spc) )
 	sp[0] = cont = copy_graph(cont, cont->sc.spc);
@@ -319,7 +318,7 @@ static
 FUNCTION(search_goal_proceed)
 {
     Node *susp;
- ENTRY_LABEL(search_goal_proceed)
+ ENTRY_LABEL(static, search_goal_proceed)
     sp	+= 1;
     susp = sp[0];
     ASSERT(is_boxed(susp));
@@ -344,7 +343,7 @@ static
 FUNCTION(deadlock_search)
 {
     Node *goal, *sc, *clos, *list;
- ENTRY_LABEL(deadlock_search)
+ ENTRY_LABEL(static, deadlock_search)
     /* check for successful computation or deadlock */
     ASSERT(sp == (Node **)bp - 2);
     for ( goal = sp[0]; ; )
@@ -479,7 +478,7 @@ static
 FUNCTION(resume_search)
 {
     Node *sc;
- ENTRY_LABEL(resume_search)
+ ENTRY_LABEL(static, resume_search)
     sp += 1;
     sc	= sp[0];
     ASSERT(is_boxed(sc) && is_search_cont_node(sc));
@@ -508,7 +507,7 @@ FUNCTION(choices_search)
     unsigned int n_conts;
     Node	 *list, *cons, *clos, *sc;
     const Label	 *conts;
- ENTRY_LABEL(choices_search)
+ ENTRY_LABEL(static, choices_search)
     ASSERT(bp && is_search_context(bp));
 
     /* compute the number of alternative solutions */
@@ -573,7 +572,7 @@ enclosing context.
 static
 FUNCTION(fail_search)
 {
- ENTRY_LABEL(fail_search)
+ ENTRY_LABEL(static, fail_search)
     ASSERT(is_search_context(bp));
 
     /* discard the current search space and context */
@@ -636,13 +635,12 @@ in the program
 \end{verbatim}
 
 <<search.c>>=
-DECLARE_ENTRYPOINT(__encapsulate);
+DECLARE_LABEL(extern, __encapsulate);
 
 FUNCTION(__encapsulate)
 {
     Node *susp, *var, *goal, *clos, *sc;
-    EXPORT_LABEL(__encapsulate)
- ENTRY_LABEL(__encapsulate)
+ ENTRY_LABEL(extern, __encapsulate)
     /* create a new search context for the goal */
     TRACE(("starting encapsulated search\n"));
     sp[1] = sp[0];

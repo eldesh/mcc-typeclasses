@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: eval.nw 2264 2007-06-16 14:49:40Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -369,13 +369,11 @@ FUNCTION(eval_clos_2)
 static
 FUNCTION(eval_lazy_2)
 {
-    boolean local;
-    Node    *susp, *x, *y;
-    Label   entry;
+    Node  *susp, *x, *y;
+    Label entry;
  ENTRY_LABEL(static, eval_lazy_2)
     /* suspend the search if the node is not local */
-    local = is_local_space(regs.sp[0]->s.spc);
-    if ( !local )
+    if ( !is_local_space(regs.sp[0]->s.spc) )
 	suspend_search(resume, regs.sp[0], regs.sp[0]->s.spc);
 
     /* get the arguments */
@@ -385,7 +383,7 @@ FUNCTION(eval_lazy_2)
     y	  = susp->s.args[1];
 
     /* create an indirection if there is an update frame immediately above */
-    if ( local && (Label)regs.sp[1] == update )
+    if ( (Label)regs.sp[1] == update )
     {
 	CHECK_STACK1();
 	regs.sp -= 1;
@@ -580,13 +578,11 @@ DECLARE_LABEL(static, eval_lazy_1);
 static
 FUNCTION(eval_lazy_1)
 {
-    boolean local;
-    Node    *susp, *x;
-    Label   entry;
+    Node  *susp, *x;
+    Label entry;
  ENTRY_LABEL(static, eval_lazy_1)
     /* suspend the search if the node is not local */
-    local = is_local_space(regs.sp[0]->s.spc);
-    if ( !local )
+    if ( !is_local_space(regs.sp[0]->s.spc) )
 	suspend_search(resume, regs.sp[0], regs.sp[0]->s.spc);
 
     /* get the argument */
@@ -595,7 +591,7 @@ FUNCTION(eval_lazy_1)
     x	  = susp->s.args[0];
 
     /* create an indirection if there is an update frame immediately above */
-    if ( local && (Label)regs.sp[1] == update )
+    if ( (Label)regs.sp[1] == update )
     {
 #if !COPY_SEARCH_SPACE
 	if ( (word *)susp < regs.hlim )

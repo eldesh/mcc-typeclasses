@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2262 2007-06-16 14:46:48Z wlux $
+% $Id: CGen.lhs 2264 2007-06-16 14:49:40Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -553,17 +553,13 @@ calls to a variable instead of a known function.
 
 > lazyCode :: Int -> [CStmt]
 > lazyCode n =
->   CLocalVar boolType "local"
->             (Just (funCall "is_local_space" ["regs.sp[0]->s.spc"])) :
->   CIf (CExpr "!local")
+>   CIf (funCall "!is_local_space" ["regs.sp[0]->s.spc"])
 >       [procCall "suspend_search" ["resume","regs.sp[0]","regs.sp[0]->s.spc"]]
 >       [] :
 >   CLocalVar nodePtrType "susp" (Just (CExpr "regs.sp[0]")) :
 >   CLocalVar labelType "entry" (Just (CExpr "susp->info->entry")) :
 >   zipWith fetchArg vs [0..] ++
->   CIf (CRel (CExpr "local") "&&"
->             (CRel (CCast labelType (CExpr "regs.sp[1]")) "=="
->                   (CExpr "update")))
+>   CIf (CRel (CCast labelType (CExpr "regs.sp[1]")) "==" (CExpr "update"))
 >       (CLocalVar nodePtrType "que" (Just (CExpr "regs.sp[2]")) :
 >        lockIndir (Name "susp") (Name "que") ++
 >        [CProcCall "CHECK_STACK" [CInt (n - 1)] | n > 1] ++
@@ -918,9 +914,7 @@ translation function.
 
 > lock :: Name -> [CStmt]
 > lock v =
->   [rtsAssertList[isBoxed v',CRel (nodeKind v') "==" (CExpr "LAZY_KIND"),
->                  CRel (nodeTag v') "==" (CExpr "UPD_TAG"),
->                  CFunCall "is_local_space" [field v' "s.spc"]],
+>   [assertLazyNode v "UPD_TAG",
 >    CppCondStmts "!COPY_SEARCH_SPACE"
 >      [CIf (CRel (CCast wordPtrType (CExpr v')) "<" (CExpr "regs.hlim"))
 >           [procCall "DO_SAVE" [v',"q.wq"],
@@ -932,9 +926,7 @@ translation function.
 
 > update :: Name -> Name -> [CStmt]
 > update v1 v2 =
->   [rtsAssertList[isBoxed v1',CRel (nodeKind v1') "==" (CExpr "LAZY_KIND"),
->                  CRel (nodeTag v1') "==" (CExpr "QUEUEME_TAG"),
->                  CFunCall "is_local_space" [field v1' "q.spc"]],
+>   [assertLazyNode v1 "QUEUEME_TAG",
 >    CLocalVar (CType "ThreadQueue") wq (Just (CField (CExpr v1') "q.wq")),
 >    CppCondStmts "!COPY_SEARCH_SPACE"
 >      [procCall "SAVE" [v1',"q.wq"],
@@ -947,17 +939,22 @@ translation function.
 
 > lockIndir :: Name -> Name -> [CStmt]
 > lockIndir v1 v2 =
->   [rtsAssertList [CRel (field v2' "info->kind") "==" (CExpr "LAZY_KIND"),
->                   CRel (field v2' "info->tag") "==" (CExpr "QUEUEME_TAG")],
+>   [assertLazyNode v2 "QUEUEME_TAG",
 >    CppCondStmts "!COPY_SEARCH_SPACE"
->       [CIf (CRel (CCast wordPtrType (CExpr v1')) "<" (CExpr "regs.hlim"))
+>      [CIf (CRel (CCast wordPtrType (CExpr v1')) "<" (CExpr "regs.hlim"))
 >           [procCall "DO_SAVE" [v1',"n.node"],
 >            CIncrBy (LField (LVar v1') "info") (CInt 2)]
 >           [CAssign (LField (LVar v1') "info") (CAddr (CExpr "indir_info"))]]
->       [CAssign (LField (LVar v1') "info") (CAddr (CExpr "indir_info"))],
->    CAssign (LVar "susp->n.node") (CExpr v2')]
+>      [CAssign (LField (LVar v1') "info") (CAddr (CExpr "indir_info"))],
+>    CAssign (LField (LVar v1') "n.node") (CExpr (show v2))]
 >   where v1' = show v1
->         v2' = show v2
+
+> assertLazyNode :: Name -> String -> CStmt
+> assertLazyNode v tag =
+>   rtsAssertList [isBoxed v',CRel (nodeKind v') "==" (CExpr "LAZY_KIND"),
+>                  CRel (nodeTag v') "==" (CExpr tag),
+>                  CFunCall "is_local_space" [field v' "q.spc"]]
+>   where v' = show v
 
 > unifyVar :: [Name] -> Name -> Name -> [CPSCont] -> [CStmt]
 > unifyVar vs0 v n ks = saveCont vs0 [n,v] ks ++ [goto "bind_var"]

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: show.nw 2264 2007-06-16 14:49:40Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -94,13 +94,11 @@ static NodeInfo showStringTail_lazy_info_table[] =
 static
 FUNCTION(eval_lazy_3)
 {
-    boolean local;
-    Node    *susp, *x, *y, *z;
-    Label   entry;
+    Node  *susp, *x, *y, *z;
+    Label entry;
  ENTRY_LABEL(static, eval_lazy_3)
     /* suspend the search if the node is not local */
-    local = is_local_space(regs.sp[0]->s.spc);
-    if ( !local )
+    if ( !is_local_space(regs.sp[0]->s.spc) )
 	suspend_search(resume, regs.sp[0], regs.sp[0]->s.spc);
 
     /* get the arguments */
@@ -111,7 +109,7 @@ FUNCTION(eval_lazy_3)
     z	  = susp->s.args[2];
 
     /* create an indirection if there is an update frame immediately above */
-    if ( local && (Label)regs.sp[1] == update )
+    if ( (Label)regs.sp[1] == update )
     {
 	CHECK_STACK(2);
 	regs.sp -= 2;
@@ -158,13 +156,11 @@ FUNCTION(eval_lazy_3)
 static
 FUNCTION(eval_lazy_4)
 {
-    boolean local;
-    Node    *susp, *x, *y, *z, *t;
-    Label   entry;
+    Node  *susp, *x, *y, *z, *t;
+    Label entry;
  ENTRY_LABEL(static, eval_lazy_4)
     /* suspend the search if the node is not local */
-    local = is_local_space(regs.sp[0]->s.spc);
-    if ( !local )
+    if ( !is_local_space(regs.sp[0]->s.spc) )
 	suspend_search(resume, regs.sp[0], regs.sp[0]->s.spc);
 
     /* get the arguments */
@@ -176,7 +172,7 @@ FUNCTION(eval_lazy_4)
     t	  = susp->s.args[3];
 
     /* create an indirection if there is an update frame immediately above */
-    if ( local && (Label)regs.sp[1] == update )
+    if ( (Label)regs.sp[1] == update )
     {
 	CHECK_STACK(3);
 	regs.sp -= 3;

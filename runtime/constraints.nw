@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: constraints.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: constraints.nw 2271 2007-06-16 16:30:52Z wlux $
 %
-% Copyright (c) 2002-2005, Wolfgang Lux
+% Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Basic Constraints}
@@ -30,7 +30,7 @@ DECLARE_LABEL(extern, __success);
 FUNCTION(__success)
 {
  ENTRY_LABEL(extern, __success)
-    RETURN(Success);
+    RET(Success);
 }
 
 @
@@ -61,14 +61,15 @@ when both arguments are unbound variables.
 DECLARE_LABEL(extern, ___38_);
 DECLARE_LABEL(static, ___38__1);
 DECLARE_LABEL(static, ___38__2);
+DECLARE_LABEL(static, ___38__3);
 
 FUNCTION(___38_)
 {
     Node *c1, *c2, *aux;
  ENTRY_LABEL(extern, ___38_)
-    for ( c1 = regs.sp[0]; node_kind(c1) == INDIR_KIND; c1 = c1->n.node )
+    for ( c1 = regs.r[0]; node_kind(c1) == INDIR_KIND; c1 = c1->n.node )
 	;
-    for ( c2 = regs.sp[1]; node_kind(c2) == INDIR_KIND; c2 = c2->n.node )
+    for ( c2 = regs.r[1]; node_kind(c2) == INDIR_KIND; c2 = c2->n.node )
 	;
 
     switch ( node_kind(c1) )
@@ -81,23 +82,21 @@ FUNCTION(___38_)
 		switch ( node_tag(c2) )
 		{
 		case NOUPD_TAG:
-		    regs.sp[0] = c1;
-		    regs.sp[1] = c2;
-		    CHECK_HEAP(queueMe_node_size);
+		    regs.r[0] = c1;
+		    regs.r[1] = c2;
+		    CHECK_HEAP(2, queueMe_node_size);
 		    aux	       = (Node *)regs.hp;
 		    aux->info  = queueMe_info_table;
 		    aux->q.spc = regs.ss;
 		    aux->q.wq  = 0;
 		    regs.hp   += queueMe_node_size;
-		    CHECK_STACK(4);
-		    regs.sp   -= 4;
-		    regs.sp[0] = regs.sp[4];
-		    regs.sp[1] = (Node *)update;
-		    regs.sp[2] = aux;
-		    regs.sp[3] = (Node *)___38_;
-		    regs.sp[4] = aux;
-		    start_thread(4);
-		    GOTO(regs.sp[0]->info->eval);
+
+		    SAVE_RET2(aux, regs.r[1]);
+		    regs.r[1] = aux;
+		    start_thread(2, ___38__1);
+
+		    SAVE_REGS(1);
+		    CALL_ENT(regs.r[0], update);
 		case UPD_TAG:
 		    aux = c1;
 		    c1	= c2;
@@ -111,27 +110,19 @@ FUNCTION(___38_)
 	    case LAZY_KIND:
 		if ( node_tag(c2) != QUEUEME_TAG )
 		{
-		    CHECK_STACK(2);
-		    regs.sp   -= 2;
-		    regs.sp[0] = c1;
-		    regs.sp[1] = (Node *)___38_;
-		    regs.sp[2] = c1;
-		    regs.sp[3] = c2;
-		    start_thread(2);
-		    GOTO(regs.sp[0]->info->eval);
+		    SAVE_RET2(c1, c2);
+		    regs.r[0] = c1;
+		    start_thread(1, ___38__1);
+		    ENT(regs.r[0]);
 		}
 		/* FALL THROUGH!!! */
 	    case LVAR_KIND:
-		CHECK_STACK1();
-		regs.sp   -= 1;
-		regs.sp[0] = c1;
-		regs.sp[1] = (Node *)___38__1;
-		regs.sp[2] = c2;
-		GOTO(c1->info->eval);
+		SAVE_RET1(c2);
+		CALL_ENT(c1, ___38__2);
+	    default:
+		assert(node_tag(c2) == CAPP_KIND);
 	    }
-	    assert(node_tag(c2) == CAPP_KIND);
-	    *++regs.sp = c1;
-	    GOTO(c1->info->eval);
+	    break;
 
 	case QUEUEME_TAG:
 	    switch ( node_kind(c2) )
@@ -139,63 +130,53 @@ FUNCTION(___38_)
 	    case LAZY_KIND:
 		if ( node_kind(c2) != QUEUEME_TAG )
 		{
-		    CHECK_STACK1();
-		    regs.sp   -= 1;
-		    regs.sp[0] = c2;
-		    regs.sp[1] = (Node *)___38__1;
-		    regs.sp[2] = c1;
-		    GOTO(c2->info->eval);
+		    SAVE_RET1(c1);
+		    CALL_ENT(c2, ___38__2);
 		}
 		/* FALL_THROUGH!!! */
 	    case LVAR_KIND:
-		CHECK_STACK1();
-		regs.sp   -= 1;
-		regs.sp[0] = c1;
-		regs.sp[1] = (Node *)___38__1;
-		regs.sp[2] = c2;
-		GOTO(c1->info->eval);
+		SAVE_RET1(c2);
+		CALL_ENT(c1, ___38__2);
+	    default:
+		assert(node_kind(c2) == CAPP_KIND);
 	    }
-	    assert(node_kind(c2) == CAPP_KIND);
-	    *++regs.sp = c1;
-	    GOTO(c1->info->eval);
+	    break;
+
 	default:
 	    unexpected_tag("(&)", node_tag(c1));
 	}
-	break;
+	ENT(c1);
 
     case LVAR_KIND:
 	/* evaluate the other argument then delay */
 	switch ( node_kind(c2) )
 	{
 	case LAZY_KIND:
-	    CHECK_STACK1();
-	    regs.sp   -= 1;
-	    regs.sp[0] = c2;
-	    regs.sp[1] = (Node *)___38__1;
-	    regs.sp[2] = c1;
-	    GOTO(c2->info->eval);
+	    SAVE_RET1(c1);
+	    CALL_ENT(c2, ___38__2);
 	case LVAR_KIND:
-	    CHECK_STACK1();
-	    regs.sp   -= 1;
-	    regs.sp[0] = c1;
-	    regs.sp[1] = (Node *)___38__2;
-	    regs.sp[2] = c2;
-	    GOTO(sync_var);
+	    SAVE_RET1(c2);
+	    CALL1(sync_var, ___38__3, c1);
+	default:
+	    assert(node_kind(c2) == CAPP_KIND);
 	}
-	assert(node_kind(c2) == CAPP_KIND);
-	regs.sp += 2;
-	RETURN(c1);
+	RET(c1);
+
+    default:
+	assert(node_kind(c1) == CAPP_KIND);
     }
 
     /* trivial case */
-    assert(node_kind(c1) == CAPP_KIND);
     if ( is_lazy_node(c2) )
-    {
-	*++regs.sp = c2;
-	GOTO(c2->info->eval);
-    }
-    regs.sp += 2;
-    RETURN(c2);
+	ENT(c2);
+    RET(c2);
+}
+
+static
+FUNCTION(___38__1)
+{
+ ENTRY_LABEL(static, ___38__1)
+    CALL_RET2(___38_, 2, regs.sp[0], regs.sp[1]);
 }
 
 @
@@ -208,13 +189,13 @@ node.
 
 <<constraints.c>>=
 static
-FUNCTION(___38__1)
+FUNCTION(___38__2)
 {
     Node *c1, *c2;
- ENTRY_LABEL(static, ___38__1)
-    for ( c1 = regs.sp[0]; node_kind(c1) == INDIR_KIND; c1 = c1->n.node )
+ ENTRY_LABEL(static, ___38__2)
+    for ( c1 = regs.r[0]; node_kind(c1) == INDIR_KIND; c1 = c1->n.node )
 	;
-    for ( c2 = regs.sp[1]; node_kind(c2) == INDIR_KIND; c2 = c2->n.node )
+    for ( c2 = regs.sp[0]; node_kind(c2) == INDIR_KIND; c2 = c2->n.node )
 	;
 
     if ( node_kind(c1) == LVAR_KIND )
@@ -223,34 +204,24 @@ FUNCTION(___38__1)
 	{
 	case LAZY_KIND:
 	    assert(node_tag(c2) == QUEUEME_TAG);
-	    CHECK_STACK1();
-	    regs.sp   -= 1;
-	    regs.sp[0] = c2;
-	    regs.sp[1] = (Node *)___38__1;
-	    regs.sp[2] = c1;
-	    GOTO(c2->info->eval);
-	case LVAR_KIND:
-	    CHECK_STACK1();
-	    regs.sp   -= 1;
 	    regs.sp[0] = c1;
-	    regs.sp[1] = (Node *)___38__2;
-	    regs.sp[2] = c2;
-	    GOTO(sync_var);
+	    CALL_ENT(c2, ___38__2);
+	case LVAR_KIND:
+	    regs.sp[0] = c2;
+	    CALL1(sync_var, ___38__3, c1);
+	default:
+	    assert(node_kind(c2) == CAPP_KIND);
 	}
-	assert(node_kind(c2) == CAPP_KIND);
-	regs.sp += 2;
-	RETURN(c1);
+	RETURN(c1, 1);
     }
 
     assert(node_kind(c1) == CAPP_KIND);
     if ( node_kind(c2) == LAZY_KIND )
     {
 	assert(node_tag(c2) == QUEUEME_TAG);
-	*++regs.sp = c2;
-	GOTO(c2->info->eval);
+	ENTER(c2, 1);
     }
-    regs.sp += 2;
-    RETURN(c2);
+    RETURN(c2, 1);
 }
 
 @
@@ -260,19 +231,18 @@ only if the other argument was a variable node.
 
 <<constraints.c>>=
 static
-FUNCTION(___38__2)
+FUNCTION(___38__3)
 {
     Node *c1, *c2;
- ENTRY_LABEL(static, ___38__2)
-    for ( c1 = regs.sp[0]; node_kind(c1) == INDIR_KIND; c1 = c1->n.node )
+ ENTRY_LABEL(static, ___38__3)
+    for ( c1 = regs.r[0]; node_kind(c1) == INDIR_KIND; c1 = c1->n.node )
 	;
-    for ( c2 = regs.sp[1]; node_kind(c2) == INDIR_KIND; c2 = c2->n.node )
+    for ( c2 = regs.sp[0]; node_kind(c2) == INDIR_KIND; c2 = c2->n.node )
 	;
     assert(node_kind(c1) == CAPP_KIND);
     assert(node_kind(c2) == CAPP_KIND || node_kind(c2) == LVAR_KIND);
 
-    regs.sp += 2;
-    RETURN(c2);
+    RETURN(c2, 1);
 }
 
 @ 
@@ -287,32 +257,32 @@ DECLARE_LABEL(static, __spawnConstraint_1);
 
 FUNCTION(__spawnConstraint)
 {
-    Node *c;
+    Node *c, *x;
  ENTRY_LABEL(extern, __spawnConstraint)
-    for ( c = regs.sp[0]; node_kind(c) == INDIR_KIND; c = c->n.node )
+    for ( c = regs.r[0]; node_kind(c) == INDIR_KIND; c = c->n.node )
 	;
+
     if ( node_kind(c) == LAZY_KIND && node_tag(c) != QUEUEME_TAG )
     {
-	CHECK_STACK1();
-	regs.sp   -= 1;
-	regs.sp[0] = c;
-	regs.sp[1] = (Node *)__spawnConstraint_1;
-	start_thread(2);
-	GOTO(regs.sp[0]->info->eval);
+	SAVE_REGS(1);
+	regs.r[0] = c;
+	start_thread(1, __spawnConstraint_1);
+	ENT(regs.r[0]);
     }
 
-    regs.sp += 1;
-    GOTO(__spawnConstraint_1);
+    x = regs.r[1];
+    if ( is_boxed(x) )
+	ENT(x);
+    RET(x);
 }
 
 static
 FUNCTION(__spawnConstraint_1)
 {
-    Node *r;
+    Node *x;
  ENTRY_LABEL(static, __spawnConstraint_1)
-    r = regs.sp[0];
-    if ( is_boxed(r) )
-	GOTO(r->info->eval);
-    regs.sp += 1;
-    RETURN(r);
+    x = regs.sp[0];
+    if ( is_boxed(x) )
+	ENTER(x, 1);
+    RETURN(x, 1);
 }

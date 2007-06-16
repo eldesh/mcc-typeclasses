@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: io_monad.nw 2270 2007-06-16 14:59:21Z wlux $
+% $Id: io_monad.nw 2271 2007-06-16 16:30:52Z wlux $
 %
-% Copyright (c) 2001-2005, Wolfgang Lux
+% Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Monadic Code}\label{sec:io-monad}
@@ -134,9 +134,7 @@ curry_exec(NodeInfo *main_info, int argc, char **argv)
     assert(main_info->kind == LAZY_KIND && main_info->tag == NOUPD_TAG &&
 	   main_info->length == closure_node_size(0));
 
-    CHECK_STACK1();
-    *--regs.sp = (Node *)&main_info;
-
+    regs.r[0] = (Node *)&main_info;
     run(start_io);
     regs.hlim = heap_base;
     release_mem();
@@ -167,15 +165,9 @@ FUNCTION(start_io)
  ENTRY_LABEL(static, start_io)
     regs.handlers = &io_handlers;
     TRACE(("start program\n"));
-    CHECK_STACK(2);
-    regs.sp   -= 2;
-    regs.sp[0] = regs.sp[2];
-    regs.sp[1] = unit;
-    regs.sp[2] = 0;
-    start_thread(3);
+    start_thread(1, 0);
     /* Hack: Change the return address of the main thread */
-    regs.sp[2] = (Node *)stop_io;
-    GOTO(___64_);
+    CALL2(___64_, stop_io, regs.r[0], unit);
 }
 
 static
@@ -213,11 +205,8 @@ DECLARE_LABEL(extern, __return);
 
 FUNCTION(__return)
 {
-    Node *r;
  ENTRY_LABEL(extern, __return)
-    r	     = regs.sp[0];
-    regs.sp += 2;
-    RETURN(r);
+    RET(regs.r[0]);
 }
 
 DECLARE_LABEL(extern, ___62__62_);
@@ -226,20 +215,15 @@ DECLARE_LABEL(static, ___62__62__1);
 FUNCTION(___62__62_)
 {
  ENTRY_LABEL(extern, ___62__62_)
-    CHECK_STACK(2);
-    regs.sp   -= 2;
-    regs.sp[0] = regs.sp[2];
-    regs.sp[1] = regs.sp[4];
-    regs.sp[2] = (Node *)___62__62__1;
-    GOTO(___64_);
+    SAVE_REGS(2);
+    CALL2(___64_, ___62__62__1, regs.r[0], regs.r[2]);
 }
 
 static
 FUNCTION(___62__62__1)
 {
  ENTRY_LABEL(static, ___62__62__1)
-    regs.sp += 1;
-    GOTO(___64_);
+    CALL_RET2(___64_, 2, regs.sp[0], regs.sp[1]);
 }
 
 DECLARE_LABEL(extern, ___62__62__61_);
@@ -249,31 +233,26 @@ DECLARE_LABEL(static, ___62__62__61__2);
 FUNCTION(___62__62__61_)
 {
  ENTRY_LABEL(extern, ___62__62__61_)
-    CHECK_STACK(2);
-    regs.sp   -= 2;
-    regs.sp[0] = regs.sp[2];
-    regs.sp[1] = regs.sp[4];
-    regs.sp[2] = (Node *)___62__62__61__1;
-    GOTO(___64_);
+    SAVE_REGS(2);
+    CALL2(___64_, ___62__62__61__1, regs.r[0], regs.r[2]);
 }
 
 static
 FUNCTION(___62__62__61__1)
 {
+    Node *f, *x;
  ENTRY_LABEL(static, ___62__62__61__1)
-    CHECK_STACK1();
-    regs.sp   -= 1;
-    regs.sp[0] = regs.sp[2];
-    regs.sp[2] = (Node *)___62__62__61__2;
-    GOTO(___64_);
+    f = *regs.sp++;
+    x = regs.r[0];
+    CALL2(___64_, ___62__62__61__2, f, x);
 }
 
 static
 FUNCTION(___62__62__61__2)
 {
  ENTRY_LABEL(static, ___62__62__61__2)
-    assert(regs.sp[0]->info->kind == PAPP_KIND && regs.sp[0]->info->tag == 1);
-    GOTO(regs.sp[0]->info->apply);
+    assert(regs.r[0]->info->kind == PAPP_KIND && regs.r[0]->info->tag == 1);
+    GOTO(regs.r[0]->info->apply);
 }
 
 @
@@ -291,43 +270,31 @@ DECLARE_LABEL(static, __catch_1);
 
 FUNCTION(__catch)
 {
-    Node	   *action, *handler, *world;
+    unsigned int   frm_sz;
     ExceptionFrame *prevFrame;
  ENTRY_LABEL(extern, __catch)
-
-    CHECK_STACK(wordsof(ExceptionFrame));
-    action  = regs.sp[0];
-    handler = regs.sp[1];
-    world   = regs.sp[2];
+    frm_sz = wordsof(ExceptionFrame);
+    CHECK_STACK(frm_sz + 1);
 
     /* create and initialize the new exception frame */
-    regs.sp	     += 3 - wordsof(ExceptionFrame);
     prevFrame	      = regs.efp;
+    regs.sp	     -= frm_sz + 1;
     regs.efp	      = (ExceptionFrame *)regs.sp;
-    regs.efp->handler = handler;
+    regs.efp->handler = regs.r[1];
     regs.efp->frame   = prevFrame;
+    regs.sp[frm_sz]   = (Node *)regs.ret;
 
     /* invoke the action */
-    regs.sp   -= 3;
-    regs.sp[0] = action;
-    regs.sp[1] = world;
-    regs.sp[2] = (Node *)__catch_1;
-    GOTO(___64_);
+    CALL2(___64_, __catch_1, regs.r[0], regs.r[2]);
 }
 
 static
 FUNCTION(__catch_1)
 {
-    Node	   *r;
-    ExceptionFrame *curFrame;
  ENTRY_LABEL(static, __catch_1)
-    r = regs.sp[0];
-
-    curFrame = regs.efp;
+    assert((Node **)regs.efp == regs.sp);
     regs.efp = regs.efp->frame;
-    regs.sp  = (Node **)curFrame + wordsof(ExceptionFrame);
-
-    RETURN(r);
+    RETURN(regs.r[0], wordsof(ExceptionFrame));
 }
 
 @
@@ -344,38 +311,31 @@ DECLARE_LABEL(static, __ioError_1);
 
 FUNCTION(__ioError)
 {
-    Node	   *exc, *handler, *world;
+    Node	   *exc, *handler;
     ExceptionFrame *curFrame;
  ENTRY_LABEL(extern, __ioError)
-    TRACE(("%I throw %N\n", regs.sp[0]));
+    exc = regs.r[0];
+    TRACE(("%I throw %N\n", exc));
 
     if ( regs.efp == 0 )
-    {
-	regs.sp[1] = prefix_string("Uncaught I/O exception:\n", regs.sp[0]);
-	regs.sp   += 1;
-	GOTO(__Prelude__error);
-    }
+	EXEC1(__Prelude__error,
+	      prefix_string(0, "Uncaught I/O exception:\n", exc));
 
-    exc	     = regs.sp[0];
-    world    = regs.sp[1];
     curFrame = regs.efp;
     handler  = regs.efp->handler;
     regs.efp = regs.efp->frame;
 
-    regs.sp    = (Node **)curFrame + wordsof(ExceptionFrame) - 4;
-    regs.sp[0] = handler;
-    regs.sp[1] = exc;
-    regs.sp[2] = (Node *)__ioError_1;
-    regs.sp[3] = world;
-    GOTO(___64_);
+    regs.sp    = (Node **)curFrame + wordsof(ExceptionFrame) - 1;
+    regs.sp[0] = regs.r[1];
+    CALL2(___64_, __ioError_1, handler, exc);
 }
 
 static
 FUNCTION(__ioError_1)
 {
  ENTRY_LABEL(static, __ioError_1)
-    assert(regs.sp[0]->info->kind == PAPP_KIND && regs.sp[0]->info->tag == 1);
-    GOTO(regs.sp[0]->info->apply);
+    assert(regs.r[0]->info->kind == PAPP_KIND && regs.r[0]->info->tag == 1);
+    GOTO(regs.r[0]->info->apply);
 }
 
 @
@@ -397,24 +357,19 @@ DECLARE_LABEL(static, __unsafePerformIO_1);
 FUNCTION(__unsafePerformIO)
 {
  ENTRY_LABEL(extern, __unsafePerformIO)
-    CHECK_STACK(2);
-    regs.sp   -= 2;
-    regs.sp[0] = regs.sp[2];
-    regs.sp[1] = unit;
-    regs.sp[2] = (Node *)__unsafePerformIO_1;
-    GOTO(___64_);
+    SAVE_REGS(0);
+    CALL2(___64_, __unsafePerformIO_1, regs.r[0], unit);
 }
 
 static
 FUNCTION(__unsafePerformIO_1)
 {
-    Node *r;
+    Node *x;
  ENTRY_LABEL(static, __unsafePerformIO_1)
-    r = regs.sp[0];
-    if ( is_boxed(r) )
-	GOTO(r->info->eval);
-    regs.sp += 1;
-    RETURN(r);
+    x = regs.r[0];
+    if ( is_boxed(x) )
+	ENTER(x, 0);
+    RETURN(x, 0);
 }
 
 @
@@ -449,20 +404,19 @@ FUNCTION(__fixIO)
 {
     Node *clos, *susp;
  ENTRY_LABEL(extern, __fixIO)
-    CHECK_HEAP(closure_node_size(2) + suspend_node_size(2));
+    CHECK_HEAP(2, closure_node_size(2) + suspend_node_size(2));
     clos     = (Node *)regs.hp;
     susp     = (Node *)(regs.hp + closure_node_size(2));
     regs.hp += closure_node_size(2) + suspend_node_size(2);
 
     clos->info	    = &___64__info;
-    clos->c.args[0] = regs.sp[0];
+    clos->c.args[0] = regs.r[0];
     clos->c.args[1] = susp;
 
     susp->info	    = ___64__lazy_info_table;
     susp->s.spc	    = regs.ss;
     susp->s.args[0] = clos;
-    susp->s.args[1] = regs.sp[1];
+    susp->s.args[1] = regs.r[1];
 
-    *++regs.sp = susp;
-    GOTO(susp->info->eval);
+    ENT(susp);
 }

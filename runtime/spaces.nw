@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: spaces.nw 2271 2007-06-16 16:30:52Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -16,11 +16,11 @@ particular search goal, and the other nodes of that tree corresponding
 to different evaluation states of that goal. Within each tree, the
 bindings of only one space are active at each time. A pointer to this
 space is recorded in the [[active]] field of the root space. The
-current search space is maintained in the register [[ss]].
+current search space is maintained in the register [[regs.ss]].
 
 \textbf{Invariant}: The runtime system preserves the invariant
-[[ss->root->active == ss]]. The garbage collector makes use of this
-invariant.
+[[regs.ss->root->active == regs.ss]]. The garbage collector makes use
+of this invariant.
 
 Since only local variables and applications can be changed by a
 computation and their bindings are not visible outside of the search
@@ -338,16 +338,16 @@ for a search goal and assigns it to the register [[ss]]. The new space
 is its own root and its (non-existent) bindings are considered active.
 
 <<spaces.h>>=
-extern void new_search_space(void);
+extern void new_search_space(unsigned int n_regs);
 
 @
 <<spaces.c>>=
 void
-new_search_space()
+new_search_space(unsigned int n_regs)
 {
     SearchSpace *newSpace;
 
-    CHECK_HEAP(wordsof(SearchSpace));
+    CHECK_HEAP(n_regs, wordsof(SearchSpace));
     regs.ss = newSpace = (SearchSpace *)regs.hp;
     newSpace->info     = &search_space_info;
 #if !COPY_SEARCH_SPACE
@@ -405,16 +405,16 @@ of the goal, no new search space node is allocated.
 
 <<spaces.h>>=
 #if !COPY_SEARCH_SPACE
-extern void save_search_space(void);
+extern void save_search_space(unsigned int n_regs);
 #else
-# define save_search_space()  /* empty */
+# define save_search_space(n_regs)  /* empty */
 #endif
 
 @ 
 <<spaces.c>>=
 #if !COPY_SEARCH_SPACE
 void
-save_search_space()
+save_search_space(unsigned int n_regs)
 {
     unsigned int i, n;
     SearchSpace	 *space;
@@ -425,7 +425,8 @@ save_search_space()
 
     /* compute the size of the trail segment to be saved */
     n = regs.tp - regs.bp->btTp;
-    CHECK_HEAP(wordsof(SearchSpace) + vector_node_size(n * wordsof(ScriptRec)));
+    CHECK_HEAP(n_regs,
+	       wordsof(SearchSpace) + vector_node_size(n * wordsof(ScriptRec)));
 
     /* eventually allocate a new search space */
     /* NB garbage collection can decrease the size of the trail */
@@ -521,7 +522,7 @@ used in order to create a copy of the current state of the computation
 at a non-deterministic choice in global search.
 
 <<spaces.h>>=
-extern Node *copy_graph(Node *graph, SearchSpace *space);
+extern Node *copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space);
 
 @
 We use an algorithm similar to a two-space copying garbage collector
@@ -757,7 +758,7 @@ nodes are restored.
 
 <<spaces.c>>=
 Node *
-copy_graph(Node *graph, SearchSpace *space)
+copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space)
 {
     boolean	 gc_done = false;
     unsigned int sz;
@@ -794,7 +795,7 @@ copy_graph(Node *graph, SearchSpace *space)
 	    space->info = &search_space_info;
 #endif
 	}
-	collect(sz);
+	collect(n_regs, sz);
 	gc_done = true;
     }
 

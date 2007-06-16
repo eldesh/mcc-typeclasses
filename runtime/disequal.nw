@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: disequal.nw 2271 2007-06-16 16:30:52Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -53,7 +53,6 @@ DECLARE_LABEL(static, diseq_args);
 DECLARE_LABEL(static, diseq_args_1);
 DECLARE_LABEL(static, diseq_args_2);
 DECLARE_LABEL(static, diseq_papp_args);
-DECLARE_LABEL(static, diseq_papp_args_1);
 DECLARE_LABEL(static, check_diseq);
 
 #define diseq_constraint_size wordsof(Disequality)
@@ -65,6 +64,7 @@ FUNCTION(___61__47__61_)
 {
  ENTRY_LABEL(extern, ___61__47__61_)
     TRACE_FUN("=/=", 2);
+    SAVE_REGS(1);
     EVAL(___61__47__61__1);
 }
 
@@ -72,7 +72,7 @@ static
 FUNCTION(___61__47__61__1)
 {
  ENTRY_LABEL(static, ___61__47__61__1)
-    SWAPn(1);
+    SWAPn(0);
     EVAL(___61__47__61__2);
 }
 
@@ -81,8 +81,8 @@ FUNCTION(___61__47__61__2)
 {
     Node *arg1, *arg2;
  ENTRY_LABEL(static, ___61__47__61__2)
-    arg1 = regs.sp[1];
-    arg2 = regs.sp[0];
+    arg1 = regs.sp[0];
+    arg2 = regs.r[0];
 
     while ( is_boxed(arg1) && is_indir_node(arg1) )
 	arg1 = arg1->n.node;
@@ -91,15 +91,15 @@ FUNCTION(___61__47__61__2)
 	/* check for trivial disequality (x=/=x) */
 	if ( arg1 != arg2 )
 	{
-	    regs.sp[0] = arg1;
-	    regs.sp[1] = arg2;
+	    regs.r[0]  = arg1;
+	    regs.sp[0] = arg2;
 	    GOTO(diseq_var);
 	}
     }
     else if ( is_boxed(arg2) && is_variable_node(arg2) )
     {
-	regs.sp[0] = arg2;
-	regs.sp[1] = arg1;
+	regs.r[0]  = arg2;
+	regs.sp[0] = arg1;
 	GOTO(diseq_var);
     }
     else
@@ -107,10 +107,7 @@ FUNCTION(___61__47__61__2)
 	unsigned int n = 0;
 
 	if ( !eq_root(arg1, arg2, &n) )
-	{
-	    regs.sp += 2;
-	    RETURN(Success);
-	}
+	    RETURN(Success, 1);
 	else if ( n > 0 )
 	{
 	    boolean exist_type;
@@ -121,16 +118,19 @@ FUNCTION(___61__47__61__2)
 	    exist_type = is_papp_node(arg1)
 		|| (is_capp_node(arg1) && node_tag(arg1) < 0);
 	    arglist = nil;
-	    if ( !eq_args(arg1, arg2, n, &arglist) )
-	    {
-		regs.sp += 2;
-		RETURN(Success);
-	    }
+	    if ( !eq_args(0, arg1, arg2, n, &arglist) )
+		RETURN(Success, 1);
 
 	    if ( arglist != nil )
 	    {
-		*++regs.sp = arglist;
-		GOTO(exist_type ? diseq_papp_args : diseq_args);
+		regs.sp[0] = arglist;
+		if ( exist_type )
+		{
+		    regs.r[0] = CONST(__Prelude__True);
+		    GOTO(diseq_papp_args);
+		}
+		else
+		    GOTO(diseq_args);
 	    }
 	}
     }
@@ -180,47 +180,34 @@ FUNCTION(diseq_var)
     boolean	nf;
     Disequality *cstr;
  ENTRY_LABEL(static, diseq_var)
-    if ( !is_local_space(regs.sp[0]->v.spc) )
+    if ( !is_local_space(regs.r[0]->v.spc) )
     {
-	if ( is_boxed(regs.sp[1]) && is_variable_node(regs.sp[1])
-	     && is_local_space(regs.sp[1]->v.spc) )
-	    SWAPn(1);
+	if ( is_boxed(regs.sp[0]) && is_variable_node(regs.sp[0])
+	     && is_local_space(regs.sp[0]->v.spc) )
+	    SWAPn(0);
 	else
-	{
-	    CHECK_STACK1();
-	    regs.sp   -= 1;
-	    regs.sp[0] = regs.sp[1];
-	    regs.sp[1] = (Node *)___61__47__61__1;
-	    GOTO(sync_var);
-	}
+	    CALL1(sync_var, ___61__47__61__1, regs.r[0]);
     }
 
     nf = true;
-    if ( occurs(regs.sp[0], regs.sp[1], &nf) )
-    {
-	regs.sp += 2;
-	RETURN(Success);
-    }
+    if ( occurs(regs.r[0], regs.sp[0], &nf) )
+	RETURN(Success, 1);
 
     /* add the constraint to the variable */
-    CHECK_HEAP(diseq_constraint_size);
+    CHECK_HEAP(1, diseq_constraint_size);
     cstr	     = (Disequality *)regs.hp;
     cstr->cstr.info  = &diseq_constraint_info;
-    cstr->cstr.cstrs = regs.sp[0]->v.cstrs;
-    cstr->node	     = regs.sp[1];
+    cstr->cstr.cstrs = regs.r[0]->v.cstrs;
+    cstr->node	     = regs.sp[0];
     regs.hp	    += diseq_constraint_size;
 
-    SAVE(regs.sp[0], v.cstrs);
-    regs.sp[0]->v.cstrs = (Constraint *)cstr;
+    SAVE(regs.r[0], v.cstrs);
+    regs.r[0]->v.cstrs = (Constraint *)cstr;
 
     /* if necessary, evaluate the argument to normal form */
     if ( nf )
-    {
-	regs.sp += 2;
-	RETURN(Success);
-    }
-    regs.sp[0] = regs.sp[1];
-    GOTO(___61__58__61_);
+	RETURN(Success, 1);
+    CALL_RET2(___61__58__61_, 1, regs.sp[0], regs.sp[0]);
 }
 
 @ 
@@ -252,12 +239,15 @@ FUNCTION(diseq_args)
     if ( regs.sp[0]->c.args[2] == nil )
 	GOTO(diseq_args_1);
 
-    CHECK_STACK(1);
+    CHECK_STACK1();
     regs.sp   -= 1;
     regs.sp[0] = (Node *)diseq_args_choices;
 #if YIELD_NONDET
     if ( regs.rq )
-        GOTO(yield_thread(regs.handlers->choices));
+    {
+	regs.ret = regs.handlers->choices;
+        GOTO(yield_thread);
+    }
 #endif
     GOTO(regs.handlers->choices);
 }
@@ -267,12 +257,8 @@ FUNCTION(diseq_args_1)
 {
     Node *arglist;
  ENTRY_LABEL(static, diseq_args_1)
-    CHECK_STACK1();
-    arglist    = regs.sp[0];
-    regs.sp   -= 1;
-    regs.sp[0] = arglist->c.args[0];
-    regs.sp[1] = arglist->c.args[1];
-    GOTO(___61__47__61_);
+    arglist = regs.sp[0];
+    CALL_RET2(___61__47__61_, 1, arglist->c.args[0], arglist->c.args[1]);
 }
 
 static
@@ -303,35 +289,16 @@ and using a rigid variant of \texttt{(=/=)}.}
 static
 FUNCTION(diseq_papp_args)
 {
-    Node *arg1, *arg2, *arglist;
+    Node *arglist;
  ENTRY_LABEL(static, diseq_papp_args)
+    if ( regs.r[0] != CONST(__Prelude__True) )
+	RETURN(Success, 1);
+
     arglist = regs.sp[0];
-    arg1    = arglist->c.args[0];
-    arg2    = arglist->c.args[1];
-    arglist = arglist->c.args[2];
-
-    CHECK_STACK(3);
-    regs.sp   -= 3;
-    regs.sp[0] = arg1;
-    regs.sp[1] = arg2;
-    regs.sp[2] = (Node *)diseq_papp_args_1;
-    regs.sp[3] = arglist;
-    GOTO(___61__61_);
-}
-
-static
-FUNCTION(diseq_papp_args_1)
-{
- ENTRY_LABEL(static, diseq_papp_args_1)
-    if ( *regs.sp++ != CONST(__Prelude__True) )
-    {
-	regs.sp += 1;
-	RETURN(Success);
-    }
-
-    if ( regs.sp[0] == nil )
+    if ( arglist == nil )
 	FAIL();
-    GOTO(diseq_papp_args);
+    regs.sp[0] = arglist->c.args[2];
+    CALL2(___61__61_, diseq_papp_args, arglist->c.args[0], arglist->c.args[1]);
 }
 
 @
@@ -343,6 +310,5 @@ static
 FUNCTION(check_diseq)
 {
  ENTRY_LABEL(static, check_diseq)
-    regs.sp[1] = ((Disequality *)regs.sp[1])->node;
-    GOTO(___61__47__61_);
+    EXEC2(___61__47__61_, regs.r[0], ((Disequality *)regs.r[1])->node);
 }

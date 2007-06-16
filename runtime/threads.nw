@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: threads.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: threads.nw 2271 2007-06-16 16:30:52Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -142,19 +142,20 @@ enum suspend_reason {
 static const char *reasons[] = { "None", "Yield", "Delay", "Eval" };
 
 @
-The interface to the thread management code consists of eight global
-functions and the entry-point [[stop_thread]]. The function
-[[start_thread]] starts a new thread, [[stop_thread]] terminates the
-current thread, and the functions [[suspend_thread]] and
-[[delay_thread]] suspend the current thread and add this thread to the
-wait queue of node [[n]]. The former is intended to be used for locked
-suspended applications, the latter for unbound variables. The function
+The interface to the thread management code consists of four global
+functions and five entry points. The function [[start_thread]] starts
+a new thread, [[stop_thread]] terminates the current thread, and the
+functions [[suspend_thread]] and [[delay_thread]] suspend the current
+thread and add this thread to the wait queue of the node in register
+[[regs.r[0]]]. The former is intended to be used for locked suspended
+applications, the latter for unbound variables. The function
 [[yield_thread]] interrupts the current thread and moves it to the end
 of the ready queue. The function [[yield_delay_thread]] is a
 combination of [[yield_thread]] and [[delay_thread]]. It interrupts
 the running thread and moves it to the end of the ready queue. In
-addition, the running thread is inserted into the wait queue of a
-variable so that it will be woken as well when that variable is bound.
+addition, the running thread is inserted into the wait queue of the
+variable in register [[regs.r[0]]] so that it will be woken as well
+when that variable is bound.
 
 The functions [[activate_threads]] and [[wake_threads]] wake a list of
 suspended threads. Whereas [[activate_threads]] interrupts the current
@@ -164,12 +165,12 @@ function, [[join_queues]], concatenates the two thread queues [[tq1]]
 and [[tq2]].
 
 <<threads.h>>=
-extern void start_thread(unsigned int n);
+extern void start_thread(unsigned int n, Label l);
 DECLARE_LABEL(extern, stop_thread);
-extern Label suspend_thread(Label l, Node *n);
-extern Label delay_thread(Label l, Node *n);
-extern Label yield_thread(Label l);
-extern Label yield_delay_thread(Label l, Node *n);
+DECLARE_LABEL(extern, suspend_thread);
+DECLARE_LABEL(extern, delay_thread);
+DECLARE_LABEL(extern, yield_thread);
+DECLARE_LABEL(extern, yield_delay_thread);
 extern Label activate_threads(ThreadQueue wq, Label l);
 extern void wake_threads(ThreadQueue wq);
 extern ThreadQueue join_queues(ThreadQueue tq1, ThreadQueue tq2);
@@ -192,16 +193,21 @@ the continuation address of the first thread from the local
 computation's ready queue with the specified address. %'
 
 <<threads.h>>=
-extern void save_continuation(void);
+extern void save_continuation(unsigned int n_regs);
+#if !COPY_SEARCH_SPACE
+extern void restore_continuation(unsigned int n_regs, Label l, ThreadQueue rq);
+#else
 extern void restore_continuation(Label l, ThreadQueue rq);
+# define restore_continuation(n_regs, l, rq) restore_continuation(l, rq)
+#endif
 extern Label resume_continuation(Label l, ThreadQueue rq);
 
 @
 <<threads.c>>=
 static void new_thread(void);
-static Label activate_thread(void);
+DECLARE_LABEL(static, activate_thread);
 static void terminate_thread(void);
-static ThreadQueue interrupt_thread(Label, enum suspend_reason);
+static ThreadQueue interrupt_thread(unsigned int, Label, enum suspend_reason);
 static ExceptionFrame *relocate_thread(ExceptionFrame *, int);
 
 static NodeInfo saved_stack_info = {
@@ -209,45 +215,36 @@ static NodeInfo saved_stack_info = {
 };
 
 @
-The function [[start_thread]] starts a new thread. It uses the stack
-frame from the top of the stack to initialize the new thread. The
-size of this frame is passed as an argument to [[start_thread]]. The
-current thread is interrupted and will continue its execution at the
-return address found at the bottom of the new thread's stack when it
-is resumed. If this return address is [[0]], [[start_thread]] assumes
-that it is creating the initial thread of the program or an
-encapsulated search and therefore no thread is interrupted. The return
-address at the bottom of the a thread's stack is replaced by
-[[stop_thread]] so that a thread is terminated automatically when it
-returns from its bottom frame.
+The function [[start_thread]] starts a new thread. It preserves the
+first [[n_regs]] argument registers, which can be used to pass
+arguments to the new thread. The current thread is interrupted and
+will continue its execution at address [[l]]. If this parameter is
+[[0]], [[start_thread]] assumes that it is creating the initial thread
+of the program or an encapsulated search and therefore no thread is
+interrupted. The initial return address of the new thread is set to
+[[stop_thread]] so that it is terminated automatically when it returns
+from its bottom frame.
 
 <<threads.c>>=
 void
-start_thread(unsigned int n)
+start_thread(unsigned int n_regs, Label l)
 {
     ThreadQueue thd;
-    Label	contIp;
 
-    ASSERT(n > 0);
-
-    /* start a new thread */
-    contIp = (Label)regs.sp[n-1];
-    if ( contIp )
+    /* eventually interrupt the current thread */
+    if ( l )
     {
-	thd	    = interrupt_thread(contIp, None);
+	thd	    = interrupt_thread(n_regs, l, None);
 	thd->t.next = regs.rq;
 	regs.rq	    = thd;
     }
+
+    /* start a new thread */
     new_thread();
     TRACE(("%I starting\n"));
 
-    /* move the initial stack to the new thread */
-    regs.ds_base += n;
-    if ( regs.rq )
-	regs.rq->t.ds_size -= n;
-
-    /* save the ultimate return address */
-    regs.sp[n-1] = (Node *)stop_thread;
+    /* set the ultimate return address */
+    regs.ret = stop_thread;
 }
 
 @
@@ -260,94 +257,88 @@ FUNCTION(stop_thread)
  ENTRY_LABEL(extern, stop_thread)
     TRACE(("%I terminated\n"));
     terminate_thread();
-    GOTO(activate_thread());
+    GOTO(activate_thread);
 }
 
 @
 The functions [[suspend_thread]] and [[delay_thread]] suspend the
-current thread and add it to the wait queue of the specified node.
-This node should be either a queue-me node ([[suspend_thread]]) or an
-unbound variable ([[delay_thread]]). Both functions must be applied
-only to local nodes of the current search space.
+current thread and add it to the wait queue of the node in register
+[[regs.r[0]]]. This node must be either a queue-me node
+([[suspend_thread]]) or an unbound variable ([[delay_thread]]). Both
+functions must be applied only to local nodes of the current search
+space.
 
 <<threads.c>>=
-Label
-suspend_thread(Label l, Node *susp)
+FUNCTION(suspend_thread)
 {
+    Node	*susp;
     ThreadQueue thd;
+ ENTRY_LABEL(extern, suspend_thread)
+    thd = interrupt_thread(1, regs.ret, Eval);
 
+    susp = regs.r[0];
     ASSERT(is_boxed(susp) && is_queueMe_node(susp));
     assert(is_local_space(susp->q.spc));
-
-    BEGIN_LOCAL_ROOTS1(susp)
-    thd = interrupt_thread(l, Eval);
-    END_LOCAL_ROOTS
-
     SAVE(susp, q.wq);
     thd->t.next = susp->q.wq;
     susp->q.wq  = thd;
 
-    return activate_thread();
+    GOTO(activate_thread);
 }
 
-Label
-delay_thread(Label l, Node *var)
+FUNCTION(delay_thread)
 {
+    Node	*var;
     ThreadQueue thd;
+ ENTRY_LABEL(extern, delay_thread)
+    thd = interrupt_thread(1, regs.ret, Delay);
 
+    var = regs.r[0];
     ASSERT(is_boxed(var) && is_variable_node(var));
     assert(is_local_space(var->v.spc));
-
-    BEGIN_LOCAL_ROOTS1(var)
-    thd = interrupt_thread(l, Delay);
-    END_LOCAL_ROOTS
-
     SAVE(var, v.wq);
     thd->t.next = var->v.wq;
     var->v.wq   = thd;
 
-    return activate_thread();
+    GOTO(activate_thread);
 }
 
 @ 
 The functions [[yield_thread]] and [[yield_delay_thread]] interrupt
 the current thread and move it to the end of the ready queue. The
 function [[yield_delay_thread]] also adds the thread to the wait queue
-of the specified variable so that it is woken when the variable is
-bound.
+of the variable node in register [[regs.r[0]]] so that it is woken
+when that variable is bound.
 
 <<threads.c>>=
-Label
-yield_thread(Label l)
+FUNCTION(yield_thread)
 {
     ThreadQueue thd;
-
+ ENTRY_LABEL(extern, yield_thread)
     if ( regs.rq == 0 )
-	return l;
+	GOTO(regs.ret);
 
-    thd	    = interrupt_thread(l, Yield);
+    thd	    = interrupt_thread(0, regs.ret, Yield);
     regs.rq = join_queues(regs.rq, thd);
-    return activate_thread();
+    GOTO(activate_thread);
 }
 
-Label
-yield_delay_thread(Label l, Node *var)
+FUNCTION(yield_delay_thread)
 {
+    Node	*var;
     ThreadQueue thd, thd1;
+ ENTRY_LABEL(extern, yield_delay_thread)
+    if ( regs.rq == 0 )
+	GOTO(regs.ret);
 
+    thd1 = interrupt_thread(1, regs.ret, Yield);
+    BEGIN_LOCAL_ROOTS1(thd1)
+    CHECK_HEAP(1, 2*thread_surrogate_size);
+    END_LOCAL_ROOTS
+
+    var = regs.r[0];
     ASSERT(is_boxed(var) && is_variable_node(var));
     assert(is_local_space(var->v.spc));
-
-    if ( regs.rq == 0 )
-	return l;
-
-    BEGIN_LOCAL_ROOTS1(var)
-    thd1 = interrupt_thread(l, Yield);
-    BEGIN_LOCAL_ROOTS1(thd1)
-    CHECK_HEAP(2*thread_surrogate_size);
-    END_LOCAL_ROOTS
-    END_LOCAL_ROOTS
-
     SAVE(var, v.wq);
     thd		= (ThreadQueue)regs.hp;
     thd->s.info = &surrogate_info;
@@ -366,7 +357,7 @@ yield_delay_thread(Label l, Node *var)
     regs.hp    += 2*thread_surrogate_size;
 
     regs.rq = join_queues(regs.rq, thd);
-    return activate_thread();
+    GOTO(activate_thread);
 }
 
 @ 
@@ -388,14 +379,14 @@ activate_threads(ThreadQueue wq, Label l)
     if ( wq == 0 )
 	return l;
 
-    BEGIN_LOCAL_ROOTS1(wq);
-    thd = interrupt_thread(l, None);
+    BEGIN_LOCAL_ROOTS1(wq)
+    thd = interrupt_thread(0, l, None);
     END_LOCAL_ROOTS
 
     thd->t.next = regs.rq;
     regs.rq	= join_queues(wq, thd);
 
-    return activate_thread();
+    return activate_thread;
 }
 
 void
@@ -466,16 +457,16 @@ ready queue. If the ready queue is empty the function jumps to the
 deadlock handler of the current context.
 
 <<threads.c>>=
-static Label
-activate_thread()
+static
+FUNCTION(activate_thread)
 {
     Label		ip;
     ThreadQueue		thd, sur;
     enum suspend_reason reason;
-
+ ENTRY_LABEL(static, activate_thread)
     /* check for a deadlock */
     if ( regs.rq == 0 )
-	return regs.handlers->deadlock;
+	GOTO(regs.handlers->deadlock);
 
     /* activate the head of the ready queue */
     thd	    = regs.rq;
@@ -519,7 +510,7 @@ activate_thread()
     /* return the continuation address of the thread */
     if ( reason != None )
 	TRACE(("%I resume (%s)\n", reasons[reason]));
-    return ip;
+    GOTO(ip);
 }
 
 @ 
@@ -542,14 +533,15 @@ responsible for adding the thread to the appropriate queue.
 
 <<threads.c>>=
 static ThreadQueue
-interrupt_thread(Label l, enum suspend_reason reason)
+interrupt_thread(unsigned int n_regs, Label l, enum suspend_reason reason)
 {
     Node	 *ds;
     ThreadQueue  thd;
     boolean	 save_ds = reason != None;
     unsigned int ds_size = regs.ds_base - regs.sp;
 
-    CHECK_HEAP(thread_state_size + (save_ds ? vector_node_size(ds_size) : 0));
+    CHECK_HEAP(n_regs,
+	       thread_state_size + (save_ds ? vector_node_size(ds_size) : 0));
 
     if ( reason != None )
 	TRACE(("%I suspend (%s)\n", reasons[reason]));
@@ -633,14 +625,14 @@ the \texttt{--enable-copying} option and neither in function
 
 <<threads.c>>=
 void
-save_continuation()
+save_continuation(unsigned int n_regs)
 {
     unsigned int ds_size;
     Node	 *ds;
     ThreadQueue  tq;
 
     /* interrupt the current thread */
-    tq	       = interrupt_thread(0, None);
+    tq	       = interrupt_thread(n_regs, 0, None);
     tq->t.next = regs.rq;
     regs.rq    = tq;
 
@@ -651,7 +643,7 @@ save_continuation()
 	{
 	    ds_size = tq->t.ds_size;
 
-	    CHECK_HEAP(vector_node_size(ds_size));
+	    CHECK_HEAP(n_regs, vector_node_size(ds_size));
 	    SAVE(tq, t.ds);
 	    ds = tq->t.ds = (Node *)regs.hp;
 	    ds->info	  = &saved_stack_info;
@@ -666,14 +658,19 @@ save_continuation()
 }
 
 void
+#if !COPY_SEARCH_SPACE
+restore_continuation(unsigned int n_regs, Label l, ThreadQueue tq)
+#else
+# undef restore_continuation
 restore_continuation(Label l, ThreadQueue tq)
+#endif
 {
     assert(tq && tq->t.id != 0);
 
     /* update the continuation address of the first restored thread */
 #if !COPY_SEARCH_SPACE
     BEGIN_LOCAL_ROOTS1(tq)
-    CHECK_HEAP(thread_node_size);
+    CHECK_HEAP(n_regs, thread_node_size);
     memcpy(regs.hp, tq, thread_node_size * word_size);
     tq	     = (ThreadQueue)regs.hp;
     regs.hp += thread_node_size;
@@ -696,5 +693,5 @@ resume_continuation(Label l, ThreadQueue tq)
     regs.rq->t.ip = l;
 
     /* activate the first thread */
-    return activate_thread();
+    return activate_thread;
 }

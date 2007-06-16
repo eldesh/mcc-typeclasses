@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: unify.nw 2271 2007-06-16 16:30:52Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -21,7 +21,7 @@ DECLARE_LABEL(extern, bind_var);
 extern boolean occurs(Node *, Node *, boolean *);
 #endif
 extern boolean eq_root(Node *, Node *, unsigned int *);
-extern boolean eq_args(Node *, Node *, unsigned int, Node **);
+extern boolean eq_args(unsigned int, Node *, Node *, unsigned int, Node **);
 
 @ 
 <<unify.c>>=
@@ -58,12 +58,12 @@ DECLARE_LABEL(static, unify_args);
 DECLARE_LABEL(static, unify_args_1);
 DECLARE_LABEL(static, unify_args_2);
 DECLARE_LABEL(static, unify_papp_args);
-DECLARE_LABEL(static, unify_papp_args_1);
 
 FUNCTION(___61__58__61_)
 {
  ENTRY_LABEL(extern, ___61__58__61_)
     TRACE_FUN("=:=", 2);
+    SAVE_REGS(1);
     EVAL(___61__58__61__1);
 }
 
@@ -71,7 +71,7 @@ static
 FUNCTION(___61__58__61__1)
 {
  ENTRY_LABEL(static, ___61__58__61__1)
-    SWAPn(1);
+    SWAPn(0);
     EVAL(___61__58__61__2);
 }
 
@@ -80,8 +80,8 @@ FUNCTION(___61__58__61__2)
 {
     Node *arg1, *arg2;
  ENTRY_LABEL(static, ___61__58__61__2)
-    arg1 = regs.sp[1];
-    arg2 = regs.sp[0];
+    arg1 = regs.sp[0];
+    arg2 = regs.r[0];
 
     while ( is_boxed(arg1) && is_indir_node(arg1) )
 	arg1 = arg1->n.node;
@@ -90,15 +90,15 @@ FUNCTION(___61__58__61__2)
 	/* check for trivial unification */
 	if ( arg1 != arg2 )
 	{
-	    regs.sp[0] = arg1;
-	    regs.sp[1] = arg2;
+	    regs.r[0]  = arg1;
+	    regs.sp[0] = arg2;
 	    GOTO(unify_var);
 	}
     }
     else if ( is_boxed(arg2) && is_variable_node(arg2) )
     {
-	regs.sp[0] = arg2;
-	regs.sp[1] = arg1;
+	regs.r[0]  = arg2;
+	regs.sp[0] = arg1;
 	GOTO(unify_var);
     }
     else
@@ -117,19 +117,24 @@ FUNCTION(___61__58__61__2)
 	    exist_type = is_papp_node(arg1)
 		|| (is_capp_node(arg1) && node_tag(arg1) < 0);
 	    arglist = nil;
-	    if ( !eq_args(arg1, arg2, n, &arglist) )
+	    if ( !eq_args(0, arg1, arg2, n, &arglist) )
 		FAIL();
 
 	    if ( arglist != nil )
 	    {
-		*++regs.sp = arglist;
-		GOTO(exist_type ? unify_papp_args : unify_args);
+		regs.sp[0] = arglist;
+		if ( exist_type )
+		{
+		    regs.r[0] = CONST(__Prelude__True);
+		    GOTO(unify_papp_args);
+		}
+		else
+		    GOTO(unify_args);
 	    }
 	}
     }
 
-    regs.sp += 2;
-    RETURN(Success);
+    RETURN(Success, 1);
 }
 
 @ 
@@ -251,7 +256,8 @@ immediately.
 
 <<unify.c>>=
 boolean
-eq_args(Node *arg1, Node *arg2, unsigned int n, Node **arglist)
+eq_args(unsigned int n_regs, Node *arg1, Node *arg2,
+	unsigned int n, Node **arglist)
 {
     boolean	 is_vect;
     unsigned int i;
@@ -263,7 +269,7 @@ eq_args(Node *arg1, Node *arg2, unsigned int n, Node **arglist)
 	return true;
 
     BEGIN_LOCAL_ROOTS2(arg1, arg2)
-    CHECK_HEAP(n * pair_cons_node_size);
+    CHECK_HEAP(n_regs, n * pair_cons_node_size);
     END_LOCAL_ROOTS
 
     is_vect = is_vector_node(arg1);
@@ -435,35 +441,29 @@ FUNCTION(unify_args)
 {
     Node *susp, *arglist;
  ENTRY_LABEL(static, unify_args)
-    CHECK_STACK(6);
-    CHECK_HEAP(queueMe_node_size);
-
     arglist = regs.sp[0];
     ASSERT(arglist->info == &pair_cons_info);
     if ( arglist->c.args[2] == nil )
-    {
-	regs.sp   -= 1;
-	regs.sp[0] = arglist->c.args[0];
-	regs.sp[1] = arglist->c.args[1];
-	GOTO(___61__58__61_);
-    }
+	CALL_RET2(___61__58__61_, 1, arglist->c.args[0], arglist->c.args[1]);
 
+    CHECK_HEAP(1, queueMe_node_size);
     susp	= (Node *)regs.hp;
     susp->info	= queueMe_info_table;
     susp->q.spc	= regs.ss;
     susp->q.wq	= 0;
     regs.hp    += queueMe_node_size;
 
-    regs.sp   -= 6;
-    regs.sp[0] = arglist->c.args[0];
-    regs.sp[1] = arglist->c.args[1];
-    regs.sp[2] = (Node *)update;
-    regs.sp[3] = susp;
-    regs.sp[4] = (Node *)unify_args_1;
-    regs.sp[5] = susp;
-    regs.sp[6] = arglist->c.args[2];
-    start_thread(5);
-    GOTO(___61__58__61_);
+    arglist = regs.sp[0];
+    CHECK_STACK1();
+    regs.sp   -= 1;
+    regs.sp[0] = regs.r[2] = susp;
+    regs.sp[1] = arglist->c.args[2];
+    regs.r[0]  = arglist->c.args[0];
+    regs.r[1]  = arglist->c.args[1];
+    start_thread(3, unify_args_1);
+
+    SAVE_RET1(regs.r[2]);
+    CALL2(___61__58__61_, update, regs.r[0], regs.r[1]);
 }
 
 static
@@ -475,16 +475,17 @@ FUNCTION(unify_args_1)
 	;
 
     if ( node_kind(r) == CAPP_KIND )
-	regs.sp++;
-    else
     {
-	ASSERT(node_kind(r) == LAZY_KIND && node_tag(r) == QUEUEME_TAG);
-	CHECK_STACK1();
-	regs.sp   -= 1;
-	regs.sp[0] = regs.sp[2];
-	regs.sp[1] = (Node *)unify_args_2;
-	regs.sp[2] = r;
+	regs.sp += 1;
+	GOTO(unify_args);
     }
+
+    ASSERT(node_kind(r) == LAZY_KIND && node_tag(r) == QUEUEME_TAG);
+    CHECK_STACK1();
+    regs.sp   -= 1;
+    regs.sp[0] = regs.sp[2];
+    regs.sp[1] = (Node *)unify_args_2;
+    regs.sp[2] = r;
     GOTO(unify_args);
 }
 
@@ -493,19 +494,15 @@ FUNCTION(unify_args_2)
 {
     Node *r;
  ENTRY_LABEL(static, unify_args_2)
-    ASSERT(node_kind(regs.sp[0]) == CAPP_KIND);
-    for ( r = regs.sp[1]; node_kind(r) == INDIR_KIND; r = r->n.node )
+    ASSERT(node_kind(regs.r[0]) == CAPP_KIND);
+    for ( r = regs.sp[0]; node_kind(r) == INDIR_KIND; r = r->n.node )
 	;
 
     if ( node_kind(r) == LAZY_KIND && node_tag(r) == QUEUEME_TAG )
-    {
-	*++regs.sp = r;
-	GOTO(r->info->eval);
-    }
-    ASSERT(node_kind(regs.sp[0]) == CAPP_KIND);
+	ENTER(r, 1);
 
-    regs.sp += 2;
-    RETURN(r);
+    ASSERT(node_kind(r) == CAPP_KIND);
+    RETURN(r, 1);
 }
 
 @ 
@@ -529,36 +526,18 @@ and using a rigid variant of \texttt{(=:=)}.}
 static
 FUNCTION(unify_papp_args)
 {
-    Node *arg1, *arg2, *arglist;
+    Node *arglist;
  ENTRY_LABEL(static, unify_papp_args)
-    ASSERT(regs.sp[0]->info == INFO(pair_cons));
-    arglist = regs.sp[0];
-    arg1    = arglist->c.args[0];
-    arg2    = arglist->c.args[1];
-    arglist = arglist->c.args[2];
-
-    CHECK_STACK(3);
-    regs.sp   -= 3;
-    regs.sp[0] = arg1;
-    regs.sp[1] = arg2;
-    regs.sp[2] = (Node *)unify_papp_args_1;
-    regs.sp[3] = arglist;
-    GOTO(___61__61_);
-}
-
-static
-FUNCTION(unify_papp_args_1)
-{
- ENTRY_LABEL(static, unify_papp_args_1)
-    if ( *regs.sp++ != CONST(__Prelude__True) )
+    if ( regs.r[0] != CONST(__Prelude__True) )
 	FAIL();
 
-    if ( regs.sp[0] == nil )
-    {
-	regs.sp += 1;
-	RETURN(Success);
-    }
-    GOTO(unify_papp_args);
+    arglist = regs.sp[0];
+    if ( arglist == nil )
+	RETURN(Success, 1);
+    ASSERT(arglist->info == INFO(pair_cons));
+
+    regs.sp[0] = arglist->c.args[2];
+    CALL2(___61__61_, unify_papp_args, arglist->c.args[0], arglist->c.args[1]);
 }
 
 @
@@ -631,24 +610,18 @@ FUNCTION(unify_var)
     unsigned int i, n, sz;
     Node	 *var, *arg, *next, *arglist, **argp;
  ENTRY_LABEL(static, unify_var)
-    if ( !is_local_space(regs.sp[0]->v.spc) )
+    if ( !is_local_space(regs.r[0]->v.spc) )
     {
-	if ( is_boxed(regs.sp[1]) && is_variable_node(regs.sp[1])
-	     && is_local_space(regs.sp[1]->v.spc) )
-	    SWAPn(1);
+	if ( is_boxed(regs.sp[0]) && is_variable_node(regs.sp[0])
+	     && is_local_space(regs.sp[0]->v.spc) )
+	    SWAPn(0);
 	else
-	{
-	    CHECK_STACK1();
-	    regs.sp   -= 1;
-	    regs.sp[0] = regs.sp[1];
-	    regs.sp[1] = (Node *)___61__58__61__1;
-	    GOTO(sync_var);
-	}
+	    CALL1(sync_var, ___61__58__61__1, regs.r[0]);
     }
 
     nf	= true;
-    var = regs.sp[0];
-    arg = regs.sp[1];
+    var = regs.r[0];
+    arg = regs.sp[0];
     if ( occurs(var, arg, &nf) )
 	FAIL();
 
@@ -677,12 +650,12 @@ FUNCTION(unify_var)
 
 	if ( n > 0 )
 	{
-	    CHECK_HEAP(sz + n * (variable_node_size + pair_cons_node_size));
-	    memcpy(regs.hp, regs.sp[1], sz * word_size);
-	    regs.sp[1] = (Node *)regs.hp;
+	    CHECK_HEAP(1, sz + n * (variable_node_size + pair_cons_node_size));
+	    memcpy(regs.hp, regs.sp[0], sz * word_size);
+	    regs.sp[0] = (Node *)regs.hp;
 	    regs.hp   += sz;
 
-	    argp  = is_vect ? regs.sp[1]->a.args : regs.sp[1]->c.args;
+	    argp  = is_vect ? regs.sp[0]->a.args : regs.sp[0]->c.args;
 	    argp += n;
 	    for ( i = n; i-- > 0; )
 	    {
@@ -718,29 +691,18 @@ FUNCTION(unify_var)
     }
 
     /* bind the variable */
-    CHECK_STACK(2);
-    var	       = regs.sp[0];
-    arg	       = regs.sp[1];
-    regs.sp   -= 2;
-    regs.sp[0] = arg;
-    regs.sp[1] = var;
-    regs.sp[2] = (Node *)unify_var_1;
-    regs.sp[3] = arglist;
-    GOTO(bind_var);
+    var	       = regs.r[0];
+    arg	       = regs.sp[0];
+    regs.sp[0] = arglist;
+    CALL2(bind_var, unify_var_1, var, arg);
 }
 
 static
 FUNCTION(unify_var_1)
 {
-    Node *arglist;
  ENTRY_LABEL(static, unify_var_1)
-    arglist = regs.sp[1];
-    if ( arglist == nil )
-    {
-	regs.sp += 2;
-	RETURN(Success);
-    }
-    regs.sp += 1;
+    if ( regs.sp[0] == nil )
+	RETURN(Success, 1);
     GOTO(unify_args);
 }
 
@@ -777,10 +739,12 @@ In this case, [[bind_var]] is implicitly transformed into a
 unification between the two values.
 
 <<unify.c>>=
+DECLARE_LABEL(static, bind_var_1);
+DECLARE_LABEL(static, bind_var_2);
 DECLARE_LABEL(static, check_constraints);
 DECLARE_LABEL(static, check_constraints_1);
 DECLARE_LABEL(static, wake);
-DECLARE_LABEL(static, bind_var_1);
+DECLARE_LABEL(static, wake_1);
 
 FUNCTION(bind_var)
 {
@@ -789,19 +753,14 @@ FUNCTION(bind_var)
     Constraint	*cstrs;
     ThreadQueue	wq;
  ENTRY_LABEL(extern, bind_var)
-    node = regs.sp[0];
-    var	 = regs.sp[1];
+    var	 = regs.r[0];
+    node = regs.r[1];
 
     if ( !is_boxed(var) || !is_variable_node(var)
 	 || !is_local_space(var->v.spc) )
     {
-	CHECK_STACK(2);
-	regs.sp   -= 2;
-	regs.sp[0] = var;
-	regs.sp[1] = node;
-	regs.sp[2] = (Node *)bind_var_1;
-	regs.sp[3] = node;
-	GOTO(___61__58__61_);
+	SAVE_RET1(node);
+	CALL2(___61__58__61_, bind_var_1, regs.r[0], regs.r[1]);
     }
 
     cstrs  = var->v.cstrs;
@@ -818,11 +777,8 @@ FUNCTION(bind_var)
 	    case LVAR_KIND:
 		if ( !is_local_space(node->v.spc) && (wq || cstrs) )
 		{
-		    CHECK_STACK1();
-		    regs.sp   -= 1;
-		    regs.sp[0] = node;
-		    regs.sp[1] = (Node *)bind_var;
-		    GOTO(sync_var);
+		    SAVE_RET1(var);
+		    CALL1(sync_var, bind_var_2, node);
 		}
 		is_var = true;
 		break;
@@ -853,7 +809,6 @@ FUNCTION(bind_var)
     var->n.node = node;
 
     /* handle the wait queue of the variable */
-    regs.sp += 2;
     if ( wq )
     {
 	if ( is_var )
@@ -863,98 +818,89 @@ FUNCTION(bind_var)
 	}
 	else
 	{
-	    regs.sp   -= 2;
-	    regs.sp[0] = (Node *)wake;
-	    regs.sp[1] = (Node *)wq;
+	    SAVE_RET1((Node *)wq);
+	    regs.ret = wake;
 	}
     }
 
     /* if there are any constraints on the variable re-check them */
     if ( cstrs )
     {
-        CHECK_STACK(2);
-	regs.sp   -= 2;
-        regs.sp[0] = (Node *)check_constraints;
-        regs.sp[1] = (Node *)cstrs;
+        SAVE_RET1((Node *)cstrs);
+	regs.ret = check_constraints;
     }
 
     /* we need to check the constraints of the other variable, too */
     if ( is_var && is_local_space(node->v.spc) && node->v.cstrs )
     {
-        CHECK_STACK(2);
-	regs.sp   -= 2;
-        regs.sp[0] = (Node *)check_constraints;
-        regs.sp[1] = (Node *)node->v.cstrs;
+        SAVE_RET1((Node *)node->v.cstrs);
+	regs.ret = check_constraints;
 	SAVE(node, v.cstrs);
 	node->v.cstrs = 0;
     }
 
     /* continue evaluation */
-    RETURN(node);
+    RET(node);
 }
 
 static
 FUNCTION(bind_var_1)
 {
-    Node *node;
  ENTRY_LABEL(static, bind_var_1)
-    node     = regs.sp[1];
-    regs.sp += 2;
-    RETURN(node);
+    RETURN(regs.sp[0], 1);
+}
+
+static
+FUNCTION(bind_var_2)
+{
+    Node *node;
+ ENTRY_LABEL(static, bind_var_2)
+    node = regs.r[0];
+    CALL_RET2(bind_var, 1, regs.sp[0], node);
 }
 
 static
 FUNCTION(check_constraints)
 {
-    Node       *node;
-    Constraint *cstrs;
  ENTRY_LABEL(static, check_constraints)
-    node  = regs.sp[0];
-    cstrs = (Constraint *)regs.sp[1];
-    ASSERT(cstrs != 0);
-
-    CHECK_STACK(3);
-    regs.sp   -= 3;
-    regs.sp[0] = node;
-    regs.sp[1] = (Node *)cstrs;
-    regs.sp[2] = (Node *)check_constraints_1;
-    regs.sp[4] = (Node *)cstrs->cstrs;
-    GOTO(cstrs->info->eval);
+    CHECK_STACK1();
+    regs.sp   -= 1;
+    regs.sp[0] = regs.r[0];
+    GOTO(check_constraints_1);
 }
 
 static
 FUNCTION(check_constraints_1)
 {
-    Node       *node;
+    Node *node;
     Constraint *cstrs;
  ENTRY_LABEL(static, check_constraints_1)
-    /* XXX check for suspended constraints? */
-    cstrs = (Constraint *)regs.sp[2];
+    node  = regs.sp[0];
+    cstrs = (Constraint *)regs.sp[1];
     if ( cstrs )
     {
-	regs.sp += 1;
-	GOTO(check_constraints);
+	regs.sp[1] = (Node *)cstrs->cstrs;
+	CALL2(cstrs->info->eval, check_constraints_1, node, (Node *)cstrs);
     }
-
-    node     = regs.sp[1];
-    regs.sp += 3;
-    RETURN(node);
+    RETURN(node, 2);
 }
 
 static
 FUNCTION(wake)
 {
-    Node	*node;
-    Label	ret_ip;
     ThreadQueue	wq;
  ENTRY_LABEL(static, wake)
     /* handle the wait queue of the variable */
-    node       = regs.sp[0];
-    wq	       = (ThreadQueue)regs.sp[1];
-    ret_ip     = (Label)regs.sp[2];
-    regs.sp   += 2;
-    regs.sp[0] = node;
+    wq	       = (ThreadQueue)regs.sp[0];
+    regs.sp[0] = regs.r[0];
 
     /* wake all threads from the queue */
-    GOTO(activate_threads(wq, ret_ip));
+    GOTO(activate_threads(wq, wake_1));
+}
+
+static
+FUNCTION(wake_1)
+{
+ ENTRY_LABEL(static, wake_1)
+    RETURN(regs.sp[0], 1);
 }

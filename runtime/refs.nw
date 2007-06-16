@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: refs.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: refs.nw 2271 2007-06-16 16:30:52Z wlux $
 %
 % Copyright (c) 2004-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -56,6 +56,7 @@ DECLARE_LABEL(static, __primEqIORef_2);
 FUNCTION(__primEqIORef)
 {
  ENTRY_LABEL(extern, __primEqIORef)
+    SAVE_REGS(1);
     EVAL_BOXED(__primEqIORef_1);
 }
 
@@ -64,7 +65,7 @@ FUNCTION(__primEqIORef_1)
 {
  ENTRY_LABEL(static, __primEqIORef_1)
     MATCH_RIGID_IOREF(__primEqIORef_1);
-    SWAPn(1);
+    SWAPn(0);
     EVAL_BOXED(__primEqIORef_2);
 }
 
@@ -74,9 +75,8 @@ FUNCTION(__primEqIORef_2)
     Node *r;
  ENTRY_LABEL(static, __primEqIORef_2)
     MATCH_RIGID_IOREF(__primEqIORef_2);
-    r	     = regs.sp[1] == regs.sp[0] ? Prelude_True : Prelude_False;
-    regs.sp += 2;
-    RETURN(r);
+    r = regs.sp[0] == regs.r[0] ? Prelude_True : Prelude_False;
+    RETURN(r, 1);
 }
 
 @ 
@@ -90,14 +90,13 @@ FUNCTION(__newIORef)
 {
     IORef *ref;
  ENTRY_LABEL(extern, __newIORef)
-    CHECK_HEAP(ioref_node_size);
+    CHECK_HEAP(1, ioref_node_size);
     ref	      = (IORef *)regs.hp;
     ref->info = &ioref_info;
-    ref->ref  = regs.sp[0];
+    ref->ref  = regs.r[0];
     regs.hp  += ioref_node_size;
 
-    regs.sp += 2;
-    RETURN((Node *)ref);
+    RET((Node *)ref);
 }
 
 @ 
@@ -112,6 +111,7 @@ DECLARE_LABEL(static, __readIORef_1);
 FUNCTION(__readIORef)
 {
  ENTRY_LABEL(extern, __readIORef)
+    SAVE_REGS(1);
     EVAL_BOXED(__readIORef_1);
 }
 
@@ -121,9 +121,8 @@ FUNCTION(__readIORef_1)
     IORef *ref;
  ENTRY_LABEL(static, __readIORef_1)
     MATCH_RIGID_IOREF(__readIORef_1);
-    ref	     = (IORef *)regs.sp[0];
-    regs.sp += 2;
-    RETURN(ref->ref);
+    ref = (IORef *)regs.r[0];
+    RETURN(ref->ref, 1);
 }
 
 @ 
@@ -142,6 +141,7 @@ DECLARE_LABEL(static, __writeIORef_1);
 FUNCTION(__writeIORef)
 {
  ENTRY_LABEL(extern, __writeIORef)
+    SAVE_REGS(2);
     EVAL_BOXED(__writeIORef_1);
 }
 
@@ -151,9 +151,8 @@ FUNCTION(__writeIORef_1)
     IORef *ref;
  ENTRY_LABEL(static, __writeIORef_1)
     MATCH_RIGID_IOREF(__writeIORef_1);
-    ref = (IORef *)regs.sp[0];
+    ref = (IORef *)regs.r[0];
     SAVE(ref, ref);
-    ref->ref = regs.sp[1];
-    regs.sp += 3;
-    RETURN(unit);
+    ref->ref = regs.sp[0];
+    RETURN(unit, 2);
 }

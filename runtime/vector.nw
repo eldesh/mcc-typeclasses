@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: vector.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: vector.nw 2271 2007-06-16 16:30:52Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -57,6 +57,7 @@ DECLARE_LABEL(static, __primEqIOVector_2);
 FUNCTION(__primEqIOVector)
 {
  ENTRY_LABEL(extern, __primEqIOVector)
+    SAVE_REGS(1);
     EVAL_BOXED(__primEqIOVector_1);
 }
 
@@ -65,7 +66,7 @@ FUNCTION(__primEqIOVector_1)
 {
  ENTRY_LABEL(static, __primEqIOVector_1)
     MATCH_RIGID_VECTOR(__primEqIOVector_1);
-    SWAPn(1);
+    SWAPn(0);
     EVAL_BOXED(__primEqIOVector_2);
 }
 
@@ -75,9 +76,8 @@ FUNCTION(__primEqIOVector_2)
     Node *r;
  ENTRY_LABEL(static, __primEqIOVector_2)
     MATCH_RIGID_VECTOR(__primEqIOVector_2);
-    r	     = regs.sp[1] == regs.sp[0] ? Prelude_True : Prelude_False;
-    regs.sp += 2;
-    RETURN(r);
+    r = regs.sp[0] == regs.r[0] ? Prelude_True : Prelude_False;
+    RETURN(r, 1);
 }
 
 @ 
@@ -91,6 +91,7 @@ DECLARE_LABEL(static, __newIOVector_1);
 FUNCTION(__newIOVector)
 {
  ENTRY_LABEL(extern, __newIOVector)
+    SAVE_REGS(2);
     EVAL(__newIOVector_1);
 }
 
@@ -101,7 +102,7 @@ FUNCTION(__newIOVector_1)
     Node *init, *vec;
  ENTRY_LABEL(static, __newIOVector_1)
     MATCH_RIGID_INT(__newIOVector_1);
-    n = long_val(regs.sp[0]);
+    n = long_val(regs.r[0]);
     if ( n < 0 )
 	fail_with("newIOVector: negative length (%ld)", n);
 
@@ -109,8 +110,8 @@ FUNCTION(__newIOVector_1)
 	vec = (Node *)&empty;
     else
     {
-	CHECK_HEAP(vector_node_size(n));
-	init = regs.sp[1];
+	CHECK_HEAP(0, vector_node_size(n));
+	init = regs.sp[0];
 	while ( is_boxed(init) && is_indir_node(init) )
 	    init = init->n.node;
 	vec	      = (Node *)regs.hp;
@@ -121,8 +122,7 @@ FUNCTION(__newIOVector_1)
 	regs.hp += vector_node_size(n);
     }
 
-    regs.sp += 3;
-    RETURN(vec);
+    RETURN(vec, 2);
 }
 
 @ 
@@ -137,6 +137,7 @@ DECLARE_LABEL(static, __copyIOVector_1);
 FUNCTION(__copyIOVector)
 {
  ENTRY_LABEL(extern, __copyIOVector)
+    SAVE_REGS(1);
     EVAL_BOXED(__copyIOVector_1);
 }
 
@@ -147,17 +148,16 @@ FUNCTION(__copyIOVector_1)
  ENTRY_LABEL(static, __copyIOVector_1)
     MATCH_RIGID_VECTOR(__copyIOVector_1);
 
-    vec = regs.sp[0];
+    vec = regs.r[0];
     if ( vector_argc(vec) > 0 )
     {
-	CHECK_HEAP(vec->a.length);
+	CHECK_HEAP(1, vec->a.length);
 	vec = (Node *)regs.hp;
-	memcpy(vec, regs.sp[0], regs.sp[0]->a.length * word_size);
+	memcpy(vec, regs.r[0], regs.r[0]->a.length * word_size);
 	regs.hp += vec->a.length;
     }
 
-    regs.sp += 2;
-    RETURN(vec);
+    RETURN(vec, 1);
 }
 
 @ 
@@ -174,6 +174,7 @@ DECLARE_LABEL(static, __readIOVector_2);
 FUNCTION(__readIOVector)
 {
  ENTRY_LABEL(extern, __readIOVector)
+    SAVE_REGS(2);
     EVAL_BOXED(__readIOVector_1);
 }
 
@@ -182,26 +183,24 @@ FUNCTION(__readIOVector_1)
 {
  ENTRY_LABEL(static, __readIOVector_1)
     MATCH_RIGID_VECTOR(__readIOVector_1);
-    SWAPn(1);
+    SWAPn(0);
     EVAL(__readIOVector_2);
 }
 
 static
 FUNCTION(__readIOVector_2)
 {
-    long  i;
-    Node *vec, *r;
+    long i;
+    Node *vec;
  ENTRY_LABEL(static, __readIOVector_2)
     MATCH_RIGID_INT(__readIOVector_2);
 
-    i	     = long_val(regs.sp[0]);
-    vec	     = regs.sp[1];
-    regs.sp += 3;
+    i	= long_val(regs.r[0]);
+    vec = regs.sp[0];
     if ( i < 0 || (unsigned long)i >= vector_argc(vec) )
 	fail_with("readIOVector: index out range (%ld)", i);
 
-    r = vec->a.args[i];
-    RETURN(r);
+    RETURN(vec->a.args[i], 2);
 }
 
 @ 
@@ -217,6 +216,7 @@ DECLARE_LABEL(static, __writeIOVector_2);
 FUNCTION(__writeIOVector)
 {
  ENTRY_LABEL(extern, __writeIOVector)
+    SAVE_REGS(3);
     EVAL_BOXED(__writeIOVector_1);
 }
 
@@ -225,7 +225,7 @@ FUNCTION(__writeIOVector_1)
 {
  ENTRY_LABEL(static, __writeIOVector_1)
     MATCH_RIGID_VECTOR(__writeIOVector_1);
-    SWAPn(1);
+    SWAPn(0);
     EVAL(__writeIOVector_2);
 }
 
@@ -237,17 +237,16 @@ FUNCTION(__writeIOVector_2)
  ENTRY_LABEL(static, __writeIOVector_2)
     MATCH_RIGID_INT(__writeIOVector_2);
 
-    i	     = long_val(regs.sp[0]);
-    vec	     = regs.sp[1];
-    node     = regs.sp[2];
-    regs.sp += 4;
+    i	 = long_val(regs.r[0]);
+    vec	 = regs.sp[0];
+    node = regs.sp[1];
 
     if ( i < 0 || (unsigned long)i >= vector_argc(vec) )
 	fail_with("writeIOVector: index out range (%ld)", i);
 
     SAVE(vec, a.args[i]);
     vec->a.args[i] = node;
-    RETURN(unit);
+    RETURN(unit, 3);
 }
 
 @ 
@@ -263,6 +262,7 @@ DECLARE_LABEL(static, __lengthIOVector_1);
 FUNCTION(__lengthIOVector)
 {
  ENTRY_LABEL(extern, __lengthIOVector)
+    SAVE_REGS(0);
     EVAL_BOXED(__lengthIOVector_1);
 }
 
@@ -274,8 +274,7 @@ FUNCTION(__lengthIOVector_1)
  ENTRY_LABEL(static, __lengthIOVector_1)
     MATCH_RIGID_VECTOR(__lengthIOVector_1);
 
-    n	     = vector_argc(regs.sp[0]);
-    regs.sp += 1;
+    n = vector_argc(regs.r[0]);
 
 #if !ONLY_BOXED_OBJECTS
     if ( !is_large_int(n) )
@@ -283,11 +282,11 @@ FUNCTION(__lengthIOVector_1)
     else
 #endif
     {
-	CHECK_HEAP(int_node_size);
+	CHECK_HEAP(0, int_node_size);
 	r	 = (Node *)regs.hp;
 	r->info	 = &int_info;
 	r->i.i	 = n;
 	regs.hp += int_node_size;
     }
-    RETURN(r);
+    RETURN(r, 0);
 }

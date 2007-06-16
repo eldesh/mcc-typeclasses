@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: heap.nw 2271 2007-06-16 16:30:52Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -685,7 +685,7 @@ or partial application node.
 
 #define PAPPINFO(fname,argc,entrypoint,arity) \
 { PAPP_KIND, (arity) - (argc), closure_node_size(argc), 0, fname, \
-  eval_whnf, eval_clos_##argc, entrypoint, 0 },
+  eval_whnf, apply_clos_##argc##_##arity, entrypoint, 0 },
 
 @ 
 In addition to the info table, a descriptor table for lazy
@@ -785,16 +785,16 @@ by the appropriate amount. Before any allocation is performed, it
 should be checked that enough words are still available in the heap.
 Otherwise, the garbage collector must be called first. The macro
 [[CHECK_HEAP]] can be used for that purpose. The [[collect]] function
-is passed the number of additional words that are required. If this
-amount is not available after the collection, the program will be
-aborted. The global flag [[in_gc]] is set while the garbage collector
-is executing.
+is passed the number of live argument registers and the number of
+additional words that are required. If this amount is not available
+after the collection, the program will be aborted. The global flag
+[[in_gc]] is set while the garbage collector is executing.
 
 <<heap.h>>=
 extern boolean in_gc;
-extern void collect(unsigned int);
-#define CHECK_HEAP(n) \
-    do { if ( regs.hp + (n) > heap_end ) collect(n); } while ( 0 )
+extern void collect(unsigned int, unsigned int);
+#define CHECK_HEAP(n_regs, n) \
+    do { if ( regs.hp + (n) > heap_end ) collect(n_regs, n); } while ( 0 )
 
 @
 <<heap.c>>=
@@ -806,7 +806,7 @@ collector. Since it is not tied to an allocation, it does not request
 any additional memory.
 
 <<heap.h>>=
-#define primPerformGC()	collect(0)
+#define primPerformGC()	collect(0, 0)
 
 @
 In order to find all live nodes during a garbage collection, the

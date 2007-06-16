@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: regs.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: regs.nw 2271 2007-06-16 16:30:52Z wlux $
 %
 % Copyright (c) 2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -33,9 +33,18 @@ available as fields of the global [[regs]] structure.
   a non-determinstic computation step is processed in the current
   execution mode (I/O, global search, or encapsulated search) of the
   abstract machine.
+\item The return address register [[ret]] is used for passing the
+  return address to a function. Leaf procedures can return by jumping
+  to that address. Non-leaf procedures must save the register to the
+  stack before calling another function.
+\item The argument registers \texttt{r[0]} to \texttt{r[N\_REGS-1]}
+  are used for passing arguments to a function. The result of a
+  function is returned in register \texttt{r[0]}.
 \end{itemize}
 
 <<regs.h>>=
+#define N_REGS 128
+
 typedef void *word;
 
 struct regs {
@@ -52,6 +61,8 @@ struct regs {
 #endif
     struct choicepoint		 *bp;
     const struct nondet_handlers *handlers;
+    Label			 ret;
+    union node			 *r[N_REGS];
 } regs;
 
 @ 
@@ -87,4 +98,5 @@ init_regs()
 #endif
     regs.bp	  = 0;
     regs.handlers = 0;
+    regs.ret	  = 0;
 }

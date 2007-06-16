@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: data.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: data.nw 2271 2007-06-16 16:30:52Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -60,9 +60,13 @@ DEFINE_CONST(__Success, "success", SUCCESS_TAG);
 
 @ 
 The functions [[___40__41__unify]], [[___91__93__unify]], and
-[[___58__unify]] instantiate their argument with a fresh data term.
-There is no corresponding function for type [[Success]] because its
-constructor is hidden and cannot be instantiated in a flexible match.
+[[___58__unify]] instantiate an unbound variable with a fresh data
+term. There is no corresponding function for type [[Success]] because
+its constructor is hidden and cannot be instantiated in a flexible
+match. Note that these functions expect the variable to be bound and
+the return address on the stack rather than in argument registers
+because these functions are usually invoked after continuing an
+encapsulated search.
 
 <<data.h>>=
 DECLARE_LABEL(extern, ___40__41__unify);
@@ -73,27 +77,20 @@ DECLARE_LABEL(extern, ___58__unify);
 FUNCTION(___40__41__unify)
 {
  ENTRY_LABEL(extern, ___40__41__unify)
-    CHECK_STACK1();
-    regs.sp   -= 1;
-    regs.sp[0] = CONST(___40__41_);
-    GOTO(bind_var);
+    CALL_RET2(bind_var, 1, regs.sp[0], CONST(___40__41_));
 }
 
 FUNCTION(___91__93__unify)
 {
  ENTRY_LABEL(extern, ___91__93__unify)
-    CHECK_STACK1();
-    regs.sp   -= 1;
-    regs.sp[0] = CONST(___91__93_);
-    GOTO(bind_var);
+    CALL_RET2(bind_var, 1, regs.sp[0], CONST(___91__93_));
 }
 
 FUNCTION(___58__unify)
 {
     Node *v1, *v2, *n;
  ENTRY_LABEL(extern, ___58__unify)
-    CHECK_STACK1();
-    CHECK_HEAP(2 * variable_node_size + cons_node_size);
+    CHECK_HEAP(0, 2 * variable_node_size + cons_node_size);
 
     v1		= (Node *)regs.hp;
     v1->info	= variable_info_table;
@@ -115,9 +112,7 @@ FUNCTION(___58__unify)
     n->c.args[1] = v2;
     regs.hp	+= cons_node_size;
 
-    regs.sp   -= 1;
-    regs.sp[0] = n;
-    GOTO(bind_var);
+    CALL_RET2(bind_var, 1, regs.sp[0], n);
 }
 
 @ 
@@ -132,8 +127,8 @@ extern const struct closure_node ___58__function;
 @ 
 <<data.c>>=
 DECLARE_LABEL(static, ___58_);
-DECLARE_LABEL(static, eval_clos_0);
-DECLARE_LABEL(static, eval_clos_1);
+DECLARE_LABEL(static, apply_clos_0_2);
+DECLARE_LABEL(static, apply_clos_1_2);
 
 NodeInfo ___58__papp_info_table[] = {
     PAPPINFO(":", 0, ___58_, 2)
@@ -142,23 +137,21 @@ NodeInfo ___58__papp_info_table[] = {
 const struct closure_node ___58__function = { ___58__papp_info_table, { 0 } };
 
 static
-FUNCTION(eval_clos_0)
+FUNCTION(apply_clos_0_2)
 {
     Node *clos;
- ENTRY_LABEL(static, eval_clos_0)
-    clos     = regs.sp[0];
-    regs.sp += 1;
-    GOTO(clos->info->entry);
+ ENTRY_LABEL(static, apply_clos_0_2)
+    clos = regs.r[0];
+    CALL_RET2(clos->info->entry, 2, regs.sp[0], regs.sp[1]);
 }
 
 static
-FUNCTION(eval_clos_1)
+FUNCTION(apply_clos_1_2)
 {
     Node *clos;
- ENTRY_LABEL(static, eval_clos_1)
-    clos       = regs.sp[0];
-    regs.sp[0] = clos->c.args[0];
-    GOTO(clos->info->entry);
+ ENTRY_LABEL(static, apply_clos_1_2)
+    clos = regs.r[0];
+    CALL_RET2(clos->info->entry, 1, clos->c.args[0], regs.sp[0]);
 }
 
 static
@@ -168,13 +161,12 @@ FUNCTION(___58_)
  ENTRY_LABEL(static, ___58_)
     TRACE_FUN(":", 2);
 
-    CHECK_HEAP(cons_node_size);
+    CHECK_HEAP(2, cons_node_size);
     cons	    = (Node *)regs.hp;
     cons->info	    = &cons_info;
-    cons->c.args[0] = regs.sp[0];
-    cons->c.args[1] = regs.sp[1];
+    cons->c.args[0] = regs.r[0];
+    cons->c.args[1] = regs.r[1];
     regs.hp	   += cons_node_size;
 
-    regs.sp += 2;
-    RETURN(cons);
+    RET(cons);
 }

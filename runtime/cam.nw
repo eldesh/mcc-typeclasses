@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cam.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: cam.nw 2271 2007-06-16 16:30:52Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -8,74 +8,196 @@
 The header file [[cam.h]] defines a few useful macros for writing
 external functions.
 
-@
-The [[RETURN]] and [[ENTER]] macros return the value on the top of the
-stack to the caller of the current function. [[RETURN]] must be used
-only if the value is known to be in head normal form. Otherwise, the
-[[ENTER]] macro must be used, which starts the evaluation of the node
-with a tail call to its evaluation method unless the node is already
-in head normal form.
+@ 
+The macros [[SAVE_RET]]$n$ can be used to save $n$ values and the
+contents of the return address register to the stack.
 
 <<cam.h>>=
-#define RETURN(_res) {		      \
-    Label ret_ip = (Label)regs.sp[0]; \
-    regs.sp[0]	 = (_res);	      \
-    GOTO(ret_ip);		      \
-}
+#define SAVE_RET0()		SAVE_RET(0, ())
+#define SAVE_RET1(x)		SAVE_RET(1, (x))
+#define SAVE_RET2(x,y)		SAVE_RET(2, (x,y))
+#define SAVE_RET3(x,y,z)	SAVE_RET(3, (x,y,z))
+#define SAVE_RET4(x,y,z,t)	SAVE_RET(4, (x,y,z,t))
 
-#define ENTER(_node) {		   \
-    if ( is_boxed(_node) ) {	   \
-	CHECK_STACK1();		   \
-	*--regs.sp = (_node);	   \
-	GOTO((_node)->info->eval); \
-    }				   \
-    RETURN(_node);		   \
-}
+#define SAVE_RET(n,args) {	       \
+	CHECK_STACK(n+1);	       \
+	regs.sp -= n+1;		       \
+	DO_SAVE_RET_##n args;	       \
+	regs.sp[n] = (Node *)regs.ret; \
+    }
+
+#define DO_SAVE_RET_0()		/* empty */
+#define DO_SAVE_RET_1(x)	DO_SAVE_RET_0();      regs.sp[0] = (x)
+#define DO_SAVE_RET_2(x,y)	DO_SAVE_RET_1(x);     regs.sp[1] = (y)
+#define DO_SAVE_RET_3(x,y,z)	DO_SAVE_RET_2(x,y);   regs.sp[2] = (z)
+#define DO_SAVE_RET_4(x,y,z,t)	DO_SAVE_RET_3(x,y,z); regs.sp[3] = (t)
 
 @ 
-The macros [[EVAL]] and [[EVAL_BOXED]] evaluate the node on the top of
-the stack and continue execution at the specified label after the node
-is evaluated to head normal form.
+The frequently used special case of saving the argument registers
+\texttt{regs.r[1]} to \texttt{regs.r[$n$]} together with the return
+address register is implemented by the macro [[SAVE_REGS]].
 
 <<cam.h>>=
-#define EVAL(l)	do {							\
+#define SAVE_REGS(n)	SAVE_REGS_##n
+#define SAVE_REGS_0	SAVE_RET0()
+#define SAVE_REGS_1	SAVE_RET1(regs.r[1])
+#define SAVE_REGS_2	SAVE_RET2(regs.r[1], regs.r[2])
+#define SAVE_REGS_3	SAVE_RET3(regs.r[1], regs.r[2], regs.r[3])
+#define SAVE_REGS_4	SAVE_RET4(regs.r[1], regs.r[2], regs.r[3], regs.r[4])
+
+@ 
+The macros [[EXEC]]$n(f,\emph{arg}_1,\dots,\emph{arg}_n)$ implement
+tail calls in leaf procedures. They assign the expressions
+$\emph{arg}_1$ to $\emph{arg}_n$ to the argument registers
+\texttt{regs.r[0]} to \texttt{regs.r[$n-1$]} and then jump to the
+entry point of function $f$. Note that these macros initialize the
+argument registers strictly from left to right and therefore
+\texttt{regs.r[$i$]} must not be used in an argument position that is
+loaded into register \texttt{regs.r[$j$]} when $i<j$.
+
+<<cam.h>>=
+#define EXEC0(f)		DO_EXEC(0,f,())
+#define EXEC1(f,x)		DO_EXEC(1,f,(x))
+#define EXEC2(f,x,y)		DO_EXEC(2,f,(x,y))
+#define EXEC3(f,x,y,z)		DO_EXEC(3,f,(x,y,z))
+#define EXEC4(f,x,y,z,t)	DO_EXEC(4,f,(x,y,z,t))
+
+#define DO_EXEC(n,f,args) do { \
+	DO_LOAD_REGS_##n args; \
+	GOTO(f);	       \
+    } while ( 0 )
+
+#define DO_LOAD_REGS_0()	/* empty */
+#define DO_LOAD_REGS_1(x)	DO_LOAD_REGS_0();      regs.r[0] = (x)
+#define DO_LOAD_REGS_2(x,y)	DO_LOAD_REGS_1(x);     regs.r[1] = (y)
+#define DO_LOAD_REGS_3(x,y,z)   DO_LOAD_REGS_2(x,y);   regs.r[2] = (z)
+#define DO_LOAD_REGS_4(x,y,z,t)	DO_LOAD_REGS_3(x,y,z); regs.r[3] = (t)
+
+@ 
+Two important special cases of [[EXEC1]] are implemented by the macros
+[[RET]] and [[ENT]]. [[RET(x)]] returns [[x]] and [[ENT(x)]] enters
+the evaluation method of [[x]]. Since both macros do not change the
+return address register, they are supposed to be used only in leaf
+procedures.
+
+<<cam.h>>=
+#define RET(x)			EXEC1(regs.ret, x)
+#define ENT(x)			EXEC1((x)->info->eval, x)
+
+@ 
+The macros [[CALL]]$n(f,k,\emph{arg}_1,\dots,\emph{arg}_n)$ implement
+recursive calls. Similar to the [[EXEC]]$n$ macros, they assign the
+expressions $\emph{arg}_1$ to $\emph{arg}_n$ to the argument
+registers \texttt{regs.r[0]} to \texttt{regs.r[$n-1$]} and jump to the
+entry point of function $f$. In addition, these macros also assign the
+return address $k$ to the return address register [[regs.ret]].
+
+<<cam.h>>=
+#define CALL0(f,k)		DO_CALL(0,f,k,())
+#define CALL1(f,k,x)		DO_CALL(1,f,k,(x))
+#define CALL2(f,k,x,y)		DO_CALL(2,f,k,(x,y))
+#define CALL3(f,k,x,y,z)	DO_CALL(3,f,k,(x,y,z))
+#define CALL4(f,k,x,y,z,t)	DO_CALL(4,f,k,(x,y,z,t))
+
+#define DO_CALL(n,f,k,args) do { \
+	DO_LOAD_REGS_##n args;	 \
+	regs.ret = k;		 \
+	GOTO(f);		 \
+    } while ( 0 )
+
+@ 
+An important special case of [[CALL1]] is implemented by the macro
+[[CALL_ENT(x,k)]], which calls the evaluation method of [[x]] such that
+execution continues at address [[k]] after the node has been
+evaluated.
+
+<<cam.h>>=
+#define CALL_ENT(x,k)		CALL1((x)->info->eval, k, x)
+
+@ 
+The macros [[CALL_RET]]$n(f,m,\emph{arg}_1,\dots,\emph{arg}_n)$
+implement tail calls in non-leaf procedures. They assign the
+expressions $\emph{arg}_1$ to $\emph{arg}_n$ to the argument registers
+\texttt{regs.r[0]} to \texttt{regs.[$n-1$]}, restore [[regs.ret]] from
+the stack, drop $m$ values from the stack, and then jump to the entry
+point of function $f$. Note that even though [[CALL_RET]]$n$ drops the
+current stack frame, it is safe to use \texttt{regs.sp[$i$]} in an
+argument expression.
+
+<<cam.h>>=
+#define CALL_RET0(f,m)		DO_CALL_RET(0,f,m,())
+#define CALL_RET1(f,m,x)	DO_CALL_RET(1,f,m,(x))
+#define CALL_RET2(f,m,x,y)	DO_CALL_RET(2,f,m,(x,y))
+#define CALL_RET3(f,m,x,y,z)	DO_CALL_RET(3,f,m,(x,y,z))
+#define CALL_RET4(f,m,x,y,z,t)	DO_CALL_RET(4,f,m,(x,y,z,t))
+
+#define DO_CALL_RET(n,f,m,args) do {  \
+	DO_LOAD_REGS_##n args;	      \
+	regs.ret = (Label)regs.sp[m]; \
+	regs.sp += m + 1;	      \
+	GOTO(f);		      \
+    } while ( 0 )
+
+@
+The macros [[RETURN]] and [[ENTER]] implement two special cases of
+[[CALL_RET1]]. [[RETURN(x,n)]] returns [[x]] and [[ENTER(x,n)]] jumps
+to the evaluation method of [[x]]. Both functions restore their return
+address from the stack and drop [[n]] values from the stack.
+
+<<cam.h>>=
+#define RETURN(x,n) do {		 \
+	Label _ret_ = (Label)regs.sp[n]; \
+	regs.r[0]   = (x);		 \
+	regs.sp	   += n + 1;		 \
+	GOTO(_ret_);			 \
+    } while ( 0 )
+
+#define ENTER(x,n) do {			\
+	Node *node = (x);		\
+	regs.r[0]  = node;		\
+	regs.ret   = (Label)regs.sp[n]; \
+	regs.sp	  += n + 1;		\
+	GOTO(node->info->eval);		\
+    } while ( 0 )
+
+@ 
+The macros [[EVAL]] and [[EVAL_BOXED]] evaluate the node in argument
+register \texttt{regs.r[0]} and continue execution at the specified
+label after the node is evaluated to head normal form.
+
+<<cam.h>>=
+#define EVAL(l) do {							\
     for (;;) {								\
-	if ( is_boxed(regs.sp[0]) )					\
-	    switch ( regs.sp[0]->info->kind ) {				\
-	    case INDIR_KIND: regs.sp[0] = regs.sp[0]->n.node; continue;	\
-	    case LAZY_KIND:						\
-		CHECK_STACK1(); regs.sp -= 1;				\
-		regs.sp[0] = regs.sp[1]; regs.sp[1] = (Node *)(l);	\
-		GOTO(regs.sp[0]->info->eval);				\
+	if ( is_boxed(regs.r[0]) )					\
+	    switch ( regs.r[0]->info->kind ) {				\
+	    case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue;	\
+	    case LAZY_KIND: regs.ret = (l); GOTO(regs.r[0]->info->eval); \
 	    }								\
 	break;								\
     }									\
     GOTO(l);								\
 } while ( 0 )
 
-#define EVAL_BOXED(l) do {					    \
-    for (;;) {							    \
-	switch ( regs.sp[0]->info->kind ) {			    \
-	case INDIR_KIND: regs.sp[0] = regs.sp[0]->n.node; continue; \
-	case LAZY_KIND:						    \
-	    CHECK_STACK1(); regs.sp -= 1;			    \
-	    regs.sp[0] = regs.sp[1]; regs.sp[1] = (Node *)(l);	    \
-	    GOTO(regs.sp[0]->info->eval);			    \
-	}							    \
-	break;							    \
-    }								    \
-    GOTO(l);							    \
+#define EVAL_BOXED(l) do {					     \
+    for (;;) {							     \
+	switch ( regs.r[0]->info->kind ) {			     \
+	case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue;    \
+	case LAZY_KIND: regs.ret = (l); GOTO(regs.r[0]->info->eval); \
+	}							     \
+	break;							     \
+    }								     \
+    GOTO(l);							     \
 } while ( 0 )
 
 @ 
-The macro [[SWAPn]] exchanges the nodes at the top of the stack and at
-offset $n$. This is useful for functions with two or more arguments
-that must be evaluated.
+The macro [[SWAPn]] exchanges the nodes in argument register
+\texttt{regs.r[0]} and at offset $n$ in the stack. This is useful for
+functions with two or more arguments that must be evaluated.
 
 <<cam.h>>=
 #define SWAPn(n) do {		 \
-	Node *aux  = regs.sp[0]; \
-	regs.sp[0] = regs.sp[n]; \
+	Node *aux  = regs.r[0];	 \
+	regs.r[0]  = regs.sp[n]; \
 	regs.sp[n] = aux;	 \
     } while ( 0 )
 
@@ -86,28 +208,24 @@ The [[FAIL]] macro invokes the current failure handler.
 #define FAIL() GOTO(regs.handlers->fail)
 
 @
-The following macros implement (kind) matching of the node on the top
-of the stack, which is expected to be in head normal form already.
-[[MATCH_RIGID_INT]] and [[MATCH_RIGID]] carefully check for unboxed
-values while the other macros assume that the node on the top of the
-stack is always boxed. The argument of all macros is the label where
-execution is resumed after an unbound variable has been instantiated.
-In general this is the entry point of the function that uses the
-[[MATCH]] macro.
+The following macros implement (kind) matching of the node in argument
+register \texttt{regs.r[0]}, which is expected to be in head normal
+form already. [[MATCH_RIGID_INT]] and [[MATCH_RIGID]] carefully check
+for unboxed values while the other macros assume that the node is
+always boxed. The argument of all macros is the label where execution
+is resumed after an unbound variable has been instantiated. In general
+this is the entry point of the function that uses the [[MATCH]] macro.
 
 <<cam.h>>=
-#define MATCH_RIGID_BOXED(what, l)				    \
-    for (;;) {							    \
-	switch ( regs.sp[0]->info->kind ) {			    \
-	case INDIR_KIND: regs.sp[0] = regs.sp[0]->n.node; continue; \
-	case LVAR_KIND:						    \
-	    CHECK_STACK1(); regs.sp -= 1;			    \
-	    regs.sp[0] = regs.sp[1]; regs.sp[1] = (Node *)(l);	    \
-	    GOTO(sync_var);					    \
-	case what##_KIND: break;				    \
-	default: invalid_arg(#l, regs.sp[0]->info->kind);	    \
-	}							    \
-	break;							    \
+#define MATCH_RIGID_BOXED(what, l)				  \
+    for (;;) {							  \
+	switch ( regs.r[0]->info->kind ) {			  \
+	case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue; \
+	case LVAR_KIND: regs.ret = (l); GOTO(sync_var);		  \
+	case what##_KIND: break;				  \
+	default: invalid_arg(#l, regs.r[0]->info->kind);	  \
+	}							  \
+	break;							  \
     }
 
 #define MATCH_RIGID_CHAR(l)		MATCH_RIGID_BOXED(CHAR, l)
@@ -119,30 +237,24 @@ In general this is the entry point of the function that uses the
 #define MATCH_RIGID_VECTOR(l)		MATCH_RIGID_BOXED(VECTOR, l)
 #define MATCH_RIGID_ABSTRACT(l)		MATCH_RIGID_BOXED(ABSTRACT, l)
 
-#define MATCH_RIGID_INT(l)						\
-    for (;;) {								\
-	if ( is_boxed(regs.sp[0]) )					\
-	    switch ( regs.sp[0]->info->kind ) {				\
-	    case INDIR_KIND: regs.sp[0] = regs.sp[0]->n.node; continue;	\
-	    case LVAR_KIND:						\
-		CHECK_STACK1(); regs.sp -= 1;				\
-		regs.sp[0] = regs.sp[1]; regs.sp[1] = (Node *)(l);	\
-		GOTO(sync_var);						\
-	    case INT_KIND: break;					\
-	    default: invalid_arg(#l, regs.sp[0]->info->kind);		\
-	    }								\
-	break;								\
+#define MATCH_RIGID_INT(l)					      \
+    for (;;) {							      \
+	if ( is_boxed(regs.r[0]) )				      \
+	    switch ( regs.r[0]->info->kind ) {			      \
+	    case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue; \
+	    case LVAR_KIND: regs.ret = (l); GOTO(sync_var);	      \
+	    case INT_KIND: break;				      \
+	    default: invalid_arg(#l, regs.r[0]->info->kind);	      \
+	    }							      \
+	break;							      \
     }
 
-#define MATCH_RIGID(l)							\
-    for (;;) {								\
-	if ( is_boxed(regs.sp[0]) )					\
-	    switch ( regs.sp[0]->info->kind ) {				\
-	    case INDIR_KIND: regs.sp[0] = regs.sp[0]->n.node; continue;	\
-	    case LVAR_KIND:						\
-		CHECK_STACK1(); regs.sp -= 1;				\
-		regs.sp[0] = regs.sp[1]; regs.sp[1] = (Node *)(l);	\
-		GOTO(sync_var);						\
-	    }								\
-	break;								\
+#define MATCH_RIGID(l)						      \
+    for (;;) {							      \
+	if ( is_boxed(regs.r[0]) )				      \
+	    switch ( regs.r[0]->info->kind ) {			      \
+	    case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue; \
+	    case LVAR_KIND: regs.ret = (l); GOTO(sync_var);	      \
+	    }							      \
+	break;							      \
     }

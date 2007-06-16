@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2269 2007-06-16 14:57:15Z wlux $
+% $Id: show.nw 2271 2007-06-16 16:30:52Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -98,22 +98,19 @@ FUNCTION(eval_lazy_3)
     Label entry;
  ENTRY_LABEL(static, eval_lazy_3)
     /* suspend the search if the node is not local */
-    if ( !is_local_space(regs.sp[0]->s.spc) )
-	suspend_search(resume, regs.sp[0], regs.sp[0]->s.spc);
+    if ( !is_local_space(regs.r[0]->s.spc) )
+	suspend_search(1, regs.r[0]->s.spc);
 
     /* get the arguments */
-    susp  = regs.sp[0];
+    susp  = regs.r[0];
     entry = susp->info->entry;
     x	  = susp->s.args[0];
     y	  = susp->s.args[1];
     z	  = susp->s.args[2];
 
     /* create an indirection if there is an update frame immediately above */
-    if ( (Label)regs.sp[1] == update )
+    if ( regs.ret == update )
     {
-	CHECK_STACK(2);
-	regs.sp -= 2;
-
 #if !COPY_SEARCH_SPACE
 	if ( (word *)susp < regs.hlim )
 	{
@@ -123,16 +120,15 @@ FUNCTION(eval_lazy_3)
 	else
 #endif
 	    susp->info = &indir_info;
-	assert(is_queueMe_node(regs.sp[4]));
-	susp->n.node = regs.sp[4];
+	assert(is_queueMe_node(regs.sp[0]));
+	susp->n.node = regs.sp[0];
     }
 
     /* otherwise, lock the application node and create an update frame */
     else
     {
-	CHECK_STACK(4);
-	regs.sp   -= 4;
-	regs.sp[3] = (Node *)update;
+	SAVE_RET1(susp);
+	regs.ret = update;
 
 #if !COPY_SEARCH_SPACE
 	if ( (word *)susp < regs.hlim )
@@ -147,10 +143,7 @@ FUNCTION(eval_lazy_3)
     }
 
     /* enter the callee */
-    regs.sp[0] = x;
-    regs.sp[1] = y;
-    regs.sp[2] = z;
-    GOTO(entry);
+    EXEC3(entry, x, y, z);
 }
 
 static
@@ -160,11 +153,11 @@ FUNCTION(eval_lazy_4)
     Label entry;
  ENTRY_LABEL(static, eval_lazy_4)
     /* suspend the search if the node is not local */
-    if ( !is_local_space(regs.sp[0]->s.spc) )
-	suspend_search(resume, regs.sp[0], regs.sp[0]->s.spc);
+    if ( !is_local_space(regs.r[0]->s.spc) )
+	suspend_search(1, regs.r[0]->s.spc);
 
     /* get the arguments */
-    susp  = regs.sp[0];
+    susp  = regs.r[0];
     entry = susp->info->entry;
     x	  = susp->s.args[0];
     y	  = susp->s.args[1];
@@ -172,11 +165,8 @@ FUNCTION(eval_lazy_4)
     t	  = susp->s.args[3];
 
     /* create an indirection if there is an update frame immediately above */
-    if ( (Label)regs.sp[1] == update )
+    if ( regs.ret == update )
     {
-	CHECK_STACK(3);
-	regs.sp -= 3;
-
 #if !COPY_SEARCH_SPACE
 	if ( (word *)susp < regs.hlim )
 	{
@@ -186,16 +176,15 @@ FUNCTION(eval_lazy_4)
 	else
 #endif
 	    susp->info = &indir_info;
-	assert(is_queueMe_node(regs.sp[5]));
-	susp->n.node = regs.sp[5];
+	assert(is_queueMe_node(regs.sp[0]));
+	susp->n.node = regs.sp[0];
     }
 
     /* otherwise, lock the application node and create an update frame */
     else
     {
-	CHECK_STACK(5);
-	regs.sp   -= 5;
-	regs.sp[4] = (Node *)update;
+	SAVE_RET1(susp);
+	regs.ret = update;
 
 #if !COPY_SEARCH_SPACE
 	if ( (word *)susp < regs.hlim )
@@ -210,11 +199,7 @@ FUNCTION(eval_lazy_4)
     }
 
     /* enter the callee */
-    regs.sp[0] = x;
-    regs.sp[1] = y;
-    regs.sp[2] = z;
-    regs.sp[3] = t;
-    GOTO(entry);
+    EXEC4(entry, x, y, z, t);
 }
 
 @
@@ -231,24 +216,18 @@ position, which is the way \texttt{dvals} is used by the debugger.
 <<show.c>>=
 FUNCTION(__shows)
 {
+    Node *tail;
  ENTRY_LABEL(extern, __shows)
-    CHECK_STACK(2);
-    regs.sp   -= 2;
-    regs.sp[0] = regs.sp[2];
-    regs.sp[1] = zero;
-    regs.sp[2] = one;
-    GOTO(showp);
+    tail = regs.r[1];
+    EXEC4(showp, regs.r[0], zero, one, tail);
 }
 
 FUNCTION(__dvals)
 {
+    Node *tail;
  ENTRY_LABEL(extern, __dvals)
-    CHECK_STACK(2);
-    regs.sp   -= 2;
-    regs.sp[0] = regs.sp[2];
-    regs.sp[1] = two;
-    regs.sp[2] = zero;
-    GOTO(showp);
+    tail = regs.r[1];
+    EXEC4(showp, regs.r[0], two, zero, tail);
 }
 
 @
@@ -264,7 +243,8 @@ FUNCTION(showp)
 {
  ENTRY_LABEL(static, showp)
     TRACE_FUN("showp", 4);
-    if ( regs.sp[2] == zero )
+    SAVE_REGS(3);
+    if ( regs.r[2] == zero )
 	GOTO(showp_1);
     EVAL(showp_1);
 }
@@ -283,9 +263,10 @@ FUNCTION(showp_1)
 
     str	  = buf;
     argc  = 0;
-    node  = regs.sp[0];
-    prec  = regs.sp[1];
-    show  = regs.sp[2];
+    node  = regs.r[0];
+    prec  = regs.sp[0];
+    show  = regs.sp[1];
+    tail  = regs.sp[2];
     isop  = false;
     isneg = false;
 
@@ -310,13 +291,7 @@ FUNCTION(showp_1)
 
 	case LVAR_KIND:
 	    if ( show != zero )
-	    {
-		CHECK_STACK1();
-		regs.sp   -= 1;
-		regs.sp[0] = node;
-		regs.sp[1] = (Node *)showp_1;
-		GOTO(sync_var);
-	    }
+		CALL1(sync_var, showp_1, node);
 	    str = lookup_name(node);
 	    break;
 
@@ -348,10 +323,7 @@ FUNCTION(showp_1)
 
 	case VECTOR_KIND:
 	    if ( is_tuple(node->info) )
-	    {
-		*++regs.sp = node;
-		GOTO(showTuple);
-	    }
+		CALL_RET3(showTuple, 3, node, show, tail);
 	    else
 	    {
 		str  = node->info->cname;
@@ -374,16 +346,10 @@ FUNCTION(showp_1)
 
 	case CAPP_KIND:
 	    if ( node->info == (NodeInfo *)&cons_info )
-	    {
-		regs.sp[0] = node->c.args[0];
-		regs.sp[1] = node->c.args[1];
-		GOTO(showList);
-	    }
+		CALL_RET4(showList, 3, node->c.args[0], node->c.args[1],
+			  show, tail);
 	    else if ( is_tuple(node->info) )
-	    {
-		*++regs.sp = node;
-		GOTO(showTuple);
-	    }
+		CALL_RET3(showTuple, 3, node, show, tail);
 	    else
 	    {
 		str  = node->info->cname;
@@ -397,17 +363,14 @@ FUNCTION(showp_1)
 	}
 
     if ( isop && argc == 2 )
-    {
-	regs.sp[0] = node;
-	GOTO(showInfix);
-    }
+	CALL_RET4(showInfix, 3, node, prec, show, tail);
 
-    regs.sp[0] = node;
-    CHECK_HEAP((argc + 1) * cons_node_size + suspend_node_size(4));
-    node = regs.sp[0];
-    prec = regs.sp[1];
-    show = regs.sp[2];
-    tail = regs.sp[3];
+    regs.r[0] = node;
+    CHECK_HEAP(1, (argc + 1) * cons_node_size + suspend_node_size(4));
+    node = regs.r[0];
+    prec = regs.sp[0];
+    show = regs.sp[1];
+    tail = regs.sp[2];
 
     if ( argc > 0 )
     {
@@ -446,12 +409,11 @@ FUNCTION(showp_1)
 	tail = cons;
     }
 
-    regs.sp[0] = prefix_string(str, tail);
+    regs.r[0] = prefix_string(0, str, tail);
 
-    CHECK_HEAP(2*cons_node_size);
-    cons     = regs.sp[0];
-    prec     = regs.sp[1];
-    regs.sp += 4;
+    CHECK_HEAP(1, 2*cons_node_size);
+    cons = regs.r[0];
+    prec = regs.sp[0];
     if ( isop || (isneg && long_val(prec) > 0) )
     {
 	tail		= cons;
@@ -471,7 +433,7 @@ FUNCTION(showp_1)
 	regs.hp	       += cons_node_size;
     }
 
-    RETURN(cons);
+    RETURN(cons, 3);
 }
 
 @
@@ -487,12 +449,11 @@ FUNCTION(showArgs)
  ENTRY_LABEL(static, showArgs)
     TRACE_FUN("showArgs", 4);
 
-    CHECK_HEAP(2 * suspend_node_size(4) + cons_node_size);
-    arglist  = regs.sp[0];
-    prec     = regs.sp[1];
-    show     = regs.sp[2];
-    tail     = regs.sp[3];
-    regs.sp += 4;
+    CHECK_HEAP(4, 2 * suspend_node_size(4) + cons_node_size);
+    arglist = regs.r[0];
+    prec    = regs.r[1];
+    show    = regs.r[2];
+    tail    = regs.r[3];
 
     if ( arglist->info->tag == NIL_TAG )
     {
@@ -505,10 +466,7 @@ FUNCTION(showArgs)
 	    regs.hp	   += cons_node_size;
 	}
 	else
-	{
-	    *--regs.sp = tail;
-	    GOTO(tail->info->eval);
-	}
+	    ENT(tail);
     }
     else
     {
@@ -539,7 +497,7 @@ FUNCTION(showArgs)
 	regs.hp	       += cons_node_size;
     }
 
-    RETURN(cons);
+    RET(cons);
 }
 
 @
@@ -556,11 +514,11 @@ FUNCTION(showInfix)
     long prec;
     Node *node, *tail, *show, *cons, *susp;
  ENTRY_LABEL(static, showInfix)
-    CHECK_HEAP(2 * cons_node_size + suspend_node_size(4));
-    node = regs.sp[0];
-    prec = long_val(regs.sp[1]);
-    show = regs.sp[2];
-    tail = regs.sp[3];
+    CHECK_HEAP(4, 2 * cons_node_size + suspend_node_size(4));
+    node = regs.r[0];
+    prec = long_val(regs.r[1]);
+    show = regs.r[2];
+    tail = regs.r[3];
 
     if ( prec > 0 )
     {
@@ -588,13 +546,13 @@ FUNCTION(showInfix)
     cons->c.args[1] = susp;
     regs.hp	   += cons_node_size;
 
-    regs.sp[0] = node->c.args[0];
-    regs.sp[3] = prefix_string(node->info->cname, cons);
+    regs.r[0] = node->c.args[0];
+    regs.r[3] = prefix_string(3, node->info->cname, cons);
 
-    CHECK_HEAP(2 * cons_node_size + suspend_node_size(4));
-    node = regs.sp[0];
-    show = regs.sp[2];
-    tail = regs.sp[3];
+    CHECK_HEAP(4, 2 * cons_node_size + suspend_node_size(4));
+    node = regs.r[0];
+    show = regs.r[2];
+    tail = regs.r[3];
 
     cons	    = (Node *)regs.hp;
     cons->info	    = &cons_info;
@@ -619,13 +577,10 @@ FUNCTION(showInfix)
 	cons->c.args[1] = susp;
 	regs.hp	       += cons_node_size;
 
-	regs.sp += 4;
-	RETURN(cons);
+	RET(cons);
     }
 
-    regs.sp[1] = one;
-    regs.sp[3] = cons;
-    GOTO(showp);
+    EXEC4(showp, regs.r[0], one, regs.r[2], cons);
 }
 
 @
@@ -642,14 +597,13 @@ FUNCTION(showTuple)
     unsigned int i, argc;
     Node	 *tuple, *susp, *cons, *tail, *arglist, **argp, *show;
  ENTRY_LABEL(static, showTuple)
-    argc = is_vector_node(regs.sp[0]) ? vector_argc(regs.sp[0])
-				      : closure_argc(regs.sp[0]);
-    CHECK_HEAP(argc * cons_node_size + suspend_node_size(3)
-	       + suspend_node_size(4));
-    tuple    = regs.sp[0];
-    show     = regs.sp[1];
-    tail     = regs.sp[2];
-    regs.sp += 3;
+    argc = is_vector_node(regs.r[0]) ? vector_argc(regs.r[0])
+				     : closure_argc(regs.r[0]);
+    CHECK_HEAP(3, argc * cons_node_size + suspend_node_size(3)
+	           + suspend_node_size(4));
+    tuple = regs.r[0];
+    show  = regs.r[1];
+    tail  = regs.r[2];
 
     argp    = is_vector_node(tuple) ? tuple->a.args : tuple->c.args;
     argp   += argc;
@@ -693,7 +647,7 @@ FUNCTION(showTuple)
     cons->c.args[1] = susp;
     regs.hp	   += cons_node_size;
 
-    RETURN(cons);
+    RET(cons);
 }
 
 static
@@ -703,11 +657,10 @@ FUNCTION(showTupleArgs)
  ENTRY_LABEL(static, showTupleArgs)
     TRACE_FUN("showTupleArgs", 3);
 
-    CHECK_HEAP(suspend_node_size(3) + suspend_node_size(4) + cons_node_size);
-    arglist  = regs.sp[0];
-    show     = regs.sp[1];
-    tail     = regs.sp[2];
-    regs.sp += 3;
+    CHECK_HEAP(3, suspend_node_size(3) + suspend_node_size(4) + cons_node_size);
+    arglist = regs.r[0];
+    show    = regs.r[1];
+    tail    = regs.r[2];
 
     if ( arglist->info->tag == NIL_TAG )
     {
@@ -745,7 +698,7 @@ FUNCTION(showTupleArgs)
 	regs.hp	       += cons_node_size;
     }
 
-    RETURN(cons);
+    RET(cons);
 }
 
 @
@@ -803,7 +756,8 @@ static
 FUNCTION(showList)
 {
  ENTRY_LABEL(static, showList)
-    if ( regs.sp[2] == zero )
+    SAVE_REGS(3);
+    if ( regs.r[2] == zero )
 	GOTO(showList_1);
     EVAL(showList_1);
 }
@@ -813,8 +767,8 @@ FUNCTION(showList_1)
 {
     Node *hd, *tl, *susp, *susp2, *cons, *tail, *show;
  ENTRY_LABEL(static, showList_1)
-    hd	 = regs.sp[0];
-    show = regs.sp[2];
+    hd	 = regs.r[0];
+    show = regs.sp[1];
     for (;;)
     {
 	if ( is_boxed(hd) )
@@ -825,24 +779,17 @@ FUNCTION(showList_1)
 		continue;
 	    case LVAR_KIND:
 		if ( show != zero )
-		{
-		    CHECK_STACK1();
-		    regs.sp   -= 1;
-		    regs.sp[0] = hd;
-		    regs.sp[1] = (Node *)showList_1;
-		    GOTO(sync_var);
-		}
+		    CALL1(sync_var, showList_1, hd);
 		break;
 	    case CHAR_KIND:
-		if ( show != zero || is_string(regs.sp[1]) )
+		if ( show != zero || is_string(regs.sp[0]) )
 		{
-		    regs.sp[0] = hd;
-		    CHECK_HEAP(suspend_node_size(3) + 2 * cons_node_size);
+		    regs.r[0] = hd;
+		    CHECK_HEAP(1, suspend_node_size(3) + 2 * cons_node_size);
 
-		    hd       = regs.sp[0];
-		    tl       = regs.sp[1];
-		    tail     = regs.sp[3];
-		    regs.sp += 4;
+		    hd   = regs.r[0];
+		    tl   = regs.sp[0];
+		    tail = regs.sp[2];
 
 		    cons	    = (Node *)regs.hp;
 		    cons->info	    = &cons_info;
@@ -864,20 +811,19 @@ FUNCTION(showList_1)
 		    cons->c.args[1] = susp;
 		    regs.hp	   += cons_node_size;
 
-		    RETURN(cons);
+		    RETURN(cons, 3);
 		}
 		break;
 	    }
 	break;
     }
-    regs.sp[0] = hd;
+    regs.r[0] = hd;
 
-    CHECK_HEAP(suspend_node_size(3) + suspend_node_size(4) + cons_node_size);
-    hd       = regs.sp[0];
-    tl	     = regs.sp[1];
-    show     = regs.sp[2];
-    tail     = regs.sp[3];
-    regs.sp += 4;
+    CHECK_HEAP(1, suspend_node_size(3) + suspend_node_size(4) + cons_node_size);
+    hd   = regs.r[0];
+    tl	 = regs.sp[0];
+    show = regs.sp[1];
+    tail = regs.sp[2];
 
     susp	    = (Node *)regs.hp;
     susp->info	    = showTail_lazy_info_table;
@@ -902,7 +848,7 @@ FUNCTION(showList_1)
     cons->c.args[1] = susp2;
     regs.hp	   += cons_node_size;
 
-    RETURN(cons);
+    RETURN(cons, 3);
 }
 
 static
@@ -910,7 +856,8 @@ FUNCTION(showTail)
 {
  ENTRY_LABEL(static, showTail)
     TRACE_FUN("showTail", 3);
-    if ( regs.sp[1] == zero )
+    SAVE_REGS(2);
+    if ( regs.r[1] == zero )
 	GOTO(showTail_1);
     EVAL_BOXED(showTail_1);
 }
@@ -920,8 +867,8 @@ FUNCTION(showTail_1)
 {
     Node *list, *susp, *susp2, *cons, *tail, *show;
  ENTRY_LABEL(static, showTail_1)
-    list = regs.sp[0];
-    show = regs.sp[1];
+    list = regs.r[0];
+    show = regs.sp[0];
  again:
     switch ( node_kind(list) )
     {
@@ -931,21 +878,14 @@ FUNCTION(showTail_1)
 
     case LVAR_KIND:
 	if ( show != zero )
-	{
-	    CHECK_STACK1();
-	    regs.sp   -= 1;
-	    regs.sp[0] = list;
-	    regs.sp[1] = (Node *)showTail_1;
-	    GOTO(sync_var);
-	}
+	    CALL1(sync_var, showTail_1, list);
 	/* FALL THROUGH!!! */
     case LAZY_KIND:
-	regs.sp[0] = list;
-	CHECK_HEAP(suspend_node_size(4) + 2 * cons_node_size);
-	list 	 = regs.sp[0];
-	show 	 = regs.sp[1];
-	tail 	 = regs.sp[2];
-	regs.sp += 3;
+	regs.r[0] = list;
+	CHECK_HEAP(1, suspend_node_size(4) + 2 * cons_node_size);
+	list = regs.r[0];
+	show = regs.sp[0];
+	tail = regs.sp[1];
 
 	cons		= (Node *)regs.hp;
 	cons->info	= &cons_info;
@@ -973,9 +913,8 @@ FUNCTION(showTail_1)
 	switch ( node_tag(list) )
 	{
 	case NIL_TAG:
-	    CHECK_HEAP(cons_node_size);
-	    tail     = regs.sp[2];
-	    regs.sp += 3;
+	    CHECK_HEAP(0, cons_node_size);
+	    tail = regs.sp[1];
 
 	    cons	    = (Node *)regs.hp;
 	    cons->info	    = &cons_info;
@@ -985,13 +924,12 @@ FUNCTION(showTail_1)
 	    break;
 
 	case CONS_TAG:
-	    regs.sp[0] = list;
-	    CHECK_HEAP(suspend_node_size(3) + suspend_node_size(4)
-		       + cons_node_size);
-	    list     = regs.sp[0];
-	    show     = regs.sp[1];
-	    tail     = regs.sp[2];
-	    regs.sp += 3;
+	    regs.r[0] = list;
+	    CHECK_HEAP(1, suspend_node_size(3) + suspend_node_size(4)
+		           + cons_node_size);
+	    list = regs.r[0];
+	    show = regs.sp[0];
+	    tail = regs.sp[1];
 
 	    susp	    = (Node *)regs.hp;
 	    susp->info	    = showTail_lazy_info_table;
@@ -1026,7 +964,7 @@ FUNCTION(showTail_1)
 	invalid_arg("showTail", node_kind(list));
     }
 
-    RETURN(cons);
+    RETURN(cons, 2);
 }
 
 @ 
@@ -1039,6 +977,7 @@ static
 FUNCTION(showString)
 {
  ENTRY_LABEL(static, showString)
+    SAVE_REGS(3);
     EVAL_BOXED(showString_1);
 }
 
@@ -1046,16 +985,15 @@ static
 FUNCTION(showString_1)
 {
     char buf[10];
-    Node *hd, *tl, *prev, *tail, *susp, *cons;
+    Node *hd, *tl, *prev, *tail, *susp;
  ENTRY_LABEL(static, showString_1)
     MATCH_RIGID_CHAR(showString_1);
-    CHECK_HEAP(suspend_node_size(3));
+    CHECK_HEAP(1, suspend_node_size(3));
 
-    hd	     = regs.sp[0];
-    tl	     = regs.sp[1];
-    prev     = regs.sp[2];
-    tail     = regs.sp[3];
-    regs.sp += 4;
+    hd	 = regs.r[0];
+    tl	 = regs.sp[0];
+    prev = regs.sp[1];
+    tail = regs.sp[2];
 
     susp	    = (Node *)regs.hp;
     susp->info	    = showStringTail_lazy_info_table;
@@ -1065,14 +1003,15 @@ FUNCTION(showString_1)
     susp->s.args[2] = tail;
     regs.hp	   += suspend_node_size(3);
 
-    cons = prefix_string(lit_char(buf, prev->ch.ch, hd->ch.ch, '"'), susp);
-    RETURN(cons);
+    RETURN(prefix_string(0, lit_char(buf, prev->ch.ch, hd->ch.ch, '"'), susp),
+	   3);
 }
 
 static
 FUNCTION(showStringTail)
 {
  ENTRY_LABEL(static, showStringTail)
+    SAVE_REGS(2);
     EVAL_BOXED(showStringTail_1);
 }
 
@@ -1083,26 +1022,23 @@ FUNCTION(showStringTail_1)
  ENTRY_LABEL(static, showStringTail_1)
     MATCH_RIGID_DATA(showStringTail_1);
 
-    if ( regs.sp[0] == nil )
+    cons = regs.r[0];
+    if ( cons == nil )
     {
-	CHECK_HEAP(cons_node_size);
+	CHECK_HEAP(0, cons_node_size);
 
 	cons		= (Node *)regs.hp;
 	cons->info	= &cons_info;
 	cons->c.args[0] = dblquote;
-	cons->c.args[1] = regs.sp[2];
+	cons->c.args[1] = regs.sp[1];
 	regs.hp	       += cons_node_size;
 
-	regs.sp += 3;
-	RETURN(cons);
+	RETURN(cons, 2);
     }
 
-    ASSERT(regs.sp[0]->info == &cons_info);
-    CHECK_STACK1();
-    regs.sp   -= 1;
-    regs.sp[0] = regs.sp[1]->c.args[0];
-    regs.sp[1] = regs.sp[1]->c.args[1];
-    GOTO(showString);
+    ASSERT(cons->info == &cons_info);
+    CALL_RET4(showString, 2, cons->c.args[0], cons->c.args[1],
+	      regs.sp[0], regs.sp[1]);
 }
 
 @
@@ -1125,6 +1061,7 @@ DECLARE_LABEL(static, __showFFloat_2);
 FUNCTION(__showEFloat)
 {
  ENTRY_LABEL(extern, __showEFloat)
+    SAVE_REGS(2);
     EVAL(__showEFloat_1);
 }
 
@@ -1133,7 +1070,7 @@ FUNCTION(__showEFloat_1)
 {
  ENTRY_LABEL(static, __showEFloat_1)
     MATCH_RIGID_INT(__showEFloat_1);
-    SWAPn(1);
+    SWAPn(0);
     EVAL_BOXED(__showEFloat_2);
 }
 
@@ -1147,9 +1084,9 @@ FUNCTION(__showEFloat_2)
     Node       *str;
  ENTRY_LABEL(static, __showEFloat_2)
     MATCH_RIGID_FLOAT(__showEFloat_2);
-    get_double_val(d, regs.sp[0]);
-    p   = long_val(regs.sp[1]);
-    str = regs.sp[2];
+    get_double_val(d, regs.r[0]);
+    p   = long_val(regs.sp[0]);
+    str = regs.sp[1];
     if ( p >= 0 )
 	sprintf(fmt, "%%.%de", p);
     else
@@ -1163,15 +1100,15 @@ FUNCTION(__showEFloat_2)
     sprintf(buf, fmt, d);
     setlocale(LC_NUMERIC, loc);
 
-    regs.sp += 3;
-    str	     = prefix_string(buf, str);
+    str = prefix_string(0, buf, str);
     free(buf);
-    RETURN(str);
+    RETURN(str, 2);
 }
 
 FUNCTION(__showFFloat)
 {
  ENTRY_LABEL(extern, __showFFloat)
+    SAVE_REGS(2);
     EVAL(__showFFloat_1);
 }
 
@@ -1180,7 +1117,7 @@ FUNCTION(__showFFloat_1)
 {
  ENTRY_LABEL(static, __showFFloat_1)
     MATCH_RIGID_INT(__showFFloat_1);
-    SWAPn(1);
+    SWAPn(0);
     EVAL_BOXED(__showFFloat_2);
 }
 
@@ -1194,9 +1131,9 @@ FUNCTION(__showFFloat_2)
     Node       *str;
  ENTRY_LABEL(static, __showFFloat_2)
     MATCH_RIGID_FLOAT(__showFFloat_2);
-    get_double_val(d, regs.sp[0]);
-    p   = long_val(regs.sp[1]);
-    str = regs.sp[2];
+    get_double_val(d, regs.r[0]);
+    p   = long_val(regs.sp[0]);
+    str = regs.sp[1];
     if ( p >= 0 )
 	sprintf(fmt, "%%.%df", p);
     else
@@ -1214,10 +1151,9 @@ FUNCTION(__showFFloat_2)
     sprintf(buf, fmt, d);
     setlocale(LC_NUMERIC, loc);
 
-    regs.sp += 3;
-    str	     = prefix_string(buf, str);
+    str = prefix_string(0, buf, str);
     free(buf);
-    RETURN(str);
+    RETURN(str, 2);
 }
 
 @ 
@@ -1233,11 +1169,8 @@ DECLARE_LABEL(static, __convertToFloat_1);
 FUNCTION(__convertToFloat)
 {
  ENTRY_LABEL(extern, __convertToFloat)
-    CHECK_STACK(1);
-    regs.sp   -= 1;
-    regs.sp[0] = regs.sp[1];
-    regs.sp[1] = (Node *)__convertToFloat_1;
-    GOTO(nf_string);
+    SAVE_REGS(0);
+    CALL1(nf_string, __convertToFloat_1, regs.r[0]);
 }
 
 static
@@ -1249,7 +1182,7 @@ FUNCTION(__convertToFloat_1)
     Node       *s, *r;
  ENTRY_LABEL(static, __convertToFloat_1)
     /* drop leading zeros */
-    s = *regs.sp++;
+    s = regs.r[0];
     while ( is_indir_node(s) )
 	s = s->n.node;
     while ( s != nil )
@@ -1278,10 +1211,10 @@ FUNCTION(__convertToFloat_1)
 	d = 0;
 
     /* return a fresh number */
-    CHECK_HEAP(float_node_size);
+    CHECK_HEAP(0, float_node_size);
     r	    = (Node *)regs.hp;
     r->info = &float_info;
     put_double_val(r, d);
     regs.hp += float_node_size;
-    RETURN(r);
+    RETURN(r, 0);
 }

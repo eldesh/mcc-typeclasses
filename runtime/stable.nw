@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: stable.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: stable.nw 2271 2007-06-16 16:30:52Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -48,17 +48,16 @@ FUNCTION(__newStablePtr)
     sptr = (Node **)malloc(sizeof(Node *));
     if ( sptr == NULL )
 	sys_error("newStablePtr");
-    *sptr    = regs.sp[0];
-    regs.sp += 2;
+    *sptr = regs.r[0];
     add_global_root(sptr);
 
-    CHECK_HEAP(ptr_node_size);
+    CHECK_HEAP(0, ptr_node_size);
     ptr	       = (Node *)regs.hp;
     ptr->info  = &stabptr_info;
     ptr->p.ptr = sptr;
     regs.hp   += ptr_node_size;
 
-    RETURN(ptr);
+    RET(ptr);
 }
 
 @ 
@@ -80,6 +79,7 @@ DECLARE_LABEL(static, __deRefStablePtr_1);
 FUNCTION(__deRefStablePtr)
 {
  ENTRY_LABEL(extern, __deRefStablePtr)
+    SAVE_REGS(1);
     EVAL_BOXED(__deRefStablePtr_1);
 }
 
@@ -89,11 +89,10 @@ FUNCTION(__deRefStablePtr_1)
     Node **sptr;
  ENTRY_LABEL(static, __deRefStablePtr_1)
     MATCH_RIGID_PTR(__deRefStablePtr_1);
-    sptr = (Node **)regs.sp[0]->p.ptr;
+    sptr = (Node **)regs.r[0]->p.ptr;
     if ( *sptr == 0 )
 	fail_with("deRefStablePtr: value released by failed computation");
-    regs.sp += 2;
-    RETURN(*sptr);
+    RETURN(*sptr, 1);
 }
 
 @ 
@@ -107,6 +106,7 @@ DECLARE_LABEL(static, __freeStablePtr_1);
 FUNCTION(__freeStablePtr)
 {
  ENTRY_LABEL(extern, __freeStablePtr)
+    SAVE_REGS(1);
     EVAL_BOXED(__freeStablePtr_1);
 }
 
@@ -116,11 +116,10 @@ FUNCTION(__freeStablePtr_1)
     Node **sptr;
  ENTRY_LABEL(static, __freeStablePtr_1)
     MATCH_RIGID_PTR(__freeStablePtr_1);
-    sptr = (Node **)regs.sp[0]->p.ptr;
+    sptr = (Node **)regs.r[0]->p.ptr;
 
     remove_global_root(sptr);
     free(sptr);
 
-    regs.sp += 2;
-    RETURN(unit);
+    RETURN(unit, 1);
 }

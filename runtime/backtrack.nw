@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: backtrack.nw 2271 2007-06-16 16:30:52Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -98,7 +98,7 @@ FUNCTION(choices)
     regs.sp	 -= cp_sz;
     regs.ds_base -= cp_sz;
 #if COPY_SEARCH_SPACE
-    (void)copy_graph(0, 0);
+    (void)copy_graph(0, 0, 0);
     copy_goal_names();
 #endif
 
@@ -161,7 +161,7 @@ FUNCTION(fail)
 	memcpy(regs.sp, regs.sp + wordsof(Choicepoint) + stk_sz,
 	       stk_sz * word_size);
 #if COPY_SEARCH_SPACE
-	(void)copy_graph(0, 0);
+	(void)copy_graph(0, 0, 0);
 	copy_goal_names();
 #endif
 	TRACE(("%I retry\n"));
@@ -328,7 +328,7 @@ eval_apply(NodeInfo *goal_info, const char *fv_names[])
     assert(goal_info->kind == LAZY_KIND && goal_info->tag == NOUPD_TAG &&
 	   goal_info->length == closure_node_size(n + 1));
 
-    CHECK_HEAP(closure_node_size(n + 1) + (n + 1) * variable_node_size);
+    CHECK_HEAP(0, closure_node_size(n + 1) + (n + 1) * variable_node_size);
     vars = (struct variable_node *)regs.hp;
     for ( i = 0; i <= n; i++ )
     {
@@ -355,19 +355,7 @@ eval_apply(NodeInfo *goal_info, const char *fv_names[])
 static Node *
 eval_first(Node *goal)
 {
-    Node *susp;
-
-    CHECK_HEAP(queueMe_node_size);
-    susp	= (Node *)regs.hp;
-    susp->info	= queueMe_info_table;
-    susp->q.spc	= regs.ss;
-    susp->q.wq	= 0;
-    regs.hp    += queueMe_node_size;
-
-    regs.sp    = stack_end - 2;
-    regs.sp[0] = goal;
-    regs.sp[1] = susp;
-
+    regs.r[0] = goal;
     return do_eval(start);
 }
 
@@ -434,24 +422,26 @@ eval_continue(boolean *interactive)
 static
 FUNCTION(start)
 {
-    Node  *susp, *goal;
-    Label eval;
+    Node *susp;
  ENTRY_LABEL(static, start)
     regs.handlers = &global_handlers;
     TRACE(("start program\n"));
 
-    goal = regs.sp[0];
-    susp = regs.sp[1];
-    eval = goal->info->eval;
+    CHECK_HEAP(1, queueMe_node_size);
+    susp	= (Node *)regs.hp;
+    susp->info	= queueMe_info_table;
+    susp->q.spc	= regs.ss;
+    susp->q.wq	= 0;
+    regs.hp    += queueMe_node_size;
 
-    CHECK_STACK(4);
-    regs.sp   -= 4;
-    regs.sp[0] = goal;
-    regs.sp[1] = (Node *)update;
-    regs.sp[2] = susp;
-    regs.sp[3] = 0;
-    start_thread(4);
-    GOTO(eval);
+    regs.sp    = stack_end - 2;
+    regs.sp[0] = regs.r[0];
+    regs.sp[1] = susp;
+    regs.r[1]  = susp;
+    start_thread(2, 0);
+
+    SAVE_REGS(1);
+    CALL_ENT(regs.r[0], update);
 }
 
 static

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: trace.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: trace.nw 2271 2007-06-16 16:30:52Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -57,6 +57,7 @@ extern void trace_fun(const char *name, unsigned int arity);
 #include "threads.h"
 #include "eval.h"
 #include "cstring.h"
+#include "cam.h"
 #include "trace.h"
 
 #if 0
@@ -268,28 +269,18 @@ growing the stack unnecessarily.
 void
 trace_fun(const char *name, unsigned int arity)
 {
-    unsigned int i;
-
-    if ( regs.sp[arity] != (Node *)trace_return )
+    if ( regs.ret != trace_return )
     {
-	CHECK_STACK1();
-	regs.sp -= 1;
-	for ( i = 0; i < arity; i++ )
-	    regs.sp[i] = regs.sp[i+1];
-	regs.sp[arity] = (Node *)trace_return;
+	SAVE_REGS(0);
+	regs.ret = trace_return;
     }
-    trace("%Ienter %s%V\n", name, arity, regs.sp);
+    trace("%I enter %s%V\n", name, arity, regs.r);
 }
 
 static
 FUNCTION(trace_return)
 {
-    Node  *r;
-    Label ret_ip;
  ENTRY_LABEL(static, trace_return)
-    r = *regs.sp++;
-    trace("%I return %N\n", r);
-    ret_ip     = (Label)regs.sp[0];
-    regs.sp[0] = r;
-    GOTO(ret_ip);
+    trace("%I return %N\n", regs.r[0]);
+    RETURN(regs.r[0], 0);
 }

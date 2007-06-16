@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: gc_2space.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: gc_2space.nw 2271 2007-06-16 16:30:52Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -64,7 +64,7 @@ the runtime system would have to record -- at least -- all root spaces
 with cross segment [[active]] pointers, and the garbage collector
 would have to scan the trails of those spaces as well. See
 Sect.~\ref{sec:spaces} and in particular the to do note on
-page~\pageref{todo:lazy-spaces} for more details.
+p.~\pageref{todo:lazy-spaces} for more details.
 
 With respect to downward cross generation pointers, we make no special
 provision at all. By collecting heap segments in bottom up order,
@@ -183,7 +183,7 @@ collector.
 
 <<gc_2space.c>>=
 void
-collect(unsigned int request)
+collect(unsigned int n_regs, unsigned int request)
 {
     unsigned int     i, j, len;
     word	     *hlim, *aux;
@@ -348,6 +348,7 @@ tlim = cp->btTp;
 <<Compact the current trail segment>>
 #endif
 <<Collect the external roots>>
+<<Collect the argument registers>>
 <<Collect the current stack segment>>
 cp->btRq  = (ThreadQueue)GC_copy(&copy, hlim, (Node *)cp->btRq);
 cp->btSpc = (SearchSpace *)GC_copy(&copy, hlim, (Node *)cp->btSpc);
@@ -375,6 +376,7 @@ tlim = regs.tp;
 <<Compact the current trail segment>>
 #endif
 <<Collect the external roots>>
+<<Collect the argument registers>>
 <<Collect the current stack segment>>
 regs.rq = (ThreadQueue)GC_copy(&copy, hlim, (Node *)regs.rq);
 regs.ss = (SearchSpace *)GC_copy(&copy, hlim, (Node *)regs.ss);
@@ -397,6 +399,14 @@ for ( roots = global_roots; roots; roots = roots->next )
     *roots->root = GC_copy(&copy, hlim, *roots->root);
 for ( roots = local_roots; roots; roots = roots->next )
     *roots->root = GC_copy(&copy, hlim, *roots->root);
+
+@ 
+All nodes referenced from the first [[n_regs]] arguments registers
+arc copied into to-space as well.
+
+<<Collect the argument registers>>=
+for ( i = 0; i < n_regs; i++ )
+    regs.r[i] = GC_copy(&copy, hlim, regs.r[i]);
 
 @ 
 For each heap segment, we collect only that part of the stack which

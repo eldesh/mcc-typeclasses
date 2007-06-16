@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 2259 2007-06-16 13:37:33Z wlux $
+% $Id: print.nw 2261 2007-06-16 13:40:59Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -34,25 +34,30 @@ static boolean is_string(Node *);
 static void    print_string(Node *);
 static void    print_list(Node *);
 static void    print_tuple(Node *, unsigned int, Node **);
-static boolean print_constraints(boolean, Node *);
-static boolean print_app_constraints(boolean, unsigned int, Node **);
-static boolean print_constrained_var(boolean, Node *);
+static void    print_constraints(Node *);
+static void    print_app_constraints(unsigned int, Node **);
+static void    print_constrained_var(Node *);
 
 @ 
-The function [[print_result]] prints the computed result and the
-bindings of the global variables. Only those variables which have been
-bound by the program are actually printed. In order to assign names to
-the unbound variables, a dictionary is used (see below). This
+The function [[print_result]] prints the computed result of a goal and
+the bindings of its free variables. Only those variables are actually
+printed which have been bound by the program. In order to assign names
+to the unbound variables, a dictionary is used (see below). This
 dictionary is initialized with the names of the goal's free variables %'
 when the initial goal application is allocated (see
 Sect.~\ref{sec:global-search}).
 
+The global variable [[hasAnswer]] is set to [[true]] when a constraint
+for a variable is printed. In that case, also the redundant value
+\texttt{success} is not shown in the result of a constraint goal.
+
 <<print.c>>=
+static boolean hasAnswer;
+
 void
 print_result(const char **var_names, Node **vars, Node *result)
 {
     unsigned int     i, n;
-    boolean	     hasAnswer;
     struct dict_node *tail;
 
     tail      = names_tail;
@@ -70,9 +75,9 @@ print_result(const char **var_names, Node **vars, Node *result)
 	    print_node(0, vars[n]);
 	}
 
-    hasAnswer = print_constraints(hasAnswer, result);
+    print_constraints(result);
     for ( i = 0; i < n; i++ )
-	hasAnswer = print_constraints(hasAnswer, vars[i]);
+	print_constraints(vars[i]);
 
     if ( !hasAnswer )
 	print_node(0, result);
@@ -98,7 +103,7 @@ found in the node descriptor. However, some kinds of nodes are
 handled differently. In particular, for each unbound variable a name
 is generated and this name is shown by the printer. Special functions
 are used for printing lists and tuples. The [[prec]] parameter is used
-to determine when to enclose a term in parentheses. At present, we
+to determine when to enclose a term with parentheses. At present, we
 distinguish three different levels: [[0]] is used for terms at the
 top-level and arguments of a list or tuple, [[1]] is used for
 arguments within an infix application, and [[2]] is used for arguments
@@ -237,12 +242,12 @@ print_app(unsigned int prec, Node *node, unsigned int argc, Node **argv)
 }
 
 @
-The list printer shows lists in Curry's usual list notation. If
-the tail of the list is not an empty list, it will be printed in
-Prolog style, i.e., the tail is separated from the rest of the list by
-a vertical bar instead of a comma.                                           %'
+The list printer uses the standard list notation. If the tail of the
+list is not empty, it will be shown in Prolog style, i.e., the tail is
+separated from the rest of the list by a vertical bar instead of a
+comma.
 
-If the list is ground and consists of only characters, it is displayed
+If the list is ground and consists of characters only, it is displayed
 as a string. Note that we need to traverse the whole list in order to
 check this property. Fortunately, we know that the printing code is
 applied to finite data terms only.
@@ -345,13 +350,13 @@ print_tuple(Node *node, unsigned int argc, Node **argv)
 The printer traverses the result and all free variables and outputs
 all constraints it encounters. In order to print the constraints for a
 variable only once, the constraint field of the variable node is reset
-before the constraint is printed. The constraint itself is saved on
-the trail so that it is restored when the runtime system backtracks to
-compute the next solution.
+before the constraint is printed. The constraint list itself is saved
+on the trail so that it is restored when the runtime system backtracks
+to the next solution.
 
 <<print.c>>=
-static boolean
-print_constraints(boolean hasAnswer, Node *node)
+static void
+print_constraints(Node *node)
 {
     unsigned int argc;
 
@@ -362,28 +367,22 @@ print_constraints(boolean hasAnswer, Node *node)
 	    {
 	    case CAPP_KIND:
 	    case PAPP_KIND:
-		hasAnswer = print_app_constraints(hasAnswer,
-						  closure_argc(node),
-						  node->c.args);
+		print_app_constraints(closure_argc(node), node->c.args);
 		break;
 	    case LVAR_KIND:
 		if ( node->v.cstrs )
-		    hasAnswer = print_constrained_var(hasAnswer, node);
+		    print_constrained_var(node);
 		break;
 	    case LAZY_KIND:
 		switch ( node_tag(node) )
 		{
 		case NOUPD_TAG:
-		    hasAnswer = print_app_constraints(hasAnswer,
-						      closure_argc(node),
-						      node->c.args);
+		    print_app_constraints(closure_argc(node), node->c.args);
 		    break;
 		case UPD_TAG:
 		    argc = suspend_argc(node);
 		    if ( argc > 1 || node->s.args[0] )
-			hasAnswer = print_app_constraints(hasAnswer,
-							  argc,
-							  node->s.args);
+			print_app_constraints(argc, node->s.args);
 		    break;
 		}
 		break;
@@ -391,29 +390,24 @@ print_constraints(boolean hasAnswer, Node *node)
 		node = node->n.node;
 		continue;
 	    case VECTOR_KIND:
-		hasAnswer = print_app_constraints(hasAnswer,
-						  vector_argc(node),
-						  node->a.args);
+		print_app_constraints(vector_argc(node), node->a.args);
 		break;
 	    }
 	break;
     }
-    return hasAnswer;
 }
 
-static boolean
-print_app_constraints(boolean hasAnswer, unsigned int argc, Node **argv)
+static void
+print_app_constraints(unsigned int argc, Node **argv)
 {
     unsigned int i;
 
     for ( i = 0; i < argc; i++ )
-	hasAnswer = print_constraints(hasAnswer, argv[i]);
-
-    return hasAnswer;
+	print_constraints(argv[i]);
 }
 
-static boolean
-print_constrained_var(boolean hasAnswer, Node *var)
+static void
+print_constrained_var(Node *var)
 {
     Constraint *cstrs;
 
@@ -436,8 +430,6 @@ print_constrained_var(boolean hasAnswer, Node *var)
 	printf(" /= ");
 	print_node(0, ((Disequality *)cstrs)->node);
 
-	hasAnswer = print_constraints(hasAnswer, ((Disequality *)cstrs)->node);
+	print_constraints(((Disequality *)cstrs)->node);
     }
-
-    return hasAnswer;
 }

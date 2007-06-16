@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: run.nw 2252 2007-06-15 17:45:09Z wlux $
+% $Id: run.nw 2272 2007-06-16 16:32:29Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -150,16 +150,35 @@ the [[halt]] function.
 
 <<run.h>>=
 extern void run(Label ip);
-extern void halt(void) __attribute__ ((noreturn));
+extern void halt(void) __attribute__((noreturn));
 
 @ 
-If the runtime system is compiled with [[USE_TRAMPOLINE]], the [[run]]
-function is a trampoline loop that repeatedly calls the function
-returned from the previous call. In order to improve efficiency, the
-loop has been unrolled 8 times and does not perform a null pointer
-test. In order to stop execution, a [[longjmp]] to the context stored
-in [[halt_buf]] has to be performed. This jump buffer is initialized
-at the beginning of the [[run]] function.
+In order to achieve an efficient implementation with the trampoline
+model, the trampoline loop does not check the continuation address
+returned to it. Therefore, it is impossible to stop execution of
+compiled code by returning, e.g., a null pointer to the
+trampoline. Instead, we use a [[longjmp]] back into the [[run]]
+function in order to stop execution.
+
+The [[run]] function only saves the context for this [[longjmp]] in
+the global variable [[halt_buf]] and then calls the private function
+[[do_run]], which either executes the trampoline loop or prepares the
+stack frame in which the compiled code is executed in the direct jump
+configuration.
+
+The [[halt]] function stops execution of compiled abstract machine
+code by performing a non-local jump to the context saved in
+[[halt_buf]].
+
+The [[noinline]] attribute of [[do_run]] is important in order to
+prevent an overzealous Gnu C compiler from inlining the code of
+[[do_run]] in the [[run]] function. This could lead to worse code
+because the optimizer may save local variables to the stack rather
+than keeping them in processor registers so that their values are not
+clobbered by a non-local return to the [[setjmp]] call. Furthermore,
+the code, which executes in [[do_run]]'s stack frame in the direct
+jump configuration, otherwise might overwrite register values saved in
+[[run]]'s stack frame.
 
 <<run.c>>=
 #include "config.h"
@@ -168,47 +187,67 @@ at the beginning of the [[run]] function.
 
 static jmp_buf halt_buf;
 
-#if USE_TRAMPOLINE
+#if __GNUC__ >= 3
+# define NOINLINE  __attribute__((noinline))
+#else
+# define NOINLINE
+#endif
+
+static void do_run(Label ip) NOINLINE;
+
 void
 run(Label ip)
 {
     if ( setjmp(halt_buf) == 0 )
+	do_run(ip);
+}
+
+void
+halt()
+{
+    longjmp(halt_buf, 1);
+}
+
+@ 
+If the runtime system is compiled with the trampoline configuration,
+the [[do_run]] function is a tight loop that repeatedly calls the
+function returned from the previous call. In order to improve
+efficiency, the loop has been unrolled 8 times and does not perform
+null pointer tests.
+
+<<run.c>>=
+#if USE_TRAMPOLINE
+static void
+do_run(Label ip)
+{
+    for (;;)
     {
-	while ( 1 )
-	{
-	    ip = (Label)(*ip)();
-	    ip = (Label)(*ip)();
-	    ip = (Label)(*ip)();
-	    ip = (Label)(*ip)();
-	    ip = (Label)(*ip)();
-	    ip = (Label)(*ip)();
-	    ip = (Label)(*ip)();
-	    ip = (Label)(*ip)();
-	}
+	ip = (Label)ip();
+	ip = (Label)ip();
+	ip = (Label)ip();
+	ip = (Label)ip();
+	ip = (Label)ip();
+	ip = (Label)ip();
+	ip = (Label)ip();
+	ip = (Label)ip();
     }
 }
 #endif /* USE_TRAMPOLINE */
 
 @
 If the runtime system uses direct jumps via Gnu C extensions, the
-[[run]] function initializes the [[halt_buf]] structure and then calls
-the auxiliary function [[do_run]]. This function allocates a stack
-frame which is large enough to handle the allocation requirements of
-all functions in the program and then jumps to the entry point of the
-program. The compiled functions must never return and use a
-[[longjmp]] in order to terminate execution.
+[[do_run]] function allocates a stack frame which should be large
+enough to handle the allocation requirements of all functions in the
+program and then jumps to the entry point of the program. The compiled
+functions must never return, but call the [[halt]] function in order
+to terminate execution.
 
-We do not allocate the stack frame in the [[run]] function and call
-the main entry point from there because the compiler may save some
-registers in the stack frame and their contents could be overwritten
-by the tail called functions otherwise.
-
-Furthermore, the [[do_run]] function performs a redundant call to the
-[[trace]] function so that it is not treated as a leaf procedure. This
-is necessary on some architectures in order to ensure that a proper
-stack frame is set up for [[do_run]]. Any other function, which
-effectively performs no operation but cannot be inlined by the
-compiler, would do as well.
+The [[do_run]] function performs a seemingly redundant call of the
+[[trace]] function. This call is necessary so that [[do_run]] is not
+compiled as a leaf procedure and therefore a proper stack frame is set
+up for it on all architectures. Any other function, which effectively
+performs no operation but cannot be inlined by the compiler, would do
+as well.
 
 <<run.c>>=
 #if !USE_TRAMPOLINE
@@ -218,15 +257,6 @@ compiler, would do as well.
 /* needed to work around an instruction scheduler bug in gcc 2.91 for sparc */
 Label ip;
 # endif
-
-static void do_run(Label ip);
-
-void
-run(Label ip)
-{
-    if ( setjmp(halt_buf) == 0 )
-	do_run(ip);
-}
 
 static void
 do_run(Label ip)
@@ -242,15 +272,3 @@ do_run(Label ip)
     goto *ip;
 }
 #endif /* !USE_TRAMPOLINE */
-
-@ 
-The [[halt]] function stops execution of compiled abstract machine
-code by performing a non-local jump to the context saved in
-[[halt_buf]].
-
-<<run.c>>=
-void
-halt()
-{
-    longjmp(halt_buf, 1);
-}

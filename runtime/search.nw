@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: search.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: search.nw 2270 2007-06-16 14:59:21Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -47,6 +47,13 @@ FUNCTION(eval_clos_1)
     regs.sp[0] = clos->c.args[0];
     GOTO(clos->info->entry);
 }
+
+static NodeInfo solved_goal_papp_info_table[] = {
+    PAPPINFO("<solved goal>", 1, solved_goal, 2)
+};
+static NodeInfo search_cont_papp_info_table[] = {
+    PAPPINFO("<search goal>", 1, search_cont, 2)
+};
 
 @
 Search contexts are allocated on the stack in order to save the
@@ -146,7 +153,7 @@ FUNCTION(__try_1)
     assert(regs.sp[0]->info->tag == 1);
 
     /* return immediately when applied to a solved search goal */
-    if ( regs.sp[0]->info->entry == solved_goal )
+    if ( regs.sp[0]->info == solved_goal_papp_info_table )
     {
 	CHECK_HEAP(cons_node_size);
 	list		= (Node *)regs.hp;
@@ -165,7 +172,7 @@ FUNCTION(__try_1)
 #endif
 
     /* when applied to a partially solved goal continue its evaluation */
-    if ( regs.sp[0]->info->entry == search_cont )
+    if ( regs.sp[0]->info == search_cont_papp_info_table )
     {
 	sc = regs.sp[0]->c.args[0];
 #if COPY_SEARCH_SPACE
@@ -213,7 +220,7 @@ FUNCTION(__try_1)
     regs.sp[5] = susp;
     regs.sp[6] = var;
     start_thread(5);
-    GOTO(___64_);
+    GOTO(regs.sp[0]->info->apply);
 }
 
 @ 
@@ -231,10 +238,6 @@ succeeds because \verb|try (\x -> success)| is equivalent to
 \verb|[\x -> success]|.
 
 <<search.c>>=
-static NodeInfo solved_goal_papp_info_table[] = {
-    PAPPINFO("<solved goal>", 1, solved_goal, 2)
-};
-
 static
 FUNCTION(solved_goal)
 {
@@ -298,10 +301,6 @@ argument to which [[search_cont]] was applied, whereas the equality
 constraint returns the constant [[Success]].
 
 <<search.c>>=
-static NodeInfo search_cont_papp_info_table[] = {
-    PAPPINFO("<search goal>", 1, search_cont, 2)
-};
-
 static
 FUNCTION(search_cont)
 {

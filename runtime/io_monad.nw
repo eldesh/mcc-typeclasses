@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: io_monad.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: io_monad.nw 2270 2007-06-16 14:59:21Z wlux $
 %
 % Copyright (c) 2001-2005, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -272,7 +272,8 @@ static
 FUNCTION(___62__62__61__2)
 {
  ENTRY_LABEL(static, ___62__62__61__2)
-    GOTO(___64_);
+    assert(regs.sp[0]->info->kind == PAPP_KIND && regs.sp[0]->info->tag == 1);
+    GOTO(regs.sp[0]->info->apply);
 }
 
 @
@@ -373,7 +374,8 @@ static
 FUNCTION(__ioError_1)
 {
  ENTRY_LABEL(static, __ioError_1)
-    GOTO(___64_);
+    assert(regs.sp[0]->info->kind == PAPP_KIND && regs.sp[0]->info->tag == 1);
+    GOTO(regs.sp[0]->info->apply);
 }
 
 @

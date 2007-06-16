@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2267 2007-06-16 14:54:56Z wlux $
+% $Id: CGen.lhs 2268 2007-06-16 14:55:58Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -596,12 +596,14 @@ the Gnu C compiler does not detect such redundant save operations.
 > fetchArgs _ CPSFreeCase = []
 > fetchArgs _ CPSDefaultCase = []
 
-> saveVars :: [Name] -> [Name] -> [CStmt]
-> saveVars vs0 vs =
+> saveVars :: [Name] -> [CExpr] -> [CStmt]
+> saveVars vs0 es =
 >   [incrSp d | d /= 0] ++
->   [setStk i (var v) | (i,v0,v) <- zip3 [0..] vs0' vs, v0 /= v]
->   where d = length vs0 - length vs
->         vs0' = if d >= 0 then drop d vs0 else replicate (-d) (Name "") ++ vs0
+>   [setStk i e | (i,v0,e) <- zip3 [0..] vs0'' es, v0 /= e]
+>   where d = length vs0 - length es
+>         vs0' = map var vs0
+>         vs0'' =
+>           if d >= 0 then drop d vs0' else replicate (-d) (CExpr "") ++ vs0'
 
 > updVar :: [Name] -> Name -> CStmt
 > updVar vs v =
@@ -871,7 +873,7 @@ translation function.
 
 > ret :: [Name] -> Name -> [CPSCont] -> [CStmt]
 > ret vs0 v [] =
->   saveVars vs0 [] ++
+>   saveCont vs0 [] [] ++
 >   [CLocalVar labelType "_ret_ip" (Just (CCast labelType (stk 0))),
 >    setStk 0 (var v),
 >    goto "_ret_ip"]
@@ -891,13 +893,8 @@ translation function.
 > exec vs0 f vs ks = saveCont vs0 vs ks ++ [goto (cName f)]
 
 > saveCont :: [Name] -> [Name] -> [CPSCont] -> [CStmt]
-> saveCont vs0 vs ks =
->   zipWith withCont ips ks ++
->   saveVars vs0 (concat (vs : zipWith contFrame ips ks))
->   where ips = map contIpName ("" : map show [2..])
->         withCont ip k = localVar ip (Just (asNode (CExpr (contName k))))
->         contFrame ip k = ip : contVars k
->         contIpName suffix = Name ("_cont_ip" ++ suffix)
+> saveCont vs0 vs ks = saveVars vs0 (map var vs ++ concatMap contFrame ks)
+>   where contFrame k = asNode (CExpr (contName k)) : map var (contVars k)
 
 > lock :: Name -> [CStmt]
 > lock v =

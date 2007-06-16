@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2264 2007-06-16 14:49:40Z wlux $
+% $Id: eval.nw 2265 2007-06-16 14:50:45Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -307,8 +307,6 @@ FUNCTION(flex_yield_resume)
 	    case LVAR_KIND:
 		regs.sp[1] = node;
 		GOTO(regs.handlers->choices);
-	    default:
-		break;
 	    }
 	break;
     }

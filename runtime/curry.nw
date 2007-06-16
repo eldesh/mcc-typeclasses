@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: curry.nw 1909 2006-05-01 09:31:58Z wlux $
+% $Id: curry.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -28,6 +28,7 @@ header files from the standard C library.
 
 /* runtime system */
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "trail.h"

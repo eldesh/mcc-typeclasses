@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: trail.nw 1899 2006-04-19 10:50:11Z wlux $
+% $Id: trail.nw 2262 2007-06-16 14:46:48Z wlux $
 %
-% Copyright (c) 2002-2005, Wolfgang Lux
+% Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{The Trail}
@@ -29,22 +29,20 @@ typedef struct save_rec {
 #endif
 
 @
-The trail is implemented as a single array starting at the address
-[[trail_base]] and ending at [[trail_end]]. The register [[tp]]
-serves as an allocation pointer for the trail. Before adding a new
-entry to the trail it must checked that there is no trail
-overflow. This can be done with the [[CHECK_TRAIL]] or
-[[CHECK_TRAIL1]] macro.
+The trail stack is implemented as a single array starting at address
+[[trail_base]] and ending at [[trail_end]]. The register [[tp]] serves
+as allocation pointer for the trail. Before adding a new entry to the
+trail it must be checked that there is no trail overflow. This can be
+done with the [[CHECK_TRAIL]] and [[CHECK_TRAIL1]] macros.
 
 <<trail.h>>=
 #if !COPY_SEARCH_SPACE
 extern SaveRec *trail_base, *trail_end;
-extern SaveRec *tp;
 
-extern void trail_overflow(void) __attribute__ ((noreturn));
+extern void trail_overflow(void) __attribute__((noreturn));
 
-#define CHECK_TRAIL1()	if ( tp == trail_end ) trail_overflow();
-#define CHECK_TRAIL(n)	if ( tp + n > trail_end ) trail_overflow();
+#define CHECK_TRAIL1()	if ( regs.tp >= trail_end ) trail_overflow();
+#define CHECK_TRAIL(n)	if ( regs.tp + (n) > trail_end ) trail_overflow();
 #endif
 
 @
@@ -54,12 +52,12 @@ extern void trail_overflow(void) __attribute__ ((noreturn));
 #include <stdlib.h>
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "trail.h"
 #include "main.h"
 
 #if !COPY_SEARCH_SPACE
-SaveRec *tp;
 SaveRec *trail_base;
 SaveRec *trail_end;
 
@@ -76,7 +74,7 @@ trail_overflow()
 
 @
 The initialization function allocates a trail array with the specified
-size and initializes the trail pointer.
+size.
 
 <<trail.h>>=
 #if !COPY_SEARCH_SPACE
@@ -96,7 +94,6 @@ init_trail(unsigned int trail_size)
 
     trail_base = (SaveRec *)(((long)trail_base + pagemask) & ~pagemask);
     trail_end = trail_base + trail_size / sizeof(SaveRec);
-    tp	      = trail_base;
 }
 #endif
 
@@ -123,18 +120,18 @@ saves its argument to the trail.
 #if !COPY_SEARCH_SPACE
 #define INFO_OFS	word_offsetof(Node, info)
 
-#define DO_SAVE(v,f) do { \
-    CHECK_TRAIL1(); \
-    tp->addr = (word *)(v); \
-    tp->info = tp->addr[INFO_OFS]; \
-    tp->ofs  = (word *)&(v->f) - (word *)(v); \
-    tp->val  = (word)(v->f); \
-    tp++; \
-} while (0)
-#define SAVE(v,f) do { \
-    if ( (word *)(v) < hlim && (word *)(v->f) < hlim ) \
-	DO_SAVE(v,f); \
-} while (0)
+#define DO_SAVE(v,f) do {				\
+	CHECK_TRAIL1();					\
+	regs.tp->addr = (word *)(v);			\
+	regs.tp->info = regs.tp->addr[INFO_OFS];	\
+	regs.tp->ofs  = (word *)&(v->f) - (word *)(v);	\
+	regs.tp->val  = (word)(v->f);			\
+	regs.tp++;					\
+    } while (0)
+#define SAVE(v,f) do {						     \
+	if ( (word *)(v) < regs.hlim && (word *)(v->f) < regs.hlim ) \
+	    DO_SAVE(v,f);					     \
+    } while (0)
 #else
 # define DO_SAVE(v,f)  /* empty */
 # define SAVE(v,f)     /* empty */
@@ -149,11 +146,11 @@ task.
 
 <<trail.h>>=
 #if !COPY_SEARCH_SPACE
-#define RESTORE(oldTp) do { \
-    while ( tp > oldTp ) { \
-	--tp; \
-	tp->addr[INFO_OFS] = tp->info; \
-	tp->addr[tp->ofs]  = tp->val; \
-    } \
-} while (0)
+#define RESTORE(oldTp) do {				 \
+	while ( regs.tp > oldTp ) {			 \
+	    --regs.tp;					 \
+	    regs.tp->addr[INFO_OFS]	= regs.tp->info; \
+	    regs.tp->addr[regs.tp->ofs] = regs.tp->val;	 \
+	}						 \
+    } while (0)
 #endif

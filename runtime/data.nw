@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: data.nw 2255 2007-06-16 13:26:58Z wlux $
+% $Id: data.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -16,6 +16,7 @@ because there is no upper limit on the size of tuples.
 #include <stdlib.h>
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "spaces.h"
@@ -73,8 +74,8 @@ FUNCTION(___40__41__unify)
 {
  ENTRY_LABEL(extern, ___40__41__unify)
     CHECK_STACK1();
-    sp	 -= 1;
-    sp[0] = CONST(___40__41_);
+    regs.sp   -= 1;
+    regs.sp[0] = CONST(___40__41_);
     GOTO(bind_var);
 }
 
@@ -82,8 +83,8 @@ FUNCTION(___91__93__unify)
 {
  ENTRY_LABEL(extern, ___91__93__unify)
     CHECK_STACK1();
-    sp	 -= 1;
-    sp[0] = CONST(___91__93_);
+    regs.sp   -= 1;
+    regs.sp[0] = CONST(___91__93_);
     GOTO(bind_var);
 }
 
@@ -94,28 +95,28 @@ FUNCTION(___58__unify)
     CHECK_STACK1();
     CHECK_HEAP(2 * variable_node_size + cons_node_size);
 
-    v1		= (Node *)hp;
+    v1		= (Node *)regs.hp;
     v1->info	= variable_info_table;
-    v1->v.spc	= ss;
+    v1->v.spc	= regs.ss;
     v1->v.wq	= 0;
     v1->v.cstrs = 0;
-    hp	       += variable_node_size;
+    regs.hp    += variable_node_size;
 
-    v2		= (Node *)hp;
+    v2		= (Node *)regs.hp;
     v2->info	= variable_info_table;
-    v2->v.spc	= ss;
+    v2->v.spc	= regs.ss;
     v2->v.wq	= 0;
     v2->v.cstrs = 0;
-    hp	       += variable_node_size;
+    regs.hp    += variable_node_size;
 
-    n		 = (Node *)hp;
+    n		 = (Node *)regs.hp;
     n->info	 = &cons_info;
     n->c.args[0] = v1;
     n->c.args[1] = v2;
-    hp		+= cons_node_size;
+    regs.hp	+= cons_node_size;
 
-    sp	 -= 1;
-    sp[0] = n;
+    regs.sp   -= 1;
+    regs.sp[0] = n;
     GOTO(bind_var);
 }
 
@@ -145,8 +146,8 @@ FUNCTION(eval_clos_0)
 {
     Node *clos;
  ENTRY_LABEL(static, eval_clos_0)
-    clos = sp[0];
-    sp	+= 1;
+    clos     = regs.sp[0];
+    regs.sp += 1;
     GOTO(clos->info->entry);
 }
 
@@ -155,8 +156,8 @@ FUNCTION(eval_clos_1)
 {
     Node *clos;
  ENTRY_LABEL(static, eval_clos_1)
-    clos  = sp[0];
-    sp[0] = clos->c.args[0];
+    clos       = regs.sp[0];
+    regs.sp[0] = clos->c.args[0];
     GOTO(clos->info->entry);
 }
 
@@ -168,12 +169,12 @@ FUNCTION(___58_)
     TRACE_FUN(":", 2);
 
     CHECK_HEAP(cons_node_size);
-    cons	    = (Node *)hp;
+    cons	    = (Node *)regs.hp;
     cons->info	    = &cons_info;
-    cons->c.args[0] = sp[0];
-    cons->c.args[1] = sp[1];
-    hp		   += cons_node_size;
+    cons->c.args[0] = regs.sp[0];
+    cons->c.args[1] = regs.sp[1];
+    regs.hp	   += cons_node_size;
 
-    sp += 2;
+    regs.sp += 2;
     RETURN(cons);
 }

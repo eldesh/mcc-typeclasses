@@ -1,0 +1,90 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: regs.nw 2262 2007-06-16 14:46:48Z wlux $
+%
+% Copyright (c) 2006, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{The Abstract Machine Registers}\label{sec:registers}
+The abstract machine's state is kept in a few registers, which are %'
+available as fields of the global [[regs]] structure.
+\begin{itemize}
+\item The register [[cid]] contains the id of the current thread.
+  Setting [[cid]] to [[0]] denotes that no thread is running.
+\item The stack pointer [[sp]] points to the node on top of the stack.
+\item The register [[ds_base]] points to the base of the current
+  thread's stack segment. %'
+\item The register [[efp]] points to the current I/O exception handler
+  frame. Note that each thread has its own exception handler.
+\item The state of threads which are ready to run but not active is
+  maintained in the ready queue [[rq]].
+\item The register [[hp]] maintains the allocation pointer into the
+  heap.
+\item The contents of the register [[hlim]] caches the value of [[hp]]
+  at the time when the current choice point or search context was
+  created. It is used in order to decide whether trailing is necessary
+  when a variable or lazy application node is updated.
+\item A pointer to the current search space is kept in register [[ss]].
+\item The trail pointer [[tp]] points to the first free entry in the
+  trail stack.
+\item The register [[bp]] points to the current choice point or search
+  context in the stack.
+\item The register [[handlers]] contains a pointer to the current
+  non-deterministic execution handlers. These functions determine how
+  a non-determinstic computation step is processed in the current
+  execution mode (I/O, global search, or encapsulated search) of the
+  abstract machine.
+\end{itemize}
+
+<<regs.h>>=
+typedef void *word;
+
+struct regs {
+    unsigned int		 cid;
+    union node			 **sp;
+    union node			 **ds_base;
+    struct exception_frame	 *efp;
+    union thread_node		 *rq;
+    word			 *hp;
+    word			 *hlim;
+    struct search_space		 *ss;
+#if !COPY_SEARCH_SPACE
+    struct save_rec		 *tp;
+#endif
+    struct choicepoint		 *bp;
+    const struct nondet_handlers *handlers;
+} regs;
+
+@ 
+At startup, the abstract machine registers must be initialized by
+calling the function [[init_regs]].
+
+<<regs.h>>=
+extern void init_regs(void);
+
+@ 
+<<regs.c>>=
+#include "config.h"
+#include "run.h"
+#include "regs.h"
+#include "heap.h"
+#include "stack.h"
+#include "trail.h"
+#include "threads.h"
+#include "spaces.h"
+
+void
+init_regs()
+{
+    regs.cid	  = 0;
+    regs.sp	  = stack_end;
+    regs.ds_base  = 0;
+    regs.efp	  = 0;
+    regs.rq	  = 0;
+    regs.hp	  = regs.hlim = heap_base;
+    regs.ss	  = (SearchSpace *)&global_space;
+#if !COPY_SEARCH_SPACE
+    regs.tp	  = trail_base;
+#endif
+    regs.bp	  = 0;
+    regs.handlers = 0;
+}

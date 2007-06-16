@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: io_monad.nw 2252 2007-06-15 17:45:09Z wlux $
+% $Id: io_monad.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2001-2005, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -39,6 +39,7 @@ DECLARE_LABEL(extern, __ioError);
 #include <stdio.h>
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "threads.h"
@@ -134,10 +135,10 @@ curry_exec(NodeInfo *main_info, int argc, char **argv)
 	   main_info->length == closure_node_size(0));
 
     CHECK_STACK1();
-    *--sp = (Node *)&main_info;
+    *--regs.sp = (Node *)&main_info;
 
     run(start_io);
-    hlim = heap_base;
+    regs.hlim = heap_base;
     release_mem();
     return curry_rc;
 }
@@ -164,16 +165,16 @@ static
 FUNCTION(start_io)
 {
  ENTRY_LABEL(static, start_io)
-    nondet_handlers = &io_handlers;
+    regs.handlers = &io_handlers;
     TRACE(("start program\n"));
     CHECK_STACK(2);
-    sp	 -= 2;
-    sp[0] = sp[2];
-    sp[1] = unit;
-    sp[2] = 0;
+    regs.sp   -= 2;
+    regs.sp[0] = regs.sp[2];
+    regs.sp[1] = unit;
+    regs.sp[2] = 0;
     start_thread(3);
     /* Hack: Change the return address of the main thread */
-    sp[2] = (Node *)stop_io;
+    regs.sp[2] = (Node *)stop_io;
     GOTO(___64_);
 }
 
@@ -214,8 +215,8 @@ FUNCTION(__return)
 {
     Node *r;
  ENTRY_LABEL(extern, __return)
-    r	= sp[0];
-    sp += 2;
+    r	     = regs.sp[0];
+    regs.sp += 2;
     RETURN(r);
 }
 
@@ -226,10 +227,10 @@ FUNCTION(___62__62_)
 {
  ENTRY_LABEL(extern, ___62__62_)
     CHECK_STACK(2);
-    sp	 -= 2;
-    sp[0] = sp[2];
-    sp[1] = sp[4];
-    sp[2] = (Node *)___62__62__1;
+    regs.sp   -= 2;
+    regs.sp[0] = regs.sp[2];
+    regs.sp[1] = regs.sp[4];
+    regs.sp[2] = (Node *)___62__62__1;
     GOTO(___64_);
 }
 
@@ -237,7 +238,7 @@ static
 FUNCTION(___62__62__1)
 {
  ENTRY_LABEL(static, ___62__62__1)
-    sp += 1;
+    regs.sp += 1;
     GOTO(___64_);
 }
 
@@ -249,10 +250,10 @@ FUNCTION(___62__62__61_)
 {
  ENTRY_LABEL(extern, ___62__62__61_)
     CHECK_STACK(2);
-    sp	 -= 2;
-    sp[0] = sp[2];
-    sp[1] = sp[4];
-    sp[2] = (Node *)___62__62__61__1;
+    regs.sp   -= 2;
+    regs.sp[0] = regs.sp[2];
+    regs.sp[1] = regs.sp[4];
+    regs.sp[2] = (Node *)___62__62__61__1;
     GOTO(___64_);
 }
 
@@ -261,9 +262,9 @@ FUNCTION(___62__62__61__1)
 {
  ENTRY_LABEL(static, ___62__62__61__1)
     CHECK_STACK1();
-    sp	 -= 1;
-    sp[0] = sp[2];
-    sp[2] = (Node *)___62__62__61__2;
+    regs.sp   -= 1;
+    regs.sp[0] = regs.sp[2];
+    regs.sp[2] = (Node *)___62__62__61__2;
     GOTO(___64_);
 }
 
@@ -294,22 +295,22 @@ FUNCTION(__catch)
  ENTRY_LABEL(extern, __catch)
 
     CHECK_STACK(wordsof(ExceptionFrame));
-    action  = sp[0];
-    handler = sp[1];
-    world   = sp[2];
+    action  = regs.sp[0];
+    handler = regs.sp[1];
+    world   = regs.sp[2];
 
     /* create and initialize the new exception frame */
-    sp += 3 - wordsof(ExceptionFrame);
-    prevFrame	 = efp;
-    efp		 = (ExceptionFrame *)sp;
-    efp->handler = handler;
-    efp->frame	 = prevFrame;
+    regs.sp	     += 3 - wordsof(ExceptionFrame);
+    prevFrame	      = regs.efp;
+    regs.efp	      = (ExceptionFrame *)regs.sp;
+    regs.efp->handler = handler;
+    regs.efp->frame   = prevFrame;
 
     /* invoke the action */
-    sp	 -= 3;
-    sp[0] = action;
-    sp[1] = world;
-    sp[2] = (Node *)__catch_1;
+    regs.sp   -= 3;
+    regs.sp[0] = action;
+    regs.sp[1] = world;
+    regs.sp[2] = (Node *)__catch_1;
     GOTO(___64_);
 }
 
@@ -318,13 +319,12 @@ FUNCTION(__catch_1)
 {
     Node	   *r;
     ExceptionFrame *curFrame;
-
  ENTRY_LABEL(static, __catch_1)
-    r = sp[0];
+    r = regs.sp[0];
 
-    curFrame = efp;
-    efp	     = efp->frame;
-    sp	     = (Node **)curFrame + wordsof(ExceptionFrame);
+    curFrame = regs.efp;
+    regs.efp = regs.efp->frame;
+    regs.sp  = (Node **)curFrame + wordsof(ExceptionFrame);
 
     RETURN(r);
 }
@@ -346,26 +346,26 @@ FUNCTION(__ioError)
     Node	   *exc, *handler, *world;
     ExceptionFrame *curFrame;
  ENTRY_LABEL(extern, __ioError)
-    TRACE(("%I throw %N\n", sp[0]));
+    TRACE(("%I throw %N\n", regs.sp[0]));
 
-    if ( efp == 0 )
+    if ( regs.efp == 0 )
     {
-	sp[1] = prefix_string("Uncaught I/O exception:\n", sp[0]);
-	sp   += 1;
+	regs.sp[1] = prefix_string("Uncaught I/O exception:\n", regs.sp[0]);
+	regs.sp   += 1;
 	GOTO(__Prelude__error);
     }
 
-    exc	     = sp[0];
-    world    = sp[1];
-    curFrame = efp;
-    handler  = efp->handler;
-    efp	     = efp->frame;
+    exc	     = regs.sp[0];
+    world    = regs.sp[1];
+    curFrame = regs.efp;
+    handler  = regs.efp->handler;
+    regs.efp = regs.efp->frame;
 
-    sp    = (Node **)curFrame + wordsof(ExceptionFrame) - 4;
-    sp[0] = handler;
-    sp[1] = exc;
-    sp[2] = (Node *)__ioError_1;
-    sp[3] = world;
+    regs.sp    = (Node **)curFrame + wordsof(ExceptionFrame) - 4;
+    regs.sp[0] = handler;
+    regs.sp[1] = exc;
+    regs.sp[2] = (Node *)__ioError_1;
+    regs.sp[3] = world;
     GOTO(___64_);
 }
 
@@ -396,10 +396,10 @@ FUNCTION(__unsafePerformIO)
 {
  ENTRY_LABEL(extern, __unsafePerformIO)
     CHECK_STACK(2);
-    sp	 -= 2;
-    sp[0] = sp[2];
-    sp[1] = unit;
-    sp[2] = (Node *)__unsafePerformIO_1;
+    regs.sp   -= 2;
+    regs.sp[0] = regs.sp[2];
+    regs.sp[1] = unit;
+    regs.sp[2] = (Node *)__unsafePerformIO_1;
     GOTO(___64_);
 }
 
@@ -407,12 +407,11 @@ static
 FUNCTION(__unsafePerformIO_1)
 {
     Node *r;
-
  ENTRY_LABEL(static, __unsafePerformIO_1)
-    r = sp[0];
+    r = regs.sp[0];
     if ( is_boxed(r) )
 	GOTO(r->info->eval);
-    sp += 1;
+    regs.sp += 1;
     RETURN(r);
 }
 
@@ -449,19 +448,19 @@ FUNCTION(__fixIO)
     Node *clos, *susp;
  ENTRY_LABEL(extern, __fixIO)
     CHECK_HEAP(closure_node_size(2) + suspend_node_size(2));
-    clos  = (Node *)hp;
-    susp  = (Node *)(hp + closure_node_size(2));
-    hp   += closure_node_size(2) + suspend_node_size(2);
+    clos     = (Node *)regs.hp;
+    susp     = (Node *)(regs.hp + closure_node_size(2));
+    regs.hp += closure_node_size(2) + suspend_node_size(2);
 
     clos->info	    = &___64__info;
-    clos->c.args[0] = sp[0];
+    clos->c.args[0] = regs.sp[0];
     clos->c.args[1] = susp;
 
     susp->info	    = ___64__lazy_info_table;
-    susp->s.spc	    = ss;
+    susp->s.spc	    = regs.ss;
     susp->s.args[0] = clos;
-    susp->s.args[1] = sp[1];
+    susp->s.args[1] = regs.sp[1];
 
-    *++sp = susp;
-    GOTO(susp->info->eval);    
+    *++regs.sp = susp;
+    GOTO(susp->info->eval);
 }

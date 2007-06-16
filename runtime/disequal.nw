@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2255 2007-06-16 13:26:58Z wlux $
+% $Id: disequal.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -30,6 +30,7 @@ DECLARE_LABEL(extern, ___61__47__61_);
 #include <stdlib.h>
 #include <string.h>
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "eval.h"
@@ -80,8 +81,8 @@ FUNCTION(___61__47__61__2)
 {
     Node *arg1, *arg2;
  ENTRY_LABEL(static, ___61__47__61__2)
-    arg1 = sp[1];
-    arg2 = sp[0];
+    arg1 = regs.sp[1];
+    arg2 = regs.sp[0];
 
     while ( is_boxed(arg1) && is_indir_node(arg1) )
 	arg1 = arg1->n.node;
@@ -90,15 +91,15 @@ FUNCTION(___61__47__61__2)
 	/* check for trivial disequality (x=/=x) */
 	if ( arg1 != arg2 )
 	{
-	    sp[0] = arg1;
-	    sp[1] = arg2;
+	    regs.sp[0] = arg1;
+	    regs.sp[1] = arg2;
 	    GOTO(diseq_var);
 	}
     }
     else if ( is_boxed(arg2) && is_variable_node(arg2) )
     {
-	sp[0] = arg2;
-	sp[1] = arg1;
+	regs.sp[0] = arg2;
+	regs.sp[1] = arg1;
 	GOTO(diseq_var);
     }
     else
@@ -107,7 +108,7 @@ FUNCTION(___61__47__61__2)
 
 	if ( !eq_root(arg1, arg2, &n) )
 	{
-	    sp += 2;
+	    regs.sp += 2;
 	    RETURN(Success);
 	}
 	else if ( n > 0 )
@@ -122,13 +123,13 @@ FUNCTION(___61__47__61__2)
 	    arglist = nil;
 	    if ( !eq_args(arg1, arg2, n, &arglist) )
 	    {
-		sp += 2;
+		regs.sp += 2;
 		RETURN(Success);
 	    }
 
 	    if ( arglist != nil )
 	    {
-		*++sp = arglist;
+		*++regs.sp = arglist;
 		GOTO(exist_type ? diseq_papp_args : diseq_args);
 	    }
 	}
@@ -179,46 +180,46 @@ FUNCTION(diseq_var)
     boolean	nf;
     Disequality *cstr;
  ENTRY_LABEL(static, diseq_var)
-    if ( !is_local_space(sp[0]->v.spc) )
+    if ( !is_local_space(regs.sp[0]->v.spc) )
     {
-	if ( is_boxed(sp[1]) && is_variable_node(sp[1])
-	     && is_local_space(sp[1]->v.spc) )
+	if ( is_boxed(regs.sp[1]) && is_variable_node(regs.sp[1])
+	     && is_local_space(regs.sp[1]->v.spc) )
 	    SWAPn(1);
 	else
 	{
 	    CHECK_STACK1();
-	    sp	 -= 1;
-	    sp[0] = sp[1];
-	    sp[1] = (Node *)___61__47__61__1;
+	    regs.sp   -= 1;
+	    regs.sp[0] = regs.sp[1];
+	    regs.sp[1] = (Node *)___61__47__61__1;
 	    GOTO(sync_var);
 	}
     }
 
     nf = true;
-    if ( occurs(sp[0], sp[1], &nf) )
+    if ( occurs(regs.sp[0], regs.sp[1], &nf) )
     {
-	sp += 2;
+	regs.sp += 2;
 	RETURN(Success);
     }
 
     /* add the constraint to the variable */
     CHECK_HEAP(diseq_constraint_size);
-    cstr	     = (Disequality *)hp;
+    cstr	     = (Disequality *)regs.hp;
     cstr->cstr.info  = &diseq_constraint_info;
-    cstr->cstr.cstrs = sp[0]->v.cstrs;
-    cstr->node	     = sp[1];
-    hp		    += diseq_constraint_size;
+    cstr->cstr.cstrs = regs.sp[0]->v.cstrs;
+    cstr->node	     = regs.sp[1];
+    regs.hp	    += diseq_constraint_size;
 
-    SAVE(sp[0], v.cstrs);
-    sp[0]->v.cstrs = (Constraint *)cstr;
+    SAVE(regs.sp[0], v.cstrs);
+    regs.sp[0]->v.cstrs = (Constraint *)cstr;
 
     /* if necessary, evaluate the argument to normal form */
     if ( nf )
     {
-	sp += 2;
+	regs.sp += 2;
 	RETURN(Success);
     }
-    sp[0] = sp[1];
+    regs.sp[0] = regs.sp[1];
     GOTO(___61__58__61_);
 }
 
@@ -248,17 +249,17 @@ FUNCTION(diseq_args)
 {
     static const Label diseq_args_choices[] = { diseq_args_1, diseq_args_2, 0 };
  ENTRY_LABEL(static, diseq_args)
-    if ( sp[0]->c.args[2] == nil )
+    if ( regs.sp[0]->c.args[2] == nil )
 	GOTO(diseq_args_1);
 
     CHECK_STACK(1);
-    sp -= 1;
-    sp[0] = (Node *)diseq_args_choices;
+    regs.sp   -= 1;
+    regs.sp[0] = (Node *)diseq_args_choices;
 #if YIELD_NONDET
-    if ( rq )
-        GOTO(yield_thread(nondet_handlers->choices));
+    if ( regs.rq )
+        GOTO(yield_thread(regs.handlers->choices));
 #endif
-    GOTO(nondet_handlers->choices);
+    GOTO(regs.handlers->choices);
 }
 
 static
@@ -267,10 +268,10 @@ FUNCTION(diseq_args_1)
     Node *arglist;
  ENTRY_LABEL(static, diseq_args_1)
     CHECK_STACK1();
-    arglist = sp[0];
-    sp	   -= 1;
-    sp[0]   = arglist->c.args[0];
-    sp[1]   = arglist->c.args[1];
+    arglist    = regs.sp[0];
+    regs.sp   -= 1;
+    regs.sp[0] = arglist->c.args[0];
+    regs.sp[1] = arglist->c.args[1];
     GOTO(___61__47__61_);
 }
 
@@ -278,7 +279,7 @@ static
 FUNCTION(diseq_args_2)
 {
  ENTRY_LABEL(static, diseq_args_2)
-    sp[0] = sp[0]->c.args[2];
+    regs.sp[0] = regs.sp[0]->c.args[2];
     GOTO(diseq_args);
 }
 
@@ -304,17 +305,17 @@ FUNCTION(diseq_papp_args)
 {
     Node *arg1, *arg2, *arglist;
  ENTRY_LABEL(static, diseq_papp_args)
-    arglist = sp[0];
+    arglist = regs.sp[0];
     arg1    = arglist->c.args[0];
     arg2    = arglist->c.args[1];
     arglist = arglist->c.args[2];
 
     CHECK_STACK(3);
-    sp	 -= 3;
-    sp[0] = arg1;
-    sp[1] = arg2;
-    sp[2] = (Node *)diseq_papp_args_1;
-    sp[3] = arglist;
+    regs.sp   -= 3;
+    regs.sp[0] = arg1;
+    regs.sp[1] = arg2;
+    regs.sp[2] = (Node *)diseq_papp_args_1;
+    regs.sp[3] = arglist;
     GOTO(___61__61_);
 }
 
@@ -322,13 +323,13 @@ static
 FUNCTION(diseq_papp_args_1)
 {
  ENTRY_LABEL(static, diseq_papp_args_1)
-    if ( *sp++ != CONST(__Prelude__True) )
+    if ( *regs.sp++ != CONST(__Prelude__True) )
     {
-	sp += 1;
+	regs.sp += 1;
 	RETURN(Success);
     }
 
-    if ( sp[0] == nil )
+    if ( regs.sp[0] == nil )
 	FAIL();
     GOTO(diseq_papp_args);
 }
@@ -342,6 +343,6 @@ static
 FUNCTION(check_diseq)
 {
  ENTRY_LABEL(static, check_diseq)
-    sp[1] = ((Disequality *)sp[1])->node;
+    regs.sp[1] = ((Disequality *)regs.sp[1])->node;
     GOTO(___61__47__61_);
 }

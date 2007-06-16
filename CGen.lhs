@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2259 2007-06-16 13:37:33Z wlux $
+% $Id: CGen.lhs 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -544,40 +544,43 @@ calls to a variable instead of a known function.
 > evalCode :: Int -> [CStmt]
 > evalCode n =
 >   [CProcCall "CHECK_STACK" [CInt (n - 1)] | n > 1] ++
->   CLocalVar nodePtrType "clos" (Just (CExpr "sp[0]")) :
->   [CDecrBy (LVar "sp") (CInt (n - 1)) | n /= 1] ++
+>   CLocalVar nodePtrType "clos" (Just (CExpr "regs.sp[0]")) :
+>   [CDecrBy (LVar "regs.sp") (CInt (n - 1)) | n /= 1] ++
 >   [saveArg i | i <- [0..n-1]] ++
 >   [goto "clos->info->entry"]
->   where saveArg i = CAssign (LElem (LVar "sp") (CInt i))
+>   where saveArg i = CAssign (LElem (LVar "regs.sp") (CInt i))
 >                             (CElem (CExpr "clos->c.args") (CInt i))
 
 > lazyCode :: Int -> [CStmt]
 > lazyCode n =
 >   CLocalVar boolType "local"
->             (Just (funCall "is_local_space" ["sp[0]->s.spc"])) :
+>             (Just (funCall "is_local_space" ["regs.sp[0]->s.spc"])) :
 >   CIf (CExpr "!local")
->       [procCall "suspend_search" ["resume","sp[0]","sp[0]->s.spc"]]
+>       [procCall "suspend_search" ["resume","regs.sp[0]","regs.sp[0]->s.spc"]]
 >       [] :
->   CLocalVar nodePtrType "susp" (Just (CExpr "sp[0]")) :
+>   CLocalVar nodePtrType "susp" (Just (CExpr "regs.sp[0]")) :
 >   CLocalVar labelType "entry" (Just (CExpr "susp->info->entry")) :
 >   zipWith fetchArg vs [0..] ++
 >   CIf (CRel (CExpr "local") "&&"
->             (CRel (CCast labelType (CExpr "sp[1]")) "==" (CExpr "update")))
->       (CLocalVar nodePtrType "que" (Just (CExpr "sp[2]")) :
+>             (CRel (CCast labelType (CExpr "regs.sp[1]")) "=="
+>                   (CExpr "update")))
+>       (CLocalVar nodePtrType "que" (Just (CExpr "regs.sp[2]")) :
 >        lockIndir (Name "susp") (Name "que") ++
 >        [CProcCall "CHECK_STACK" [CInt (n - 1)] | n > 1] ++
->        [CDecrBy (LVar "sp") (CInt (n - 1)) | n /= 1])
+>        [CDecrBy (LVar "regs.sp") (CInt (n - 1)) | n /= 1])
 >       (lock (Name "susp") ++
 >        [CProcCall "CHECK_STACK" [CInt (n + 1)],
->         CDecrBy (LVar "sp") (CInt (n + 1)),
->         CAssign (LElem (LVar "sp") (CInt n)) (asNode (CExpr "update"))]) :
+>         CDecrBy (LVar "regs.sp") (CInt (n + 1)),
+>         CAssign (LElem (LVar "regs.sp") (CInt n))
+>                 (asNode (CExpr "update"))]) :
 >   zipWith saveArg [0..] vs ++
 >   [goto "entry"]
 >   where vs = [Name ('v' : show i) | i <- [1..n]]
 >         fetchArg v i =
 >           CLocalVar nodePtrType (show v)
 >                     (Just (CElem (CExpr "susp->s.args") (CInt i)))
->         saveArg i v = CAssign (LElem (LVar "sp") (CInt i)) (CExpr (show v))
+>         saveArg i v =
+>           CAssign (LElem (LVar "regs.sp") (CInt i)) (CExpr (show v))
 
 \end{verbatim}
 When saving arguments to the stack, we avoid saving variables that
@@ -588,7 +591,8 @@ the Gnu C compiler does not detect such redundant save operations.
 > loadVars :: [Name] -> [CStmt]
 > loadVars vs = zipWith loadVar vs [0..]
 >   where loadVar v i =
->           CLocalVar nodePtrType (show v) (Just (CElem (CExpr "sp") (CInt i)))
+>           CLocalVar nodePtrType (show v)
+>                     (Just (CElem (CExpr "regs.sp") (CInt i)))
 
 > fetchArgs :: Name -> CPSTag -> [CStmt]
 > fetchArgs _ (CPSLitCase _) = []
@@ -602,17 +606,18 @@ the Gnu C compiler does not detect such redundant save operations.
 
 > saveVars :: [Name] -> [Name] -> [CStmt]
 > saveVars vs0 vs =
->   [CIncrBy (LVar "sp") (CInt d) | d /= 0] ++
+>   [CIncrBy (LVar "regs.sp") (CInt d) | d /= 0] ++
 >   [saveVar i v | (i,v0,v) <- zip3 [0..] vs0' vs, v0 /= v]
 >   where d = length vs0 - length vs
 >         vs0' = if d >= 0 then drop d vs0 else replicate (-d) (Name "") ++ vs0
->         saveVar i v = CAssign (LElem (LVar "sp") (CInt i)) (CExpr (show v))
+>         saveVar i v =
+>           CAssign (LElem (LVar "regs.sp") (CInt i)) (CExpr (show v))
 
 > updVar :: [Name] -> Name -> CStmt
 > updVar vs v
 >   | null vs'' = error ("updVar " ++ show v)
 >   | otherwise =
->       CAssign (LElem (LVar "sp") (CInt (length vs'))) (CExpr (show v))
+>       CAssign (LElem (LVar "regs.sp") (CInt (length vs'))) (CExpr (show v))
 >   where (vs',vs'') = break (v ==) vs
 
 \end{verbatim}
@@ -786,8 +791,8 @@ split into minimal binding groups.
 >       case n of
 >         Lit c -> [CLocalVar nodePtrType v' (Just (literal c))]
 >         Var v'' -> [CLocalVar nodePtrType v' (Just (CExpr (show v'')))]
->         _ -> [CLocalVar nodePtrType v' (Just (asNode (CExpr "hp"))),
->               CIncrBy (LVar "hp") (nodeSize n)]
+>         _ -> [CLocalVar nodePtrType v' (Just (asNode (CExpr "regs.hp"))),
+>               CIncrBy (LVar "regs.hp") (nodeSize n)]
 >   where v' = show v
 
 > initNode :: FM Name CExpr -> Bind -> [CStmt]
@@ -823,7 +828,7 @@ split into minimal binding groups.
 > initLazy :: LVar -> Name -> [String] -> [CStmt]
 > initLazy v f vs =
 >   CAssign (LField v "info") (CExpr (lazyInfoTable f)) :
->   CAssign (LField v "s.spc") (CExpr "ss") :
+>   CAssign (LField v "s.spc") (CExpr "regs.ss") :
 >   if null vs then
 >     [CAssign (LElem (LField v "s.args") (CInt 0)) CNull]
 >   else
@@ -832,7 +837,7 @@ split into minimal binding groups.
 > initFree :: LVar -> [CStmt]
 > initFree v =
 >   [CAssign (LField v "info") (CExpr "variable_info_table"),
->    CAssign (LField v "v.spc") (CExpr "ss"),
+>    CAssign (LField v "v.spc") (CExpr "regs.ss"),
 >    CAssign (LField v "v.wq") CNull,
 >    CAssign (LField v "v.cstrs") CNull]
 
@@ -882,8 +887,9 @@ translation function.
 > ret :: [Name] -> Name -> [CPSCont] -> [CStmt]
 > ret vs0 v [] =
 >   saveVars vs0 [] ++
->   [CLocalVar labelType "_ret_ip" (Just (CCast labelType (CExpr "sp[0]"))),
->    CAssign (LVar "sp[0]") result,
+>   [CLocalVar labelType "_ret_ip"
+>              (Just (CCast labelType (CExpr "regs.sp[0]"))),
+>    CAssign (LVar "regs.sp[0]") result,
 >    goto "_ret_ip"]
 >   where result = CExpr (show v)
 > ret vs0 v (k:ks) = saveCont vs0 (v : contVars k) ks ++ [goto (contName k)]
@@ -916,7 +922,7 @@ translation function.
 >                  CRel (nodeTag v') "==" (CExpr "UPD_TAG"),
 >                  CFunCall "is_local_space" [field v' "s.spc"]],
 >    CppCondStmts "!COPY_SEARCH_SPACE"
->      [CIf (CRel (CCast wordPtrType (CExpr v')) "<" (CExpr "hlim"))
+>      [CIf (CRel (CCast wordPtrType (CExpr v')) "<" (CExpr "regs.hlim"))
 >           [procCall "DO_SAVE" [v',"q.wq"],
 >            CIncrBy (LField (LVar v') "info") (CInt 1)]
 >           [CAssign (LField (LVar v') "info") (CExpr "queueMe_info_table")]]
@@ -944,7 +950,7 @@ translation function.
 >   [rtsAssertList [CRel (field v2' "info->kind") "==" (CExpr "LAZY_KIND"),
 >                   CRel (field v2' "info->tag") "==" (CExpr "QUEUEME_TAG")],
 >    CppCondStmts "!COPY_SEARCH_SPACE"
->       [CIf (CRel (CCast wordPtrType (CExpr v1')) "<" (CExpr "hlim"))
+>       [CIf (CRel (CCast wordPtrType (CExpr v1')) "<" (CExpr "regs.hlim"))
 >           [procCall "DO_SAVE" [v1',"n.node"],
 >            CIncrBy (LField (LVar v1') "info") (CInt 2)]
 >           [CAssign (LField (LVar v1') "info") (CAddr (CExpr "indir_info"))]]
@@ -972,18 +978,18 @@ translation function.
 >   CLocalVar nodePtrType ips (Just (asNode (CExpr choices))) :
 >   saveCont vs0 (Name ips : contVars (head ks)) ks' ++
 >   [CppCondStmts "YIELD_NONDET"
->      [CIf (CExpr "rq") [yieldCall v] []]
+>      [CIf (CExpr "regs.rq") [yieldCall v] []]
 >      [],
->    goto "nondet_handlers->choices"]
+>    goto "regs.handlers->choices"]
 >   where ips = "_choice_ips"
 >         choices = "_choices"
 >         yieldCall (Just v) =
 >           tailCall "yield_delay_thread" ["flex_yield_resume",show v]
 >         yieldCall Nothing =
->           tailCall "yield_thread" ["nondet_handlers->choices"]
+>           tailCall "yield_thread" ["regs.handlers->choices"]
 
 > failAndBacktrack :: [CStmt]
-> failAndBacktrack = [goto "nondet_handlers->fail"]
+> failAndBacktrack = [goto "regs.handlers->fail"]
 
 \end{verbatim}
 Code generation for \texttt{CPSSwitch} statements is a little bit more
@@ -1103,12 +1109,12 @@ the application to the surplus arguments.
 >   CLocalVar uintType "argc" (Just (funCall "closure_argc" [show v])) :
 >   CLocalVar uintType "sz" (Just (funCall "node_size" [show v])) :
 >   CProcCall "CHECK_HEAP" [CAdd (CExpr "sz") (CInt n)] :
->   CAssign (LVar v') (asNode (CExpr "hp")) :
->   CIncrBy (LVar "hp") (CAdd (CExpr "sz") (CInt n)) :
->   wordCopy (CExpr v') (CExpr "sp[0]") "sz" :
+>   CAssign (LVar v') (asNode (CExpr "regs.hp")) :
+>   CIncrBy (LVar "regs.hp") (CAdd (CExpr "sz") (CInt n)) :
+>   wordCopy (CExpr v') (CExpr "regs.sp[0]") "sz" :
 >   CIncrBy (LField (LVar v') "info") (CInt n) :
 >   [CAssign (LElem (LField (LVar v') "c.args") (CAdd (CExpr "argc") (CInt i)))
->            (CElem (CExpr "sp") (CInt (i+1))) | i <- [0 .. n-1]] ++
+>            (CElem (CExpr "regs.sp") (CInt (i+1))) | i <- [0 .. n-1]] ++
 >   ret vs0 v []
 >   where v' = show v
 
@@ -1178,50 +1184,50 @@ first loads this address into a temporary variable and then boxes it.
 >    CIf (CRel (CRel (CExpr v2) ">=" (CInt 0)) "&&"
 >              (CRel (CExpr v2) "<" (CInt 0x100)))
 >      [CAssign (LVar v1) (asNode (CExpr "char_table" `CAdd` CExpr v2))]
->      [CAssign (LVar v1) (asNode (CExpr "hp")),
+>      [CAssign (LVar v1) (asNode (CExpr "regs.hp")),
 >       CAssign (LField (LVar v1) "info") (CAddr (CExpr "char_info")),
 >       CAssign (LField (LVar v1) "ch.ch") (CExpr v2),
->       CIncrBy (LVar "hp") (ctypeSize TypeChar)]]
+>       CIncrBy (LVar "regs.hp") (ctypeSize TypeChar)]]
 > box (Just TypeInt) v1 v2 =
 >   [CLocalVar nodePtrType v1 Nothing,
 >    CIf (funCall "is_large_int" [v2])
->      [CAssign (LVar v1) (asNode (CExpr "hp")),
+>      [CAssign (LVar v1) (asNode (CExpr "regs.hp")),
 >       CAssign (LField (LVar v1) "info") (CAddr (CExpr "int_info")),
 >       CAssign (LField (LVar v1) "i.i") (CExpr v2),
->       CIncrBy (LVar "hp") (ctypeSize TypeInt)]
+>       CIncrBy (LVar "regs.hp") (ctypeSize TypeInt)]
 >      [CppCondStmts "ONLY_BOXED_OBJECTS"
 >         [CProcCall "curry_panic"
 >                    [CString "impossible: !is_large_int(%ld)\n",CExpr v2]]
 >         [CAssign (LVar v1) (funCall "mk_unboxed" [v2])]]]
 > box (Just TypeFloat) v1 v2 =
->   [CLocalVar nodePtrType v1 (Just (asNode (CExpr "hp"))),
+>   [CLocalVar nodePtrType v1 (Just (asNode (CExpr "regs.hp"))),
 >    CAssign (LField (LVar v1) "info") (CAddr (CExpr  "float_info")),
 >    CProcCall "put_double_val" [CExpr v1,CExpr v2],
->    CIncrBy (LVar "hp") (ctypeSize TypeFloat)]
+>    CIncrBy (LVar "regs.hp") (ctypeSize TypeFloat)]
 > box (Just TypePtr) v1 v2 =
 >   [CLocalVar nodePtrType v1 Nothing,
 >    CIf (CRel (CExpr v2) "==" CNull)
 >      [CAssign (LVar v1) (constRef "null_ptr")]
->      [CAssign (LVar v1) (asNode (CExpr "hp")),
+>      [CAssign (LVar v1) (asNode (CExpr "regs.hp")),
 >       CAssign (LField (LVar v1) "info") (CAddr (CExpr "ptr_info")),
 >       CAssign (LField (LVar v1) "p.ptr") (CExpr v2),
->       CIncrBy (LVar "hp") (ctypeSize TypePtr)]]
+>       CIncrBy (LVar "regs.hp") (ctypeSize TypePtr)]]
 > box (Just TypeFunPtr) v1 v2 =
 >   [CLocalVar nodePtrType v1 Nothing,
 >    CIf (CRel (CExpr v2) "==" CNull)
 >      [CAssign (LVar v1) (constRef "null_funptr")]
->      [CAssign (LVar v1) (asNode (CExpr "hp")),
+>      [CAssign (LVar v1) (asNode (CExpr "regs.hp")),
 >       CAssign (LField (LVar v1) "info") (CAddr (CExpr "funptr_info")),
 >       CAssign (LField (LVar v1) "p.ptr") (CExpr v2),
->       CIncrBy (LVar "hp") (ctypeSize TypeFunPtr)]]
+>       CIncrBy (LVar "regs.hp") (ctypeSize TypeFunPtr)]]
 > box (Just TypeStablePtr) v1 v2 =
 >   [CLocalVar nodePtrType v1 Nothing,
 >    CIf (CRel (CExpr v2) "==" CNull)
 >      [CAssign (LVar v1) (constRef "null_stabptr")]
->      [CAssign (LVar v1) (asNode (CExpr "hp")),
+>      [CAssign (LVar v1) (asNode (CExpr "regs.hp")),
 >       CAssign (LField (LVar v1) "info") (CAddr (CExpr "stabptr_info")),
 >       CAssign (LField (LVar v1) "p.ptr") (CExpr v2),
->       CIncrBy (LVar "hp") (ctypeSize TypeStablePtr)]]
+>       CIncrBy (LVar "regs.hp") (ctypeSize TypeStablePtr)]]
 
 > ctype :: CArgType -> CType
 > ctype TypeBool = intType

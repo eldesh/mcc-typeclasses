@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: stack.nw 1899 2006-04-19 10:50:11Z wlux $
+% $Id: stack.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -19,7 +19,6 @@ the stack.
 
 <<stack.h>>=
 extern Node **stack_base, **stack_end;
-extern Node **sp;
 
 @
 <<stack.c>>=
@@ -28,17 +27,17 @@ extern Node **sp;
 #include <stdlib.h>
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "main.h"
 
 Node **stack_base;
 Node **stack_end;
-Node **sp;
 
 @
 The initialization function allocates a stack array with the specified
-size and initializes the stack pointer.
+size.
 
 <<stack.h>>=
 extern void init_stack(unsigned int stack_size);
@@ -53,9 +52,8 @@ init_stack(unsigned int stack_size)
     if ( stack_base == NULL )
 	sys_error("init_stack");
 
-    stack_base = (Node **)(((long)stack_base + pagemask) & ~pagemask); 
+    stack_base = (Node **)(((long)stack_base + pagemask) & ~pagemask);
     stack_end  = stack_base + stack_size / word_size;
-    sp	       = stack_end;
 }
 
 @ 
@@ -68,8 +66,8 @@ function [[stack_overflow]].
 <<stack.h>>=
 extern void stack_overflow(void) __attribute__ ((noreturn));
 
-#define CHECK_STACK1()	 if ( sp == stack_base ) stack_overflow();
-#define CHECK_STACK(n)	 if ( sp - (n) < stack_base ) stack_overflow();
+#define CHECK_STACK1()	 if ( regs.sp <= stack_base ) stack_overflow();
+#define CHECK_STACK(n)	 if ( regs.sp - (n) < stack_base ) stack_overflow();
 
 @
 <<stack.c>>=
@@ -101,7 +99,7 @@ backtracking and when returning from a failed encapsulated search,
 respectively.
 
 A pointer to the current choice point or search context is saved in
-the [[bp]] variable. Choice points and search contexts can be
+the [[bp]] register. Choice points and search contexts can be
 distinguished by examining the [[btAlts]] field. It contains a null
 pointer for search contexts as there are no alternative continuations.
 
@@ -123,12 +121,6 @@ typedef struct choicepoint {
     const struct nondet_handlers *btHandlers;
 } Choicepoint;
 
-extern Choicepoint *bp;
-
-@
-<<stack.c>>=
-Choicepoint *bp;
-
 @
 \subsubsection{Non-deterministic evaluation}
 The abstract machine uses the \texttt{Choices} statement in order to
@@ -140,23 +132,19 @@ returned to the caller. In monadic code, the program is aborted with
 an error message. The runtime system uses a set of labels to handle
 non-deterministic choices and failures. A pointer to the current set
 of handlers, which also includes an entry point to handle deadlocks,
-is saved in the global variable [[nondet_handlers]]. When the abstract
-machine enters or leaves an encapsulated search, this variable is
-updated appropriately.
+is saved in the [[handlers]] register. When the abstract machine
+enters or leaves an encapsulated search, this variable is updated
+appropriately.
 
 The [[choices]] handlers expect a pointer to a null-terminated array
 containing all continuation addresses on the top of the stack.
 
 <<stack.h>>=
-extern const struct nondet_handlers {
+struct nondet_handlers {
     Label choices;
     Label deadlock;
     Label fail;
-} *nondet_handlers;
-
-@
-<<stack.c>>=
-const struct nondet_handlers *nondet_handlers;
+};
 
 @
 \subsubsection{Exceptions}
@@ -166,7 +154,7 @@ is installed by the \texttt{catch} function. Each frame saves a
 pointer to the current exception handler, which must be a function of
 type \texttt{IOError -> IO a}, and the address of the previous
 exception frame. The pointer to the current exception frame is saved
-in the global variable [[efp]].
+in the abstract machine register [[efp]].
 
 In general, only the main thread of a program executes an I/O
 computation and therefore there will be only one dedicated exception
@@ -174,7 +162,7 @@ handler. However, it is possible to run an I/O computation on any
 thread -- even within an encapsulated search -- with the help of
 \texttt{unsafePerformIO}. Therefore, each thread uses its own
 exception handler chain. The runtime system will initialize the
-variable [[efp]] with [[0]] when a new thread is created.
+register [[efp]] with [[0]] when a new thread is created.
 
 <<stack.h>>=
 typedef struct exception_frame
@@ -182,9 +170,3 @@ typedef struct exception_frame
     Node		   *handler;
     struct exception_frame *frame;
 } ExceptionFrame;
-
-extern ExceptionFrame *efp;
-
-@
-<<stack.c>>=
-ExceptionFrame *efp;

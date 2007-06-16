@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: trace.nw 2259 2007-06-16 13:37:33Z wlux $
+% $Id: trace.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -51,6 +51,7 @@ extern void trace_fun(const char *name, unsigned int arity);
 #include <stdlib.h>
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "threads.h"
@@ -106,8 +107,8 @@ trace(const char *fmt, ...)
 		trace_showaddr(va_arg(ap, Node *));
 		break;
 	    case 'I':
-		fprintf(stderr, "[%u]", cid);
-		for ( fp = sp; fp < ds_base; fp++ )
+		fprintf(stderr, "[%u]", regs.cid);
+		for ( fp = regs.sp; fp < regs.ds_base; fp++ )
 		    if ( (Label)*fp == trace_return )
 			fputc(' ', stderr);
 		break;
@@ -269,15 +270,15 @@ trace_fun(const char *name, unsigned int arity)
 {
     unsigned int i;
 
-    if ( sp[arity] != (Node *)trace_return )
+    if ( regs.sp[arity] != (Node *)trace_return )
     {
 	CHECK_STACK1();
-	sp -= 1;
+	regs.sp -= 1;
 	for ( i = 0; i < arity; i++ )
-	    sp[i] = sp[i+1];
-	sp[arity] = (Node *)trace_return;
+	    regs.sp[i] = regs.sp[i+1];
+	regs.sp[arity] = (Node *)trace_return;
     }
-    trace("%Ienter %s%V\n", name, arity, sp);
+    trace("%Ienter %s%V\n", name, arity, regs.sp);
 }
 
 static
@@ -286,9 +287,9 @@ FUNCTION(trace_return)
     Node  *r;
     Label ret_ip;
  ENTRY_LABEL(static, trace_return)
-    r = *sp++;
+    r = *regs.sp++;
     trace("%I return %N\n", r);
-    ret_ip = (Label)sp[0];
-    sp[0]  = r;
+    ret_ip     = (Label)regs.sp[0];
+    regs.sp[0] = r;
     GOTO(ret_ip);
 }

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: vector.nw 2256 2007-06-16 13:28:39Z wlux $
+% $Id: vector.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -21,6 +21,7 @@ this will make the printing code treat vectors as tuples.
 #include <limits.h>
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "trail.h"
@@ -74,8 +75,8 @@ FUNCTION(__primEqIOVector_2)
     Node *r;
  ENTRY_LABEL(static, __primEqIOVector_2)
     MATCH_RIGID_VECTOR(__primEqIOVector_2);
-    r	= sp[1] == sp[0] ? Prelude_True : Prelude_False;
-    sp += 2;
+    r	     = regs.sp[1] == regs.sp[0] ? Prelude_True : Prelude_False;
+    regs.sp += 2;
     RETURN(r);
 }
 
@@ -100,7 +101,7 @@ FUNCTION(__newIOVector_1)
     Node *init, *vec;
  ENTRY_LABEL(static, __newIOVector_1)
     MATCH_RIGID_INT(__newIOVector_1);
-    n = long_val(sp[0]);
+    n = long_val(regs.sp[0]);
     if ( n < 0 )
 	fail_with("newIOVector: negative length (%ld)", n);
 
@@ -109,18 +110,18 @@ FUNCTION(__newIOVector_1)
     else
     {
 	CHECK_HEAP(vector_node_size(n));
-	init = sp[1];
+	init = regs.sp[1];
 	while ( is_boxed(init) && is_indir_node(init) )
 	    init = init->n.node;
-	vec	      = (Node *)hp;
+	vec	      = (Node *)regs.hp;
 	vec->info     = &vector_info;
 	vec->a.length = vector_node_size(n);
 	for ( i = 0; i < n; i++ )
 	    vec->a.args[i] = init;
-	hp += vector_node_size(n);
+	regs.hp += vector_node_size(n);
     }
 
-    sp += 3;
+    regs.sp += 3;
     RETURN(vec);
 }
 
@@ -146,16 +147,16 @@ FUNCTION(__copyIOVector_1)
  ENTRY_LABEL(static, __copyIOVector_1)
     MATCH_RIGID_VECTOR(__copyIOVector_1);
 
-    vec = sp[0];
+    vec = regs.sp[0];
     if ( vector_argc(vec) > 0 )
     {
 	CHECK_HEAP(vec->a.length);
-	vec = (Node *)hp;
-	memcpy(vec, sp[0], sp[0]->a.length * word_size);
-	hp += vec->a.length;
+	vec = (Node *)regs.hp;
+	memcpy(vec, regs.sp[0], regs.sp[0]->a.length * word_size);
+	regs.hp += vec->a.length;
     }
 
-    sp += 2;
+    regs.sp += 2;
     RETURN(vec);
 }
 
@@ -193,9 +194,9 @@ FUNCTION(__readIOVector_2)
  ENTRY_LABEL(static, __readIOVector_2)
     MATCH_RIGID_INT(__readIOVector_2);
 
-    i	= long_val(sp[0]);
-    vec = sp[1];
-    sp += 3;
+    i	     = long_val(regs.sp[0]);
+    vec	     = regs.sp[1];
+    regs.sp += 3;
     if ( i < 0 || (unsigned long)i >= vector_argc(vec) )
 	fail_with("readIOVector: index out range (%ld)", i);
 
@@ -236,10 +237,10 @@ FUNCTION(__writeIOVector_2)
  ENTRY_LABEL(static, __writeIOVector_2)
     MATCH_RIGID_INT(__writeIOVector_2);
 
-    i	 = long_val(sp[0]);
-    vec	 = sp[1];
-    node = sp[2];
-    sp	+= 4;
+    i	     = long_val(regs.sp[0]);
+    vec	     = regs.sp[1];
+    node     = regs.sp[2];
+    regs.sp += 4;
 
     if ( i < 0 || (unsigned long)i >= vector_argc(vec) )
 	fail_with("writeIOVector: index out range (%ld)", i);
@@ -273,8 +274,8 @@ FUNCTION(__lengthIOVector_1)
  ENTRY_LABEL(static, __lengthIOVector_1)
     MATCH_RIGID_VECTOR(__lengthIOVector_1);
 
-    n	= vector_argc(sp[0]);
-    sp += 1;
+    n	     = vector_argc(regs.sp[0]);
+    regs.sp += 1;
 
 #if !ONLY_BOXED_OBJECTS
     if ( !is_large_int(n) )
@@ -283,10 +284,10 @@ FUNCTION(__lengthIOVector_1)
 #endif
     {
 	CHECK_HEAP(int_node_size);
-	r	= (Node *)hp;
-	r->info = &int_info;
-	r->i.i  = n;
-	hp     += int_node_size;
+	r	 = (Node *)regs.hp;
+	r->info	 = &int_info;
+	r->i.i	 = n;
+	regs.hp += int_node_size;
     }
     RETURN(r);
 }

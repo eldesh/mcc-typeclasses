@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2260 2007-06-16 13:38:36Z wlux $
+% $Id: heap.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -13,6 +13,7 @@
 #include <ctype.h>
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "eval.h"
 #include "data.h"
@@ -35,7 +36,9 @@ typedef enum bool { false, true } boolean;
 #define word_size	sizeof(word)
 #define wordsof(x)	((sizeof(x) + word_size - 1) / word_size)
 
-typedef void *word;
+#if 0
+typedef void *word;	/* already declared in regs.h */
+#endif
 
 @ 
 In the default configuration, all data except for integer numbers is
@@ -766,21 +769,13 @@ is_operator(NodeInfo *info)
 @ 
 The heap is organized as a large array of words starting at
 [[heap_base]] with its top at [[heap_end]]. The current allocation
-pointer into the heap is kept in the variable [[hp]], which
-corresponds to the abstract machine register with the same name. The
-variable [[hlim]] saves the value of the allocation pointer at the
-time when the current choice point or search context was created. It
-is used to avoid trailing of variables and suspended applications that
-are younger than the current choice point.
+pointer into the heap is kept in the register [[hp]].
 
 <<heap.h>>=
-extern word *hp, *hlim;
 extern word *heap_base, *heap_end;
 
 @
 <<heap.c>>=
-word *hp;
-word *hlim;
 word *heap_base;
 word *heap_end;
 
@@ -798,7 +793,8 @@ is executing.
 <<heap.h>>=
 extern boolean in_gc;
 extern void collect(unsigned int);
-#define CHECK_HEAP(n) do { if ( hp + (n) > heap_end ) collect(n); } while ( 0 )
+#define CHECK_HEAP(n) \
+    do { if ( regs.hp + (n) > heap_end ) collect(n); } while ( 0 )
 
 @
 <<heap.c>>=

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 2252 2007-06-15 17:45:09Z wlux $
+% $Id: backtrack.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -66,37 +66,37 @@ FUNCTION(choices)
     unsigned int cp_sz, stk_sz;
     const Label	 *choice_conts;
  ENTRY_LABEL(static, choices)
-    choice_conts = (const Label *)*sp++;
+    choice_conts = (const Label *)*regs.sp++;
     assert(choice_conts[1] != 0);
 
     TRACE(("%I try\n"));
-    oldBp  = bp;
-    stk_sz = (bp ? (Node **)bp : stack_end) - sp;
+    oldBp  = regs.bp;
+    stk_sz = (regs.bp ? (Node **)regs.bp : stack_end) - regs.sp;
     cp_sz  = wordsof(Choicepoint) + stk_sz;
 
     /* create a new choice point on the stack */
     CHECK_STACK(cp_sz);
-    bp		   = (Choicepoint *)(sp - wordsof(Choicepoint));
-    bp->btAlts	   = choice_conts + 1;
-    bp->btCid	   = cid;
-    bp->btDsBase   = ds_base;
-    bp->btBp	   = oldBp;
-    bp->btRq	   = rq;
+    regs.bp		= (Choicepoint *)(regs.sp - wordsof(Choicepoint));
+    regs.bp->btAlts	= choice_conts + 1;
+    regs.bp->btCid	= regs.cid;
+    regs.bp->btDsBase	= regs.ds_base;
+    regs.bp->btBp	= oldBp;
+    regs.bp->btRq	= regs.rq;
 #if !COPY_SEARCH_SPACE
-    bp->btTp	   = tp;
+    regs.bp->btTp	= regs.tp;
 #endif
-    bp->btDict	   = names_tail;
-    bp->btHp	   = hp;
-    bp->btSpc	   = ss;
-    bp->btHandlers = nondet_handlers;
+    regs.bp->btDict	= names_tail;
+    regs.bp->btHp	= regs.hp;
+    regs.bp->btSpc	= regs.ss;
+    regs.bp->btHandlers = regs.handlers;
 
     /* adjust the heap limit */
-    hlim = hp;
+    regs.hlim = regs.hp;
 
     /* create a copy of the stack below the choice point */
-    memcpy(sp - cp_sz, sp, stk_sz*word_size);
-    sp	    -= cp_sz;
-    ds_base -= cp_sz;
+    memcpy(regs.sp - cp_sz, regs.sp, stk_sz*word_size);
+    regs.sp	 -= cp_sz;
+    regs.ds_base -= cp_sz;
 #if COPY_SEARCH_SPACE
     (void)copy_graph(0, 0);
     copy_goal_names();
@@ -115,50 +115,51 @@ FUNCTION(fail)
     TRACE(("%I fail\n"));
 
     /* if no alternatives are available terminate the program */
-    if ( bp == 0 )
+    if ( regs.bp == 0 )
     {
-	assert(cid != 0);
+	assert(regs.cid != 0);
 	halt();
     }
 
 #if !COPY_SEARCH_SPACE
     /* restore the old bindings from the trail */
-    RESTORE(bp->btTp);
+    RESTORE(regs.bp->btTp);
 #endif
 
     /* restore registers from the choice point */
-    cid	    = bp->btCid;
-    rq	    = bp->btRq;
+    regs.cid = regs.bp->btCid;
+    regs.rq  = regs.bp->btRq;
 
     /* release the memory allocated since the last choice point */
-    release_names(bp->btDict);
+    release_names(regs.bp->btDict);
     release_mem();
 
     /* if only one alternative remains, drop the choice point */
-    choice_conts = bp->btAlts;
+    choice_conts = regs.bp->btAlts;
     assert(choice_conts[0] != 0);
     if ( choice_conts[1] == 0 )
     {
-	ds_base		= bp->btDsBase;
-	ss		= bp->btSpc;
-	nondet_handlers = bp->btHandlers;
-	sp		= (Node **)bp + wordsof(Choicepoint);
-	bp		= bp->btBp;
-	hlim		= bp ? bp->btHp : 0;
+	regs.ds_base  = regs.bp->btDsBase;
+	regs.ss	      = regs.bp->btSpc;
+	regs.handlers = regs.bp->btHandlers;
+	regs.sp	      = (Node **)regs.bp + wordsof(Choicepoint);
+	regs.bp	      = regs.bp->btBp;
+	regs.hlim     = regs.bp ? regs.bp->btHp : 0;
 	TRACE(("%I trust\n"));
     }
 
     /* otherwise update the choice point */
     else
     {
-	bp->btAlts = choice_conts + 1;
+	regs.bp->btAlts = choice_conts + 1;
 
 	/* copy the stack */
-	stk_sz	 = (bp->btBp ? (Node **)bp->btBp : stack_end)
-		   - (Node **)(bp + 1);
-	sp       = (Node **)bp - stk_sz;
-	ds_base  = bp->btDsBase - wordsof(Choicepoint) - stk_sz;
-	memcpy(sp, sp + wordsof(Choicepoint) + stk_sz, stk_sz * word_size);
+	stk_sz	     = (regs.bp->btBp ? (Node **)regs.bp->btBp : stack_end)
+		       - (Node **)(regs.bp + 1);
+	regs.sp	     = (Node **)regs.bp - stk_sz;
+	regs.ds_base = regs.bp->btDsBase - wordsof(Choicepoint) - stk_sz;
+	memcpy(regs.sp, regs.sp + wordsof(Choicepoint) + stk_sz,
+	       stk_sz * word_size);
 #if COPY_SEARCH_SPACE
 	(void)copy_graph(0, 0);
 	copy_goal_names();
@@ -180,8 +181,8 @@ copy_goal_names()
     /* insert the copied global variables into the dictionary */
     /* NB: copied names must be strdup'ed so that they can be
      *     released with free(3) upon backtracking */
-    old_goal = bp->btBp ? ((Node **)bp->btBp)[-2] : stack_end[-2];
-    goal     = ((Node **)bp)[-2];
+    old_goal = regs.bp->btBp ? ((Node **)regs.bp->btBp)[-2] : stack_end[-2];
+    goal     = ((Node **)regs.bp)[-2];
     for ( i = 1, n = closure_argc(goal); i < n; i++ )
 	add_name(goal->c.args[i], strdup(lookup_name(old_goal->c.args[i])));
 }
@@ -215,16 +216,16 @@ solutions are computed. The interactive and non-interactive operation
 can be enforced by passing the options \texttt{-i} and \texttt{-n},
 respectively, to the program.
 
-The functions [[eval_first]] and [[eval_next]] use [[cid == 0]] in
-order to check whether execution has stopped without a failure. The
+The functions [[eval_first]] and [[eval_next]] use [[regs.cid == 0]]
+in order to check whether execution has stopped without a failure. The
 [[fail]] code above does not reset the machine registers; therefore,
 if no alternative continuation is available in [[fail]] and the
-machine is halted, [[cid]] contains a valid thread id. On the other
-hand, the [[stop]] code, which is invoked when a deadlock occurs in
-global search mode, sets [[cid]] to [[0]]. Both [[eval_first]] and
-[[eval_next]] return the goal application upon successful termination.
-Note that this node may be different from the one passed to
-[[eval_first]] when the runtime system was configured with the
+machine is halted, [[regs.cid]] contains a valid thread id. On the
+other hand, the [[stop]] code, which is invoked when a deadlock occurs
+in global search mode, sets [[regs.cid]] to [[0]]. Both [[eval_first]]
+and [[eval_next]] return the goal application upon successful
+termination.  Note that this node may be different from the one passed
+to [[eval_first]] when the runtime system was configured with the
 \texttt{--enable-copying} option. The special values [[-1]] and [[0]]
 are returned when a deadlock has occurred and when the are no
 solutions, respectively.
@@ -308,7 +309,7 @@ curry_eval(NodeInfo *goal_info, const char *fv_names[], int argc, char **argv)
 	fprintf(interactive ? stdout : stderr, "No solution\n");
 
     /* execute finalization functions of the live objects */
-    hlim = heap_base;
+    regs.hlim = heap_base;
     release_mem();
 
     return 0;
@@ -328,22 +329,22 @@ eval_apply(NodeInfo *goal_info, const char *fv_names[])
 	   goal_info->length == closure_node_size(n + 1));
 
     CHECK_HEAP(closure_node_size(n + 1) + (n + 1) * variable_node_size);
-    vars = (struct variable_node *)hp;
+    vars = (struct variable_node *)regs.hp;
     for ( i = 0; i <= n; i++ )
     {
-	var	     = (Node *)hp;
+	var	     = (Node *)regs.hp;
 	var->info    = variable_info_table;
-	var->v.spc   = ss;
+	var->v.spc   = regs.ss;
 	var->v.wq    = 0;
 	var->v.cstrs = 0;
-	hp	    += variable_node_size;
+	regs.hp	    += variable_node_size;
     }
 
-    clos       = (Node *)hp;
+    clos       = (Node *)regs.hp;
     clos->info = goal_info;
     for ( i = 0; i <= n; i++ )
 	clos->c.args[i] = (Node *)(vars + i);
-    hp += closure_node_size(n + 1);
+    regs.hp += closure_node_size(n + 1);
 
     for ( i = 0; i < n; i++ )
 	add_name((Node *)(vars + i + 1), fv_names[i]);
@@ -357,15 +358,15 @@ eval_first(Node *goal)
     Node *susp;
 
     CHECK_HEAP(queueMe_node_size);
-    susp	= (Node *)hp;
+    susp	= (Node *)regs.hp;
     susp->info	= queueMe_info_table;
-    susp->q.spc	= ss;
+    susp->q.spc	= regs.ss;
     susp->q.wq	= 0;
-    hp	       += queueMe_node_size;
+    regs.hp    += queueMe_node_size;
 
-    sp	  = stack_end - 2;
-    sp[0] = goal;
-    sp[1] = susp;
+    regs.sp    = stack_end - 2;
+    regs.sp[0] = goal;
+    regs.sp[1] = susp;
 
     return do_eval(start);
 }
@@ -382,16 +383,16 @@ do_eval(Label ip)
     Node *susp;
 
     run(ip);
-    if ( cid != 0 )
+    if ( regs.cid != 0 )
 	return 0;
 
-    susp = bp ? ((Node **)bp)[-1] : stack_end[-1];
+    susp = regs.bp ? ((Node **)regs.bp)[-1] : stack_end[-1];
     while ( is_boxed(susp) && is_indir_node(susp) )
 	susp = susp->n.node;
     if ( is_boxed(susp) && is_lazy_node(susp) )
 	return (Node *)-1;
 
-    return bp ? ((Node **)bp)[-2] : stack_end[-2];
+    return regs.bp ? ((Node **)regs.bp)[-2] : stack_end[-2];
 }
 
 static boolean
@@ -400,7 +401,7 @@ eval_continue(boolean *interactive)
     int c, c1;
 
     /* terminate the program if no alternatives remain */
-    if ( bp == 0 )
+    if ( regs.bp == 0 )
     {
 	printf("\n");
 	return false;
@@ -436,19 +437,19 @@ FUNCTION(start)
     Node  *susp, *goal;
     Label eval;
  ENTRY_LABEL(static, start)
-    nondet_handlers = &global_handlers;
+    regs.handlers = &global_handlers;
     TRACE(("start program\n"));
 
-    goal = sp[0];
-    susp = sp[1];
+    goal = regs.sp[0];
+    susp = regs.sp[1];
     eval = goal->info->eval;
 
     CHECK_STACK(4);
-    sp	 -= 4;
-    sp[0] = goal;
-    sp[1] = (Node *)update;
-    sp[2] = susp;
-    sp[3] = 0;
+    regs.sp   -= 4;
+    regs.sp[0] = goal;
+    regs.sp[1] = (Node *)update;
+    regs.sp[2] = susp;
+    regs.sp[3] = 0;
     start_thread(4);
     GOTO(eval);
 }
@@ -457,6 +458,6 @@ static
 FUNCTION(stop)
 {
  ENTRY_LABEL(static, stop)
-    cid = 0;
+    regs.cid = 0;
     halt();
 }

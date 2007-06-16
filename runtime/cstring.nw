@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cstring.nw 2256 2007-06-16 13:28:39Z wlux $
+% $Id: cstring.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -39,6 +39,7 @@ DECLARE_LABEL(extern, nf_string);
 #endif
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "threads.h"
@@ -92,11 +93,11 @@ prefix_string_len(const char *cp, unsigned long len, Node *list)
 
 	do
 	{
-	    list	    = (Node *)hp;
+	    list	    = (Node *)regs.hp;
 	    list->info	    = &cons_info;
 	    list->c.args[0] = (Node *)(char_table + (*--cp & 0xff));
 	    list->c.args[1] = tail;
-	    hp		   += cons_node_size;
+	    regs.hp	   += cons_node_size;
 	    tail	    = list;
 	}
 	while ( --len > 0 );
@@ -118,8 +119,8 @@ FUNCTION(nf_string)
  ENTRY_LABEL(extern, nf_string)
     TRACE_FUN("nf_string", 1);
     CHECK_STACK1();
-    sp	 -= 1;
-    sp[0] = sp[1];
+    regs.sp   -= 1;
+    regs.sp[0] = regs.sp[1];
     EVAL_BOXED(nf_string_1);
 }
 
@@ -129,18 +130,18 @@ FUNCTION(nf_string_1)
     Node *list;
  ENTRY_LABEL(static, nf_string_1)
     MATCH_RIGID_DATA(nf_string_1);
-    list = sp[0];
+    list = regs.sp[0];
     switch ( node_tag(list) )
     {
     case NIL_TAG:
-	list = sp[1];
-	sp  += 2;
+	list	 = regs.sp[1];
+	regs.sp += 2;
 	RETURN(list);
     case CONS_TAG:
 	CHECK_STACK1();
-	sp   -= 1;
-	sp[0] = list->c.args[0];
-	sp[1] = list->c.args[1];
+	regs.sp   -= 1;
+	regs.sp[0] = list->c.args[0];
+	regs.sp[1] = list->c.args[1];
 	EVAL_BOXED(nf_string_2);
     default:
 	unexpected_tag("nf_string", node_tag(list));
@@ -152,7 +153,7 @@ FUNCTION(nf_string_2)
 {
  ENTRY_LABEL(static, nf_string_2)
     MATCH_RIGID_CHAR(nf_string_2);
-    sp++;
+    regs.sp++;
 
     /* continue to evaluate the tail of the string */
     EVAL_BOXED(nf_string_1);
@@ -245,7 +246,7 @@ static DEFINE_DATA(pair, "(,)", 0, 2);
 FUNCTION(__newCString)
 {
  ENTRY_LABEL(extern, __newCString)
-    sp[1] = (Node *)__newCString_1;
+    regs.sp[1] = (Node *)__newCString_1;
     GOTO(nf_string);
 }
 
@@ -255,13 +256,13 @@ FUNCTION(__newCString_1)
     char *cp;
     Node *p;
  ENTRY_LABEL(static, __newCString_1)
-    cp = to_string(*sp++);
+    cp = to_string(*regs.sp++);
 
     CHECK_HEAP(ptr_node_size);
-    p	     = (Node *)hp;
+    p	     = (Node *)regs.hp;
     p->info  = &ptr_info;
     p->p.ptr = cp;
-    hp	    += ptr_node_size;
+    regs.hp += ptr_node_size;
 
     RETURN(p);
 }
@@ -269,7 +270,7 @@ FUNCTION(__newCString_1)
 FUNCTION(__newCStringLen)
 {
  ENTRY_LABEL(extern, __newCStringLen)
-    sp[1] = (Node *)__newCStringLen_1;
+    regs.sp[1] = (Node *)__newCStringLen_1;
     GOTO(nf_string);
 }
 
@@ -280,33 +281,33 @@ FUNCTION(__newCStringLen_1)
     char	 *cp;
     Node	 *p, *i, *r;
  ENTRY_LABEL(static, __newCStringLen_1)
-    l  = string_length(sp[0]);
+    l  = string_length(regs.sp[0]);
     cp = (char *)malloc(l + 1);
     if ( cp == NULL )
 	sys_error("newCStringLen");
-    copy_string(*sp++, cp);
+    copy_string(*regs.sp++, cp);
 
     CHECK_HEAP(ptr_node_size + int_node_size + pair_node_size);
-    p	     = (Node *)hp;
+    p	     = (Node *)regs.hp;
     p->info  = &ptr_info;
     p->p.ptr = cp;
-    hp	    += ptr_node_size;
+    regs.hp += ptr_node_size;
 #if !ONLY_BOXED_OBJECTS
     if ( !is_large_int(l) )
 	i = mk_unboxed((long)l);
     else
 #endif
     {
-	i	= (Node *)hp;
-	i->info = &int_info;
-	i->i.i  = l;
-	hp     += int_node_size;
+	i	 = (Node *)regs.hp;
+	i->info	 = &int_info;
+	i->i.i	 = l;
+	regs.hp += int_node_size;
     }
-    r		 = (Node *)hp;
+    r		 = (Node *)regs.hp;
     r->info	 = &pair_info;
     r->c.args[0] = p;
     r->c.args[1] = i;
-    hp		+= pair_node_size;
+    regs.hp	+= pair_node_size;
 
     RETURN(r);
 }
@@ -340,14 +341,14 @@ FUNCTION(__peekCString_1)
     Node *r;
  ENTRY_LABEL(static, __peekCString_1)
     MATCH_RIGID_PTR(__peekCString_1);
-    cp = (char *)sp[0]->p.ptr;
+    cp = (char *)regs.sp[0]->p.ptr;
     if ( cp == NULL )
     {
-	sp[0] = from_string("peekCString: null pointer");
+	regs.sp[0] = from_string("peekCString: null pointer");
 	GOTO(__ioError);
     }
-    r	= from_string(cp);
-    sp += 2;
+    r	     = from_string(cp);
+    regs.sp += 2;
     RETURN(r);
 }
 
@@ -363,9 +364,9 @@ FUNCTION(__peekCStringLen_1)
  ENTRY_LABEL(static, __peekCStringLen_1)
     MATCH_RIGID_DATA(__peekCStringLen_1);
     CHECK_STACK1();
-    sp	 -= 1;
-    sp[0] = sp[1]->c.args[0];
-    sp[1] = sp[1]->c.args[1];
+    regs.sp   -= 1;
+    regs.sp[0] = regs.sp[1]->c.args[0];
+    regs.sp[1] = regs.sp[1]->c.args[1];
     EVAL_BOXED(__peekCStringLen_2);
 }
 
@@ -386,20 +387,20 @@ FUNCTION(__peekCStringLen_3)
     Node *r;
  ENTRY_LABEL(static, __peekCStringLen_3)
     MATCH_RIGID_INT(__peekCStringLen_3);
-    l = long_val(sp[0]);
+    l = long_val(regs.sp[0]);
     if ( l > 0 )
     {
-	cp = (char *)sp[1]->p.ptr;
+	cp = (char *)regs.sp[1]->p.ptr;
 	if ( cp == NULL )
 	{
-	    *++sp = from_string("peekCStringLen: null pointer");
+	    *++regs.sp = from_string("peekCStringLen: null pointer");
 	    GOTO(__ioError);
 	}
 	r = from_string_len(cp, l);
     }
     else
 	r = nil;
-    sp += 3;
+    regs.sp += 3;
     RETURN(r);
 }
 

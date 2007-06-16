@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: foreign.nw 2255 2007-06-16 13:26:58Z wlux $
+% $Id: foreign.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -16,6 +16,7 @@ garbage collected.
 #include <stdlib.h>
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "threads.h"
@@ -139,14 +140,14 @@ FUNCTION(__newForeignPtr_1)
     MATCH_RIGID_PTR(__newForeignPtr_1);
 
     CHECK_HEAP(foreign_ptr_node_size);
-    fp		= (Node *)hp;
+    fp		= (Node *)regs.hp;
     fp->info	= &foreign_ptr_info;
-    fp->fp.spc	= ss;
-    fp->fp.ptr	= sp[0]->p.ptr;
+    fp->fp.spc	= regs.ss;
+    fp->fp.ptr	= regs.sp[0]->p.ptr;
     fp->fp.fptr	= 0;
-    hp	       += foreign_ptr_node_size;
+    regs.hp    += foreign_ptr_node_size;
 
-    sp += 2;
+    regs.sp += 2;
     register_final(fp);
     RETURN(fp);
 }
@@ -191,18 +192,18 @@ FUNCTION(__addForeignPtrFinalizer_2)
     union finalizer_list *fptr;
  ENTRY_LABEL(static, __addForeignPtrFinalizer_2)
     MATCH_RIGID_FOREIGN_PTR(__addForeignPtrFinalizer_2);
-    if ( sp[0]->fp.spc != ss )
+    if ( regs.sp[0]->fp.spc != regs.ss )
 	fail_with("addForeignPtrFinalizer: non-local pointer");
 
     CHECK_HEAP(finalizer_node_size);
-    fptr	     = (union finalizer_list *)hp;
+    fptr	     = (union finalizer_list *)regs.hp;
     fptr->info	     = &finalizer_info;
-    fptr->f.next     = sp[0]->fp.fptr;
-    fptr->f.finalize = (void (*)(void *))sp[1]->p.ptr;
-    hp		    += finalizer_node_size;
+    fptr->f.next     = regs.sp[0]->fp.fptr;
+    fptr->f.finalize = (void (*)(void *))regs.sp[1]->p.ptr;
+    regs.hp	    += finalizer_node_size;
 
-    sp[0]->fp.fptr = fptr;
-    sp		  += 3;
+    regs.sp[0]->fp.fptr = fptr;
+    regs.sp	       += 3;
     RETURN(unit);
 }
 
@@ -236,19 +237,19 @@ FUNCTION(__addForeignPtrFinalizerEnv_3)
     union finalizer_list *fptr;
  ENTRY_LABEL(static, __addForeignPtrFinalizerEnv_3)
     MATCH_RIGID_FOREIGN_PTR(__addForeignPtrFinalizerEnv_3);
-    if ( sp[0]->fp.spc != ss )
+    if ( regs.sp[0]->fp.spc != regs.ss )
 	fail_with("addForeignPtrFinalizerEnv: non-local pointer");
 
     CHECK_HEAP(finalizer_env_node_size);
-    fptr	      = (union finalizer_list *)hp;
+    fptr	      = (union finalizer_list *)regs.hp;
     fptr->info	      = &finalizer_env_info;
-    fptr->fe.next     = sp[0]->fp.fptr;
-    fptr->fe.finalize = (void (*)(void *, void *))sp[1]->p.ptr;
-    fptr->fe.env      = sp[2]->p.ptr;
-    hp		     += finalizer_env_node_size;
+    fptr->fe.next     = regs.sp[0]->fp.fptr;
+    fptr->fe.finalize = (void (*)(void *, void *))regs.sp[1]->p.ptr;
+    fptr->fe.env      = regs.sp[2]->p.ptr;
+    regs.hp	     += finalizer_env_node_size;
 
-    sp[0]->fp.fptr = fptr;
-    sp		  += 4;
+    regs.sp[0]->fp.fptr = fptr;
+    regs.sp	       += 4;
     RETURN(unit);
 }
 
@@ -274,18 +275,18 @@ FUNCTION(__unsafeForeignPtrToPtr_1)
     Node *p;
  ENTRY_LABEL(static, __unsafeForeignPtrToPtr_1)
     MATCH_RIGID_FOREIGN_PTR(__unsafeForeignPtrToPtr_1);
-    if ( sp[0]->fp.ptr )
+    if ( regs.sp[0]->fp.ptr )
     {
 	CHECK_HEAP(ptr_node_size);
-	p	 = (Node *)hp;
+	p	 = (Node *)regs.hp;
 	p->info  = &ptr_info;
-	p->p.ptr = sp[0]->fp.ptr;
-	hp	+= ptr_node_size;
+	p->p.ptr = regs.sp[0]->fp.ptr;
+	regs.hp	+= ptr_node_size;
     }
     else
 	p = (Node *)&null_ptr;
 
-    sp += 1;
+    regs.sp += 1;
     RETURN(p);
 }
 
@@ -301,7 +302,7 @@ DECLARE_LABEL(extern, __touchForeignPtr);
 FUNCTION(__touchForeignPtr)
 {
  ENTRY_LABEL(extern, __touchForeignPtr)
-    sp += 2;
+    regs.sp += 2;
     RETURN(unit);
 }
 
@@ -317,5 +318,5 @@ DECLARE_LABEL(extern, __castForeignPtr);
 FUNCTION(__castForeignPtr)
 {
  ENTRY_LABEL(extern, __castForeignPtr)
-    GOTO(sp[0]->info->eval);
+    GOTO(regs.sp[0]->info->eval);
 }

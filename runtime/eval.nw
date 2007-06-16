@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2255 2007-06-16 13:26:58Z wlux $
+% $Id: eval.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -18,6 +18,7 @@ evaluated on the top of the stack.
 #include <string.h>
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "trail.h"
@@ -58,7 +59,7 @@ FUNCTION(eval_whnf)
 {
     Node *self;
  ENTRY_LABEL(extern, eval_whnf)
-    self = *sp++;
+    self = *regs.sp++;
     RETURN(self);
 }
 
@@ -78,7 +79,7 @@ FUNCTION(eval_indir)
 {
     Node *node;
  ENTRY_LABEL(extern, eval_indir)
-    node = sp[0];
+    node = regs.sp[0];
     ASSERT(is_boxed(node) && is_indir_node(node));
 
     /* dereference the indirection */
@@ -89,10 +90,10 @@ FUNCTION(eval_indir)
     /* enter the node */
     if ( is_unboxed(node) )
     {
-	sp += 1;
+	regs.sp += 1;
         RETURN(node);
     }
-    sp[0] = node;
+    regs.sp[0] = node;
     GOTO(node->info->eval);
 }
 
@@ -122,10 +123,10 @@ FUNCTION(eval_queueMe)
     Label	cont_ip;
     ThreadQueue wq;
  ENTRY_LABEL(extern, eval_queueMe)
-    susp = sp[0];
-    if ( (Label)sp[1] == update )
+    susp = regs.sp[0];
+    if ( (Label)regs.sp[1] == update )
     {
-	susp2 = sp[2];
+	susp2 = regs.sp[2];
 	assert(is_queueMe_node(susp2) && is_local_space(susp2->q.spc));
 	if ( is_local_space(susp->q.spc) || !susp2->q.wq )
 	{
@@ -148,22 +149,22 @@ FUNCTION(eval_queueMe)
 		}
 	    }
 
-	    if ( (Label)sp[3] == stop_thread )
+	    if ( (Label)regs.sp[3] == stop_thread )
 		GOTO(stop_thread);
-	    sp	 += 2;
-	    sp[0] = susp;
+	    regs.sp   += 2;
+	    regs.sp[0] = susp;
 	}
     }
-    else if ( (Label)sp[1] == stop_thread )
+    else if ( (Label)regs.sp[1] == stop_thread )
 	GOTO(stop_thread);
 
     cont_ip = resume;
     if ( !is_local_space(susp->q.spc) )
     {
 	suspend_search(cont_ip, susp, susp->q.spc);
-	susp	= sp[0];
-	cont_ip	= (Label)sp[1];
-	*++sp	= susp;
+	susp	   = regs.sp[0];
+	cont_ip	   = (Label)regs.sp[1];
+	*++regs.sp = susp;
     }
     GOTO(suspend_thread(cont_ip, susp));
 }
@@ -187,11 +188,11 @@ FUNCTION(resume)
     Label ret_ip;
  ENTRY_LABEL(extern, resume)
     /* dereference the indirection */
-    result = sp[0];
-    ret_ip = (Label)sp[1];
+    result = regs.sp[0];
+    ret_ip = (Label)regs.sp[1];
     while ( is_boxed(result) && result->info->kind == INDIR_KIND )
 	result = result->n.node;
-    *++sp = result;
+    *++regs.sp = result;
 
     /* return to the caller */
     GOTO(ret_ip);
@@ -214,10 +215,10 @@ FUNCTION(update)
     Label       ret_ip;
     ThreadQueue wq;
  ENTRY_LABEL(extern, update)
-    result = sp[0];
-    susp   = sp[1];
-    ret_ip = (Label)sp[2];
-    sp	  += 2;
+    result   = regs.sp[0];
+    susp     = regs.sp[1];
+    ret_ip   = (Label)regs.sp[2];
+    regs.sp += 2;
     ASSERT(is_boxed(susp) && is_queueMe_node(susp) &&
 	   is_local_space(susp->q.spc));
 
@@ -231,7 +232,7 @@ FUNCTION(update)
     susp->info	 = &indir_info;
 #endif
     susp->n.node = result;
-    sp[0]	 = result;
+    regs.sp[0]	 = result;
 
     /* wake all threads on the wait-queue of the application */
     if ( wq )
@@ -258,14 +259,14 @@ FUNCTION(sync_var)
     Node  *var;
     Label cont_ip;
  ENTRY_LABEL(extern, sync_var)
-    var	    = sp[0];
+    var	    = regs.sp[0];
     cont_ip = resume;
     if ( !is_local_space(var->v.spc) )
     {
 	suspend_search(cont_ip, var, var->v.spc);
-	var	= sp[0];
-	cont_ip = (Label)sp[1];
-	*++sp	= var;
+	var	   = regs.sp[0];
+	cont_ip	   = (Label)regs.sp[1];
+	*++regs.sp = var;
     }
     GOTO(delay_thread(cont_ip, var));
 }
@@ -294,7 +295,7 @@ FUNCTION(flex_yield_resume)
     Node  *node;
     Label cont_ip;
  ENTRY_LABEL(extern, flex_yield_resume)
-    node = sp[1];
+    node = regs.sp[1];
     for (;;)
     {
 	if ( is_boxed(node) )
@@ -304,16 +305,16 @@ FUNCTION(flex_yield_resume)
 		node = node->n.node;
 		continue;
 	    case LVAR_KIND:
-		sp[1] = node;
-		GOTO(nondet_handlers->choices);
+		regs.sp[1] = node;
+		GOTO(regs.handlers->choices);
 	    default:
 		break;
 	    }
 	break;
     }
-    cont_ip = (Label)sp[2];
-    sp	   += 2;
-    sp[0]   = node;
+    cont_ip    = (Label)regs.sp[2];
+    regs.sp   += 2;
+    regs.sp[0] = node;
     GOTO(cont_ip);
 }
 #endif
@@ -358,10 +359,10 @@ FUNCTION(eval_clos_2)
     Node *clos;
  ENTRY_LABEL(static, eval_clos_2)
     CHECK_STACK1();
-    clos  = sp[0];
-    sp	 -= 1;
-    sp[0] = clos->c.args[0];
-    sp[1] = clos->c.args[1];
+    clos       = regs.sp[0];
+    regs.sp   -= 1;
+    regs.sp[0] = clos->c.args[0];
+    regs.sp[1] = clos->c.args[1];
     GOTO(clos->info->entry);
 }
 
@@ -373,24 +374,24 @@ FUNCTION(eval_lazy_2)
     Label   entry;
  ENTRY_LABEL(static, eval_lazy_2)
     /* suspend the search if the node is not local */
-    local = is_local_space(sp[0]->s.spc);
+    local = is_local_space(regs.sp[0]->s.spc);
     if ( !local )
-	suspend_search(resume, sp[0], sp[0]->s.spc);
+	suspend_search(resume, regs.sp[0], regs.sp[0]->s.spc);
 
     /* get the arguments */
-    susp  = sp[0];
+    susp  = regs.sp[0];
     entry = susp->info->entry;
     x	  = susp->s.args[0];
     y	  = susp->s.args[1];
 
     /* create an indirection if there is an update frame immediately above */
-    if ( local && (Label)sp[1] == update )
+    if ( local && (Label)regs.sp[1] == update )
     {
 	CHECK_STACK1();
-	sp -= 1;
+	regs.sp -= 1;
 
 #if !COPY_SEARCH_SPACE
-	if ( (word *)susp < hlim )
+	if ( (word *)susp < regs.hlim )
 	{
 	    DO_SAVE(susp, n.node);
 	    susp->info += 2;
@@ -398,19 +399,19 @@ FUNCTION(eval_lazy_2)
 	else
 #endif
 	    susp->info = &indir_info;
-	assert(is_queueMe_node(sp[3]));
-	susp->n.node = sp[3];
+	assert(is_queueMe_node(regs.sp[3]));
+	susp->n.node = regs.sp[3];
     }
 
     /* otherwise, lock the application node and create an update frame */
     else
     {
 	CHECK_STACK(3);
-	sp   -= 3;
-	sp[2] = (Node *)update;
+	regs.sp   -= 3;
+	regs.sp[2] = (Node *)update;
 
 #if !COPY_SEARCH_SPACE
-	if ( (word *)susp < hlim )
+	if ( (word *)susp < regs.hlim )
 	{
 	    DO_SAVE(susp, q.wq);
 	    susp->info++;
@@ -422,8 +423,8 @@ FUNCTION(eval_lazy_2)
     }
 
     /* enter the callee */
-    sp[0] = x;
-    sp[1] = y;
+    regs.sp[0] = x;
+    regs.sp[1] = y;
     GOTO(entry);
 }
 
@@ -443,7 +444,7 @@ FUNCTION(___64__1)
     Node	 *clos;
  ENTRY_LABEL(static, ___64__1)
     MATCH_RIGID_PAPP(___64__1);
-    clos = sp[0];
+    clos = regs.sp[0];
 
     /* evaluate the application if just one argument is missing */
     if ( clos->info->tag == 1 )
@@ -455,14 +456,14 @@ FUNCTION(___64__1)
     CHECK_HEAP(sz + 1);
 
     /* create a new closure from the old closure and the argument */
-    clos = (Node *)hp;
-    memcpy(clos, sp[0], sz * word_size);
+    clos = (Node *)regs.hp;
+    memcpy(clos, regs.sp[0], sz * word_size);
     clos->info++;
-    clos->c.args[argc] = sp[1];
-    hp		      += sz + 1;
+    clos->c.args[argc] = regs.sp[1];
+    regs.hp	      += sz + 1;
 
     /* return to the caller */
-    sp += 2;
+    regs.sp += 2;
     RETURN(clos);
 }
 
@@ -485,13 +486,13 @@ FUNCTION(__seq_1)
 {
     Node *node;
  ENTRY_LABEL(static, __seq_1)
-    node = sp[1];
+    node = regs.sp[1];
     if ( is_boxed(node) )
     {
-	sp += 1;
+	regs.sp += 1;
 	GOTO(node->info->eval);
     }
-    sp += 2;
+    regs.sp += 2;
     RETURN(node);
 }
 
@@ -531,9 +532,11 @@ FUNCTION(__isVar_1)
 {
     Node *r;
  ENTRY_LABEL(static, __isVar_1)
-    r	= is_boxed(sp[0]) && is_variable_node(sp[0]) ? CONST(__Prelude__True)
-						     : CONST(__Prelude__False);
-    sp += 1;
+    if ( is_boxed(regs.sp[0]) && is_variable_node(regs.sp[0]) )
+	r = CONST(__Prelude__True);
+    else
+	r = CONST(__Prelude__False);
+    regs.sp += 1;
     RETURN(r);
 }
 
@@ -558,7 +561,7 @@ FUNCTION(__ensureNotFree_1)
     Node *node;
  ENTRY_LABEL(static, __ensureNotFree_1)
     MATCH_RIGID(__ensureNotFree_1);
-    node = *sp++;
+    node = *regs.sp++;
     RETURN(node);
 }
 
@@ -582,20 +585,20 @@ FUNCTION(eval_lazy_1)
     Label   entry;
  ENTRY_LABEL(static, eval_lazy_1)
     /* suspend the search if the node is not local */
-    local = is_local_space(sp[0]->s.spc);
+    local = is_local_space(regs.sp[0]->s.spc);
     if ( !local )
-	suspend_search(resume, sp[0], sp[0]->s.spc);
+	suspend_search(resume, regs.sp[0], regs.sp[0]->s.spc);
 
     /* get the argument */
-    susp  = sp[0];
+    susp  = regs.sp[0];
     entry = susp->info->entry;
     x	  = susp->s.args[0];
 
     /* create an indirection if there is an update frame immediately above */
-    if ( local && (Label)sp[1] == update )
+    if ( local && (Label)regs.sp[1] == update )
     {
 #if !COPY_SEARCH_SPACE
-	if ( (word *)susp < hlim )
+	if ( (word *)susp < regs.hlim )
 	{
 	    DO_SAVE(susp, n.node);
 	    susp->info += 2;
@@ -603,19 +606,19 @@ FUNCTION(eval_lazy_1)
 	else
 #endif
 	    susp->info = &indir_info;
-	assert(is_queueMe_node(sp[2]));
-	susp->n.node = sp[2];
+	assert(is_queueMe_node(regs.sp[2]));
+	susp->n.node = regs.sp[2];
     }
 
     /* otherwise, lock the application node and create an update frame */
     else
     {
 	CHECK_STACK(2);
-	sp   -= 2;
-	sp[1] = (Node *)update;
+	regs.sp   -= 2;
+	regs.sp[1] = (Node *)update;
 
 #if !COPY_SEARCH_SPACE
-	if ( (word *)susp < hlim )
+	if ( (word *)susp < regs.hlim )
 	{
 	    DO_SAVE(susp, q.wq);
 	    susp->info++;
@@ -627,7 +630,7 @@ FUNCTION(eval_lazy_1)
     }
 
     /* enter the callee */
-    sp[0] = x;
+    regs.sp[0] = x;
     GOTO(entry);
 }
 
@@ -648,7 +651,7 @@ FUNCTION(__ensureGround_1)
 	LAZYINFO("ensureGround", __ensureGround, 1);
  ENTRY_LABEL(static, __ensureGround_1)
     MATCH_RIGID(__ensureGround_1);
-    node = sp[0];
+    node = regs.sp[0];
     if ( is_boxed(node) )
     {
 	switch ( node_kind(node) )
@@ -675,27 +678,27 @@ FUNCTION(__ensureGround_1)
 	{
 	    CHECK_HEAP(sz + n * suspend_node_size(1));
 
-	    node = (Node *)(hp + n * suspend_node_size(1));
-	    memcpy(node, sp[0], sz * word_size);
+	    node = (Node *)(regs.hp + n * suspend_node_size(1));
+	    memcpy(node, regs.sp[0], sz * word_size);
 
 	    for ( argp = is_vect ? node->a.args : node->c.args;
 		  n > 0;
 		  argp++, n-- )
 	    {
-		susp		= (Node *)hp;
+		susp		= (Node *)regs.hp;
 		susp->info	= ensureGround_lazy_info_table;
-		susp->s.spc	= ss;
+		susp->s.spc	= regs.ss;
 		susp->s.args[0]	= *argp;
-		hp	       += suspend_node_size(1);
+		regs.hp	       += suspend_node_size(1);
 
 		*argp = susp;
 	    }
 
-	    ASSERT((Node *)hp == node);
-	    hp  += sz;
+	    ASSERT((Node *)regs.hp == node);
+	    regs.hp += sz;
 	}
     }
 
-    sp += 1;
+    regs.sp += 1;
     RETURN(node);
 }

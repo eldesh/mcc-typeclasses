@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2256 2007-06-16 13:28:39Z wlux $
+% $Id: files.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -32,6 +32,7 @@ extern void init_files(int, long);
 #include <arpa/inet.h>
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "threads.h"
@@ -179,8 +180,8 @@ FUNCTION(__primEqHandle_2)
     Node *r;
  ENTRY_LABEL(static, __primEqHandle_2)
     MATCH_RIGID_FILE(__primEqHandle_2);
-    r	= sp[1] == sp[0] ? Prelude_True : Prelude_False;
-    sp += 2;
+    r	     = regs.sp[1] == regs.sp[0] ? Prelude_True : Prelude_False;
+    regs.sp += 2;
     RETURN(r);
 }
 
@@ -267,9 +268,9 @@ FUNCTION(__openFile)
  ENTRY_LABEL(extern, __openFile)
     TRACE_FUN("openFile", 3);
     CHECK_STACK(1);
-    sp	 -= 1;
-    sp[0] = sp[1];
-    sp[1] = (Node *)__openFile_1;
+    regs.sp   -= 1;
+    regs.sp[0] = regs.sp[1];
+    regs.sp[1] = (Node *)__openFile_1;
     GOTO(nf_string);
 }
 
@@ -291,7 +292,7 @@ FUNCTION(__openFile_2)
  ENTRY_LABEL(static, __openFile_2)
     /* determine the access mode */
     MATCH_RIGID_DATA(__openFile_2);
-    switch ( node_tag(sp[0]) )
+    switch ( node_tag(regs.sp[0]) )
     {
     case ReadMode_tag:
 	mode  = "r";
@@ -310,31 +311,31 @@ FUNCTION(__openFile_2)
 	flags = mask(readable) | mask(writable);
 	break;
     default:
-	unexpected_tag("openFile (mode)", node_tag(sp[0]));
+	unexpected_tag("openFile (mode)", node_tag(regs.sp[0]));
     }
 
     /* open the file */
-    fn = to_string(sp[1]);
+    fn = to_string(regs.sp[1]);
     fp = fopen(fn, mode);
     free((char *)fn);
     if ( fp == NULL )
     {
-	*++sp = from_string(strerror(errno));
+	*++regs.sp = from_string(strerror(errno));
 	GOTO(__ioError);
     }
     else
-	sp += 3;
+	regs.sp += 3;
 
     /* create the file node */
     CHECK_HEAP(file_node_size);
-    file	 = (Handle *)hp;
+    file	 = (Handle *)regs.hp;
     file->info	 = &file_info;
     file->fp	 = fp;
     file->flags  = flags;
     file->bmode  = -1;
     file->bsize  = 0;
     file->buffer = NULL;
-    hp		+= file_node_size;
+    regs.hp	+= file_node_size;
     register_final((Node *)file);
 
     /* return the file */
@@ -376,7 +377,7 @@ FUNCTION(__openFd_2)
  ENTRY_LABEL(static, __openFd_2)
     /* determine the access mode */
     MATCH_RIGID_DATA(__openFd_2);
-    switch ( node_tag(sp[0]) )
+    switch ( node_tag(regs.sp[0]) )
     {
     case ReadMode_tag:
 	mode  = "r";
@@ -395,29 +396,29 @@ FUNCTION(__openFd_2)
 	flags = mask(readable) | mask(writable);
 	break;
     default:
-	unexpected_tag("openFd (mode)", node_tag(sp[0]));
+	unexpected_tag("openFd (mode)", node_tag(regs.sp[0]));
     }
 
     /* open the file */
-    fp = fdopen(long_val(sp[1]), mode);
+    fp = fdopen(long_val(regs.sp[1]), mode);
     if ( fp == NULL )
     {
-	*++sp = from_string(strerror(errno));
+	*++regs.sp = from_string(strerror(errno));
 	GOTO(__ioError);
     }
     else
-	sp += 3;
+	regs.sp += 3;
 
     /* create the file node */
     CHECK_HEAP(file_node_size);
-    file	 = (Handle *)hp;
+    file	 = (Handle *)regs.hp;
     file->info	 = &file_info;
     file->fp	 = fp;
     file->flags  = flags;
     file->bmode  = -1;
     file->bsize  = 0;
     file->buffer = NULL;
-    hp		+= file_node_size;
+    regs.hp	+= file_node_size;
     register_final((Node *)file);
 
     /* return the file */
@@ -443,8 +444,8 @@ FUNCTION(__hClose_1)
 {
  ENTRY_LABEL(static, __hClose_1)
     MATCH_RIGID_FILE(__hClose_1);
-    close_handle((Handle *)sp[0]);
-    sp += 2;
+    close_handle((Handle *)regs.sp[0]);
+    regs.sp += 2;
     RETURN(unit);
 }
 
@@ -479,11 +480,11 @@ FUNCTION(__hIsOpen)
 static
 FUNCTION(__hIsOpen_1)
 {
-    Node   *r;
+    Node *r;
  ENTRY_LABEL(static, __hIsOpen_1)
     MATCH_RIGID_FILE(__hIsOpen_1);
-    r	= is_open((Handle *)sp[0]) ? Prelude_True : Prelude_False;
-    sp += 2;
+    r = is_open((Handle *)regs.sp[0]) ? Prelude_True : Prelude_False;
+    regs.sp += 2;
     RETURN(r);
 }
 
@@ -496,11 +497,11 @@ FUNCTION(__hIsClosed)
 static
 FUNCTION(__hIsClosed_1)
 {
-    Node   *r;
+    Node *r;
  ENTRY_LABEL(static, __hIsClosed_1)
     MATCH_RIGID_FILE(__hIsClosed_1);
-    r	= ((Handle *)sp[0])->fp == NULL ? Prelude_True : Prelude_False;
-    sp += 2;
+    r = ((Handle *)regs.sp[0])->fp == NULL ? Prelude_True : Prelude_False;
+    regs.sp += 2;
     RETURN(r);
 }
 
@@ -513,11 +514,11 @@ FUNCTION(__hIsReadable)
 static
 FUNCTION(__hIsReadable_1)
 {
-    Node   *r;
+    Node *r;
  ENTRY_LABEL(static, __hIsReadable_1)
     MATCH_RIGID_FILE(__hIsReadable_1);
-    r	= is_readable((Handle *)sp[0]) ? Prelude_True : Prelude_False;
-    sp += 2;
+    r = is_readable((Handle *)regs.sp[0]) ? Prelude_True : Prelude_False;
+    regs.sp += 2;
     RETURN(r);
 }
 
@@ -530,11 +531,11 @@ FUNCTION(__hIsWritable)
 static
 FUNCTION(__hIsWritable_1)
 {
-    Node   *r;
+    Node *r;
  ENTRY_LABEL(static, __hIsWritable_1)
     MATCH_RIGID_FILE(__hIsWritable_1);
-    r	= is_writable((Handle *)sp[0]) ? Prelude_True : Prelude_False;
-    sp += 2;
+    r = is_writable((Handle *)regs.sp[0]) ? Prelude_True : Prelude_False;
+    regs.sp += 2;
     RETURN(r);
 }
 
@@ -551,8 +552,8 @@ FUNCTION(__hIsSeekable_1)
     Node   *r;
  ENTRY_LABEL(static, __hIsSeekable_1)
     MATCH_RIGID_FILE(__hIsSeekable_1);
-    file = (Handle *)sp[0];
-    sp	+= 2;
+    file     = (Handle *)regs.sp[0];
+    regs.sp += 2;
 
     if ( !is_open(file) )
 	r = Prelude_False;
@@ -589,8 +590,8 @@ FUNCTION(__isEOF)
 {
  ENTRY_LABEL(extern, __isEOF)
     CHECK_STACK(1);
-    sp	 -= 1;
-    sp[0] = (Node *)&stdin_node;
+    regs.sp   -= 1;
+    regs.sp[0] = (Node *)&stdin_node;
     GOTO(__hIsEOF_1);
 }
 
@@ -608,11 +609,11 @@ FUNCTION(__hIsEOF_1)
     Handle *file;
  ENTRY_LABEL(static, __hIsEOF_1)
     MATCH_RIGID_FILE(__hIsEOF_1);
-    file = (Handle *)sp[0];
+    file = (Handle *)regs.sp[0];
 
     if ( !is_readable(file) )
     {
-	sp[0] = from_string("hIsEOF: handle not readable");
+	regs.sp[0] = from_string("hIsEOF: handle not readable");
 	GOTO(__ioError);
     }
 
@@ -620,13 +621,13 @@ FUNCTION(__hIsEOF_1)
     c = getc(file->fp);
     if ( c == EOF && ferror(file->fp) )
     {
-	sp[0] = from_string(strerror(errno));
+	regs.sp[0] = from_string(strerror(errno));
 	GOTO(__ioError);
     }
     ungetc(c, file->fp);
 
-    sp += 2;
-    r	= c == EOF ? Prelude_True : Prelude_False;
+    regs.sp += 2;
+    r	     = c == EOF ? Prelude_True : Prelude_False;
     RETURN(r);
 }
 
@@ -648,8 +649,8 @@ FUNCTION(__getChar)
 {
  ENTRY_LABEL(extern, __getChar)
     CHECK_STACK(1);
-    sp	 -= 1;
-    sp[0] = (Node *)&stdin_node;
+    regs.sp   -= 1;
+    regs.sp[0] = (Node *)&stdin_node;
     GOTO(__hGetChar_1);
 }
 
@@ -667,11 +668,11 @@ FUNCTION(__hGetChar_1)
     Handle *file;
  ENTRY_LABEL(static, __hGetChar_1)
     MATCH_RIGID_FILE(__hGetChar_1);
-    file = (Handle *)sp[0];
+    file = (Handle *)regs.sp[0];
 
     if ( !is_readable(file) )
     {
-	sp[0] = from_string("hGetChar: handle not readable");
+	regs.sp[0] = from_string("hGetChar: handle not readable");
 	GOTO(__ioError);
     }
 
@@ -679,12 +680,13 @@ FUNCTION(__hGetChar_1)
     c = getc(file->fp);
     if ( c == EOF )
     {
-	sp[0] = from_string(feof(file->fp) ? "End of file" : strerror(errno));
+	regs.sp[0] =
+	    from_string(feof(file->fp) ? "End of file" : strerror(errno));
 	GOTO(__ioError);
     }
 
-    sp += 2;
-    r	= (Node *)(char_table + (c & 0xff));
+    regs.sp += 2;
+    r	     = (Node *)(char_table + (c & 0xff));
     RETURN(r);
 }
 
@@ -710,11 +712,11 @@ FUNCTION(__hLookAhead_1)
     Handle *file;
  ENTRY_LABEL(static, __hLookAhead_1)
     MATCH_RIGID_FILE(__hLookAhead_1);
-    file = (Handle *)sp[0];
+    file = (Handle *)regs.sp[0];
 
     if ( !is_readable(file) )
     {
-	sp[0] = from_string("hLookAhead: handle not readable");
+	regs.sp[0] = from_string("hLookAhead: handle not readable");
 	GOTO(__ioError);
     }
 
@@ -722,13 +724,14 @@ FUNCTION(__hLookAhead_1)
     c = getc(file->fp);
     if ( c == EOF )
     {
-	sp[0] = from_string(feof(file->fp) ? "End of file" : strerror(errno));
+	regs.sp[0] =
+	    from_string(feof(file->fp) ? "End of file" : strerror(errno));
 	GOTO(__ioError);
     }
     ungetc(c, file->fp);
 
-    sp += 2;
-    r	= (Node *)(char_table + (c & 0xff));
+    regs.sp += 2;
+    r	     = (Node *)(char_table + (c & 0xff));
     RETURN(r);
 }
 
@@ -762,8 +765,8 @@ FUNCTION(__getLine)
 {
  ENTRY_LABEL(extern, __getLine)
     CHECK_STACK(1);
-    sp	 -= 1;
-    sp[0] = (Node *)&stdin_node;
+    regs.sp   -= 1;
+    regs.sp[0] = (Node *)&stdin_node;
     GOTO(__hGetLine_1);
 }
 
@@ -782,24 +785,24 @@ FUNCTION(__hGetLine_1)
  ENTRY_LABEL(static, __hGetLine_1)
     MATCH_RIGID_FILE(__hGetLine_1);
 
-    if ( !is_readable((Handle *)sp[0]) )
+    if ( !is_readable((Handle *)regs.sp[0]) )
     {
-	sp[0] = from_string("hGetLine: handle not readable");
+	regs.sp[0] = from_string("hGetLine: handle not readable");
 	GOTO(__ioError);
     }
 
-    fp = ((Handle *)sp[0])->fp;
+    fp = ((Handle *)regs.sp[0])->fp;
     assert(fp != NULL);
     if ( !fgets(buf, sizeof(buf), fp) )
     {
-	sp[0] = from_string(feof(fp) ? "End of file" : strerror(errno));
+	regs.sp[0] = from_string(feof(fp) ? "End of file" : strerror(errno));
 	GOTO(__ioError);
     }
 
     CHECK_STACK(2);
-    sp   -= 2;
-    sp[0] = sp[1] = 0;
-    sp[3] = nil;
+    regs.sp   -= 2;
+    regs.sp[0] = regs.sp[1] = 0;
+    regs.sp[3] = nil;
 
     /* in this loop:
        sp[0]: pointer to indirection tail node
@@ -824,26 +827,26 @@ FUNCTION(__hGetLine_1)
 	else
 	{
 	    CHECK_HEAP(indir_node_size);
-	    tail	 = (Node *)hp;
+	    tail	 = (Node *)regs.hp;
 	    tail->info	 = &indir_info;
 #if !COPY_SEARCH_SPACE
-	    tail->n.spc	 = ss;
+	    tail->n.spc	 = regs.ss;
 #endif
 	    tail->n.node = nil;
-	    hp		+= indir_node_size;
+	    regs.hp	+= indir_node_size;
 	}
 
-	sp[0] = tail;
+	regs.sp[0] = tail;
 	line  = prefix_string(buf, tail);
-	if ( sp[3] == nil )
-	    sp[3] = line;
+	if ( regs.sp[3] == nil )
+	    regs.sp[3] = line;
 	else
-	    sp[1]->n.node = line;
-	sp[1] = sp[0];
-    } while ( sp[1] != nil && fgets(buf, sizeof(buf), fp) );
+	    regs.sp[1]->n.node = line;
+	regs.sp[1] = regs.sp[0];
+    } while ( regs.sp[1] != nil && fgets(buf, sizeof(buf), fp) );
 
-    line = sp[3];
-    sp	+= 4;
+    line     = regs.sp[3];
+    regs.sp += 4;
     RETURN(line);
 }
 
@@ -884,20 +887,20 @@ FUNCTION(eval_lazy_1)
     Label   entry;
  ENTRY_LABEL(static, eval_lazy_1)
     /* suspend the search if the node is not local */
-    local = is_local_space(sp[0]->s.spc);
+    local = is_local_space(regs.sp[0]->s.spc);
     if ( !local )
-	suspend_search(resume, sp[0], sp[0]->s.spc);
+	suspend_search(resume, regs.sp[0], regs.sp[0]->s.spc);
 
     /* get the argument */
-    susp  = sp[0];
+    susp  = regs.sp[0];
     entry = susp->info->entry;
     x	  = susp->s.args[0];
 
     /* create an indirection if there is an update frame immediately above */
-    if ( local && (Label)sp[1] == update )
+    if ( local && (Label)regs.sp[1] == update )
     {
 #if !COPY_SEARCH_SPACE
-	if ( (word *)susp < hlim )
+	if ( (word *)susp < regs.hlim )
 	{
 	    DO_SAVE(susp, n.node);
 	    susp->info += 2;
@@ -905,19 +908,19 @@ FUNCTION(eval_lazy_1)
 	else
 #endif
 	    susp->info = &indir_info;
-	assert(is_queueMe_node(sp[2]));
-	susp->n.node = sp[2];
+	assert(is_queueMe_node(regs.sp[2]));
+	susp->n.node = regs.sp[2];
     }
 
     /* otherwise, lock the application node and create an update frame */
     else
     {
 	CHECK_STACK(2);
-	sp   -= 2;
-	sp[1] = (Node *)update;
+	regs.sp   -= 2;
+	regs.sp[1] = (Node *)update;
 
 #if !COPY_SEARCH_SPACE
-	if ( (word *)susp < hlim )
+	if ( (word *)susp < regs.hlim )
 	{
 	    DO_SAVE(susp, q.wq);
 	    susp->info++;
@@ -929,7 +932,7 @@ FUNCTION(eval_lazy_1)
     }
 
     /* enter the callee */
-    sp[0] = x;
+    regs.sp[0] = x;
     GOTO(entry);
 }
 
@@ -937,15 +940,15 @@ FUNCTION(__readFile)
 {
     Node *fn, *world;
  ENTRY_LABEL(extern, __readFile)
-    fn	  = sp[0];
-    world = sp[1];
+    fn	  = regs.sp[0];
+    world = regs.sp[1];
 
     CHECK_STACK(3);
-    sp	 -= 3;
-    sp[0] = fn;
-    sp[1] = CONST(__IO__ReadMode);
-    sp[2] = world;
-    sp[3] = (Node *)__hGetContents_1;
+    regs.sp   -= 3;
+    regs.sp[0] = fn;
+    regs.sp[1] = CONST(__IO__ReadMode);
+    regs.sp[2] = world;
+    regs.sp[3] = (Node *)__hGetContents_1;
     GOTO(__openFile);
 }
 
@@ -953,8 +956,8 @@ FUNCTION(__getContents)
 {
  ENTRY_LABEL(extern, __getContents)
     CHECK_STACK(1);
-    sp	 -= 1;
-    sp[0] = (Node *)&stdin_node;
+    regs.sp   -= 1;
+    regs.sp[0] = (Node *)&stdin_node;
     GOTO(__hGetContents_1);
 }
 
@@ -971,11 +974,11 @@ FUNCTION(__hGetContents_1)
     Handle *file;
  ENTRY_LABEL(static, __hGetContents_1)
     MATCH_RIGID_FILE(__hGetContents_1);
-    file = (Handle *)sp[0];
+    file = (Handle *)regs.sp[0];
 
     if ( !is_readable(file) )
     {
-	sp[0] = from_string("hGetContents: handle not readable");
+	regs.sp[0] = from_string("hGetContents: handle not readable");
 	GOTO(__ioError);
     }
 
@@ -984,13 +987,13 @@ FUNCTION(__hGetContents_1)
 
     /* construct the (lazy) input stream */
     CHECK_HEAP(suspend_node_size(1));
-    susp	    = (Node *)hp;
+    susp	    = (Node *)regs.hp;
     susp->info	    = lazyRead_lazy_info_table;
-    susp->s.spc	    = ss;
-    susp->s.args[0] = sp[0];
-    hp		   += suspend_node_size(1);
+    susp->s.spc	    = regs.ss;
+    susp->s.args[0] = regs.sp[0];
+    regs.hp	   += suspend_node_size(1);
 
-    sp += 2;
+    regs.sp += 2;
     RETURN(susp);
 }
 
@@ -1003,7 +1006,7 @@ FUNCTION(lazyRead)
  ENTRY_LABEL(static, lazyRead)
     TRACE_FUN("lazyRead", 1);
 
-    file = (Handle *)sp[0];
+    file = (Handle *)regs.sp[0];
     if ( file->fp == NULL )
 	list = nil;
     else
@@ -1018,21 +1021,21 @@ FUNCTION(lazyRead)
 	{
 	    CHECK_HEAP(suspend_node_size(1) + cons_node_size);
 
-	    tail	    = (Node *)hp;
+	    tail	    = (Node *)regs.hp;
 	    tail->info	    = lazyRead_lazy_info_table;
-	    tail->s.spc	    = ss;
-	    tail->s.args[0] = sp[0];
-	    hp		   += suspend_node_size(1);
+	    tail->s.spc	    = regs.ss;
+	    tail->s.args[0] = regs.sp[0];
+	    regs.hp	   += suspend_node_size(1);
 
-	    list	    = (Node *)hp;
+	    list	    = (Node *)regs.hp;
 	    list->info	    = &cons_info;
 	    list->c.args[0] = (Node *)(char_table + (c & 0xff));
 	    list->c.args[1] = tail;
-	    hp		   += cons_node_size;
+	    regs.hp	   += cons_node_size;
 	}
     }
 
-    sp += 1;
+    regs.sp += 1;
     RETURN(list);
 }
 
@@ -1051,9 +1054,9 @@ FUNCTION(__putChar)
 {
  ENTRY_LABEL(extern, __putChar)
     CHECK_STACK(1);
-    sp	 -= 1;
-    sp[0] = sp[1];
-    sp[1] = (Node *)&stdout_node;
+    regs.sp   -= 1;
+    regs.sp[0] = regs.sp[1];
+    regs.sp[1] = (Node *)&stdout_node;
     EVAL_BOXED(__hPutChar_2);
 }
 
@@ -1078,22 +1081,22 @@ FUNCTION(__hPutChar_2)
     Handle *file;
  ENTRY_LABEL(static, __hPutChar_2)
     MATCH_RIGID_CHAR(__hPutChar_2);
-    file = (Handle *)sp[1];
+    file = (Handle *)regs.sp[1];
 
     if ( !is_writable(file) )
     {
-	*++sp = from_string("hPutChar: handle not writable");
+	*++regs.sp = from_string("hPutChar: handle not writable");
 	GOTO(__ioError);
     }
 
     assert(file->fp != NULL);
-    if ( putc(sp[0]->ch.ch, file->fp) == EOF )
+    if ( putc(regs.sp[0]->ch.ch, file->fp) == EOF )
     {
-	*++sp = from_string(strerror(errno));
+	*++regs.sp = from_string(strerror(errno));
 	GOTO(__ioError);
     }
 
-    sp += 3;
+    regs.sp += 3;
     RETURN(unit);
 }
 
@@ -1112,9 +1115,9 @@ FUNCTION(__putStr)
 {
  ENTRY_LABEL(extern, __putStr)
     CHECK_STACK(1);
-    sp	 -= 1;
-    sp[0] = sp[1];
-    sp[1] = (Node *)&stdout_node;
+    regs.sp   -= 1;
+    regs.sp[0] = regs.sp[1];
+    regs.sp[1] = (Node *)&stdout_node;
     EVAL_BOXED(__hPutStr_2);
 }
 
@@ -1129,9 +1132,9 @@ FUNCTION(__hPutStr_1)
 {
  ENTRY_LABEL(static, __hPutStr_1)
     MATCH_RIGID_FILE(__hPutStr_1);
-    if ( !is_writable((Handle *)sp[0]) )
+    if ( !is_writable((Handle *)regs.sp[0]) )
     {
-	*++sp = from_string("hPutStr: handle not writable");
+	*++regs.sp = from_string("hPutStr: handle not writable");
 	GOTO(__ioError);
     }
 
@@ -1145,17 +1148,17 @@ FUNCTION(__hPutStr_2)
     Node *list;
  ENTRY_LABEL(static, __hPutStr_2)
     MATCH_RIGID_DATA(__hPutStr_2);
-    list = sp[0];
+    list = regs.sp[0];
     switch ( node_tag(list) )
     {
     case NIL_TAG:
-	sp += 3;
+	regs.sp += 3;
 	RETURN(unit);
     case CONS_TAG:
 	CHECK_STACK1();
-	sp   -= 1;
-	sp[0] = list->c.args[0];
-	sp[1] = list->c.args[1];
+	regs.sp   -= 1;
+	regs.sp[0] = list->c.args[0];
+	regs.sp[1] = list->c.args[1];
 	EVAL_BOXED(__hPutStr_3);
     default:
 	unexpected_tag("hPutStr", node_tag(list));
@@ -1169,15 +1172,15 @@ FUNCTION(__hPutStr_3)
  ENTRY_LABEL(static, __hPutStr_3)
     MATCH_RIGID_CHAR(__hPutStr_3);
 
-    file = (Handle *)sp[2];
-    if ( fputc(sp[0]->ch.ch, file->fp) == EOF )
+    file = (Handle *)regs.sp[2];
+    if ( fputc(regs.sp[0]->ch.ch, file->fp) == EOF )
     {
-	sp   += 2;
-	sp[0] = from_string(strerror(errno));
+	regs.sp   += 2;
+	regs.sp[0] = from_string(strerror(errno));
 	GOTO(__ioError);
     }
 
-    sp += 1;
+    regs.sp += 1;
     EVAL_BOXED(__hPutStr_2);
 }
 
@@ -1201,15 +1204,15 @@ FUNCTION(__writeFile)
 {
     Node *fn, *world;
  ENTRY_LABEL(extern, __writeFile)
-    fn	  = sp[0];
-    world = sp[2];
+    fn	  = regs.sp[0];
+    world = regs.sp[2];
 
     CHECK_STACK(3);
-    sp	 -= 3;
-    sp[0] = fn;
-    sp[1] = CONST(__IO__WriteMode);
-    sp[2] = world;
-    sp[3] = (Node *)__hPutContents;
+    regs.sp   -= 3;
+    regs.sp[0] = fn;
+    regs.sp[1] = CONST(__IO__WriteMode);
+    regs.sp[2] = world;
+    regs.sp[3] = (Node *)__hPutContents;
     GOTO(__openFile);
 }
 
@@ -1217,15 +1220,15 @@ FUNCTION(__appendFile)
 {
     Node *fn, *world;
  ENTRY_LABEL(extern, __appendFile)
-    fn	  = sp[0];
-    world = sp[2];
+    fn	  = regs.sp[0];
+    world = regs.sp[2];
 
     CHECK_STACK(3);
-    sp	 -= 3;
-    sp[0] = fn;
-    sp[1] = CONST(__IO__AppendMode);
-    sp[2] = world;
-    sp[3] = (Node *)__hPutContents;
+    regs.sp   -= 3;
+    regs.sp[0] = fn;
+    regs.sp[1] = CONST(__IO__AppendMode);
+    regs.sp[2] = world;
+    regs.sp[3] = (Node *)__hPutContents;
     GOTO(__openFile);
 }
 
@@ -1234,17 +1237,17 @@ FUNCTION(__hPutContents)
 {
     Node *file, *str, *world;
  ENTRY_LABEL(static, __hPutContents)
-    file  = sp[0];
-    str	  = sp[1];
-    world = sp[2];
+    file  = regs.sp[0];
+    str	  = regs.sp[1];
+    world = regs.sp[2];
 
     CHECK_STACK(3);
-    sp	 -= 3;
-    sp[0] = file;
-    sp[1] = str;
-    sp[2] = world;
-    sp[3] = (Node *)__hPutContents_1;
-    sp[4] = file;
+    regs.sp   -= 3;
+    regs.sp[0] = file;
+    regs.sp[1] = str;
+    regs.sp[2] = world;
+    regs.sp[3] = (Node *)__hPutContents_1;
+    regs.sp[4] = file;
     GOTO(__hPutStr);
 }
 
@@ -1252,7 +1255,7 @@ static
 FUNCTION(__hPutContents_1)
 {
  ENTRY_LABEL(static, __hPutContents_1)
-    sp += 1;
+    regs.sp += 1;
     GOTO(__hClose);
 }
 
@@ -1278,11 +1281,11 @@ FUNCTION(__hFileSize_1)
     Handle *file;
  ENTRY_LABEL(static, __hFileSize_1)
     MATCH_RIGID_FILE(__hFileSize_1);
-    file = (Handle *)sp[0];
+    file = (Handle *)regs.sp[0];
 
     if ( !is_open(file) )
     {
-	sp[0] = from_string("hFileSize: handle not open");
+	regs.sp[0] = from_string("hFileSize: handle not open");
 	GOTO(__ioError);
     }
 
@@ -1290,18 +1293,18 @@ FUNCTION(__hFileSize_1)
     curpos = ftell(file->fp);
     if ( curpos == -1 || fseek(file->fp, 0, SEEK_END) == -1 )
     {
-	sp[0] = from_string(strerror(errno));
+	regs.sp[0] = from_string(strerror(errno));
 	GOTO(__ioError);
     }
 
     endpos = ftell(file->fp);
     if ( endpos == -1 || fseek(file->fp, curpos, SEEK_SET) == -1 )
     {
-	sp[0] = from_string(strerror(errno));
+	regs.sp[0] = from_string(strerror(errno));
 	GOTO(__ioError);
     }
 
-    sp += 2;
+    regs.sp += 2;
 #if !ONLY_BOXED_OBJECTS
     if ( !is_large_int(endpos) )
 	r = mk_unboxed(endpos);
@@ -1309,10 +1312,10 @@ FUNCTION(__hFileSize_1)
 #endif
     {
 	CHECK_HEAP(int_node_size);
-	r	= (Node *)hp;
-	r->info = &int_info;
-	r->i.i  = endpos;
-	hp     += int_node_size;
+	r	 = (Node *)regs.hp;
+	r->info	 = &int_info;
+	r->i.i	 = endpos;
+	regs.hp += int_node_size;
     }
     RETURN(r);
 }
@@ -1339,17 +1342,17 @@ FUNCTION(__hIsTerminalDevice_1)
     Handle *file;
  ENTRY_LABEL(static, __hIsTerminalDevice_1)
     MATCH_RIGID_FILE(__hIsTerminalDevice_1);
-    file = (Handle *)sp[0];
+    file = (Handle *)regs.sp[0];
 
     if ( !is_open(file) )
     {
-	sp[0] = from_string("hIsTerminalDevice: handle not open");
+	regs.sp[0] = from_string("hIsTerminalDevice: handle not open");
 	GOTO(__ioError);
     }
     assert(file->fp != NULL);
 
-    sp += 2;
-    r	= isatty(fileno(file->fp)) ? Prelude_True : Prelude_False;
+    regs.sp += 2;
+    r	     = isatty(fileno(file->fp)) ? Prelude_True : Prelude_False;
     RETURN(r);
 }
 
@@ -1397,16 +1400,16 @@ FUNCTION(__hGetBuffering_1)
     Handle *file;
  ENTRY_LABEL(static, __hGetBuffering_1)
     MATCH_RIGID_FILE(__hGetBuffering_1);
-    file = (Handle *)sp[0];
+    file = (Handle *)regs.sp[0];
 
     if ( !is_open(file) )
     {
-	sp[0] = from_string("hGetBuffering: handle not open");
+	regs.sp[0] = from_string("hGetBuffering: handle not open");
 	GOTO(__ioError);
     }
 
     assert(file->fp != NULL);
-    sp += 2;
+    regs.sp += 2;
     for (;;)
     {
 	bmode = file->bmode;
@@ -1432,24 +1435,24 @@ FUNCTION(__hGetBuffering_1)
 		else
 #endif
 		{
-		    r	    = (Node *)hp;
-		    r->info = &int_info;
-		    r->i.i  = bsize;
-		    hp	   += int_node_size;
+		    r	     = (Node *)regs.hp;
+		    r->info  = &int_info;
+		    r->i.i   = bsize;
+		    regs.hp += int_node_size;
 		}
 
-		size		= (Node *)hp;
+		size		= (Node *)regs.hp;
 		size->info	= INFO(__Prelude__Just);
 		size->c.args[0] = r;
-		hp	       += closure_node_size(1);
+		regs.hp	       += closure_node_size(1);
 	    }
 	    else
 		size = CONST(__Prelude__Nothing);
 
-	    r		 = (Node *)hp;
+	    r		 = (Node *)regs.hp;
 	    r->info	 = INFO(__IO__BlockBuffering);
 	    r->c.args[0] = size;
-	    hp		+= closure_node_size(1);
+	    regs.hp	+= closure_node_size(1);
 	    break;
 	default:
 	    curry_panic("hGetBuffering: invalid buffer mode %d\n", bmode);
@@ -1493,7 +1496,7 @@ FUNCTION(__hSetBuffering_2)
     Handle *file;
  ENTRY_LABEL(static, __hSetBuffering_2)
     MATCH_RIGID_DATA(__hSetBuffering_2);
-    switch ( node_tag(sp[0]) )
+    switch ( node_tag(regs.sp[0]) )
     {
     case NoBuffering_tag:
 	bmode = _IONBF;
@@ -1502,23 +1505,23 @@ FUNCTION(__hSetBuffering_2)
 	bmode = _IOLBF;
 	break;
     case BlockBuffering_tag:
-	sp[0] = sp[0]->c.args[0];
+	regs.sp[0] = regs.sp[0]->c.args[0];
 	EVAL_BOXED(__hSetBuffering_3);
     default:
-	unexpected_tag("hSetBuffering", node_tag(sp[0]));
+	unexpected_tag("hSetBuffering", node_tag(regs.sp[0]));
     }
 
-    file = (Handle *)sp[1];
+    file = (Handle *)regs.sp[1];
     if ( !is_open(file) )
     {
-	*++sp = from_string("hSetBuffering: handle not open");
+	*++regs.sp = from_string("hSetBuffering: handle not open");
 	GOTO(__ioError);
     }
 
     assert(file->fp != NULL);
     if ( setvbuf(file->fp, NULL, bmode, 0) == -1 )
     {
-	*++sp = from_string(strerror(errno));
+	*++regs.sp = from_string(strerror(errno));
 	GOTO(__ioError);
     }
     file->bmode = bmode;
@@ -1527,7 +1530,7 @@ FUNCTION(__hSetBuffering_2)
 	free(file->buffer);
     file->buffer = NULL;
 
-    sp += 3;
+    regs.sp += 3;
     RETURN(unit);
 }
 
@@ -1537,28 +1540,28 @@ FUNCTION(__hSetBuffering_3)
     Handle *file;
  ENTRY_LABEL(static, __hSetBuffering_3)
     MATCH_RIGID_DATA(__hSetBuffering_3);
-    switch ( node_tag(sp[0]) )
+    switch ( node_tag(regs.sp[0]) )
     {
     case Nothing_tag:
 	break;
     case Just_tag:
-	sp[0] = sp[0]->c.args[0];
+	regs.sp[0] = regs.sp[0]->c.args[0];
 	EVAL(__hSetBuffering_4);
     default:
-	unexpected_tag("hSetBuffering (mode)", node_tag(sp[0]));
+	unexpected_tag("hSetBuffering (mode)", node_tag(regs.sp[0]));
     }
 
-    file = (Handle *)sp[1];
+    file = (Handle *)regs.sp[1];
     if ( !is_open(file) )
     {
-	*++sp = from_string("hSetBuffering: handle not open");
+	*++regs.sp = from_string("hSetBuffering: handle not open");
 	GOTO(__ioError);
     }
 
     assert(file->fp != NULL);
     if ( setvbuf(file->fp, NULL, _IOFBF, 0) == -1 )
     {
-	*++sp = from_string(strerror(errno));
+	*++regs.sp = from_string(strerror(errno));
 	GOTO(__ioError);
     }
     file->bmode = _IOFBF;
@@ -1567,7 +1570,7 @@ FUNCTION(__hSetBuffering_3)
 	free(file->buffer);
     file->buffer = NULL;
 
-    sp += 3;
+    regs.sp += 3;
     RETURN(unit);
 }
 
@@ -1579,14 +1582,14 @@ FUNCTION(__hSetBuffering_4)
     Handle *file;
  ENTRY_LABEL(static, __hSetBuffering_4)
     MATCH_RIGID_INT(__hSetBuffering_4);
-    file = (Handle *)sp[1];
+    file = (Handle *)regs.sp[1];
     if ( !is_open(file) )
     {
-	*++sp = from_string("hSetBuffering: handle not open");
+	*++regs.sp = from_string("hSetBuffering: handle not open");
 	GOTO(__ioError);
     }
 
-    bsize = long_val(sp[0]);
+    bsize = long_val(regs.sp[0]);
     if ( bsize > 0 )
     {
 	buffer = (char *)malloc(bsize);
@@ -1599,7 +1602,7 @@ FUNCTION(__hSetBuffering_4)
     assert(file->fp != NULL);
     if ( setvbuf(file->fp, buffer, _IOFBF, bsize) == -1 )
     {
-	*++sp = from_string(strerror(errno));
+	*++regs.sp = from_string(strerror(errno));
 	free(buffer);
 	GOTO(__ioError);
     }
@@ -1609,7 +1612,7 @@ FUNCTION(__hSetBuffering_4)
 	free(file->buffer);
     file->buffer = buffer;
 
-    sp += 3;
+    regs.sp += 3;
     RETURN(unit);
 }
 
@@ -1633,22 +1636,22 @@ FUNCTION(__hFlush_1)
     Handle *file;
  ENTRY_LABEL(static, __hFlush_1)
     MATCH_RIGID_FILE(__hFlush_1);
-    file = (Handle *)sp[0];
+    file = (Handle *)regs.sp[0];
 
     if ( !is_writable(file) )
     {
-	sp[0] = from_string("hFlush: handle not writable");
+	regs.sp[0] = from_string("hFlush: handle not writable");
 	GOTO(__ioError);
     }
 
     assert(file->fp != NULL);
     if ( fflush(file->fp) == -1 )
     {
-	sp[0] = from_string(strerror(errno));
+	regs.sp[0] = from_string(strerror(errno));
 	GOTO(__ioError);
     }
 
-    sp += 2;
+    regs.sp += 2;
     RETURN(unit);
 }
 
@@ -1674,11 +1677,11 @@ FUNCTION(__hTell_1)
     Handle *file;
  ENTRY_LABEL(static, __hTell_1)
     MATCH_RIGID_FILE(__hTell_1);
-    file = (Handle *)sp[0];
+    file = (Handle *)regs.sp[0];
 
     if ( !is_open(file) )
     {
-	sp[0] = from_string("hTell: handle not open");
+	regs.sp[0] = from_string("hTell: handle not open");
 	GOTO(__ioError);
     }
 
@@ -1686,11 +1689,11 @@ FUNCTION(__hTell_1)
     curpos = ftell(file->fp);
     if ( curpos == -1 )
     {
-	sp[0] = from_string(strerror(errno));
+	regs.sp[0] = from_string(strerror(errno));
 	GOTO(__ioError);
     }
 
-    sp += 2;
+    regs.sp += 2;
 #if !ONLY_BOXED_OBJECTS
     if ( !is_large_int(curpos) )
 	r = mk_unboxed(curpos);
@@ -1698,10 +1701,10 @@ FUNCTION(__hTell_1)
 #endif
     {
 	CHECK_HEAP(int_node_size);
-	r	= (Node *)hp;
-	r->info = &int_info;
-	r->i.i  = curpos;
-	hp     += int_node_size;
+	r	 = (Node *)regs.hp;
+	r->info	 = &int_info;
+	r->i.i	 = curpos;
+	regs.hp += int_node_size;
     }
     RETURN(r);
 }
@@ -1758,15 +1761,15 @@ FUNCTION(__hSeek_3)
  ENTRY_LABEL(static, __hSeek_3)
     MATCH_RIGID_INT(__hSeek_3);
 
-    file = (Handle *)sp[1];
+    file = (Handle *)regs.sp[1];
     if ( !is_open(file) )
     {
-	sp   += 2;
-	sp[0] = from_string("hSeek: handle not open");
+	regs.sp   += 2;
+	regs.sp[0] = from_string("hSeek: handle not open");
 	GOTO(__ioError);
     }
 
-    switch ( node_tag(sp[2]) )
+    switch ( node_tag(regs.sp[2]) )
     {
     case AbsoluteSeek_tag:
 	smode = SEEK_SET;
@@ -1778,18 +1781,18 @@ FUNCTION(__hSeek_3)
 	smode = SEEK_END;
 	break;
     default:
-	unexpected_tag("hSeek (mode)", node_tag(sp[2]));
+	unexpected_tag("hSeek (mode)", node_tag(regs.sp[2]));
     }
 
     assert(file->fp != NULL);
-    if ( fseek(file->fp, long_val(sp[0]), smode) == -1 )
+    if ( fseek(file->fp, long_val(regs.sp[0]), smode) == -1 )
     {
-	sp   += 2;
-	sp[0] = from_string(strerror(errno));
+	regs.sp   += 2;
+	regs.sp[0] = from_string(strerror(errno));
 	GOTO(__ioError);
     }
 
-    sp += 4;
+    regs.sp += 4;
     RETURN(unit);
 }
 
@@ -1808,9 +1811,9 @@ FUNCTION(__openProcess)
 {
  ENTRY_LABEL(extern, __openProcess)
     CHECK_STACK(1);
-    sp	 -= 1;
-    sp[0] = sp[1];
-    sp[1] = (Node *)__openProcess_1;
+    regs.sp   -= 1;
+    regs.sp[0] = regs.sp[1];
+    regs.sp[1] = (Node *)__openProcess_1;
     GOTO(nf_string);
 }
 
@@ -1834,8 +1837,8 @@ FUNCTION(__openProcess_2)
  ENTRY_LABEL(static, __openProcess_2)
     /* determine the access mode */
     MATCH_RIGID_DATA(__openProcess_2);
-    cmd = to_string(sp[1]);
-    switch ( node_tag(sp[0]) )
+    cmd = to_string(regs.sp[1]);
+    switch ( node_tag(regs.sp[0]) )
     {
     case ReadMode_tag:
 	mode  = "r";
@@ -1851,7 +1854,7 @@ FUNCTION(__openProcess_2)
 	flags = mask(readable) | mask(writable);
 	break;
     default:
-	unexpected_tag("openProcess (mode)", node_tag(sp[0]));
+	unexpected_tag("openProcess (mode)", node_tag(regs.sp[0]));
     }
 
     /* depending on the mode create either a pipe or a socket pair */
@@ -1861,7 +1864,7 @@ FUNCTION(__openProcess_2)
 	r = pipe(fds);
     if ( r == -1 )
     {
-	*++sp = from_string(strerror(errno));
+	*++regs.sp = from_string(strerror(errno));
 	GOTO(__ioError);
     }
 
@@ -1895,7 +1898,7 @@ FUNCTION(__openProcess_2)
     case -1:
 	close(fds[0]);
 	close(fds[1]);
-	*++sp = from_string(strerror(errno));
+	*++regs.sp = from_string(strerror(errno));
 	GOTO(__ioError);
     default:
 	free((char *)cmd);
@@ -1916,15 +1919,15 @@ FUNCTION(__openProcess_2)
     if ( fp == NULL )
     {
 	close(fds[0]);
-	*++sp = from_string(strerror(errno));
+	*++regs.sp = from_string(strerror(errno));
 	GOTO(__ioError);
     }
     else
-	sp += 3;
+	regs.sp += 3;
 
     /* create the process node */
     CHECK_HEAP(process_node_size);
-    proc	 = (ProcessHandle *)hp;
+    proc	 = (ProcessHandle *)regs.hp;
     proc->info	 = &process_info;
     proc->fp	 = fp;
     proc->flags  = flags;
@@ -1933,7 +1936,7 @@ FUNCTION(__openProcess_2)
     proc->buffer = NULL;
     proc->pid	 = pid;
     proc->status = 0;
-    hp		+= process_node_size;
+    regs.hp	+= process_node_size;
     register_final((Node *)proc);
 
     /* return the process node */
@@ -1965,14 +1968,14 @@ FUNCTION(__pClose_1)
     Node	  *r;
  ENTRY_LABEL(static, __pClose_1)
     MATCH_RIGID_FILE(__pClose_1);
-    proc = (ProcessHandle *)sp[0];
+    proc = (ProcessHandle *)regs.sp[0];
     if ( proc->info != &process_info )
     {
-	sp[0] = from_string("pClose applied to a handle that "
-			    "is not connected to a process");
+	regs.sp[0] = from_string("pClose applied to a handle that "
+				 "is not connected to a process");
 	GOTO(__ioError);
     }
-    sp += 2;
+    regs.sp += 2;
 
     if ( proc->fp )
     {
@@ -2005,10 +2008,10 @@ FUNCTION(__pClose_1)
 #endif
     {
 	CHECK_HEAP(int_node_size);
-	r	= (Node *)hp;
-	r->info = &int_info;
-	r->i.i  = res;
-	hp     += int_node_size;
+	r	 = (Node *)regs.hp;
+	r->info	 = &int_info;
+	r->i.i	 = res;
+	regs.hp += int_node_size;
     }
     RETURN(r);
 }
@@ -2027,9 +2030,9 @@ FUNCTION(__connectTcpSocket)
 {
  ENTRY_LABEL(extern, __connectTcpSocket)
     CHECK_STACK(1);
-    sp	 -= 1;
-    sp[0] = sp[1];
-    sp[1] = (Node *)__connectTcpSocket_1;
+    regs.sp   -= 1;
+    regs.sp[0] = regs.sp[1];
+    regs.sp[1] = (Node *)__connectTcpSocket_1;
     GOTO(nf_string);
 }
 
@@ -2061,9 +2064,9 @@ FUNCTION(__connectTcpSocket_3)
     struct sockaddr_in addr;
  ENTRY_LABEL(static, __connectTcpSocket_3)
     MATCH_RIGID_DATA(__connectTcpSocket_3)
-    host = to_string(sp[1]);
-    port = long_val(sp[2]);
-    switch ( node_tag(sp[0]) )
+    host = to_string(regs.sp[1]);
+    port = long_val(regs.sp[2]);
+    switch ( node_tag(regs.sp[0]) )
     {
     case ReadMode_tag:
 	mode  = "r";
@@ -2079,7 +2082,7 @@ FUNCTION(__connectTcpSocket_3)
 	flags = mask(readable) | mask(writable);
 	break;
     default:
-	unexpected_tag("connectTcpSocket (mode)", node_tag(sp[0]));
+	unexpected_tag("connectTcpSocket (mode)", node_tag(regs.sp[0]));
     }
 
     /* setup the socket address structure */
@@ -2091,8 +2094,8 @@ FUNCTION(__connectTcpSocket_3)
     else if ( (addr.sin_addr.s_addr = inet_addr(host)) == (in_addr_t)~0 )
     {
 	free((char *)host);
-	sp   += 2;
-	sp[0] = from_string("unknown host");
+	regs.sp   += 2;
+	regs.sp[0] = from_string("unknown host");
 	GOTO(__ioError);
     }
     free((char *)host);
@@ -2101,8 +2104,8 @@ FUNCTION(__connectTcpSocket_3)
     fd = socket(AF_INET, SOCK_STREAM, 0);
     if ( fd < 0 )
     {
-	sp   += 2;
-	sp[0] = from_string(strerror(errno));
+	regs.sp   += 2;
+	regs.sp[0] = from_string(strerror(errno));
 	GOTO(__ioError);
     }
 
@@ -2110,8 +2113,8 @@ FUNCTION(__connectTcpSocket_3)
     if ( connect(fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) < 0 )
     {
 	close(fd);
-	sp   += 2;
-	sp[0] = from_string(strerror(errno));
+	regs.sp   += 2;
+	regs.sp[0] = from_string(strerror(errno));
 	GOTO(__ioError);
     }
 
@@ -2120,22 +2123,22 @@ FUNCTION(__connectTcpSocket_3)
     if ( fp == NULL )
     {
 	close(fd);
-	sp   += 2;
-	sp[0] = from_string(strerror(errno));
+	regs.sp   += 2;
+	regs.sp[0] = from_string(strerror(errno));
 	GOTO(__ioError);
     }
-    sp += 4;
+    regs.sp += 4;
 
     /* create the file node */
     CHECK_HEAP(file_node_size);
-    sock	 = (Handle *)hp;
+    sock	 = (Handle *)regs.hp;
     sock->info	 = &file_info;
     sock->fp	 = fp;
     sock->flags  = flags;
     sock->bmode  = _IOFBF;
     sock->bsize	 = 0;
     sock->buffer = NULL;
-    hp		+= file_node_size;
+    regs.hp	+= file_node_size;
     register_final((Node *)sock);
 
     /* return the socket */

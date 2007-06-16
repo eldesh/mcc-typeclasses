@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: refs.nw 2255 2007-06-16 13:26:58Z wlux $
+% $Id: refs.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2004-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -16,6 +16,7 @@ which are defined in this file.
 #include <string.h>
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "trail.h"
@@ -73,8 +74,8 @@ FUNCTION(__primEqIORef_2)
     Node *r;
  ENTRY_LABEL(static, __primEqIORef_2)
     MATCH_RIGID_IOREF(__primEqIORef_2);
-    r	= sp[1] == sp[0] ? Prelude_True : Prelude_False;
-    sp += 2;
+    r	     = regs.sp[1] == regs.sp[0] ? Prelude_True : Prelude_False;
+    regs.sp += 2;
     RETURN(r);
 }
 
@@ -90,12 +91,12 @@ FUNCTION(__newIORef)
     IORef *ref;
  ENTRY_LABEL(extern, __newIORef)
     CHECK_HEAP(ioref_node_size);
-    ref	      = (IORef *)hp;
+    ref	      = (IORef *)regs.hp;
     ref->info = &ioref_info;
-    ref->ref  = sp[0];
-    hp	     += ioref_node_size;
+    ref->ref  = regs.sp[0];
+    regs.hp  += ioref_node_size;
 
-    sp += 2;
+    regs.sp += 2;
     RETURN((Node *)ref);
 }
 
@@ -120,8 +121,8 @@ FUNCTION(__readIORef_1)
     IORef *ref;
  ENTRY_LABEL(static, __readIORef_1)
     MATCH_RIGID_IOREF(__readIORef_1);
-    ref = (IORef *)sp[0];
-    sp += 2;
+    ref	     = (IORef *)regs.sp[0];
+    regs.sp += 2;
     RETURN(ref->ref);
 }
 
@@ -150,9 +151,9 @@ FUNCTION(__writeIORef_1)
     IORef *ref;
  ENTRY_LABEL(static, __writeIORef_1)
     MATCH_RIGID_IOREF(__writeIORef_1);
-    ref = (IORef *)sp[0];
+    ref = (IORef *)regs.sp[0];
     SAVE(ref, ref);
-    ref->ref = sp[1];
-    sp	    += 3;
+    ref->ref = regs.sp[1];
+    regs.sp += 3;
     RETURN(unit);
 }

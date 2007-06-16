@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: random.nw 2255 2007-06-16 13:26:58Z wlux $
+% $Id: random.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2004-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -17,6 +17,7 @@ The functions in this file implement the primitives for the
 #include <sys/time.h>
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "threads.h"
@@ -96,16 +97,16 @@ FUNCTION(__mkStdGen_1)
  ENTRY_LABEL(static, __mkStdGen_1)
     MATCH_RIGID_INT(__mkStdGen_1);
 
-    seed = long_val(sp[0]);
-    sp	+= 1;
+    seed     = long_val(regs.sp[0]);
+    regs.sp += 1;
 
     CHECK_HEAP(stdgen_node_size);
-    rng		= (StdGen *)hp;
+    rng		= (StdGen *)regs.hp;
     rng->info   = &stdgen_info;
     rng->state  = (char *)malloc(STATESIZE);
     rng->valid  = 0;
     rng->random = 0;
-    hp	       += stdgen_node_size;
+    regs.hp    += stdgen_node_size;
     register_final((Node *)rng);
 
     if ( rng->state == NULL )
@@ -154,10 +155,10 @@ FUNCTION(__nextStdGen)
 {
  ENTRY_LABEL(extern, __nextStdGen)
     CHECK_STACK(2);
-    sp	 -= 2;
-    sp[0] = sp[2];
-    sp[1] = minInt;
-    sp[2] = maxInt;
+    regs.sp   -= 2;
+    regs.sp[0] = regs.sp[2];
+    regs.sp[1] = minInt;
+    regs.sp[2] = maxInt;
     EVAL_BOXED(__nextRStdGen_3);
 }
 
@@ -199,10 +200,10 @@ FUNCTION(__nextRStdGen_3)
 
     CHECK_HEAP(pair_node_size + int_node_size);
 
-    rng	= (StdGen *)sp[0];
-    lo	= long_val(sp[1]);
-    hi	= long_val(sp[2]);
-    sp += 3;
+    rng	     = (StdGen *)regs.sp[0];
+    lo	     = long_val(regs.sp[1]);
+    hi	     = long_val(regs.sp[2]);
+    regs.sp += 3;
 
     /* determine the number of bits required */
     if ( hi >= lo )
@@ -240,17 +241,17 @@ repeat:
     else
 #endif
     {
-	i	= (Node *)hp;
-	i->info = &int_info;
-	i->i.i  = r;
-	hp     += int_node_size;
+	i	 = (Node *)regs.hp;
+	i->info	 = &int_info;
+	i->i.i	 = r;
+	regs.hp += int_node_size;
     }
 
-    p		 = (Node *)hp;
+    p		 = (Node *)regs.hp;
     p->info	 = &pair_info;
     p->c.args[0] = i;
     p->c.args[1] = (Node *)rng;
-    hp		+= pair_node_size;
+    regs.hp	+= pair_node_size;
 
     RETURN(p);
 }
@@ -264,14 +265,14 @@ FUNCTION(__genRange)
 {
     Node *r;
  ENTRY_LABEL(extern, __genRange)
-    sp		+= 1;
+    regs.sp += 1;
 
     CHECK_HEAP(pair_node_size);
-    r		 = (Node *)hp;
+    r		 = (Node *)regs.hp;
     r->info	 = &pair_info;
     r->c.args[0] = minInt;
     r->c.args[1] = maxInt;
-    hp		+= pair_node_size;
+    regs.hp	+= pair_node_size;
 
     RETURN(r);
 }
@@ -300,7 +301,7 @@ can happen only when these functions are used in an
 static StdGen *stdGen;
 
 #define DET_CHECK(what) do { \
-    if ( bp ) fail_with("cannot duplicate " what); \
+    if ( regs.bp ) fail_with("cannot duplicate " what); \
 } while (0)
 
 DECLARE_LABEL(extern, __setStdGen);
@@ -320,8 +321,8 @@ FUNCTION(__setStdGen_1)
     if ( stdGen == 0 )
 	add_global_root((Node **)&stdGen);
     DET_CHECK("Random.stdGen");
-    stdGen = (StdGen *)sp[0];
-    sp	  += 2;
+    stdGen   = (StdGen *)regs.sp[0];
+    regs.sp += 2;
     RETURN(unit);
 }
 
@@ -336,7 +337,7 @@ FUNCTION(__getStdGen)
  ENTRY_LABEL(extern, __getStdGen)
     if ( stdGen )
     {
-	sp += 1;
+	regs.sp += 1;
 	RETURN((Node *)stdGen);
     }
 
@@ -345,17 +346,17 @@ FUNCTION(__getStdGen)
     seed = random();
 
     CHECK_STACK1();
-    sp -= 1;
+    regs.sp -= 1;
 #if !ONLY_BOXED_OBJECTS
     if ( !is_large_int(seed) )
-	sp[0] = mk_unboxed(seed);
+	regs.sp[0] = mk_unboxed(seed);
     else
 #endif
     {
 	seed_node.i = seed;
-	sp[0]	    = (Node *)&seed_node;
+	regs.sp[0]  = (Node *)&seed_node;
     }
-    sp[1] = (Node *)__getStdGen_1;
+    regs.sp[1] = (Node *)__getStdGen_1;
     GOTO(__mkStdGen);
 }
 
@@ -364,7 +365,7 @@ FUNCTION(__getStdGen_1)
 {
     Node *rng;
  ENTRY_LABEL(static, __getStdGen_1)
-    rng = *sp++;
+    rng = *regs.sp++;
     add_global_root((Node **)&stdGen);
     DET_CHECK("Random.stdGen");
     stdGen = (StdGen *)rng;

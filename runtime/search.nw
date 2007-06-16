@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: search.nw 2255 2007-06-16 13:26:58Z wlux $
+% $Id: search.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -43,8 +43,8 @@ FUNCTION(eval_clos_1)
 {
     Node *clos;
  ENTRY_LABEL(static, eval_clos_1)
-    clos  = sp[0];
-    sp[0] = clos->c.args[0];
+    clos       = regs.sp[0];
+    regs.sp[0] = clos->c.args[0];
     GOTO(clos->info->entry);
 }
 
@@ -59,59 +59,59 @@ not saved by the context.
 static void
 push_search_context()
 {
-    Choicepoint	   *oldBp = bp;
+    Choicepoint *oldBp = regs.bp;
 
     CHECK_STACK(wordsof(Choicepoint));
-    sp   -= wordsof(Choicepoint);
-    sp[0] = sp[wordsof(Choicepoint)];
+    regs.sp   -= wordsof(Choicepoint);
+    regs.sp[0] = regs.sp[wordsof(Choicepoint)];
 
     /* allocate a new search context on the stack */
-    bp		   = (Choicepoint *)(sp + 1);
-    bp->btAlts	   = 0;		/* btAlts == 0 identifies search context */
-    bp->btCid	   = cid;
-    bp->btDsBase   = ds_base;
-    bp->btBp	   = oldBp;
-    bp->btRq	   = rq;
+    regs.bp		= (Choicepoint *)(regs.sp + 1);
+    regs.bp->btAlts	= 0;	    /* btAlts == 0 identifies search context */
+    regs.bp->btCid	= regs.cid;
+    regs.bp->btDsBase   = regs.ds_base;
+    regs.bp->btBp	= oldBp;
+    regs.bp->btRq	= regs.rq;
 #if !COPY_SEARCH_SPACE
-    bp->btTp	   = tp;
+    regs.bp->btTp	= regs.tp;
 #endif
-    bp->btDict	   = names_tail;
-    bp->btHp	   = hp;
-    bp->btSpc	   = ss;
-    bp->btHandlers = nondet_handlers;
+    regs.bp->btDict	= names_tail;
+    regs.bp->btHp	= regs.hp;
+    regs.bp->btSpc	= regs.ss;
+    regs.bp->btHandlers = regs.handlers;
 
     /* change the current handler vector */
-    nondet_handlers = &search_handlers;
+    regs.handlers = &search_handlers;
 
     /* initialize the machine state for the new context */
-    cid	    = 0;
-    ds_base = sp;
-    rq	    = 0;
-    hlim    = hp;
+    regs.cid	 = 0;
+    regs.ds_base = regs.sp;
+    regs.rq	 = 0;
+    regs.hlim	 = regs.hp;
 }
 
 static void
 pop_search_context()
 {
-    assert(bp->btAlts == 0);
+    assert(regs.bp->btAlts == 0);
 
     /* eventually restore a safe ancestor of the current search space */
     leave_context();
 
     /* restore the machine state from the current search context */
-    cid		    = bp->btCid;
-    ds_base	    = bp->btDsBase;
-    rq 		    = bp->btRq;
+    regs.cid	  = regs.bp->btCid;
+    regs.ds_base  = regs.bp->btDsBase;
+    regs.rq	  = regs.bp->btRq;
 #if !COPY_SEARCH_SPACE
-    tp		    = bp->btTp;
+    regs.tp	  = regs.bp->btTp;
 #endif
-    ss		    = bp->btSpc;
-    nondet_handlers = bp->btHandlers;
-    sp		    = (Node **)(bp + 1);
+    regs.ss	  = regs.bp->btSpc;
+    regs.handlers = regs.bp->btHandlers;
+    regs.sp	  = (Node **)(regs.bp + 1);
 
     /* drop the search context */
-    bp	 = bp->btBp;
-    hlim = bp ? bp->btHp : heap_base;
+    regs.bp   = regs.bp->btBp;
+    regs.hlim = regs.bp ? regs.bp->btHp : heap_base;
 }
 
 @ 
@@ -143,17 +143,17 @@ FUNCTION(__try_1)
     Node *susp, *list, *sc, *var;
  ENTRY_LABEL(static, __try_1)
     MATCH_RIGID_PAPP(__try_1);
-    assert(sp[0]->info->tag == 1);
+    assert(regs.sp[0]->info->tag == 1);
 
     /* return immediately when applied to a solved search goal */
-    if ( sp[0]->info->entry == solved_goal )
+    if ( regs.sp[0]->info->entry == solved_goal )
     {
 	CHECK_HEAP(cons_node_size);
-	list		= (Node *)hp;
+	list		= (Node *)regs.hp;
 	list->info	= &cons_info;
-	list->c.args[0] = *sp++;
+	list->c.args[0] = *regs.sp++;
 	list->c.args[1] = nil;
-	hp	       += cons_node_size;
+	regs.hp	       += cons_node_size;
 	RETURN(list);
     }
 
@@ -165,17 +165,17 @@ FUNCTION(__try_1)
 #endif
 
     /* when applied to a partially solved goal continue its evaluation */
-    if ( sp[0]->info->entry == search_cont )
+    if ( regs.sp[0]->info->entry == search_cont )
     {
-	sc = sp[0]->c.args[0];
+	sc = regs.sp[0]->c.args[0];
 #if COPY_SEARCH_SPACE
 	sc = copy_graph(sc, sc->sc.spc);
 #endif
 
 	CHECK_STACK1();
-	sp   -= 1;
-	sp[0] = sc->sc.susp;
-	sp[1] = sc->sc.var;
+	regs.sp   -= 1;
+	regs.sp[0] = sc->sc.susp;
+	regs.sp[1] = sc->sc.var;
 #if !COPY_SEARCH_SPACE
 	restore_search_space(sc->sc.spc);
 #endif
@@ -189,29 +189,29 @@ FUNCTION(__try_1)
 
     /* allocate new goal variable and suspension */
     CHECK_HEAP(variable_node_size + queueMe_node_size);
-    var		 = (Node *)hp;
+    var		 = (Node *)regs.hp;
     var->info	 = variable_info_table;
-    var->v.spc	 = ss;
+    var->v.spc	 = regs.ss;
     var->v.wq	 = 0;
     var->v.cstrs = 0;
-    hp		+= variable_node_size;
+    regs.hp	+= variable_node_size;
 
-    susp	= (Node *)hp;
+    susp	= (Node *)regs.hp;
     susp->info	= queueMe_info_table;
-    susp->q.spc	= ss;
+    susp->q.spc	= regs.ss;
     susp->q.wq	= 0;
-    hp	       += queueMe_node_size;
+    regs.hp    += queueMe_node_size;
 
     /* start the initial thread and evaluate the goal */
     CHECK_STACK(6);
-    sp	 -= 6;
-    sp[0] = sp[6];
-    sp[1] = var;
-    sp[2] = (Node *)update;
-    sp[3] = susp;
-    sp[4] = 0;
-    sp[5] = susp;
-    sp[6] = var;
+    regs.sp   -= 6;
+    regs.sp[0] = regs.sp[6];
+    regs.sp[1] = var;
+    regs.sp[2] = (Node *)update;
+    regs.sp[3] = susp;
+    regs.sp[4] = 0;
+    regs.sp[5] = susp;
+    regs.sp[6] = var;
     start_thread(5);
     GOTO(___64_);
 }
@@ -240,24 +240,24 @@ FUNCTION(solved_goal)
 {
     Node  *cont, *res, *arg;
  ENTRY_LABEL(static, solved_goal)
-    cont = sp[0];
+    cont = regs.sp[0];
     res	 = copy_graph(cont->sc.var, cont->sc.spc);
 
-    arg = sp[1];
+    arg = regs.sp[1];
     while ( is_boxed(arg) && arg->info->kind == INDIR_KIND )
 	arg = arg->n.node;
     if ( is_boxed(arg) && is_variable_node(arg) && is_local_space(arg->v.spc) )
     {
 	CHECK_STACK1();
-	sp   -= 1;
-	sp[0] = res;
-	sp[1] = arg;
-	sp[2] = (Node *)search_goal_success;
+	regs.sp   -= 1;
+	regs.sp[0] = res;
+	regs.sp[1] = arg;
+	regs.sp[2] = (Node *)search_goal_success;
 	GOTO(bind_var);
     }
 
-    sp[0] = arg;
-    sp[1] = res;
+    regs.sp[0] = arg;
+    regs.sp[1] = res;
     GOTO(___61__58__61_);
 }
 
@@ -265,7 +265,7 @@ static
 FUNCTION(search_goal_success)
 {
  ENTRY_LABEL(static, search_goal_success)
-    sp += 1;
+    regs.sp += 1;
     RETURN(Success);
 }
 
@@ -307,29 +307,29 @@ FUNCTION(search_cont)
 {
     Node *arg, *cont;
  ENTRY_LABEL(static, search_cont)
-    cont = sp[0];
+    cont = regs.sp[0];
     if ( !inject_search_space(cont->sc.spc) )
-	sp[0] = cont = copy_graph(cont, cont->sc.spc);
+	regs.sp[0] = cont = copy_graph(cont, cont->sc.spc);
     restore_continuation(cont->sc.code, cont->sc.rq);
 
     /* NB reload cont -- restore_continuation might invoke gc */
-    cont = sp[0];
-    arg  = sp[1];
+    cont = regs.sp[0];
+    arg  = regs.sp[1];
     while ( is_boxed(arg) && arg->info->kind == INDIR_KIND )
 	arg = arg->n.node;
 
     CHECK_STACK(2);
-    sp   -= 2;
-    sp[2] = (Node *)search_goal_proceed;
-    sp[3] = cont->sc.susp;
+    regs.sp   -= 2;
+    regs.sp[2] = (Node *)search_goal_proceed;
+    regs.sp[3] = cont->sc.susp;
     if ( is_boxed(arg) && is_variable_node(arg) && is_local_space(arg->v.spc) )
     {
-	sp[0] = cont->sc.var;
-	sp[1] = arg;
+	regs.sp[0] = cont->sc.var;
+	regs.sp[1] = arg;
 	GOTO(bind_var);
     }
-    sp[0] = arg;
-    sp[1] = cont->sc.var;
+    regs.sp[0] = arg;
+    regs.sp[1] = cont->sc.var;
     GOTO(___61__58__61_);
 }
 
@@ -338,8 +338,8 @@ FUNCTION(search_goal_proceed)
 {
     Node *susp;
  ENTRY_LABEL(static, search_goal_proceed)
-    sp	+= 1;
-    susp = sp[0];
+    regs.sp += 1;
+    susp     = regs.sp[0];
     ASSERT(is_boxed(susp));
     GOTO(susp->info->eval);
 }
@@ -364,8 +364,8 @@ FUNCTION(deadlock_search)
     Node *goal, *sc, *clos, *list;
  ENTRY_LABEL(static, deadlock_search)
     /* check for successful computation or deadlock */
-    ASSERT(sp == (Node **)bp - 2);
-    for ( goal = sp[0]; ; )
+    assert(regs.sp == (Node **)regs.bp - 2);
+    for ( goal = regs.sp[0]; ; )
     {
 	switch ( goal->info->kind )
 	{
@@ -390,33 +390,33 @@ FUNCTION(deadlock_search)
     TRACE(("leaving encapsulated search with solved search goal\n"));
 
     /* dereference the goal variable in order to avoid some garbage */
-    while ( is_boxed(sp[1]) && sp[1]->info->kind == INDIR_KIND )
-	sp[1] = sp[1]->n.node;
+    while ( is_boxed(regs.sp[1]) && regs.sp[1]->info->kind == INDIR_KIND )
+	regs.sp[1] = regs.sp[1]->n.node;
 
     /* save the local space */
     save_search_space();
 
     /* allocate the singleton list for the search continuation */
     CHECK_HEAP(search_cont_node_size + closure_node_size(1) + cons_node_size);
-    sc		= (Node *)hp;
+    sc		= (Node *)regs.hp;
     sc->info	= &search_cont_info;
-    sc->sc.spc	= ss;
+    sc->sc.spc	= regs.ss;
     sc->sc.susp	= 0;
-    sc->sc.var	= sp[1];
+    sc->sc.var	= regs.sp[1];
     sc->sc.code	= 0;
     sc->sc.rq	= 0;
-    hp	       += search_cont_node_size;
+    regs.hp    += search_cont_node_size;
 
-    clos	    = (Node *)hp;
+    clos	    = (Node *)regs.hp;
     clos->info	    = solved_goal_papp_info_table;
     clos->c.args[0] = sc;
-    hp		   += closure_node_size(1);
+    regs.hp	   += closure_node_size(1);
 
-    list	    = (Node *)hp;
+    list	    = (Node *)regs.hp;
     list->info	    = &cons_info;
     list->c.args[0] = clos;
     list->c.args[1] = nil;
-    hp		   += cons_node_size;
+    regs.hp	   += cons_node_size;
 
     /* return the list */
     pop_search_context();
@@ -442,48 +442,48 @@ suspend_search(Label retIp, Node *node, SearchSpace *space)
     while ( !is_local_space(space) )
     {
 	TRACE(("suspending encapsulated search\n"));
-	if ( bp == 0 || !is_search_context(bp) )
+	if ( regs.bp == 0 || !is_search_context(regs.bp) )
 	    curry_panic("local variable escaped its search space\n");
 
 	/* save the current state */
 	save_continuation();
 
 	/* dereference the goal nodes in order to avoid some garbage */
-	ASSERT(sp == (Node **)bp - 2);
-	while ( is_boxed(sp[0]) && sp[0]->info->kind == INDIR_KIND )
-	    sp[0] = sp[0]->n.node;
-	while ( is_boxed(sp[1]) && sp[1]->info->kind == INDIR_KIND )
-	    sp[1] = sp[1]->n.node;
+	assert(regs.sp == (Node **)regs.bp - 2);
+	while ( is_boxed(regs.sp[0]) && regs.sp[0]->info->kind == INDIR_KIND )
+	    regs.sp[0] = regs.sp[0]->n.node;
+	while ( is_boxed(regs.sp[1]) && regs.sp[1]->info->kind == INDIR_KIND )
+	    regs.sp[1] = regs.sp[1]->n.node;
 
 	/* save the local space */
 	save_search_space();
 
 	/* allocate a search continuation */
 	CHECK_HEAP(search_cont_node_size);
-	sc	    = (Node *)hp;
+	sc	    = (Node *)regs.hp;
 	sc->info    = &search_cont_info;
-	sc->sc.spc  = ss;
-	sc->sc.susp = sp[0];
-	sc->sc.var  = sp[1];
+	sc->sc.spc  = regs.ss;
+	sc->sc.susp = regs.sp[0];
+	sc->sc.var  = regs.sp[1];
 	sc->sc.code = retIp;
-	sc->sc.rq   = rq;
-	hp	   += search_cont_node_size;
+	sc->sc.rq   = regs.rq;
+	regs.hp	   += search_cont_node_size;
 
 	/* save the search continuation and set up a return frame that
 	 * restores the suspended search; note that resume_search discards
 	 * its first argument */
 	pop_search_context();
 	CHECK_STACK(3);
-	retIp = resume_search;
-	sp   -= 2;
-	sp[0] = 0;
-	sp[1] = sc;
+	retIp	   = resume_search;
+	regs.sp   -= 2;
+	regs.sp[0] = 0;
+	regs.sp[1] = sc;
     }
     END_LOCAL_ROOTS
 
-    sp	 -= 1;
-    sp[0] = node;
-    sp[1] = (Node *)retIp;
+    regs.sp   -= 1;
+    regs.sp[0] = node;
+    regs.sp[1] = (Node *)retIp;
 }
 
 @ 
@@ -498,17 +498,17 @@ FUNCTION(resume_search)
 {
     Node *sc;
  ENTRY_LABEL(static, resume_search)
-    sp += 1;
-    sc	= sp[0];
-    ASSERT(is_boxed(sc) && is_search_cont_node(sc));
+    regs.sp += 1;
+    sc	     = regs.sp[0];
+    assert(is_boxed(sc) && is_search_cont_node(sc));
 
     TRACE(("resuming encapsulated search\n"));
     push_search_context();
 
     CHECK_STACK1();
-    sp	 -= 1;
-    sp[0] = sc->sc.susp;
-    sp[1] = sc->sc.var;
+    regs.sp   -= 1;
+    regs.sp[0] = sc->sc.susp;
+    regs.sp[1] = sc->sc.var;
     restore_search_space(sc->sc.spc);
     GOTO(resume_continuation(sc->sc.code, sc->sc.rq));
 }
@@ -527,24 +527,24 @@ FUNCTION(choices_search)
     Node	 *list, *cons, *clos, *sc;
     const Label	 *conts;
  ENTRY_LABEL(static, choices_search)
-    ASSERT(bp && is_search_context(bp));
+    assert(regs.bp && is_search_context(regs.bp));
 
     /* compute the number of alternative solutions */
     n_conts = 0;
-    for ( conts = (const Label *)*sp++; *conts; conts++ )
+    for ( conts = (const Label *)*regs.sp++; *conts; conts++ )
 	n_conts++;
-    ASSERT(n_conts > 1);
+    assert(n_conts > 1);
     TRACE(("leaving encapsulated search with %u continuations\n", n_conts));
 
     /* save the current state */
     save_continuation();
 
     /* dereference the goal nodes in order to avoid some garbage */
-    ASSERT(sp == (Node **)bp - 2);
-    while ( is_boxed(sp[0]) && sp[0]->info->kind == INDIR_KIND )
-	sp[0] = sp[0]->n.node;
-    while ( is_boxed(sp[1]) && sp[1]->info->kind == INDIR_KIND )
-	sp[1] = sp[1]->n.node;
+    assert(regs.sp == (Node **)regs.bp - 2);
+    while ( is_boxed(regs.sp[0]) && regs.sp[0]->info->kind == INDIR_KIND )
+	regs.sp[0] = regs.sp[0]->n.node;
+    while ( is_boxed(regs.sp[1]) && regs.sp[1]->info->kind == INDIR_KIND )
+	regs.sp[1] = regs.sp[1]->n.node;
 
     /* save the local space */
     save_search_space();
@@ -555,25 +555,25 @@ FUNCTION(choices_search)
     list = nil;
     while ( n_conts-- > 0 )
     {
-	sc	    = (Node *)hp;
+	sc	    = (Node *)regs.hp;
 	sc->info    = &search_cont_info;
-	sc->sc.spc  = ss;
-	sc->sc.susp = sp[0];
-	sc->sc.var  = sp[1];
+	sc->sc.spc  = regs.ss;
+	sc->sc.susp = regs.sp[0];
+	sc->sc.var  = regs.sp[1];
 	sc->sc.code = *--conts;
-	sc->sc.rq   = rq;
-	hp	   += search_cont_node_size;
+	sc->sc.rq   = regs.rq;
+	regs.hp	   += search_cont_node_size;
 
-	clos		= (Node *)hp;
+	clos		= (Node *)regs.hp;
 	clos->info	= search_cont_papp_info_table;
 	clos->c.args[0] = sc;
-	hp	       += closure_node_size(1);
+	regs.hp	       += closure_node_size(1);
 
-	cons		= (Node *)hp;
+	cons		= (Node *)regs.hp;
 	cons->info	= &cons_info;
 	cons->c.args[0] = clos;
 	cons->c.args[1] = list;
-	hp	       += cons_node_size;
+	regs.hp	       += cons_node_size;
 	list		= cons;
     }
 
@@ -592,7 +592,7 @@ static
 FUNCTION(fail_search)
 {
  ENTRY_LABEL(static, fail_search)
-    ASSERT(is_search_context(bp));
+    assert(is_search_context(regs.bp));
 
     /* discard the current search space and context */
     discard_search_space();
@@ -662,40 +662,40 @@ FUNCTION(__encapsulate)
  ENTRY_LABEL(extern, __encapsulate)
     /* create a new search context for the goal */
     TRACE(("starting encapsulated search\n"));
-    sp[1] = sp[0];
-    sp	 += 1;
+    regs.sp[1] = regs.sp[0];
+    regs.sp   += 1;
     push_search_context();
     new_search_space();
 
     /* copy the argument into the new search space */
-    sp[0] = copy_graph(sp[0], 0);
+    regs.sp[0] = copy_graph(regs.sp[0], 0);
 
     /* allocate new goal variable and suspension */
     CHECK_HEAP(queueMe_node_size + variable_node_size);
-    var		 = (Node *)hp;
+    var		 = (Node *)regs.hp;
     var->info	 = variable_info_table;
-    var->v.spc	 = ss;
+    var->v.spc	 = regs.ss;
     var->v.wq	 = 0;
     var->v.cstrs = 0;
-    hp		+= variable_node_size;
+    regs.hp	+= variable_node_size;
 
-    susp	= (Node *)hp;
+    susp	= (Node *)regs.hp;
     susp->info	= queueMe_info_table;
-    susp->q.spc = ss;
+    susp->q.spc = regs.ss;
     susp->q.wq	= 0;
-    hp	       += queueMe_node_size;
+    regs.hp    += queueMe_node_size;
 
     /* prepare the initial thread that evaluates the argument via v=:=e */
     CHECK_STACK(6);
-    goal = sp[0];
-    sp	 -= 6;
-    sp[0] = var;
-    sp[1] = goal;
-    sp[2] = (Node *)update;
-    sp[3] = susp;
-    sp[4] = 0;
-    sp[5] = susp;
-    sp[6] = var;
+    goal       = regs.sp[0];
+    regs.sp   -= 6;
+    regs.sp[0] = var;
+    regs.sp[1] = goal;
+    regs.sp[2] = (Node *)update;
+    regs.sp[3] = susp;
+    regs.sp[4] = 0;
+    regs.sp[5] = susp;
+    regs.sp[6] = var;
     start_thread(5);
 
     /* save the current state */
@@ -705,19 +705,19 @@ FUNCTION(__encapsulate)
 
     /* allocate a search continuation */
     CHECK_HEAP(search_cont_node_size + closure_node_size(1));
-    sc		= (Node *)hp;
+    sc		= (Node *)regs.hp;
     sc->info	= &search_cont_info;
-    sc->sc.spc	= ss;
-    sc->sc.susp = sp[0];
-    sc->sc.var	= sp[1];
+    sc->sc.spc	= regs.ss;
+    sc->sc.susp = regs.sp[0];
+    sc->sc.var	= regs.sp[1];
     sc->sc.code	= ___61__58__61_;
-    sc->sc.rq	= rq;
-    hp	       += search_cont_node_size;
+    sc->sc.rq	= regs.rq;
+    regs.hp    += search_cont_node_size;
 
-    clos	    = (Node *)hp;
+    clos	    = (Node *)regs.hp;
     clos->info	    = search_cont_papp_info_table;
     clos->c.args[0] = sc;
-    hp		   += closure_node_size(1);
+    regs.hp	   += closure_node_size(1);
 
     /* return the search goal */
     pop_search_context();

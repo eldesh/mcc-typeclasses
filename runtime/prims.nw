@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: prims.nw 2030 2006-11-28 13:31:04Z wlux $
+% $Id: prims.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2004-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -78,7 +78,7 @@ infinity.\footnote{One might think of using the \texttt{ldiv} function
 <<prims.h>>=
 #define primMinInt() LONG_MIN
 #define primMaxInt() LONG_MAX
-      
+
 #define primAddInt(x,y) (x + y)
 #define primSubInt(x,y) (x - y)
 #define primMulInt(x,y) (x * y)
@@ -136,6 +136,7 @@ extern long primRotateRInt(long, long);
 #include <math.h>
 #include "prims.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "io_monad.h"
 

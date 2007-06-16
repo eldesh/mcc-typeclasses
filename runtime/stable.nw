@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: stable.nw 2254 2007-06-15 18:42:06Z wlux $
+% $Id: stable.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -20,6 +20,7 @@ pointers, respectively.
 #include <stdlib.h>
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "threads.h"
@@ -47,15 +48,15 @@ FUNCTION(__newStablePtr)
     sptr = (Node **)malloc(sizeof(Node *));
     if ( sptr == NULL )
 	sys_error("newStablePtr");
-    *sptr = sp[0];
-    sp   += 2;
+    *sptr    = regs.sp[0];
+    regs.sp += 2;
     add_global_root(sptr);
 
     CHECK_HEAP(ptr_node_size);
-    ptr	       = (Node *)hp;
+    ptr	       = (Node *)regs.hp;
     ptr->info  = &stabptr_info;
     ptr->p.ptr = sptr;
-    hp	      += ptr_node_size;
+    regs.hp   += ptr_node_size;
 
     RETURN(ptr);
 }
@@ -88,10 +89,10 @@ FUNCTION(__deRefStablePtr_1)
     Node **sptr;
  ENTRY_LABEL(static, __deRefStablePtr_1)
     MATCH_RIGID_PTR(__deRefStablePtr_1);
-    sptr = (Node **)sp[0]->p.ptr;
+    sptr = (Node **)regs.sp[0]->p.ptr;
     if ( *sptr == 0 )
 	fail_with("deRefStablePtr: value released by failed computation");
-    sp	+= 2;
+    regs.sp += 2;
     RETURN(*sptr);
 }
 
@@ -115,11 +116,11 @@ FUNCTION(__freeStablePtr_1)
     Node **sptr;
  ENTRY_LABEL(static, __freeStablePtr_1)
     MATCH_RIGID_PTR(__freeStablePtr_1);
-    sptr = (Node **)sp[0]->p.ptr;
+    sptr = (Node **)regs.sp[0]->p.ptr;
 
     remove_global_root(sptr);
     free(sptr);
 
-    sp += 2;
+    regs.sp += 2;
     RETURN(unit);
 }

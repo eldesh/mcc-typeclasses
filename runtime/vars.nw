@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: vars.nw 1744 2005-08-23 16:17:12Z wlux $
+% $Id: vars.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2002-2005, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -17,6 +17,7 @@ addresses of variables onto names.
 #include <string.h>
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "vars.h"
@@ -170,7 +171,7 @@ cleanup_names()
     }
 
     /* Phase II: update the control stack */
-    for ( cp = bp; cp; cp = cp->btBp )
+    for ( cp = regs.bp; cp; cp = cp->btBp )
     {
 	curr = cp->btDict;
 	while ( curr && curr->node == 0 )

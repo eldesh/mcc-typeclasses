@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 2261 2007-06-16 13:40:59Z wlux $
+% $Id: print.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -20,7 +20,9 @@ extern void print_result(const char *var_names[], Node *vars[], Node *result);
 #include <string.h>
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
+#include "stack.h"
 #include "trail.h"
 #include "data.h"
 #include "disequal.h"
@@ -170,10 +172,10 @@ print_node(unsigned int prec, Node *node)
 		node = node->n.node;
 		continue;
 	    case VECTOR_KIND:
-		 if ( is_tuple(node->info) )
-		     print_tuple(node, vector_argc(node), node->a.args);
-		 else
-		     print_app(prec, node, vector_argc(node), node->a.args);
+		if ( is_tuple(node->info) )
+		    print_tuple(node, vector_argc(node), node->a.args);
+		else
+		    print_app(prec, node, vector_argc(node), node->a.args);
 		break;
 	    case CHAR_KIND:
 		printf("'%s'", lit_char(buf, '\0', node->ch.ch, '\''));

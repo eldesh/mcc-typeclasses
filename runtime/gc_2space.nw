@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: gc_2space.nw 1899 2006-04-19 10:50:11Z wlux $
+% $Id: gc_2space.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -98,6 +98,7 @@ garbage collection.
 #endif
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "trail.h"
@@ -126,7 +127,6 @@ init_heap(unsigned long size)
     from_space = heap_base;
     to_space   = from_space + heap_size;
     heap_end   = to_space;
-    hp = hlim  = heap_base;
 #ifdef HAVE_MPROTECT
     mprotect(to_space, heap_size * word_size, PROT_NONE);
 #endif
@@ -186,7 +186,7 @@ void
 collect(unsigned int request)
 {
     unsigned int     i, j, len;
-    word	     *aux;
+    word	     *hlim, *aux;
     Node	     **scan, **copy, **scan_stack, **slim;
 #if !COPY_SEARCH_SPACE
     SaveRec	     *from_trail, *scan_trail, *copy_trail, *tlim;
@@ -197,11 +197,11 @@ collect(unsigned int request)
     struct root	     *roots;
     struct dict_node *dict;
 
-    stats_begin_gc(hp - heap_base);
-    assert(hp <= heap_end);
-    assert(stack_base <= sp && sp <= stack_end);
+    stats_begin_gc(regs.hp - heap_base);
+    assert(regs.hp <= heap_end);
+    assert(stack_base <= regs.sp && regs.sp <= stack_end);
 #if !COPY_SEARCH_SPACE
-    assert(trail_base <= tp && tp <= trail_end);
+    assert(trail_base <= regs.tp && regs.tp <= trail_end);
 #endif
 
 #ifdef HAVE_MPROTECT
@@ -215,9 +215,9 @@ collect(unsigned int request)
 #endif
 
     prev_cp = next_cp = 0;
-    if ( bp )
+    if ( regs.bp )
     {
-	for ( cp = bp; cp; cp = prev_cp )
+	for ( cp = regs.bp; cp; cp = prev_cp )
 	{
 	    prev_cp  = cp->btBp;
 	    cp->btBp = next_cp;
@@ -236,16 +236,16 @@ collect(unsigned int request)
     <<Update the variable name dictionary>>
     <<Update the finalized objects table>>
     <<Flip the semi-spaces>>
-    hp	 = (word *)copy;
-    hlim = bp ? bp->btHp : heap_base;
-    assert(hp <= heap_end);
-    if ( hp + request >= heap_end )
+    regs.hp   = (word *)copy;
+    regs.hlim = regs.bp ? regs.bp->btHp : heap_base;
+    assert(regs.hp <= heap_end);
+    if ( regs.hp + request >= heap_end )
         heap_exhausted();
     in_gc = false;
 #ifdef HAVE_MPROTECT
     mprotect(to_space, heap_size * word_size, PROT_NONE);
 #endif
-    stats_end_gc(hp - heap_base);
+    stats_end_gc(regs.hp - heap_base);
 }
 
 @
@@ -288,7 +288,7 @@ therefore it is not recorded on the trail.
 
 <<Garbage collector definitions>>=
 static inline Node *
-GC_copy(Node ***p_alloc, Node *node)
+GC_copy(Node ***p_alloc, word *hlim, Node *node)
 {
     while ( is_boxed(node) && node >= (Node *)heap_base && node < (Node *)hlim )
     {
@@ -349,8 +349,8 @@ tlim = cp->btTp;
 #endif
 <<Collect the external roots>>
 <<Collect the current stack segment>>
-cp->btRq  = (ThreadQueue)GC_copy(&copy, (Node *)cp->btRq);
-cp->btSpc = (SearchSpace *)GC_copy(&copy, (Node *)cp->btSpc);
+cp->btRq  = (ThreadQueue)GC_copy(&copy, hlim, (Node *)cp->btRq);
+cp->btSpc = (SearchSpace *)GC_copy(&copy, hlim, (Node *)cp->btSpc);
 #if !COPY_SEARCH_SPACE
 <<Collect the current trail segment>>
 <<Collect all younger trail segments>>
@@ -368,24 +368,24 @@ cp->btHp   = (word *)copy;
 
 @ 
 <<Collect the heap segment above the current choice point>>=
-hlim = hp;
-slim = sp;
+hlim = regs.hp;
+slim = regs.sp;
 #if !COPY_SEARCH_SPACE
-tlim = tp;
+tlim = regs.tp;
 <<Compact the current trail segment>>
 #endif
 <<Collect the external roots>>
 <<Collect the current stack segment>>
-rq = (ThreadQueue)GC_copy(&copy, (Node *)rq);
-ss = (SearchSpace *)GC_copy(&copy, (Node *)ss);
+regs.rq = (ThreadQueue)GC_copy(&copy, hlim, (Node *)regs.rq);
+regs.ss = (SearchSpace *)GC_copy(&copy, hlim, (Node *)regs.ss);
 #if !COPY_SEARCH_SPACE
 <<Collect the current trail segment>>
-tp = copy_trail;
+regs.tp = copy_trail;
 #endif
 <<Scan to-space and copy all reachable nodes into to-space>>
 #if !COPY_SEARCH_SPACE
-if ( ss != &global_space )
-    ss->root->active = ss;
+if ( regs.ss != &global_space )
+    regs.ss->root->active = regs.ss;
 #endif
 
 @ 
@@ -394,9 +394,9 @@ just copied into to-space.
 
 <<Collect the external roots>>=
 for ( roots = global_roots; roots; roots = roots->next )
-    *roots->root = GC_copy(&copy, *roots->root);
+    *roots->root = GC_copy(&copy, hlim, *roots->root);
 for ( roots = local_roots; roots; roots = roots->next )
-    *roots->root = GC_copy(&copy, *roots->root);
+    *roots->root = GC_copy(&copy, hlim, *roots->root);
 
 @ 
 For each heap segment, we collect only that part of the stack which
@@ -410,7 +410,7 @@ the corresponding heap segments.
 
 <<Collect the current stack segment>>=
 while ( --scan_stack >= slim )
-    *scan_stack = GC_copy(&copy, *scan_stack);
+    *scan_stack = GC_copy(&copy, hlim, *scan_stack);
 
 @ 
 Processing of the trail is somewhat more complicated. First of all, we
@@ -455,7 +455,7 @@ the current heap segment.
 for ( ; scan_trail < copy_trail; scan_trail++ )
     if ( scan_trail->ofs )
 	scan_trail->addr[scan_trail->ofs] =
-	    GC_copy(&copy, (Node *)scan_trail->addr[scan_trail->ofs]);
+	    GC_copy(&copy, hlim, (Node *)scan_trail->addr[scan_trail->ofs]);
 
 @ 
 Finally, the garbage collector scans the saved values in all younger
@@ -472,9 +472,9 @@ This is handled automatically by the address range check in the
 [[GC_copy]] function.
 
 <<Collect all younger trail segments>>=
-for ( scan_trail = cp->btTp; scan_trail < tp; scan_trail++ )
+for ( scan_trail = cp->btTp; scan_trail < regs.tp; scan_trail++ )
     if ( scan_trail->addr < hlim )
-	scan_trail->val = GC_copy(&copy, (Node *)scan_trail->val);
+	scan_trail->val = GC_copy(&copy, hlim, (Node *)scan_trail->val);
 
 @ 
 Besides the younger trail segments, the garbage collector must also
@@ -486,7 +486,7 @@ scan_cp = cp;
 while ( scan_cp )
 {
     scan_cp = scan_cp->btBp;
-    for ( spc = scan_cp ? scan_cp->btSpc : ss;
+    for ( spc = scan_cp ? scan_cp->btSpc : regs.ss;
 	  spc && !is_forwarded(spc);
 	  spc = spc->parent )
 	if ( spc->script )
@@ -495,7 +495,8 @@ while ( scan_cp )
 	    for ( i = 0; i < len; i++ )
 		if ( spc->script->data[i].ofs )
 		    spc->script->data[i].outVal =
-			GC_copy(&copy, (Node *)spc->script->data[i].outVal);
+			GC_copy(&copy, hlim,
+				(Node *)spc->script->data[i].outVal);
 	}
 }
 
@@ -530,7 +531,7 @@ for ( ; scan != copy; scan += len )
     if ( otable == 0 )
     {
 	for ( i = is_vect ? 2 : 1 ; i < len; i++ )
-	    scan[i] = GC_copy(&copy, scan[i]);
+	    scan[i] = GC_copy(&copy, hlim, scan[i]);
     }
     else
     {
@@ -540,7 +541,7 @@ for ( ; scan != copy; scan += len )
 	    while ( n-- > 0 )
 	    {
 		i	= *otable++;
-		scan[i] = GC_copy(&copy, scan[i]);
+		scan[i] = GC_copy(&copy, hlim, scan[i]);
 	    }
 	}
 	else
@@ -554,7 +555,7 @@ for ( ; scan != copy; scan += len )
 		while ( n-- > 0 )
 		{
 		    i	      = *otable++;
-		    scan[j+i] = GC_copy(&copy, scan[j+i]);
+		    scan[j+i] = GC_copy(&copy, hlim, scan[j+i]);
 		}
 	    }
 	    ASSERT(j == len);
@@ -610,17 +611,17 @@ release_mem()
     unsigned int i = n_finals;
     struct root	 *roots;
 
-    while ( i-- > 0 && (word *)finals[i] >= hlim )
+    while ( i-- > 0 && (word *)finals[i] >= regs.hlim )
     {
-	ASSERT((word *)finals[i] < hp);
+	ASSERT((word *)finals[i] < regs.hp);
 	finals[i]->info->final_fun(finals[i]);
     }
     n_finals = ++i;
 
     for ( roots = global_roots; roots; roots = roots->next )
-	if ( *roots->root >= (Node *)hlim )
+	if ( *roots->root >= (Node *)regs.hlim )
 	    *roots->root = 0;
 
-    stats_backtrack(hp - hlim);
-    hp = hlim;
+    stats_backtrack(regs.hp - regs.hlim);
+    regs.hp = regs.hlim;
 }

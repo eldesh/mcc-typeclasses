@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: equal.nw 2254 2007-06-15 18:42:06Z wlux $
+% $Id: equal.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -25,6 +25,7 @@ DECLARE_LABEL(extern, ___61__61_);
 #include <string.h>
 #include "debug.h"
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "eval.h"
@@ -73,50 +74,50 @@ FUNCTION(___61__61__2)
     MATCH_RIGID(___61__61__2);
 
     n	 = 0;
-    arg1 = sp[1];
-    arg2 = sp[0];
+    arg1 = regs.sp[1];
+    arg2 = regs.sp[0];
 
     if ( !eq_root(arg1, arg2, &n) )
     {
-	sp += 2;
+	regs.sp += 2;
 	RETURN(CONST(__Prelude__False));
     }
     else if ( n == 0 )
     {
-	sp += 2;
+	regs.sp += 2;
 	RETURN(CONST(__Prelude__True));
     }
     else if ( n == 1 )
     {
-	is_vect = is_vector_node(arg1);
-	sp[0]	= is_vect? arg1->a.args[0] : arg1->c.args[0];
-	sp[1]	= is_vect? arg2->a.args[0] : arg2->c.args[0];
+	is_vect	   = is_vector_node(arg1);
+	regs.sp[0] = is_vect? arg1->a.args[0] : arg1->c.args[0];
+	regs.sp[1] = is_vect? arg2->a.args[0] : arg2->c.args[0];
 	GOTO(___61__61_);
     }
 
     arglist = nil;
     is_vect = is_vector_node(arg1);
     CHECK_HEAP(n * pair_cons_node_size);
-    argp1 = is_vect ? sp[1]->a.args : sp[1]->c.args;
-    argp2 = is_vect ? sp[0]->a.args : sp[0]->c.args;
+    argp1 = is_vect ? regs.sp[1]->a.args : regs.sp[1]->c.args;
+    argp2 = is_vect ? regs.sp[0]->a.args : regs.sp[0]->c.args;
 
     for ( i = n, argp1 += n, argp2 += n; i-- > 1; )
     {
-	next		= (Node *)hp;
+	next		= (Node *)regs.hp;
 	next->info	= INFO(pair_cons);
 	next->c.args[0] = *--argp1;
 	next->c.args[1] = *--argp2;
 	next->c.args[2] = arglist;
 	arglist		= next;
-	hp	       += pair_cons_node_size;
+	regs.hp	       += pair_cons_node_size;
     }
 
     CHECK_STACK(2);
-    sp	 -= 2;
-    sp[0] = *--argp1;
-    sp[1] = *--argp2;
-    sp[2] = (Node *)___61__61__3;
-    sp[3] = arglist;
+    regs.sp   -= 2;
+    regs.sp[0] = *--argp1;
+    regs.sp[1] = *--argp2;
+    regs.sp[2] = (Node *)___61__61__3;
+    regs.sp[3] = arglist;
     GOTO(___61__61_);
 }
 
@@ -125,31 +126,31 @@ FUNCTION(___61__61__3)
 {
     Node *eq, *arg1, *arg2, *arglist;
  ENTRY_LABEL(static, ___61__61__3)
-    eq = sp[0];
+    eq = regs.sp[0];
     if ( eq != CONST(__Prelude__True) )
     {
-	sp += 2;
+	regs.sp += 2;
 	RETURN(eq);
     }
 
-    ASSERT(sp[1]->info == INFO(pair_cons));
-    arglist = sp[1];
+    ASSERT(regs.sp[1]->info == INFO(pair_cons));
+    arglist = regs.sp[1];
     arg1    = arglist->c.args[0];
     arg2    = arglist->c.args[1];
     arglist = arglist->c.args[2];
 
     if ( arglist == nil )
     {
-	sp[0] = arg1;
-	sp[1] = arg2;
+	regs.sp[0] = arg1;
+	regs.sp[1] = arg2;
 	GOTO(___61__61_);
     }
 
     CHECK_STACK(2);
-    sp	 -= 2;
-    sp[0] = arg1;
-    sp[1] = arg2;
-    sp[2] = (Node *)___61__61__3;
-    sp[3] = arglist;
+    regs.sp   -= 2;
+    regs.sp[0] = arg1;
+    regs.sp[1] = arg2;
+    regs.sp[2] = (Node *)___61__61__3;
+    regs.sp[3] = arglist;
     GOTO(___61__61_);
 }

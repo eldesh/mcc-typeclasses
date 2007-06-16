@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: main.nw 2258 2007-06-16 13:35:37Z wlux $
+% $Id: main.nw 2262 2007-06-16 14:46:48Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -80,6 +80,7 @@ from the argument vector.
 #include <unistd.h>
 #include <limits.h>
 #include "run.h"
+#include "regs.h"
 #include "heap.h"
 #include "stack.h"
 #include "trail.h"
@@ -235,6 +236,7 @@ curry_init(int *p_argc, char *argv[])
 #endif
     init_heap(heapsize);
     init_files(bufmode, bufsize);
+    init_regs();
     stats_init(show_stats);
 }
 

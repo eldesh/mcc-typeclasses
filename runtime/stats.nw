@@ -1,25 +1,24 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: stats.nw 1744 2005-08-23 16:17:12Z wlux $
+% $Id: stats.nw 2258 2007-06-16 13:35:37Z wlux $
 %
-% Copyright (c) 2002-2005, Wolfgang Lux
+% Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
-\subsection{Gathering statistical information}
-The compiled Curry program is able to gather some timing information
-and memory allocation statistics. The interface to this module
-consists of five functions. The function [[stats_init]] will
-initialize the module. The argument determines the amount of
-information displayed. The function [[stats_terminate]] prints the
-final statistics when the program has finished. The functions
-[[stats_begin_gc]] and [[stats_end_gc]] switch between normal program
-execution and garbage collection for gathering the statistics. In
-addition, they expect the amount of allocated memory as
-arguments. Space which is freed by backtracking is recorded by the
-function [[stats_backtrack]].
+\subsection{Gathering Statistical Information}
+Compiled Curry programs are able to gather some timing information and
+memory allocation statistics. The interface to this module consists of
+five functions. The function [[stats_init]] initializes the module.
+Its argument determines the amount of information displayed. The
+function [[stats_terminate]] prints the final statistics after the
+program has finished. The functions [[stats_begin_gc]] and
+[[stats_end_gc]] switch between normal program execution and garbage
+collection for gathering statistics. In addition, they expect the
+amount of allocated memory as arguments. Space which is freed by
+backtracking is recorded by the function [[stats_backtrack]].
 
 <<stats.h>>=
 extern void stats_init(int on);
-extern void stats_terminate(unsigned long allocated);
+extern void stats_terminate(void);
 
 extern void stats_begin_gc(unsigned long allocated);
 extern void stats_end_gc(unsigned long allocated);
@@ -28,9 +27,9 @@ extern void stats_backtrack(unsigned long freed);
 
 @ 
 The implementation of the statistics module is pretty straight
-forward. In order to determine the expired run-time we will use the
-[[rusage]] function which is usually defined in the header file
-[[sys/resource.h]] together with the necessary constants.
+forward. In order to determine expired run times, we use the
+[[rusage]] function, which is defined together with the necessary
+constants in the header file [[sys/resource.h]].
 
 <<stats.c>>=
 #include "config.h"
@@ -43,32 +42,32 @@ forward. In order to determine the expired run-time we will use the
 <<Global variables>>
 
 @
-The amount of statistics to be presented is determined by the variable
-[[show_stats]]. If it is 0, nothing will be shown at all, if is 1 the
-total execution time and garbage collector information is presented at
-the end of the run and if it is larger, information about allocated
-memory and live memory will be shown at every garbage collection, too.
+The amount of statistics being presented to the user is determined by
+the variable [[show_stats]]. If it is 0, nothing is shown at all; if
+it is 1, the total execution time and memory allocation information
+are output when the program ends. If it is larger than 1, information
+about allocated and released memory will be shown at every garbage
+collection, too.
 
 <<Global variables>>=
 static int show_stats;
 
 @ 
-Timing information will be divided into the execution time in user
-space during (normal) program execution, execution time in user space
-during garbage collection, and system time for the whole program. The
+Timing information is divided into execution time in user space during
+(normal) program execution, execution time in user space during
+garbage collections, and system time for the whole program. Execution
 times are computed with the help of the function [[rusage]], which
 returns user and system time information since the program start. In
-addition, the elapsed wall clock time is computed using
-[[gettimeofday]].
+addition, elapsed wall clock time is computed using [[gettimeofday]].
 
 <<Global variables>>=
 static struct timeval user_time, gc_time, sys_time, real_time;
 
 @ 
-Concerning memory allocation the statistics module computes the number
-of allocated \emph{words} and the average number of live words during
-each garbage collection. Because these numbers can become quite large,
-we use variables of type [[long long]] here.
+Regarding memory allocation, the statistics module computes the number
+of allocated words and the average number of live words during each
+garbage collection. Because these numbers can become quite large, we
+use variables of type [[long long]] here.
 
 <<Global variables>>=
 unsigned long      n_gc;
@@ -77,8 +76,8 @@ unsigned long long total_collect, total_release, total_live;
 @
 The function [[stats_init]] saves its argument in the global variable
 [[show_stats]] and computes the initial timing information. The time
-spent in the initialization code will be added as a negative offset
-for the collect user mode and system mode times. For that reason
+spent in initialization code is added as a negative offset to the
+garbage collection and system mode execution times. For that reason
 [[stats_init]] should be called after all other initializations have
 been performed.
 
@@ -98,27 +97,23 @@ stats_init(int level)
 }
 
 @ 
-At the end of the program, [[stats_terminate]] is used to display the
-statistics information collected during the program. We assume here
-that this function is called on regular termination of the program,
-i.e., this call will always happen in normal execution mode and not in
-garbage collection mode. 
+At the end of a program, [[stats_terminate]] is used to display the
+statistics collected during the program. We assume that this function
+is called on regular termination of the program, i.e., the program is
+in normal execution mode and not performing a garbage collection.
 
 <<stats.c>>=
 void
-stats_terminate(unsigned long allocated)
+stats_terminate()
 {
-    struct rusage      ru;
-    struct timeval     tv;
-    unsigned long long total_alloc;
+    struct rusage  ru;
+    struct timeval tv;
 
     gettimeofday(&tv, NULL);
     getrusage(RUSAGE_SELF, &ru);
     add_timeval(&user_time, ru.ru_utime);
     add_timeval(&sys_time, ru.ru_stime);
     add_timeval(&real_time, tv);
-
-    total_alloc = allocated + total_collect + total_release;
 
     if ( show_stats > 0 )
     {
@@ -134,7 +129,7 @@ stats_terminate(unsigned long allocated)
                 (unsigned long)real_time.tv_sec,
 		(unsigned)real_time.tv_usec / 1000);
 
-        fprintf(stderr, "[%llu words allocated", total_alloc);
+        fprintf(stderr, "[%llu words allocated", total_collect + total_release);
         if ( n_gc > 0 )
 	    fprintf(stderr,
 		    ", %lu collection%s copying %llu words (%.2g%% live)",
@@ -145,20 +140,18 @@ stats_terminate(unsigned long allocated)
 }
 
 @ 
-The functions [[stats_begin_gc]] and [[stats_end_gc]] update the
-timing information appropriately at the beginning and end of a garbage
-collection. In addition, the allocation counts are updated with the
-arguments passed to the functions. Note that only the cells that have
-been freed by the garbage collection are actually added to number of
-allocated cells. This will ensure that every live cell is counted only
-once, viz. when the cell is finally freed. For that reason, the
-[[stats_terminate]] function had to update the allocation count with
-the number of cells that are still allocated when the program
-terminates.
+The functions [[stats_begin_gc]] and [[stats_end_gc]] update timing
+information at the beginning and end of a garbage collection,
+respectively. In addition, the allocation counts are updated with the
+arguments passed to the functions. Only cells that have been freed
+during a garbage collection are actually added to the number of
+allocated cells. This ensures that every live cell is counted only
+once, namely when the cell is finally freed. Note that this implies
+that a program must free all allocated memory at the end in order to
+display correct allocation statistics.
 
-If the value [[show_stats]] is greater than 1, information about the
-number of allocated and freed words is displayed to the user at the
-end of a collection.
+If [[show_stats]] is greater than 1, the numbers of allocated and
+released words are displayed at the end of each garbage collection.
 
 <<Global variables>>=
 static unsigned long n_alloc_before_gc;
@@ -198,8 +191,8 @@ stats_end_gc(unsigned long n_alloc)
 }
 
 @ 
-The function [[stats_backtrack]] only has to update the number of
-allocated words.
+The function [[stats_backtrack]] just updates the number of allocated
+words.
 
 <<stats.c>>=
 void
@@ -211,8 +204,8 @@ stats_backtrack(unsigned long n_freed)
 @
 Unix systems usually do not provide any functions to compute the sum
 or difference of two [[timeval]]s. The statistics module therefore
-implements its own functions for that purpose. Note that the micro
-seconds part will always be a positive number in the range between 0
+implements its own functions for that purpose. Note that the
+microseconds part is always a positive number in the range between 0
 and 999999.
 
 <<Function prototypes>>=

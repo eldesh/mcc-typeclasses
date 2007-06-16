@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2259 2007-06-16 13:37:33Z wlux $
+% $Id: heap.nw 2260 2007-06-16 13:38:36Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -267,26 +267,37 @@ Floating point numbers use type [[double]] for the represented number.
 This is problematic on some 32-bit architectures, which require
 [[double]] fields and variables to be aligned to double-word
 boundaries, because the current runtime system aligns heap nodes to
-word boundaries only. In order to avoid crashes due to an unaligned
-access to a [[double]] field, the values of floating-point nodes are
-read from and written to the heap as two consecutive [[long]] values
-with the help of an intermediate union on such systems. The macros
-[[get_double_val]] and [[put_double_val]] are used for that purpose.
-
-\emph{Do not replace the assignments in [[get_double_val]] and
-[[put_double_val]] by a single call to [[memcpy]]. The Gnu C compiler
-may generate inline code for [[memcpy]] when it is called with a fixed
-size and may use floating-point instructions, which expect properly
-aligned operands, in order to copy a [[double]] sized memory
-region. Such happens, e.g., on the Sparc architecture.}
+word boundaries only. When using the Gnu C compiler, we avoid crashes
+due to an unaligned access to a [[double]] field by using a packed
+storage layout for floating-point nodes. In addition, the packed
+layout avoids the unnecessary padding that otherwise would be inserted
+between the info and value fields. When another compiler is used on a
+system where [[double]]s must be aligned to double-word boundaries,
+the values of floating-point nodes are read from and written to the
+heap as two consecutive [[long]] values with the help of an
+intermediate union. The macros [[get_double_val]] and
+[[put_double_val]] are used for that purpose.
 
 <<heap.h>>=
+#if __GNUC__ && !UNALIGNED_DOUBLE
+# undef UNALIGNED_DOUBLE
+# define UNALIGNED_DOUBLE 1
+#endif
+
+#if defined(__SUNPRO_C) && defined(__sparc) && !defined(__sparcv9)
+# pragma pack(4)
+#endif
+
 extern NodeInfo float_info;
 struct float_node {
     NodeInfo *info;
     double   d;
-};
+} __attribute__((aligned(sizeof(word)), packed));
 #define float_node_size         wordsof(struct float_node)
+
+#if defined(__SUNPRO_C)
+# pragma pack()
+#endif
 
 #if UNALIGNED_DOUBLE
 # define get_double_val(_d,node)	_d = (node)->f.d

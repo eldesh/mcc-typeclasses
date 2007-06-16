@@ -1,11 +1,11 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: main.nw 1899 2006-04-19 10:50:11Z wlux $
+% $Id: main.nw 2257 2007-06-16 13:33:00Z wlux $
 %
-% Copyright (c) 2001-2005, Wolfgang Lux
+% Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 @
-\subsection{Runtime system initialization}
+\subsection{Runtime System Initialization}
 The [[main]] function of a Curry program must initialize the runtime
 system by calling the function [[curry_init]]. This function parses
 the command line options and initializes the runtime system
@@ -13,17 +13,17 @@ accordingly. At the end, the program should call [[curry_terminate]]
 in order to display the statistics gathered during the run.
 
 The main program is also responsible for providing default sizes for
-the heap, the stack, and the trail. To this end it must define the
+the heap, the stack, and the trail. To this end, it must define the
 global variables [[heapsize]], [[stacksize]], and [[trailsize]]. The
 actual sizes can be changed at runtime with the runtime system options
 \texttt{-h}, \texttt{-k}, and \texttt{-t}, respectively. The defaults
 sizes (4 MBytes for the heap and 512 kBytes for the stack and the
 trail) are available with the preprocessor constants
 [[DEFAULT_HEAPSIZE]], [[DEFAULT_STACKSIZE]], and
-[[DEFAULT_TRAILSIZE]] which can be redefined at compile time.
+[[DEFAULT_TRAILSIZE]], which can be redefined at compile time.
 
 The sizes and base addresses of the heap, the stack, and the trail are
-rounded to the next page boundary. Fur the purpose of rounding, the
+rounded to the next page boundary. For the purpose of rounding, the
 global variable [[pagemask]] is set to 1 less than the operating
 system's page size. If the page size cannot be determined
 from the operating system, a default of 4k is used. %'
@@ -66,15 +66,11 @@ extern void curry_terminate(void);
 @ 
 The function [[curry_init]] extracts the runtime system options from
 the command line and initializes the runtime system using these
-options. Options to the runtime system must be enclosed by
-\texttt{+RTS} and \texttt{-RTS}. The latter may be omitted if no
-further arguments follow it on the command line. When [[curry_init]]
-returns, all runtime system options have been removed from the
-argument vector.
-
-The function [[curry_terminate]] performs some clean up after the
-program has finished. At present, this function only prints the
-current statistics.
+options. Options to the runtime system must be enclosed with
+\texttt{+RTS} and \texttt{-RTS} delimiters. The latter may be omitted
+if no further arguments follow on the command line. When
+[[curry_init]] returns, all runtime system options have been removed
+from the argument vector.
 
 <<main.c>>=
 #include "config.h"
@@ -93,8 +89,7 @@ current statistics.
 #include "stats.h"
 
 static void	     bad_option(void) __attribute__((noreturn));
-static unsigned int  parse_size(const char *, const char *);
-static unsigned long parse_size_long(const char *, const char *);
+static unsigned long parse_size(long max, const char *, const char *);
 
 #define DEFAULT_PAGESIZE 4*k
 
@@ -188,7 +183,8 @@ curry_init(int *p_argc, char *argv[])
 			    else if ( *arg == 'f' )
 			    {
 				bufmode = _IOFBF;
-				bufsize = parse_size("buffer size", arg + 1);
+				bufsize = (int)
+				    parse_size(INT_MAX, "buffer size", arg + 1);
 			    }
 			    else
 			    {
@@ -199,14 +195,16 @@ curry_init(int *p_argc, char *argv[])
 			    }
 			    break;
 			case 'h':
-			    heapsize = parse_size_long("heap size", arg);
+			    heapsize = parse_size(LONG_MAX, "heap size", arg);
 			    break;
 			case 'k':
-			    stacksize = parse_size("stack size", arg);
+			    stacksize = (unsigned int)
+				parse_size(INT_MAX, "stack size", arg);
 			    break;
 #if !COPY_SEARCH_SPACE
 			case 't':
-			    trailsize = parse_size("trail size", arg);
+			    trailsize = (unsigned int)
+				parse_size(INT_MAX, "trail size", arg);
 			    break;
 #endif
 			}
@@ -240,6 +238,12 @@ curry_init(int *p_argc, char *argv[])
     stats_init(show_stats);
 }
 
+@ 
+The function [[curry_terminate]] performs some clean up after the
+program has finished. At present, this function only prints the
+current statistics.
+
+<<main.c>>=
 void
 curry_terminate()
 {
@@ -247,39 +251,13 @@ curry_terminate()
 }
 
 @ 
-As a handy abbreviation, the functions [[parse_size]] and
-[[parse_size_long]] parse numbers with the suffixes [[k]] and [[K]] as
-kBytes and with the suffixes [[m]] and [[M]] as MBytes. 
+As a handy abbreviation, the function [[parse_size]] recognizes the
+suffixes [[k]] and [[K]] for specifying sizes in kBytes and the
+suffixes [[m]] and [[M]] for specifying a size in MBytes.
 
 <<main.c>>=
-static unsigned int
-parse_size(const char *what, const char *arg)
-{
-    long size;
-    char *end;
-
-    size = strtol(arg, &end, 0);
-    if ( *end != '\0' )
-    {
-	if ( strcmp(end, "m") == 0 || strcmp(end, "M") == 0 )
-	    size = size > INT_MAX / M ? INT_MAX : size * M;
-	else if ( strcmp(end, "k") == 0 || strcmp(end, "K") == 0 )
-	    size = size > INT_MAX / k ? INT_MAX : size * k;
-	else
-	    size = -1;
-    }
-
-    if ( size <= 0 )
-    {
-	fprintf(stderr, "invalid %s: %s\n", what, arg);
-	exit(1);
-    }
-
-    return size > INT_MAX ? INT_MAX : size;
-}
-
 static unsigned long
-parse_size_long(const char *what, const char *arg)
+parse_size(long max, const char *what, const char *arg)
 {
     long size;
     char *end;
@@ -288,9 +266,9 @@ parse_size_long(const char *what, const char *arg)
     if ( *end != '\0' )
     {
 	if ( strcmp(end, "m") == 0 || strcmp(end, "M") == 0 )
-	    size = size > LONG_MAX / M ? LONG_MAX : size * M;
+	    size = size > max / M ? max : size * M;
 	else if ( strcmp(end, "k") == 0 || strcmp(end, "K") == 0 )
-	    size = size > LONG_MAX / k ? LONG_MAX : size * k;
+	    size = size > max / k ? max : size * k;
 	else
 	    size = -1;
     }
@@ -301,5 +279,5 @@ parse_size_long(const char *what, const char *arg)
 	exit(1);
     }
 
-    return size > LONG_MAX ? LONG_MAX : size;
+    return size > max ? max : size;
 }

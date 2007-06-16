@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2266 2007-06-16 14:54:01Z wlux $
+% $Id: CGen.lhs 2267 2007-06-16 14:54:56Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -684,7 +684,7 @@ performing a stack check.
 > stackDepth (CPSEnter _) = 1
 > stackDepth (CPSExec _ vs) = length vs
 > stackDepth (CPSCCall _ _) = 0
-> stackDepth (CPSApply _ vs) = if length vs > 1 then 1 else 0
+> stackDepth (CPSApply _ vs) = 2 + length vs
 > stackDepth (CPSUnify _ _) = 2
 > stackDepth (CPSDelay _) = 1
 > stackDepth (CPSDelayNonLocal _ st) = max 1 (stackDepth st)
@@ -842,7 +842,7 @@ translation function.
 > cCode _ vs0 (CPSEnter v) ks = enter vs0 v ks
 > cCode _ vs0 (CPSExec f vs) ks = exec vs0 f vs ks
 > cCode _ vs0 (CPSCCall ty cc) ks = cCall ty resName cc ++ ret vs0 resName ks
-> cCode _ vs0 (CPSApply v vs) [] = apply vs0 v vs
+> cCode _ vs0 (CPSApply v vs) ks = apply vs0 v vs ks
 > cCode consts vs0 (CPSUnify v e) ks =
 >   freshNode consts resName e ++ unifyVar vs0 v resName ks
 > cCode _ vs0 (CPSDelay v) ks = delay vs0 v ks
@@ -1058,36 +1058,37 @@ return frame on the stack, which takes care of applying the result of
 the application to the surplus arguments.
 \begin{verbatim}
 
-> apply :: [Name] -> Name -> [Name] -> [CStmt]
-> apply vs0 v vs =
->   [CSwitch (nodeTag v)
->            ([CCase (show i) (splitArgs i) | i <- [1..n-1]] ++
->             [CCase (show n) (saveVars vs0 (v:vs) ++ [CBreak]),
->              CDefault (applyPartial vs0 n v)]),
->    gotoExpr (field v "info->apply")]
->   where n = length vs
->         retIp = Name "_ret_ip"
->         splitArgs m =
->           localVar retIp
->                    (Just (asNode (CExpr (cName (apName (n - m + 1)))))) :
->           saveVars vs0 (v : take m vs ++ retIp : drop m vs) ++
->           [CBreak]
+> apply :: [Name] -> Name -> [Name] -> [CPSCont] -> [CStmt]
+> apply vs0 v vs ks =
+>   CSwitch (nodeTag v)
+>           [CCase (show i)
+>                  (applyExec vs0 v (splitAt i vs) ks) | i <- [1..length vs]] :
+>   applyPartial vs0 v vs ks
 
-> applyPartial :: [Name] -> Int -> Name -> [CStmt]
-> applyPartial vs0 n v =
->   assertRel (nodeTag v) ">" (CInt 0) :
->   CLocalVar uintType "argc" (Just (CFunCall "closure_argc" [var v])) :
->   CLocalVar uintType "sz" (Just (CFunCall "node_size" [var v])) :
->   CProcCall "CHECK_HEAP" [size] :
->   setVar v alloc :
->   incrAlloc size :
->   wordCopy (var v) (stk 0) "sz" :
->   CIncrBy (lfield v "info") (CInt n) :
->   map (setArg (lfield v "c.args")) [0..n-1] ++
->   ret vs0 v []
->   where size = CExpr "sz" `CAdd` CInt n
->         setArg base i =
->           CAssign (LElem base (CExpr "argc" `add` CInt i)) (stk (i+1))
+> applyExec :: [Name] -> Name -> ([Name],[Name]) -> [CPSCont] -> [CStmt]
+> applyExec vs0 v (vs,vs') ks =
+>   saveCont vs0 (v : vs) (if null vs' then ks else applyCont vs' : ks) ++
+>   [gotoExpr (field v "info->apply")]
+>   where applyCont vs =
+>           CPSCont (CPSFunction (apName (length vs + 1)) 0 [v] vs undefined)
+
+> applyPartial :: [Name] -> Name -> [Name] -> [CPSCont] -> [CStmt]
+> applyPartial vs0 v vs ks =
+>   [assertRel (nodeTag v) ">" (CInt 0),
+>    CLocalVar uintType "argc" (Just (CFunCall "closure_argc" [var v])),
+>    CLocalVar uintType "sz" (Just (CFunCall "node_size" [var v])),
+>    CProcCall "CHECK_HEAP" [size],
+>    CBlock (loadVars vs0 ++
+>            localVar resName (Just alloc) :
+>            incrAlloc size :
+>            wordCopy (var resName) (var v) "sz" :
+>            CIncrBy (lfield resName "info") (CInt n) :
+>            zipWith (setArg (lfield resName "c.args")) [0..] vs ++
+>            ret vs0 resName ks)]
+>   where n = length vs
+>         size = CExpr "sz" `CAdd` CInt n
+>         setArg base i v =
+>           CAssign (LElem base (CExpr "argc" `add` CInt i)) (var v)
 
 \end{verbatim}
 For a foreign function call, the generated code first unboxes all

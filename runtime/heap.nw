@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2255 2007-06-16 13:26:58Z wlux $
+% $Id: heap.nw 2259 2007-06-16 13:37:33Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -263,13 +263,15 @@ NodeInfo int_info = {
 };
 
 @ 
-Floating point numbers use type [[double]] for the represented number
-to get the maximum precision. On some architectures values of this
-type must be aligned on a double word boundary. As nodes in the heap
-are aligned to a word boundary only, floating point values in a heap
-node cannot be accessed directly in this case. The macros
-[[get_double_val]] and [[put_double_val]] can be used for accessing
-unaligned [[double]] values.
+Floating point numbers use type [[double]] for the represented number.
+This is problematic on some 32-bit architectures, which require
+[[double]] fields and variables to be aligned to double-word
+boundaries, because the current runtime system aligns heap nodes to
+word boundaries only. In order to avoid crashes due to an unaligned
+access to a [[double]] field, the values of floating-point nodes are
+read from and written to the heap as two consecutive [[long]] values
+with the help of an intermediate union on such systems. The macros
+[[get_double_val]] and [[put_double_val]] are used for that purpose.
 
 \emph{Do not replace the assignments in [[get_double_val]] and
 [[put_double_val]] by a single call to [[memcpy]]. The Gnu C compiler
@@ -287,26 +289,27 @@ struct float_node {
 #define float_node_size         wordsof(struct float_node)
 
 #if UNALIGNED_DOUBLE
-# define get_double_val(_d,node)	_d = (node).d
-# define put_double_val(node,_d)	(node).d = _d
+# define get_double_val(_d,node)	_d = (node)->f.d
+# define put_double_val(node,_d)	(node)->f.d = _d
 #else
-union _conv {
+union dconv {
     double d;
     long   l[2];
 };
 
-# define get_double_val(_d,node) do { \
-    union _conv conv; \
-    conv.l[0] = ((long *)&(node).d)[0]; \
-    conv.l[1] = ((long *)&(node).d)[1]; \
-    _d = conv.d; \
-} while ( 0 )
-# define put_double_val(node,_d) do { \
-    union _conv conv; \
-    conv.d = _d; \
-    ((long *)&(node).d)[0] = conv.l[0]; \
-    ((long *)&(node).d)[1] = conv.l[1]; \
-} while ( 0 )
+# define D_OFS	offsetof(struct float_node, d) / sizeof(long)
+# define get_double_val(_d,node) do {		\
+	union dconv conv;			\
+	conv.l[0] = ((long *)(node))[D_OFS];	\
+	conv.l[1] = ((long *)(node))[D_OFS+1];	\
+	_d = conv.d;				\
+    } while ( 0 )
+# define put_double_val(node,_d) do {		\
+	union dconv conv;			\
+	conv.d = _d;				\
+	((long *)(node))[D_OFS]	  = conv.l[0];	\
+	((long *)(node))[D_OFS+1] = conv.l[1];	\
+    } while ( 0 )
 #endif
 
 @
@@ -592,7 +595,12 @@ NodeInfo search_cont_info = {
 };
 
 @
-Combined node type.
+Combined node type. On architectures where [[double]] values must be
+aligned to double-word boundaries, the [[Node]] union type does not
+include a member for floating-point values. This is to prevent the
+compiler from assuming that all nodes are aligned to double-word
+boundaries, which would happen, e.g., for Gnu C version 3 and newer on
+Sparc.
 
 <<heap.h>>=
 union node {
@@ -601,7 +609,9 @@ union node {
     struct vector_node a;
     struct char_node ch;
     struct int_node i;
+#if UNALIGNED_DOUBLE
     struct float_node f;
+#endif
     struct ptr_node p;
     struct foreign_ptr_node fp;
     struct variable_node v;

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2254 2007-06-15 18:42:06Z wlux $
+% $Id: unify.nw 2259 2007-06-16 13:37:33Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -27,6 +27,7 @@ extern boolean eq_args(Node *, Node *, unsigned int, Node **);
 <<unify.c>>=
 #include "config.h"
 #include "debug.h"
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -191,8 +192,8 @@ eq_root(Node *arg1, Node *arg2, unsigned int *argc)
 	    eq = arg1->i.i == arg2->i.i;
 	    break;
         case FLOAT_KIND:
-	    get_double_val(d, arg1->f);
-	    get_double_val(e, arg2->f);
+	    get_double_val(d, arg1);
+	    get_double_val(e, arg2);
 	    eq = d == e;
             break;
 	case PTR_KIND:
@@ -364,8 +365,8 @@ eq_args(Node *arg1, Node *arg2, unsigned int n, Node **arglist)
 	    case FLOAT_KIND:
 		if ( is_float_node(y) )
 		{
-		    get_double_val(d, x->f);
-		    get_double_val(e, y->f);
+		    get_double_val(d, x);
+		    get_double_val(e, y);
 		    if ( d != e )
 			return false;
 		    continue;

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 1899 2006-04-19 10:50:11Z wlux $
+% $Id: print.nw 2259 2007-06-16 13:37:33Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -14,6 +14,7 @@ extern void print_result(const char *var_names[], Node *vars[], Node *result);
 @ 
 <<print.c>>=
 #include "config.h"
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -177,7 +178,7 @@ print_node(unsigned int prec, Node *node)
 		       node->i.i);
 		break;
 	    case FLOAT_KIND:
-		get_double_val(d, node->f);
+		get_double_val(d, node);
 		lit_double(buf, d);
 		printf(prec > 0 && buf[0] == '-' ? "(%s)" : "%s", buf);
 		break;

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: trace.nw 2252 2007-06-15 17:45:09Z wlux $
+% $Id: trace.nw 2259 2007-06-16 13:37:33Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -45,6 +45,7 @@ extern void trace_fun(const char *name, unsigned int arity);
 @
 <<trace.c>>=
 #include "config.h"
+#include <stddef.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -171,7 +172,7 @@ trace_shownode(int depth, Node *node)
 	    fprintf(stderr, "%ld", node->i.i);
 	    break;
 	case FLOAT_KIND:
-	    get_double_val(d, node->f);
+	    get_double_val(d, node);
 	    fprintf(stderr, "%s", lit_double(buf, d));
 	    break;
 	case PTR_KIND:

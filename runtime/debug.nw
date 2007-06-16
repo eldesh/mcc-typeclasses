@@ -1,18 +1,21 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: debug.nw 1865 2006-03-01 22:30:38Z wlux $
+% $Id: debug.nw 2263 2007-06-16 14:47:51Z wlux $
 %
-% Copyright (c) 2002,2005-2006, Wolfgang Lux
+% Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Debugging}
-When the preprocessor symbol [[DEBUG]] is defined, the code will
-include a few assertions. Otherwise these assertions are
-ignored.
+When the preprocessor symbol [[DEBUG]] is defined, some more paranoid
+assertions are enabled, which usually check invariants that are
+preserved by the compiler. Otherwise these assertions are ignored. If
+enabled, [[ASSERT]] is defined as an object-like macro in order to
+prevent its arguments from being expanded before the [[assert]] macro
+is expanded.
 
 <<debug.h>>=
 #ifdef DEBUG
 # undef NDEBUG
-# define ASSERT(e) assert(e)
+# define ASSERT assert
 #else
 # define ASSERT(e)
 #endif

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2264 2007-06-16 14:49:40Z wlux $
+% $Id: show.nw 2269 2007-06-16 14:57:15Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -1045,7 +1045,7 @@ FUNCTION(showString)
 static
 FUNCTION(showString_1)
 {
-    char buf[8];
+    char buf[10];
     Node *hd, *tl, *prev, *tail, *susp, *cons;
  ENTRY_LABEL(static, showString_1)
     MATCH_RIGID_CHAR(showString_1);

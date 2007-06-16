@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cstring.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: cstring.nw 2269 2007-06-16 14:57:15Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -163,10 +163,9 @@ FUNCTION(nf_string_2)
 The function [[string_length]] returns the length of a Curry string.
 The function [[copy_string]] copies a Curry string into a string
 buffer terminated with a final [['\0']] character. The buffer must be
-large enough to hold the string including the terminator
-character. Finally, the function [[to_string]] uses [[malloc]] to
-allocate a suitable buffer and copies the Curry string argument into
-this buffer.
+large enough to hold the string including the terminator character.
+Finally, the function [[to_string]] uses [[malloc]] to allocate a
+suitable buffer and copies the Curry string argument into this buffer.
 
 <<cstring.c>>=
 unsigned
@@ -418,9 +417,9 @@ inserted between \verb|\SO| (ASCII code 14) and \verb|H| in order to
 distinguish the strings \verb|['\SO','H']| and \verb|['\SOH']|.
 
 The buffer passed to [[lit_char]] must be long enough to accommodate
-the converted string. Since at present characters are limited to the
-range between \verb|chr 0| and \verb|chr 255|, five bytes are
-sufficient.
+the converted string. In order to support the whole Unicode character
+set range ($[\texttt{'\bs{}NUL'},\texttt{'\bs{}x10ffff'}]$) at least 9
+bytes are required.
 
 <<cstring.c>>=
 static const char *asciiTab[] = {

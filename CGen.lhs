@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2265 2007-06-16 14:50:45Z wlux $
+% $Id: CGen.lhs 2266 2007-06-16 14:54:01Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -64,10 +64,9 @@ defines the array holding the names of the goal's free variables.
 >                        (map CInit (map CString vs ++ [CNull]))
 >         curry_main (Just _) = curry_eval
 >         curry_main Nothing = const . curry_exec
->         curry_exec g args =
->           CFunCall "curry_exec" (CAddr (CExpr g) : map CExpr args)
+>         curry_exec g args = CFunCall "curry_exec" (addr g : map CExpr args)
 >         curry_eval g v args =
->           CFunCall "curry_eval" (CAddr (CExpr g) : map CExpr (v:args))
+>           CFunCall "curry_eval" (addr g : map CExpr (v:args))
 
 \end{verbatim}
 \subsection{Modules}
@@ -219,7 +218,7 @@ configured with the \texttt{--disable-unboxed} configuration option.
 >   | null tys =
 >       [CVarDef CPrivate nodeInfoType (nodeInfo c) nodeinfo,
 >        CVarDef vb nodeInfoConstPtrType (constNode c)
->                (CInit (CAddr (CExpr (nodeInfo c))))]
+>                (CInit (addr (nodeInfo c)))]
 >   | otherwise = [CVarDef vb nodeInfoType (nodeInfo c) nodeinfo]
 >   where nodeinfo = CStruct (map CInit nodeinfo')
 >         nodeinfo' =
@@ -237,20 +236,20 @@ configured with the \texttt{--disable-unboxed} configuration option.
 > charConstant :: Char -> CTopDecl
 > charConstant c =
 >   CVarDef CPrivate (CConstType "struct char_node") (constChar c)
->           (CStruct $ map CInit [CAddr (CExpr "char_info"),CInt (ord c)])
+>           (CStruct $ map CInit [addr "char_info",CInt (ord c)])
 
 > intConstant :: Int -> CTopDecl
 > intConstant i =
 >   CppCondDecls (CFunCall "is_large_int" [CInt i])
 >     [CVarDef CPrivate (CConstType "struct int_node") (constInt i)
->              (CStruct $ map CInit [CAddr (CExpr "int_info"),CInt i]),
+>              (CStruct $ map CInit [addr "int_info",CInt i]),
 >      CppDefine (constInt i) (constRef (constInt i))]
 >     [CppDefine (constInt i) (CFunCall "mk_unboxed" [CInt i])]
 
 > floatConstant :: Double -> CTopDecl
 > floatConstant f =
 >   CVarDef CPrivate (CConstType "struct float_node") (constFloat f)
->           (CStruct $ map CInit [CAddr (CExpr "float_info"),fval f])
+>           (CStruct $ map CInit [addr "float_info",fval f])
 >   where fval f
 >           | isNaN f = error "internalError: NaN literal in CGen.floatConstant"
 >           | isInfinite f = CExpr (withSign f "1e500")
@@ -417,7 +416,7 @@ is generated.
 >   [CVarDef vb (CConstType "struct closure_node") (constFunc f)
 >            (CStruct [CInit (info f n),CStruct [CInit CNull]])]
 >   where info f n
->           | n == 0 = CAddr (CExpr (nodeInfo f))
+>           | n == 0 = addr (nodeInfo f)
 >           | otherwise = CExpr (pappInfoTable f)
 
 > pappInfo :: Name -> Int -> Int -> CInitializer
@@ -544,39 +543,38 @@ calls to a variable instead of a known function.
 > evalCode :: Int -> [CStmt]
 > evalCode n =
 >   [CProcCall "CHECK_STACK" [CInt (n - 1)] | n > 1] ++
->   CLocalVar nodePtrType "clos" (Just (CExpr "regs.sp[0]")) :
->   [CDecrBy (LVar "regs.sp") (CInt (n - 1)) | n /= 1] ++
->   [saveArg i | i <- [0..n-1]] ++
->   [goto "clos->info->entry"]
->   where saveArg i = CAssign (LElem (LVar "regs.sp") (CInt i))
->                             (CElem (CExpr "clos->c.args") (CInt i))
+>   localVar v (Just (stk 0)) :
+>   [decrSp (n - 1) | n /= 1] ++
+>   [setStk i (arg i) | i <- [0..n-1]] ++
+>   [gotoExpr (field v "info->entry")]
+>   where v = Name "clos"
+>         arg = element (field v "c.args")
 
 > lazyCode :: Int -> [CStmt]
 > lazyCode n =
->   CIf (funCall "!is_local_space" ["regs.sp[0]->s.spc"])
->       [procCall "suspend_search" ["resume","regs.sp[0]","regs.sp[0]->s.spc"]]
+>   CIf (CFunCall "!is_local_space" [CField (stk 0) "s.spc"])
+>       [CProcCall "suspend_search"
+>                  [CExpr "resume",stk 0,CField (stk 0) "s.spc"]]
 >       [] :
->   CLocalVar nodePtrType "susp" (Just (CExpr "regs.sp[0]")) :
->   CLocalVar labelType "entry" (Just (CExpr "susp->info->entry")) :
+>   localVar v (Just (stk 0)) :
+>   CLocalVar labelType "entry" (Just (field v "info->entry")) :
 >   zipWith fetchArg vs [0..] ++
->   CIf (CRel (CCast labelType (CExpr "regs.sp[1]")) "==" (CExpr "update"))
->       (CLocalVar nodePtrType "que" (Just (CExpr "regs.sp[2]")) :
->        lockIndir (Name "susp") (Name "que") ++
+>   CIf (CRel (CCast labelType (stk 1)) "==" (CExpr "update"))
+>       (localVar v' (Just (stk 2)) : lockIndir v v' ++
 >        [CProcCall "CHECK_STACK" [CInt (n - 1)] | n > 1] ++
->        [CDecrBy (LVar "regs.sp") (CInt (n - 1)) | n /= 1])
->       (lock (Name "susp") ++
+>        [decrSp (n - 1) | n /= 1])
+>       (lock v ++
 >        [CProcCall "CHECK_STACK" [CInt (n + 1)],
->         CDecrBy (LVar "regs.sp") (CInt (n + 1)),
->         CAssign (LElem (LVar "regs.sp") (CInt n))
->                 (asNode (CExpr "update"))]) :
+>         decrSp (n + 1),
+>         setStk n (asNode (CExpr "update"))]) :
 >   zipWith saveArg [0..] vs ++
 >   [goto "entry"]
->   where vs = [Name ('v' : show i) | i <- [1..n]]
->         fetchArg v i =
->           CLocalVar nodePtrType (show v)
->                     (Just (CElem (CExpr "susp->s.args") (CInt i)))
->         saveArg i v =
->           CAssign (LElem (LVar "regs.sp") (CInt i)) (CExpr (show v))
+>   where v = Name "susp"
+>         v' = Name "que"
+>         vs = [Name ('v' : show i) | i <- [1..n]]
+>         arg = element (field v "s.args")
+>         fetchArg v i = localVar v (Just (arg i))
+>         saveArg i v = setStk i (var v)
 
 \end{verbatim}
 When saving arguments to the stack, we avoid saving variables that
@@ -586,35 +584,30 @@ the Gnu C compiler does not detect such redundant save operations.
 
 > loadVars :: [Name] -> [CStmt]
 > loadVars vs = zipWith loadVar vs [0..]
->   where loadVar v i =
->           CLocalVar nodePtrType (show v)
->                     (Just (CElem (CExpr "regs.sp") (CInt i)))
+>   where loadVar v i = localVar v (Just (stk i))
 
 > fetchArgs :: Name -> CPSTag -> [CStmt]
 > fetchArgs _ (CPSLitCase _) = []
 > fetchArgs v (CPSConstrCase _ vs) =
->   assertRel (funCall "closure_argc" [show v]) "==" (CInt (length vs)) :
->   zipWith (fetchArg (field (show v) "c.args")) vs [0..]
->   where fetchArg v v' =
->           CLocalVar nodePtrType (show v') . Just . CElem v . CInt
+>   assertRel (CFunCall "closure_argc" [var v]) "==" (CInt (length vs)) :
+>   zipWith fetchArg vs [0..]
+>   where arg = element (field v "c.args")
+>         fetchArg v i = localVar v (Just (arg i))
 > fetchArgs _ CPSFreeCase = []
 > fetchArgs _ CPSDefaultCase = []
 
 > saveVars :: [Name] -> [Name] -> [CStmt]
 > saveVars vs0 vs =
->   [CIncrBy (LVar "regs.sp") (CInt d) | d /= 0] ++
->   [saveVar i v | (i,v0,v) <- zip3 [0..] vs0' vs, v0 /= v]
+>   [incrSp d | d /= 0] ++
+>   [setStk i (var v) | (i,v0,v) <- zip3 [0..] vs0' vs, v0 /= v]
 >   where d = length vs0 - length vs
 >         vs0' = if d >= 0 then drop d vs0 else replicate (-d) (Name "") ++ vs0
->         saveVar i v =
->           CAssign (LElem (LVar "regs.sp") (CInt i)) (CExpr (show v))
 
 > updVar :: [Name] -> Name -> CStmt
-> updVar vs v
->   | null vs'' = error ("updVar " ++ show v)
->   | otherwise =
->       CAssign (LElem (LVar "regs.sp") (CInt (length vs'))) (CExpr (show v))
->   where (vs',vs'') = break (v ==) vs
+> updVar vs v =
+>   case elemIndex v vs of
+>     Just n -> setStk n (var v)
+>     Nothing -> error ("updVar " ++ show v)
 
 \end{verbatim}
 When computing the heap requirements of a function, we have to take
@@ -731,7 +724,7 @@ split into minimal binding groups.
 >         init o (v,Closure f vs)
 >           | null vs = (o,(v,constRef (constFunc f)))
 >           | otherwise = (o + length vs + 1,(v,constant o))
->         init o (v,Var v') = (o,(v,CExpr (show v')))
+>         init o (v,Var v') = (o,(v,var v'))
 >         init _ (v,n) = error ("internal error: constants.init" ++ show n)
 >         constant = asNode . add (CExpr constArray) . CInt
 
@@ -764,14 +757,14 @@ split into minimal binding groups.
 > constData consts ds = map (CInit . asNode) $ foldr constInit [] ds
 >   where constInit (Bind v (Constr c vs)) is
 >           | not (null vs) && isConstant consts v =
->               CAddr (CExpr (nodeInfo c)) : map arg vs ++ is
+>               addr (nodeInfo c) : map arg vs ++ is
 >         constInit (Bind v (Papp f vs)) is
 >           | not (null vs) && isConstant consts v =
 >               CExpr (pappInfoTable f) `add` CInt (length vs) :
 >               map arg vs ++ is
 >         constInit (Bind v (Closure f vs)) is
 >           | not (null vs) && isConstant consts v =
->               CAddr (CExpr (nodeInfo f)) : map arg vs ++ is
+>               addr (nodeInfo f) : map arg vs ++ is
 >         constInit _ is = is
 >         arg v = fromJust (lookupFM v consts)
 
@@ -782,64 +775,60 @@ split into minimal binding groups.
 > allocNode :: FM Name CExpr -> Bind -> [CStmt]
 > allocNode consts (Bind v n) =
 >   case lookupFM v consts of
->     Just e -> [CLocalVar nodePtrType v' (Just e)]
+>     Just e -> [localVar v (Just e)]
 >     Nothing ->
 >       case n of
->         Lit c -> [CLocalVar nodePtrType v' (Just (literal c))]
->         Var v'' -> [CLocalVar nodePtrType v' (Just (CExpr (show v'')))]
->         _ -> [CLocalVar nodePtrType v' (Just (asNode (CExpr "regs.hp"))),
->               CIncrBy (LVar "regs.hp") (nodeSize n)]
->   where v' = show v
+>         Lit c -> [localVar v (Just (literal c))]
+>         Var v' -> [localVar v (Just (var v'))]
+>         _ -> [localVar v (Just alloc),incrAlloc (nodeSize n)]
 
 > initNode :: FM Name CExpr -> Bind -> [CStmt]
 > initNode _ (Bind v (Lit _)) = []
 > initNode consts (Bind v (Constr c vs))
 >   | isConstant consts v = []
->   | otherwise = initConstr (LVar (show v)) c (map show vs)
+>   | otherwise = initConstr v c vs
 > initNode consts (Bind v (Papp f vs))
 >   | isConstant consts v = []
->   | otherwise = initPapp (LVar (show v)) f (map show vs)
+>   | otherwise = initPapp v f vs
 > initNode consts (Bind v (Closure f vs))
 >   | isConstant consts v = []
->   | otherwise = initClosure (LVar (show v)) f (map show vs)
-> initNode _ (Bind v (Lazy f vs)) = initLazy (LVar (show v)) f (map show vs)
-> initNode _ (Bind v Free) = initFree (LVar (show v))
+>   | otherwise = initClosure v f vs
+> initNode _ (Bind v (Lazy f vs)) = initLazy v f vs
+> initNode _ (Bind v Free) = initFree v
 > initNode _ (Bind v (Var _)) = []
 
-> initConstr :: LVar -> Name -> [String] -> [CStmt]
+> initConstr :: Name -> Name -> [Name] -> [CStmt]
 > initConstr v c vs =
->   CAssign (LField v "info") (CAddr (CExpr (nodeInfo c))) :
->   initArgs (LField v "c.args") vs
+>   setField v "info" (addr (nodeInfo c)) : initArgs v "c.args" vs
 
-> initPapp :: LVar -> Name -> [String] -> [CStmt]
+> initPapp :: Name -> Name -> [Name] -> [CStmt]
 > initPapp v f vs =
->   CAssign (LField v "info") (CExpr (pappInfoTable f) `add` CInt (length vs)) :
->   initArgs (LField v "c.args") vs
+>   setField v "info" (CExpr (pappInfoTable f) `add` CInt (length vs)) :
+>   initArgs v "c.args" vs
 
-> initClosure :: LVar -> Name -> [String] -> [CStmt]
+> initClosure :: Name -> Name -> [Name] -> [CStmt]
 > initClosure v f vs =
->   CAssign (LField v "info") (CAddr (CExpr (nodeInfo f))) :
->   initArgs (LField v "c.args") vs
+>   setField v "info" (addr (nodeInfo f)) : initArgs v "c.args" vs
 
-> initLazy :: LVar -> Name -> [String] -> [CStmt]
+> initLazy :: Name -> Name -> [Name] -> [CStmt]
 > initLazy v f vs =
->   CAssign (LField v "info") (CExpr (lazyInfoTable f)) :
->   CAssign (LField v "s.spc") (CExpr "regs.ss") :
+>   setField v "info" (CExpr (lazyInfoTable f)) :
+>   setField v "s.spc" (CExpr "regs.ss") :
 >   if null vs then
->     [CAssign (LElem (LField v "s.args") (CInt 0)) CNull]
+>     [setElem (lfield v "s.args") 0 CNull]
 >   else
->     initArgs (LField v "s.args") vs
+>     initArgs v "s.args" vs
 
-> initFree :: LVar -> [CStmt]
+> initFree :: Name -> [CStmt]
 > initFree v =
->   [CAssign (LField v "info") (CExpr "variable_info_table"),
->    CAssign (LField v "v.spc") (CExpr "regs.ss"),
->    CAssign (LField v "v.wq") CNull,
->    CAssign (LField v "v.cstrs") CNull]
+>   [setField v "info" (CExpr "variable_info_table"),
+>    setField v "v.spc" (CExpr "regs.ss"),
+>    setField v "v.wq" CNull,
+>    setField v "v.cstrs" CNull]
 
-> initArgs :: LVar -> [String] -> [CStmt]
-> initArgs v vs = zipWith (initArg v) [0..] vs
->   where initArg v i = CAssign (LElem v (CInt i)) . CExpr
+> initArgs :: Name -> String -> [Name] -> [CStmt]
+> initArgs v f vs = zipWith (initArg (lfield v f)) [0..] vs
+>   where initArg v1 i v2 = setElem v1 i (var v2)
 
 \end{verbatim}
 Every abstract machine code statement is translated by its own
@@ -883,22 +872,20 @@ translation function.
 > ret :: [Name] -> Name -> [CPSCont] -> [CStmt]
 > ret vs0 v [] =
 >   saveVars vs0 [] ++
->   [CLocalVar labelType "_ret_ip"
->              (Just (CCast labelType (CExpr "regs.sp[0]"))),
->    CAssign (LVar "regs.sp[0]") result,
+>   [CLocalVar labelType "_ret_ip" (Just (CCast labelType (stk 0))),
+>    setStk 0 (var v),
 >    goto "_ret_ip"]
->   where result = CExpr (show v)
 > ret vs0 v (k:ks) = saveCont vs0 (v : contVars k) ks ++ [goto (contName k)]
 
 > enter :: [Name] -> Name -> [CPSCont] -> [CStmt]
 > enter vs0 v ks =
->   CLocalVar nodePtrType v' (Just (CExpr (show v))) :
->   kindSwitch (Name v') [] (Just [])
+>   localVar v' (Just (var v)) :
+>   kindSwitch v' [] (Just [])
 >              [CCase "LAZY_KIND"
->                     (saveCont vs0 [Name v'] ks ++
+>                     (saveCont vs0 [v'] ks ++
 >                      [gotoExpr (field v' "info->eval")])] :
->   ret vs0 (Name v') ks
->   where v' = "_node"
+>   ret vs0 v' ks
+>   where v' = Name "_node"
 
 > exec :: [Name] -> Name -> [Name] -> [CPSCont] -> [CStmt]
 > exec vs0 f vs ks = saveCont vs0 vs ks ++ [goto (cName f)]
@@ -907,54 +894,50 @@ translation function.
 > saveCont vs0 vs ks =
 >   zipWith withCont ips ks ++
 >   saveVars vs0 (concat (vs : zipWith contFrame ips ks))
->   where ips = ["_cont_ip" ++ if n == 1 then "" else show n | n <- [1..]]
->         withCont ip k =
->           CLocalVar nodePtrType ip (Just (asNode (CExpr (contName k))))
->         contFrame ip k = Name ip : contVars k
+>   where ips = map contIpName ("" : map show [2..])
+>         withCont ip k = localVar ip (Just (asNode (CExpr (contName k))))
+>         contFrame ip k = ip : contVars k
+>         contIpName suffix = Name ("_cont_ip" ++ suffix)
 
 > lock :: Name -> [CStmt]
 > lock v =
 >   [assertLazyNode v "UPD_TAG",
 >    CppCondStmts "!COPY_SEARCH_SPACE"
->      [CIf (CRel (CCast wordPtrType (CExpr v')) "<" (CExpr "regs.hlim"))
->           [procCall "DO_SAVE" [v',"q.wq"],
->            CIncrBy (LField (LVar v') "info") (CInt 1)]
->           [CAssign (LField (LVar v') "info") (CExpr "queueMe_info_table")]]
->      [CAssign (LField (LVar v') "info") (CExpr "queueMe_info_table")],
->    CAssign (LField (LVar v') "q.wq") CNull]
->   where v' = show v
+>      [CIf (CRel (CCast wordPtrType (var v)) "<" (CExpr "regs.hlim"))
+>           [CProcCall "DO_SAVE" [var v,CExpr "q.wq"],
+>            CIncrBy (lfield v "info") (CInt 1)]
+>           [setField v "info" (CExpr "queueMe_info_table")]]
+>      [setField v "info" (CExpr "queueMe_info_table")],
+>    setField v "q.wq" CNull]
 
 > update :: Name -> Name -> [CStmt]
 > update v1 v2 =
 >   [assertLazyNode v1 "QUEUEME_TAG",
->    CLocalVar (CType "ThreadQueue") wq (Just (CField (CExpr v1') "q.wq")),
+>    CLocalVar (CType "ThreadQueue") wq (Just (field v1 "q.wq")),
 >    CppCondStmts "!COPY_SEARCH_SPACE"
->      [procCall "SAVE" [v1',"q.wq"],
->       CIncrBy (LField (LVar v1') "info") (CInt 1)]
->      [CAssign (LField (LVar v1') "info") (CAddr (CExpr "indir_info"))],
->    CAssign (LField (LVar v1') "n.node") (CExpr (show v2)),
+>      [CProcCall "SAVE" [var v1,CExpr "q.wq"],
+>       CIncrBy (lfield v1 "info") (CInt 1)]
+>      [setField v1 "info" (addr "indir_info")],
+>    setField v1 "n.node" (var v2),
 >    CIf (CExpr wq) [procCall "wake_threads" [wq]] []]
->   where v1' = show v1
->         wq = "wq"
+>   where wq = "wq"
 
 > lockIndir :: Name -> Name -> [CStmt]
 > lockIndir v1 v2 =
 >   [assertLazyNode v2 "QUEUEME_TAG",
 >    CppCondStmts "!COPY_SEARCH_SPACE"
->      [CIf (CRel (CCast wordPtrType (CExpr v1')) "<" (CExpr "regs.hlim"))
->           [procCall "DO_SAVE" [v1',"n.node"],
->            CIncrBy (LField (LVar v1') "info") (CInt 2)]
->           [CAssign (LField (LVar v1') "info") (CAddr (CExpr "indir_info"))]]
->      [CAssign (LField (LVar v1') "info") (CAddr (CExpr "indir_info"))],
->    CAssign (LField (LVar v1') "n.node") (CExpr (show v2))]
->   where v1' = show v1
+>      [CIf (CRel (CCast wordPtrType (var v1)) "<" (CExpr "regs.hlim"))
+>           [CProcCall "DO_SAVE" [var v1,CExpr "n.node"],
+>            CIncrBy (lfield v1 "info") (CInt 2)]
+>           [setField v1 "info" (addr "indir_info")]]
+>      [setField v1 "info" (addr "indir_info")],
+>    setField v1 "n.node" (var v2)]
 
 > assertLazyNode :: Name -> String -> CStmt
 > assertLazyNode v tag =
->   rtsAssertList [isBoxed v',CRel (nodeKind v') "==" (CExpr "LAZY_KIND"),
->                  CRel (nodeTag v') "==" (CExpr tag),
->                  CFunCall "is_local_space" [field v' "q.spc"]]
->   where v' = show v
+>   rtsAssertList [isBoxed v,CRel (nodeKind v) "==" (CExpr "LAZY_KIND"),
+>                  CRel (nodeTag v) "==" (CExpr tag),
+>                  CFunCall "is_local_space" [field v "s.spc"]]
 
 > unifyVar :: [Name] -> Name -> Name -> [CPSCont] -> [CStmt]
 > unifyVar vs0 v n ks = saveCont vs0 [n,v] ks ++ [goto "bind_var"]
@@ -964,7 +947,7 @@ translation function.
 
 > delayNonLocal :: [Name] -> Name -> [CPSCont] -> [CStmt]
 > delayNonLocal vs0 v ks =
->   [CIf (CFunCall "!is_local_space" [field (show v) "v.spc"])
+>   [CIf (CFunCall "!is_local_space" [field v "v.spc"])
 >        (delay vs0 v ks)
 >        []]
 
@@ -972,18 +955,18 @@ translation function.
 > choices vs0 v ks ks' =
 >   CStaticArray constLabelType choices
 >                (map (CInit . CExpr . contName) ks ++ [CInit CNull]) :
->   CLocalVar nodePtrType ips (Just (asNode (CExpr choices))) :
->   saveCont vs0 (Name ips : contVars (head ks)) ks' ++
+>   localVar ips (Just (asNode (CExpr choices))) :
+>   saveCont vs0 (ips : contVars (head ks)) ks' ++
 >   [CppCondStmts "YIELD_NONDET"
 >      [CIf (CExpr "regs.rq") [yieldCall v] []]
 >      [],
 >    goto "regs.handlers->choices"]
->   where ips = "_choice_ips"
+>   where ips = Name "_choice_ips"
 >         choices = "_choices"
 >         yieldCall (Just v) =
->           tailCall "yield_delay_thread" ["flex_yield_resume",show v]
+>           tailCall "yield_delay_thread" [CExpr "flex_yield_resume",var v]
 >         yieldCall Nothing =
->           tailCall "yield_thread" ["regs.handlers->choices"]
+>           tailCall "yield_thread" [CExpr "regs.handlers->choices"]
 
 > failAndBacktrack :: [CStmt]
 > failAndBacktrack = [goto "regs.handlers->fail"]
@@ -1003,16 +986,15 @@ integer numbers when set to a non-zero value.
 > switchOnTerm maybeUnboxed vs0 v cases =
 >   kindSwitch v [updVar vs0 v] unboxedCase otherCases :
 >   head (dflts ++ [failAndBacktrack])
->   where v' = show v
->         (lits,constrs,vars,dflts) = foldr partition ([],[],[],[]) cases
+>   where (lits,constrs,vars,dflts) = foldr partition ([],[],[],[]) cases
 >         (chars,ints,floats) = foldr litPartition ([],[],[]) lits
 >         unboxedCase
 >           | maybeUnboxed =
 >               Just [CppCondStmts "ONLY_BOXED_OBJECTS"
 >                       [CProcCall "curry_panic"
 >                                  [CString "impossible: is_unboxed(%p)\n",
->                                   CExpr v']]
->                       [intSwitch (funCall "unboxed_val" [v']) ints]
+>                                   var v]]
+>                       [intSwitch (CFunCall "unboxed_val" [var v]) ints]
 >                    | not (null ints)]
 >           | otherwise = Nothing
 >         otherCases =
@@ -1021,9 +1003,7 @@ integer numbers when set to a non-zero value.
 >           [constrCase | not (null constrs)]
 >         varCase = CCase "LVAR_KIND"
 >         charCase = CCase "CHAR_KIND" [charSwitch v chars,CBreak]
->         intCase =
->           CCase "INT_KIND"
->                 [intSwitch (CField (CExpr v') "i.i") ints,CBreak]
+>         intCase = CCase "INT_KIND" [intSwitch (field v "i.i") ints,CBreak]
 >         floatCase = CCase "FLOAT_KIND" (floatSwitch v floats ++ [CBreak])
 >         constrCase = CCase "CAPP_KIND" [tagSwitch v constrs,CBreak]
 >         partition (t,stmts) ~(lits,constrs,vars,dflts) =
@@ -1041,33 +1021,31 @@ integer numbers when set to a non-zero value.
 
 > kindSwitch :: Name -> [CStmt] -> Maybe [CStmt] -> [CCase] -> CStmt
 > kindSwitch v upd unboxed cases =
->   CLoop [unboxedSwitch unboxed (CSwitch (nodeKind v') allCases),CBreak]
->   where v' = show v
->         allCases =
+>   CLoop [unboxedSwitch unboxed (CSwitch (nodeKind v) allCases),CBreak]
+>   where allCases =
 >           CCase "INDIR_KIND"
->             (CAssign (LVar v') (field v' "n.node") : upd ++ [CContinue]) :
+>             (setVar v (field v "n.node") : upd ++ [CContinue]) :
 >           cases
 >         unboxedSwitch (Just sts) switch
->           | null sts = CIf (isBoxed v') [switch] []
->           | otherwise = CIf (isUnboxed v') sts [switch]
+>           | null sts = CIf (isBoxed v) [switch] []
+>           | otherwise = CIf (isUnboxed v) sts [switch]
 >         unboxedSwitch Nothing switch = switch
 
 > charSwitch :: Name -> [(Char,[CStmt])] -> CStmt
 > charSwitch v cases =
->   CSwitch (CField (CExpr (show v)) "ch.ch")
->           [CCase (show (ord c)) stmts | (c,stmts) <- cases]
+>   CSwitch (field v "ch.ch") [CCase (show (ord c)) stmts | (c,stmts) <- cases]
 
 > intSwitch :: CExpr -> [(Int,[CStmt])] -> CStmt
 > intSwitch e cases = CSwitch e [CCase (show i) stmts | (i,stmts) <- cases]
 
 > floatSwitch :: Name -> [(Double,[CStmt])] -> [CStmt]
 > floatSwitch v cases =
->   getFloat "d" (CExpr (show v)) ++ foldr (match (CExpr "d")) [] cases
+>   getFloat "d" (var v) ++ foldr (match (CExpr "d")) [] cases
 >   where match v (f,stmts) rest = [CIf (CRel v "==" (CFloat f)) stmts rest]
 
 > tagSwitch :: Name -> [(Name,[CStmt])] -> CStmt
 > tagSwitch v cases =
->   CSwitch (nodeTag (show v)) [CCase (dataTag c) stmts | (c,stmts) <- cases]
+>   CSwitch (nodeTag v) [CCase (dataTag c) stmts | (c,stmts) <- cases]
 
 \end{verbatim}
 The code for \texttt{CPSApply} statements has to check to how many
@@ -1082,33 +1060,34 @@ the application to the surplus arguments.
 
 > apply :: [Name] -> Name -> [Name] -> [CStmt]
 > apply vs0 v vs =
->   [CSwitch (field v' "info->tag")
+>   [CSwitch (nodeTag v)
 >            ([CCase (show i) (splitArgs i) | i <- [1..n-1]] ++
 >             [CCase (show n) (saveVars vs0 (v:vs) ++ [CBreak]),
 >              CDefault (applyPartial vs0 n v)]),
->    gotoExpr (field v' "info->apply")]
+>    gotoExpr (field v "info->apply")]
 >   where n = length vs
->         v' = show v
+>         retIp = Name "_ret_ip"
 >         splitArgs m =
->           CLocalVar nodePtrType "_ret_ip"
->                     (Just (asNode (CExpr (cName (apName (n - m + 1)))))) :
->           saveVars vs0 (v : take m vs ++ Name "_ret_ip" : drop m vs) ++
+>           localVar retIp
+>                    (Just (asNode (CExpr (cName (apName (n - m + 1)))))) :
+>           saveVars vs0 (v : take m vs ++ retIp : drop m vs) ++
 >           [CBreak]
 
 > applyPartial :: [Name] -> Int -> Name -> [CStmt]
 > applyPartial vs0 n v =
->   assertRel (field v' "info->tag") ">" (CInt 0) :
->   CLocalVar uintType "argc" (Just (funCall "closure_argc" [show v])) :
->   CLocalVar uintType "sz" (Just (funCall "node_size" [show v])) :
->   CProcCall "CHECK_HEAP" [CAdd (CExpr "sz") (CInt n)] :
->   CAssign (LVar v') (asNode (CExpr "regs.hp")) :
->   CIncrBy (LVar "regs.hp") (CAdd (CExpr "sz") (CInt n)) :
->   wordCopy (CExpr v') (CExpr "regs.sp[0]") "sz" :
->   CIncrBy (LField (LVar v') "info") (CInt n) :
->   [CAssign (LElem (LField (LVar v') "c.args") (CAdd (CExpr "argc") (CInt i)))
->            (CElem (CExpr "regs.sp") (CInt (i+1))) | i <- [0 .. n-1]] ++
+>   assertRel (nodeTag v) ">" (CInt 0) :
+>   CLocalVar uintType "argc" (Just (CFunCall "closure_argc" [var v])) :
+>   CLocalVar uintType "sz" (Just (CFunCall "node_size" [var v])) :
+>   CProcCall "CHECK_HEAP" [size] :
+>   setVar v alloc :
+>   incrAlloc size :
+>   wordCopy (var v) (stk 0) "sz" :
+>   CIncrBy (lfield v "info") (CInt n) :
+>   map (setArg (lfield v "c.args")) [0..n-1] ++
 >   ret vs0 v []
->   where v' = show v
+>   where size = CExpr "sz" `CAdd` CInt n
+>         setArg base i =
+>           CAssign (LElem base (CExpr "argc" `add` CInt i)) (stk (i+1))
 
 \end{verbatim}
 For a foreign function call, the generated code first unboxes all
@@ -1118,45 +1097,44 @@ first loads this address into a temporary variable and then boxes it.
 \begin{verbatim}
 
 > cCall :: CRetType -> Name -> CCall -> [CStmt]
-> cCall ty v cc = cEval ty v' cc ++ box ty (show v) v'
+> cCall ty v cc = cEval ty v' cc ++ box ty v (CExpr v')
 >   where v' = cRetVar v
 
 > cEval :: CRetType -> String -> CCall -> [CStmt]
 > cEval ty v (StaticCall f xs) = cFunCall ty v f xs
 > cEval ty v1 (DynamicCall v2 xs) =
->   unboxFunPtr ty (map fst xs) f (show v2) : cFunCall ty v1 f xs
+>   unboxFunPtr ty (map fst xs) f (var v2) : cFunCall ty v1 f xs
 >   where f = cArgVar v2
 > cEval ty v (StaticAddr x) = cAddr ty v x
 
 > cFunCall :: CRetType -> String -> String -> [(CArgType,Name)] -> [CStmt]
 > cFunCall ty v f xs =
->   concat [unbox ty v2 (show v1) | ((ty,v1),v2) <- zip xs vs] ++
+>   concat [unbox ty v2 (var v1) | ((ty,v1),v2) <- zip xs vs] ++
 >   [callCFun ty v f vs]
 >   where vs = map (cArgVar . snd) xs
 
 > cAddr :: CRetType -> String -> String -> [CStmt]
 > cAddr Nothing v x = []
 > cAddr (Just ty) v x =
->   [CLocalVar (ctype ty) v (Just (CCast (ctype ty) (CAddr (CExpr x))))]
+>   [CLocalVar (ctype ty) v (Just (CCast (ctype ty) (addr x)))]
 
-> unbox :: CArgType -> String -> String -> [CStmt]
-> unbox TypeBool v1 v2 =
->   [CLocalVar (ctype TypeBool) v1 (Just (CField (CExpr v2) "info->tag"))]
-> unbox TypeChar v1 v2 =
->   [CLocalVar (ctype TypeChar) v1 (Just (CField (CExpr v2) "ch.ch"))]
-> unbox TypeInt v1 v2 =
->   [CLocalVar (ctype TypeInt) v1 (Just (funCall "long_val" [v2]))]
-> unbox TypeFloat v1 v2 = getFloat v1 (CExpr v2)
-> unbox TypePtr v1 v2 =
->   [CLocalVar (ctype TypePtr) v1 (Just (CField (CExpr v2) "p.ptr"))]
-> unbox TypeFunPtr v1 v2 =
->   [CLocalVar (ctype TypeFunPtr) v1 (Just (CField (CExpr v2) "p.ptr"))]
-> unbox TypeStablePtr v1 v2 =
->   [CLocalVar (ctype TypeStablePtr) v1 (Just (CField (CExpr v2) "p.ptr"))]
+> unbox :: CArgType -> String -> CExpr -> [CStmt]
+> unbox TypeBool v e =
+>   [CLocalVar (ctype TypeBool) v (Just (CField e "info->tag"))]
+> unbox TypeChar v e =
+>   [CLocalVar (ctype TypeChar) v (Just (CField e "ch.ch"))]
+> unbox TypeInt v e =
+>   [CLocalVar (ctype TypeInt) v (Just (CFunCall "long_val" [e]))]
+> unbox TypeFloat v e = getFloat v e
+> unbox TypePtr v e =
+>   [CLocalVar (ctype TypePtr) v (Just (CField e "p.ptr"))]
+> unbox TypeFunPtr v e =
+>   [CLocalVar (ctype TypeFunPtr) v (Just (CField e "p.ptr"))]
+> unbox TypeStablePtr v e =
+>   [CLocalVar (ctype TypeStablePtr) v (Just (CField e "p.ptr"))]
 
-> unboxFunPtr :: CRetType -> [CArgType] -> String -> String -> CStmt
-> unboxFunPtr ty0 tys v1 v2 =
->   CLocalVar ty v1 (Just (CCast ty (CField (CExpr v2) "p.ptr")))
+> unboxFunPtr :: CRetType -> [CArgType] -> String -> CExpr -> CStmt
+> unboxFunPtr ty0 tys v e = CLocalVar ty v (Just (CCast ty (CField e "p.ptr")))
 >   where ty = CPointerType
 >            $ CFunctionType (maybe voidType ctype ty0) (map ctype tys)
 
@@ -1164,62 +1142,60 @@ first loads this address into a temporary variable and then boxes it.
 > callCFun Nothing _ f vs = procCall f vs
 > callCFun (Just ty) v f vs = CLocalVar (ctype ty) v (Just (funCall f vs))
 
-> box :: CRetType -> String -> String -> [CStmt]
+> box :: CRetType -> Name -> CExpr -> [CStmt]
 > box Nothing v _ =
->   [CLocalVar nodePtrType v (Just (constRef (constNode (mangle "()"))))]
-> box (Just TypeBool) v1 v2 =
->   [CLocalVar nodePtrType v1
->              (Just (CCond (CExpr v2) (const prelTrue) (const prelFalse)))]
+>   [localVar v (Just (constRef (constNode (mangle "()"))))]
+> box (Just TypeBool) v e =
+>   [localVar v (Just (CCond e (const prelTrue) (const prelFalse)))]
 >   where const = constRef . constNode
-> box (Just TypeChar) v1 v2 =
->   [CLocalVar nodePtrType v1 Nothing,
->    CIf (CRel (CRel (CExpr v2) ">=" (CInt 0)) "&&"
->              (CRel (CExpr v2) "<" (CInt 0x100)))
->      [CAssign (LVar v1) (asNode (CExpr "char_table" `CAdd` CExpr v2))]
->      [CAssign (LVar v1) (asNode (CExpr "regs.hp")),
->       CAssign (LField (LVar v1) "info") (CAddr (CExpr "char_info")),
->       CAssign (LField (LVar v1) "ch.ch") (CExpr v2),
->       CIncrBy (LVar "regs.hp") (ctypeSize TypeChar)]]
-> box (Just TypeInt) v1 v2 =
->   [CLocalVar nodePtrType v1 Nothing,
->    CIf (funCall "is_large_int" [v2])
->      [CAssign (LVar v1) (asNode (CExpr "regs.hp")),
->       CAssign (LField (LVar v1) "info") (CAddr (CExpr "int_info")),
->       CAssign (LField (LVar v1) "i.i") (CExpr v2),
->       CIncrBy (LVar "regs.hp") (ctypeSize TypeInt)]
+> box (Just TypeChar) v e =
+>   [localVar v Nothing,
+>    CIf (CRel (CRel e ">=" (CInt 0)) "&&" (CRel e "<" (CInt 0x100)))
+>      [setVar v (asNode (CExpr "char_table" `CAdd` e))]
+>      [setVar v alloc,
+>       setField v "info" (addr "char_info"),
+>       setField v "ch.ch" e,
+>       incrAlloc (ctypeSize TypeChar)]]
+> box (Just TypeInt) v e =
+>   [localVar v Nothing,
+>    CIf (CFunCall "is_large_int" [e])
+>      [setVar v alloc,
+>       setField v "info" (addr "int_info"),
+>       setField v "i.i" e,
+>       incrAlloc (ctypeSize TypeInt)]
 >      [CppCondStmts "ONLY_BOXED_OBJECTS"
 >         [CProcCall "curry_panic"
->                    [CString "impossible: !is_large_int(%ld)\n",CExpr v2]]
->         [CAssign (LVar v1) (funCall "mk_unboxed" [v2])]]]
-> box (Just TypeFloat) v1 v2 =
->   [CLocalVar nodePtrType v1 (Just (asNode (CExpr "regs.hp"))),
->    CAssign (LField (LVar v1) "info") (CAddr (CExpr  "float_info")),
->    CProcCall "put_double_val" [CExpr v1,CExpr v2],
->    CIncrBy (LVar "regs.hp") (ctypeSize TypeFloat)]
-> box (Just TypePtr) v1 v2 =
->   [CLocalVar nodePtrType v1 Nothing,
->    CIf (CRel (CExpr v2) "==" CNull)
->      [CAssign (LVar v1) (constRef "null_ptr")]
->      [CAssign (LVar v1) (asNode (CExpr "regs.hp")),
->       CAssign (LField (LVar v1) "info") (CAddr (CExpr "ptr_info")),
->       CAssign (LField (LVar v1) "p.ptr") (CExpr v2),
->       CIncrBy (LVar "regs.hp") (ctypeSize TypePtr)]]
-> box (Just TypeFunPtr) v1 v2 =
->   [CLocalVar nodePtrType v1 Nothing,
->    CIf (CRel (CExpr v2) "==" CNull)
->      [CAssign (LVar v1) (constRef "null_funptr")]
->      [CAssign (LVar v1) (asNode (CExpr "regs.hp")),
->       CAssign (LField (LVar v1) "info") (CAddr (CExpr "funptr_info")),
->       CAssign (LField (LVar v1) "p.ptr") (CExpr v2),
->       CIncrBy (LVar "regs.hp") (ctypeSize TypeFunPtr)]]
-> box (Just TypeStablePtr) v1 v2 =
->   [CLocalVar nodePtrType v1 Nothing,
->    CIf (CRel (CExpr v2) "==" CNull)
->      [CAssign (LVar v1) (constRef "null_stabptr")]
->      [CAssign (LVar v1) (asNode (CExpr "regs.hp")),
->       CAssign (LField (LVar v1) "info") (CAddr (CExpr "stabptr_info")),
->       CAssign (LField (LVar v1) "p.ptr") (CExpr v2),
->       CIncrBy (LVar "regs.hp") (ctypeSize TypeStablePtr)]]
+>                    [CString "impossible: !is_large_int(%ld)\n",e]]
+>         [setVar v (CFunCall "mk_unboxed" [e])]]]
+> box (Just TypeFloat) v e =
+>   [localVar v (Just alloc),
+>    setField v "info" (addr  "float_info"),
+>    CProcCall "put_double_val" [var v,e],
+>    incrAlloc (ctypeSize TypeFloat)]
+> box (Just TypePtr) v e =
+>   [localVar v Nothing,
+>    CIf (CRel e "==" CNull)
+>      [setVar v (constRef "null_ptr")]
+>      [setVar v alloc,
+>       setField v "info" (addr "ptr_info"),
+>       setField v "p.ptr" e,
+>       incrAlloc (ctypeSize TypePtr)]]
+> box (Just TypeFunPtr) v e =
+>   [localVar v Nothing,
+>    CIf (CRel e "==" CNull)
+>      [setVar v (constRef "null_funptr")]
+>      [setVar v alloc,
+>       setField v "info" (addr "funptr_info"),
+>       setField v "p.ptr" e,
+>       incrAlloc (ctypeSize TypeFunPtr)]]
+> box (Just TypeStablePtr) v e =
+>   [localVar v Nothing,
+>    CIf (CRel e "==" CNull)
+>      [setVar v (constRef "null_stabptr")]
+>      [setVar v alloc,
+>       setField v "info" (addr "stabptr_info"),
+>       setField v "p.ptr" e,
+>       incrAlloc (ctypeSize TypeStablePtr)]]
 
 > ctype :: CArgType -> CType
 > ctype TypeBool = intType
@@ -1414,6 +1390,51 @@ Here are some convenience functions, which simplify the construction
 of the abstract syntax tree.
 \begin{verbatim}
 
+> var :: Name -> CExpr
+> var v = CExpr (show v)
+
+> localVar :: Name -> Maybe CExpr -> CStmt
+> localVar v = CLocalVar nodePtrType (show v)
+
+> setVar :: Name -> CExpr -> CStmt
+> setVar v = CAssign (LVar (show v))
+
+> field :: Name -> String -> CExpr
+> field v f = CField (CExpr (show v)) f
+
+> lfield :: Name -> String -> LVar
+> lfield v f = LField (LVar (show v)) f
+
+> setField :: Name -> String -> CExpr -> CStmt
+> setField v f = CAssign (LField (LVar (show v)) f)
+
+> element :: CExpr -> Int -> CExpr
+> element base n = CElem base (CInt n)
+
+> setElem :: LVar -> Int -> CExpr -> CStmt
+> setElem base n = CAssign (LElem base (CInt n))
+
+> stk :: Int -> CExpr
+> stk = element (CExpr "regs.sp")
+
+> setStk :: Int -> CExpr -> CStmt
+> setStk n = setElem (LVar "regs.sp") n
+
+> incrSp, decrSp :: Int -> CStmt
+> incrSp n
+>   | n >= 0 = CIncrBy (LVar "regs.sp") (CInt n)
+>   | otherwise = CDecrBy (LVar "regs.sp") (CInt (-n))
+> decrSp n = incrSp (-n)
+
+> alloc :: CExpr
+> alloc = asNode (CExpr "regs.hp")
+
+> incrAlloc :: CExpr -> CStmt
+> incrAlloc = CIncrBy (LVar "regs.hp")
+
+> addr :: String -> CExpr
+> addr = CAddr . CExpr
+
 > asNode :: CExpr -> CExpr
 > asNode = CCast nodePtrType
 
@@ -1423,8 +1444,8 @@ of the abstract syntax tree.
 > gotoExpr :: CExpr -> CStmt
 > gotoExpr l = CProcCall "GOTO" [l]
 
-> tailCall :: String -> [String] -> CStmt
-> tailCall f xs = gotoExpr (funCall f xs)
+> tailCall :: String -> [CExpr] -> CStmt
+> tailCall f xs = gotoExpr (CFunCall f xs)
 
 > funCall :: String -> [String] -> CExpr
 > funCall f xs = CFunCall f (map CExpr xs)
@@ -1455,18 +1476,15 @@ of the abstract syntax tree.
 >   [CLocalVar doubleType v Nothing,CProcCall "get_double_val" [CExpr v,e]]
 
 > constRef :: String -> CExpr
-> constRef = asNode . CAddr . CExpr
+> constRef = asNode . addr
 
-> isBoxed, isUnboxed :: String -> CExpr
-> isBoxed v = funCall "is_boxed" [v]
-> isUnboxed v = funCall "is_unboxed" [v]
+> isBoxed, isUnboxed :: Name -> CExpr
+> isBoxed v = CFunCall "is_boxed" [var v]
+> isUnboxed v = CFunCall "is_unboxed" [var v]
 
-> nodeKind, nodeTag :: String -> CExpr
+> nodeKind, nodeTag :: Name -> CExpr
 > nodeKind v = field v "info->kind"
 > nodeTag v = field v "info->tag"
-
-> field :: String -> String -> CExpr
-> field v f = CField (CExpr v) f
 
 \end{verbatim}
 Frequently used types.

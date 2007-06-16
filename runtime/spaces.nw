@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 1899 2006-04-19 10:50:11Z wlux $
+% $Id: spaces.nw 2255 2007-06-16 13:26:58Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -83,7 +83,7 @@ static SearchSpace *copy_search_space(SearchSpace *spc, SearchSpace *space);
 static Node *copy_node(Node *node, SearchSpace *space);
 
 static NodeInfo search_space_info = {
-    CAPP_KIND, 0, wordsof(struct search_space), 0, 0, no_eval, 0, 0
+    CAPP_KIND, 0, wordsof(struct search_space), 0, 0, no_eval, 0, 0, 0
 };
 
 const SearchSpace global_space = {
@@ -151,7 +151,7 @@ static const int ot_script[] = {
     word_offsetof(ScriptRec, outVal)
 };
 static NodeInfo script_info = {
-    SCRIPT_KIND, 0, 0, ot_script, 0, no_eval, 0, 0
+    SCRIPT_KIND, 0, 0, ot_script, 0, no_eval, 0, 0, 0
 };
 #endif
 
@@ -195,7 +195,7 @@ switch_bindings(SearchSpace *space)
 	parent	      = space->parent;
 	space->parent = (SearchSpace *)((long)child | 0x01);
 	child 	      = space;
-	space 	      = parent; 
+	space 	      = parent;
     }
 
     /* Phase 2: undo bindings up to closest common ancestor */
@@ -709,7 +709,7 @@ copy_node(Node *node, SearchSpace *space)
 @ 
 In order to distinguish local nodes, which have to be copied, and
 nodes from global search spaces, which are shared, [[copy_node]]
-checks whether a node's search space is forwarded or not. This means         %' 
+checks whether a node's search space is forwarded or not. This means         %'
 that a search space and its parents have to be copied \emph{before}
 any node from that space is copied. This is handled by the function
 [[copy_search_space]]. Note that this function does not update the
@@ -956,7 +956,7 @@ copy_graph(Node *graph, SearchSpace *space)
 	rq = (ThreadQueue)copy_node((Node *)rq, space);
     }
 #endif
-    
+
     /* restore the old graph */
     for ( ; ntp < (Node **)heap_end; ntp++ )
     {

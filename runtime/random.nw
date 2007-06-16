@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: random.nw 2254 2007-06-15 18:42:06Z wlux $
+% $Id: random.nw 2255 2007-06-16 13:26:58Z wlux $
 %
 % Copyright (c) 2004-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -61,7 +61,7 @@ typedef struct stdgen_node {
 
 static NodeInfo stdgen_info = {
     ABSTRACT_KIND, 0, stdgen_node_size, ot_binary, "@<<Random.StdGen>>",
-    eval_whnf, 0, finalize_stdgen
+    eval_whnf, 0, 0, finalize_stdgen
 };
 
 static void

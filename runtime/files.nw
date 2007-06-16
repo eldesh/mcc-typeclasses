@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2254 2007-06-15 18:42:06Z wlux $
+% $Id: files.nw 2255 2007-06-16 13:26:58Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -106,12 +106,12 @@ static void finalize_process(Node *node);
 
 static NodeInfo file_info = {
     ABSTRACT_KIND, FILE_TAG, file_node_size, ot_binary, "<Handle>",
-    eval_whnf, 0, finalize_file
+    eval_whnf, 0, 0, finalize_file
 };
 
 static NodeInfo process_info = {
     ABSTRACT_KIND, PROCESS_TAG, process_node_size, ot_binary, "<ProcessHandle>",
-    eval_whnf, 0, finalize_process
+    eval_whnf, 0, 0, finalize_process
 };
 
 static void

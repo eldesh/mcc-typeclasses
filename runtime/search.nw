@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: search.nw 2254 2007-06-15 18:42:06Z wlux $
+% $Id: search.nw 2255 2007-06-16 13:26:58Z wlux $
 %
 % Copyright (c) 2002-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -24,6 +24,7 @@ extern void suspend_search(Label, Node *, SearchSpace *);
 static void push_search_context(void);
 static void pop_search_context(void);
 
+DECLARE_LABEL(static, eval_clos_1);
 DECLARE_LABEL(static, solved_goal);
 DECLARE_LABEL(static, search_goal_success);
 DECLARE_LABEL(static, search_cont);
@@ -36,6 +37,16 @@ DECLARE_LABEL(static, fail_search);
 static const struct nondet_handlers search_handlers = {
     choices_search, deadlock_search, fail_search
 };
+
+static
+FUNCTION(eval_clos_1)
+{
+    Node *clos;
+ ENTRY_LABEL(static, eval_clos_1)
+    clos  = sp[0];
+    sp[0] = clos->c.args[0];
+    GOTO(clos->info->entry);
+}
 
 @
 Search contexts are allocated on the stack in order to save the

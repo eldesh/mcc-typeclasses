@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: data.nw 2252 2007-06-15 17:45:09Z wlux $
+% $Id: data.nw 2255 2007-06-16 13:26:58Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -131,11 +131,34 @@ extern const struct closure_node ___58__function;
 @ 
 <<data.c>>=
 DECLARE_LABEL(static, ___58_);
+DECLARE_LABEL(static, eval_clos_0);
+DECLARE_LABEL(static, eval_clos_1);
+
 NodeInfo ___58__papp_info_table[] = {
     PAPPINFO(":", 0, ___58_, 2)
     PAPPINFO(":", 1, ___58_, 2)
 };
 const struct closure_node ___58__function = { ___58__papp_info_table, { 0 } };
+
+static
+FUNCTION(eval_clos_0)
+{
+    Node *clos;
+ ENTRY_LABEL(static, eval_clos_0)
+    clos = sp[0];
+    sp	+= 1;
+    GOTO(clos->info->entry);
+}
+
+static
+FUNCTION(eval_clos_1)
+{
+    Node *clos;
+ ENTRY_LABEL(static, eval_clos_1)
+    clos  = sp[0];
+    sp[0] = clos->c.args[0];
+    GOTO(clos->info->entry);
+}
 
 static
 FUNCTION(___58_)

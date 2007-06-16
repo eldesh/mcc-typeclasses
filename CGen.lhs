@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2251 2007-06-15 14:36:17Z wlux $
+% $Id: CGen.lhs 2255 2007-06-16 13:26:58Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -224,7 +224,7 @@ configured with the \texttt{--disable-unboxed} configuration option.
 >   where nodeinfo = CStruct (map CInit nodeinfo')
 >         nodeinfo' =
 >           [CExpr "CAPP_KIND",CExpr (dataTag c),closureNodeSize (length tys),
->            gcPointerTable,CString name,CExpr "eval_whnf",noEntry,
+>            gcPointerTable,CString name,CExpr "eval_whnf",noApply,noEntry,
 >            notFinalized]
 >         name = snd $ splitQualified $ demangle c
 
@@ -260,6 +260,7 @@ configured with the \texttt{--disable-unboxed} configuration option.
 > gcPointerTable, notFinalized :: CExpr
 > gcPointerTable = CNull
 > notFinalized = CNull
+> noApply = CNull
 > noEntry = CNull
 > noName = CNull
 
@@ -288,7 +289,7 @@ is generated.
 >   map lazyDecl (nonLocal lazy) ++
 >   map fun0Decl (nonLocal fun0) ++
 >   -- (private) closure and suspend node evaluation entry points
->   concat [[evalEntryDecl n,evalFunction n] | n <- closArities] ++
+>   concat [[evalEntryDecl n,evalFunction n] | n <- [0..maxArity]] ++
 >   concat [[lazyEntryDecl n,lazyFunction n] | n <- lazyArities] ++
 >   -- instantiation functions for data constructors
 >   map (instEntryDecl CPublic . fst) cs ++
@@ -337,7 +338,11 @@ is generated.
 >         clos' = filter (used clos . fst) fs'
 >         lazy' = filter (used lazy . fst) fs'
 >         fun0' = filter (used fun0 . fst) fs'
->         closArities = nub (filter (> 2) (map apArity apClos) ++ map snd clos')
+>         maxArity =
+>           maximum (-1 : filter (> 2) (map apArity apClos) ++
+>                    map ((subtract 1) . snd) papp' ++ map snd clos' ++
+>                    [n - 1 | (c,n) <- cs, n > 0] ++
+>                    [tupleArity f - 1 | f <- tuplePapp])
 >         lazyArities = nub (filter (> 2) (map apArity apLazy) ++ map snd lazy')
 >         ts = [t | Switch Flex _ cs <- sts, Case t _ <- cs]
 >         flexLits = nub [l | LitCase l <- ts]
@@ -396,13 +401,15 @@ is generated.
 >   where suspinfo =
 >           [CExpr "LAZY_KIND",CExpr "UPD_TAG",suspendNodeSize n,
 >            gcPointerTable,CString (undecorate (demangle f)),
->            CExpr (lazyFunc n),CExpr (cName f),notFinalized]
+>            CExpr (lazyFunc n),noApply,CExpr (cName f),notFinalized]
 >         queuemeinfo =
 >           [CExpr "LAZY_KIND",CExpr "QUEUEME_TAG",suspendNodeSize n,
->            gcPointerTable,noName,CExpr "eval_queueMe",noEntry,notFinalized]
+>            gcPointerTable,noName,CExpr "eval_queueMe",noApply,noEntry,
+>            notFinalized]
 >         indirinfo =
 >           [CExpr "INDIR_KIND",CInt 0,suspendNodeSize n,
->            gcPointerTable,noName,CExpr "eval_indir",noEntry,notFinalized]
+>            gcPointerTable,noName,CExpr "eval_indir",noApply,noEntry,
+>            notFinalized]
 
 > fun0Def :: CVisibility -> Name -> Int -> [CTopDecl]
 > fun0Def vb f n =
@@ -418,14 +425,14 @@ is generated.
 >   where funinfo =
 >           [CExpr "PAPP_KIND",CInt (n - i),closureNodeSize i,gcPointerTable,
 >            CString (undecorate (demangle f)),CExpr "eval_whnf",
->            CExpr (cName f),notFinalized]
+>            CExpr (evalFunc i),CExpr (cName f),notFinalized]
 
 > funInfo :: Name -> Int -> CInitializer
 > funInfo f n = CStruct (map CInit funinfo)
 >   where funinfo =
 >           [CExpr "LAZY_KIND",CExpr "NOUPD_TAG",closureNodeSize n,
 >            gcPointerTable,CString (undecorate (demangle f)),
->            CExpr (evalFunc n),CExpr (cName f),notFinalized]
+>            CExpr (evalFunc n),noApply,CExpr (cName f),notFinalized]
 
 \end{verbatim}
 \subsection{Code Generation}
@@ -667,9 +674,8 @@ The maximum stack depth of a function is simply the difference between
 the number of arguments passed to the function and the number of
 arguments pushed onto the stack when calling the continuation. Note
 that \texttt{CPSEnter} may push the node to be evaluated onto the
-stack. No stack check is performed before a \texttt{CPSApply}
-statement because the required stack depth depends on the number of
-arguments saved in the closure that is applied. In case of a
+stack and that \texttt{CPSApply} must prepare a return frame when a
+partial application is applied to too many arguments. In case of a
 \texttt{CPSSwitch} statement, every alternative is responsible for
 performing a stack check.
 \begin{verbatim}
@@ -684,7 +690,7 @@ performing a stack check.
 > stackDepth (CPSEnter _) = 1
 > stackDepth (CPSExec _ vs) = length vs
 > stackDepth (CPSCCall _ _) = 0
-> stackDepth (CPSApply _ _) = 0
+> stackDepth (CPSApply _ vs) = if length vs > 1 then 1 else 0
 > stackDepth (CPSUnify _ _) = 2
 > stackDepth (CPSDelay _) = 1
 > stackDepth (CPSDelayNonLocal _ st) = max 1 (stackDepth st)
@@ -1070,36 +1076,32 @@ The code for \texttt{CPSApply} statements has to check to how many
 arguments a partial application is applied. If there are too few
 arguments, a new partial application node is returned, which includes
 the arguments available on the stack. Otherwise, the application is
-evaluated by pushing the closure's arguments onto the stack and
-jumping to the function's entry point. If the closure is applied to
-too many arguments, the code generated by \texttt{apply} creates a
+entered through its application entry point. If the closure is applied
+to too many arguments, the code generated by \texttt{apply} creates a
 return frame on the stack, which takes care of applying the result of
 the application to the surplus arguments.
 \begin{verbatim}
 
 > apply :: [Name] -> Name -> [Name] -> [CStmt]
 > apply vs0 v vs =
->   [CLocalVar uintType "argc" (Just (funCall "closure_argc" [show v])),
->    CSwitch (field v' "info->tag")
+>   [CSwitch (field v' "info->tag")
 >            ([CCase (show i) (splitArgs i) | i <- [1..n-1]] ++
->             [CCase (show n) (saveVars vs0 vs ++ [CBreak]),
+>             [CCase (show n) (saveVars vs0 (v:vs) ++ [CBreak]),
 >              CDefault (applyPartial vs0 n v)]),
->    CIf (CExpr "argc > 0") [procCall "CHECK_STACK" ["argc"]] [],
->    CDecrBy (LVar "sp") (CExpr "argc"),
->    wordCopy (CExpr "sp") (field v' "c.args") "argc",
->    gotoExpr (field v' "info->entry")]
+>    gotoExpr (field v' "info->apply")]
 >   where n = length vs
 >         v' = show v
 >         splitArgs m =
 >           CLocalVar nodePtrType "_ret_ip"
 >                     (Just (asNode (CExpr (cName (apName (n - m + 1)))))) :
->           saveVars vs0 (take m vs ++ Name "_ret_ip" : drop m vs) ++
+>           saveVars vs0 (v : take m vs ++ Name "_ret_ip" : drop m vs) ++
 >           [CBreak]
 
 > applyPartial :: [Name] -> Int -> Name -> [CStmt]
 > applyPartial vs0 n v =
 >   assertRel (field v' "info->tag") ">" (CInt 0) :
->   CLocalVar uintType "sz" (Just (funCall "closure_node_size" ["argc"])) :
+>   CLocalVar uintType "argc" (Just (funCall "closure_argc" [show v])) :
+>   CLocalVar uintType "sz" (Just (funCall "node_size" [show v])) :
 >   CProcCall "CHECK_HEAP" [CAdd (CExpr "sz") (CInt n)] :
 >   CAssign (LVar v') (asNode (CExpr "hp")) :
 >   CIncrBy (LVar "hp") (CAdd (CExpr "sz") (CInt n)) :

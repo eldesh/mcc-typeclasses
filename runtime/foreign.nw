@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: foreign.nw 2254 2007-06-15 18:42:06Z wlux $
+% $Id: foreign.nw 2255 2007-06-16 13:26:58Z wlux $
 %
 % Copyright (c) 2005-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -34,7 +34,7 @@ static const int ot_foreign_ptr[] = {
 };
 static NodeInfo foreign_ptr_info = {
     FOREIGN_PTR_KIND, 0, foreign_ptr_node_size, ot_foreign_ptr, "ForeignPtr",
-    eval_whnf, 0, finalize_foreign_ptr
+    eval_whnf, 0, 0, finalize_foreign_ptr
 };
 
 
@@ -78,11 +78,11 @@ static const int ot_finalizer_env[] = {
 
 NodeInfo finalizer_info = {
     CAPP_KIND, FINALIZER_TAG, finalizer_node_size, ot_finalizer,
-    0, no_eval, 0, 0
+    0, no_eval, 0, 0, 0
 };
 NodeInfo finalizer_env_info = {
     CAPP_KIND, FINALIZER_ENV_TAG, finalizer_env_node_size, ot_finalizer_env,
-    0, no_eval, 0, 0
+    0, no_eval, 0, 0, 0
 };
 
 @ 

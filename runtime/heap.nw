@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 1899 2006-04-19 10:50:11Z wlux $
+% $Id: heap.nw 2255 2007-06-16 13:26:58Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -102,15 +102,17 @@ enum {
 In general, a node consists of a pointer to a node descriptor followed
 by a list of argument pointers. However, some kinds of nodes use
 different representations, e.g., a node representing a \verb|Float|
-number consists of a descriptor and a [[double]] value. Therefore,
-the [[Node]] type is defined as a union type. The first field of all
+number consists of a descriptor and a [[double]] value. Therefore, the
+[[Node]] type is defined as a union type. The first field of all
 variants as well as of the union itself is the [[info]] field, which
 points to the node descriptor. This descriptor comprises
 the node's kind, a tag value, the length of the node in words, a %'
-pointer offset table, a name used for printing the node, the
-evaluation code for the node, the entry point of the function
-corresponding to a partial application or function application node,
-and an optional finalization function.
+pointer offset table, a name used when printing the node, the
+evaluation code of the node, an application entry point for partial
+applications that is used when a partial application is applied to its
+missing arguments, the entry point of the function corresponding to a
+partial application or function application node, and an optional
+finalization function.
 
 The meaning of the [[tag]] field depends on the node's kind. For %'
 constructor applications, it is used to distinguish data constructors
@@ -118,7 +120,7 @@ of the same type. For instance, the constructors of the type
 \texttt{data Num = Prec Num | Zero | Succ Num} are assigned tags 0
 (\verb|Prec|), 1 (\verb|Zero|), and 2 (\verb|Succ|),
 respectively. Usually, data constructor tags are positive
-numbers. However, data constructors of existentially quantified 
+numbers. However, data constructors of existentially quantified
 types are assigned negative tags.
 
 For partial application nodes, the [[tag]] field denotes the arity --
@@ -167,6 +169,7 @@ struct node_info
     const int          *offset_table;	/* pointer offset table */
     const char	       *cname;		/* closure name */
     const Label	       eval;		/* entry point for evaluation */
+    const Label	       apply;		/* PAPP: application entry point */
     const Label	       entry;		/* function entry point */
     const FinalFun     final_fun;	/* optional finalization function */
 };
@@ -255,8 +258,8 @@ struct int_node {
 
 @
 <<heap.c>>=
-NodeInfo int_info = { 
-    INT_KIND, 0, int_node_size, ot_binary, 0, eval_whnf, 0, 0
+NodeInfo int_info = {
+    INT_KIND, 0, int_node_size, ot_binary, 0, eval_whnf, 0, 0, 0
 };
 
 @ 
@@ -309,7 +312,7 @@ union _conv {
 @
 <<heap.c>>=
 NodeInfo float_info = {
-    FLOAT_KIND, 0, float_node_size, ot_binary, 0, eval_whnf, 0, 0
+    FLOAT_KIND, 0, float_node_size, ot_binary, 0, eval_whnf, 0, 0, 0
 };
 
 @ 
@@ -332,7 +335,7 @@ extern void init_chars(void);
 @
 <<heap.c>>=
 NodeInfo char_info = {
-    CHAR_KIND, 0, char_node_size, ot_binary, 0, eval_whnf, 0, 0
+    CHAR_KIND, 0, char_node_size, ot_binary, 0, eval_whnf, 0, 0, 0
 };
 
 struct char_node char_table[256];
@@ -374,14 +377,14 @@ extern const struct ptr_node null_ptr, null_funptr, null_stabptr;
 @ 
 <<heap.c>>=
 NodeInfo ptr_info = {
-    PTR_KIND, PTR_TAG, ptr_node_size, ot_binary, "Ptr", eval_whnf, 0, 0
+    PTR_KIND, PTR_TAG, ptr_node_size, ot_binary, "Ptr", eval_whnf, 0, 0, 0
 };
 NodeInfo funptr_info = {
-    PTR_KIND, FUNPTR_TAG, ptr_node_size, ot_binary, "FunPtr", eval_whnf, 0, 0
+    PTR_KIND, FUNPTR_TAG, ptr_node_size, ot_binary, "FunPtr", eval_whnf, 0, 0, 0
 };
 NodeInfo stabptr_info = {
     PTR_KIND, STABPTR_TAG, ptr_node_size, ot_binary, "StablePtr",
-    eval_whnf, 0, 0
+    eval_whnf, 0, 0, 0
 };
 
 const struct ptr_node null_ptr     = { &ptr_info, 0 };
@@ -434,7 +437,7 @@ struct indir_node {
 @
 <<heap.c>>=
 NodeInfo indir_info = {
-    INDIR_KIND, 0, indir_node_size, 0, 0, eval_indir, 0, 0
+    INDIR_KIND, 0, indir_node_size, 0, 0, eval_indir, 0, 0, 0
 };
 
 @ 
@@ -458,12 +461,12 @@ struct variable_node {
 <<heap.c>>=
 #if !COPY_SEARCH_SPACE
 NodeInfo variable_info_table[] = {
-    { LVAR_KIND, 0, variable_node_size, 0, 0, eval_whnf, 0, 0 },
-    { INDIR_KIND, 0, variable_node_size, 0, 0, eval_indir, 0, 0 }
+    { LVAR_KIND, 0, variable_node_size, 0, 0, eval_whnf, 0, 0, 0 },
+    { INDIR_KIND, 0, variable_node_size, 0, 0, eval_indir, 0, 0, 0 }
 };
 #else
 NodeInfo variable_info_table[] = {
-    { LVAR_KIND, 0, variable_node_size, 0, 0, eval_whnf, 0, 0 }
+    { LVAR_KIND, 0, variable_node_size, 0, 0, eval_whnf, 0, 0, 0 }
 };
 #endif
 
@@ -558,12 +561,12 @@ struct queueMe_node {
 <<heap.c>>=
 #if !COPY_SEARCH_SPACE
 NodeInfo queueMe_info_table[] = {
-    { LAZY_KIND, QUEUEME_TAG, queueMe_node_size, 0, 0, eval_queueMe, 0, 0 },
-    { INDIR_KIND, 0, queueMe_node_size, 0, 0, eval_indir, 0, 0 }
+    { LAZY_KIND, QUEUEME_TAG, queueMe_node_size, 0, 0, eval_queueMe, 0, 0, 0 },
+    { INDIR_KIND, 0, queueMe_node_size, 0, 0, eval_indir, 0, 0, 0 }
 };
 #else
 NodeInfo queueMe_info_table[] = {
-    { LAZY_KIND, QUEUEME_TAG, queueMe_node_size, 0, 0, eval_queueMe, 0, 0 }
+    { LAZY_KIND, QUEUEME_TAG, queueMe_node_size, 0, 0, eval_queueMe, 0, 0, 0 }
 };
 #endif
 
@@ -585,7 +588,7 @@ struct search_cont_node {
 @
 <<heap.c>>=
 NodeInfo search_cont_info = {
-    SEARCH_CONT_KIND, 0, search_cont_node_size, 0, "<state>", no_eval, 0, 0
+    SEARCH_CONT_KIND, 0, search_cont_node_size, 0, "<state>", no_eval, 0, 0, 0
 };
 
 @
@@ -628,7 +631,7 @@ NodeInfo *const name##_node = &name##_info
 
 #define DEFINE_DATA(name,cname,tag,arity) \
 NodeInfo name##_info = { \
-    CAPP_KIND, tag, closure_node_size(arity), 0, cname, eval_whnf, 0, 0 \
+    CAPP_KIND, tag, closure_node_size(arity), 0, cname, eval_whnf, 0, 0, 0 \
 }
 
 @ 
@@ -646,18 +649,19 @@ which the function can be applied. These info vectors are allocated in
 an array in ascending order with respect to the number of arguments.
 
 The following macros can be used to initialize the elements of these
-info tables. They presume the existence of an entry point for
-evaluating a (fully applied) closure node whose name is composed of
-the prefix [[eval_clos_]] and the arity of the function.
+info tables. They presume the existence of entry points for evaluating
+a saturated application whose name is composed of the prefix
+[[eval_clos_]] and the number of arguments available in the function
+or partial application node.
 
 <<heap.h>>=
 #define FUNINFO(fname,entrypoint,arity) \
 { LAZY_KIND, NOUPD_TAG, closure_node_size(arity), 0, fname, \
-  eval_clos_##arity, entrypoint, 0 }
+  eval_clos_##arity, 0, entrypoint, 0 }
 
 #define PAPPINFO(fname,argc,entrypoint,arity) \
 { PAPP_KIND, (arity) - (argc), closure_node_size(argc), 0, fname, \
-  eval_whnf, entrypoint, 0 },
+  eval_whnf, eval_clos_##argc, entrypoint, 0 },
 
 @ 
 In addition to the info table, a descriptor table for lazy
@@ -667,17 +671,18 @@ is named by adding the function's arity to the prefix [[eval_lazy_]].        %'
 
 <<heap.h>>=
 #if !COPY_SEARCH_SPACE
-# define LAZYINFO(fname,entrypoint,arity) { \
+# define LAZYINFO(fname,entrypoint,arity) {		      \
     { LAZY_KIND, UPD_TAG, suspend_node_size(arity), 0, fname, \
-      eval_lazy_##arity, entrypoint, 0 }, \
+      eval_lazy_##arity, 0, entrypoint, 0 },		      \
     { LAZY_KIND, QUEUEME_TAG, suspend_node_size(arity), 0, 0, \
-      eval_queueMe, 0, 0 },					\
-    { INDIR_KIND, 0, suspend_node_size(arity), 0, 0, eval_indir, 0, 0 } \
+      eval_queueMe, 0, 0, 0 },				      \
+    { INDIR_KIND, 0, suspend_node_size(arity), 0, 0,	      \
+      eval_indir, 0, 0, 0 }				      \
 }
 #else
-# define LAZYINFO(fname,entrypoint,arity) { \
+# define LAZYINFO(fname,entrypoint,arity) {		      \
     { LAZY_KIND, UPD_TAG, suspend_node_size(arity), 0, fname, \
-      eval_lazy_##arity, entrypoint, 0 } \
+      eval_lazy_##arity, 0, entrypoint, 0 }		      \
 }
 #endif
 

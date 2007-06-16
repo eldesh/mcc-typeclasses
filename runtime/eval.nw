@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2254 2007-06-15 18:42:06Z wlux $
+% $Id: eval.nw 2255 2007-06-16 13:26:58Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -323,12 +323,13 @@ The compiler transforms applications of higher order functions into
 first order applications by inserting applications of the (binary)
 primitive [[@]]. The code of this function first evaluates the
 function argument to a (ground) head normal form. If the result is a
-closure taking exactly one argument, a tail call to that function is
-performed. Otherwise, a new partial application node is returned to
-the caller. The info vector of the new closure is computed by using
-the fact that the node descriptors for all partial applications of a
-function are allocated in an array which is indexed by the number of
-arguments to which the function is applied.
+partial application missing exactly one argument, a tail call to its
+application entry point is performed. Otherwise, a new partial
+application node is returned to the caller. The info vector of the new
+closure is computed by using the fact that the node descriptors for
+all partial applications of a function are allocated in an array which
+is indexed by the number of arguments to which the function is
+applied.
 
 Actually, the compiler generates a whole family of functions [[@]]$_n$
 for each module and number of arguments $n$ to which an unknown
@@ -438,47 +439,27 @@ FUNCTION(___64_)
 static
 FUNCTION(___64__1)
 {
-    unsigned int argc;
+    unsigned int argc, sz;
     Node	 *clos;
-    NodeInfo	 *fInfo;
  ENTRY_LABEL(static, ___64__1)
     MATCH_RIGID_PAPP(___64__1);
     clos = sp[0];
 
-    /* check the number of missing arguments */
-    fInfo = clos->info;
-    argc  = closure_argc(clos);
-    if ( fInfo->tag == 1 )
-    {
-	/* push the arguments onto the stack */
-	switch ( argc )
-	{
-	case 0:
-	    sp += 1;
-	    break;
-	case 1:
-	    sp[0] = clos->c.args[0];
-	    break;
-	default:
-	    CHECK_STACK(argc - 1);
-	    sp -= argc - 1;
-	    memcpy(sp, clos->c.args, argc * word_size);
-	    break;
-	}
+    /* evaluate the application if just one argument is missing */
+    if ( clos->info->tag == 1 )
+	GOTO(clos->info->apply);
 
-	/* perform a tail call to the function */
-	GOTO(fInfo->entry);
-    }
-
-    /* allocate a new closure for the application */
-    CHECK_HEAP(closure_node_size(argc + 1));
+    /* otherwise allocate a new closure for the application */
+    argc = closure_argc(clos);
+    sz	 = node_size(clos);
+    CHECK_HEAP(sz + 1);
 
     /* create a new closure from the old closure and the argument */
     clos = (Node *)hp;
-    memcpy(clos, sp[0], closure_node_size(argc) * word_size);
+    memcpy(clos, sp[0], sz * word_size);
     clos->info++;
     clos->c.args[argc] = sp[1];
-    hp += closure_node_size(argc + 1);
+    hp		      += sz + 1;
 
     /* return to the caller */
     sp += 2;

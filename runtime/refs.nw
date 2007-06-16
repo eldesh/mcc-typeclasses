@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: refs.nw 2254 2007-06-15 18:42:06Z wlux $
+% $Id: refs.nw 2255 2007-06-16 13:26:58Z wlux $
 %
 % Copyright (c) 2004-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -34,7 +34,7 @@ typedef struct ioref_node {
 #define ioref_node_size wordsof(IORef)
 
 static NodeInfo ioref_info = {
-    ABSTRACT_KIND, 0, closure_node_size(1), 0, "<IORef>", eval_whnf, 0, 0
+    ABSTRACT_KIND, 0, closure_node_size(1), 0, "<IORef>", eval_whnf, 0, 0, 0
 };
 
 @ 

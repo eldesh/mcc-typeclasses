@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: run.nw 2272 2007-06-16 16:32:29Z wlux $
+% $Id: run.nw 2273 2007-06-16 16:33:22Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -145,12 +145,18 @@ extern Label ip;
 
 @ 
 The [[run]] function executes the compiled code starting at label
-[[ip]]. The execution of compiled code must be terminated by a call to
-the [[halt]] function.
+[[ip]]. The execution of compiled code must be terminated by calling
+the [[halt]] function. Execution can be continued at an arbitrary
+address by calling the [[jump]] function. [[Jump]] is similar to
+[[GOTO]], but can be used from foreign C code. On the other hand, it
+is implemented less efficiently than [[GOTO]] and therefore should not
+be used in compiled code. If the jump address is zero, execution of
+compiled code is halted.
 
 <<run.h>>=
 extern void run(Label ip);
-extern void halt(void) __attribute__((noreturn));
+extern void jump(Label ip) __attribute__((noreturn));
+#define halt() jump(0)
 
 @ 
 In order to achieve an efficient implementation with the trampoline
@@ -161,14 +167,16 @@ trampoline. Instead, we use a [[longjmp]] back into the [[run]]
 function in order to stop execution.
 
 The [[run]] function only saves the context for this [[longjmp]] in
-the global variable [[halt_buf]] and then calls the private function
+the global variable [[jump_buf]] and then calls the private function
 [[do_run]], which either executes the trampoline loop or prepares the
 stack frame in which the compiled code is executed in the direct jump
 configuration.
 
-The [[halt]] function stops execution of compiled abstract machine
+The [[jump]] function stops execution of compiled abstract machine
 code by performing a non-local jump to the context saved in
-[[halt_buf]].
+[[jump_buf]]. If the continuation address is zero, the machine is
+halted and [[run]] returns to its caller. Otherwise, [[do_run]] is
+entered again with the address passed to [[jump]].
 
 The [[noinline]] attribute of [[do_run]] is important in order to
 prevent an overzealous Gnu C compiler from inlining the code of
@@ -185,27 +193,31 @@ jump configuration, otherwise might overwrite register values saved in
 #include <setjmp.h>
 #include "run.h"
 
-static jmp_buf halt_buf;
+static Label   jump_ip;
+static jmp_buf jump_buf;
 
 #if __GNUC__ >= 3
-# define NOINLINE  __attribute__((noinline))
+# define NOINLINE  noinline,
 #else
 # define NOINLINE
 #endif
 
-static void do_run(Label ip) NOINLINE;
+static void do_run(Label ip) __attribute__((NOINLINE noreturn));
 
 void
 run(Label ip)
 {
-    if ( setjmp(halt_buf) == 0 )
+    if ( setjmp(jump_buf) )
+	ip = jump_ip;
+    if ( ip )
 	do_run(ip);
 }
 
 void
-halt()
+jump(Label ip)
 {
-    longjmp(halt_buf, 1);
+    jump_ip = ip;
+    longjmp(jump_buf, 1);
 }
 
 @ 
@@ -239,7 +251,7 @@ If the runtime system uses direct jumps via Gnu C extensions, the
 [[do_run]] function allocates a stack frame which should be large
 enough to handle the allocation requirements of all functions in the
 program and then jumps to the entry point of the program. The compiled
-functions must never return, but call the [[halt]] function in order
+functions must never return, but call the [[jump]] function in order
 to terminate execution.
 
 The [[do_run]] function performs a seemingly redundant call of the

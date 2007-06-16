@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 2255 2007-06-16 13:26:58Z wlux $
+% $Id: spaces.nw 2256 2007-06-16 13:28:39Z wlux $
 %
 % Copyright (c) 2003-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -145,7 +145,7 @@ struct script {
 <<spaces.c>>=
 #if !COPY_SEARCH_SPACE
 static const int ot_script[] = {
-    -wordsof(ScriptRec), 3,
+    -(int)wordsof(ScriptRec), 3,
     word_offsetof(ScriptRec, addr),
     word_offsetof(ScriptRec, inVal),
     word_offsetof(ScriptRec, outVal)

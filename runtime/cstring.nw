@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cstring.nw 2254 2007-06-15 18:42:06Z wlux $
+% $Id: cstring.nw 2256 2007-06-16 13:28:39Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -292,8 +292,8 @@ FUNCTION(__newCStringLen_1)
     p->p.ptr = cp;
     hp	    += ptr_node_size;
 #if !ONLY_BOXED_OBJECTS
-    if ( !is_large_int((long)l) )
-	i = mk_unboxed(l);
+    if ( !is_large_int(l) )
+	i = mk_unboxed((long)l);
     else
 #endif
     {

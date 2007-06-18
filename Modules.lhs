@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2276 2007-06-18 12:18:09Z wlux $
+% $Id: Modules.lhs 2278 2007-06-18 17:47:44Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -102,40 +102,38 @@ declaration to the module.
 >            -> ErrorT IO (ModuleEnv,PEnv,TCEnv,InstEnv,ValueEnv,Module Type)
 > loadModule paths caseMode warn fn =
 >   do
->     m <- liftErr (readFile fn) >>= okM . parseModule fn
->     mEnv <- loadInterfaces paths m
->     (pEnv,tcEnv,iEnv,tyEnv,m') <- okM $ checkModule mEnv m
+>     Module m es is ds <- liftErr (readFile fn) >>= okM . parseModule fn
+>     mEnv <- loadInterfaces paths [] emptyEnv m (modules is)
+>     okM $ checkInterfaces mEnv
+>     (pEnv,tcEnv,iEnv,tyEnv,m') <- okM $ checkModule mEnv (Module m es is ds)
 >     liftErr $ mapM_ putErrLn $ warnModule caseMode warn m'
 >     return (mEnv,pEnv,tcEnv,iEnv,tyEnv,m')
+>   where modules is = [P p m | ImportDecl p m _ _ _ <- is]
 
 > parseModule :: FilePath -> String -> Error (Module ())
 > parseModule fn s =
 >   unlitLiterate fn s >>= liftM (importPrelude fn) . parseSource fn
 
-> loadInterfaces :: [FilePath] -> Module a -> ErrorT IO ModuleEnv
-> loadInterfaces paths (Module m _ is _) =
->   foldM (loadInterface paths [m]) emptyEnv
->         [P p m | ImportDecl p m _ _ _ <- is]
-
 > checkModule :: ModuleEnv -> Module ()
 >             -> Error (PEnv,TCEnv,InstEnv,ValueEnv,Module Type)
 > checkModule mEnv (Module m es is ds) =
 >   do
->     (pEnv,tcEnv,iEnv,tyEnv) <- importModules mEnv is
+>     (pEnv,tcEnv,iEnv,tyEnv) <- importModules mEnv' is
 >     (tEnv,ds') <- typeSyntaxCheck m tcEnv iEnv ds
 >     (vEnv,ds'') <- syntaxCheck m tEnv tyEnv ds'
 >     es' <- checkExports m is tEnv vEnv es
 >     let (k1,ds''') = rename k0 ds''
->     let (pEnv',tcEnv',tyEnv') = qualifyEnv1 mEnv is pEnv tcEnv tyEnv
+>     let (pEnv',tcEnv',tyEnv') = qualifyEnv1 mEnv' is pEnv tcEnv tyEnv
 >     (pEnv'',ds'''') <- precCheck m pEnv' (qual1 tEnv vEnv ds''')
 >     tcEnv'' <- kindCheck m tcEnv' ds''''
 >     iEnv' <- instCheck m tcEnv'' iEnv ds''''
 >     (k2,deriv) <- liftM (rename k1) (derive m pEnv'' tcEnv'' iEnv' ds'''')
 >     (tyEnv'',ds''''') <- typeCheck m tcEnv'' iEnv' tyEnv' (ds'''' ++ deriv)
 >     let (pEnv''',tcEnv''',tyEnv''') =
->           qualifyEnv2 mEnv m pEnv'' tcEnv'' tyEnv''
+>           qualifyEnv2 mEnv' m pEnv'' tcEnv'' tyEnv''
 >     return (pEnv''',tcEnv''',iEnv',tyEnv''',
 >             Module m (Just es') is (qual2 tEnv vEnv ds'''''))
+>   where mEnv' = sanitizeInterfaces m mEnv
 
 > warnModule :: CaseMode -> [Warn] -> Module Type -> [String]
 > warnModule caseMode warn m =
@@ -263,9 +261,11 @@ declaration to the module.
 
 \end{verbatim}
 A goal is compiled with respect to a given module. If no module is
-specified, the Curry prelude is used. The source module has to be
-parsed and type checked before the goal can be compiled. Otherwise,
-compilation of a goal is similar to that of a module.
+specified, the Curry \texttt{Prelude} is used. When a goal is
+specified, the source of the main module is parsed and type checked
+and the goal is compiled in its context. If no goal is specified, the
+default goal \texttt{main} is compiled in the context of the main
+module's interface.
 \begin{verbatim}
 
 > compileGoal :: Options -> Maybe String -> [FilePath] -> ErrorT IO ()
@@ -323,6 +323,7 @@ compilation of a goal is similar to that of a module.
 >   do
 >     mEnv <- loadInterface paths [] emptyEnv (P (first "") preludeMIdent)
 >     (mEnv',ms) <- mapAccumM (loadGoalInterface paths) mEnv fns
+>     okM $ checkInterfaces mEnv'
 >     return (mEnv',preludeMIdent:ms)
 
 > loadGoalInterface :: [FilePath] -> ModuleEnv -> FilePath
@@ -403,6 +404,31 @@ imported modules into scope in the current module.
 > initEnvs = (initPEnv,initTCEnv,initIEnv,initDCEnv)
 
 \end{verbatim}
+When mutually recursive modules are compiled, it may be possible that
+the imported interfaces include entities that are supposed to be
+defined in the current module. These entities must not be imported
+into the current module in any way because they might be in conflict
+with the actual definitions in the current module.
+\begin{verbatim}
+
+> sanitizeInterfaces :: ModuleIdent -> ModuleEnv -> ModuleEnv
+> sanitizeInterfaces m mEnv = fmap (sanitizeInterface m) (unbindModule m mEnv)
+
+> sanitizeInterface :: ModuleIdent -> Interface -> Interface
+> sanitizeInterface m (Interface m' is' ds') =
+>   Interface m' is' (filter ((Just m /=) . fst . splitQualIdent . entity) ds')
+>   where entity (IInfixDecl _ _ _ op) = op
+>         entity (HidingDataDecl _ tc _ _) = tc
+>         entity (IDataDecl _ _ tc _ _ _) = tc
+>         entity (INewtypeDecl _ _ tc _ _ _) = tc
+>         entity (ITypeDecl _ tc _ _ _) = tc
+>         entity (HidingClassDecl _ _ cls _ _) = cls
+>         entity (IClassDecl _ _ cls _ _ _) = cls
+>         entity (IInstanceDecl _ _ _ _ m'') =
+>           qualifyWith (fromMaybe m' m'') anonId
+>         entity (IFunctionDecl _ f _ _) = f
+
+\end{verbatim}
 The prelude is imported implicitly into every module that does not
 import the prelude explicitly with an import declaration. Obviously,
 no import declaration is added to the prelude itself.
@@ -420,9 +446,8 @@ no import declaration is added to the prelude itself.
 \end{verbatim}
 The module \texttt{DebugPrelude} is loaded automatically when the
 program is compiled for debugging. However, no explicit import is
-added to the source code because \texttt{DebugPrelude} in turn imports
-the prelude. Therefore, its loading is delayed until after the source
-file has been checked.
+added to the source code because the debugging transformation is
+applied to the intermediate language.
 \begin{verbatim}
 
 > importDebugPrelude :: [FilePath] -> Bool -> FilePath -> ModuleEnv
@@ -432,20 +457,24 @@ file has been checked.
 >   | otherwise = return mEnv
 
 \end{verbatim}
-If an import declaration for a module is found, the compiler first
-checks whether an import for the module is already pending. In this
-case the module imports are cyclic, which is not allowed in Curry, and
-the compilation is aborted. Next, the compiler checks whether the
-module has been imported already. If so, nothing needs to be done,
-otherwise the interface is searched in the import paths and loaded if
-it is found.
+If an import declaration for a module is found, the compiler loads the
+module's interface unless a load is already pending. Such is possible
+in the case of cyclic module dependencies, which are accepted as an
+extension to the Curry language. An error is reported only if a module
+contains an import declaration directly importing itself.
 \begin{verbatim}
+
+> loadInterfaces :: [FilePath] -> [ModuleIdent] -> ModuleEnv
+>                -> ModuleIdent -> [P ModuleIdent] -> ErrorT IO ModuleEnv
+> loadInterfaces paths ctxt mEnv m ms =
+>   do
+>     okM $ sequenceE_ [errorAt p (cyclicImport m) | P p m' <- ms, m == m']
+>     foldM (loadInterface paths ctxt) mEnv ms
 
 > loadInterface :: [FilePath] -> [ModuleIdent] -> ModuleEnv -> P ModuleIdent
 >               -> ErrorT IO ModuleEnv
 > loadInterface paths ctxt mEnv (P p m)
->   | m `elem` ctxt = errorAt p (cyclicImport m (takeWhile (/= m) ctxt))
->   | isJust (lookupEnv m mEnv) = return mEnv
+>   | m `elem` ctxt || isJust (lookupEnv m mEnv) = return mEnv
 >   | otherwise =
 >       liftErr (lookupInterface paths m) >>=
 >       maybe (errorAt p (interfaceNotFound m))
@@ -460,8 +489,10 @@ it is found.
 >     return mEnv'
 
 \end{verbatim}
-After parsing an interface, all imported interfaces are recursively
-loaded and entered into the interface's environment.
+After parsing an interface, all of its imported interfaces are
+recursively loaded and entered into the module environment. In
+addition, the compiler applies syntax checking to the interface, which
+is possible because interface files are self-contained.
 
 \ToDo{Avoid recursive loading of imported interfaces. All information
 that is needed for compiling a module is present in the interfaces
@@ -472,22 +503,24 @@ that are imported directly from that module.}
 >                  -> FilePath -> ErrorT IO (ModuleEnv,ModuleIdent)
 > compileInterface paths ctxt mEnv fn =
 >   do
->     i <- liftErr (readFile fn) >>= okM . parseInterface fn
->     mEnv' <- loadIntfInterfaces paths ctxt mEnv i
->     Interface m is ds <- okM (checkInterface mEnv' i)
->     return (bindModule (Interface m is ds) mEnv',m)
+>     Interface m is ds <- liftErr (readFile fn) >>= okM . parseInterface fn
+>     mEnv' <- loadInterfaces paths (m:ctxt) mEnv m (modules is)
+>     ds' <- okM $ intfSyntaxCheck ds
+>     return (bindModule (Interface m is ds') mEnv',m)
+>   where modules is = [P p m | IImportDecl p m <- is]
 
-> loadIntfInterfaces :: [FilePath] -> [ModuleIdent] -> ModuleEnv -> Interface
->                    -> ErrorT IO ModuleEnv
-> loadIntfInterfaces paths ctxt mEnv (Interface m is _) =
->   foldM (loadInterface paths (m:ctxt)) mEnv [P p m | IImportDecl p m <- is]
+\end{verbatim}
+After all interface files have been loaded, the compiler checks that
+re-exported definitions in the interfaces are compatible with their
+original definitions in order to ensure that the set of loaded
+interfaces is consistent.
+\begin{verbatim}
 
-> checkInterface :: ModuleEnv -> Interface -> Error Interface
-> checkInterface mEnv (Interface m is ds) =
->   do
->     ds' <- intfSyntaxCheck ds
->     intfCheck m pEnv tcEnv iEnv tyEnv ds'
->     return (Interface m is ds')
+> checkInterfaces :: ModuleEnv -> Error ()
+> checkInterfaces mEnv = mapE_ (checkInterface mEnv . snd) (envToList mEnv)
+
+> checkInterface :: ModuleEnv -> Interface -> Error ()
+> checkInterface mEnv (Interface m is ds) = intfCheck m pEnv tcEnv iEnv tyEnv ds
 >   where (pEnv,tcEnv,iEnv,tyEnv) = foldl importModule initEnvs is
 >         importModule envs (IImportDecl _ m) =
 >           importInterfaceIntf envs (moduleInterface m mEnv)
@@ -592,7 +625,7 @@ from the type environment.
 >           IFunctionDecl undefined (qualify f) Nothing (fromQualType tcEnv ty)
 
 \end{verbatim}
-Various filename extensions.
+Various file name extensions.
 \begin{verbatim}
 
 > cExt = ".c"
@@ -618,13 +651,8 @@ Error messages.
 > interfaceNotFound :: ModuleIdent -> String
 > interfaceNotFound m = "Interface for module " ++ moduleName m ++ " not found"
 
-> cyclicImport :: ModuleIdent -> [ModuleIdent] -> String
-> cyclicImport m [] = "Recursive import for module " ++ moduleName m
-> cyclicImport m ms =
->   "Cyclic import dependency between modules " ++ moduleName m ++
->     modules "" ms
->   where modules comma [m] = comma ++ " and " ++ moduleName m
->         modules _ (m:ms) = ", " ++ moduleName m ++ modules "," ms
+> cyclicImport :: ModuleIdent -> String
+> cyclicImport m = "Module " ++ moduleName m ++ " imports itself"
 
 > wrongInterface :: ModuleIdent -> ModuleIdent -> String
 > wrongInterface m m' =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2250 2007-06-15 14:31:09Z wlux $
+% $Id: ILTrans.lhs 2277 2007-06-18 15:55:56Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -54,7 +54,7 @@ synonyms in place of newtype declarations (see Sect.~\ref{sec:IL}).
 > translTopDecl m tyEnv (BlockDecl d) = translDecl m tyEnv d
 
 > translDecl :: ModuleIdent -> ValueEnv -> Decl a -> [IL.Decl]
-> translDecl _ tyEnv (FunctionDecl _ f eqs) = [translFunction tyEnv f eqs]
+> translDecl m tyEnv (FunctionDecl _ f eqs) = [translFunction m tyEnv f eqs]
 > translDecl m tyEnv (ForeignDecl _ cc ie f _) =
 >   [translForeign m tyEnv f cc (fromJust ie)]
 > translDecl _ _ _ = []
@@ -168,24 +168,18 @@ and their repeated occurrences in the remaining arguments must be
 preserved. This means that the second and following arguments of a
 selector function have to be renamed according to the name mapping
 computed for its first argument.
-
-The compiler expects all dictionary creation functions introduced in
-place of the instance declarations to use an empty module name
-qualifier. This is necessary because the interface syntax does not
-indicate in which module an instance was defined. For that reason, we
-must look up the qualified name of a function in the type environment
-rather than invariably adding the name of the current module.
 \begin{verbatim}
 
 > type RenameEnv = Env Ident Ident
 
-> translFunction :: ValueEnv -> Ident -> [Equation a] -> IL.Decl
-> translFunction tyEnv f eqs =
->   IL.FunctionDecl f' vs (translType ty)
+> translFunction :: ModuleIdent -> ValueEnv -> Ident -> [Equation a] -> IL.Decl
+> translFunction m tyEnv f eqs =
+>   IL.FunctionDecl (qualifyWith m f) vs (translType ty)
 >                   (match IL.Flex vs (map (translEquation tyEnv vs vs'') eqs))
->   where Value f' n (ForAll _ (QualType _ ty)) : _ = lookupTopEnv f tyEnv
+>   where ty = rawType (varType f tyEnv)
 >         vs = if isSelectorId f then translArgs eqs vs' else vs'
->         (vs',vs'') = splitAt n (argNames (mkIdent ""))
+>         (vs',vs'') = splitAt (arity eqs) (argNames (mkIdent ""))
+>         arity (Equation _ (FunLhs _ ts) _ : _) = length ts
 
 > translArgs :: [Equation a] -> [Ident] -> [Ident]
 > translArgs [Equation _ (FunLhs _ (t:ts)) _] (v:_) =

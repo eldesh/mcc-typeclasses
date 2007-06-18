@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2247 2007-06-14 12:57:40Z wlux $
+% $Id: Modules.lhs 2274 2007-06-18 09:10:49Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -309,12 +309,12 @@ compilation of a goal is similar to that of a module.
 >     (mEnv,ms) <- loadGoalModules paths fns
 >     let m' = last ms
 >     (tcEnv,iEnv,tyEnv,cx,g') <- okM $
->       maybe (return mainGoal) parseGoal g >>=
+>       maybe (return (mainGoal m')) parseGoal g >>=
 >       checkGoal forEval mEnv m (map (importModule [m',preludeMIdent]) ms)
 >     liftErr $ mapM_ putErrLn $ warnGoal caseMode warn m g'
 >     return (mEnv,tcEnv,iEnv,tyEnv,cx,g')
 >   where p = first ""
->         mainGoal = Goal p (Variable () (qualify mainId)) []
+>         mainGoal m = Goal p (Variable () (qualifyWith m mainId)) []
 >         importModule ms m = importDecl p m (m `notElem` ms)
 
 > loadGoalModules :: [FilePath] -> [FilePath]

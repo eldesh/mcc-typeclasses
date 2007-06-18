@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2171 2007-04-24 21:53:08Z wlux $
+% $Id: Exports.lhs 2275 2007-06-18 09:30:41Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -138,13 +138,14 @@ declarations which cannot be used in another module because
 >         ForAll u ty = funType f tyEnv
 > funDecl _ _ _ (ExportTypeWith _ _) ds = ds
 
-> instDecl :: ModuleIdent -> TCEnv -> [QualIdent] -> CT -> Context -> [IDecl]
->          -> [IDecl]
-> instDecl m tcEnv ts (CT cls tc) cx ds
+> instDecl :: ModuleIdent -> TCEnv -> [QualIdent] -> CT -> (ModuleIdent,Context)
+>          -> [IDecl] -> [IDecl]
+> instDecl m tcEnv ts (CT cls tc) (m',cx) ds
 >   | isJust (localIdent m cls) && cls `notElem` ts = ds
 >   | isJust (localIdent m tc) && not (isPrimTypeId tc) && tc `notElem` ts = ds
->   | otherwise = IInstanceDecl noPos cx' (qualUnqualify m cls) ty' : ds
->   where n = kindArity (constrKind tc tcEnv) - kindArity (classKind cls tcEnv)
+>   | otherwise = IInstanceDecl noPos cx' (qualUnqualify m cls) ty' m'' : ds
+>   where m'' = if m == m' then Nothing else Just m'
+>         n = kindArity (constrKind tc tcEnv) - kindArity (classKind cls tcEnv)
 >         tvs = take n (map TypeVariable [0..])
 >         QualTypeExpr cx' ty' = fromQualType tcEnv $
 >           QualType cx (applyType (TypeConstructor tc) tvs)
@@ -186,7 +187,8 @@ not module \texttt{B}.
 >   modules (INewtypeDecl _ cx tc _ _ nc) = modules cx . modules tc . modules nc
 >   modules (ITypeDecl _ tc _ _ ty) = modules tc . modules ty
 >   modules (IClassDecl _ cx cls _ _ ds) = modules cx . modules cls . modules ds
->   modules (IInstanceDecl _ cx cls ty) = modules cx . modules cls . modules ty
+>   modules (IInstanceDecl _ cx cls ty m) =
+>      modules cx . modules cls . modules ty . maybe id (:) m
 >   modules (IFunctionDecl _ f _ ty) = modules f . modules ty
 
 > instance HasModule ConstrDecl where
@@ -248,7 +250,7 @@ loading the imported modules.
 > definedType (INewtypeDecl _ _ tc _ _ _) tcs = tc : tcs
 > definedType (ITypeDecl _ tc _ _ _) tcs = tc : tcs
 > definedType (IClassDecl _ _ cls _ _ _) tcs = cls : tcs
-> definedType (IInstanceDecl _ _ _ _) tcs = tcs
+> definedType (IInstanceDecl _ _ _ _ _) tcs = tcs
 > definedType (IFunctionDecl _ _ _ _)  tcs = tcs
 
 > class HasType a where
@@ -265,7 +267,7 @@ loading the imported modules.
 >   usedTypes (INewtypeDecl _ cx _ _ _ nc) = usedTypes cx . usedTypes nc
 >   usedTypes (ITypeDecl _ _ _ _ ty) = usedTypes ty
 >   usedTypes (IClassDecl _ cx _ _ _ ds) = usedTypes cx . usedTypes ds
->   usedTypes (IInstanceDecl _ cx cls ty) =
+>   usedTypes (IInstanceDecl _ cx cls ty _) =
 >     usedTypes cx . (cls :) . usedTypes ty
 >   usedTypes (IFunctionDecl _ _ _ ty) = usedTypes ty
 

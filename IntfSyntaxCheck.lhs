@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2171 2007-04-24 21:53:08Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2275 2007-06-18 09:30:41Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -48,7 +48,7 @@ The latter must not occur in type expressions in interfaces.
 > bindType (HidingClassDecl _ _ cls _ _) = qualBindTopEnv cls (Class cls [])
 > bindType (IClassDecl _ cx cls _ _ ds) =
 >   qualBindTopEnv cls (Class cls (map imethod (catMaybes ds)))
-> bindType (IInstanceDecl _ _ _ _) = id
+> bindType (IInstanceDecl _ _ _ _ _) = id
 > bindType (IFunctionDecl _ _ _ _) = id
 
 \end{verbatim}
@@ -91,11 +91,11 @@ during syntax checking of type expressions.
 >       mapE (liftMaybe (checkIMethodDecl env tv)) ds
 >     return (IClassDecl p cx' cls k tv ds')
 >   where doc = ppQIdent cls <+> ppIdent tv
-> checkIDecl env (IInstanceDecl p cx cls ty) =
+> checkIDecl env (IInstanceDecl p cx cls ty m) =
 >   do
 >     (cx',ty') <- checkClass env p cls &&> checkInstType env p cx ty
 >     mapE_ (checkSimpleConstraint "instance" doc p) cx
->     return (IInstanceDecl p cx' cls ty')
+>     return (IInstanceDecl p cx' cls ty' m)
 >   where doc = ppQIdent cls <+> ppTypeExpr 2 ty
 > checkIDecl env (IFunctionDecl p f n ty) =
 >   liftE (IFunctionDecl p f n) (checkQualType env p ty)

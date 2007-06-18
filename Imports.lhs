@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2173 2007-04-25 19:03:57Z wlux $
+% $Id: Imports.lhs 2275 2007-06-18 09:30:41Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -53,7 +53,7 @@ all instance declarations are always imported into the current module.
 > isHiddenDecl (ITypeDecl _ _ _ _ _) = False
 > isHiddenDecl (HidingClassDecl _ _ _ _ _) = True
 > isHiddenDecl (IClassDecl _ _ _ _ _ _) = False
-> isHiddenDecl (IInstanceDecl _ _ _ _) = False
+> isHiddenDecl (IInstanceDecl _ _ _ _ _) = False
 > isHiddenDecl (IFunctionDecl _ _ _ _) = False
 
 > isVisible :: (Import -> Set Ident -> Set Ident) -> Maybe ImportSpec
@@ -88,8 +88,8 @@ all instance declarations are always imported into the current module.
 > importInstances m ds iEnv = foldr (bindInstance m) iEnv ds
 
 > bindInstance :: ModuleIdent -> IDecl -> InstEnv -> InstEnv
-> bindInstance m (IInstanceDecl _ cx cls ty) =
->   bindEnv (CT (qualQualify m cls) (rootOfType ty')) cx'
+> bindInstance m (IInstanceDecl _ cx cls ty m') =
+>   bindEnv (CT (qualQualify m cls) (rootOfType ty')) (fromMaybe m m',cx')
 >   where QualType cx' ty' = toQualType m (QualTypeExpr cx ty)
 > bindInstance _ _ = id
 
@@ -135,7 +135,7 @@ instances imported from another module.
 > entity (ITypeDecl _ tc _ _ _) = tc
 > entity (HidingClassDecl _ _ cls _ _) = cls
 > entity (IClassDecl _ _ cls _ _ _) = cls
-> entity (IInstanceDecl _ _ _ _) = qualify anonId
+> entity (IInstanceDecl _ _ _ _ _) = qualify anonId
 > entity (IFunctionDecl _ f _ _) = f
 
 > importEntitiesIntf :: Entity a

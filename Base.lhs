@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2161 2007-04-22 14:48:33Z wlux $
+% $Id: Base.lhs 2275 2007-06-18 09:30:41Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -337,15 +337,16 @@ used in order to check the export list of a module.
 The compiler maintains information about defined instances in an
 environment that maps $C$-$T$-pairs, which associate a type class
 identifier and a type constructor identifier, onto the context of the
-corresponding instance declaration. A flat environment is sufficient
-because instances are visible globally and cannot be hidden. Instance
+corresponding instance declaration and the name of the module where
+the instance is declared. A flat environment is sufficient because
+instances are visible globally and cannot be hidden. Instance
 relationships are recorded only with the original names of the class
 and type constructor involved.
 \begin{verbatim}
 
 > data CT = CT QualIdent QualIdent deriving (Eq,Ord,Show)
 
-> type InstEnv = Env CT Context
+> type InstEnv = Env CT (ModuleIdent,Context)
 
 \end{verbatim}
 When checking for duplicate instance declarations, the compiler simply

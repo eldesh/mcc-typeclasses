@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2247 2007-06-14 12:57:40Z wlux $
+% $Id: DictTrans.lhs 2275 2007-06-18 09:30:41Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -122,7 +122,7 @@ generator.
 >   classIDecls m tcEnv p cls k tv Nothing
 > liftIntfDecls m tcEnv _ (IClassDecl p _ cls k tv ds) =
 >   classIDecls m tcEnv p cls k tv (Just ds) ++ intfMethodStubs cls tv ds
-> liftIntfDecls m tcEnv tyEnv (IInstanceDecl p cx cls ty) =
+> liftIntfDecls m tcEnv tyEnv (IInstanceDecl p cx cls ty _) =
 >   instIDecls tcEnv tyEnv p cls' (toQualType m (QualTypeExpr cx ty))
 >   where cls' = qualQualify m cls
 > liftIntfDecls _ _ _ (IFunctionDecl p f n ty) = [IFunctionDecl p f n ty]
@@ -440,8 +440,8 @@ of method $f_i$ in class $C$.
 > bindInstDecls tcEnv iEnv tyEnv =
 >   foldr (bindInstFuns tcEnv) tyEnv (envToList iEnv)
 
-> bindInstFuns :: TCEnv -> (CT,Context) -> ValueEnv -> ValueEnv
-> bindInstFuns tcEnv (CT cls tc,cx) tyEnv =
+> bindInstFuns :: TCEnv -> (CT,(ModuleIdent,Context)) -> ValueEnv -> ValueEnv
+> bindInstFuns tcEnv (CT cls tc,(_,cx)) tyEnv =
 >   foldr ($) tyEnv
 >         (zipWith (bindInstFun m)
 >                  (instFunId tp : instMethodIds tp)
@@ -655,7 +655,7 @@ computed for the context instantiated at the appropriate types.
 >   case unapplyType True ty of
 >     (TypeConstructor tc,tys) ->
 >       case lookupEnv (CT cls tc) iEnv of
->         Just cx -> map (expandAliasType tys) (maxContext tcEnv cx)
+>         Just (_,cx) -> map (expandAliasType tys) (maxContext tcEnv cx)
 >         Nothing ->
 >           internalError ("instContext " ++ show cls ++ " " ++ show tc)
 >     _ ->

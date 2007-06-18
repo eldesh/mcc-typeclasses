@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2171 2007-04-24 21:53:08Z wlux $
+% $Id: CurryPP.lhs 2275 2007-06-18 09:30:41Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -205,7 +205,9 @@ Interfaces
 >   text "hiding" <+> ppIDecl (IClassDecl p cx cls k tv [])
 > ppIDecl (IClassDecl _ cx cls k tv ds) =
 >   ppIClassDecl (ppClassHead cx (ppITypeIdent cls k) tv) ds
-> ppIDecl (IInstanceDecl _ cx cls ty) = ppInstanceHead cx cls ty
+> ppIDecl (IInstanceDecl _ cx cls ty m) =
+>   ppInstanceHead cx cls ty <+> maybePP instModule m
+>   where instModule m = text "of" <+> ppMIdent m
 > ppIDecl (IFunctionDecl _ f n ty) =
 >   ppQIdent f <+> text "::" <+> maybePP ppArity n <+> ppQualTypeExpr ty
 >   where ppArity n = ppPragma (text "ARITY" <+> int n)

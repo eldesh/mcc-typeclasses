@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2095 2007-02-13 17:34:10Z wlux $
+% $Id: InstCheck.lhs 2275 2007-06-18 09:30:41Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -36,19 +36,19 @@ compiler are added to the instance environment.
 >     return iEnv''
 >   where (tds,ods) = partition isTypeDecl ds
 >         ids = filter isInstanceDecl ods
->         iEnv' = foldr (bindInstance tcEnv) iEnv ids
+>         iEnv' = foldr (bindInstance m tcEnv) iEnv ids
 
 \end{verbatim}
 First, the compiler adds all explicit instance declarations to the
 instance environment.
 \begin{verbatim}
 
-> bindInstance :: TCEnv -> TopDecl a -> InstEnv -> InstEnv
-> bindInstance tcEnv (InstanceDecl _ cx cls ty _) =
->   bindEnv (CT cls' (rootOfType ty')) cx'
+> bindInstance :: ModuleIdent -> TCEnv -> TopDecl a -> InstEnv -> InstEnv
+> bindInstance m tcEnv (InstanceDecl _ cx cls ty _) =
+>   bindEnv (CT cls' (rootOfType ty')) (m,cx')
 >   where cls' = origName (head (qualLookupTopEnv cls tcEnv))
 >         QualType cx' ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
-> bindInstance _ _ = id
+> bindInstance _ _ _ = id
 
 \end{verbatim}
 In the next step, the compiler infers the contexts of derived instance
@@ -101,8 +101,8 @@ environment before instances of their subclasses.
 > bindDerived :: ModuleIdent -> TCEnv -> Position -> [ClassAssert] -> Ident
 >             -> [Ident] -> [TypeExpr] -> InstEnv -> QualIdent -> Error InstEnv
 > bindDerived m tcEnv p cx tc tvs tys iEnv cls =
->   liftM (flip (uncurry bindEnv) iEnv)
->         (inferContext m tcEnv iEnv p cx tc tvs tys cls)
+>   liftM (bindInstance m iEnv) (inferContext m tcEnv iEnv p cx tc tvs tys cls)
+>   where bindInstance m iEnv (ct,cx) = bindEnv ct (m,cx) iEnv
 
 > bindInitialContexts :: ModuleIdent -> TCEnv -> InstEnv -> TopDecl a
 >                     -> Error InstEnv
@@ -148,9 +148,9 @@ environment before instances of their subclasses.
 >   where (iEnv',upds) = mapAccumL updateInstance iEnv cxs
 >         updateInstance iEnv (ct,cx) =
 >           case lookupEnv ct iEnv of
->             Just cx'
+>             Just (m,cx')
 >               | cx == cx' -> (iEnv,False)
->               | otherwise -> (bindEnv ct cx iEnv,True)
+>               | otherwise -> (bindEnv ct (m,cx) iEnv,True)
 >             Nothing -> internalError "updateContext"
 
 > sortClasses :: TCEnv -> [QualIdent] -> [QualIdent]
@@ -237,7 +237,7 @@ implied by other predicates in the context are removed.
 > instContext iEnv cls ty =
 >   case unapplyType False ty of
 >     (TypeConstructor tc,tys) ->
->       fmap (map (expandAliasType tys)) (lookupEnv (CT cls tc) iEnv)
+>       fmap (map (expandAliasType tys) . snd) (lookupEnv (CT cls tc) iEnv)
 >     _ -> Nothing
 
 > partitionContext :: Context -> (Context,Context)

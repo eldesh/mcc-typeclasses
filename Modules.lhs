@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2274 2007-06-18 09:10:49Z wlux $
+% $Id: Modules.lhs 2276 2007-06-18 12:18:09Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -351,7 +351,7 @@ compilation of a goal is similar to that of a module.
 >     let (pEnv',tcEnv',tyEnv') = qualifyEnv1 mEnv is pEnv tcEnv tyEnv
 >     g'''' <- precCheckGoal m pEnv' (qual1 tEnv vEnv g''')
 >     (tyEnv'',cx,g''''') <- kindCheckGoal tcEnv' g'''' >>
->                          typeCheckGoal forEval m tcEnv' iEnv tyEnv' g''''
+>                            typeCheckGoal forEval m tcEnv' iEnv tyEnv' g''''
 >     let (_,tcEnv'',tyEnv''') =
 >           qualifyGoalEnv forEval mEnv m pEnv' tcEnv' tyEnv''
 >     return (tcEnv'',iEnv,tyEnv''',cx,qualifyGoal forEval tEnv vEnv g''''')
@@ -486,9 +486,9 @@ that are imported directly from that module.}
 > checkInterface mEnv (Interface m is ds) =
 >   do
 >     ds' <- intfSyntaxCheck ds
->     intfCheck m pEnv tcEnv tyEnv ds'
+>     intfCheck m pEnv tcEnv iEnv tyEnv ds'
 >     return (Interface m is ds')
->   where (pEnv,tcEnv,_,tyEnv) = foldl importModule initEnvs is
+>   where (pEnv,tcEnv,iEnv,tyEnv) = foldl importModule initEnvs is
 >         importModule envs (IImportDecl _ m) =
 >           importInterfaceIntf envs (moduleInterface m mEnv)
 

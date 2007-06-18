@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2275 2007-06-18 09:30:41Z wlux $
+% $Id: IntfCheck.lhs 2276 2007-06-18 12:18:09Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -47,6 +47,7 @@ interface module only. However, this has not been implemented yet.
 
 > module IntfCheck(intfCheck) where
 > import Base
+> import Env
 > import Error
 > import KindTrans
 > import Maybe
@@ -54,15 +55,18 @@ interface module only. However, this has not been implemented yet.
 > import TopEnv
 > import TypeTrans
 
-> intfCheck :: ModuleIdent -> PEnv -> TCEnv -> ValueEnv -> [IDecl] -> Error ()
-> intfCheck m pEnv tcEnv tyEnv = mapE_ (checkImport m pEnv tcEnv tyEnv)
+> intfCheck :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> ValueEnv -> [IDecl]
+>           -> Error ()
+> intfCheck m pEnv tcEnv iEnv tyEnv =
+>   mapE_ (checkImport m pEnv tcEnv iEnv tyEnv)
 
-> checkImport :: ModuleIdent -> PEnv -> TCEnv -> ValueEnv -> IDecl -> Error ()
-> checkImport _ pEnv _ _ (IInfixDecl p fix pr op) =
+> checkImport :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> ValueEnv -> IDecl
+>             -> Error ()
+> checkImport _ pEnv _ _ _ (IInfixDecl p fix pr op) =
 >   checkPrecInfo checkPrec pEnv p op
 >   where checkPrec (PrecInfo op' (OpPrec fix' pr')) =
 >           op == op' && fix == fix' && pr == pr'
-> checkImport _ _ tcEnv _ (HidingDataDecl p tc k tvs) =
+> checkImport _ _ tcEnv _ _ (HidingDataDecl p tc k tvs) =
 >   checkTypeInfo "hidden data type" checkData tcEnv p tc
 >   where checkData (DataType tc' k' _)
 >           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' =
@@ -71,7 +75,7 @@ interface module only. However, this has not been implemented yet.
 >           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' =
 >               Just (return ())
 >         checkData _ = Nothing
-> checkImport m _ tcEnv tyEnv (IDataDecl p cx tc k tvs cs) =
+> checkImport m _ tcEnv _ tyEnv (IDataDecl p cx tc k tvs cs) =
 >   checkTypeInfo "data type" checkData tcEnv p tc
 >   where checkData (DataType tc' k' cs')
 >           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' &&
@@ -83,28 +87,28 @@ interface module only. However, this has not been implemented yet.
 >             null cs =
 >               Just (return ())
 >         checkData _ = Nothing
-> checkImport m _ tcEnv tyEnv (INewtypeDecl p cx tc k tvs nc) =
+> checkImport m _ tcEnv _ tyEnv (INewtypeDecl p cx tc k tvs nc) =
 >   checkTypeInfo "newtype" checkNewtype tcEnv p tc
 >   where checkNewtype (RenamingType tc' k' nc')
 >           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' &&
 >             nconstr nc == nc' =
 >               Just (checkNewConstrImport m tyEnv cx tc tvs nc)
 >         checkNewtype _ = Nothing
-> checkImport m _ tcEnv _ (ITypeDecl p tc k tvs ty) =
+> checkImport m _ tcEnv _ _ (ITypeDecl p tc k tvs ty) =
 >   checkTypeInfo "synonym type" checkType tcEnv p tc
 >   where checkType (AliasType tc' n' k' ty')
 >           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' &&
 >             length tvs == n' && toType m tvs ty == ty' =
 >               Just (return ())
 >         checkType _ = Nothing
-> checkImport m _ tcEnv _ (HidingClassDecl p cx cls k tv) =
+> checkImport m _ tcEnv _ _ (HidingClassDecl p cx cls k tv) =
 >   checkTypeInfo "hidden type class" checkClass tcEnv p cls
 >   where checkClass (TypeClass cls' k' clss' _)
 >           | cls == cls' && maybe KindStar toKind k == k' &&
 >             [qualQualify m cls | ClassAssert cls _ _ <- cx] == clss' =
 >               Just (return ())
 >         checkClass _ = Nothing
-> checkImport m _ tcEnv tyEnv (IClassDecl p cx cls k tv ds) =
+> checkImport m _ tcEnv _ tyEnv (IClassDecl p cx cls k tv ds) =
 >   checkTypeInfo "type class" checkClass tcEnv p cls
 >   where checkClass (TypeClass cls' k' clss' fs')
 >           | cls == cls' && maybe KindStar toKind k == k' &&
@@ -113,8 +117,12 @@ interface module only. However, this has not been implemented yet.
 >             and (zipWith (isVisible imethod) ds fs') =
 >               Just (mapM_ (checkMethodImport m tyEnv cls tv) (catMaybes ds))
 >         checkClass _ = Nothing
-> checkImport m _ _ _ (IInstanceDecl _ _ _ _ _) = return ()
-> checkImport m _ _ tyEnv (IFunctionDecl p f n ty) =
+> checkImport m _ _ iEnv _ (IInstanceDecl p cx cls ty m') =
+>   checkInstInfo checkContext iEnv p (qualQualify m cls) tc m'
+>   where QualType cx' ty' = toQualType m (QualTypeExpr cx ty)
+>         tc = rootOfType ty'
+>         checkContext cx'' = cx' == cx''
+> checkImport m _ _ _ tyEnv (IFunctionDecl p f n ty) =
 >   checkValueInfo "function" checkFun tyEnv p f
 >   where checkFun (Value f' n' (ForAll _ ty')) =
 >           f == f' && maybe True (n' ==) n && toQualType m ty == ty'
@@ -185,6 +193,19 @@ interface module only. However, this has not been implemented yet.
 >             [vi] -> unless (check vi) (errorAt p (importConflict what m x'))
 >             _ -> internalError "checkValueInfo"
 
+> checkInstInfo :: (Context -> Bool) -> InstEnv -> Position
+>               -> QualIdent -> QualIdent -> Maybe ModuleIdent -> Error ()
+> checkInstInfo checkContext iEnv p cls tc m =
+>   checkImported checkInfo (maybe qualify qualifyWith m anonId)
+>   where checkInfo m' _ =
+>           case lookupEnv (CT cls tc) iEnv of
+>             Just (m,cx)
+>               | m /= m' -> errorAt p (noInstance m' cls tc)
+>               | otherwise ->
+>                   unless (checkContext cx)
+>                          (errorAt p (instanceConflict m' cls tc))
+>             Nothing -> errorAt p (noInstance m' cls tc)
+
 > checkImported :: (ModuleIdent -> Ident -> Error ()) -> QualIdent -> Error ()
 > checkImported f x =
 >   case splitQualIdent x of
@@ -210,10 +231,22 @@ Error messages.
 >   "Inconsistent module interfaces\n" ++
 >   "Module " ++ moduleName m ++ " does not define a precedence for " ++ name x
 
+> noInstance :: ModuleIdent -> QualIdent -> QualIdent -> String
+> noInstance m cls tc =
+>   "Inconsistent module interfaces\n" ++
+>   "Module " ++ moduleName m ++ " does not define an instance " ++
+>   qualName cls ++ " " ++ qualName tc
+
 > importConflict :: String -> ModuleIdent -> Ident -> String
 > importConflict what m x =
 >   "Inconsistent module interfaces\n" ++
 >   "Declaration of " ++ what ++ " " ++ name x ++
+>   " does not match its definition in module " ++ moduleName m
+
+> instanceConflict :: ModuleIdent -> QualIdent -> QualIdent -> String
+> instanceConflict m cls tc =
+>   "Inconsistent module interfaces\n" ++
+>   "Declaration of instance " ++ qualName cls ++ " " ++ qualName tc ++
 >   " does not match its definition in module " ++ moduleName m
 
 \end{verbatim}

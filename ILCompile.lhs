@@ -1,11 +1,11 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 2250 2007-06-15 14:31:09Z wlux $
+% $Id: ILCompile.lhs 2290 2007-06-19 21:48:25Z wlux $
 %
-% Copyright (c) 1999-2006, Wolfgang Lux
+% Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ILCompile.lhs}
-\section{Compiling the Intermediate Language}
+\section{Compiling the Intermediate Language}\label{sec:il-compile}
 This section describes the transformation from the intermediate
 language into abstract machine code.
 \begin{verbatim}
@@ -67,13 +67,24 @@ foreign code. For functions using the \texttt{ccall} calling
 convention, all arguments are evaluated to ground terms before calling
 the foreign function. The result of the call or, if the C function
 does not return a result, the constant \texttt{()} is returned from
-the compiled function. For functions with result type \texttt{IO}~$t$,
-the compiler generates two functions. The first of these returns an
-I/O action and the other function implements the I/O action itself.
+the compiled function. Arguments and results of the basic data types
+\texttt{Bool}, \texttt{Char}, \texttt{Int}, \texttt{Float},
+\texttt{Ptr}, \texttt{FunPtr}, and \texttt{StablePtr} are marshaled to
+and from their corresponding C types. Marshaling for arguments and
+results of other types must be implemented completely by the foreign
+function. The generated code simply passes a pointer to the node
+representing the argument to the C function and expects a pointer to a
+node being returned from the foreign function in this case. Obviously,
+the called function must be very careful with those pointers and make
+sure that they are not invalidated by a garbage collection. Therefore,
+and because there are absolutely no assurances about type correctness,
+such arguments are allowed only in unsafe calls.
 
-The runtime system employs the usual state monad approach in order to
-implement I/O actions, but with a minor optimization. The type
-\texttt{IO} can be defined as
+For functions with result type \texttt{IO}~$t$, the compiler generates
+two functions. The first of these returns an I/O action and the other
+function implements the I/O action itself. The runtime system employs
+the usual state monad approach in order to implement I/O actions, but
+with a minor optimization. The type \texttt{IO} can be defined as
 \begin{verbatim}
   type IO a = World -> (a,World)
 \end{verbatim}
@@ -144,9 +155,7 @@ reader monad for the type \texttt{IO}.
 >         callStmt h cc = Cam.CCall h (cRetType ty) cc
 
 > cArgType :: Type -> Cam.CArgType
-> cArgType ty =
->   fromMaybe (internalError ("ccall: invalid argument type " ++ show ty))
->             (cRetType ty)
+> cArgType ty = fromMaybe Cam.TypeNodePtr (cRetType ty)
 
 > cRetType :: Type -> Cam.CRetType
 > cRetType (TypeConstructor tc [])
@@ -159,7 +168,7 @@ reader monad for the type \texttt{IO}.
 >   | tc == qPtrId = Just Cam.TypePtr
 >   | tc == qFunPtrId = Just Cam.TypeFunPtr
 >   | tc == qStablePtrId = Just Cam.TypeStablePtr
-> cRetType ty = internalError ("ccall: invalid result type " ++ show ty)
+> cRetType ty = Just Cam.TypeNodePtr
 
 \end{verbatim}
 The selector functions, which are introduced by the compiler in order

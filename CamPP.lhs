@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CamPP.lhs 1866 2006-03-02 17:34:02Z wlux $
+% $Id: CamPP.lhs 2290 2007-06-19 21:48:25Z wlux $
 %
-% Copyright (c) 2002-2006, Wolfgang Lux
+% Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \subsection{Pretty-printing Abstract Machine Code}
@@ -47,8 +47,7 @@
 > ppStmt (Enter v) = ppKW "enter" <+> ppName v
 > ppStmt (Exec f vs) = ppKW "exec" <+> ppName f <> ppNames vs
 > ppStmt (CCall h ty cc) =
->   ppKW "ccall" <+> maybe empty ppHeader h
->                <+> parens (ppCRetType ty) <> ppCCall cc
+>   ppKW "ccall" <+> maybe empty ppHeader h <+> ppCRetType ty <> ppCCall cc
 >   where ppHeader h = char '"' <> text h <> char '"'
 > ppStmt (Seq st1 st2) = ppStmt0 st1 <> semi $$ ppStmt st2
 > ppStmt (Switch rf v cases) =
@@ -104,19 +103,20 @@
 
 > ppCFunCall :: Doc -> [(CArgType,Name)] -> Doc
 > ppCFunCall f xs = f <> ppList arg xs
->   where arg (ty,v) = parens (ppCArgType ty) <> ppName v
+>   where arg (ty,v) = ppCArgType ty <> ppName v
 
 > ppCArgType :: CArgType -> Doc
-> ppCArgType TypeBool = ppKW "bool"
-> ppCArgType TypeChar = ppKW "char"
-> ppCArgType TypeInt = ppKW "int"
-> ppCArgType TypeFloat = ppKW "float"
-> ppCArgType TypePtr = ppKW "pointer"
-> ppCArgType TypeFunPtr = ppKW "function"
-> ppCArgType TypeStablePtr = ppKW "stable"
+> ppCArgType TypeBool = parens (ppKW "bool")
+> ppCArgType TypeChar = parens (ppKW "char")
+> ppCArgType TypeInt = parens (ppKW "int")
+> ppCArgType TypeFloat = parens (ppKW "float")
+> ppCArgType TypePtr = parens (ppKW "pointer")
+> ppCArgType TypeFunPtr = parens (ppKW "function")
+> ppCArgType TypeStablePtr = parens (ppKW "stable")
+> ppCArgType TypeNodePtr = text ""          -- Do not replace text "" by empty!
 
 > ppCRetType :: CRetType -> Doc
-> ppCRetType = maybe (ppKW "unit") ppCArgType
+> ppCRetType = maybe (parens (ppKW "unit")) ppCArgType
 
 > ppKW :: String -> Doc
 > ppKW kw = char '.' <> text kw

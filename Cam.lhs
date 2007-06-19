@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Cam.lhs 1866 2006-03-02 17:34:02Z wlux $
+% $Id: Cam.lhs 2290 2007-06-19 21:48:25Z wlux $
 %
-% Copyright (c) 1998-2006, Wolfgang Lux
+% Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Cam.lhs}
@@ -37,7 +37,7 @@ declaration comprises the function's name, arguments, and code.
 > splitCam = foldr split ([],[],[])
 >   where split (ImportDecl m) ~(ms,ds,fs) = (m:ms,ds,fs)
 >         split (DataDecl t vs cs) ~(ms,ds,fs) = (ms,(t,vs,cs):ds,fs)
->         split (FunctionDecl f vs is) ~(ms,dss,fs) = (ms,dss,(f,vs,is):fs)
+>         split (FunctionDecl f vs st) ~(ms,dss,fs) = (ms,dss,(f,vs,st):fs)
 
 \end{verbatim}
 \subsection{Instruction Set}
@@ -187,16 +187,19 @@ cases in a switch statement.
 \end{verbatim}
 Argument and result types of C functions are restricted to booleans,
 characters, integer numbers, floating-point numbers, and (untyped)
-pointers and function pointers at present. The result type of a C
-function may be omitted when the function is called only for its side
-effect. In this case, the abstract machine will use the unit
-constructor \texttt{()} as result of the call.
+pointers and function pointers at present. Two special cases are
+present in order to handle passing stable and node pointers to and
+from foreign functions. Passing node pointers is an experimental
+feature that should be used with care. The result type of a C function
+may be omitted when the function is called only for its side effect.
+In this case, the abstract machine will use the unit constructor
+\texttt{()} as result of the call.
 \begin{verbatim}
 
 > type CRetType = Maybe CArgType
 > data CArgType =
 >     TypeBool | TypeChar | TypeInt | TypeFloat
->   | TypePtr | TypeFunPtr | TypeStablePtr
+>   | TypePtr | TypeFunPtr | TypeStablePtr | TypeNodePtr
 >   deriving (Eq,Show)
 
 \end{verbatim}

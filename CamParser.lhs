@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CamParser.lhs 2285 2007-06-19 12:23:18Z wlux $
+% $Id: CamParser.lhs 2290 2007-06-19 21:48:25Z wlux $
 %
-% Copyright (c) 1999-2006, Wolfgang Lux
+% Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CamParser.lhs}
@@ -248,8 +248,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 
 > lexNumber :: (Token -> L a) -> FailL a -> (String -> String) -> L a
 > lexNumber success fail f p cs
->   | null digits =
->       fail p ("Digit expected after " ++ show (head (f ""))) (next p) cs
+>   | null digits = fail p ("Digit expected after " ++ show (head (f ""))) p cs
 >   | otherwise = lexOptFraction float int p' rest
 >   where p' = incr p (length digits)
 >         (digits,rest) = span isDigit cs
@@ -334,7 +333,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 >    <|> Enter <$-> keyword KW_enter <*> checkName
 >    <|> Exec <$-> keyword KW_exec <*> checkName <*> nameList
 >    <|> CCall <$-> keyword KW_ccall <*> (Just <$> string `opt` Nothing)
->              <*> parens cRetType <*> cCall
+>              <*> (parens cRetType `opt` Just TypeNodePtr) <*> cCall
 >    <|> Seq <$> stmt0 <*-> checkSemi <*> stmt
 >    <|> flip Switch <$-> keyword KW_switch <*> checkName <*> rf
 >                    <*> braces cases
@@ -376,6 +375,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 >                     <*> parenList arg
 >     <|> StaticAddr <$-> ampersand <*> (show <$> checkName)
 >   where arg = (,) <$> parens cArgType <*> checkName
+>           <|> (,) TypeNodePtr <$> name
 
 > cRetType :: Parser Token CRetType a
 > cRetType = Nothing <$-> keyword KW_unit <|> Just <$> cArgType

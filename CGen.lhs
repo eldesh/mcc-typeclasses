@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2282 2007-06-19 12:13:35Z wlux $
+% $Id: CGen.lhs 2290 2007-06-19 21:48:25Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -707,6 +707,7 @@ because constants are allocated per block, not per CPS function.
 > ctypeSize TypePtr = CExpr "ptr_node_size"
 > ctypeSize TypeFunPtr = CExpr "ptr_node_size"
 > ctypeSize TypeStablePtr = CExpr "ptr_node_size"
+> ctypeSize TypeNodePtr = CInt 0
 
 > closureNodeSize, suspendNodeSize :: Int -> CExpr
 > closureNodeSize n = CFunCall "closure_node_size" [CInt n]
@@ -1201,6 +1202,7 @@ first loads this address into a temporary variable and then boxes it.
 >   [CLocalVar (ctype TypeFunPtr) v (Just (CField e "p.ptr"))]
 > unbox TypeStablePtr v e =
 >   [CLocalVar (ctype TypeStablePtr) v (Just (CField e "p.ptr"))]
+> unbox TypeNodePtr v e = [CLocalVar (ctype TypeNodePtr) v (Just e)]
 
 > unboxFunPtr :: CRetType -> [CArgType] -> String -> CExpr -> CStmt
 > unboxFunPtr ty0 tys v e = CLocalVar ty v (Just (CCast ty (CField e "p.ptr")))
@@ -1265,6 +1267,7 @@ first loads this address into a temporary variable and then boxes it.
 >       setField v "info" (addr "stabptr_info"),
 >       setField v "p.ptr" e,
 >       incrAlloc (ctypeSize TypeStablePtr)]]
+> box (Just TypeNodePtr) v e = [localVar v (Just e)]
 
 > ctype :: CArgType -> CType
 > ctype TypeBool = intType
@@ -1274,6 +1277,7 @@ first loads this address into a temporary variable and then boxes it.
 > ctype TypePtr = voidPtrType
 > ctype TypeFunPtr = voidPtrType
 > ctype TypeStablePtr = voidPtrType
+> ctype TypeNodePtr = nodePtrType
 
 \end{verbatim}
 As a convenience to the user, we strip the decoration of auxiliary

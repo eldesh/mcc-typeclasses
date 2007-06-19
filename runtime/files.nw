@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2280 2007-06-19 11:40:35Z wlux $
+% $Id: files.nw 2283 2007-06-19 12:14:56Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -1928,7 +1928,7 @@ init_files(int bmode, long bsize)
 	}
 	else
 	    buffer = NULL;
-	if ( setvbuf(stdout, buffer, bmode, bmode) == -1 )
+	if ( setvbuf(stdout, buffer, bmode, bsize) == -1 )
 	    sys_error("setvbuf (stdout)");
 	stdout_node.bmode  = bmode;
 	stdout_node.bsize  = bsize;

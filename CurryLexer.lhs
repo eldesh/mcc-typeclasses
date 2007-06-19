@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryLexer.lhs 2171 2007-04-24 21:53:08Z wlux $
+% $Id: CurryLexer.lhs 2285 2007-06-19 12:23:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -9,7 +9,8 @@
 In this section a lexer for Curry is implemented.
 \begin{verbatim}
 
-> module CurryLexer where
+> module CurryLexer(Token(..), Category(..), Attributes(..), Pragma(..),
+>                   lexFile, lexer) where
 > import LexComb
 > import Position
 > import Map
@@ -289,32 +290,32 @@ Lexing functions
 > lexer success fail = skipBlanks
 >   where -- skipBlanks moves past whitespace and comments
 >         skipBlanks p [] bol = success p (tok EOF) p [] bol
->         skipBlanks p ('\t':s) bol = skipBlanks (tab p) s bol
->         skipBlanks p ('\n':s) _ = skipBlanks (nl p) s True
->         skipBlanks p ('-':'-':s) _ =
->           skipBlanks (nl p) (drop 1 (dropWhile (/= '\n') s)) True
->         skipBlanks p ('{':'-':'#':s) bol =
->           (if bol then pragmaBOL p ('{':'-':'#':s) else pragma)
->             (success p) (nestedComment p skipBlanks fail) (incr p 3) s bol
->         skipBlanks p ('{':'-':s) bol =
->           nestedComment p skipBlanks fail (incr p 2) s bol
->         skipBlanks p (c:s) bol
->           | isSpace c = skipBlanks (next p) s bol
+>         skipBlanks p ('\t':cs) bol = skipBlanks (tab p) cs bol
+>         skipBlanks p ('\n':cs) _ = skipBlanks (nl p) cs True
+>         skipBlanks p ('-':'-':cs) _ =
+>           skipBlanks (nl p) (drop 1 (dropWhile (/= '\n') cs)) True
+>         skipBlanks p ('{':'-':'#':cs) bol =
+>           (if bol then pragmaBOL p ('{':'-':'#':cs) else pragma)
+>             (success p) (nestedComment p skipBlanks fail) (incr p 3) cs bol
+>         skipBlanks p ('{':'-':cs) bol =
+>           nestedComment p skipBlanks fail (incr p 2) cs bol
+>         skipBlanks p (c:cs) bol
+>           | isSpace c = skipBlanks (next p) cs bol
 >           | otherwise =
->               (if bol then lexBOL else lexToken) success fail p (c:s) bol
+>               (if bol then lexBOL else lexToken) success fail p (c:cs) bol
 
 > nestedComment :: Position -> L a -> FailL a -> L a
 > nestedComment p0 _ fail p [] =
 >   fail p0 "Unterminated nested comment at end-of-file" p []
-> nestedComment _ success _ p ('-':'}':s) = success (incr p 2) s
-> nestedComment p0 success fail p ('{':'-':s) =
->   nestedComment p (nestedComment p0 success fail) fail (incr p 2) s
-> nestedComment p0 success fail p ('\t':s) =
->   nestedComment p0 success fail (tab p) s
-> nestedComment p0 success fail p ('\n':s) =
->   nestedComment p0 success fail (nl p) s
-> nestedComment p0 success fail p (_:s) =
->   nestedComment p0 success fail (next p) s
+> nestedComment _ success _ p ('-':'}':cs) = success (incr p 2) cs
+> nestedComment p0 success fail p ('{':'-':cs) =
+>   nestedComment p (nestedComment p0 success fail) fail (incr p 2) cs
+> nestedComment p0 success fail p ('\t':cs) =
+>   nestedComment p0 success fail (tab p) cs
+> nestedComment p0 success fail p ('\n':cs) =
+>   nestedComment p0 success fail (nl p) cs
+> nestedComment p0 success fail p (_:cs) =
+>   nestedComment p0 success fail (next p) cs
 
 \end{verbatim}
 Lexing pragmas is a little bit complicated because lexically they
@@ -337,41 +338,42 @@ backs up to the beginning of the pragma in that case so that
 \begin{verbatim}
 
 > pragmaBOL :: Position -> String -> (Token -> L a) -> L a -> L a
-> pragmaBOL _ _ success noPragma p s _ [] = pragma success noPragma p s False []
-> pragmaBOL p0 s0 success noPragma p s _ ctxt@(n:_)
->   | col < n = pragma insertRightBrace noPragma p s True ctxt
->   | col == n = pragma insertSemicolon noPragma p s True ctxt
+> pragmaBOL _ _ success noPragma p cs _ [] =
+>   pragma success noPragma p cs False []
+> pragmaBOL p0 s0 success noPragma p cs _ ctxt@(n:_)
+>   | col < n = pragma insertRightBrace noPragma p cs True ctxt
+>   | col == n = pragma insertSemicolon noPragma p cs True ctxt
 >   | otherwise =
->       pragma (\t p s _ -> success t p s False) noPragma p s True ctxt
+>       pragma (\t p cs _ -> success t p cs False) noPragma p cs True ctxt
 >   where col = column p0
 >         insertRightBrace _ _ _ _ = success (tok VRightBrace) p0 s0 True
 >         insertSemicolon _ _ _ _ = success (tok VSemicolon) p0 s0 False
 
 > pragma :: (Token -> L a) -> L a -> L a
 > pragma _ noPragma p [] = noPragma p []
-> pragma success noPragma p (c:s)
->   | c == '\t' = pragma success noPragma (tab p) s
->   | c == '\n' = pragma success noPragma (nl p) s
->   | isSpace c = pragma success noPragma (next p) s
+> pragma success noPragma p (c:cs)
+>   | c == '\t' = pragma success noPragma (tab p) cs
+>   | c == '\n' = pragma success noPragma (nl p) cs
+>   | isSpace c = pragma success noPragma (next p) cs
 >   | isAlpha c =
->       maybe (noPragma (next p) s)
+>       maybe (noPragma (next p) cs)
 >             (\t -> success (idTok (PragmaBegin t) [] ("{-# " ++ keyword))
 >                            (incr p (length keyword)) rest)
 >             (lookupFM keyword pragma_keywords)
->   | otherwise = noPragma p (c:s)
->   where (keyword,rest) = span isIdent (c:s)
+>   | otherwise = noPragma p (c:cs)
+>   where (keyword,rest) = span isIdent (c:cs)
 
 > lexBOL :: SuccessL a -> FailL a -> L a
-> lexBOL success fail p s _ [] = lexToken success fail p s False []
-> lexBOL success fail p s _ ctxt@(n:_)
->   | col < n = success p (tok VRightBrace) p s True ctxt
->   | col == n = success p (tok VSemicolon) p s False ctxt
->   | otherwise = lexToken success fail p s False ctxt
+> lexBOL success fail p cs _ [] = lexToken success fail p cs False []
+> lexBOL success fail p cs _ ctxt@(n:_)
+>   | col < n = success p (tok VRightBrace) p cs True ctxt
+>   | col == n = success p (tok VSemicolon) p cs False ctxt
+>   | otherwise = lexToken success fail p cs False ctxt
 >   where col = column p
 
 > lexToken :: SuccessL a -> FailL a -> L a
 > lexToken success fail p [] = success p (tok EOF) p []
-> lexToken success fail p (c:s)
+> lexToken success fail p (c:cs)
 >   | c == '(' = token LeftParen
 >   | c == ')' = token RightParen
 >   | c == ',' = token Comma
@@ -382,207 +384,203 @@ backs up to the beginning of the pragma in that case so that
 >   | c == '`' = token Backquote
 >   | c == '{' = token LeftBrace
 >   | c == '}' = token RightBrace
->   | c == '\'' = lexChar p success fail (next p) s
->   | c == '\"' = lexString p success fail (next p) s
->   | isAlpha c = lexIdent (success p) p (c:s)
->   | isSym c = lexSym (success p) p (c:s)
->   | isDigit c = lexNumber (success p) p (c:s)
->   | otherwise = fail p ("Illegal character " ++ show c) p s
->   where token t = success p (tok t) (next p) s
+>   | c == '\'' = lexChar p (success p . charTok) fail (next p) cs
+>   | c == '\"' = lexString p (success p . stringTok) fail (next p) cs
+>   | isAlpha c = lexIdent (success p) p (c:cs)
+>   | isSym c = lexSym (success p) p (c:cs)
+>   | isDigit c = lexNumber (success p) p (c:cs)
+>   | otherwise = fail p ("Illegal character " ++ show c) p cs
+>   where token t = success p (tok t) (next p) cs
 
 > lexIdent :: (Token -> L a) -> L a
-> lexIdent cont p s =
+> lexIdent cont p cs =
 >   maybe (lexOptQual cont (token Id) [ident]) (cont . token)
 >         (lookupFM ident reserved_and_special_ids)
 >         (incr p (length ident)) rest
->   where (ident,rest) = span isIdent s
+>   where (ident,rest) = span isIdent cs
 >         token t = idTok t [] ident
 
 > lexSym :: (Token -> L a) -> L a
-> lexSym cont p s
->   | "#-}" `isPrefixOf` s =            -- 3 == length "#-}"
->       cont (idTok PragmaEnd [] "#-}") (incr p 3) (drop 3 s)
+> lexSym cont p cs
+>   | "#-}" `isPrefixOf` cs =           -- 3 == length "#-}"
+>       cont (idTok PragmaEnd [] "#-}") (incr p 3) (drop 3 cs)
 >   | otherwise =
 >       cont (token (maybe Sym id (lookupFM sym reserved_and_special_ops)))
 >            (incr p (length sym)) rest
->   where (sym,rest) = span isSym s
+>   where (sym,rest) = span isSym cs
 >         token t = idTok t [] sym
 
 > lexOptQual :: (Token -> L a) -> Token -> [String] -> L a
-> lexOptQual cont token mIdent p ('.':c:s)
->   | isAlpha c = lexQualIdent cont identCont mIdent (next p) (c:s)
->   | isSym c = lexQualSym cont identCont mIdent (next p) (c:s)
->   where identCont _ _ = cont token p ('.':c:s)
-> lexOptQual cont token mIdent p s = cont token p s
+> lexOptQual cont token mIdent p ('.':c:cs)
+>   | isAlpha c = lexQualIdent cont identCont mIdent (next p) (c:cs)
+>   | isSym c = lexQualSym cont identCont mIdent (next p) (c:cs)
+>   where identCont _ _ = cont token p ('.':c:cs)
+> lexOptQual cont token mIdent p cs = cont token p cs
 
 > lexQualIdent :: (Token -> L a) -> L a -> [String] -> L a
-> lexQualIdent cont identCont mIdent p s =
+> lexQualIdent cont identCont mIdent p cs =
 >   maybe (lexOptQual cont (idTok QId mIdent ident) (mIdent ++ [ident]))
 >         (const identCont)
 >         (lookupFM ident reserved_ids)
 >         (incr p (length ident)) rest
->   where (ident,rest) = span isIdent s
+>   where (ident,rest) = span isIdent cs
 
 > lexQualSym :: (Token -> L a) -> L a -> [String] -> L a
-> lexQualSym cont identCont mIdent p s =
+> lexQualSym cont identCont mIdent p cs =
 >   maybe (cont (idTok QSym mIdent sym)) (const identCont)
 >         (lookupFM sym reserved_ops)
 >         (incr p (length sym)) rest
->   where (sym,rest) = span isSym s
+>   where (sym,rest) = span isSym cs
 
 > lexNumber :: (Token -> L a) -> L a
-> lexNumber cont p ('0':c:s)
->   | c `elem` "oO" = lexOctal cont nullCont (incr p 2) s
->   | c `elem` "xX" = lexHexadecimal cont nullCont (incr p 2) s
->   where nullCont _ _ = cont (intTok 10 "0") (next p) (c:s)
-> lexNumber cont p s =
->   lexOptFraction cont (intTok 10 digits) digits (incr p (length digits)) rest
->   where (digits,rest) = span isDigit s
+> lexNumber cont p ('0':c:cs)
+>   | c `elem` "oO" = lexNonDecimal 8 isOctit cont nullCont (incr p 2) cs
+>   | c `elem` "xX" = lexNonDecimal 16 isHexit cont nullCont (incr p 2) cs
+>   where nullCont _ _ = cont (intTok 10 "0") (next p) (c:cs)
+> lexNumber cont p cs = lexOptFraction float int p' rest
+>   where p' = incr p (length digits)
+>         (digits,rest) = span isDigit cs
+>         int _ _ = cont (intTok 10 digits) p' rest
+>         float frac exp = cont (floatTok digits frac exp)
 
-> lexOctal :: (Token -> L a) -> L a -> L a
-> lexOctal cont nullCont p s
->   | null digits = nullCont undefined undefined
->   | otherwise = cont (intTok 8 digits) (incr p (length digits)) rest
->   where (digits,rest) = span isOctit s
+> lexNonDecimal :: Int -> (Char -> Bool) -> (Token -> L a) -> L a -> L a
+> lexNonDecimal base isDigit cont nullCont p cs
+>   | null digits = nullCont p cs
+>   | otherwise = cont (intTok base digits) (incr p (length digits)) rest
+>   where (digits,rest) = span isDigit cs
 
-> lexHexadecimal :: (Token -> L a) -> L a -> L a
-> lexHexadecimal cont nullCont p s
->   | null digits = nullCont undefined undefined
->   | otherwise = cont (intTok 16 digits) (incr p (length digits)) rest
->   where (digits,rest) = span isHexit s
+> lexOptFraction :: (String -> Int -> L a) -> L a -> L a
+> lexOptFraction cont noFrac p ('.':cs) = lexFraction cont noFrac (next p) cs
+> lexOptFraction cont noFrac p cs = lexOptExponent (cont "") noFrac p cs
 
-> lexOptFraction :: (Token -> L a) -> Token -> String -> L a
-> lexOptFraction cont _ mant p ('.':c:s)
->   | isDigit c = lexOptExponent cont (floatTok mant frac 0) mant frac
->                                (incr p (length frac+1)) rest
->   where (frac,rest) = span isDigit (c:s)
-> lexOptFraction cont token mant p (c:s)
->   | c `elem` "eE" = lexSignedExponent cont intCont mant "" (next p) s
->   where intCont _ _ = cont token p (c:s)
-> lexOptFraction cont token _ p s = cont token p s
+> lexFraction :: (String -> Int -> L a) -> L a -> L a
+> lexFraction cont noFrac p cs
+>   | null frac = noFrac p cs
+>   | otherwise = lexOptExponent (cont frac) noExp p' rest
+>   where p' = incr p (length frac)
+>         (frac,rest) = span isDigit cs
+>         noExp _ _ = cont frac 0 p' rest
 
-> lexOptExponent :: (Token -> L a) -> Token -> String -> String -> L a
-> lexOptExponent cont token mant frac p (c:s)
->   | c `elem` "eE" = lexSignedExponent cont floatCont mant frac (next p) s
->   where floatCont _ _ = cont token p (c:s)
-> lexOptExponent cont token mant frac p s = cont token p s
+> lexOptExponent :: (Int -> L a) -> L a -> L a
+> lexOptExponent cont noExp p (c:cs)
+>   | c `elem` "eE" = lexSignedExponent cont noExp (next p) cs
+> lexOptExponent _ noExp p cs = noExp p cs
 
-> lexSignedExponent :: (Token -> L a) -> L a -> String -> String -> L a
-> lexSignedExponent cont floatCont mant frac p ('+':c:s)
->   | isDigit c = lexExponent cont mant frac id (next p) (c:s)
-> lexSignedExponent cont floatCont mant frac p ('-':c:s)
->   | isDigit c = lexExponent cont mant frac negate (next p) (c:s)
-> lexSignedExponent cont floatCont mant frac p (c:s)
->   | isDigit c = lexExponent cont mant frac id p (c:s)
-> lexSignedExponent cont floatCont mant frac p s = floatCont p s
+> lexSignedExponent :: (Int -> L a) -> L a -> L a
+> lexSignedExponent cont noExp p ('+':cs) = lexExponent cont noExp (next p) cs
+> lexSignedExponent cont noExp p ('-':cs) =
+>   lexExponent (cont . negate) noExp (next p) cs
+> lexSignedExponent cont noExp p cs = lexExponent cont noExp p cs
 
-> lexExponent :: (Token -> L a) -> String -> String -> (Int -> Int) -> L a
-> lexExponent cont mant frac expSign p s =
->   cont (floatTok mant frac exp) (incr p (length digits)) rest
->   where (digits,rest) = span isDigit s
->         exp = expSign (convertIntegral 10 digits)
+> lexExponent :: (Int -> L a) -> L a -> L a
+> lexExponent cont noExp p cs
+>   | null digits = noExp p cs
+>   | otherwise = cont (convertIntegral 10 digits) (incr p (length digits)) rest
+>   where (digits,rest) = span isDigit cs
 
-> lexChar :: Position -> SuccessL a -> FailL a -> L a
+> lexChar :: Position -> (Char -> L a) -> FailL a -> L a
 > lexChar p0 success fail p [] = fail p0 "Illegal character constant" p []
-> lexChar p0 success fail p (c:s)
->   | c == '\\' = lexEscape p (lexCharEnd p0 success fail) fail (next p) s
->   | c == '\n' = fail p0 "Illegal character constant" p (c:s)
->   | c == '\t' = lexCharEnd p0 success fail c (tab p) s
->   | otherwise = lexCharEnd p0 success fail c (next p) s
+> lexChar p0 success fail p (c:cs)
+>   | c == '\\' = lexEscape p (lexCharChar p0 success fail) fail (next p) cs
+>   | c == '\n' = fail p0 "Illegal character constant" p (c:cs)
+>   | c == '\t' = lexCharChar p0 success fail c (tab p) cs
+>   | otherwise = lexCharChar p0 success fail c (next p) cs
 
-> lexCharEnd :: Position -> SuccessL a -> FailL a -> Char -> L a
-> lexCharEnd p0 success fail c p ('\'':s) = success p0 (charTok c) (next p) s
-> lexCharEnd p0 success fail c p s =
->   fail p0 "Improperly terminated character constant" p s
+> lexCharChar :: Position -> (Char -> L a) -> FailL a -> Char -> L a
+> lexCharChar p0 success fail c = lexCharEnd p0 (success c) fail
 
-> lexString :: Position -> SuccessL a -> FailL a -> L a
-> lexString p0 success fail = lexStringRest p0 success fail ""
+> lexCharEnd :: Position -> L a -> FailL a -> L a
+> lexCharEnd _ success _ p ('\'':cs) = success (next p) cs
+> lexCharEnd p0 _ fail p cs =
+>   fail p0 "Improperly terminated character constant" p cs
 
-> lexStringRest :: Position -> SuccessL a -> FailL a -> String -> L a
-> lexStringRest p0 success fail s0 p [] = 
+> lexString :: Position -> (String -> L a) -> FailL a -> L a
+> lexString p0 _ fail p [] =
 >   fail p0 "Improperly terminated string constant" p []
-> lexStringRest p0 success fail s0 p (c:s)
->   | c == '\\' =
->       lexStringEscape p (lexStringRest p0 success fail) fail s0 (next p) s
->   | c == '\"' = success p0 (stringTok (reverse s0)) (next p) s
->   | c == '\n' = fail p0 "Improperly terminated string constant" p []
->   | c == '\t' = lexStringRest p0 success fail (c:s0) (tab p) s
->   | otherwise = lexStringRest p0 success fail (c:s0) (next p) s
+> lexString p0 success fail p (c:cs)
+>   | c == '\\' = lexStringEscape p0 p success fail (next p) cs
+>   | c == '\"' = success "" (next p) cs
+>   | c == '\n' = fail p0 "Improperly terminated string constant" p (c:cs)
+>   | c == '\t' = lexStringChar p0 success fail c (tab p) cs
+>   | otherwise = lexStringChar p0 success fail c (next p) cs
 
-> lexStringEscape :: Position -> (String -> L a) -> FailL a -> String -> L a
-> lexStringEscape p0 success fail s0 p [] = lexEscape p0 undefined fail p []
-> lexStringEscape p0 success fail s0 p (c:s)
->   | c == '&' = success s0 (next p) s
->   | isSpace c = lexStringGap (success s0) fail p (c:s)
->   | otherwise = lexEscape p0 (success . (:s0)) fail p (c:s)
+> lexStringChar :: Position -> (String -> L a) -> FailL a -> Char -> L a
+> lexStringChar p0 success fail c = lexString p0 (success . (c:)) fail
+
+> lexStringEscape :: Position -> Position -> (String -> L a) -> FailL a -> L a
+> lexStringEscape _ p1 _ fail p [] = lexEscape p1 undefined fail p []
+> lexStringEscape p0 p1 success fail p (c:cs)
+>   | c == '&' = lexString p0 success fail (next p) cs
+>   | isSpace c = lexStringGap (lexString p0 success fail) fail p (c:cs)
+>   | otherwise = lexEscape p1 (lexStringChar p0 success fail) fail p (c:cs)
 
 > lexStringGap :: L a -> FailL a -> L a
-> lexStringGap success fail p [] = fail p "End of file in string gap" p []
-> lexStringGap success fail p (c:s)
->   | c == '\\' = success (next p) s
->   | c == '\t' = lexStringGap success fail (tab p) s
->   | c == '\n' = lexStringGap success fail (nl p) s
->   | isSpace c = lexStringGap success fail (next p) s
->   | otherwise = fail p ("Illegal character in string gap " ++ show c) p s
+> lexStringGap _ fail p [] = fail p "End of file in string gap" p []
+> lexStringGap success fail p (c:cs)
+>   | c == '\\' = success (next p) cs
+>   | c == '\t' = lexStringGap success fail (tab p) cs
+>   | c == '\n' = lexStringGap success fail (nl p) cs
+>   | isSpace c = lexStringGap success fail (next p) cs
+>   | otherwise = fail p ("Illegal character in string gap " ++ show c) p (c:cs)
 
 > lexEscape :: Position -> (Char -> L a) -> FailL a -> L a
-> lexEscape p0 success fail p ('a':s) = success '\a' (next p) s
-> lexEscape p0 success fail p ('b':s) = success '\b' (next p) s
-> lexEscape p0 success fail p ('f':s) = success '\f' (next p) s
-> lexEscape p0 success fail p ('n':s) = success '\n' (next p) s
-> lexEscape p0 success fail p ('r':s) = success '\r' (next p) s
-> lexEscape p0 success fail p ('t':s) = success '\t' (next p) s
-> lexEscape p0 success fail p ('v':s) = success '\v' (next p) s
-> lexEscape p0 success fail p ('\\':s) = success '\\' (next p) s
-> lexEscape p0 success fail p ('"':s) = success '\"' (next p) s
-> lexEscape p0 success fail p ('\'':s) = success '\'' (next p) s
-> lexEscape p0 success fail p ('^':c:s)
+> lexEscape _ success _ p ('a':cs) = success '\a' (next p) cs
+> lexEscape _ success _ p ('b':cs) = success '\b' (next p) cs
+> lexEscape _ success _ p ('f':cs) = success '\f' (next p) cs
+> lexEscape _ success _ p ('n':cs) = success '\n' (next p) cs
+> lexEscape _ success _ p ('r':cs) = success '\r' (next p) cs
+> lexEscape _ success _ p ('t':cs) = success '\t' (next p) cs
+> lexEscape _ success _ p ('v':cs) = success '\v' (next p) cs
+> lexEscape _ success _ p ('\\':cs) = success '\\' (next p) cs
+> lexEscape _ success _ p ('\"':cs) = success '\"' (next p) cs
+> lexEscape _ success _ p ('\'':cs) = success '\'' (next p) cs
+> lexEscape _ success _ p ('^':c:cs)
 >   | isUpper c || c `elem` "@[\\]^_" =
->       success (chr (ord c `mod` 32)) (incr p 2) s
-> lexEscape p0 success fail p ('o':c:s)
->   | isOctit c = numEscape p0 success fail 8 isOctit (next p) (c:s)
-> lexEscape p0 success fail p ('x':c:s)
->   | isHexit c = numEscape p0 success fail 16 isHexit (next p) (c:s)
-> lexEscape p0 success fail p (c:s)
->   | isDigit c = numEscape p0 success fail 10 isDigit p (c:s)
-> lexEscape p0 success fail p s = asciiEscape p0 success fail p s
+>       success (chr (ord c `mod` 32)) (incr p 2) cs
+> lexEscape p0 success fail p ('o':c:cs)
+>   | isOctit c = numEscape 8 isOctit p0 success fail (next p) (c:cs)
+> lexEscape p0 success fail p ('x':c:cs)
+>   | isHexit c = numEscape 16 isHexit p0 success fail (next p) (c:cs)
+> lexEscape p0 success fail p (c:cs)
+>   | isDigit c = numEscape 10 isDigit p0 success fail p (c:cs)
+> lexEscape p0 success fail p cs = asciiEscape p0 success fail p cs
 
 > asciiEscape :: Position -> (Char -> L a) -> FailL a -> L a
-> asciiEscape p0 success fail p ('N':'U':'L':s) = success '\NUL' (incr p 3) s
-> asciiEscape p0 success fail p ('S':'O':'H':s) = success '\SOH' (incr p 3) s
-> asciiEscape p0 success fail p ('S':'T':'X':s) = success '\STX' (incr p 3) s
-> asciiEscape p0 success fail p ('E':'T':'X':s) = success '\ETX' (incr p 3) s
-> asciiEscape p0 success fail p ('E':'O':'T':s) = success '\EOT' (incr p 3) s
-> asciiEscape p0 success fail p ('E':'N':'Q':s) = success '\ENQ' (incr p 3) s
-> asciiEscape p0 success fail p ('A':'C':'K':s) = success '\ACK' (incr p 3) s 
-> asciiEscape p0 success fail p ('B':'E':'L':s) = success '\BEL' (incr p 3) s
-> asciiEscape p0 success fail p ('B':'S':s) = success '\BS' (incr p 2) s
-> asciiEscape p0 success fail p ('H':'T':s) = success '\HT' (incr p 2) s
-> asciiEscape p0 success fail p ('L':'F':s) = success '\LF' (incr p 2) s
-> asciiEscape p0 success fail p ('V':'T':s) = success '\VT' (incr p 2) s
-> asciiEscape p0 success fail p ('F':'F':s) = success '\FF' (incr p 2) s
-> asciiEscape p0 success fail p ('C':'R':s) = success '\CR' (incr p 2) s
-> asciiEscape p0 success fail p ('S':'O':s) = success '\SO' (incr p 2) s
-> asciiEscape p0 success fail p ('S':'I':s) = success '\SI' (incr p 2) s
-> asciiEscape p0 success fail p ('D':'L':'E':s) = success '\DLE' (incr p 3) s 
-> asciiEscape p0 success fail p ('D':'C':'1':s) = success '\DC1' (incr p 3) s
-> asciiEscape p0 success fail p ('D':'C':'2':s) = success '\DC2' (incr p 3) s
-> asciiEscape p0 success fail p ('D':'C':'3':s) = success '\DC3' (incr p 3) s
-> asciiEscape p0 success fail p ('D':'C':'4':s) = success '\DC4' (incr p 3) s
-> asciiEscape p0 success fail p ('N':'A':'K':s) = success '\NAK' (incr p 3) s
-> asciiEscape p0 success fail p ('S':'Y':'N':s) = success '\SYN' (incr p 3) s
-> asciiEscape p0 success fail p ('E':'T':'B':s) = success '\ETB' (incr p 3) s
-> asciiEscape p0 success fail p ('C':'A':'N':s) = success '\CAN' (incr p 3) s 
-> asciiEscape p0 success fail p ('E':'M':s) = success '\EM' (incr p 2) s
-> asciiEscape p0 success fail p ('S':'U':'B':s) = success '\SUB' (incr p 3) s
-> asciiEscape p0 success fail p ('E':'S':'C':s) = success '\ESC' (incr p 3) s
-> asciiEscape p0 success fail p ('F':'S':s) = success '\FS' (incr p 2) s
-> asciiEscape p0 success fail p ('G':'S':s) = success '\GS' (incr p 2) s
-> asciiEscape p0 success fail p ('R':'S':s) = success '\RS' (incr p 2) s
-> asciiEscape p0 success fail p ('U':'S':s) = success '\US' (incr p 2) s
-> asciiEscape p0 success fail p ('S':'P':s) = success '\SP' (incr p 2) s
-> asciiEscape p0 success fail p ('D':'E':'L':s) = success '\DEL' (incr p 3) s
-> asciiEscape p0 success fail p s = fail p0 "Illegal escape sequence" p s
+> asciiEscape _ success _ p ('N':'U':'L':cs) = success '\NUL' (incr p 3) cs
+> asciiEscape _ success _ p ('S':'O':'H':cs) = success '\SOH' (incr p 3) cs
+> asciiEscape _ success _ p ('S':'T':'X':cs) = success '\STX' (incr p 3) cs
+> asciiEscape _ success _ p ('E':'T':'X':cs) = success '\ETX' (incr p 3) cs
+> asciiEscape _ success _ p ('E':'O':'T':cs) = success '\EOT' (incr p 3) cs
+> asciiEscape _ success _ p ('E':'N':'Q':cs) = success '\ENQ' (incr p 3) cs
+> asciiEscape _ success _ p ('A':'C':'K':cs) = success '\ACK' (incr p 3) cs 
+> asciiEscape _ success _ p ('B':'E':'L':cs) = success '\BEL' (incr p 3) cs
+> asciiEscape _ success _ p ('B':'S':cs) = success '\BS' (incr p 2) cs
+> asciiEscape _ success _ p ('H':'T':cs) = success '\HT' (incr p 2) cs
+> asciiEscape _ success _ p ('L':'F':cs) = success '\LF' (incr p 2) cs
+> asciiEscape _ success _ p ('V':'T':cs) = success '\VT' (incr p 2) cs
+> asciiEscape _ success _ p ('F':'F':cs) = success '\FF' (incr p 2) cs
+> asciiEscape _ success _ p ('C':'R':cs) = success '\CR' (incr p 2) cs
+> asciiEscape _ success _ p ('S':'O':cs) = success '\SO' (incr p 2) cs
+> asciiEscape _ success _ p ('S':'I':cs) = success '\SI' (incr p 2) cs
+> asciiEscape _ success _ p ('D':'L':'E':cs) = success '\DLE' (incr p 3) cs 
+> asciiEscape _ success _ p ('D':'C':'1':cs) = success '\DC1' (incr p 3) cs
+> asciiEscape _ success _ p ('D':'C':'2':cs) = success '\DC2' (incr p 3) cs
+> asciiEscape _ success _ p ('D':'C':'3':cs) = success '\DC3' (incr p 3) cs
+> asciiEscape _ success _ p ('D':'C':'4':cs) = success '\DC4' (incr p 3) cs
+> asciiEscape _ success _ p ('N':'A':'K':cs) = success '\NAK' (incr p 3) cs
+> asciiEscape _ success _ p ('S':'Y':'N':cs) = success '\SYN' (incr p 3) cs
+> asciiEscape _ success _ p ('E':'T':'B':cs) = success '\ETB' (incr p 3) cs
+> asciiEscape _ success _ p ('C':'A':'N':cs) = success '\CAN' (incr p 3) cs 
+> asciiEscape _ success _ p ('E':'M':cs) = success '\EM' (incr p 2) cs
+> asciiEscape _ success _ p ('S':'U':'B':cs) = success '\SUB' (incr p 3) cs
+> asciiEscape _ success _ p ('E':'S':'C':cs) = success '\ESC' (incr p 3) cs
+> asciiEscape _ success _ p ('F':'S':cs) = success '\FS' (incr p 2) cs
+> asciiEscape _ success _ p ('G':'S':cs) = success '\GS' (incr p 2) cs
+> asciiEscape _ success _ p ('R':'S':cs) = success '\RS' (incr p 2) cs
+> asciiEscape _ success _ p ('U':'S':cs) = success '\US' (incr p 2) cs
+> asciiEscape _ success _ p ('S':'P':cs) = success '\SP' (incr p 2) cs
+> asciiEscape _ success _ p ('D':'E':'L':cs) = success '\DEL' (incr p 3) cs
+> asciiEscape p0 _ fail p cs = fail p0 "Illegal escape sequence" p cs
 
 \end{verbatim}
 The \texttt{numEscape} lexer accepts character codes in the character
@@ -591,13 +589,13 @@ range supported by the Haskell compiler. Note that hbc and nhc98 up to
 though they actually support a larger character set range.
 \begin{verbatim}
 
-> numEscape :: Position -> (Char -> L a) -> FailL a -> Int
->           -> (Char -> Bool) -> L a
-> numEscape p0 success fail b isDigit p s
+> numEscape :: Int -> (Char -> Bool) -> Position -> (Char -> L a) -> FailL a
+>           -> L a
+> numEscape base isDigit p0 success fail p cs
 >   | n >= min && n <= max = success (chr n) (incr p (length digits)) rest
->   | otherwise = fail p0 "Numeric escape out-of-range" p s
->   where (digits,rest) = span isDigit s
->         n = convertIntegral b digits
+>   | otherwise = fail p0 "Numeric escape out-of-range" p cs
+>   where (digits,rest) = span isDigit cs
+>         n = convertIntegral base digits
 >         min = ord minBound
 >         max = ord maxBound
 

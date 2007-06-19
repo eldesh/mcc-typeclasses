@@ -1,9 +1,10 @@
 % -*- LaTeX -*-
-% $Id: CamParser.lhs 1866 2006-03-02 17:34:02Z wlux $
+% $Id: CamParser.lhs 2285 2007-06-19 12:23:18Z wlux $
 %
-% Copyright (c) 1999-2005, Wolfgang Lux
+% Copyright (c) 1999-2006, Wolfgang Lux
 % See LICENSE for the full license.
 %
+\nwfilename{CamParser.lhs}
 \subsection{Parsing Abstract Machine Code}
 In this section, a lexer and parser for the abstract machine code are
 presented, which are based on the LL(1) parsing combinators described
@@ -58,13 +59,12 @@ in appendix~\ref{sec:ll-parsecomb}.
 > nameTok :: Category -> String -> Token
 > nameTok c cs = Token c NameAttributes{ sval = cs }
 
-> intTok :: Category -> String -> Token
-> intTok c cs = Token c IntAttributes{ ival = convertSignedIntegral 10 cs }
+> intTok :: String -> Token
+> intTok cs = Token IntNum IntAttributes{ ival = convertSignedIntegral 10 cs }
 
-> floatTok :: String -> String -> String -> Token
+> floatTok :: String -> String -> Int -> Token
 > floatTok mant frac exp =
->   Token FloatNum FloatAttributes{ fval = convertSignedFloating mant frac e }
->   where e = convertSignedIntegral 10 exp
+>   Token FloatNum FloatAttributes{ fval = convertSignedFloating mant frac exp }
 
 > data Keyword =
 >     KW_bool
@@ -200,11 +200,12 @@ in appendix~\ref{sec:ll-parsecomb}.
 > lexer success fail p [] = success p (tok EOF) p []
 > lexer success fail p (c:cs)
 >   | isSpace c = lexer success fail (advance c p) cs
+>   | c == '+' = lexNumber (success p) fail (c:) (next p) cs
 >   | c == '-' =
 >       case cs of
 >         ('-':cs') -> lexer success fail p (dropWhile (/= '\n') cs')
 >         ('>':cs') -> token2 RightArrow cs'
->         _ -> illegalChar
+>         _ -> lexNumber (success p) fail (c:) (next p) cs
 >   | c == '=' = token Equals
 >   | c == ':' = token Colon
 >   | c == ',' = token Comma
@@ -220,10 +221,10 @@ in appendix~\ref{sec:ll-parsecomb}.
 >   | c == ')' = token RightParen
 >   | c == '{' = token LeftBrace
 >   | c == '}' = token RightBrace
->   | c == '"' = lexString (success p . nameTok String . id) fail (next p) cs
->   | c == '.' = lexKeyword (success p) fail p cs
->   | isAlpha c || c == '_' = lexIdent (success p) c p cs
->   | isDigit c || c `elem` "+-" = lexNumber (success p) fail c p cs
+>   | c == '"' = lexString (success p . nameTok String) fail (next p) cs
+>   | c == '.' = lexKeyword (success p . tok . Keyword) fail (next p) cs
+>   | isAlpha c || c == '_' = lexIdent (success p . nameTok Ident) p (c:cs)
+>   | isDigit c = lexNumber (success p) fail id p (c:cs)
 >   | otherwise = illegalChar
 >   where token t = success p (tok t) (next p) cs
 >         token2 t = success p (tok t) (incr p 2)
@@ -232,59 +233,65 @@ in appendix~\ref{sec:ll-parsecomb}.
 >         advance _ = next
 >         illegalChar = fail p ("Illegal character " ++ show c) p (c:cs)
 
-> lexIdent :: (Token -> L a) -> Char -> L a
-> lexIdent success c p cs =
->   success (nameTok Ident (c : cs')) (incr p (1 + length cs')) cs''
->   where (cs',cs'') = span isIdent cs
+> lexIdent :: (String -> L a) -> L a
+> lexIdent success p cs = success ident (incr p (length ident)) rest
+>   where (ident,rest) = span isIdent cs
 
-> lexKeyword :: (Token -> L a) -> FailL a -> L a
+> lexKeyword :: (Keyword -> L a) -> FailL a -> L a
 > lexKeyword success fail p cs
->   | null cs' = fail p "Keyword expected after '.'" (next p) cs
+>   | null keyword = fail p "Keyword expected after '.'" p cs
 >   | otherwise =
->       maybe (fail p ("Unknown keyword " ++ show ('.':cs')))
->             (success . tok . Keyword)
->             (lookupFM cs' keywords) (incr p (1 + length cs')) cs''
->   where (cs',cs'') = span isIdent cs
+>       maybe (fail p ("Unknown keyword " ++ show ('.':keyword)))
+>             success
+>             (lookupFM keyword keywords) (incr p (length keyword)) rest
+>   where (keyword,rest) = span isIdent cs
 
-> lexNumber :: (Token -> L a) -> FailL a -> Char -> L a
-> lexNumber success fail c p cs
->   | null ds && not (isDigit c) =
->      fail p ("Digit expected after " ++ show c) (next p) cs
->   | otherwise =
->       case cs' of
->         ('.':cs'') -> lexFraction success fail (c:ds) (next p') cs''
->         ('e':cs'') -> lexExponent success fail (c:ds) "" (next p') cs''
->         ('E':cs'') -> lexExponent success fail (c:ds) "" (next p') cs''
->         _ -> success (intTok IntNum (c:ds)) p' cs'
->   where (ds,cs' ) = span isDigit cs
->         p' = incr p (1 + length ds)
+> lexNumber :: (Token -> L a) -> FailL a -> (String -> String) -> L a
+> lexNumber success fail f p cs
+>   | null digits =
+>       fail p ("Digit expected after " ++ show (head (f ""))) (next p) cs
+>   | otherwise = lexOptFraction float int p' rest
+>   where p' = incr p (length digits)
+>         (digits,rest) = span isDigit cs
+>         int _ _ = success (intTok (f digits)) p' rest
+>         float frac exp = success (floatTok (f digits) frac exp)
 
-> lexFraction :: (Token -> L a) -> FailL a -> String -> L a
-> lexFraction success fail ds p cs =
->   case cs' of
->     ('e':cs'') -> lexExponent success fail ds ds' (next p') cs''
->     ('E':cs'') -> lexExponent success fail ds ds' (next p') cs''
->     _ -> success (floatTok ds ds' "") p' cs'
->   where (ds',cs') = span isDigit cs
->         p' = incr p (length ds')
+> lexOptFraction :: (String -> Int -> L a) -> L a -> L a
+> lexOptFraction success _ p ('.':cs) = lexFraction success (next p) cs
+> lexOptFraction success noFrac p cs = lexOptExponent (success "") noFrac p cs
 
-> lexExponent :: (Token -> L a) -> FailL a -> String -> String -> L a
-> lexExponent success fail ds ds' p (c:cs)
->   | isDigit c || c `elem` "+-" =
->       case span isDigit cs of
->         (es,cs')
->           | not (isDigit c) && null es -> fail p "Empty exponent" p cs
->           | otherwise ->
->               success (floatTok ds ds' (c:es)) (incr p (1 + length es)) cs'
-> lexExponent success fail _ _ p cs = fail p "Exponent expected" p cs
+> lexFraction :: (String -> Int -> L a) -> L a
+> lexFraction success p cs = lexOptExponent (success frac) noExp p' rest
+>   where p' = incr p (length frac)
+>         (frac,rest) = span isDigit cs
+>         noExp _ _ = success frac 0 p' rest
+
+> lexOptExponent :: (Int -> L a) -> L a -> L a
+> lexOptExponent success noExp p (c:cs)
+>   | c `elem` "eE" = lexSignedExponent success noExp (next p) cs
+> lexOptExponent _ noExp p cs = noExp p cs
+
+> lexSignedExponent :: (Int -> L a) -> L a -> L a
+> lexSignedExponent success noExp p ('+':cs) =
+>   lexExponent success noExp (next p) cs
+> lexSignedExponent success noExp p ('-':cs) =
+>   lexExponent (success . negate) noExp (next p) cs
+> lexSignedExponent success noExp p cs = lexExponent success noExp p cs
+
+> lexExponent :: (Int -> L a) -> L a -> L a
+> lexExponent success noExp p cs
+>   | null digits = noExp p cs
+>   | otherwise = success (exp) (incr p (length digits)) rest
+>   where (digits,rest) = span isDigit cs
+>         exp = convertIntegral 10 digits
 
 > lexString :: (String -> L a) -> FailL a -> L a
-> lexString success fail p [] = fail p "Unterminated string constant" p []
+> lexString _ fail p [] = fail p "Unterminated string constant" p []
 > lexString success fail p (c:cs)
->   | c == '"' = success "" (next p) cs
->   | c == '\n' = fail p "Unterminated string constant" p []
+>   | c == '\"' = success "" (next p) cs
+>   | c == '\n' = fail p "Unterminated string constant" p (c:cs)
 >   | c == '\t' = lexString (success . (c:)) fail (tab p) cs
->   | c < ' ' = fail p "Illegal character in string constant" p cs
+>   | c < ' ' = fail p "Illegal character in string constant" p (c:cs)
 >   | otherwise = lexString (success . (c:)) fail (next p) cs
 
 \end{verbatim}

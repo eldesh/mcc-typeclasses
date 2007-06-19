@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cstring.nw 2296 2007-06-19 22:37:03Z wlux $
+% $Id: cstring.nw 2297 2007-06-19 22:51:03Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -41,14 +41,8 @@ extern char *lit_double(char *buf, double d);
 #include "run.h"
 #include "regs.h"
 #include "heap.h"
-#include "stack.h"
-#include "threads.h"
-#include "eval.h"
 #include "data.h"
-#include "io_monad.h"
 #include "cstring.h"
-#include "cam.h"
-#include "trace.h"
 
 @
 The functions [[from_string]] and [[from_string_len]] translate a C
@@ -58,6 +52,18 @@ functions. In order to prepend a C string to a given list of
 characters, use the functions [[prefix_string]] and
 [[prefix_string_len]] instead.
 
+The macros [[primPeekString]] and [[primPeekCStringLen]] make these
+function available to the foreign function interface.
+[[PrimPeekCString]] computes the length of the C string using
+[[strlen]], whereas the length is passed explicitly to
+[[primPeekCString]]. This allows converting C strings with embedded
+\verb|\NUL| characters as well as substrings.
+
+<<cstring.h>>=
+#define primPeekCString(str)		from_string(0, str)
+#define primPeekCStringLen(str, len)	from_string_len(0, str, len)
+
+@ 
 <<cstring.c>>=
 Node *
 from_string(unsigned int n_regs, const char *cp)
@@ -113,7 +119,13 @@ buffer terminated with a final [['\0']] character. The buffer must be
 large enough to hold the string including the terminator character.
 Finally, the function [[to_string]] uses [[malloc]] to allocate a
 suitable buffer and copies the Curry string argument into this buffer.
+The macro [[primNewCString]] makes this function available to the
+foreign function interface.
 
+<<cstring.h>>=
+#define primNewCString(str)	to_string(str)
+
+@ 
 <<cstring.c>>=
 unsigned
 string_length(Node *list)
@@ -172,180 +184,6 @@ to_string(Node *list)
     if ( cp == NULL )
 	sys_error("to_string");
     return copy_string(list, cp);
-}
-
-@ 
-The primitives [[__newCString]] and [[__newCStringLen]] convert a
-ground Curry string into a heap allocated C string. In addition,
-[[__newCStringLen]] also returns the length of the string.
-
-<<cstring.c>>=
-DECLARE_LABEL(extern, __newCString);
-DECLARE_LABEL(static, __newCString_1);
-
-DECLARE_LABEL(extern, __newCStringLen);
-DECLARE_LABEL(static, __newCStringLen_1);
-
-#define pair_node_size closure_node_size(2)
-static DEFINE_DATA(pair, "(,)", 0, 2);
-
-FUNCTION(__newCString)
-{
- ENTRY_LABEL(extern, __newCString)
-    SAVE_REGS(0);
-    EVAL_BOXED(__newCString_1);
-}
-
-static
-FUNCTION(__newCString_1)
-{
-    char *cp;
-    Node *p;
- ENTRY_LABEL(static, __newCString_1)
-    cp = to_string(regs.r[0]);
-
-    CHECK_HEAP(0, ptr_node_size);
-    p	     = (Node *)regs.hp;
-    p->info  = &ptr_info;
-    p->p.ptr = cp;
-    regs.hp += ptr_node_size;
-
-    RETURN(p, 0);
-}
-
-FUNCTION(__newCStringLen)
-{
- ENTRY_LABEL(extern, __newCStringLen)
-    SAVE_REGS(0);
-    EVAL_BOXED(__newCStringLen_1);
-}
-
-static
-FUNCTION(__newCStringLen_1)
-{
-    unsigned int l;
-    char	 *cp;
-    Node	 *p, *i, *r;
- ENTRY_LABEL(static, __newCStringLen_1)
-    l  = string_length(regs.r[0]);
-    cp = (char *)malloc(l + 1);
-    if ( cp == NULL )
-	sys_error("newCStringLen");
-    copy_string(regs.r[0], cp);
-
-    CHECK_HEAP(0, ptr_node_size + int_node_size + pair_node_size);
-    p	     = (Node *)regs.hp;
-    p->info  = &ptr_info;
-    p->p.ptr = cp;
-    regs.hp += ptr_node_size;
-#if !ONLY_BOXED_OBJECTS
-    if ( !is_large_int(l) )
-	i = mk_unboxed((long)l);
-    else
-#endif
-    {
-	i	 = (Node *)regs.hp;
-	i->info	 = &int_info;
-	i->i.i	 = l;
-	regs.hp += int_node_size;
-    }
-    r		 = (Node *)regs.hp;
-    r->info	 = &pair_info;
-    r->c.args[0] = p;
-    r->c.args[1] = i;
-    regs.hp	+= pair_node_size;
-
-    RETURN(r, 0);
-}
-
-@ 
-The primitives [[__peekCString]] and [[__peekCStringLen]] convert a C
-string into a Curry string. [[__peekCString]] computes the length of
-the C string using [[strlen]], whereas the length is passed explicitly
-to [[__peekCString]]. This allows converting C strings with embedded
-\verb|\NUL| characters as well as substrings.
-
-<<cstring.c>>=
-DECLARE_LABEL(extern, __peekCString);
-DECLARE_LABEL(static, __peekCString_1);
-
-DECLARE_LABEL(extern, __peekCStringLen);
-DECLARE_LABEL(static, __peekCStringLen_1);
-DECLARE_LABEL(static, __peekCStringLen_2);
-DECLARE_LABEL(static, __peekCStringLen_3);
-
-FUNCTION(__peekCString)
-{
- ENTRY_LABEL(extern, __peekCString)
-    SAVE_REGS(1);
-    EVAL_BOXED(__peekCString_1);
-}
-
-static
-FUNCTION(__peekCString_1)
-{
-    char *cp;
- ENTRY_LABEL(static, __peekCString_1)
-    MATCH_RIGID_PTR(__peekCString_1);
-    cp = (char *)regs.r[0]->p.ptr;
-    if ( cp == NULL )
-	CALL_RET2(__ioError, 1,
-		  from_string(0, "peekCString: null pointer"),
-		  regs.sp[0]);
-    RETURN(from_string(0, cp), 1);
-}
-
-FUNCTION(__peekCStringLen)
-{
- ENTRY_LABEL(extern, __peekCStringLen)
-    SAVE_REGS(1);
-    EVAL_BOXED(__peekCStringLen_1);
-}
-
-static
-FUNCTION(__peekCStringLen_1)
-{
-    Node *pair;
- ENTRY_LABEL(static, __peekCStringLen_1)
-    MATCH_RIGID_DATA(__peekCStringLen_1);
-    CHECK_STACK1();
-    pair       = regs.r[0];
-    regs.sp   -= 1;
-    regs.sp[0] = pair->c.args[1];
-    regs.r[0]  = pair->c.args[0];
-    EVAL_BOXED(__peekCStringLen_2);
-}
-
-static
-FUNCTION(__peekCStringLen_2)
-{
- ENTRY_LABEL(static, __peekCStringLen_2)
-    MATCH_RIGID_PTR(__peekCStringLen_2);
-    SWAPn(0);
-    EVAL(__peekCStringLen_3);
-}
-
-static
-FUNCTION(__peekCStringLen_3)
-{
-    char *cp;
-    long l;
-    Node *r;
- ENTRY_LABEL(static, __peekCStringLen_3)
-    MATCH_RIGID_INT(__peekCStringLen_3);
-    l = long_val(regs.r[0]);
-    if ( l > 0 )
-    {
-	cp = (char *)regs.sp[0]->p.ptr;
-	if ( cp == NULL )
-	    CALL_RET2(__ioError, 2,
-		      from_string(0, "peekCStringLen: null pointer"),
-		      regs.sp[1]);
-	r = from_string_len(0, cp, l);
-    }
-    else
-	r = nil;
-    RETURN(r, 2);
 }
 
 @ 

@@ -1,5 +1,10 @@
--- $Id: Prelude.curry 2089 2007-02-05 13:44:23Z wlux $
+-- $Id: Prelude.curry 2280 2007-06-19 11:40:35Z wlux $
+--
+-- Copyright (c) 1999-2006, Wolfgang Lux
+-- See ../LICENSE for the full license.
+
 module Prelude where
+import IO
 
 -- Lines beginning with "--++" are part of the prelude, but are already
 -- predefined by the compiler (or cannot be defined at all)
@@ -91,8 +96,6 @@ f $## x		= f $!! ensureGround x
 error :: String -> a
 error msg = unsafePerformIO (abort ("Error: " ++ msg ++ "\n"))
   where abort msg = hPutStr stderr msg >> curry_exit 1 >> undefined
-	foreign import primitive stderr :: Handle
-	foreign import primitive hPutStr :: Handle -> String -> IO ()
 	foreign import primitive unsafePerformIO :: IO a -> a
  	foreign import ccall curry_exit :: Int -> IO ()
         -- NB curry_exit does not return and therefore should have
@@ -1080,40 +1083,48 @@ done :: Monad m => m ()
 done = return ()
 
 --- Action that (lazily) reads file and returns its contents.
-foreign import primitive readFile   :: FilePath -> IO String
+readFile :: FilePath -> IO String
+readFile fn = openFile fn ReadMode >>= hGetContents
 
 --- Actions that writes a file.
-foreign import primitive writeFile  :: FilePath -> String -> IO ()
+writeFile :: FilePath -> String -> IO ()
+writeFile fn str = bracket (openFile fn WriteMode) hClose (flip hPutStr str)
 
 --- Actions that appends a string to a file.
-foreign import primitive appendFile :: FilePath -> String -> IO ()
+appendFile :: FilePath -> String -> IO ()
+appendFile fn str = bracket (openFile fn AppendMode) hClose (flip hPutStr str)
 
 --- Action to read a single character from stanard input.
-foreign import primitive getChar     :: IO Char
+getChar :: IO Char
+getChar = hGetChar stdin
 
 --- Action to read a single line from standard input.
-foreign import primitive getLine     :: IO String
+getLine :: IO String
+getLine = hGetLine stdin
 
 --- Action that (lazily) reads all of standard input.
-foreign import primitive getContents :: IO String
+getContents :: IO String
+getContents = hGetContents stdin
 
 --- Action to print a character on stdout.
-foreign import primitive putChar     :: Char -> IO ()
+putChar :: Char -> IO ()
+putChar = hPutChar stdout
 
 --- Action to print a string on stdout.
-foreign import primitive putStr :: String -> IO ()
+putStr :: String -> IO ()
+putStr = hPutStr stdout
  
 --- Action to print a string with a newline on stdout.
-putStrLn          :: String -> IO ()
-putStrLn cs       = putStr cs >> putChar '\n'
+putStrLn :: String -> IO ()
+putStrLn = hPutStrLn stdout
 
 --- Converts a term into a string and prints it.
-print             :: Show a => a -> IO ()
-print t           = putStrLn (show t)
+print   :: Show a => a -> IO ()
+print t = putStrLn (show t)
 
 --- Convert a simple stream filter into an I/O program
 --- Note: interact closes the standard input
-interact     	  :: (String -> String) -> IO ()
+interact   :: (String -> String) -> IO ()
 interact f = getContents >>= putStr . f
 
 --- Solves a constraint as an I/O action.

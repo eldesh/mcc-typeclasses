@@ -1,6 +1,6 @@
--- $Id: Random.curry 2041 2006-12-13 09:43:43Z wlux $
+-- $Id: Random.curry 2280 2007-06-19 11:40:35Z wlux $
 --
--- Copyright (c) 2004, Wolfgang Lux
+-- Copyright (c) 2004-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module Random where
@@ -10,9 +10,13 @@ instance Show StdGen where
   -- FIXME: use a dedicated primitive for this
   showsPrec _ = shows where foreign import primitive shows :: a -> ShowS
 
-foreign import primitive genRange	   :: StdGen -> (Int,Int)
-foreign import primitive "nextStdGen" next :: StdGen -> (Int,StdGen)
-foreign import primitive mkStdGen	   :: Int -> StdGen
+foreign import primitive mkStdGen :: Int -> StdGen
+
+next :: StdGen -> (Int,StdGen)
+next rng = randomR (genRange rng) rng
+
+genRange :: StdGen -> (Int,Int)
+genRange _ = (minBound,maxBound)
 
 split :: StdGen -> (StdGen,StdGen)
 split rng = (mkStdGen x,mkStdGen y)

@@ -1,3 +1,8 @@
+-- $Id: IO.curry 2280 2007-06-19 11:40:35Z wlux $
+--
+-- Copyright (c) 2003-2006, Wolfgang Lux
+-- See ../LICENSE for the full license.
+
 module IO(Handle, HandlePosn, IOMode(..), BufferMode(..), SeekMode(..),
           stdin, stdout, stderr,
 	  openFile, hClose, 
@@ -67,8 +72,10 @@ foreign import primitive hIsSeekable :: Handle -> IO Bool
 
 --- Actions that check whether a (readable) handle is at the
 --- end-of-file.
-foreign import primitive isEOF  :: IO Bool
 foreign import primitive hIsEOF :: Handle -> IO Bool
+
+isEOF :: IO Bool
+isEOF = hIsEOF stdin
 
 --- Action that returns the size of file.
 foreign import primitive hFileSize :: Handle -> IO Int

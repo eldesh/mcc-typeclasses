@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: random.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: random.nw 2280 2007-06-19 11:40:35Z wlux $
 %
 % Copyright (c) 2004-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -118,11 +118,8 @@ FUNCTION(__mkStdGen_1)
 @ 
 The function [[nextRStdGen :: Int -> Int -> StdGen -> (Int,StdGen)]]
 returns the next random number in the specified range for a particular
-random number generator. The function [[nextStdGen]] is a partial
-application of [[nextRStdGen]] using the minimum and maximum [[Int]]
-values as lower and upper bounds, respectively. Both functions
-carefully restore the state of the global random number generator
-after computing the number.
+random number generator. The function carefully restores the state of
+the global random number generator after computing the number.
 
 In order to ensure an equal distribution of random numbers between the
 two bounds $l$ and $h$, we interpret the random numbers returned by
@@ -139,24 +136,10 @@ may be executed more than once if a 32-bit or larger result is
 requested.
 
 <<random.c>>=
-DECLARE_LABEL(extern, __nextStdGen);
 DECLARE_LABEL(extern, __nextRStdGen);
 DECLARE_LABEL(static, __nextRStdGen_1);
 DECLARE_LABEL(static, __nextRStdGen_2);
 DECLARE_LABEL(static, __nextRStdGen_3);
-
-static const struct int_node minInt_node = { &int_info, LONG_MIN };
-static const struct int_node maxInt_node = { &int_info, LONG_MAX };
-
-#define minInt (Node *)&minInt_node
-#define maxInt (Node *)&maxInt_node
-
-FUNCTION(__nextStdGen)
-{
- ENTRY_LABEL(extern, __nextStdGen)
-    SAVE_RET2(minInt, maxInt);
-    EVAL_BOXED(__nextRStdGen_3);
-}
 
 FUNCTION(__nextRStdGen)
 {
@@ -250,25 +233,6 @@ repeat:
     regs.hp	+= pair_node_size;
 
     RETURN(p, 2);
-}
-
-@ 
-The function [[genRange :: StdGen -> (Int,Int)]] yields the range of
-values returned by the generator.
-
-<<random.c>>=
-FUNCTION(__genRange)
-{
-    Node *r;
- ENTRY_LABEL(extern, __genRange)
-    CHECK_HEAP(0, pair_node_size);
-    r		 = (Node *)regs.hp;
-    r->info	 = &pair_info;
-    r->c.args[0] = minInt;
-    r->c.args[1] = maxInt;
-    regs.hp	+= pair_node_size;
-
-    RET(r);
 }
 
 @ 

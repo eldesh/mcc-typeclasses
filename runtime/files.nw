@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: files.nw 2280 2007-06-19 11:40:35Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -556,10 +556,9 @@ FUNCTION(__hIsSeekable_1)
 }
 
 @
-The functions [[isEOF]] and [[hIsEOF]] return whether all of the
-specified file has been read, i.e., whether the next call to
-[[hGetChar]] for the handle will raise an end-of-file exception.
-[[isEOF]] is an abbreviation for [[hIsEOF stdin]].
+The function [[hIsEOF]] returns whether all of the specified file has
+been read, i.e., whether the next call to [[hGetChar]] for the handle
+will raise an end-of-file exception.
 
 Note that the semantics of [[hIsEOF]] is different from the C
 semantics. Whereas [[hIsEOF]] returns [[True]] after the last
@@ -570,17 +569,8 @@ and puts it back with [[ungetc]]. Unfortunately, this may block the
 program until the next character is available.
 
 <<files.c>>=
-DECLARE_LABEL(extern, __isEOF);
 DECLARE_LABEL(extern, __hIsEOF);
 DECLARE_LABEL(static, __hIsEOF_1);
-
-FUNCTION(__isEOF)
-{
- ENTRY_LABEL(extern, __isEOF)
-    SAVE_REGS(1);
-    regs.r[0] = (Node *)&stdin_node;
-    GOTO(__hIsEOF_1);
-}
 
 FUNCTION(__hIsEOF)
 {
@@ -613,26 +603,16 @@ FUNCTION(__hIsEOF_1)
 }
 
 @ 
-The functions [[getChar]] and [[hGetChar]] read a single character
-from the specified input handle, with [[getChar]] being an
-abbreviation for [[hGetChar stdin]]. Both functions raise an
-end-of-file exception when reading beyond the last character of the
-input. An access exception is reported when the handle is not open for
-reading. Note that this also happens when the handle is in a
-semi-closed state after [[hGetContents]] has been applied to it.
+The function [[hGetChar]] reads a single character from the specified
+input handle. The function raises an end-of-file exception when
+reading beyond the last character of the input. An access exception is
+reported when the handle is not open for reading. Note that this also
+happens when the handle is in a semi-closed state after
+[[hGetContents]] has been applied to it.
 
 <<files.c>>=
-DECLARE_LABEL(extern, __getChar);
 DECLARE_LABEL(extern, __hGetChar);
 DECLARE_LABEL(static, __hGetChar_1);
-
-FUNCTION(__getChar)
-{
- ENTRY_LABEL(extern, __getChar)
-    SAVE_REGS(1);
-    regs.r[0] = (Node *)&stdin_node;
-    GOTO(__hGetChar_1);
-}
 
 FUNCTION(__hGetChar)
 {
@@ -708,16 +688,14 @@ FUNCTION(__hLookAhead_1)
 }
 
 @
-The functions [[getLine]] and [[hGetLine]] read a single line from the
-specified handle, with [[getLine]] being an abbreviation for
-[[hGetLine stdin]]. We implement these functions in the runtime system
-instead of defining them in terms of [[hIsEOF]] and [[hGetChar]]
-because this makes a more efficient implementation possible using
-the [[fgets]] function. Note that [[fgets]] retains a newline
-character in the input buffer; we have to remove it before converting
-the string. If no newline has been read, we continue to read more
-characters from the standard input until reaching either the
-end-of-file or reading a newline character.
+The function [[hGetLine]] reads a single line from the specified
+handle. We implement this function in the runtime system instead of
+defining it in terms of [[hIsEOF]] and [[hGetChar]] because this makes
+a more efficient implementation possible using the [[fgets]] function.
+Note that [[fgets]] retains a newline character in the input buffer;
+we have to remove it before converting the string. If no newline has
+been read, we continue to read more characters from the standard input
+until reaching either the end-of-file or reading a newline character.
 
 Concatenation of the line segments is a little bit tricky. We do not
 use the \texttt{(++)} operator from the prelude in order to avoid the
@@ -729,17 +707,8 @@ that this destructive update does not have to be trailed because
 system.
 
 <<files.c>>=
-DECLARE_LABEL(extern, __getLine);
 DECLARE_LABEL(extern, __hGetLine);
 DECLARE_LABEL(static, __hGetLine_1);
-
-FUNCTION(__getLine)
-{
- ENTRY_LABEL(extern, __getLine)
-    SAVE_REGS(1);
-    regs.r[0] = (Node *)&stdin_node;
-    GOTO(__hGetLine_1);
-}
 
 FUNCTION(__hGetLine)
 {
@@ -818,15 +787,10 @@ FUNCTION(__hGetLine_1)
 }
 
 @ 
-The functions [[getContents]] and [[hGetContents]] return the contents
-of the specified file as a lazy stream, where [[getContents]] is an
-abbreviation for [[hGetContents stdin]]. The handle is put into a
-semi-closed state by setting the flags to [[0]]. The character stream
-is constructed on demand with the help of the [[lazyRead]] function.
-
-The function [[readFile]] is just a wrapper function that combines
-[[openFile]] and [[hGetContents]]. We define it here so that the type
-[[IOMode]] need not be defined in the prelude.
+The function [[hGetContents]] returns the contents of the specified
+file as a lazy stream. The handle is put into a semi-closed state by
+setting the flags to [[0]]. The character stream is constructed on
+demand with the help of the [[lazyRead]] function.
 
 An alert reader might be surprised that [[hGetContents]] returns a
 suspended application node. However, recall that this node should be
@@ -836,8 +800,6 @@ because the representation of the world would be a simple constant
 (cf. p.~\pageref{eq:monadic-io} in Sect.~\ref{sec:io-monad}).
 
 <<files.c>>=
-DECLARE_LABEL(extern, __readFile);
-DECLARE_LABEL(extern, __getContents);
 DECLARE_LABEL(extern, __hGetContents);
 DECLARE_LABEL(static, __hGetContents_1);
 DECLARE_LABEL(static, lazyRead);
@@ -897,23 +859,6 @@ FUNCTION(eval_lazy_1)
 
     /* enter the callee */
     EXEC1(entry, x);
-}
-
-FUNCTION(__readFile)
-{
-    Node *world;
- ENTRY_LABEL(extern, __readFile)
-    world = regs.r[1];
-    SAVE_REGS(1);
-    CALL3(__openFile, __hGetContents_1, regs.r[0], CONST(__IO__ReadMode), world);
-}
-
-FUNCTION(__getContents)
-{
- ENTRY_LABEL(extern, __getContents)
-    SAVE_REGS(1);
-    regs.r[0] = (Node *)&stdin_node;
-    GOTO(__hGetContents_1);
 }
 
 FUNCTION(__hGetContents)
@@ -993,22 +938,13 @@ FUNCTION(lazyRead)
 }
 
 @
-The functions [[putChar]] and [[hPutChar]] write a single character to
-the specified handle, where [[putChar]] is an abbreviation for
-[[hPutChar stdout]].
+The function [[hPutChar]] writes a single character to the specified
+handle.
 
 <<files.c>>=
-DECLARE_LABEL(extern, __putChar);
 DECLARE_LABEL(extern, __hPutChar);
 DECLARE_LABEL(static, __hPutChar_1);
 DECLARE_LABEL(static, __hPutChar_2);
-
-FUNCTION(__putChar)
-{
- ENTRY_LABEL(extern, __putChar)
-    SAVE_RET2((Node *)&stdout_node, regs.r[1]);
-    EVAL_BOXED(__hPutChar_2);
-}
 
 FUNCTION(__hPutChar)
 {
@@ -1047,22 +983,13 @@ FUNCTION(__hPutChar_2)
 }
 
 @ 
-The functions [[putStr]] and [[hPutStr]] write a string to a file
-handle, with [[putStr]] being an abbreviation for [[hPutStr stdout]].
+The function [[hPutStr]] writes a string to a file handle.
 
 <<files.c>>=
-DECLARE_LABEL(extern, __putStr);
 DECLARE_LABEL(extern, __hPutStr);
 DECLARE_LABEL(static, __hPutStr_1);
 DECLARE_LABEL(static, __hPutStr_2);
 DECLARE_LABEL(static, __hPutStr_3);
-
-FUNCTION(__putStr)
-{
- ENTRY_LABEL(extern, __putStr)
-    SAVE_RET2((Node *)&stdout_node, regs.r[1]);
-    EVAL_BOXED(__hPutStr_2);
-}
 
 FUNCTION(__hPutStr)
 {
@@ -1120,55 +1047,6 @@ FUNCTION(__hPutStr_3)
 
     regs.r[0] = *regs.sp++;
     EVAL_BOXED(__hPutStr_2);
-}
-
-@ 
-The functions [[writeFile]] and [[appendFile]] write a string to a
-file. The current contents of the file is replaced by the string
-when using [[writeFile]]. When [[appendFile]] is used, the string is
-appended to the end of the file. Both functions create the file if it
-does not exist.
-
-The functions make use of an auxiliary function [[hPutContents]] that
-calls [[hPutStr]] and then closes the file handle.
-
-<<files.c>>=
-DECLARE_LABEL(extern, __writeFile);
-DECLARE_LABEL(extern, __appendFile);
-DECLARE_LABEL(static, __hPutContents);
-DECLARE_LABEL(static, __hPutContents_1);
-
-FUNCTION(__writeFile)
-{
- ENTRY_LABEL(extern, __writeFile)
-    SAVE_REGS(2);
-    CALL3(__openFile, __hPutContents,
-	  regs.r[0], CONST(__IO__WriteMode), regs.r[2]);
-}
-
-FUNCTION(__appendFile)
-{
- ENTRY_LABEL(extern, __appendFile)
-    SAVE_REGS(2);
-    CALL3(__openFile, __hPutContents,
-	  regs.r[0], CONST(__IO__AppendMode), regs.r[2]);
-}
-
-static
-FUNCTION(__hPutContents)
-{
-    Node *str;
- ENTRY_LABEL(static, __hPutContents)
-    str	       = regs.sp[0];
-    regs.sp[0] = regs.r[0];
-    CALL3(__hPutStr, __hPutContents_1, regs.r[0], str, regs.sp[1]);
-}
-
-static
-FUNCTION(__hPutContents_1)
-{
- ENTRY_LABEL(static, __hPutContents_1)
-    CALL_RET2(__hClose, 2, regs.sp[0], regs.sp[1]);
 }
 
 @

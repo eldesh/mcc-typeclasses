@@ -1,6 +1,6 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 2233 2007-06-08 09:57:47Z wlux $
+# $Id: Makefile.in 2280 2007-06-19 11:40:35Z wlux $
 #
 # Copyright (c) 2004-2006, Wolfgang Lux
 # See ../LICENSE for the full license.
@@ -105,7 +105,8 @@ debug_CSRC = $(debug_INTF:.icurry=.c)
 debug_OBJS = $(debug_INTF:.icurry=.o)
 debug_LIBS = libcurry_g.a
 
-DISTFILES = Makefile.in $(curry_prelude_SRCS) $(curry_stdlib_SRCS) \
+DISTFILES = Makefile.in Prelude.icurry-boot \
+	    $(curry_prelude_SRCS) $(curry_stdlib_SRCS) \
 	    $(curry_stdlib_HDRS) $(debug_SRCS)
 DISTFILES_PATH = $(DISTFILES:%=@srcdir@/%)
 BINDISTFILES = $(curry_SRCS) $($(debug)_SRCS) \
@@ -171,7 +172,7 @@ all: curry
 curry: $(curry_LIBS) $($(debug)_LIBS)
 
 $(curry_CSRC) $(debug_CSRC): ../cycc
-$(curry_DCSRC): ../cycc
+$(curry_DCSRC): ../cycc DebugPrelude.icurry
 $(curry_OBJS) $(curry_DOBJS) $(debug_OBJS): $(rts_H)
 
 obj_dirs = sed -e 's/\([A-Za-z_.]*\)\.o/.\1/g'
@@ -186,6 +187,26 @@ libcurry_g.a: $(debug_OBJS) $(curry_DOBJS) $(debug_INTF) $(curry_INTF)
 	find `echo $(debug_OBJS) $(curry_DOBJS) | $(obj_dirs)` -name '*.o' | \
 		xargs $(AR) qc $@
 	$(RANLIB) $@
+
+# special rules handling mutual recursion between Prelude and IO
+Prelude.c: Prelude.curry
+	rm -rf .Prelude
+	mkdir .Prelude
+	../cycc $(CYCCFLAGS) $(Prelude_CYCCFLAGS) --split-code -o .Prelude/Prelude Prelude.curry
+	touch Prelude.c
+	cmp -s Prelude.icurry $(srcdir)/Prelude.icurry-boot || \
+		{ cp -p Prelude.icurry $(srcdir)/Prelude.icurry-boot && \
+		  $(MAKE) $(MFLAGS) IO.icurry; }
+
+IO.c: IO.curry $(srcdir)/Prelude.icurry-boot
+	cmp -s Prelude.icurry $(srcdir)/Prelude.icurry-boot || \
+		cp -p $(srcdir)/Prelude.icurry-boot Prelude.icurry
+	rm -rf .IO
+	mkdir .IO
+	../cycc $(CYCCFLAGS) $(IO_CYCCFLAGS) --split-code -o .IO/IO IO.curry
+	touch IO.c
+IO.d.c: Prelude.icurry
+IO.o: Prelude.icurry
 
 # link all source files into the current directory
 # NB if $(srcdir) is a relative path we have to modify the paths for target
@@ -253,12 +274,14 @@ maintainerclean: distclean
 # dependencies
 # NB This is a poor hack for computing the dependencies without cymake
 #    (which may not be available at the time when this rule in executed)
-depend: $(curry_SRCS) $($(debug)_SRCS)
-	(for f in $(curry_SRCS) $($(debug)_SRCS); do \
+depend: $(curry_prelude_SRCS) $(curry_stdlib_SRCS) $(debug_SRCS)
+	(for f in $(curry_prelude_SRCS) $(curry_stdlib_SRCS) $(debug_SRCS); do \
 		stem=`basename $$f .curry`; o="$$stem.c $$stem.d.c"; \
 		echo $$o : $$f; \
-		test $$f = Prelude.curry || echo $$o : Prelude.icurry; \
-		echo $$stem.d.c : DebugPrelude.icurry; \
+		case $$f in \
+			Prelude.curry | IO.curry ) ;; \
+			* ) echo $$o : Prelude.icurry ;; \
+		esac; \
 		sed -e '/^import/!d;s/import \([A-Za-z0-9_]*\).*/'"$$o : "'\1.icurry/' $(srcdir)/$$f; \
 	 done) > .depend
 

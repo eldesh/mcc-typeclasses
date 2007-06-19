@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: io_monad.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: io_monad.nw 2280 2007-06-19 11:40:35Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -12,7 +12,7 @@ executes a monadic goal.
 The function [[curry_exit]] stops the execution of the program with
 the given return code, which will be returned from [[curry_exec]].
 
-The function [[fail_with]] prints an error message and stops the
+The function [[fail_with]] prints an error message and stops
 execution with return code 1. It is effectively equivalent to calling
 \texttt{Prelude.error} with the formatted error message.
 

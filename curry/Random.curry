@@ -1,16 +1,18 @@
--- $Id: Random.curry 2280 2007-06-19 11:40:35Z wlux $
+-- $Id: Random.curry 2295 2007-06-19 22:15:13Z wlux $
 --
--- Copyright (c) 2004-2006, Wolfgang Lux
+-- Copyright (c) 2004-2007, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
-module Random where
+module Random(StdGen, mkStdGen, next, genRange, split,
+              random, randomR, randoms, randomRs, randomIO, randomRIO,
+              getStdGen, setStdGen, newStdGen, getStdRandom) where
 
 data StdGen
 instance Show StdGen where
   -- FIXME: use a dedicated primitive for this
   showsPrec _ = shows where foreign import primitive shows :: a -> ShowS
 
-foreign import primitive mkStdGen :: Int -> StdGen
+foreign import ccall unsafe "random.h primMkStdGen" mkStdGen :: Int -> StdGen
 
 next :: StdGen -> (Int,StdGen)
 next rng = randomR (genRange rng) rng
@@ -24,19 +26,26 @@ split rng = (mkStdGen x,mkStdGen y)
   	(y,_) = next rng'
 
 random :: StdGen -> (Int,StdGen)
-random = next
+random = unsafeRandomR minBound maxBound
 
 randomR :: (Int,Int) -> StdGen -> (Int,StdGen)
-randomR (lo,hi) = nextRStdGen lo hi
-  where foreign import primitive nextRStdGen :: Int -> Int -> StdGen -> (Int,StdGen)
+randomR (lo,hi) | hi >= lo = unsafeRandomR lo hi
+
+unsafeRandomR :: Int -> Int -> StdGen -> (Int,StdGen)
+unsafeRandomR lo hi rng = r `seq` (r,rng)
+  where r = primNextRStdGen lo hi rng
+	foreign import ccall unsafe "random.h"
+  		       primNextRStdGen :: Int -> Int -> StdGen -> Int
 
 randoms :: StdGen -> [Int]
-randoms rng = x : randoms rng'
-  where (x,rng') = random rng
+randoms = unsafeRandomRs minBound maxBound
 
 randomRs :: (Int,Int) -> StdGen -> [Int]
-randomRs range rng = x : randomRs range rng'
-  where (x,rng') = randomR range rng
+randomRs (lo,hi) | hi >= lo = unsafeRandomRs lo hi
+
+unsafeRandomRs :: Int -> Int -> StdGen -> [Int]
+unsafeRandomRs lo hi rng = x : unsafeRandomRs lo hi rng'
+  where (x,rng') = unsafeRandomR lo hi rng
 
 randomIO :: IO Int
 randomIO = getStdRandom random
@@ -44,8 +53,10 @@ randomIO = getStdRandom random
 randomRIO :: (Int,Int) -> IO Int
 randomRIO range = getStdRandom (randomR range)
 
-foreign import primitive getStdGen :: IO StdGen
-foreign import primitive setStdGen :: StdGen -> IO ()
+foreign import ccall unsafe "random.h primGetStdGen"
+	       getStdGen :: IO StdGen
+foreign import ccall unsafe "random.h primSetStdGen"
+	       setStdGen :: StdGen -> IO ()
 
 newStdGen :: IO StdGen
 newStdGen =

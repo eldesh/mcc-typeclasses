@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: random.nw 2280 2007-06-19 11:40:35Z wlux $
+% $Id: random.nw 2295 2007-06-19 22:15:13Z wlux $
 %
-% Copyright (c) 2004-2006, Wolfgang Lux
+% Copyright (c) 2004-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Random Numbers}
@@ -13,23 +13,14 @@ The functions in this file implement the primitives for the
 #include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <limits.h>
 #include <sys/time.h>
 #include "debug.h"
 #include "run.h"
 #include "regs.h"
 #include "heap.h"
-#include "stack.h"
-#include "threads.h"
 #include "eval.h"
-#include "data.h"
 #include "io_monad.h"
-#include "cam.h"
-
-#define pair_node_size	 closure_node_size(2)
-#define pair_info	 ___40__44__41__info
-
-static DEFINE_DATA(___40__44__41_, "(,)", 0, 2);
+#include "random.h"
 
 @
 We use state arrays with a size of 128 bytes. While larger state
@@ -48,7 +39,6 @@ moving nodes around, and are released when their [[StdGen]] nodes
 becomes garbage.
 
 <<random.c>>=
-#define MATCH_RIGID_STDGEN(l)	MATCH_RIGID_ABSTRACT(l)
 #define stdgen_node_size	wordsof(StdGen)
 
 static void finalize_stdgen(Node *);
@@ -74,31 +64,20 @@ finalize_stdgen(Node *node)
 }
 
 @ 
-The function [[mkStdGen :: Int -> StdGen]] creates a new random number
-generator that is initialized with the seed passed to [[mkStdGen]].
-Note that the code carefully maintains the state of the default random
-number generator so as to not disrupt its operation.
+The function [[primMkStdGen]] creates a new random number generator
+that is initialized with the specified seed. Note that the code
+carefully maintains the state of the default random number generator
+so as to not disrupt its operation.
 
+<<random.h>>=
+extern Node *primMkStdGen(unsigned long seed);
+
+@ 
 <<random.c>>=
-DECLARE_LABEL(extern, __mkStdGen);
-DECLARE_LABEL(static, __mkStdGen_1);
-
-FUNCTION(__mkStdGen)
+Node *
+primMkStdGen(unsigned long seed)
 {
- ENTRY_LABEL(extern, __mkStdGen)
-    SAVE_REGS(0);
-    EVAL(__mkStdGen_1);
-}
-
-static
-FUNCTION(__mkStdGen_1)
-{
-    unsigned long seed;
-    StdGen	  *rng;
- ENTRY_LABEL(static, __mkStdGen_1)
-    MATCH_RIGID_INT(__mkStdGen_1);
-
-    seed = long_val(regs.r[0]);
+    StdGen *rng;
 
     CHECK_HEAP(0, stdgen_node_size);
     rng		= (StdGen *)regs.hp;
@@ -112,89 +91,54 @@ FUNCTION(__mkStdGen_1)
     if ( rng->state == NULL )
 	sys_error("mkStdGen");
     setstate(initstate(seed, rng->state, STATESIZE));
-    RETURN((Node *)rng, 0);
+    return (Node *)rng;
 }
 
 @ 
-The function [[nextRStdGen :: Int -> Int -> StdGen -> (Int,StdGen)]]
-returns the next random number in the specified range for a particular
-random number generator. The function carefully restores the state of
-the global random number generator after computing the number.
+The function [[primNextRStdGen]] returns the next random number in the
+range $[l,h]$ for the specified random number generator. The function
+carefully restores the state of the global random number generator
+after computing the number.
 
 In order to ensure an equal distribution of random numbers between the
 two bounds $l$ and $h$, we interpret the random numbers returned by
 [[random]] as a bit stream and take $n$ bits from that stream at every
 call, where $n$ is the smallest number such that $2^n \geq h-l+1$. In
-addition, we discard values outside the range $(0,h-l+1)$ in that
+addition, we discard values outside the range $[0,h-l+1]$ in that
 stream. A little analysis reveals that on average we take
 $\frac{2^n}{h-l+1}$ values from the input stream. Thus, even in the
 worst case, when we have $h-l+1 = 2^{n-1} + 1$ and
 $\frac{2^n}{h-l+1} = \frac{2^n}{2^{n-1}+1} \approx 2$, we take at most
 two values from the stream on average. Note that [[random]] returns
-a number in the range $(0,2^{31}-1)$. Therefore, the [[while]] loop
+a number in the range $[0,2^{31}-1]$. Therefore, the [[while]] loop
 may be executed more than once if a 32-bit or larger result is
 requested.
 
+<<random.h>>=
+extern long primNextRStdGen(long, long, Node *);
+
+@ 
 <<random.c>>=
-DECLARE_LABEL(extern, __nextRStdGen);
-DECLARE_LABEL(static, __nextRStdGen_1);
-DECLARE_LABEL(static, __nextRStdGen_2);
-DECLARE_LABEL(static, __nextRStdGen_3);
-
-FUNCTION(__nextRStdGen)
+long
+primNextRStdGen(long lo, long hi, Node *node)
 {
- ENTRY_LABEL(extern, __nextRStdGen)
-    SAVE_REGS(2);
-    EVAL(__nextRStdGen_1);
-}
-
-static
-FUNCTION(__nextRStdGen_1)
-{
- ENTRY_LABEL(static, __nextRStdGen_1)
-    MATCH_RIGID_INT(__nextRStdGen_1);
-    SWAPn(0);
-    EVAL(__nextRStdGen_2);
-}
-
-static
-FUNCTION(__nextRStdGen_2)
-{
- ENTRY_LABEL(static, __nextRStdGen_2)
-    MATCH_RIGID_INT(__nextRStdGen_2);
-    SWAPn(1);
-    EVAL_BOXED(__nextRStdGen_3);
-}
-
-static
-FUNCTION(__nextRStdGen_3)
-{
-    char   *o;
-    int    bits;
-    long   lo, hi, r;
+    char	  *o;
+    int		  bits;
+    long	  r;
     unsigned long diff, mask;
-    StdGen *rng;
-    Node   *p, *i;
- ENTRY_LABEL(static, __nextRStdGen_3)
-    MATCH_RIGID_STDGEN(__nextRStdGen_3);
+    StdGen	  *rng;
 
-    CHECK_HEAP(1, pair_node_size + int_node_size);
-
-    rng = (StdGen *)regs.r[0];
-    lo	= long_val(regs.sp[0]);
-    hi	= long_val(regs.sp[1]);
+    assert(node->info == &stdgen_info);
+    rng = (StdGen *)node;
 
     /* determine the number of bits required */
-    if ( hi >= lo )
-    {
-	diff = hi - lo;
-	mask = 1;
-	for ( bits = 1; diff & ~mask; bits++ )
-	    mask = (mask << 1) + 1;
-    }
-    else
-	FAIL();
+    assert(hi >= lo);
+    diff = hi - lo;
+    mask = 1;
+    for ( bits = 1; diff & ~mask; bits++ )
+	mask = (mask << 1) + 1;
 
+    /* get the next random number in range */
     o = setstate(rng->state);
 repeat:
     r = 0;
@@ -214,112 +158,62 @@ repeat:
 	goto repeat;
     setstate(o);
 
-#if !ONLY_BOXED_OBJECTS
-    if ( !is_large_int(r) )
-	i = mk_unboxed(r);
-    else
-#endif
-    {
-	i	 = (Node *)regs.hp;
-	i->info	 = &int_info;
-	i->i.i	 = r;
-	regs.hp += int_node_size;
-    }
-
-    p		 = (Node *)regs.hp;
-    p->info	 = &pair_info;
-    p->c.args[0] = i;
-    p->c.args[1] = (Node *)rng;
-    regs.hp	+= pair_node_size;
-
-    RETURN(p, 2);
+    return r;
 }
 
 @ 
-The functions [[getStdGen :: IO StdGen]] and [[setStdGen :: StdGen -> IO ()]]
-manage a global variable that maintains the default random number
-generator. If the global variable has not been set, [[getSetGen]]
-creates a new random number generator and initializes this generator
-from the current time.
+The functions [[primGetStdGen]] and [[primSetStdGen]] manage a global
+variable that maintains the default random number generator of the
+\texttt{IO} monad. If the global variable has not been set,
+[[getSetGen]] creates a new random number generator and seeds this
+generator with the current time.
 
 There is a fundamental problem with updating global variables like
 [[stdGen]] in non-deterministic code. In our implementation, this
 could leave a dangling pointer in [[stdGen]] when the
 non-deterministic computation fails. While this could be avoided by
 recording the update on the trail, things do not work out straight
-when a search continuation whose code did update [[stdGen]] is copied.
+when a search continuation is copied whose code did update [[stdGen]].
 In this case, the global variable cannot be copied and therefore the
 copy would start using wrong values for [[stdGen]]. For that reason,
 we simply abort the program with an error message when [[setStdGen]]
-or [[getStdGen]] is called in non-deterministic code. Note that this
-can happen only when these functions are used in an
-[[unsafePerformIO]] context.
+is called in non-deterministic code. Note that this can happen only
+when this functions is used in an [[unsafePerformIO]] context.
 
+<<random.h>>=
+extern void primSetStdGen(Node *);
+extern Node *primGetStdGen(void);
+
+@ 
 <<random.c>>=
-static StdGen *stdGen;
+static Node *stdGen;
 
 #define DET_CHECK(what) do { \
     if ( regs.bp ) fail_with("cannot duplicate " what); \
-} while (0)
+} while ( 0 )
 
-DECLARE_LABEL(extern, __setStdGen);
-DECLARE_LABEL(static, __setStdGen_1);
-
-FUNCTION(__setStdGen)
+void
+primSetStdGen(Node *rng)
 {
- ENTRY_LABEL(extern, __setStdGen)
-    SAVE_REGS(1);
-    EVAL_BOXED(__setStdGen_1);
-}
+    assert(rng->info == &stdgen_info);
 
-static
-FUNCTION(__setStdGen_1)
-{
- ENTRY_LABEL(static, __setStdGen_1)
-    MATCH_RIGID_STDGEN(__setStdGen_1);
-    if ( stdGen == 0 )
-	add_global_root((Node **)&stdGen);
     DET_CHECK("Random.stdGen");
-    stdGen = (StdGen *)regs.r[0];
-    RETURN(unit, 1);
+    if ( !stdGen )
+	add_global_root(&stdGen);
+    stdGen = rng;
 }
 
-DECLARE_LABEL(extern, __getStdGen);
-DECLARE_LABEL(static, __getStdGen_1);
-
-FUNCTION(__getStdGen)
+Node *
+primGetStdGen()
 {
-    long	   seed;
-    Node 	   *s;
-    struct timeval tv;
-    static struct int_node seed_node = { &int_info, 0 };
- ENTRY_LABEL(extern, __getStdGen)
-    if ( stdGen )
-	RET((Node *)stdGen);
-
-    gettimeofday(&tv, NULL);
-    srandom(tv.tv_sec ^ tv.tv_usec);
-    seed = random();
-
-    SAVE_REGS(1);
-#if !ONLY_BOXED_OBJECTS
-    if ( !is_large_int(seed) )
-	s = mk_unboxed(seed);
-    else
-#endif
+    if ( !stdGen )
     {
-	seed_node.i = seed;
-	s	    = (Node *)&seed_node;
-    }
-    CALL1(__mkStdGen, __getStdGen_1, s);
-}
+	struct timeval tv;
 
-static
-FUNCTION(__getStdGen_1)
-{
- ENTRY_LABEL(static, __getStdGen_1)
-    DET_CHECK("Random.stdGen");
-    stdGen = (StdGen *)regs.r[0];
-    add_global_root((Node **)&stdGen);
-    RETURN(regs.r[0], 1);
+	gettimeofday(&tv, NULL);
+	srandom(tv.tv_sec ^ tv.tv_usec);
+	primSetStdGen(primMkStdGen(random()));
+    }
+
+    return stdGen;
 }

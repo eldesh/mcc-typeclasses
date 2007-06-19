@@ -3,7 +3,7 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 2284 2007-06-19 12:19:42Z wlux $
+# $Id: cyc.in 2288 2007-06-19 15:53:44Z wlux $
 #
 # Copyright (c) 2002-2006, Wolfgang Lux
 # See LICENSE for the full license.
@@ -25,7 +25,7 @@ srcdir="@srcdir@"
 : ${CURRY_IMPORT_PATH=$CURRY_PATH}
 : ${CURRY_INCLUDE_PATH=$CURRY_PATH}
 : ${CURRY_LIBRARY_PATH=$CURRY_PATH}
-: ${CC="@CC@ @ARCH_CFLAGS@"}
+: ${CC="@CC@ @CURRY_CFLAGS@"}
 export CURRY_IMPORT_PATH
 
 # Local variables
@@ -107,7 +107,7 @@ while test $# -gt 0; do
 	;;
     -save-temps ) saveTemps=$1;;
 
-    # cyc options
+    # cycc options
     -no-intf | --no-intf | -no-icurry | --no-icurry ) 
 	cyccopts="$cyccopts --no-icurry";;
     -Whaskell ) cyccopts="$cyccopts --haskell-mode";;
@@ -327,7 +327,7 @@ if test -z "$toC$toS$toO"; then
   else
     target2=$target
   fi
-  test -n "$verbose" && echo 1>&2 $cycc $imports -e\"$goal\" $cyccopts $modules -o $target2
+  test -n "$verbose" && echo 1>&2 $cycc $imports $cyccopts -e\"$goal\" $modules -o $target2
   $exec $cycc $imports $cyccopts -e"$goal" $modules -o $target2 || exit $?
 
   test -n "$hsize" && ldopts="$ldopts -DDEFAULT_HEAPSIZE=$hsize"

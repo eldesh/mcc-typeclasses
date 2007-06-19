@@ -1,4 +1,4 @@
-dnl $Id: configure-bin.in 2233 2007-06-08 09:57:47Z wlux $
+dnl $Id: configure-bin.in 2288 2007-06-19 15:53:44Z wlux $
 dnl
 dnl Copyright (c) 2002-2007, Wolfgang Lux
 dnl
@@ -17,7 +17,7 @@ INSTALL_DIR='${INSTALL: -c=} -d -m 755'
 dnl Include additional compiler options for Gnu C
 if test "$GCC" = yes; then
   CURRY_C_DYNAMIC_NO_PIC
-  ARCH_CFLAGS=%ARCH_CFLAGS%
+  CURRY_CFLAGS=%CURRY_CFLAGS%
 fi
 
 dnl Check for Cygpath
@@ -35,7 +35,7 @@ AC_SEARCH_LIBS(socket, socket)
 dnl Check for a shell, which is suitable for cyi
 CURRY_CYI_SHELL
 
-AC_SUBST(ARCH_CFLAGS)
+AC_SUBST(CURRY_CFLAGS)
 AC_SUBST(INSTALL_DIR)
 AC_SUBST(USE_CYGPATH_WORKAROUND)
 AC_SUBST_FILE(in_place_config)

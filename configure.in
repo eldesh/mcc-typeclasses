@@ -1,4 +1,4 @@
-dnl $Id: configure.in 2246 2007-06-14 08:44:16Z wlux $
+dnl $Id: configure.in 2288 2007-06-19 15:53:44Z wlux $
 dnl
 dnl Copyright (c) 2002-2006, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -102,18 +102,12 @@ esac
 dnl Check for additional C compiler options
 if test "$GCC" = yes; then
   CURRY_C_DYNAMIC_NO_PIC
-  CFLAGS="$CFLAGS -Wall -fno-strict-aliasing"
+  CFLAGS="$CFLAGS -Wall"
+  CURRY_CFLAGS="$CURRY_CFLAGS -fno-strict-aliasing"
   if test "$enable_trampoline" != yes; then
-    case $target_cpu in
-      powerpc|powerpc64|rs6000|x86_64 ) ARCH_CFLAGS=-fomit-frame-pointer;;
-      i?86 | sparc ) ARCH_CFLAGS=;;
-      * ) AC_MSG_WARN([
-This is architecture is not yet supported.
-Please report back any additional CFLAGS needed for compilation.
-]);;
-    esac
-    CFLAGS="$CFLAGS $ARCH_CFLAGS"
+    CURRY_CFLAGS="$CURRY_CFLAGS -fomit-frame-pointer"
   fi
+  CFLAGS="$CFLAGS $CURRY_CFLAGS"
 fi
 
 
@@ -250,7 +244,7 @@ esac
 
 
 dnl Generate output files
-AC_SUBST(ARCH_CFLAGS)
+AC_SUBST(CURRY_CFLAGS)
 AC_SUBST(hc)
 AC_SUBST(HC)
 AC_SUBST(HCFLAGS)

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILPP.lhs 1817 2005-11-06 23:42:07Z wlux $
+% $Id: ILPP.lhs 2281 2007-06-19 12:12:28Z wlux $
 %
 % Copyright (c) 1999-2005 Wolfgang Lux
 % See LICENSE for the full license.
@@ -103,12 +103,11 @@ Marlow's pretty printer for Haskell.
 > ppExpr p (Variable v) = ppIdent v
 > ppExpr p (Function f _) = ppQIdent f
 > ppExpr p (Constructor c _) = ppQIdent c
-> ppExpr p (Apply (Apply (Function f _) e1) e2)
->   | isQInfixOp f = ppInfixApp p e1 f e2
-> ppExpr p (Apply (Apply (Constructor c _) e1) e2)
->   | isQInfixOp c = ppInfixApp p e1 c e2
 > ppExpr p (Apply e1 e2) =
->   ppParen (p > 2) (sep [ppExpr 2 e1,nest exprIndent (ppExpr 3 e2)])
+>   case e1 of
+>     Apply (Function f _) e | isQInfixOp f -> ppInfixApp p e f e2
+>     Apply (Constructor c _) e | isQInfixOp c -> ppInfixApp p e c e2
+>     _ -> ppParen (p > 2) (sep [ppExpr 2 e1,nest exprIndent (ppExpr 3 e2)])
 > ppExpr p (Case ev e alts) =
 >   ppParen (p > 0)
 >           (text "case" <+> ppEval ev <+> ppExpr 0 e <+> text "of" $$
@@ -116,17 +115,17 @@ Marlow's pretty printer for Haskell.
 >   where ppEval Rigid = text "rigid"
 >         ppEval Flex = text "flex"
 > ppExpr p (Or e1 e2) =
->   ppParen (p > 0) (sep [ppExpr 0 e1,char '|' <+> ppExpr 0 e2])
+>   ppParen (p > 0) (sep [ppExpr 1 e1,char '|' <+> ppExpr 0 e2])
 > ppExpr p (Exist v e) =
->   ppParen (p > 0)
+>   ppParen (p > 1)
 >           (sep [text "let" <+> ppIdent v <+> text "free" <+> text "in",
->                 ppExpr 0 e])
+>                 ppExpr 1 e])
 > ppExpr p (Let b e) =
->   ppParen (p > 0) (sep [text "let" <+> ppBinding b <+> text "in",ppExpr 0 e])
+>   ppParen (p > 1) (sep [text "let" <+> ppBinding b <+> text "in",ppExpr 1 e])
 > ppExpr p (Letrec bs e) =
->   ppParen (p > 0)
+>   ppParen (p > 1)
 >           (sep [text "letrec" <+> vcat (map ppBinding bs) <+> text "in",
->                 ppExpr 0 e])
+>                 ppExpr 1 e])
 
 > ppInfixApp :: Int -> Expression -> QualIdent -> Expression -> Doc
 > ppInfixApp p e1 op e2 =

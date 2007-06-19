@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2275 2007-06-18 09:30:41Z wlux $
+% $Id: TypeCheck.lhs 2289 2007-06-19 16:30:52Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -271,10 +271,10 @@ general than the type signature.
 
 > tcDeclGroup :: ModuleIdent -> TCEnv -> SigEnv -> Context -> [Decl a]
 >             -> TcState (Context,[Decl Type])
-> tcDeclGroup m tcEnv _ cx [ForeignDecl p cc ie f ty] =
+> tcDeclGroup m tcEnv _ cx [ForeignDecl p cc s ie f ty] =
 >   do
 >     tcForeignFunct m tcEnv p cc ie f ty
->     return (cx,[ForeignDecl p cc ie f ty])
+>     return (cx,[ForeignDecl p cc s ie f ty])
 > tcDeclGroup m tcEnv sigs cx [FreeDecl p vs] =
 >   do
 >     bindDeclVars m tcEnv sigs p vs
@@ -562,7 +562,7 @@ matter whether it its evaluation is shared or not.
 >   isNonExpansive _ _ (InfixDecl _ _ _ _) = True
 >   isNonExpansive _ _ (TypeSig _ _ _) = True
 >   isNonExpansive _ _ (FunctionDecl _ _ (eq:eqs)) = eqnArity eq > 0
->   isNonExpansive tcEnv _ (ForeignDecl _ _ _ _ ty) =
+>   isNonExpansive tcEnv _ (ForeignDecl _ _ _ _ _ ty) =
 >     arrowArity (rawType ty') > 0
 >     where ty' = typeScheme (expandPolyType tcEnv (QualTypeExpr [] ty))
 >   isNonExpansive tcEnv tyEnv (PatternDecl _ t rhs) =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2286 2007-06-19 12:31:29Z wlux $
+% $Id: CurryParser.lhs 2289 2007-06-19 16:30:52Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -45,7 +45,7 @@ combinators described in appendix~\ref{sec:ll-parsecomb}.
 >              -> Parser Token ([ImportDecl] -> [TopDecl ()] -> Module ()) a
 > moduleHeader fn = Module <$-> token KW_module
 >                          <*> (mIdent <?> "module name expected")
->                          <*> (Just <$> exportSpec `opt` Nothing)
+>                          <*> option exportSpec
 >                          <*-> (token KW_where <?> "where expected")
 >             `opt` Module (defaultMIdent fn) Nothing
 
@@ -68,10 +68,10 @@ combinators described in appendix~\ref{sec:ll-parsecomb}.
 > importDecl :: Parser Token ImportDecl a
 > importDecl =
 >   flip . ImportDecl <$> position <*-> token KW_import 
->                     <*> (True <$-> token Id_qualified `opt` False)
+>                     <*> flag (token Id_qualified)
 >                     <*> mIdent
->                     <*> (Just <$-> token Id_as <*> mIdent `opt` Nothing)
->                     <*> (Just <$> importSpec `opt` Nothing)
+>                     <*> option (token Id_as <-*> mIdent)
+>                     <*> option importSpec
 
 > importSpec :: Parser Token ImportSpec a
 > importSpec = position <**> (Hiding <$-> token Id_hiding `opt` Importing)
@@ -316,15 +316,18 @@ directory path to the module is ignored.
 > foreignDecl :: Parser Token (Decl ()) a
 > foreignDecl =
 >   mkDecl <$> position <*-> token KW_foreign <*-> token KW_import
->          <*> callConv <*> safeEntity <*-> token DoubleColon <*> type0
->   where mkDecl p cc (ie,f) ty = ForeignDecl p cc ie f ty
+>          <*> callConv <*> entitySpec <*-> token DoubleColon <*> type0
+>   where mkDecl p cc (s,ie,f) ty = ForeignDecl p cc s ie f ty
 >         callConv = CallConvPrimitive <$-> token Id_primitive
 >                <|> CallConvCCall <$-> token Id_ccall
->         safeEntity = safety <**> (const <$> importEntity `opt` safetyId)
->                  <|> importEntity <\> safety
->         importEntity = (,) <$> (Just <$> string `opt` Nothing) <*> fun
->         safety = tokens [Id_safe,Id_unsafe]
->         safetyId x = (Nothing,mkIdent (sval x))
+>         entitySpec = withSafety <$> safety <*> option importSpec
+>                  <|> withoutSafety <$> importSpec <\> safety
+>         safety = (,) Unsafe <$> token Id_unsafe
+>              <|> (,) Safe <$> token Id_safe
+>         importSpec = (,) <$> option string <*> fun
+>         withSafety s (Just (ie,f)) = (Just (fst s),ie,f)
+>         withSafety s Nothing =  (Nothing,Nothing,mkIdent (sval (snd s)))
+>         withoutSafety (ie,f) = (Nothing,ie,f)
 
 > trustAnnotation :: Parser Token (Decl ()) a
 > trustAnnotation =
@@ -402,7 +405,7 @@ directory path to the module is ignored.
 > iInstanceDecl :: Parser Token IDecl a
 > iInstanceDecl =
 >   iClassInstDecl IInstanceDecl KW_instance qtycls type2 <*>
->   (Just <$-> token KW_of <*> mIdent `opt` Nothing)
+>   option (token KW_of <-*> mIdent)
 
 > iClassInstDecl :: (Position -> [ClassAssert] -> a -> b -> c) -> Category
 >                -> Parser Token a d -> Parser Token b d -> Parser Token c d
@@ -853,6 +856,12 @@ the opening and closing brace, respectively.
 > brackets p = bracket leftBracket p rightBracket
 > parens p = bracket leftParen p rightParen
 > backquotes p = bracket backquote p checkBackquote
+
+> option :: Parser Token a b -> Parser Token (Maybe a) b
+> option p = Just <$> p `opt` Nothing
+
+> flag :: Parser Token a b -> Parser Token Bool b
+> flag p = True <$-> p `opt` False
 
 \end{verbatim}
 \paragraph{Simple token parsers}

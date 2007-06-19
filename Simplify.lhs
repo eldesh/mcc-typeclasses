@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2177 2007-04-27 16:42:08Z wlux $
+% $Id: Simplify.lhs 2289 2007-06-19 16:30:52Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -175,7 +175,7 @@ order to compute the equation's body.
 
 > isNonExpansiveDecl :: ValueEnv -> Decl a -> Bool
 > isNonExpansiveDecl _ (FunctionDecl _ _ _) = True
-> isNonExpansiveDecl _ (ForeignDecl _ _ _ _ _) = True
+> isNonExpansiveDecl _ (ForeignDecl _ _ _ _ _ _) = True
 > isNonExpansiveDecl tyEnv (PatternDecl _ _ (SimpleRhs _ e _)) =
 >   isNonExpansive tyEnv 0 e
 > isNonExpansiveDecl _ (FreeDecl _ _) = False

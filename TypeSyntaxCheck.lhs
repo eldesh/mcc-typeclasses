@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2095 2007-02-13 17:34:10Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2289 2007-06-19 16:30:52Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -144,8 +144,8 @@ not contain any additional constraints for that type variable
 >   liftE (FunctionDecl p f) (mapE (checkEquation env) eqs)
 > checkDecl env (PatternDecl p t rhs) =
 >   liftE (PatternDecl p t) (checkRhs env rhs)
-> checkDecl env (ForeignDecl p cc ie f ty) =
->   liftE (ForeignDecl p cc ie f) (checkType env p ty)
+> checkDecl env (ForeignDecl p cc s ie f ty) =
+>   liftE (ForeignDecl p cc s ie f) (checkType env p ty)
 > checkDecl _ (FreeDecl p vs) = return (FreeDecl p vs)
 > checkDecl _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
 

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2278 2007-06-18 17:47:44Z wlux $
+% $Id: Base.lhs 2289 2007-06-19 16:30:52Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -513,7 +513,7 @@ variables cannot be computed independently for each declaration.
 
 > instance QuantExpr (Decl a) where
 >   bv (FunctionDecl _ f _) = [f]
->   bv (ForeignDecl _ _ _ f _) = [f]
+>   bv (ForeignDecl _ _ _ _ f _) = [f]
 >   bv (PatternDecl _ t _) = bv t
 >   bv (FreeDecl _ vs) = vs
 >   bv _ = []
@@ -652,14 +652,14 @@ name space.
 > isInfixDecl (InfixDecl _ _ _ _) = True
 > isInfixDecl _ = False
 > isTypeSig (TypeSig _ _ _) = True
-> isTypeSig (ForeignDecl _ _ _ _ _) = True
+> isTypeSig (ForeignDecl _ _ _ _ _ _) = True
 > isTypeSig _ = False
 > isFreeDecl (FreeDecl _ _) = True
 > isFreeDecl _ = False
 > isTrustAnnot (TrustAnnot _ _ _) = True
 > isTrustAnnot _ = False
 > isValueDecl (FunctionDecl _ _ _) = True
-> isValueDecl (ForeignDecl _ _ _ _ _) = True
+> isValueDecl (ForeignDecl _ _ _ _ _ _) = True
 > isValueDecl (PatternDecl _ _ _) = True
 > isValueDecl (FreeDecl _ _) = True
 > isValueDecl _ = False

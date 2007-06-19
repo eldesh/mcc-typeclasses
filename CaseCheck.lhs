@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 2082 2007-01-24 20:11:46Z wlux $
+% $Id: CaseCheck.lhs 2289 2007-06-19 16:30:52Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -175,7 +175,7 @@ collect all defined identifiers.
 >   names _ (InfixDecl _ _ _ _) xs = xs
 >   names _ (TypeSig p _ ty) xs = names p ty xs
 >   names _ (FunctionDecl p f eqs) xs = D p FunctionId f : names p eqs xs
->   names _ (ForeignDecl p _ _ f ty) xs = D p FunctionId f : names p ty xs
+>   names _ (ForeignDecl p _ _ _ f ty) xs = D p FunctionId f : names p ty xs
 >   names _ (PatternDecl p t rhs) xs = names p t (names p rhs xs)
 >   names _ (FreeDecl p vs) xs = map (D p VariableId) vs ++ xs
 >   names _ (TrustAnnot _ _ _) xs = xs

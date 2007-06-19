@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2095 2007-02-13 17:34:10Z wlux $
+% $Id: Renaming.lhs 2289 2007-06-19 16:30:52Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -232,11 +232,11 @@ class method.
 >   do
 >     f' <- renameVar env f
 >     liftM (FunctionDecl p f') (mapM (renameEqn f' env) eqs)
-> renameDecl env (ForeignDecl p cc ie f ty) =
+> renameDecl env (ForeignDecl p cc s ie f ty) =
 >   do
 >     f' <- renameVar env f
 >     QualTypeExpr _ ty' <- renameTypeSig (QualTypeExpr [] ty)
->     return (ForeignDecl p cc ie f' ty')
+>     return (ForeignDecl p cc s ie f' ty')
 > renameDecl env (PatternDecl p t rhs) =
 >   liftM2 (PatternDecl p) (renameConstrTerm env t) (renameRhs env rhs)
 > renameDecl env (FreeDecl p vs) =

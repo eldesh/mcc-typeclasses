@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2189 2007-05-01 16:26:51Z wlux $
+% $Id: Desugar.lhs 2289 2007-06-19 16:30:52Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -243,8 +243,8 @@ and the name of the imported function.
 > desugarDeclRhs :: ModuleIdent -> Decl Type -> DesugarState (Decl Type)
 > desugarDeclRhs m (FunctionDecl p f eqs) =
 >   liftM (FunctionDecl p f) (mapM (desugarEquation m) eqs)
-> desugarDeclRhs _ (ForeignDecl p cc ie f ty) =
->   return (ForeignDecl p cc (desugarImpEnt cc ie) f ty)
+> desugarDeclRhs _ (ForeignDecl p cc s ie f ty) =
+>   return (ForeignDecl p cc (s `mplus` Just Safe) (desugarImpEnt cc ie) f ty)
 >   where desugarImpEnt CallConvPrimitive ie = ie `mplus` Just (name f)
 >         desugarImpEnt CallConvCCall ie =
 >           Just (unwords (kind (maybe [] words ie)))

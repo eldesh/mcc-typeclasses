@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Lift.lhs 2161 2007-04-22 14:48:33Z wlux $
+% $Id: Lift.lhs 2289 2007-06-19 16:30:52Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Lift.lhs}
@@ -258,8 +258,8 @@ variables in order to avoid an inadvertent name capturing.
 >   where f' = liftIdent pre f
 >         addVars f (Equation p (FunLhs _ ts) rhs) =
 >           Equation p (FunLhs f (map (uncurry VariablePattern) fvs ++ ts)) rhs
-> abstractFunDecl m pre _ lvs env (ForeignDecl p cc ie f ty) =
->   return (ForeignDecl p cc ie (liftIdent pre f) ty)
+> abstractFunDecl m pre _ lvs env (ForeignDecl p cc s ie f ty) =
+>   return (ForeignDecl p cc s ie (liftIdent pre f) ty)
 
 > abstractExpr :: ModuleIdent -> String -> [Ident] -> AbstractEnv
 >              -> Expression Type -> AbstractState (Expression Type)
@@ -365,7 +365,7 @@ to the top-level.
 
 > isFunDecl :: Decl a -> Bool
 > isFunDecl (FunctionDecl _ _ _) = True
-> isFunDecl (ForeignDecl _ _ _ _ _) = True
+> isFunDecl (ForeignDecl _ _ _ _ _ _) = True
 > isFunDecl _ = False
 
 > isVarPattern :: ConstrTerm a -> Bool

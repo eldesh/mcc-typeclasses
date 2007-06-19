@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 2247 2007-06-14 12:57:40Z wlux $
+% $Id: UnusedCheck.lhs 2289 2007-06-19 16:30:52Z wlux $
 %
-% Copyright (c) 2005-2006, Wolfgang Lux
+% Copyright (c) 2005-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{UnusedCheck.lhs}
@@ -126,7 +126,7 @@ implemented by a traversal of the syntax tree.
 >
 >   unused used _ (FunctionDecl p f eqs) =
 >     unusedVars Decl used p [f] . unused used p eqs
->   unused used _ (ForeignDecl p _ _ f _) = unusedVars Decl used p [f]
+>   unused used _ (ForeignDecl p _ _ _ f _) = unusedVars Decl used p [f]
 >   unused used _ (PatternDecl p (VariablePattern _ v) rhs)
 >     | isAnonId v = ([Pattern p] ++)
 >     | otherwise = unusedVars Decl used p [v]

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2275 2007-06-18 09:30:41Z wlux $
+% $Id: CurrySyntax.lhs 2289 2007-06-19 16:30:52Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -75,7 +75,7 @@ parsed representation of a Curry program.
 >     InfixDecl Position Infix Int [Ident]
 >   | TypeSig Position [Ident] QualTypeExpr
 >   | FunctionDecl Position Ident [Equation a]
->   | ForeignDecl Position CallConv (Maybe String) Ident TypeExpr
+>   | ForeignDecl Position CallConv (Maybe Safety) (Maybe String) Ident TypeExpr
 >   | PatternDecl Position (ConstrTerm a) (Rhs a)
 >   | FreeDecl Position [Ident]
 >   | TrustAnnot Position Trust (Maybe [Ident])
@@ -83,6 +83,7 @@ parsed representation of a Curry program.
 
 > data Infix = Infix | InfixL | InfixR deriving (Eq,Show)
 > data CallConv = CallConvPrimitive | CallConvCCall deriving (Eq,Show)
+> data Safety = Unsafe | Safe deriving (Eq,Show)
 > data Trust = Suspect | Trust deriving (Eq,Show)
 
 > constr :: ConstrDecl -> Ident
@@ -285,7 +286,7 @@ The abstract syntax tree is a functor with respect to the attributes.
 >   fmap _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops
 >   fmap _ (TypeSig p fs ty) = TypeSig p fs ty
 >   fmap f (FunctionDecl p f' eqs) = FunctionDecl p f' (map (fmap f) eqs)
->   fmap _ (ForeignDecl p cc ie f ty) = ForeignDecl p cc ie f ty
+>   fmap _ (ForeignDecl p cc s ie f ty) = ForeignDecl p cc s ie f ty
 >   fmap f (PatternDecl p t rhs) = PatternDecl p (fmap f t) (fmap f rhs)
 >   fmap _ (FreeDecl p vs) = FreeDecl p vs
 >   fmap _ (TrustAnnot p tr fs) = TrustAnnot p tr fs

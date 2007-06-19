@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2095 2007-02-13 17:34:10Z wlux $
+% $Id: KindCheck.lhs 2289 2007-06-19 16:30:52Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -118,7 +118,7 @@ declarations.
 >   fts _ (InfixDecl _ _ _ _) = id
 >   fts m (TypeSig _ _ ty) = fts m ty
 >   fts m (FunctionDecl _ _ eqs) = fts m eqs
->   fts m (ForeignDecl _ _ _ _ ty) = fts m ty
+>   fts m (ForeignDecl _ _ _ _ _ ty) = fts m ty
 >   fts m (PatternDecl _ _ rhs) = fts m rhs
 >   fts m (FreeDecl _ _) = id
 >   fts _ (TrustAnnot _ _ _) = id
@@ -388,9 +388,9 @@ latter.
 > kcDecl _ (InfixDecl _ _ _ _) = return ()
 > kcDecl tcEnv (TypeSig p _ ty) = kcTypeSig tcEnv Nothing p ty
 > kcDecl tcEnv (FunctionDecl _ _ eqs) = mapM_ (kcEquation tcEnv) eqs
-> kcDecl tcEnv (PatternDecl _ _ rhs) = kcRhs tcEnv rhs
-> kcDecl tcEnv (ForeignDecl p _ _ _ ty) =
+> kcDecl tcEnv (ForeignDecl p _ _ _ _ ty) =
 >   kcTypeSig tcEnv Nothing p (QualTypeExpr [] ty)
+> kcDecl tcEnv (PatternDecl _ _ rhs) = kcRhs tcEnv rhs
 > kcDecl _ (FreeDecl _ _) = return ()
 > kcDecl _ (TrustAnnot _ _ _) = return ()
 

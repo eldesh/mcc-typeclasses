@@ -1,6 +1,6 @@
--- $Id: ForeignPtr.curry 2041 2006-12-13 09:43:43Z wlux $
+-- $Id: ForeignPtr.curry 2292 2007-06-19 21:57:05Z wlux $
 --
--- Copyright (c) 2005, Wolfgang Lux
+-- Copyright (c) 2005-2007, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module ForeignPtr where
@@ -19,7 +19,7 @@ instance Ord (ForeignPtr a) where
 instance Show (ForeignPtr a) where
   showsPrec p = showsPrec p . unsafeForeignPtrToPtr
 
-foreign import primitive "newForeignPtr"
+foreign import ccall unsafe "foreign.h primNewForeignPtr"
         newForeignPtr_ :: Ptr a -> IO (ForeignPtr a)
 
 newForeignPtr :: FinalizerPtr a -> Ptr a -> IO (ForeignPtr a)
@@ -37,9 +37,9 @@ newForeignPtrEnv finalizer env ptr =
     addForeignPtrFinalizerEnv finalizer env fp
     return fp
 
-foreign import primitive 
+foreign import ccall unsafe "foreign.h primAddForeignPtrFinalizer"
         addForeignPtrFinalizer :: FinalizerPtr a -> ForeignPtr a -> IO ()
-foreign import primitive
+foreign import ccall unsafe "foreign.h primAddForeignPtrFinalizerEnv"
         addForeignPtrFinalizerEnv :: FinalizerEnvPtr env a -> Ptr env
                                   -> ForeignPtr a -> IO ()
 
@@ -53,6 +53,10 @@ withForeignPtr fp f =
     touchForeignPtr fp
     return x
 
-foreign import primitive unsafeForeignPtrToPtr :: ForeignPtr a -> Ptr a 
-foreign import primitive touchForeignPtr :: ForeignPtr a -> IO ()
-foreign import primitive castForeignPtr :: ForeignPtr a -> ForeignPtr b
+foreign import ccall unsafe "foreign.h primUnsafeForeignPtrToPtr"
+	       unsafeForeignPtrToPtr :: ForeignPtr a -> Ptr a 
+foreign import ccall unsafe "foreign.h primTouchForeignPtr"
+	       touchForeignPtr :: ForeignPtr a -> IO ()
+foreign import ccall unsafe "prims.h primCastPtr"
+	       castForeignPtr :: ForeignPtr a -> ForeignPtr b
+

@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: foreign.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: foreign.nw 2292 2007-06-19 21:57:05Z wlux $
 %
-% Copyright (c) 2005-2006, Wolfgang Lux
+% Copyright (c) 2005-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Finalized Foreign Pointers}\label{sec:foreign}
@@ -18,13 +18,10 @@ garbage collected.
 #include "run.h"
 #include "regs.h"
 #include "heap.h"
-#include "stack.h"
-#include "threads.h"
 #include "spaces.h"
 #include "eval.h"
-#include "data.h"
 #include "io_monad.h"
-#include "cam.h"
+#include "foreign.h"
 
 static void finalize_foreign_ptr(Node *);
 
@@ -114,208 +111,115 @@ finalize_foreign_ptr(Node *node)
 }
 
 @ 
-The primitive [[__newForeignPtr]]\footnote{Note that this primitive
-implements the function \texttt{newForeignPtr\_} in module
-\texttt{ForeignPtr}, not \texttt{newForeignPtr}.} allocates a new
-foreign pointer node for its argument. No finalization function is
-associated with the pointer initially. Such functions must be added
-with [[__addForeignPtrFinalizer]] and [[__addForeignPtrFinalizerEnv]],
-respectively.
+The function [[primNewForeignPtr]] allocates a new foreign pointer
+node for the given pointer. No finalization function is associated
+with the pointer initially. Nevertheless, the node is already
+registered as a finalized object at the garbage collector. Note that
+this function implements \texttt{newForeignPtr\_} from module
+\texttt{ForeignPtr} and not \texttt{newForeignPtr}.
 
+\ToDo{Register foreign pointer nodes at the garbage collector when the
+  first finalization function is added to the node?}
+
+<<foreign.h>>=
+extern Node *primNewForeignPtr(void *ptr);
+
+@ 
 <<foreign.c>>=
-DECLARE_LABEL(extern, __newForeignPtr);
-DECLARE_LABEL(static, __newForeignPtr_1);
-
-FUNCTION(__newForeignPtr)
-{
- ENTRY_LABEL(extern, __newForeignPtr)
-    SAVE_REGS(1);
-    EVAL_BOXED(__newForeignPtr_1);
-}
-
-static
-FUNCTION(__newForeignPtr_1)
+Node *
+primNewForeignPtr(void *ptr)
 {
     Node *fp;
- ENTRY_LABEL(static, __newForeignPtr_1)
-    MATCH_RIGID_PTR(__newForeignPtr_1);
 
-    CHECK_HEAP(1, foreign_ptr_node_size);
+    CHECK_HEAP(0, foreign_ptr_node_size);
     fp		= (Node *)regs.hp;
     fp->info	= &foreign_ptr_info;
     fp->fp.spc	= regs.ss;
-    fp->fp.ptr	= regs.r[0]->p.ptr;
+    fp->fp.ptr	= ptr;
     fp->fp.fptr	= 0;
     regs.hp    += foreign_ptr_node_size;
 
     register_final(fp);
-    RETURN(fp, 1);
+    return fp;
 }
 
 @ 
-The primitives [[__addForeignPtrFinalizer]] and
-[[__addForeignPtrFinalizerEnv]] add a finalization function to a
-finalized foreign pointer node. [[__addForeignPtrFinalizerEnv]] also
-provides the environment pointer for the finalization function. In
-order to ensure a deterministic semantics of finalizers, these
-functions must be executed in the same search space where the
-finalized foreign pointer node was created.
+The functions [[primAddForeignPtrFinalizer]] and
+[[primAddForeignPtrFinalizerEnv]] add a finalization function to a
+finalized foreign pointer node. [[PrimAddForeignPtrFinalizerEnv]]
+also records an environment pointer for the finalization function. In
+order to ensure a deterministic semantics of finalizers in conjunction
+with [[unsafePerformIO]], these functions must be executed in the same
+search space where the finalized foreign pointer node was created.
 
+<<foreign.h>>=
+extern void primAddForeignPtrFinalizer(void *, Node *);
+extern void primAddForeignPtrFinalizerEnv(void *, void *, Node *);
+
+@ 
 <<foreign.c>>=
-DECLARE_LABEL(extern, __addForeignPtrFinalizer);
-DECLARE_LABEL(static, __addForeignPtrFinalizer_1);
-DECLARE_LABEL(static, __addForeignPtrFinalizer_2);
-
-DECLARE_LABEL(extern, __addForeignPtrFinalizerEnv);
-DECLARE_LABEL(static, __addForeignPtrFinalizerEnv_1);
-DECLARE_LABEL(static, __addForeignPtrFinalizerEnv_2);
-DECLARE_LABEL(static, __addForeignPtrFinalizerEnv_3);
-
-FUNCTION(__addForeignPtrFinalizer)
-{
- ENTRY_LABEL(extern, __addForeignPtrFinalizer)
-    SAVE_REGS(2);
-    EVAL_BOXED(__addForeignPtrFinalizer_1);
-}
-
-static
-FUNCTION(__addForeignPtrFinalizer_1)
-{
- ENTRY_LABEL(static, __addForeignPtrFinalizer_1)
-    MATCH_RIGID_PTR(__addForeignPtrFinalizer_1);
-    SWAPn(0);
-    EVAL_BOXED(__addForeignPtrFinalizer_2);
-}
-
-static
-FUNCTION(__addForeignPtrFinalizer_2)
+void
+primAddForeignPtrFinalizer(void *finalize, Node *fp)
 {
     union finalizer_list *fptr;
- ENTRY_LABEL(static, __addForeignPtrFinalizer_2)
-    MATCH_RIGID_FOREIGN_PTR(__addForeignPtrFinalizer_2);
-    if ( regs.r[0]->fp.spc != regs.ss )
+
+    if ( fp->fp.spc != regs.ss )
 	fail_with("addForeignPtrFinalizer: non-local pointer");
 
-    CHECK_HEAP(1, finalizer_node_size);
+    BEGIN_LOCAL_ROOTS1(fp)
+    CHECK_HEAP(0, finalizer_node_size);
     fptr	     = (union finalizer_list *)regs.hp;
     fptr->info	     = &finalizer_info;
-    fptr->f.next     = regs.r[0]->fp.fptr;
-    fptr->f.finalize = (void (*)(void *))regs.sp[0]->p.ptr;
+    fptr->f.next     = fp->fp.fptr;
+    fptr->f.finalize = (void (*)(void *))finalize;
     regs.hp	    += finalizer_node_size;
 
-    regs.r[0]->fp.fptr = fptr;
-    RETURN(unit, 2);
+    fp->fp.fptr = fptr;
+    END_LOCAL_ROOTS
 }
 
-FUNCTION(__addForeignPtrFinalizerEnv)
-{
- ENTRY_LABEL(extern, __addForeignPtrFinalizerEnv)
-    SAVE_REGS(3);
-    EVAL_BOXED(__addForeignPtrFinalizerEnv_1);
-}
-
-static
-FUNCTION(__addForeignPtrFinalizerEnv_1)
-{
- ENTRY_LABEL(static, __addForeignPtrFinalizerEnv_1)
-    MATCH_RIGID_PTR(__addForeignPtrFinalizerEnv_1);
-    SWAPn(0);
-    EVAL_BOXED(__addForeignPtrFinalizerEnv_2);
-}
-
-static
-FUNCTION(__addForeignPtrFinalizerEnv_2)
-{
- ENTRY_LABEL(static, __addForeignPtrFinalizerEnv_2)
-    MATCH_RIGID_PTR(__addForeignPtrFinalizerEnv_2);
-    SWAPn(1);
-    EVAL_BOXED(__addForeignPtrFinalizerEnv_3);
-}
-
-static
-FUNCTION(__addForeignPtrFinalizerEnv_3)
+void
+primAddForeignPtrFinalizerEnv(void *finalize, void *env, Node *fp)
 {
     union finalizer_list *fptr;
- ENTRY_LABEL(static, __addForeignPtrFinalizerEnv_3)
-    MATCH_RIGID_FOREIGN_PTR(__addForeignPtrFinalizerEnv_3);
-    if ( regs.r[0]->fp.spc != regs.ss )
+
+    if ( fp->fp.spc != regs.ss )
 	fail_with("addForeignPtrFinalizerEnv: non-local pointer");
 
-    CHECK_HEAP(1, finalizer_env_node_size);
+    BEGIN_LOCAL_ROOTS1(fp)
+    CHECK_HEAP(0, finalizer_env_node_size);
     fptr	      = (union finalizer_list *)regs.hp;
     fptr->info	      = &finalizer_env_info;
-    fptr->fe.next     = regs.r[0]->fp.fptr;
-    fptr->fe.finalize = (void (*)(void *, void *))regs.sp[0]->p.ptr;
-    fptr->fe.env      = regs.sp[1]->p.ptr;
+    fptr->fe.next     = fp->fp.fptr;
+    fptr->fe.finalize = (void (*)(void *, void *))finalize;
+    fptr->fe.env      = env;
     regs.hp	     += finalizer_env_node_size;
 
-    regs.r[0]->fp.fptr = fptr;
-    RETURN(unit, 3);
+    fp->fp.fptr = fptr;
+    END_LOCAL_ROOTS
 }
 
 @ 
-The primitive [[__unsafeForeignPtrToPtr]] returns the pointer value of
+The macro [[primUnsafeForeignPtrToPtr]] returns the pointer value of
 a foreign pointer node. It is unsafe because the pointer may be
 finalized and therefore become invalid when the program retains no
 reference to the foreign pointer node itself.
 
-<<foreign.c>>=
-DECLARE_LABEL(extern, __unsafeForeignPtrToPtr);
-DECLARE_LABEL(static, __unsafeForeignPtrToPtr_1);
-
-FUNCTION(__unsafeForeignPtrToPtr)
-{
- ENTRY_LABEL(extern, __unsafeForeignPtrToPtr)
-    SAVE_REGS(0);
-    EVAL_BOXED(__unsafeForeignPtrToPtr_1);
-}
-
-static
-FUNCTION(__unsafeForeignPtrToPtr_1)
-{
-    Node *p;
- ENTRY_LABEL(static, __unsafeForeignPtrToPtr_1)
-    MATCH_RIGID_FOREIGN_PTR(__unsafeForeignPtrToPtr_1);
-    if ( regs.r[0]->fp.ptr )
-    {
-	CHECK_HEAP(1, ptr_node_size);
-	p	 = (Node *)regs.hp;
-	p->info  = &ptr_info;
-	p->p.ptr = regs.r[0]->fp.ptr;
-	regs.hp	+= ptr_node_size;
-    }
-    else
-	p = (Node *)&null_ptr;
-
-    RETURN(p, 0);
-}
+<<foreign.h>>=
+#define primUnsafeForeignPtrToPtr(node)	((node)->fp.ptr)
 
 @ 
-The only purpose of the primitive [[__touchForeignPtr]] is to retain a
-reference to its argument. Since this is achieved by passing the
-foreign pointer node on the stack, the function can simply ignore its
-argument and return to the caller.
+The only purpose of function [[primTouchForeignPtr]] is to retain a
+reference to its argument and thus prevent premature garbage
+collection of the foreign pointer node.
 
-<<foreign.c>>=
-DECLARE_LABEL(extern, __touchForeignPtr);
-
-FUNCTION(__touchForeignPtr)
-{
- ENTRY_LABEL(extern, __touchForeignPtr)
-    RET(unit);
-}
+<<foreign.h>>=
+extern void primTouchForeignPtr(Node *);
 
 @ 
-The primitive [[__castForeignPtr]] is intended for casting the (base)
-type of a foreign pointer. This function is effectively the identity
-function, but can take advantage of the fact that it is always passed
-a boxed object.
-
 <<foreign.c>>=
-DECLARE_LABEL(extern, __castForeignPtr);
-
-FUNCTION(__castForeignPtr)
+void
+primTouchForeignPtr(Node *fp)
 {
- ENTRY_LABEL(extern, __castForeignPtr)
-    ENT(regs.r[0]);
+    /* deliberately empty */
 }

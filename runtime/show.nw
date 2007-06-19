@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2296 2007-06-19 22:37:03Z wlux $
+% $Id: show.nw 2298 2007-06-19 22:55:06Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -37,6 +37,7 @@ declarative debugger.
 #include "data.h"
 #include "vars.h"
 #include "cstring.h"
+#include "show.h"
 #include "cam.h"
 #include "trace.h"
 
@@ -1042,57 +1043,32 @@ FUNCTION(showStringTail_1)
 }
 
 @
-The functions \verb|showEFloat| and \verb|showFFloat| convert a
-floating-point number into a string using scientific and fixed
-point formats, respectively. In order to avoid buffer overflows, these
+The functions [[primShowEFloat]] and [[primShowFFloat]] convert a
+floating-point number into a string using scientific and fixed point
+formats, respectively. In order to avoid buffer overflows, these
 functions use a dynamically allocated temporary buffer. If the
 precision argument is not negative, it specifies the number of decimal
-digits for the result.
+digits of the result.
 
+<<show.h>>=
+Node *primShowEFloat(long, double);
+Node *primShowFFloat(long, double);
+
+@ 
 <<show.c>>=
-DECLARE_LABEL(extern, __showEFloat);
-DECLARE_LABEL(static, __showEFloat_1);
-DECLARE_LABEL(static, __showEFloat_2);
-
-DECLARE_LABEL(extern, __showFFloat);
-DECLARE_LABEL(static, __showFFloat_1);
-DECLARE_LABEL(static, __showFFloat_2);
-
-FUNCTION(__showEFloat)
+Node *
+primShowEFloat(long p, double d)
 {
- ENTRY_LABEL(extern, __showEFloat)
-    SAVE_REGS(2);
-    EVAL(__showEFloat_1);
-}
-
-static
-FUNCTION(__showEFloat_1)
-{
- ENTRY_LABEL(static, __showEFloat_1)
-    MATCH_RIGID_INT(__showEFloat_1);
-    SWAPn(0);
-    EVAL_BOXED(__showEFloat_2);
-}
-
-static
-FUNCTION(__showEFloat_2)
-{
-    int	       p, n;
-    double     d;
     char       fmt[20], *buf;
     const char *loc;
     Node       *str;
- ENTRY_LABEL(static, __showEFloat_2)
-    MATCH_RIGID_FLOAT(__showEFloat_2);
-    get_double_val(d, regs.r[0]);
-    p   = long_val(regs.sp[0]);
-    str = regs.sp[1];
+
     if ( p >= 0 )
-	sprintf(fmt, "%%.%de", p);
+	sprintf(fmt, "%%.%lde", p);
     else
 	strcpy(fmt, "%e");
-    n   = p >= 0 ? 10 + p : 25;
-    buf = (char *)malloc(n);
+    p   = p >= 0 ? 10 + p : 25;
+    buf = (char *)malloc(p);
     if ( buf == NULL )
 	sys_error("showEFloat");
     loc = setlocale(LC_NUMERIC, NULL);
@@ -1100,50 +1076,29 @@ FUNCTION(__showEFloat_2)
     sprintf(buf, fmt, d);
     setlocale(LC_NUMERIC, loc);
 
-    str = prefix_string(0, buf, str);
+    str = from_string(0, buf);
     free(buf);
-    RETURN(str, 2);
+    return str;
 }
 
-FUNCTION(__showFFloat)
+Node *
+primShowFFloat(long p, double d)
 {
- ENTRY_LABEL(extern, __showFFloat)
-    SAVE_REGS(2);
-    EVAL(__showFFloat_1);
-}
-
-static
-FUNCTION(__showFFloat_1)
-{
- ENTRY_LABEL(static, __showFFloat_1)
-    MATCH_RIGID_INT(__showFFloat_1);
-    SWAPn(0);
-    EVAL_BOXED(__showFFloat_2);
-}
-
-static
-FUNCTION(__showFFloat_2)
-{
-    int	       p, n;
-    double     d;
+    int	       n;
     char       fmt[20], *buf;
     const char *loc;
     Node       *str;
- ENTRY_LABEL(static, __showFFloat_2)
-    MATCH_RIGID_FLOAT(__showFFloat_2);
-    get_double_val(d, regs.r[0]);
-    p   = long_val(regs.sp[0]);
-    str = regs.sp[1];
+
     if ( p >= 0 )
-	sprintf(fmt, "%%.%df", p);
+	sprintf(fmt, "%%.%ldf", p);
     else
 	strcpy(fmt, "%f");
     frexp(d, &n);
     if ( p >= 0 )
-	n = (n > 0 ? n / 3 + 4 : 5) + p;
+	p = (n > 0 ? n / 3 + 4 : 5) + p;
     else
-	n = (n >= 0 ? n : -n) / 3 + 20;
-    buf = (char *)malloc(n);
+	p = (n >= 0 ? n : -n) / 3 + 20;
+    buf = (char *)malloc(p);
     if ( buf == NULL )
 	sys_error("showFFloat");
     loc = setlocale(LC_NUMERIC, NULL);
@@ -1151,56 +1106,50 @@ FUNCTION(__showFFloat_2)
     sprintf(buf, fmt, d);
     setlocale(LC_NUMERIC, loc);
 
-    str = prefix_string(0, buf, str);
+    str = from_string(0, buf);
     free(buf);
-    RETURN(str, 2);
+    return str;
 }
 
 @ 
-Due to lack of a better place, we also implement the primitive
-\verb|convertToFloat| here, which converts a string into a
+Due to lack of a better place, we also implement the function
+[[primConvertToFloat]] here, which converts a string into a
 floating-point number. The conversion is based on the C function
-[[strtod]].
+[[strtod]]. We drop leading zeros from the input string in order to
+reduce the size of the temporary string buffer.
 
+<<show.h>>=
+extern double primConvertToFloat(Node *str);
+
+@ 
 <<show.c>>=
-DECLARE_LABEL(extern, __convertToFloat);
-DECLARE_LABEL(static, __convertToFloat_1);
-
-FUNCTION(__convertToFloat)
-{
- ENTRY_LABEL(extern, __convertToFloat)
-    SAVE_REGS(0);
-    EVAL_BOXED(__convertToFloat_1);
-}
-
-static
-FUNCTION(__convertToFloat_1)
+double
+primConvertToFloat(Node *str)
 {
     char       *buf;
     const char *loc;
     double     d;
-    Node       *s, *r;
- ENTRY_LABEL(static, __convertToFloat_1)
+    Node       *chr;
+
     /* drop leading zeros */
-    s = regs.r[0];
-    while ( is_indir_node(s) )
-	s = s->n.node;
-    while ( s != nil )
+    while ( is_indir_node(str) )
+	str = str->n.node;
+    while ( str != nil )
     {
-	r = s->c.args[0];
-	while ( is_indir_node(r) )
-	    r = r->n.node;
-	if ( r->ch.ch != '0' )
+	chr = str->c.args[0];
+	while ( is_indir_node(chr) )
+	    chr = chr->n.node;
+	if ( chr->ch.ch != '0' )
 	    break;
-	s = s->c.args[1];
-	while ( is_indir_node(s) )
-	    s = s->n.node;
+	str = str->c.args[1];
+	while ( is_indir_node(str) )
+	    str = str->n.node;
     }
 
     /* convert the remaining string */
-    if ( s != nil )
+    if ( str != nil )
     {
-	buf = to_string(s);
+	buf = to_string(str);
 	loc = setlocale(LC_NUMERIC, NULL);
 	setlocale(LC_NUMERIC, "C");
 	d   = strtod(buf, NULL);
@@ -1210,11 +1159,5 @@ FUNCTION(__convertToFloat_1)
     else
 	d = 0;
 
-    /* return a fresh number */
-    CHECK_HEAP(0, float_node_size);
-    r	    = (Node *)regs.hp;
-    r->info = &float_info;
-    put_double_val(r, d);
-    regs.hp += float_node_size;
-    RETURN(r, 0);
+    return d;
 }

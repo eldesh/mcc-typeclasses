@@ -1,8 +1,8 @@
 # Makefile for the Curry runtime system
 #
-# $Id: Makefile.in 2262 2007-06-16 14:46:48Z wlux $
+# $Id: Makefile.in 2291 2007-06-19 21:54:15Z wlux $
 #
-# Copyright (c) 2001-2006, Wolfgang Lux
+# Copyright (c) 2001-2007, Wolfgang Lux
 # See ../LICENSE for the full license.
 #
 
@@ -63,6 +63,7 @@ rts_H = curry.h \
 	equal.h \
 	unify.h \
 	disequal.h \
+	stable.h \
 	cstring.h \
 	files.h \
 	directory.h \
@@ -92,7 +93,6 @@ rts_C = debug.c \
 	disequal.c \
 	equal.c \
 	foreign.c \
-	stable.c \
 	cstring.c \
 	files.c \
 	random.c \

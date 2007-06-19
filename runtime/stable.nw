@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: stable.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: stable.nw 2291 2007-06-19 21:54:15Z wlux $
 %
-% Copyright (c) 2005-2006, Wolfgang Lux
+% Copyright (c) 2005-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Stable Pointers}
@@ -10,116 +10,59 @@ code. Stable pointers are implemented as [[malloc]]ed pointers to heap
 nodes. In order to prevent the referenced nodes from being garbage
 collected, stable pointers are automatically registered as global
 roots. Therefore, they must be released explicitly when they are no
-longer used. The runtime system provides three functions that create
-new stable pointers, dereference stable pointers, and release stable
-pointers, respectively.
-
-<<stable.c>>=
-#include "config.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include "debug.h"
-#include "run.h"
-#include "regs.h"
-#include "heap.h"
-#include "stack.h"
-#include "threads.h"
-#include "eval.h"
-#include "data.h"
-#include "io_monad.h"
-#include "cam.h"
+longer used. The header file [[stable.h]] provides three functions
+that create new stable pointers, dereference stable pointers, and
+release stable pointers, respectively.
 
 @ 
-The primitive [[__newStablePtr]] allocates and initializes a new
-stable pointer for its first argument.
+The argument of [[primNewStablePtr]] is a data term of the form
+\texttt{Wrap}~$e$, where $e$ is the expression to be saved in the
+stable pointer. Wrapping is used in order to prevent premature
+evaluation of the expression by the foreign function interface code.
 
 \ToDo{Allocating each stable pointer individually with [[malloc]] is
   somewhat inefficient. The system should rather allocate a whole
   block of pointers at a time and manage allocation from that block
   itself.}
 
-<<stable.c>>=
-DECLARE_LABEL(extern, __newStablePtr);
-
-FUNCTION(__newStablePtr)
+<<stable.h>>=
+static inline Node **
+primNewStablePtr(Node *wrappedPtr)
 {
-    Node *ptr, **sptr;
- ENTRY_LABEL(extern, __newStablePtr)
-    sptr = (Node **)malloc(sizeof(Node *));
-    if ( sptr == NULL )
+    Node **stabPtr = (Node **)malloc(sizeof(Node *));
+    if ( stabPtr == NULL )
 	sys_error("newStablePtr");
-    *sptr = regs.r[0];
-    add_global_root(sptr);
-
-    CHECK_HEAP(0, ptr_node_size);
-    ptr	       = (Node *)regs.hp;
-    ptr->info  = &stabptr_info;
-    ptr->p.ptr = sptr;
-    regs.hp   += ptr_node_size;
-
-    RET(ptr);
+    *stabPtr = wrappedPtr->c.args[0];
+    add_global_root(stabPtr);
+    return stabPtr;
 }
 
 @ 
-The primitive [[__deRefStablePtr]] returns the node associated with a
-stable pointer. Note that the result is not evaluated to head normal
-form due to the lazy \texttt{IO} monad semantics (cf.
-Sect.~\ref{sec:io-monad}).
+Some care is necessary while dereferencing a stable pointer. If the
+stable pointer escapes from an IO computation via [[unsafePerformIO]]
+and the enclosing computation fails, the stable pointer itself may
+still exist, but the associated node may have been released. In order
+to prevent dangling pointers, which could crash the runtime system
+later, the garbage collector assigns a null-pointer to those stable
+pointers.
 
-Some care is necessary when [[__newStablePtr]] was called in the
-context of an [[unsafePerformIO]]. If the enclosing computation fails,
-the stable pointer itself may still exist, but the associated node may
-have been released. In order to prevent crashing the runtime system,
-the garbage collector sets global roots to [[0]] in such cases.
-
-<<stable.c>>=
-DECLARE_LABEL(extern, __deRefStablePtr);
-DECLARE_LABEL(static, __deRefStablePtr_1);
-
-FUNCTION(__deRefStablePtr)
+<<stable.h>>=
+static inline Node *
+primDeRefStablePtr(Node **stabPtr)
 {
- ENTRY_LABEL(extern, __deRefStablePtr)
-    SAVE_REGS(1);
-    EVAL_BOXED(__deRefStablePtr_1);
-}
-
-static
-FUNCTION(__deRefStablePtr_1)
-{
-    Node **sptr;
- ENTRY_LABEL(static, __deRefStablePtr_1)
-    MATCH_RIGID_PTR(__deRefStablePtr_1);
-    sptr = (Node **)regs.r[0]->p.ptr;
-    if ( *sptr == 0 )
+    if ( *stabPtr == 0 )
 	fail_with("deRefStablePtr: value released by failed computation");
-    RETURN(*sptr, 1);
+    return *stabPtr;
 }
 
 @ 
-The primitive [[__freeStablePtr]] releases a stable pointer and annuls
-its registration as a global root.
+The function [[primFreeStablePtr]] simply releases a stable pointer
+and annuls its registration as a global root.
 
-<<stable.c>>=
-DECLARE_LABEL(extern, __freeStablePtr);
-DECLARE_LABEL(static, __freeStablePtr_1);
-
-FUNCTION(__freeStablePtr)
+<<stable.h>>=
+static inline void
+primFreeStablePtr(Node **stabPtr)
 {
- ENTRY_LABEL(extern, __freeStablePtr)
-    SAVE_REGS(1);
-    EVAL_BOXED(__freeStablePtr_1);
-}
-
-static
-FUNCTION(__freeStablePtr_1)
-{
-    Node **sptr;
- ENTRY_LABEL(static, __freeStablePtr_1)
-    MATCH_RIGID_PTR(__freeStablePtr_1);
-    sptr = (Node **)regs.r[0]->p.ptr;
-
-    remove_global_root(sptr);
-    free(sptr);
-
-    RETURN(unit, 1);
+    remove_global_root(stabPtr);
+    free(stabPtr);
 }

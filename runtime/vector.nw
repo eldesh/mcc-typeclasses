@@ -1,35 +1,27 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: vector.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: vector.nw 2294 2007-06-19 22:08:56Z wlux $
 %
-% Copyright (c) 2002-2006, Wolfgang Lux
+% Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
-\subsection{Array Library}
-The \texttt{Array} library is based on a few C functions which use
-tuples to implement vectors with zero-based indexing. All of these
-functions are in fact actions in the IO monad in order to ensure a
-proper sequentialization of the operations performed on the vector.
-
-We use the string \texttt{"(,)"} as closure name for vectors because
-this will make the printing code treat vectors as tuples.
+\subsection{Mutable Vectors}
+Mutable vectors are implemented essentially as tuples with an
+arbitrary length. We use the string \texttt{"(,)"} as closure name for
+vectors because this will make the printing code treat vectors as tuples.
 
 <<vector.c>>=
 #include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h>
 #include "debug.h"
 #include "run.h"
 #include "regs.h"
 #include "heap.h"
-#include "stack.h"
-#include "trail.h"
 #include "eval.h"
-#include "threads.h"
-#include "data.h"
+#include "trail.h"
 #include "io_monad.h"
-#include "cam.h"
+#include "vector.h"
 
 static NodeInfo vector_info = {
     VECTOR_KIND, 0, 0, 0, "(,)", eval_whnf, 0, 0, 0
@@ -43,250 +35,118 @@ static const struct vector_node empty = {
 Two vector nodes are considered equal, if they are physically the
 same.
 
-<<vector.c>>=
-DECLARE_CONST(__Prelude__False);
-DECLARE_CONST(__Prelude__True);
-
-#define Prelude_False CONST(__Prelude__False)
-#define Prelude_True  CONST(__Prelude__True)
-
-DECLARE_LABEL(extern, __primEqIOVector);
-DECLARE_LABEL(static, __primEqIOVector_1);
-DECLARE_LABEL(static, __primEqIOVector_2);
-
-FUNCTION(__primEqIOVector)
-{
- ENTRY_LABEL(extern, __primEqIOVector)
-    SAVE_REGS(1);
-    EVAL_BOXED(__primEqIOVector_1);
-}
-
-static
-FUNCTION(__primEqIOVector_1)
-{
- ENTRY_LABEL(static, __primEqIOVector_1)
-    MATCH_RIGID_VECTOR(__primEqIOVector_1);
-    SWAPn(0);
-    EVAL_BOXED(__primEqIOVector_2);
-}
-
-static
-FUNCTION(__primEqIOVector_2)
-{
-    Node *r;
- ENTRY_LABEL(static, __primEqIOVector_2)
-    MATCH_RIGID_VECTOR(__primEqIOVector_2);
-    r = regs.sp[0] == regs.r[0] ? Prelude_True : Prelude_False;
-    RETURN(r, 1);
-}
+<<vector.h>>=
+#define primEqIOVector(x,y) ((x) == (y))
 
 @ 
-The action [[newIOVector]] allocates a new vector with a specified
-size and assigns an initial value to every element of the vector.
+The function [[primNewIOVector]] allocates a new vector with the
+specified length and assigns an initial value to every element of the
+vector. The initial value is passed in the form \texttt{Wrap}~$e$ in
+order to prevent evaluation of $e$ by the foreign function interface
+code.
 
+<<vector.h>>=
+extern Node *primNewIOVector(long, Node *);
+
+@ 
 <<vector.c>>=
-DECLARE_LABEL(extern, __newIOVector);
-DECLARE_LABEL(static, __newIOVector_1);
-
-FUNCTION(__newIOVector)
+Node *
+primNewIOVector(long n, Node *wrappedArg)
 {
- ENTRY_LABEL(extern, __newIOVector)
-    SAVE_REGS(2);
-    EVAL(__newIOVector_1);
-}
+    long i;
+    Node *vec, *init;
 
-static
-FUNCTION(__newIOVector_1)
-{
-    long i, n;
-    Node *init, *vec;
- ENTRY_LABEL(static, __newIOVector_1)
-    MATCH_RIGID_INT(__newIOVector_1);
-    n = long_val(regs.r[0]);
     if ( n < 0 )
 	fail_with("newIOVector: negative length (%ld)", n);
-
     if ( n == 0 )
 	vec = (Node *)&empty;
     else
     {
-	CHECK_HEAP(0, vector_node_size(n));
-	init = regs.sp[0];
+	init = wrappedArg->c.args[0];
 	while ( is_boxed(init) && is_indir_node(init) )
 	    init = init->n.node;
+	BEGIN_LOCAL_ROOTS1(init)
+	CHECK_HEAP(0, vector_node_size(n));
 	vec	      = (Node *)regs.hp;
 	vec->info     = &vector_info;
 	vec->a.length = vector_node_size(n);
 	for ( i = 0; i < n; i++ )
 	    vec->a.args[i] = init;
 	regs.hp += vector_node_size(n);
+	END_LOCAL_ROOTS
     }
 
-    RETURN(vec, 2);
+    return vec;
 }
 
 @ 
-The action [[copyIOVector]] creates a copy of a vector. As it does not
-contain any information, the empty vector can be shared and need not
-be copied.
+The function [[primCopyIOVector]] creates a copy of a vector. The copy
+of an empty vector is always the vector itself.
 
+<<vector.h>>=
+extern Node *primCopyIOVector(Node *);
+
+@ 
 <<vector.c>>=
-DECLARE_LABEL(extern, __copyIOVector);
-DECLARE_LABEL(static, __copyIOVector_1);
-
-FUNCTION(__copyIOVector)
+Node *
+primCopyIOVector(Node *vec)
 {
- ENTRY_LABEL(extern, __copyIOVector)
-    SAVE_REGS(1);
-    EVAL_BOXED(__copyIOVector_1);
-}
-
-static
-FUNCTION(__copyIOVector_1)
-{
-    Node *vec;
- ENTRY_LABEL(static, __copyIOVector_1)
-    MATCH_RIGID_VECTOR(__copyIOVector_1);
-
-    vec = regs.r[0];
     if ( vector_argc(vec) > 0 )
     {
-	CHECK_HEAP(1, vec->a.length);
-	vec = (Node *)regs.hp;
-	memcpy(vec, regs.r[0], regs.r[0]->a.length * word_size);
+	BEGIN_LOCAL_ROOTS1(vec)
+	CHECK_HEAP(0, vec->a.length);
+	memcpy(regs.hp, vec, vec->a.length * word_size);
+	vec	 = (Node *)regs.hp;
 	regs.hp += vec->a.length;
+	END_LOCAL_ROOTS
     }
 
-    RETURN(vec, 1);
+    return vec;
 }
 
 @ 
-The action [[readIOVector]] returns the $i$th element of a vector. If
-the index is outside the range of the vector, the program is aborted.
-The element is \emph{not} evaluated to head normal form as the IO
-monad is lazy.
+The function [[primReadIOVector]] returns the $i$th element of a
+vector. If the index is out of range, the program is aborted.
 
+<<vector.h>>=
+extern Node *primReadIOVector(Node *, long);
+
+@ 
 <<vector.c>>=
-DECLARE_LABEL(extern, __readIOVector);
-DECLARE_LABEL(static, __readIOVector_1);
-DECLARE_LABEL(static, __readIOVector_2);
-
-FUNCTION(__readIOVector)
+Node *
+primReadIOVector(Node *vec, long i)
 {
- ENTRY_LABEL(extern, __readIOVector)
-    SAVE_REGS(2);
-    EVAL_BOXED(__readIOVector_1);
-}
-
-static
-FUNCTION(__readIOVector_1)
-{
- ENTRY_LABEL(static, __readIOVector_1)
-    MATCH_RIGID_VECTOR(__readIOVector_1);
-    SWAPn(0);
-    EVAL(__readIOVector_2);
-}
-
-static
-FUNCTION(__readIOVector_2)
-{
-    long i;
-    Node *vec;
- ENTRY_LABEL(static, __readIOVector_2)
-    MATCH_RIGID_INT(__readIOVector_2);
-
-    i	= long_val(regs.r[0]);
-    vec = regs.sp[0];
     if ( i < 0 || (unsigned long)i >= vector_argc(vec) )
 	fail_with("readIOVector: index out range (%ld)", i);
-
-    RETURN(vec->a.args[i], 2);
+    return vec->a.args[i];
 }
 
 @ 
-The action [[writeIOVector]] updates the $i$th element of a vector. As
-for [[readIOVector]], the index must be checked before calling this
-function.
+The function [[primWriteIOVector]] updates the $i$th element of a
+vector. As for [[primReadIOVector]], the program is aborted if the
+index is out of range. The assigned value is passed in the form
+\texttt{Wrap}~$e$ in order to prevent evaluation of $e$ by the foreign
+function interface code. The old value of the $i$th element is
+recorded on the trail in order prevent program crashes when mutable
+vectors are used in non-deterministic code via [[unsafePerformIO]].
 
+<<vector.h>>=
+extern void primWriteIOVector(Node *, long, Node *);
+
+@ 
 <<vector.c>>=
-DECLARE_LABEL(extern, __writeIOVector);
-DECLARE_LABEL(static, __writeIOVector_1);
-DECLARE_LABEL(static, __writeIOVector_2);
-
-FUNCTION(__writeIOVector)
+void
+primWriteIOVector(Node *vec, long i, Node *wrappedArg)
 {
- ENTRY_LABEL(extern, __writeIOVector)
-    SAVE_REGS(3);
-    EVAL_BOXED(__writeIOVector_1);
-}
-
-static
-FUNCTION(__writeIOVector_1)
-{
- ENTRY_LABEL(static, __writeIOVector_1)
-    MATCH_RIGID_VECTOR(__writeIOVector_1);
-    SWAPn(0);
-    EVAL(__writeIOVector_2);
-}
-
-static
-FUNCTION(__writeIOVector_2)
-{
-    long i;
-    Node *vec, *node;
- ENTRY_LABEL(static, __writeIOVector_2)
-    MATCH_RIGID_INT(__writeIOVector_2);
-
-    i	 = long_val(regs.r[0]);
-    vec	 = regs.sp[0];
-    node = regs.sp[1];
-
     if ( i < 0 || (unsigned long)i >= vector_argc(vec) )
 	fail_with("writeIOVector: index out range (%ld)", i);
-
     SAVE(vec, a.args[i]);
-    vec->a.args[i] = node;
-    RETURN(unit, 3);
+    vec->a.args[i] = wrappedArg->c.args[0];
 }
 
 @ 
-The function [[lengthIOVector]] returns the length of a vector, i.e.,
-the number of elements that can be stored in the vector. This function
-is not a monadic action because the length of a vector does not
-change.
+The macro [[primLengthIOVector]] returns the length of a vector, i.e.,
+the number of elements that can be stored in the vector.
 
-<<vector.c>>=
-DECLARE_LABEL(extern, __lengthIOVector);
-DECLARE_LABEL(static, __lengthIOVector_1);
-
-FUNCTION(__lengthIOVector)
-{
- ENTRY_LABEL(extern, __lengthIOVector)
-    SAVE_REGS(0);
-    EVAL_BOXED(__lengthIOVector_1);
-}
-
-static
-FUNCTION(__lengthIOVector_1)
-{
-    int  n;
-    Node *r;
- ENTRY_LABEL(static, __lengthIOVector_1)
-    MATCH_RIGID_VECTOR(__lengthIOVector_1);
-
-    n = vector_argc(regs.r[0]);
-
-#if !ONLY_BOXED_OBJECTS
-    if ( !is_large_int(n) )
-	r = mk_unboxed((long)n);
-    else
-#endif
-    {
-	CHECK_HEAP(0, int_node_size);
-	r	 = (Node *)regs.hp;
-	r->info	 = &int_info;
-	r->i.i	 = n;
-	regs.hp += int_node_size;
-    }
-    RETURN(r, 0);
-}
+<<vector.h>>=
+#define primLengthIOVector(vec)	vector_argc(vec)

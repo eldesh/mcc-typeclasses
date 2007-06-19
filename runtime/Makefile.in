@@ -1,6 +1,6 @@
 # Makefile for the Curry runtime system
 #
-# $Id: Makefile.in 2293 2007-06-19 22:03:00Z wlux $
+# $Id: Makefile.in 2294 2007-06-19 22:08:56Z wlux $
 #
 # Copyright (c) 2001-2007, Wolfgang Lux
 # See ../LICENSE for the full license.
@@ -69,6 +69,7 @@ rts_H = curry.h \
 	files.h \
 	directory.h \
 	refs.h \
+	vector.h \
 	print.h \
 	vars.h \
 	main.h \

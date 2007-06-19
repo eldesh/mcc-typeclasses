@@ -1,4 +1,4 @@
--- $Id: IOExts.curry 2293 2007-06-19 22:03:00Z wlux $
+-- $Id: IOExts.curry 2296 2007-06-19 22:37:03Z wlux $
 --
 -- Copyright (c) 2004-2007, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -89,9 +89,17 @@ unsafeThawIOArray a =
 -- assorted IO functions
 foreign import primitive hIsTerminalDevice :: Handle -> IO Bool
 foreign import primitive openFd :: Int -> IOMode -> IO Handle
-foreign import primitive openProcess :: String -> IOMode -> IO Handle
+
+openProcess :: String -> IOMode -> IO Handle
+openProcess cmd mode = (openProcess $## cmd) mode
+  where foreign import primitive openProcess :: String -> IOMode -> IO Handle
+
 foreign import primitive pClose :: Handle -> IO Int
-foreign import primitive connectTcpSocket :: String -> Int -> IOMode -> IO Handle
+
+connectTcpSocket :: String -> Int -> IOMode -> IO Handle
+connectTcpSocket host port mode = (connectTcpSocket $## host) port mode
+  where foreign import primitive
+  		       connectTcpSocket :: String -> Int -> IOMode -> IO Handle
 
 -- perform a garbage collection
 foreign import ccall "primPerformGC" performGC :: IO ()

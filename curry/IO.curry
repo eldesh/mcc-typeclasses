@@ -1,6 +1,6 @@
--- $Id: IO.curry 2280 2007-06-19 11:40:35Z wlux $
+-- $Id: IO.curry 2296 2007-06-19 22:37:03Z wlux $
 --
--- Copyright (c) 2003-2006, Wolfgang Lux
+-- Copyright (c) 2003-2007, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module IO(Handle, HandlePosn, IOMode(..), BufferMode(..), SeekMode(..),
@@ -47,7 +47,9 @@ foreign import primitive stderr :: Handle
 
 --- Action to open a file. Returns a handle for the file if successful
 --- and raises an IOError otherwise.
-foreign import primitive openFile :: FilePath -> IOMode -> IO Handle
+openFile :: FilePath -> IOMode -> IO Handle
+openFile fn mode = (openFile $## fn) mode
+  where foreign import primitive openFile :: FilePath -> IOMode -> IO Handle
 
 --- Action to close a handle. A handle may safely be closed more than once.
 foreign import primitive hClose :: Handle -> IO ()

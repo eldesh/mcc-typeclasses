@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2283 2007-06-19 12:14:56Z wlux $
+% $Id: files.nw 2296 2007-06-19 22:37:03Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Files}
@@ -268,7 +268,7 @@ FUNCTION(__openFile)
  ENTRY_LABEL(extern, __openFile)
     TRACE_FUN("openFile", 3);
     SAVE_REGS(2);
-    CALL1(nf_string, __openFile_1, regs.r[0]);
+    EVAL_BOXED(__openFile_1);
 }
 
 static
@@ -1566,7 +1566,7 @@ FUNCTION(__openProcess)
 {
  ENTRY_LABEL(extern, __openProcess)
     SAVE_REGS(2);
-    CALL1(nf_string, __openProcess_1, regs.r[0]);
+    EVAL_BOXED(__openProcess_1);
 }
 
 static
@@ -1777,7 +1777,7 @@ FUNCTION(__connectTcpSocket)
 {
  ENTRY_LABEL(extern, __connectTcpSocket)
     SAVE_REGS(3);
-    CALL1(nf_string, __connectTcpSocket_1, regs.r[0]);
+    EVAL_BOXED(__connectTcpSocket_1);
 }
 
 static

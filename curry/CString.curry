@@ -1,6 +1,6 @@
--- $Id: CString.curry 1744 2005-08-23 16:17:12Z wlux $
+-- $Id: CString.curry 2296 2007-06-19 22:37:03Z wlux $
 --
--- Copyright (c) 2005, Wolfgang Lux
+-- Copyright (c) 2005-2007, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module CString where
@@ -15,8 +15,13 @@ type CStringLen = (Ptr CChar, Int)
 foreign import primitive peekCString :: CString -> IO String
 foreign import primitive peekCStringLen :: CStringLen -> IO String
 
-foreign import primitive newCString :: String -> IO CString
-foreign import primitive newCStringLen :: String -> IO CStringLen
+newCString :: String -> IO CString
+newCString s = newCString $## s
+  where foreign import primitive newCString :: String -> IO CString
+
+newCStringLen :: String -> IO CStringLen
+newCStringLen s = newCStringLen $## s
+  where foreign import primitive newCStringLen :: String -> IO CStringLen
 
 withCString :: String -> (CString -> IO a) -> IO a
 withCString cs = bracket (newCString cs) mfree

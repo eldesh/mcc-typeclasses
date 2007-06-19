@@ -1,6 +1,6 @@
--- $Id: Numeric.curry 2019 2006-11-21 15:25:08Z wlux $
+-- $Id: Numeric.curry 2296 2007-06-19 22:37:03Z wlux $
 --
--- Copyright (c) 2003-2006, Wolfgang Lux
+-- Copyright (c) 2003-2007, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module Numeric(showSigned, showIntAtBase, showInt, showOct, showHex,
@@ -110,7 +110,7 @@ readFloat r = [(convert ds (k - d),t) | (ds,d,s) <- lexFix r,
           case splitAt (length prefix) s of
             (cs,cs') ->
               [cs' | cs == prefix && (null cs' || not (isAlphaNum (head cs')))]
-	convert ds e = fromFloat (convertToFloat (ds ++ 'e' : show e))
+	convert ds e = fromFloat (convertToFloat $## (ds ++ 'e' : show e))
 	foreign import primitive convertToFloat :: String -> Float
 
 lexDigits :: ReadS String

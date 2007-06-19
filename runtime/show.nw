@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: show.nw 2296 2007-06-19 22:37:03Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Show Function}
@@ -1170,7 +1170,7 @@ FUNCTION(__convertToFloat)
 {
  ENTRY_LABEL(extern, __convertToFloat)
     SAVE_REGS(0);
-    CALL1(nf_string, __convertToFloat_1, regs.r[0]);
+    EVAL_BOXED(__convertToFloat_1);
 }
 
 static

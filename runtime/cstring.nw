@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cstring.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: cstring.nw 2296 2007-06-19 22:37:03Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{C String Interface}\label{sec:string}
@@ -23,8 +23,6 @@ extern char	*to_string(Node *);
 
 extern char *lit_char(char *buf, int c0, int c, int q);
 extern char *lit_double(char *buf, double d);
-
-DECLARE_LABEL(extern, nf_string);
 
 @ 
 <<cstring.c>>=
@@ -108,56 +106,6 @@ prefix_string_len(unsigned int n_regs, const char *cp,
     return list;
 }
 
-@
-Translating a Curry string into a C string is more difficult because
-we have to evaluate the string to a ground normal form first. The
-Curry code [[nf_string]] can be used to handle this.
-
-<<cstring.c>>=
-DECLARE_LABEL(static, nf_string_1);
-DECLARE_LABEL(static, nf_string_2);
-
-FUNCTION(nf_string)
-{
- ENTRY_LABEL(extern, nf_string)
-    TRACE_FUN("nf_string", 1);
-    SAVE_RET1(regs.r[0]);
-    EVAL_BOXED(nf_string_1);
-}
-
-static
-FUNCTION(nf_string_1)
-{
-    Node *list;
- ENTRY_LABEL(static, nf_string_1)
-    MATCH_RIGID_DATA(nf_string_1);
-    list = regs.r[0];
-    switch ( node_tag(list) )
-    {
-    case NIL_TAG:
-	RETURN(regs.sp[0], 1);
-    case CONS_TAG:
-	CHECK_STACK1();
-	regs.sp   -= 1;
-	regs.sp[0] = list->c.args[1];
-	regs.r[0]  = list->c.args[0];
-	EVAL_BOXED(nf_string_2);
-    default:
-	unexpected_tag("nf_string", node_tag(list));
-    }
-}
-
-static
-FUNCTION(nf_string_2)
-{
- ENTRY_LABEL(static, nf_string_2)
-    MATCH_RIGID_CHAR(nf_string_2);
-
-    /* continue to evaluate the tail of the string */
-    regs.r[0] = *regs.sp++;
-    EVAL_BOXED(nf_string_1);
-}
-
 @ 
 The function [[string_length]] returns the length of a Curry string.
 The function [[copy_string]] copies a Curry string into a string
@@ -228,7 +176,7 @@ to_string(Node *list)
 
 @ 
 The primitives [[__newCString]] and [[__newCStringLen]] convert a
-Curry string into a heap allocated C string. In addition,
+ground Curry string into a heap allocated C string. In addition,
 [[__newCStringLen]] also returns the length of the string.
 
 <<cstring.c>>=
@@ -245,7 +193,7 @@ FUNCTION(__newCString)
 {
  ENTRY_LABEL(extern, __newCString)
     SAVE_REGS(0);
-    CALL1(nf_string, __newCString_1, regs.r[0]);
+    EVAL_BOXED(__newCString_1);
 }
 
 static
@@ -269,7 +217,7 @@ FUNCTION(__newCStringLen)
 {
  ENTRY_LABEL(extern, __newCStringLen)
     SAVE_REGS(0);
-    CALL1(nf_string, __newCStringLen_1, regs.r[0]);
+    EVAL_BOXED(__newCStringLen_1);
 }
 
 static

@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: io_monad.nw 2280 2007-06-19 11:40:35Z wlux $
+% $Id: io_monad.nw 2299 2007-06-19 22:58:22Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Monadic Code}\label{sec:io-monad}
@@ -16,6 +16,13 @@ The function [[fail_with]] prints an error message and stops
 execution with return code 1. It is effectively equivalent to calling
 \texttt{Prelude.error} with the formatted error message.
 
+The functions [[ioError]] and [[ioError_withErrno]] can be used to
+raise an exception from C code. The exception message is composed of a
+location where the exception is raised and an optional reason string,
+which is appended to the error message if present. The function
+[[ioError_withErrno]] is just a shorthand for
+[[ioError(loc, strerror(errno))]].
+
 The functions [[curry_argc]] and [[curry_argv]] return the arguments
 that were passed to [[curry_exec]].
 
@@ -26,6 +33,10 @@ extern void curry_exit(int rc) __attribute__((noreturn));
 extern void fail_with(const char *format, ...)
     __attribute__((noreturn, format(printf, 1, 2)));
 
+extern void ioError(const char *loc, const char *reason)
+    __attribute__((noreturn));
+extern void ioError_withErrno(const char *loc) __attribute__((noreturn));
+
 extern int  curry_argc(void);
 extern char **curry_argv(void);
 
@@ -35,8 +46,10 @@ DECLARE_LABEL(extern, __ioError);
 <<io_monad.c>>=
 #include "config.h"
 #include <stdarg.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
 #include "debug.h"
 #include "run.h"
 #include "regs.h"
@@ -298,8 +311,8 @@ FUNCTION(__catch_1)
 }
 
 @
-The function [[ioError]] raises a user exception. It removes the stack
-up to and including the current exception frame and applies the
+The I/O action [[ioError]] raises a user exception. It removes the
+stack up to and including the current exception frame and applies the
 exception handler from that frame to the exception value. If no
 exception handler is available -- as may happen when
 [[unsafePerformIO]] is used -- the program is aborted using the
@@ -336,6 +349,34 @@ FUNCTION(__ioError_1)
  ENTRY_LABEL(static, __ioError_1)
     assert(regs.r[0]->info->kind == PAPP_KIND && regs.r[0]->info->tag == 1);
     GOTO(regs.r[0]->info->apply);
+}
+
+@ 
+The functions [[ioError]] and [[ioError_withErrno]] allow raising an
+exception from C functions. This is achieved by setting up the
+arguments for the [[ioError]] action and then restarting the abstract
+machine at the entry point of the [[ioError]] action.
+
+<<io_monad.c>>=
+void
+ioError(const char *loc, const char *reason)
+{
+    if ( reason && *reason )
+    {
+	regs.r[0] = from_string(0, reason);
+	regs.r[0] = prefix_string(0, ": ", regs.r[0]);
+    }
+    else
+	regs.r[0] = nil;
+    regs.r[0] = prefix_string(0, loc, regs.r[0]);
+    regs.r[1] = unit; /* FIXME: have lost track of the IO monad's state here */
+    jump(__ioError);
+}
+
+void
+ioError_withErrno(const char *loc)
+{
+    ioError(loc, strerror(errno));
 }
 
 @

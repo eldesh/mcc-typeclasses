@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2296 2007-06-19 22:37:03Z wlux $
+% $Id: files.nw 2299 2007-06-19 22:58:22Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -44,6 +44,7 @@ extern void init_files(int, long);
 #include "cstring.h"
 #include "cam.h"
 #include "io_monad.h"
+#include "files.h"
 #include "trace.h"
 
 #if !HAVE_WORKING_VFORK
@@ -148,49 +149,15 @@ finalize_process(Node *node)
 Two file \verb|Handle|s are considered equal, if they are physically
 the same.
 
-<<files.c>>=
-DECLARE_CONST(__Prelude__False);
-DECLARE_CONST(__Prelude__True);
-
-#define Prelude_False CONST(__Prelude__False)
-#define Prelude_True  CONST(__Prelude__True)
-
-DECLARE_LABEL(extern, __primEqHandle);
-DECLARE_LABEL(static, __primEqHandle_1);
-DECLARE_LABEL(static, __primEqHandle_2);
-
-FUNCTION(__primEqHandle)
-{
- ENTRY_LABEL(extern, __primEqHandle)
-    SAVE_REGS(1);
-    EVAL_BOXED(__primEqHandle_1);
-}
-
-static
-FUNCTION(__primEqHandle_1)
-{
- ENTRY_LABEL(static, __primEqHandle_1)
-    MATCH_RIGID_FILE(__primEqHandle_1);
-    SWAPn(0);
-    EVAL_BOXED(__primEqHandle_2);
-}
-
-static
-FUNCTION(__primEqHandle_2)
-{
-    Node *r;
- ENTRY_LABEL(static, __primEqHandle_2)
-    MATCH_RIGID_FILE(__primEqHandle_2);
-    r = regs.sp[0] == regs.r[0] ? Prelude_True : Prelude_False;
-    RETURN(r, 1);
-}
+<<files.h>>=
+#define primEqHandle(x,y) ((x) == (y))
 
 @ 
-The functions [[stdin]], [[stdout]], and [[stderr]] return predefined
-handles for the standard file channels. The nodes are allocated
-statically in the runtime system. However, the file pointers of these
-nodes cannot be initialized statically because under Linux -- in
-contrast to most other operating systems -- the standard file
+The functions [[primStdin]], [[primStdout]], and [[primStderr]] return
+predefined handles for the standard file channels. The nodes are
+allocated statically in the runtime system. However, the file pointers
+of these nodes cannot be initialized statically because under Linux --
+in contrast to most other operating systems -- the standard file
 pointers are not declared as pointers into a static array of file
 descriptors, but as global variables.
 
@@ -198,6 +165,12 @@ Note that we assume that the standard error channel is always
 unbuffered, whereas the setting of the standard input and output
 channels is not known -- unless it is changed in [[init_files]].
 
+<<files.h>>=
+extern Node *primStdin(void);
+extern Node *primStdout(void);
+extern Node *primStderr(void);
+
+@ 
 <<files.c>>=
 static Handle stdin_node = {
     &file_info, NULL, mask(readable), -1, 0, NULL
@@ -209,35 +182,30 @@ static Handle stderr_node = {
     &file_info, NULL, mask(writable), _IONBF, 0, NULL
 };
 
-
-DECLARE_LABEL(extern, __stdin);
-DECLARE_LABEL(extern, __stdout);
-DECLARE_LABEL(extern, __stderr);
-
-FUNCTION(__stdin)
+Node *
+primStdin()
 {
- ENTRY_LABEL(extern, __stdin)
-    RET((Node *)&stdin_node);
+    return (Node *)&stdin_node;
 }
 
-FUNCTION(__stdout)
+Node *
+primStdout()
 {
- ENTRY_LABEL(extern, __stdout)
-    RET((Node *)&stdout_node);
+    return (Node *)&stdout_node;
 }
 
-FUNCTION(__stderr)
+Node *
+primStderr()
 {
- ENTRY_LABEL(extern, __stderr)
-    RET((Node *)&stderr_node);
+    return (Node *)&stderr_node;
 }
 
 @
-The function [[openFile]] opens a file with the specified file name
-and file mode. Files can be opened for reading, writing, and with
-read-write access, respectively. The file access mode is specified
-using a constant from the type \texttt{IOMode} that is declared as
-follows in the library module \texttt{IO}.
+The function [[primOpenFile]] opens a file with the specified file
+name and access mode. Files can be opened for reading, writing, and
+with read-write access, respectively. The file access mode is
+specified using a constant from the type \texttt{IOMode} that is
+declared as follows in library module \texttt{IO}.
 \begin{verbatim}
   data IOMode = ReadMode | WriteMode | AppendMode | ReadWriteMode
 \end{verbatim}
@@ -246,6 +214,10 @@ follows in the library module \texttt{IO}.
 single-writer/multiple-reader locking semantics mandated by the
 Haskell library report.}
 
+<<files.h>>=
+extern Node *primOpenFile(Node *, Node *);
+
+@ 
 <<files.c>>=
 enum {
     ReadMode_tag,
@@ -254,69 +226,49 @@ enum {
     ReadWriteMode_tag
 };
 
-DECLARE_CONST(__IO__ReadMode);
-DECLARE_CONST(__IO__WriteMode);
-DECLARE_CONST(__IO__AppendMode);
-DECLARE_CONST(__IO__ReadWriteMode);
-
-DECLARE_LABEL(extern, __openFile);
-DECLARE_LABEL(static, __openFile_1);
-DECLARE_LABEL(static, __openFile_2);
-
-FUNCTION(__openFile)
+static const char *
+decodeIOMode(Node *ioMode, short *p_flags)
 {
- ENTRY_LABEL(extern, __openFile)
-    TRACE_FUN("openFile", 3);
-    SAVE_REGS(2);
-    EVAL_BOXED(__openFile_1);
-}
-
-static
-FUNCTION(__openFile_1)
-{
- ENTRY_LABEL(static, __openFile_1)
-    SWAPn(0);
-    EVAL_BOXED(__openFile_2);
-}
-
-static
-FUNCTION(__openFile_2)
-{
-    const char *fn, *mode;
-    int	       flags;
-    FILE       *fp;
-    Handle     *file;
- ENTRY_LABEL(static, __openFile_2)
-    /* determine the access mode */
-    MATCH_RIGID_DATA(__openFile_2);
-    switch ( node_tag(regs.r[0]) )
+    switch ( node_tag(ioMode) )
     {
     case ReadMode_tag:
-	mode  = "r";
-	flags = mask(readable);
-	break;
+	*p_flags = mask(readable);
+	return "r";
     case WriteMode_tag:
-	mode  = "w";
-	flags = mask(writable);
-	break;
+	*p_flags = mask(writable);
+	return "w";
     case AppendMode_tag:
-	mode  = "a";
-	flags = mask(writable);
-	break;
+	*p_flags = mask(writable);
+	return "a";
     case ReadWriteMode_tag:
-	mode  = "r+";
-	flags = mask(readable) | mask(writable);
-	break;
+	*p_flags = mask(readable) | mask(writable);
+	return "r+";
     default:
-	unexpected_tag("openFile (mode)", node_tag(regs.r[0]));
+	unexpected_tag("decodeIOMode", node_tag(ioMode));
     }
+}
+
+Node *
+primOpenFile(Node *fileName, Node *ioMode)
+{
+    const char *fn, *mode;
+    short      flags;
+    FILE       *fp;
+    Handle     *file;
 
     /* open the file */
-    fn = to_string(regs.sp[0]);
-    fp = fopen(fn, mode);
+    mode = decodeIOMode(ioMode, &flags);
+    fn	 = to_string(fileName);
+    fp	 = fopen(fn, mode);
     free((char *)fn);
     if ( fp == NULL )
-	CALL_RET2(__ioError, 2, from_string(0, strerror(errno)), regs.sp[1]);
+	/* FIXME: Should include the file name in the error message.
+	 *        However, passing fn to ioError_withErrno is not possible
+	 *        since ioError_withErrno does not return and thus fn would
+	 *        leak. Might use a static buffer and only include a prefix
+	 *        of the full file name in the error message though.
+	 */
+	ioError_withErrno("openFile");
 
     /* create the file node */
     CHECK_HEAP(0, file_node_size);
@@ -331,71 +283,31 @@ FUNCTION(__openFile_2)
     register_final((Node *)file);
 
     /* return the file */
-    RETURN((Node *)file, 2);
+    return (Node *)file;
 }
 
 @ 
-The function [[openFd]] is a variant of [[openFile]] that creates a
-new file node for a file descriptor.
+The function [[primOpenFd]] is a variant of [[primOpenFile]] that
+creates a new file node for a file descriptor.
 
+<<files.h>>=
+extern Node *primOpenFd(long, Node *);
+
+@ 
 <<files.c>>=
-DECLARE_LABEL(extern, __openFd);
-DECLARE_LABEL(static, __openFd_1);
-DECLARE_LABEL(static, __openFd_2);
-
-FUNCTION(__openFd)
-{
- ENTRY_LABEL(extern, __openFd)
-    TRACE_FUN("openFd", 3);
-    SAVE_REGS(2);
-    EVAL(__openFd_1);
-}
-
-static
-FUNCTION(__openFd_1)
-{
- ENTRY_LABEL(static, __openFd_1)
-    MATCH_RIGID_INT(__openFd_1);
-    SWAPn(0);
-    EVAL_BOXED(__openFd_2);
-}
-
-static
-FUNCTION(__openFd_2)
+Node *
+primOpenFd(long fd, Node *ioMode)
 {
     const char *mode;
-    int	       flags;
+    short      flags;
     FILE       *fp;
     Handle     *file;
- ENTRY_LABEL(static, __openFd_2)
-    /* determine the access mode */
-    MATCH_RIGID_DATA(__openFd_2);
-    switch ( node_tag(regs.r[0]) )
-    {
-    case ReadMode_tag:
-	mode  = "r";
-	flags = mask(readable);
-	break;
-    case WriteMode_tag:
-	mode  = "w";
-	flags = mask(writable);
-	break;
-    case AppendMode_tag:
-	mode  = "a";
-	flags = mask(writable);
-	break;
-    case ReadWriteMode_tag:
-	mode  = "r+";
-	flags = mask(readable) | mask(writable);
-	break;
-    default:
-	unexpected_tag("openFd (mode)", node_tag(regs.r[0]));
-    }
 
     /* open the file */
-    fp = fdopen(long_val(regs.sp[0]), mode);
+    mode = decodeIOMode(ioMode, &flags);
+    fp	 = fdopen(fd, mode);
     if ( fp == NULL )
-	CALL_RET2(__ioError, 2, from_string(0, strerror(errno)), regs.sp[1]);
+	ioError_withErrno("openFd");
 
     /* create the file node */
     CHECK_HEAP(0, file_node_size);
@@ -410,292 +322,193 @@ FUNCTION(__openFd_2)
     register_final((Node *)file);
 
     /* return the file */
-    RETURN((Node *)file, 2);
+    return (Node *)file;
 }
 
 @
-The function [[hClose]] closes a file handle. Calling [[hClose]] for a
-closed file handle has no effect.
+The function [[primHClose]] closes a file handle. Calling
+[[primHClose]] for a closed file handle has no effect.
 
+<<files.h>>=
+extern void primHClose(Node *);
+
+@ 
 <<files.c>>=
-DECLARE_LABEL(extern, __hClose);
-DECLARE_LABEL(static, __hClose_1);
-
-FUNCTION(__hClose)
+void
+primHClose(Node *hdl)
 {
- ENTRY_LABEL(extern, __hClose)
-    SAVE_REGS(1);
-    EVAL_BOXED(__hClose_1);
-}
-
-static
-FUNCTION(__hClose_1)
-{
- ENTRY_LABEL(static, __hClose_1)
-    MATCH_RIGID_FILE(__hClose_1);
-    close_handle((Handle *)regs.r[0]);
-    RETURN(unit, 1);
+    close_handle((Handle *)hdl);
 }
 
 @
-The functions [[hIsOpen]], [[hIsClosed]], [[hIsReadable]],
-[[hIsWritable]], and [[hIsSeekable]] test whether these properties
-apply to a file handle. Note that for a semi-closed handle neither
-[[hIsOpen]] nor [[hIsClosed]] returns \texttt{True}.
+The predicates [[primHIsOpen]] and [[primHIsClosed]] test whether a
+file handle is open and closed, respectively. Note that for a
+semi-closed handle neither of these predicates returns [[true]]. The
+predicates [[primHIsReadable]], [[primHIsWritable]], and
+[[primHIsSeekable]] test whether the handle is readable, writable, and
+seekable, respectively.
 
+<<files.h>>=
+extern int primHIsOpen(Node *);
+extern int primHIsClosed(Node *);
+extern int primHIsReadable(Node *);
+extern int primHIsWritable(Node *);
+extern int primHIsSeekable(Node *);
+
+@ 
 <<files.c>>=
-DECLARE_LABEL(extern, __hIsOpen);
-DECLARE_LABEL(static, __hIsOpen_1);
-
-DECLARE_LABEL(extern, __hIsClosed);
-DECLARE_LABEL(static, __hIsClosed_1);
-
-DECLARE_LABEL(extern, __hIsReadable);
-DECLARE_LABEL(static, __hIsReadable_1);
-
-DECLARE_LABEL(extern, __hIsWritable);
-DECLARE_LABEL(static, __hIsWritable_1);
-
-DECLARE_LABEL(extern, __hIsSeekable);
-DECLARE_LABEL(static, __hIsSeekable_1);
-
-FUNCTION(__hIsOpen)
+int
+primHIsOpen(Node *hdl)
 {
- ENTRY_LABEL(extern, __hIsOpen)
-    SAVE_REGS(1);
-    EVAL_BOXED(__hIsOpen_1);
+    return is_open((Handle *)hdl);
 }
 
-static
-FUNCTION(__hIsOpen_1)
+int
+primHIsClosed(Node *hdl)
 {
-    Node *r;
- ENTRY_LABEL(static, __hIsOpen_1)
-    MATCH_RIGID_FILE(__hIsOpen_1);
-    r = is_open((Handle *)regs.r[0]) ? Prelude_True : Prelude_False;
-    RETURN(r, 1);
+    return ((Handle *)hdl)->fp == NULL;
 }
 
-FUNCTION(__hIsClosed)
+int
+primHIsReadable(Node *hdl)
 {
- ENTRY_LABEL(extern, __hIsClosed)
-    SAVE_REGS(1);
-    EVAL_BOXED(__hIsClosed_1);
+    return is_readable((Handle *)hdl);
 }
 
-static
-FUNCTION(__hIsClosed_1)
+int
+primHIsWritable(Node *hdl)
 {
-    Node *r;
- ENTRY_LABEL(static, __hIsClosed_1)
-    MATCH_RIGID_FILE(__hIsClosed_1);
-    r = ((Handle *)regs.r[0])->fp == NULL ? Prelude_True : Prelude_False;
-    RETURN(r, 1);
+    return is_writable((Handle *)hdl);
 }
 
-FUNCTION(__hIsReadable)
+int
+primHIsSeekable(Node *hdl)
 {
- ENTRY_LABEL(extern, __hIsReadable)
-    SAVE_REGS(1);
-    EVAL_BOXED(__hIsReadable_1);
-}
+    Handle *file = (Handle *)hdl;
 
-static
-FUNCTION(__hIsReadable_1)
-{
-    Node *r;
- ENTRY_LABEL(static, __hIsReadable_1)
-    MATCH_RIGID_FILE(__hIsReadable_1);
-    r = is_readable((Handle *)regs.r[0]) ? Prelude_True : Prelude_False;
-    RETURN(r, 1);
-}
-
-FUNCTION(__hIsWritable)
-{
- ENTRY_LABEL(extern, __hIsWritable)
-    SAVE_REGS(1);
-    EVAL_BOXED(__hIsWritable_1);
-}
-
-static
-FUNCTION(__hIsWritable_1)
-{
-    Node *r;
- ENTRY_LABEL(static, __hIsWritable_1)
-    MATCH_RIGID_FILE(__hIsWritable_1);
-    r = is_writable((Handle *)regs.r[0]) ? Prelude_True : Prelude_False;
-    RETURN(r, 1);
-}
-
-FUNCTION(__hIsSeekable)
-{
- ENTRY_LABEL(extern, __hIsSeekable)
-    SAVE_REGS(1);
-    EVAL_BOXED(__hIsSeekable_1);
-}
-
-static
-FUNCTION(__hIsSeekable_1)
-{
-    Handle *file;
-    Node   *r;
- ENTRY_LABEL(static, __hIsSeekable_1)
-    MATCH_RIGID_FILE(__hIsSeekable_1);
-    file = (Handle *)regs.r[0];
-
-    if ( !is_open(file) )
-	r = Prelude_False;
-    else if ( ftell(file->fp) != - 1 )
-	r = Prelude_True;
-    else
+    if ( is_open(file) )
     {
-	clearerr(file->fp);
-	r = Prelude_False;
+	if ( ftell(file->fp) == - 1 )
+	    clearerr(file->fp);
+	else
+	    return true;
     }
-    RETURN(r, 1);
+    return false;
 }
 
 @
-The function [[hIsEOF]] returns whether all of the specified file has
-been read, i.e., whether the next call to [[hGetChar]] for the handle
-will raise an end-of-file exception.
+The predicate [[primHIsEOF]] returns whether all of the specified file
+has been read, i.e., whether the next call to [[primHGetChar]] for the
+handle will raise an end-of-file exception.
 
-Note that the semantics of [[hIsEOF]] is different from the C
-semantics. Whereas [[hIsEOF]] returns [[True]] after the last
+Note that the semantics of [[primHIsEOF]] is different from the C
+semantics. Whereas [[primHIsEOF]] returns [[true]] after the last
 character of the file has been read, the C library sets the
 end-of-file condition only after reading the end-of-file character.
 Therefore, our implementation reads the next character from the file
 and puts it back with [[ungetc]]. Unfortunately, this may block the
 program until the next character is available.
 
+<<files.h>>=
+extern int primHIsEOF(Node *);
+
+@ 
 <<files.c>>=
-DECLARE_LABEL(extern, __hIsEOF);
-DECLARE_LABEL(static, __hIsEOF_1);
-
-FUNCTION(__hIsEOF)
-{
- ENTRY_LABEL(extern, __hIsEOF)
-    SAVE_REGS(1);
-    EVAL_BOXED(__hIsEOF_1);
-}
-
-static
-FUNCTION(__hIsEOF_1)
+int
+primHIsEOF(Node *hdl)
 {
     int	   c;
-    Handle *file;
- ENTRY_LABEL(static, __hIsEOF_1)
-    MATCH_RIGID_FILE(__hIsEOF_1);
-    file = (Handle *)regs.r[0];
+    Handle *file = (Handle *)hdl;
 
     if ( !is_readable(file) )
-	CALL_RET2(__ioError, 1,
-		  from_string(0, "hIsEOF: handle not readable"),
-		  regs.sp[0]);
+	ioError("hIsEOF", "Handle not readable");
 
     assert(file->fp != NULL);
     c = getc(file->fp);
     if ( c == EOF && ferror(file->fp) )
-	CALL_RET2(__ioError, 1, from_string(0, strerror(errno)), regs.sp[0]);
+	ioError_withErrno("hIsEOF");
     ungetc(c, file->fp);
 
-    RETURN(c == EOF ? Prelude_True : Prelude_False, 1);
+    return c == EOF;
 }
 
 @ 
-The function [[hGetChar]] reads a single character from the specified
-input handle. The function raises an end-of-file exception when
-reading beyond the last character of the input. An access exception is
-reported when the handle is not open for reading. Note that this also
-happens when the handle is in a semi-closed state after
-[[hGetContents]] has been applied to it.
+The function [[primHGetChar]] reads a single character from the
+specified input handle. The function raises an end-of-file exception
+when reading beyond the last character of the input. An access
+exception is reported when the handle is not open for reading. Note
+that this also happens when the handle is in a semi-closed state after
+[[primHGetContents]] has been applied to it.
 
+<<files.h>>=
+extern int primHGetChar(Node *);
+
+@ 
 <<files.c>>=
-DECLARE_LABEL(extern, __hGetChar);
-DECLARE_LABEL(static, __hGetChar_1);
-
-FUNCTION(__hGetChar)
-{
- ENTRY_LABEL(extern, __hGetChar)
-    SAVE_REGS(1);
-    EVAL_BOXED(__hGetChar_1);
-}
-
-static
-FUNCTION(__hGetChar_1)
+int
+primHGetChar(Node *hdl)
 {
     int	   c;
-    Handle *file;
- ENTRY_LABEL(static, __hGetChar_1)
-    MATCH_RIGID_FILE(__hGetChar_1);
-    file = (Handle *)regs.r[0];
+    Handle *file = (Handle *)hdl;
 
     if ( !is_readable(file) )
-	CALL_RET2(__ioError, 1,
-		  from_string(0, "hGetChar: handle not readable"),
-		  regs.sp[0]);
+	ioError("hGetChar", "Handle not readable");
 
     assert(file->fp != NULL);
     c = getc(file->fp);
     if ( c == EOF )
-	CALL_RET2(__ioError, 1,
-		  from_string(0,
-			      feof(file->fp) ? "End of file" : strerror(errno)),
-		  regs.sp[0]);
+    {
+	if ( feof(file->fp) )
+	    ioError("hGetChar", "End of file");
+	else
+	    ioError_withErrno("hGetChar");
+    }
 
-    RETURN((Node *)(char_table + (c & 0xff)), 1);
+    return c;
 }
 
 @
-The function [[hLookAhead]] returns the next character from the input
-file without removing it from the input stream.
+The function [[primHLookAhead]] returns the next character from the
+input file without removing it from the input stream.
 
+<<files.h>>=
+extern int primHLookAhead(Node *);
+
+@ 
 <<files.c>>=
-DECLARE_LABEL(extern, __hLookAhead);
-DECLARE_LABEL(static, __hLookAhead_1);
-
-FUNCTION(__hLookAhead)
-{
- ENTRY_LABEL(extern, __hLookAhead)
-    SAVE_REGS(1);
-    EVAL_BOXED(__hLookAhead_1);
-}
-
-static
-FUNCTION(__hLookAhead_1)
+int
+primHLookAhead(Node *hdl)
 {
     int	   c;
-    Handle *file;
- ENTRY_LABEL(static, __hLookAhead_1)
-    MATCH_RIGID_FILE(__hLookAhead_1);
-    file = (Handle *)regs.r[0];
+    Handle *file = (Handle *)hdl;
 
     if ( !is_readable(file) )
-	CALL_RET2(__ioError, 1,
-		  from_string(0, "hLookAhead: handle not readable"),
-		  regs.sp[0]);
+	ioError("hLookAhead", "Handle not readable");
 
     assert(file->fp != NULL);
     c = getc(file->fp);
     if ( c == EOF )
-	CALL_RET2(__ioError, 1,
-		  from_string(0,
-			      feof(file->fp) ? "End of file" : strerror(errno)),
-		  regs.sp[0]);
+    {
+	if ( feof(file->fp) )
+	    ioError("hLookAhead", "End of file");
+	else
+	    ioError_withErrno("hLookAhead");
+    }
     ungetc(c, file->fp);
 
-    RETURN((Node *)(char_table + (c & 0xff)), 1);
+    return c;
 }
 
 @
-The function [[hGetLine]] reads a single line from the specified
+The function [[primHGetLine]] reads a single line from the specified
 handle. We implement this function in the runtime system instead of
-defining it in terms of [[hIsEOF]] and [[hGetChar]] because this makes
-a more efficient implementation possible using the [[fgets]] function.
-Note that [[fgets]] retains a newline character in the input buffer;
-we have to remove it before converting the string. If no newline has
-been read, we continue to read more characters from the standard input
-until reaching either the end-of-file or reading a newline character.
+defining it in terms of [[primHIsEOF]] and [[primHGetChar]] because
+this allows for a more efficient implementation using the [[fgets]]
+function. Note that [[fgets]] retains a newline character in the input
+buffer; we have to remove it before converting the string. If no
+newline has been read, we continue to read more characters from the
+standard input until reaching either the end of the file or reading a
+newline character.
 
 Concatenation of the line segments is a little bit tricky. We do not
 use the \texttt{(++)} operator from the prelude in order to avoid the
@@ -703,55 +516,41 @@ quadratic complexity introduced by it when constructing the string
 from left to right. Instead we use an indirection node at the end of
 each segment and set its pointer after reading the next segment. Note
 that this destructive update does not have to be trailed because
-[[hGetLine]] is an atomic action with respect to the Curry runtime
+[[primHGetLine]] is an atomic action with respect to the Curry runtime
 system.
 
+<<files.h>>=
+extern Node *primHGetLine(Node *);
+
+@ 
 <<files.c>>=
-DECLARE_LABEL(extern, __hGetLine);
-DECLARE_LABEL(static, __hGetLine_1);
-
-FUNCTION(__hGetLine)
-{
- ENTRY_LABEL(extern, __hGetLine)
-    SAVE_REGS(1);
-    EVAL_BOXED(__hGetLine_1);
-}
-
-static
-FUNCTION(__hGetLine_1)
+Node *
+primHGetLine(Node *hdl)
 {
     char buf[256], *cp;
-    Node *line, *tail;
+    Node *start, *line, *tail, *cont;
     FILE *fp;
- ENTRY_LABEL(static, __hGetLine_1)
-    MATCH_RIGID_FILE(__hGetLine_1);
 
-    if ( !is_readable((Handle *)regs.r[0]) )
-	CALL_RET2(__ioError, 1,
-		  from_string(0, "hGetLine: handle not readable"),
-		  regs.sp[0]);
+    if ( !is_readable((Handle *)hdl) )
+	ioError("hGetLine", "Handle not readable");
 
-    fp = ((Handle *)regs.r[0])->fp;
+    fp = ((Handle *)hdl)->fp;
     assert(fp != NULL);
     if ( !fgets(buf, sizeof(buf), fp) )
-	CALL_RET2(__ioError, 1,
-		  from_string(0, feof(fp) ? "End of file" : strerror(errno)),
-		  regs.sp[0]);
+    {
+	if ( feof(fp) )
+	    ioError("hGetLine", "End of file");
+	else
+	    ioError_withErrno("hGetLine");
+    }
 
-    regs.r[3] = regs.r[0];
-    regs.r[0] = nil;
-    regs.r[1] = regs.r[2] = 0;
-
-    /* in this loop:
-       r[0]: head of line
-       r[1]: pointer to indirection tail node
-       r[2]: pointer to last line segment
-       r[3]: file handle
-       NB the file handle in r[3] is not used in the loop below;
-          nevertheless, it must be kept in a register so that the
-	  file is not closed by the garbage collector while we are
-	  reading from it.
+    /* NB the file handle node is not used in the loop below; nevertheless,
+     *    it is made a local root so that the file is not closed by the
+     *    garbage collector while we are reading from it.
      */
+    BEGIN_LOCAL_ROOTS4(hdl, start, tail, cont)
+    start = nil;
+    tail  = cont = 0;
     do
     {
 	for ( cp = buf; *cp != '\n' && *cp != '\0'; cp++ )
@@ -760,51 +559,52 @@ FUNCTION(__hGetLine_1)
 	if ( *cp == '\n' )
 	{
 	    *cp  = '\0';
-	    tail = nil;
+	    cont = nil;
 	}
 	else
 	{
-	    CHECK_HEAP(4, indir_node_size);
-	    tail	 = (Node *)regs.hp;
-	    tail->info	 = &indir_info;
+	    CHECK_HEAP(0, indir_node_size);
+	    cont	 = (Node *)regs.hp;
+	    cont->info	 = &indir_info;
 #if !COPY_SEARCH_SPACE
-	    tail->n.spc	 = regs.ss;
+	    cont->n.spc	 = regs.ss;
 #endif
-	    tail->n.node = nil;
+	    cont->n.node = nil;
 	    regs.hp	+= indir_node_size;
 	}
 
-	regs.r[1] = tail;
-	line	  = prefix_string(4, buf, tail);
-	if ( regs.r[0] == nil )
-	    regs.r[0] = line;
+	line = prefix_string(0, buf, cont);
+	if ( start == nil )
+	    start = line;
 	else
-	    regs.r[2]->n.node = line;
-	regs.r[2] = regs.r[1];
-    } while ( regs.r[2] != nil && fgets(buf, sizeof(buf), fp) );
+	    tail->n.node = line;
+	tail = cont;
+    } while ( tail != nil && fgets(buf, sizeof(buf), fp) );
+    END_LOCAL_ROOTS
 
-    RETURN(regs.r[0], 1);
+    return start;
 }
 
 @ 
-The function [[hGetContents]] returns the contents of the specified
-file as a lazy stream. The handle is put into a semi-closed state by
-setting the flags to [[0]]. The character stream is constructed on
-demand with the help of the [[lazyRead]] function.
+The function [[primHGetContents]] returns the contents of the
+specified file as a lazy stream. The handle is put into a semi-closed
+state by setting the flags to [[0]]. The character stream is
+constructed on demand with the help of the [[lazyRead]] function.
 
-An alert reader might be surprised that [[hGetContents]] returns a
+An alert reader might be surprised that [[primHGetContents]] returns a
 suspended application node. However, recall that this node should be
 considered the first component of a pair composed of a result and the
 state of the world. From these, only the result is really returned
 because the representation of the world would be a simple constant
 (cf. p.~\pageref{eq:monadic-io} in Sect.~\ref{sec:io-monad}).
 
-<<files.c>>=
-DECLARE_LABEL(extern, __hGetContents);
-DECLARE_LABEL(static, __hGetContents_1);
-DECLARE_LABEL(static, lazyRead);
+<<files.h>>=
+extern Node *primHGetContents(Node *);
 
+@ 
+<<files.c>>=
 DECLARE_LABEL(static, eval_lazy_1);
+DECLARE_LABEL(static, lazyRead);
 
 static NodeInfo lazyRead_lazy_info_table[] = LAZYINFO("lazyRead", lazyRead, 1);
 
@@ -861,41 +661,6 @@ FUNCTION(eval_lazy_1)
     EXEC1(entry, x);
 }
 
-FUNCTION(__hGetContents)
-{
- ENTRY_LABEL(extern, __hGetContents)
-    SAVE_REGS(1);
-    EVAL_BOXED(__hGetContents_1);
-}
-
-static
-FUNCTION(__hGetContents_1)
-{
-    Node   *susp;
-    Handle *file;
- ENTRY_LABEL(static, __hGetContents_1)
-    MATCH_RIGID_FILE(__hGetContents_1);
-    file = (Handle *)regs.r[0];
-
-    if ( !is_readable(file) )
-	CALL_RET2(__ioError, 1,
-		  from_string(0, "hGetContents: handle not readable"),
-		  regs.sp[0]);
-
-    /* put the file into a semi-closed state */
-    file->flags = 0;
-
-    /* construct the (lazy) input stream */
-    CHECK_HEAP(1, suspend_node_size(1));
-    susp	    = (Node *)regs.hp;
-    susp->info	    = lazyRead_lazy_info_table;
-    susp->s.spc	    = regs.ss;
-    susp->s.args[0] = regs.r[0];
-    regs.hp	   += suspend_node_size(1);
-
-    RETURN(susp, 1);
-}
-
 static
 FUNCTION(lazyRead)
 {
@@ -937,213 +702,112 @@ FUNCTION(lazyRead)
     RET(list);
 }
 
+Node *
+primHGetContents(Node *hdl)
+{
+    Node   *susp;
+    Handle *file = (Handle *)hdl;
+
+    /* put the file into a semi-closed state */
+    if ( !is_readable(file) )
+	ioError("hGetContents", "Handle not readable");
+    file->flags = 0;
+
+    /* construct the (lazy) input stream */
+    BEGIN_LOCAL_ROOTS1(hdl)
+    CHECK_HEAP(0, suspend_node_size(1));
+    susp	    = (Node *)regs.hp;
+    susp->info	    = lazyRead_lazy_info_table;
+    susp->s.spc	    = regs.ss;
+    susp->s.args[0] = hdl;
+    regs.hp	   += suspend_node_size(1);
+    END_LOCAL_ROOTS
+
+    return susp;
+}
+
 @
-The function [[hPutChar]] writes a single character to the specified
-handle.
+The function [[primHPutChar]] writes a single character to the
+specified handle.
 
-<<files.c>>=
-DECLARE_LABEL(extern, __hPutChar);
-DECLARE_LABEL(static, __hPutChar_1);
-DECLARE_LABEL(static, __hPutChar_2);
-
-FUNCTION(__hPutChar)
-{
- ENTRY_LABEL(extern, __hPutChar)
-    SAVE_REGS(2);
-    EVAL_BOXED(__hPutChar_1);
-}
-
-static
-FUNCTION(__hPutChar_1)
-{
- ENTRY_LABEL(static, __hPutChar_1)
-    MATCH_RIGID_FILE(__hPutChar_1);
-    SWAPn(0);
-    EVAL_BOXED(__hPutChar_2);
-}
-
-static
-FUNCTION(__hPutChar_2)
-{
-    Handle *file;
- ENTRY_LABEL(static, __hPutChar_2)
-    MATCH_RIGID_CHAR(__hPutChar_2);
-    file = (Handle *)regs.sp[0];
-
-    if ( !is_writable(file) )
-	CALL_RET2(__ioError, 2,
-		  from_string(0, "hPutChar: handle not writable"),
-		  regs.sp[1]);
-
-    assert(file->fp != NULL);
-    if ( putc(regs.r[0]->ch.ch, file->fp) == EOF )
-	CALL_RET2(__ioError, 2, from_string(0, strerror(errno)), regs.sp[1]);
-
-    RETURN(unit, 2);
-}
+<<files.h>>=
+extern void primHPutChar(Node *, int);
 
 @ 
-The function [[hPutStr]] writes a string to a file handle.
-
 <<files.c>>=
-DECLARE_LABEL(extern, __hPutStr);
-DECLARE_LABEL(static, __hPutStr_1);
-DECLARE_LABEL(static, __hPutStr_2);
-DECLARE_LABEL(static, __hPutStr_3);
-
-FUNCTION(__hPutStr)
+void
+primHPutChar(Node *hdl, int c)
 {
- ENTRY_LABEL(extern, __hPutStr)
-    SAVE_REGS(2);
-    EVAL_BOXED(__hPutStr_1);
-}
+    Handle *file = (Handle *)hdl;
 
-static
-FUNCTION(__hPutStr_1)
-{
- ENTRY_LABEL(static, __hPutStr_1)
-    MATCH_RIGID_FILE(__hPutStr_1);
-    if ( !is_writable((Handle *)regs.r[0]) )
-	CALL_RET2(__ioError, 2,
-		  from_string(0, "hPutStr: handle not writable"),
-		  regs.sp[1]);
+    if ( !is_writable(file) )
+	ioError("hPutChar", "Handle not writable");
 
-    SWAPn(0);
-    EVAL_BOXED(__hPutStr_2);
-}
-
-static
-FUNCTION(__hPutStr_2)
-{
-    Node *list;
- ENTRY_LABEL(static, __hPutStr_2)
-    MATCH_RIGID_DATA(__hPutStr_2);
-    list = regs.r[0];
-    switch ( node_tag(list) )
-    {
-    case NIL_TAG:
-	RETURN(unit, 2);
-    case CONS_TAG:
-	CHECK_STACK1();
-	regs.sp   -= 1;
-	regs.sp[0] = list->c.args[1];
-	regs.r[0]  = list->c.args[0];
-	EVAL_BOXED(__hPutStr_3);
-    default:
-	unexpected_tag("hPutStr", node_tag(list));
-    }
-}
-
-static
-FUNCTION(__hPutStr_3)
-{
-    Handle *file;
- ENTRY_LABEL(static, __hPutStr_3)
-    MATCH_RIGID_CHAR(__hPutStr_3);
-
-    file = (Handle *)regs.sp[1];
-    if ( fputc(regs.r[0]->ch.ch, file->fp) == EOF )
-	CALL_RET2(__ioError, 3, from_string(0, strerror(errno)), regs.sp[2]);
-
-    regs.r[0] = *regs.sp++;
-    EVAL_BOXED(__hPutStr_2);
+    assert(file->fp != NULL);
+    if ( putc(c, file->fp) == EOF )
+	ioError_withErrno("hPutChar");
 }
 
 @
-The function [[hFileSize]] returns the size of a file in bytes,
+The function [[primHFileSize]] returns the size of a file in bytes,
 provided that the file is seekable.
 
+<<files.h>>=
+extern long primHFileSize(Node *);
+
+@ 
 <<files.c>>=
-DECLARE_LABEL(extern, __hFileSize);
-DECLARE_LABEL(static, __hFileSize_1);
-
-FUNCTION(__hFileSize)
-{
- ENTRY_LABEL(extern, __hFileSize)
-    SAVE_REGS(1);
-    EVAL_BOXED(__hFileSize_1);
-}
-
-static
-FUNCTION(__hFileSize_1)
+long
+primHFileSize(Node *hdl)
 {
     long   curpos, endpos;
-    Node   *r;
-    Handle *file;
- ENTRY_LABEL(static, __hFileSize_1)
-    MATCH_RIGID_FILE(__hFileSize_1);
-    file = (Handle *)regs.r[0];
+    Handle *file = (Handle *)hdl;
 
     if ( !is_open(file) )
-	CALL_RET2(__ioError, 1,
-		  from_string(0, "hFileSize: handle not open"),
-		  regs.sp[0]);
+	ioError("hFileSize", "Handle not open");
 
     assert(file->fp != NULL);
     curpos = ftell(file->fp);
     if ( curpos == -1 || fseek(file->fp, 0, SEEK_END) == -1 )
-	CALL_RET2(__ioError, 1, from_string(0, strerror(errno)), regs.sp[0]);
+	ioError_withErrno("hFileSize");
 
     endpos = ftell(file->fp);
     if ( endpos == -1 || fseek(file->fp, curpos, SEEK_SET) == -1 )
-	CALL_RET2(__ioError, 1, from_string(0, strerror(errno)), regs.sp[0]);
+	ioError_withErrno("hFileSize");
 
-#if !ONLY_BOXED_OBJECTS
-    if ( !is_large_int(endpos) )
-	r = mk_unboxed(endpos);
-    else
-#endif
-    {
-	CHECK_HEAP(0, int_node_size);
-	r	 = (Node *)regs.hp;
-	r->info	 = &int_info;
-	r->i.i	 = endpos;
-	regs.hp	+= int_node_size;
-    }
-    RETURN(r, 1);
+    return endpos;
 }
 
 @
-The function [[hIsTerminalDevice]] returns [[True]] if the specified
-handle is connected to a terminal and [[False]] otherwise. We use the
-[[isatty]] function for testing this property.
+The function [[primHIsTerminalDevice]] returns [[true]] if the
+specified handle is connected to a terminal and [[false]] otherwise.
+We use the [[isatty]] function for testing this property.
 
+<<files.h>>=
+extern int primHIsTerminalDevice(Node *);
+
+@ 
 <<files.c>>=
-DECLARE_LABEL(extern, __hIsTerminalDevice);
-DECLARE_LABEL(static, __hIsTerminalDevice_1);
-
-FUNCTION(__hIsTerminalDevice)
+int
+primHIsTerminalDevice(Node *hdl)
 {
- ENTRY_LABEL(extern, __hIsTerminalDevice)
-    SAVE_REGS(1);
-    EVAL_BOXED(__hIsTerminalDevice_1);
-}
-
-static
-FUNCTION(__hIsTerminalDevice_1)
-{
-    Handle *file;
- ENTRY_LABEL(static, __hIsTerminalDevice_1)
-    MATCH_RIGID_FILE(__hIsTerminalDevice_1);
-    file = (Handle *)regs.r[0];
+    Handle *file = (Handle *)hdl;
 
     if ( !is_open(file) )
-	CALL_RET2(__ioError, 1,
-		  from_string(0, "hIsTerminalDevice: handle not open"),
-		  regs.sp[0]);
-    assert(file->fp != NULL);
+	ioError("hIsTerminalDevice", "Handle not open");
 
-    RETURN(isatty(fileno(file->fp)) ? Prelude_True : Prelude_False, 1);
+    assert(file->fp != NULL);
+    return isatty(fileno(file->fp));
 }
 
 @
-The function [[hGetBuffering]] returns the buffering mode used for the
-given file handle. Unfortunately, there is no portable way to
+The function [[primHGetBuffering]] returns the buffering mode used for
+the given file handle. Unfortunately, there is no portable way to
 determine the buffering mode used for a file handle. Therefore, the
-mode is saved in the file structure when [[hSetBuffering]] is called
-(see below). The initial buffering mode is determined by checking
-whether the file is connected to a terminal or to a file. In the
-former case we assume that line buffering is used, otherwise block
+mode is saved in the file structure when [[primHSetBuffering]] is
+called (see below). The initial buffering mode is determined by
+checking whether the file is connected to a terminal or to a file. In
+the former case we assume that line buffering is used, otherwise block
 buffering is assumed.
 
 The buffer mode is returned as an instance of the type
@@ -1152,6 +816,10 @@ The buffer mode is returned as an instance of the type
   data BufferMode = NoBuffering | LineBuffering | BlockBuffering (Maybe Int)
 \end{verbatim}
 
+<<files.h>>=
+extern Node *primHGetBuffering(Node *);
+
+@ 
 <<files.c>>=
 enum { Nothing_tag, Just_tag };
 DECLARE_CONST(__Prelude__Nothing);
@@ -1162,31 +830,16 @@ DECLARE_CONST(__IO__NoBuffering);
 DECLARE_CONST(__IO__LineBuffering);
 DECLARE_DATA(__IO__BlockBuffering);
 
-DECLARE_LABEL(extern, __hGetBuffering);
-DECLARE_LABEL(static, __hGetBuffering_1);
-
-FUNCTION(__hGetBuffering)
-{
- ENTRY_LABEL(extern, __hGetBuffering)
-    SAVE_REGS(1);
-    EVAL_BOXED(__hGetBuffering_1);
-}
-
-static
-FUNCTION(__hGetBuffering_1)
+Node *
+primHGetBuffering(Node *hdl)
 {
     short  bmode;
     long   bsize;
     Node   *size, *r;
-    Handle *file;
- ENTRY_LABEL(static, __hGetBuffering_1)
-    MATCH_RIGID_FILE(__hGetBuffering_1);
-    file = (Handle *)regs.r[0];
+    Handle *file = (Handle *)hdl;
 
     if ( !is_open(file) )
-	CALL_RET2(__ioError, 1,
-		  from_string(0, "hGetBuffering: handle not open"),
-		  regs.sp[0]);
+	ioError("hGetBuffering", "Handle not open");
 
     assert(file->fp != NULL);
     for (;;)
@@ -1239,44 +892,30 @@ FUNCTION(__hGetBuffering_1)
 	break;
     }
 
-    RETURN(r, 1);
+    return r;
 }
 
 @
-The function [[hSetBuffering]] changes the current buffering mode of a
-file handle.
+The function [[primHSetBuffering]] changes the current buffering mode
+of a file handle.
 
+<<files.h>>=
+extern void primHSetBuffering(Node *, Node *);
+
+@ 
 <<files.c>>=
-DECLARE_LABEL(extern, __hSetBuffering);
-DECLARE_LABEL(static, __hSetBuffering_1);
-DECLARE_LABEL(static, __hSetBuffering_2);
-DECLARE_LABEL(static, __hSetBuffering_3);
-DECLARE_LABEL(static, __hSetBuffering_4);
-
-FUNCTION(__hSetBuffering)
-{
- ENTRY_LABEL(extern, __hSetBuffering)
-    SAVE_REGS(2);
-    EVAL_BOXED(__hSetBuffering_1);
-}
-
-static
-FUNCTION(__hSetBuffering_1)
-{
- ENTRY_LABEL(static, __hSetBuffering_1)
-    MATCH_RIGID_FILE(__hSetBuffering_1);
-    SWAPn(0);
-    EVAL_BOXED(__hSetBuffering_2);
-}
-
-static
-FUNCTION(__hSetBuffering_2)
+void
+primHSetBuffering(Node *hdl, Node *bufferMode)
 {
     short  bmode;
-    Handle *file;
- ENTRY_LABEL(static, __hSetBuffering_2)
-    MATCH_RIGID_DATA(__hSetBuffering_2);
-    switch ( node_tag(regs.r[0]) )
+    long   bsize   = 0;
+    char   *buffer = NULL;
+    Handle *file   = (Handle *)hdl;
+
+    if ( !is_open(file) )
+	ioError("hSetBuffering", "Handle not open");
+
+    switch ( node_tag(bufferMode) )
     {
     case NoBuffering_tag:
 	bmode = _IONBF;
@@ -1285,251 +924,122 @@ FUNCTION(__hSetBuffering_2)
 	bmode = _IOLBF;
 	break;
     case BlockBuffering_tag:
-	regs.r[0] = regs.r[0]->c.args[0];
-	EVAL_BOXED(__hSetBuffering_3);
-    default:
-	unexpected_tag("hSetBuffering", node_tag(regs.r[0]));
-    }
-
-    file = (Handle *)regs.sp[0];
-    if ( !is_open(file) )
-	CALL_RET2(__ioError, 2,
-		  from_string(0, "hSetBuffering: handle not open"),
-		  regs.sp[1]);
-
-    assert(file->fp != NULL);
-    if ( setvbuf(file->fp, NULL, bmode, 0) == -1 )
-	CALL_RET2(__ioError, 2, from_string(0, strerror(errno)), regs.sp[1]);
-    file->bmode = bmode;
-    file->bsize = 0;
-    if ( file->buffer )
-	free(file->buffer);
-    file->buffer = NULL;
-
-    RETURN(unit, 2);
-}
-
-static
-FUNCTION(__hSetBuffering_3)
-{
-    Handle *file;
- ENTRY_LABEL(static, __hSetBuffering_3)
-    MATCH_RIGID_DATA(__hSetBuffering_3);
-    switch ( node_tag(regs.r[0]) )
-    {
-    case Nothing_tag:
+	bmode	   = _IOFBF;
+	bufferMode = bufferMode->c.args[0];
+	while ( is_indir_node(bufferMode) )
+	    bufferMode = bufferMode->n.node;
+	switch ( node_tag(bufferMode) )
+	{
+	case Nothing_tag:
+	    break;
+	case Just_tag:
+	    bufferMode = bufferMode->c.args[0];
+	    while ( is_boxed(bufferMode) && is_indir_node(bufferMode) )
+		bufferMode = bufferMode->n.node;
+	    bsize = long_val(bufferMode);
+	    if ( bsize > 0 )
+	    {
+		buffer = (char *)malloc(bsize);
+		if ( buffer == NULL )
+		    sys_error("hSetBuffering");
+	    }
+	    break;
+	default:
+	    unexpected_tag("hSetBuffering (mode)", node_tag(bufferMode));
+	}
 	break;
-    case Just_tag:
-	regs.r[0] = regs.r[0]->c.args[0];
-	EVAL(__hSetBuffering_4);
     default:
-	unexpected_tag("hSetBuffering (mode)", node_tag(regs.r[0]));
+	unexpected_tag("hSetBuffering", node_tag(bufferMode));
     }
 
-    file = (Handle *)regs.sp[0];
-    if ( !is_open(file) )
-	CALL_RET2(__ioError, 2,
-		  from_string(0, "hSetBuffering: handle not open"),
-		  regs.sp[1]);
-
     assert(file->fp != NULL);
-    if ( setvbuf(file->fp, NULL, _IOFBF, 0) == -1 )
-	CALL_RET2(__ioError, 2, from_string(0, strerror(errno)), regs.sp[1]);
-    file->bmode = _IOFBF;
-    file->bsize = 0;
-    if ( file->buffer )
-	free(file->buffer);
-    file->buffer = NULL;
-
-    RETURN(unit, 2);
-}
-
-static
-FUNCTION(__hSetBuffering_4)
-{
-    long   bsize;
-    char   *buffer;
-    Node   *exc;
-    Handle *file;
- ENTRY_LABEL(static, __hSetBuffering_4)
-    MATCH_RIGID_INT(__hSetBuffering_4);
-    file = (Handle *)regs.sp[0];
-    if ( !is_open(file) )
-	CALL_RET2(__ioError, 2,
-		  from_string(0, "hSetBuffering: handle not open"),
-		  regs.sp[1]);
-
-    bsize = long_val(regs.r[0]);
-    if ( bsize > 0 )
+    if ( setvbuf(file->fp, buffer, bmode, bsize) == -1 )
     {
-	buffer = (char *)malloc(bsize);
-	if ( buffer == NULL )
-	    sys_error("hSetBuffering");
-    }
-    else
-	buffer = NULL;
-
-    assert(file->fp != NULL);
-    if ( setvbuf(file->fp, buffer, _IOFBF, bsize) == -1 )
-    {
-	exc = from_string(0, strerror(errno));
+	int e = errno;
 	free(buffer);
-	CALL_RET2(__ioError, 2, exc, regs.sp[1]);
+	errno = e;
+	ioError_withErrno("hSetBuffering");
     }
-    file->bmode = _IOFBF;
+    file->bmode = bmode;
     file->bsize = bsize;
     if ( file->buffer )
 	free(file->buffer);
     file->buffer = buffer;
-
-    RETURN(unit, 2);
 }
 
 @
-The function [[hFlush]] flushes the output buffer associated with
+The function [[primHFlush]] flushes the output buffer associated with
 the specified handle.
 
+<<files.h>>=
+extern void primHFlush(Node *);
+
+@ 
 <<files.c>>=
-DECLARE_LABEL(extern, __hFlush);
-DECLARE_LABEL(static, __hFlush_1);
-
-FUNCTION(__hFlush)
+void
+primHFlush(Node *hdl)
 {
- ENTRY_LABEL(extern, __hFlush)
-    SAVE_REGS(1);
-    EVAL_BOXED(__hFlush_1);
-}
-
-static
-FUNCTION(__hFlush_1)
-{
-    Handle *file;
- ENTRY_LABEL(static, __hFlush_1)
-    MATCH_RIGID_FILE(__hFlush_1);
-    file = (Handle *)regs.r[0];
+    Handle *file = (Handle *)hdl;
 
     if ( !is_writable(file) )
-	CALL_RET2(__ioError, 1,
-		  from_string(0, "hFlush: handle not writable"),
-		  regs.sp[0]);
-
+	ioError("hFlush", "Handle not writable");
     assert(file->fp != NULL);
     if ( fflush(file->fp) == -1 )
-	CALL_RET2(__ioError, 1, from_string(0, strerror(errno)), regs.sp[0]);
-
-    RETURN(unit, 1);
+	ioError_withErrno("hFlush");
 }
 
 @
-The function [[hTell]] returns the current I/O position of the file
-associated with the specified handle.
+The function [[primHTell]] returns the current I/O position of the
+file associated with the specified handle.
 
+<<files.h>>=
+extern long primHTell(Node *);
+
+@ 
 <<files.c>>=
-DECLARE_LABEL(extern, __hTell);
-DECLARE_LABEL(static, __hTell_1);
-
-FUNCTION(__hTell)
-{
- ENTRY_LABEL(extern, __hTell)
-    SAVE_REGS(1);
-    EVAL_BOXED(__hTell_1);
-}
-
-static
-FUNCTION(__hTell_1)
+long
+primHTell(Node *hdl)
 {
     long   curpos;
-    Node   *r;
-    Handle *file;
- ENTRY_LABEL(static, __hTell_1)
-    MATCH_RIGID_FILE(__hTell_1);
-    file = (Handle *)regs.r[0];
+    Handle *file = (Handle *)hdl;
 
     if ( !is_open(file) )
-	CALL_RET2(__ioError, 1,
-		  from_string(0, "hTell: handle not open"),
-		  regs.sp[0]);
-
+	ioError("hTell", "Handle not open");
     assert(file->fp != NULL);
     curpos = ftell(file->fp);
     if ( curpos == -1 )
-	CALL_RET2(__ioError, 1, from_string(0, strerror(errno)), regs.sp[0]);
+	ioError_withErrno("hTell");
 
-#if !ONLY_BOXED_OBJECTS
-    if ( !is_large_int(curpos) )
-	r = mk_unboxed(curpos);
-    else
-#endif
-    {
-	CHECK_HEAP(0, int_node_size);
-	r	 = (Node *)regs.hp;
-	r->info	 = &int_info;
-	r->i.i	 = curpos;
-	regs.hp += int_node_size;
-    }
-    RETURN(r, 1);
+    return curpos;
 }
 
 @
-The function [[hSeek]] sets the I/O position of the specified handle
-to a new position. The second argument determines how the offset
-(the third argument) is interpreted. It must be a constant from the
-type \texttt{SeekMode} defined in the module \texttt{IO} as follows.
+The function [[primHSeek]] sets the I/O position of the specified
+handle to a new position. The second argument determines how the
+offset (the third argument) is interpreted. It must be a constant from
+the type \texttt{SeekMode} defined in the module \texttt{IO} as
+follows.
 \begin{verbatim}
   data SeekMode = AbsoluteSeek | RelativeSeek | SeekFromEnd
 \end{verbatim}
 
+<<files.h>>=
+extern void primHSeek(Node *, Node *, long);
+
+@ 
 <<files.c>>=
 enum { AbsoluteSeek_tag, RelativeSeek_tag, SeekFromEnd_tag };
-DECLARE_CONST(__IO__AbsoluteSeek);
-DECLARE_CONST(__IO__RelativeSeek);
-DECLARE_CONST(__IO__SeekFromEnd);
 
-DECLARE_LABEL(extern, __hSeek);
-DECLARE_LABEL(static, __hSeek_1);
-DECLARE_LABEL(static, __hSeek_2);
-DECLARE_LABEL(static, __hSeek_3);
-
-FUNCTION(__hSeek)
-{
- ENTRY_LABEL(extern, __hSeek)
-    SAVE_REGS(3);
-    EVAL_BOXED(__hSeek_1);
-}
-
-static
-FUNCTION(__hSeek_1)
-{
- ENTRY_LABEL(static, __hSeek_1)
-    MATCH_RIGID_FILE(__hSeek_1);
-    SWAPn(0);
-    EVAL_BOXED(__hSeek_2);
-}
-
-static
-FUNCTION(__hSeek_2)
-{
- ENTRY_LABEL(static, __hSeek_2)
-    MATCH_RIGID_DATA(__hSeek_2);
-    SWAPn(1);
-    EVAL(__hSeek_3);
-}
-
-static
-FUNCTION(__hSeek_3)
+void
+primHSeek(Node *hdl, Node *seekMode, long offset)
 {
     int	   smode;
-    Handle *file;
- ENTRY_LABEL(static, __hSeek_3)
-    MATCH_RIGID_INT(__hSeek_3);
+    Handle *file = (Handle *)hdl;
 
-    file = (Handle *)regs.sp[0];
     if ( !is_open(file) )
-	CALL_RET2(__ioError, 3,
-		  from_string(0, "hSeek: handle not open"),
-		  regs.sp[2]);
+	ioError("hSeek", "Handle not open");
 
-    switch ( node_tag(regs.sp[1]) )
+    switch ( node_tag(seekMode) )
     {
     case AbsoluteSeek_tag:
 	smode = SEEK_SET;
@@ -1541,83 +1051,46 @@ FUNCTION(__hSeek_3)
 	smode = SEEK_END;
 	break;
     default:
-	unexpected_tag("hSeek (mode)", node_tag(regs.sp[1]));
+	unexpected_tag("hSeek (mode)", node_tag(seekMode));
     }
 
     assert(file->fp != NULL);
-    if ( fseek(file->fp, long_val(regs.r[0]), smode) == -1 )
-	CALL_RET2(__ioError, 3, from_string(0, strerror(errno)), regs.sp[2]);
-
-    RETURN(unit, 3);
+    if ( fseek(file->fp, offset, smode) == -1 )
+	ioError_withErrno("hSeek");
 }
 
 @ 
-The function [[openProcess]] executes a shell command and returns a
-file descriptor connected to the standard input and output of the
+The function [[primOpenProcess]] executes a shell command and returns
+a file descriptor connected to the standard input and output of the
 subprocess. We cannot use [[popen]] here, as using it with the [[r+]]
 mode is a non-portable extension.
 
+<<files.h>>=
+extern Node *primOpenProcess(Node *, Node *);
+
+@ 
 <<files.c>>=
-DECLARE_LABEL(extern, __openProcess);
-DECLARE_LABEL(static, __openProcess_1);
-DECLARE_LABEL(static, __openProcess_2);
-
-FUNCTION(__openProcess)
+Node *
+primOpenProcess(Node *cmdString, Node *ioMode)
 {
- ENTRY_LABEL(extern, __openProcess)
-    SAVE_REGS(2);
-    EVAL_BOXED(__openProcess_1);
-}
-
-static
-FUNCTION(__openProcess_1)
-{
- ENTRY_LABEL(static, __openProcess_1)
-    SWAPn(0);
-    EVAL_BOXED(__openProcess_2);
-}
-
-static
-FUNCTION(__openProcess_2)
-{
-    int		  r, fds[2], flags;
+    int		  r, fds[2];
+    short	  flags;
     pid_t	  pid;
     const char	  *cmd, *mode;
-    Node	  *exc;
     FILE	  *fp;
     ProcessHandle *proc;
- ENTRY_LABEL(static, __openProcess_2)
-    /* determine the access mode */
-    MATCH_RIGID_DATA(__openProcess_2);
-    cmd = to_string(regs.sp[0]);
-    switch ( node_tag(regs.r[0]) )
-    {
-    case ReadMode_tag:
-	mode  = "r";
-	flags = mask(readable);
-	break;
-    case WriteMode_tag:
-    case AppendMode_tag:
-	mode  = "w";
-	flags = mask(writable);
-	break;
-    case ReadWriteMode_tag:
-	mode  = "r+";
-	flags = mask(readable) | mask(writable);
-	break;
-    default:
-	unexpected_tag("openProcess (mode)", node_tag(regs.r[0]));
-    }
 
-    /* depending on the mode create either a pipe or a socket pair */
+    /* depending on the access mode create either a pipe or a socket pair */
+    mode = decodeIOMode(ioMode, &flags);
     if ( flags == (mask(readable) | mask(writable)) )
 	r = socketpair(AF_UNIX, SOCK_STREAM, 0, fds);
     else
 	r = pipe(fds);
     if ( r == -1 )
-	CALL_RET2(__ioError, 2, from_string(0, strerror(errno)), regs.sp[1]);
+	ioError_withErrno("openProcess");
 
     /* start a new process for the command */
+    cmd = to_string(cmdString);
     pid = vfork();
     switch ( pid )
     {
@@ -1645,10 +1118,13 @@ FUNCTION(__openProcess_2)
 	execl("/bin/sh", "sh", "-c", cmd, (char *)0);
 	_exit(1);
     case -1:
-	exc = from_string(0, strerror(errno));
+    {
+	int e = errno;
 	close(fds[0]);
 	close(fds[1]);
-	CALL_RET2(__ioError, 2, exc, regs.sp[1]);
+	errno = e;
+	ioError_withErrno("openProcess");
+    }
     default:
 	free((char *)cmd);
 	break;
@@ -1667,9 +1143,10 @@ FUNCTION(__openProcess_2)
     fp	= fdopen(fds[0], mode);
     if ( fp == NULL )
     {
-	exc = from_string(0, strerror(errno));
+	int e = errno;
 	close(fds[0]);
-	CALL_RET2(__ioError, 2, exc, regs.sp[1]);
+	errno = e;
+	ioError_withErrno("openProcess");
     }
 
     /* create the process node */
@@ -1687,42 +1164,29 @@ FUNCTION(__openProcess_2)
     register_final((Node *)proc);
 
     /* return the process node */
-    RETURN((Node *)proc, 2);
+    return (Node *)proc;
 }
 
 @ 
-The function [[pClose]] closes the connection to a process and returns
-its termination status. This function raises an IO error when it is
-applied to a handle that is not connected to a process. However, it is
-safe to call [[pClose]] more than once for a handle that was created
-by [[openProcess]].
+The function [[primPClose]] closes the connection to a process and
+returns its termination status. This function raises an IO error when
+it is applied to a handle that is not connected to a process. However,
+it is safe to call [[primPClose]] more than once for a handle that was
+created by [[primOpenProcess]].
 
+<<files.h>>=
+extern long primPClose(Node *);
+
+@ 
 <<files.c>>=
-DECLARE_LABEL(extern, __pClose);
-DECLARE_LABEL(static, __pClose_1);
-
-FUNCTION(__pClose)
-{
- ENTRY_LABEL(extern, __pClose)
-    SAVE_REGS(1);
-    EVAL_BOXED(__pClose_1);
-}
-
-static
-FUNCTION(__pClose_1)
+long
+primPClose(Node *hdl)
 {
     int		  res;
-    ProcessHandle *proc;
-    Node	  *r;
- ENTRY_LABEL(static, __pClose_1)
-    MATCH_RIGID_FILE(__pClose_1);
-    proc = (ProcessHandle *)regs.r[0];
+    ProcessHandle *proc = (ProcessHandle *)hdl;
+
     if ( proc->info != &process_info )
-	CALL_RET2(__ioError, 1,
-		  from_string(0,
-			      "pClose applied to a handle that "
-			      "is not connected to a process"),
-		  regs.sp[0]);
+	ioError("pClose", "Handle not connected to a process");
 
     if ( proc->fp )
     {
@@ -1744,93 +1208,38 @@ FUNCTION(__pClose_1)
 	res = -WTERMSIG(proc->status);
     else
     {
-	ASSERT(WIFEXITED(proc->status));
+	assert(WIFEXITED(proc->status));
 	res = WEXITSTATUS(proc->status);
     }
 
-#if !ONLY_BOXED_OBJECTS
-    if ( !is_large_int(res) )
-	r = mk_unboxed((long)res);
-    else
-#endif
-    {
-	CHECK_HEAP(0, int_node_size);
-	r	 = (Node *)regs.hp;
-	r->info	 = &int_info;
-	r->i.i	 = res;
-	regs.hp += int_node_size;
-    }
-    RETURN(r, 1);
+    return res;
 }
 
 @ 
-The function [[connectTcpSocket]] creates a socket that is connected
-to a specified port at a given host.
+The function [[primConnectTcpSocket]] creates a socket that is
+connected to a specified port at a given host.
 
+<<files.h>>=
+extern Node *primConnectTcpSocket(Node *, long, Node *);
+
+@ 
 <<files.c>>=
-DECLARE_LABEL(extern, __connectTcpSocket);
-DECLARE_LABEL(static, __connectTcpSocket_1);
-DECLARE_LABEL(static, __connectTcpSocket_2);
-DECLARE_LABEL(static, __connectTcpSocket_3);
-
-FUNCTION(__connectTcpSocket)
+Node *
+primConnectTcpSocket(Node *hostString, long port, Node *ioMode)
 {
- ENTRY_LABEL(extern, __connectTcpSocket)
-    SAVE_REGS(3);
-    EVAL_BOXED(__connectTcpSocket_1);
-}
-
-static
-FUNCTION(__connectTcpSocket_1)
-{
- ENTRY_LABEL(static, __connectTcpSocket_1)
-    SWAPn(0);
-    EVAL(__connectTcpSocket_2);
-}
-
-static
-FUNCTION(__connectTcpSocket_2)
-{
- ENTRY_LABEL(static, __connectTcpSocket_2)
-    MATCH_RIGID_INT(__connectTcpSocket_2)
-    SWAPn(1);
-    EVAL_BOXED(__connectTcpSocket_3);
-}
-
-static
-FUNCTION(__connectTcpSocket_3)
-{
-    int		       fd, port, flags;
+    int		       fd;
+    short	       flags;
     const char	       *host, *mode;
-    Node	       *exc;
     FILE	       *fp;
     Handle	       *sock;
     struct hostent     *hostent;
     struct sockaddr_in addr;
- ENTRY_LABEL(static, __connectTcpSocket_3)
-    MATCH_RIGID_DATA(__connectTcpSocket_3)
-    host = to_string(regs.sp[0]);
-    port = long_val(regs.sp[1]);
-    switch ( node_tag(regs.r[0]) )
-    {
-    case ReadMode_tag:
-	mode  = "r";
-	flags = mask(readable);
-	break;
-    case WriteMode_tag:
-    case AppendMode_tag:
-	mode  = "w";
-	flags = mask(writable);
-	break;
-    case ReadWriteMode_tag:
-	mode  = "r+";
-	flags = mask(readable) | mask(writable);
-	break;
-    default:
-	unexpected_tag("connectTcpSocket (mode)", node_tag(regs.r[0]));
-    }
+
+    /* determine the access mode */
+    mode = decodeIOMode(ioMode, &flags);
 
     /* setup the socket address structure */
+    host	    = to_string(hostString);
     hostent	    = gethostbyname(host);
     addr.sin_family = AF_INET;
     addr.sin_port   = htons(port);
@@ -1838,32 +1247,33 @@ FUNCTION(__connectTcpSocket_3)
 	addr.sin_addr.s_addr = *(unsigned long *)hostent->h_addr_list[0];
     else if ( (addr.sin_addr.s_addr = inet_addr(host)) == (in_addr_t)~0 )
     {
-	exc = from_string(0, "unknown host");
 	free((char *)host);
-	CALL_RET2(__ioError, 3, exc, regs.sp[2]);
+	ioError("connectTcpSocket", "Unknown host");
     }
     free((char *)host);
 
     /* create a new socket */
     fd = socket(AF_INET, SOCK_STREAM, 0);
     if ( fd < 0 )
-	CALL_RET2(__ioError, 3, from_string(0, strerror(errno)), regs.sp[2]);
+	ioError_withErrno("connectTcpSocket");
 
-    /* connect the socket to specified port */
+    /* connect the socket to the specified port */
     if ( connect(fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_in)) < 0 )
     {
-	exc = from_string(0, strerror(errno));
+	int e = errno;
 	close(fd);
-	CALL_RET2(__ioError, 3, exc, regs.sp[2]);
+	errno = e;
+	ioError_withErrno("connectTcpSocket");
     }
 
     /* create a file for the scoket */
     fp = fdopen(fd, mode);
     if ( fp == NULL )
     {
-	exc = from_string(0, strerror(errno));
+	int e = errno;
 	close(fd);
-	CALL_RET2(__ioError, 3, exc, regs.sp[2]);
+	errno = e;
+	ioError_withErrno("connectTcpSocket");
     }
 
     /* create the file node */
@@ -1879,7 +1289,7 @@ FUNCTION(__connectTcpSocket_3)
     register_final((Node *)sock);
 
     /* return the socket */
-    RETURN((Node *)sock, 3);
+    return (Node *)sock;
 }
 
 @

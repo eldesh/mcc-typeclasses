@@ -1,4 +1,4 @@
--- $Id: IO.curry 2296 2007-06-19 22:37:03Z wlux $
+-- $Id: IO.curry 2299 2007-06-19 22:58:22Z wlux $
 --
 -- Copyright (c) 2003-2007, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -21,7 +21,8 @@ module IO(Handle, HandlePosn, IOMode(..), BufferMode(..), SeekMode(..),
 data Handle
 instance Eq Handle where
   (==) = primEqHandle
-    where foreign import primitive primEqHandle :: Handle -> Handle -> Bool
+    where foreign import ccall unsafe "files.h"
+    	  	  	 primEqHandle :: Handle -> Handle -> Bool
 instance Show Handle where
   -- FIXME: use a dedicated primitive for this
   showsPrec _ = shows where foreign import primitive shows :: a -> ShowS
@@ -41,65 +42,79 @@ data SeekMode =
   deriving (Eq,Ord,Bounded,Enum,Show)
 
 --- Predefined handles for standard input, output, and error
-foreign import primitive stdin  :: Handle
-foreign import primitive stdout :: Handle
-foreign import primitive stderr :: Handle
+foreign import ccall unsafe "files.h primStdin"  stdin  :: Handle
+foreign import ccall unsafe "files.h primStdout" stdout :: Handle
+foreign import ccall unsafe "files.h primStderr" stderr :: Handle
 
 --- Action to open a file. Returns a handle for the file if successful
 --- and raises an IOError otherwise.
 openFile :: FilePath -> IOMode -> IO Handle
-openFile fn mode = (openFile $## fn) mode
-  where foreign import primitive openFile :: FilePath -> IOMode -> IO Handle
+openFile fn mode = (primOpenFile $## fn) mode
+  where foreign import ccall unsafe "files.h"
+  		       primOpenFile :: FilePath -> IOMode -> IO Handle
 
 --- Action to close a handle. A handle may safely be closed more than once.
-foreign import primitive hClose :: Handle -> IO ()
+foreign import ccall unsafe "files.h primHClose" hClose :: Handle -> IO ()
 
 --- Action to check whether a handle is open. A handle is open until closed
 --- explicitly with hClose or implicity when hGetContents was applied to
 --- it and the file has been read.
-foreign import primitive hIsOpen     :: Handle -> IO Bool
+foreign import ccall unsafe "files.h primHIsOpen"
+	       hIsOpen :: Handle -> IO Bool
 
 --- Action to check whether a handle is closed. A handle is closed
 --- explicitly when hClose or hGetContents is applied to it
-foreign import primitive hIsClosed   :: Handle -> IO Bool
+foreign import ccall unsafe "files.h primHIsClosed"
+	       hIsClosed :: Handle -> IO Bool
 
 --- Actions to check whether a handle is readable.
-foreign import primitive hIsReadable :: Handle -> IO Bool
+foreign import ccall unsafe "files.h primHIsReadable"
+	       hIsReadable :: Handle -> IO Bool
 
 --- Action to check whether a handle is writable. 
-foreign import primitive hIsWritable :: Handle -> IO Bool
+foreign import ccall unsafe "files.h primHIsWritable"
+	       hIsWritable :: Handle -> IO Bool
 
 --- Action to check whether a handle is seekable. 
-foreign import primitive hIsSeekable :: Handle -> IO Bool
+foreign import ccall unsafe "files.h primHIsSeekable"
+	       hIsSeekable :: Handle -> IO Bool
 
 --- Actions that check whether a (readable) handle is at the
 --- end-of-file.
-foreign import primitive hIsEOF :: Handle -> IO Bool
+foreign import ccall unsafe "files.h primHIsEOF"
+	       hIsEOF :: Handle -> IO Bool
 
 isEOF :: IO Bool
 isEOF = hIsEOF stdin
 
 --- Action that returns the size of file.
-foreign import primitive hFileSize :: Handle -> IO Int
+foreign import ccall unsafe "files.h primHFileSize"
+	       hFileSize :: Handle -> IO Int
 
 --- Action to read a single character from an open handle.
-foreign import primitive hGetChar :: Handle -> IO Char
+foreign import ccall unsafe "files.h primHGetChar"
+	       hGetChar :: Handle -> IO Char
 
 --- Action that returns the next character from an open handle
 --- but does not remove it from the file buffer
-foreign import primitive hLookAhead :: Handle -> IO Char
+foreign import ccall unsafe "files.h primHLookAhead"
+	       hLookAhead :: Handle -> IO Char
 
 --- Action to read a single line from an open handle.
-foreign import primitive hGetLine :: Handle -> IO String
+foreign import ccall unsafe "files.h primHGetLine"
+	       hGetLine :: Handle -> IO String
 
 --- Action that (lazily) reads and closes the handle.
-foreign import primitive hGetContents :: Handle -> IO String
+foreign import ccall unsafe "files.h primHGetContents"
+	       hGetContents :: Handle -> IO String
 
 --- Action to write a character to an open handle.
-foreign import primitive hPutChar :: Handle -> Char -> IO ()
+foreign import ccall unsafe "files.h primHPutChar"
+	       hPutChar :: Handle -> Char -> IO ()
 
 --- Action to write a string to an open handle.
-foreign import primitive hPutStr :: Handle -> String -> IO ()
+hPutStr :: Handle -> String -> IO ()
+hPutStr h = mapIO_ (hPutChar h)
 
 --- Action to write a string with a newline to an open handle.
 hPutStrLn :: Handle -> String -> IO ()
@@ -110,28 +125,34 @@ hPrint :: Show a => Handle -> a -> IO ()
 hPrint h x = hPutStrLn h (show x)
 
 --- Action to determine the current buffer mode of a handle.
-foreign import primitive hGetBuffering :: Handle -> IO BufferMode
+foreign import ccall unsafe "files.h primHGetBuffering"
+	       hGetBuffering :: Handle -> IO BufferMode
 
 --- Action to change the current buffer mode of a handle.
-foreign import primitive hSetBuffering :: Handle -> BufferMode -> IO ()
+hSetBuffering :: Handle -> BufferMode -> IO ()
+hSetBuffering h b = primHSetBuffering h $## b
+  where foreign import ccall unsafe "files.h"
+  		       primHSetBuffering :: Handle -> BufferMode -> IO ()
 
 --- Action to flush all buffers associated with the handle.
-foreign import primitive hFlush :: Handle -> IO ()
+foreign import ccall unsafe "files.h primHFlush"
+	       hFlush :: Handle -> IO ()
 
 --- Action to save the current I/O position of a handle.
 hGetPosn :: Handle -> IO HandlePosn
 hGetPosn h =
   do
-    p <- hTell h
+    p <- primHTell h
     return (HandlePosn h p)
-  where foreign import primitive hTell :: Handle -> IO Int
+  where foreign import ccall unsafe "files.h" primHTell :: Handle -> IO Int
 
 --- Action to restore the current I/O position of a handle.
 hSetPosn :: HandlePosn -> IO ()
 hSetPosn (HandlePosn h p) = hSeek h AbsoluteSeek p
 
 --- Action to change the current I/O position of a handle.
-foreign import primitive hSeek :: Handle -> SeekMode -> Int -> IO ()
+foreign import ccall unsafe "files.h primHSeek"
+	       hSeek :: Handle -> SeekMode -> Int -> IO ()
 
 --- tryIO executes an IO action and either returns the exception value
 --- or the result of the action.

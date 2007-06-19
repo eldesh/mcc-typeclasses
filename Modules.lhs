@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2279 2007-06-19 11:35:02Z wlux $
+% $Id: Modules.lhs 2287 2007-06-19 14:54:09Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -200,7 +200,7 @@ declaration to the module.
 >            (DumpCam,CamPP.ppModule cam)]
 
 > qualifyEnv1 :: ModuleEnv -> [ImportDecl] -> PEnv -> TCEnv -> ValueEnv
->            -> (PEnv,TCEnv,ValueEnv)
+>             -> (PEnv,TCEnv,ValueEnv)
 > qualifyEnv1 mEnv is pEnv tcEnv tyEnv =
 >   (foldr (importEntities pEnv) pEnv' ms,
 >    foldr (importEntities tcEnv) tcEnv' ms,
@@ -260,12 +260,11 @@ declaration to the module.
 > showln x = shows x "\n"
 
 \end{verbatim}
-A goal is compiled with respect to a given module. If no module is
-specified, the Curry \texttt{Prelude} is used. When a goal is
-specified, the source of the main module is parsed and type checked
-and the goal is compiled in its context. If no goal is specified, the
-default goal \texttt{main} is compiled in the context of the main
-module's interface.
+A goal is compiled with respect to the interface of a given module. If
+no module is specified, the Curry \texttt{Prelude} is used. All
+entities exported from the main module and the \texttt{Prelude} are in
+scope with their unqualified names. In addition, the entities exported
+from all loaded interfaces are in scope with their qualified names.
 \begin{verbatim}
 
 > compileGoal :: Options -> Maybe String -> [FilePath] -> ErrorT IO ()
@@ -305,25 +304,22 @@ module's interface.
 >          -> ErrorT IO (ModuleEnv,TCEnv,InstEnv,ValueEnv,Context,Goal Type)
 > loadGoal forEval paths debug caseMode warn m g fns =
 >   do
->     (mEnv,ms) <- loadGoalModules paths debug fns
->     let m' = last ms
->     (tcEnv,iEnv,tyEnv,cx,g') <- okM $
->       maybe (return (mainGoal m')) parseGoal g >>=
->       checkGoal forEval mEnv m (map (importModule [m',preludeMIdent]) ms)
+>     (mEnv,m') <- loadGoalModules paths debug fns
+>     (tcEnv,iEnv,tyEnv,cx,g') <-
+>       okM $ maybe (return (mainGoal m')) parseGoal g >>=
+>             checkGoal forEval mEnv m (nub [m',preludeMIdent])
 >     liftErr $ mapM_ putErrLn $ warnGoal caseMode warn m g'
 >     return (mEnv,tcEnv,iEnv,tyEnv,cx,g')
->   where p = first ""
->         mainGoal m = Goal p (Variable () (qualifyWith m mainId)) []
->         importModule ms m = importDecl p m (m `notElem` ms) True
+>   where mainGoal m = Goal (first "") (Variable () (qualifyWith m mainId)) []
 
 > loadGoalModules :: [FilePath] -> Bool -> [FilePath]
->                 -> ErrorT IO (ModuleEnv,[ModuleIdent])
+>                 -> ErrorT IO (ModuleEnv,ModuleIdent)
 > loadGoalModules paths debug fns =
 >   do
 >     mEnv <- foldM (loadInterface paths []) emptyEnv ms
 >     (mEnv',ms') <- mapAccumM (loadGoalInterface paths) mEnv fns
 >     okM $ checkInterfaces mEnv'
->     return (mEnv',preludeMIdent:ms')
+>     return (mEnv',last (preludeMIdent:ms'))
 >   where ms = map (P (first "")) (preludeMIdent : [debugPreludeMIdent | debug])
 
 > loadGoalInterface :: [FilePath] -> ModuleEnv -> FilePath
@@ -341,21 +337,23 @@ module's interface.
 >           case break ('.' ==) cs of
 >             (cs',cs'') -> cs' : components cs''
 
-> checkGoal :: Bool -> ModuleEnv -> ModuleIdent -> [ImportDecl] -> Goal ()
+> checkGoal :: Bool -> ModuleEnv -> ModuleIdent -> [ModuleIdent] -> Goal ()
 >           -> Error (TCEnv,InstEnv,ValueEnv,Context,Goal Type)
-> checkGoal forEval mEnv m is g =
+> checkGoal forEval mEnv m ms g =
 >   do
->     (pEnv,tcEnv,iEnv,tyEnv) <- importModules mEnv is
+>     let (pEnv,tcEnv,iEnv,tyEnv) = importInterfaces mEnv ms
 >     (tEnv,g') <- typeSyntaxCheckGoal tcEnv g
 >     (vEnv,g'') <- syntaxCheckGoal tyEnv g'
 >     let (k1,g''') = renameGoal k0 g''
->     let (pEnv',tcEnv',tyEnv') = qualifyEnv1 mEnv is pEnv tcEnv tyEnv
+>     let (pEnv',tcEnv',tyEnv') =
+>           qualifyEnv1 mEnv (map importModule ms) pEnv tcEnv tyEnv
 >     g'''' <- precCheckGoal m pEnv' (qual1 tEnv vEnv g''')
 >     (tyEnv'',cx,g''''') <- kindCheckGoal tcEnv' g'''' >>
 >                            typeCheckGoal forEval m tcEnv' iEnv tyEnv' g''''
 >     let (_,tcEnv'',tyEnv''') =
 >           qualifyGoalEnv forEval mEnv m pEnv' tcEnv' tyEnv''
 >     return (tcEnv'',iEnv,tyEnv''',cx,qualifyGoal forEval tEnv vEnv g''''')
+>   where importModule m = importDecl (first "") m False True
 
 > qualifyGoalEnv :: Bool -> ModuleEnv -> ModuleIdent
 >                -> PEnv -> TCEnv -> ValueEnv -> (PEnv,TCEnv,ValueEnv)
@@ -402,6 +400,20 @@ imported modules into scope in the current module.
 
 > initEnvs :: (PEnv,TCEnv,InstEnv,ValueEnv)
 > initEnvs = (initPEnv,initTCEnv,initIEnv,initDCEnv)
+
+\end{verbatim}
+The function \texttt{importInterfaces} brings the declarations of all
+loaded modules into scope with their qualified names and in addition
+brings the declarations of the specified modules into scope with their
+unqualified names too.
+\begin{verbatim}
+
+> importInterfaces :: ModuleEnv -> [ModuleIdent]
+>                  -> (PEnv,TCEnv,InstEnv,ValueEnv)
+> importInterfaces mEnv ms = (pEnv,importUnifyData tcEnv,iEnv,tyEnv)
+>   where (pEnv,tcEnv,iEnv,tyEnv) =
+>           foldl (uncurry . importModule) initEnvs (envToList mEnv)
+>         importModule envs m = importInterface m (m `notElem` ms) Nothing envs
 
 \end{verbatim}
 When mutually recursive modules are compiled, it may be possible that

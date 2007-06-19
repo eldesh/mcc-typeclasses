@@ -1,6 +1,6 @@
--- $Id: IOExts.curry 2011 2006-11-16 12:17:25Z wlux $
+-- $Id: IOExts.curry 2293 2007-06-19 22:03:00Z wlux $
 --
--- Copyright (c) 2004-2006, Wolfgang Lux
+-- Copyright (c) 2004-2007, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module IOExts(fixIO, unsafePerformIO,unsafeInterleaveIO,
@@ -16,6 +16,9 @@ import IOVector
 import Monad
 import Unsafe(unsafePerformIO,unsafeInterleaveIO,trace)
 
+-- used to prevent premature evaluation of foreign function arguments
+data Wrap a = Wrap a
+
 -- monadic fix-point operator
 foreign import primitive fixIO :: (a -> IO a) -> IO a
 
@@ -23,11 +26,21 @@ foreign import primitive fixIO :: (a -> IO a) -> IO a
 data IORef a
 instance Eq (IORef a) where
   (==) = primEqIORef
-    where foreign import primitive primEqIORef :: IORef a -> IORef a -> Bool
+    where foreign import ccall unsafe "refs.h"
+    	  	  	 primEqIORef :: IORef a -> IORef a -> Bool
 
-foreign import primitive newIORef :: a -> IO (IORef a)
-foreign import primitive readIORef :: IORef a -> IO a
-foreign import primitive writeIORef :: IORef a -> a -> IO ()
+newIORef :: a -> IO (IORef a)
+newIORef x = primNewIORef (Wrap x)
+  where foreign import ccall unsafe "refs.h"
+  		       primNewIORef :: Wrap a -> IO (IORef a)
+
+foreign import ccall unsafe "refs.h primReadIORef"
+	       readIORef :: IORef a -> IO a
+
+writeIORef :: IORef a -> a -> IO ()
+writeIORef r x = primWriteIORef r (Wrap x)
+  where foreign import ccall unsafe "refs.h"
+  		       primWriteIORef :: IORef a -> Wrap a -> IO ()
 
 modifyIORef :: IORef a -> (a -> a) -> IO ()
 modifyIORef r f = readIORef r >>= \x -> writeIORef r (f x)

@@ -1,4 +1,4 @@
--- $Id: IOVector.curry 2294 2007-06-19 22:08:56Z wlux $
+-- $Id: IOVector.curry 2309 2007-06-20 11:52:36Z wlux $
 --
 -- Copyright (c) 2004-2007, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -15,24 +15,24 @@ data IOVector a
 
 instance Eq (IOVector a) where
   (==) = primEqIOVector
-    where foreign import ccall unsafe "vector.h"
+    where foreign import rawcall "vector.h"
                   	 primEqIOVector :: IOVector a -> IOVector a -> Bool
 
-newIOVector    :: Int -> a -> IO (IOVector a)
+newIOVector :: Int -> a -> IO (IOVector a)
 newIOVector n x = primNewIOVector n (Wrap x)
-  where foreign import ccall unsafe "vector.h"
+  where foreign import rawcall "vector.h"
   		       primNewIOVector :: Int -> Wrap a -> IO (IOVector a)
 
-foreign import ccall unsafe "vector.h primCopyIOVector"
+foreign import rawcall "vector.h primCopyIOVector"
 	       copyIOVector :: IOVector a -> IO (IOVector a)
 
-foreign import ccall unsafe "vector.h primReadIOVector"
+foreign import rawcall "vector.h primReadIOVector"
 	       readIOVector :: IOVector a -> Int -> IO a
 
-writeIOVector  :: IOVector a -> Int -> a -> IO ()
+writeIOVector :: IOVector a -> Int -> a -> IO ()
 writeIOVector v i x = primWriteIOVector v i (Wrap x)
-  where foreign import ccall unsafe "vector.h"
+  where foreign import rawcall "vector.h"
   		       primWriteIOVector :: IOVector a -> Int -> Wrap a -> IO ()
 
-foreign import ccall unsafe "vector.h primLengthIOVector"
+foreign import rawcall "vector.h primLengthIOVector"
 	       lengthIOVector :: IOVector a -> Int

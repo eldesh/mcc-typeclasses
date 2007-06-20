@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: vector.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: vector.nw 2309 2007-06-20 11:52:36Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -14,6 +14,7 @@ vectors because this will make the printing code treat vectors as tuples.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include "debug.h"
 #include "run.h"
 #include "regs.h"
@@ -36,7 +37,21 @@ Two vector nodes are considered equal, if they are physically the
 same.
 
 <<vector.h>>=
-#define primEqIOVector(x,y) ((x) == (y))
+extern Node *primEqIOVector(Node *, Node *);
+
+@ 
+<<vector.c>>=
+DECLARE_CONST(__Prelude__False);
+DECLARE_CONST(__Prelude__True);
+
+#define Prelude_False CONST(__Prelude__False)
+#define Prelude_True  CONST(__Prelude__True)
+
+Node *
+primEqIOVector(Node *x, Node *y)
+{
+    return x == y ? Prelude_True : Prelude_False;
+}
 
 @ 
 The function [[primNewIOVector]] allocates a new vector with the
@@ -46,18 +61,20 @@ order to prevent evaluation of $e$ by the foreign function interface
 code.
 
 <<vector.h>>=
-extern Node *primNewIOVector(long, Node *);
+extern Node *primNewIOVector(Node *, Node *);
 
 @ 
 <<vector.c>>=
 Node *
-primNewIOVector(long n, Node *wrappedArg)
+primNewIOVector(Node *len, Node *wrappedArg)
 {
-    long i;
-    Node *vec, *init;
+    long i, n;
+    Node *init, *vec;
 
+    n = long_val(len);
     if ( n < 0 )
 	fail_with("newIOVector: negative length (%ld)", n);
+
     if ( n == 0 )
 	vec = (Node *)&empty;
     else
@@ -65,6 +82,7 @@ primNewIOVector(long n, Node *wrappedArg)
 	init = wrappedArg->c.args[0];
 	while ( is_tagged_ptr(init) && is_indir_node(init) )
 	    init = init->n.node;
+
 	BEGIN_LOCAL_ROOTS1(init)
 	CHECK_HEAP(0, vector_node_size(n));
 	vec	      = (Node *)regs.hp;
@@ -106,16 +124,18 @@ primCopyIOVector(Node *vec)
 
 @ 
 The function [[primReadIOVector]] returns the $i$th element of a
-vector. If the index is out of range, the program is aborted.
+vector. If the index is out of range, the program fails.
 
 <<vector.h>>=
-extern Node *primReadIOVector(Node *, long);
+extern Node *primReadIOVector(Node *, Node *);
 
 @ 
 <<vector.c>>=
 Node *
-primReadIOVector(Node *vec, long i)
+primReadIOVector(Node *vec, Node *ofs)
 {
+    long i = long_val(ofs);
+
     if ( i < 0 || (unsigned long)i >= vector_argc(vec) )
 	fail_with("readIOVector: index out range (%ld)", i);
     return vec->a.args[i];
@@ -123,21 +143,23 @@ primReadIOVector(Node *vec, long i)
 
 @ 
 The function [[primWriteIOVector]] updates the $i$th element of a
-vector. As for [[primReadIOVector]], the program is aborted if the
-index is out of range. The assigned value is passed in the form
+vector. As for [[primReadIOVector]], the program fails if the index is
+out of range. The assigned value is passed in the form
 \texttt{Wrap}~$e$ in order to prevent evaluation of $e$ by the foreign
 function interface code. The old value of the $i$th element is
 recorded on the trail in order prevent program crashes when mutable
 vectors are used in non-deterministic code via [[unsafePerformIO]].
 
 <<vector.h>>=
-extern void primWriteIOVector(Node *, long, Node *);
+extern void primWriteIOVector(Node *, Node *, Node *);
 
 @ 
 <<vector.c>>=
 void
-primWriteIOVector(Node *vec, long i, Node *wrappedArg)
+primWriteIOVector(Node *vec, Node *ofs, Node *wrappedArg)
 {
+    long i = long_val(ofs);
+
     if ( i < 0 || (unsigned long)i >= vector_argc(vec) )
 	fail_with("writeIOVector: index out range (%ld)", i);
     SAVE(vec, a.args[i]);
@@ -145,8 +167,33 @@ primWriteIOVector(Node *vec, long i, Node *wrappedArg)
 }
 
 @ 
-The macro [[primLengthIOVector]] returns the length of a vector, i.e.,
-the number of elements that can be stored in the vector.
+The function [[primLengthIOVector]] returns the length of a vector,
+i.e., the number of elements that can be stored in the vector.
 
 <<vector.h>>=
-#define primLengthIOVector(vec)	vector_argc(vec)
+extern Node *primLengthIOVector(Node *);
+
+@ 
+<<vector.c>>=
+Node *
+primLengthIOVector(Node *vec)
+{
+    long n;
+    Node *r;
+
+    n = vector_argc(vec);
+#if !NO_POINTER_TAGS
+    if ( !is_large_int(n) )
+	r = tag_int(n);
+    else
+#endif
+    {
+	CHECK_HEAP(0, int_node_size);
+	r	 = (Node *)regs.hp;
+	r->info	 = &int_info;
+	r->i.i	 = n;
+	regs.hp += int_node_size;
+    }
+
+    return r;
+}

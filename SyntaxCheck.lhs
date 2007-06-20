@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2289 2007-06-19 16:30:52Z wlux $
+% $Id: SyntaxCheck.lhs 2305 2007-06-20 11:32:33Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -350,19 +350,21 @@ report~\cite{PeytonJones03:Haskell}).
 \end{verbatim}
 The syntax checker examines the optional import specification of
 foreign function declarations. For functions using the \texttt{ccall}
-calling convention, the syntax from the Haskell 98 foreign function
-interface addendum~\cite{Chakravarty03:FFI} is supported, except for
-\texttt{wrapper} specifications, which are not recognized because
-callbacks into Curry are not yet supported by the runtime system.
+and \texttt{rawcall} calling conventions, the syntax from the Haskell
+98 foreign function interface addendum~\cite{Chakravarty03:FFI} is
+supported, except for \texttt{wrapper} specifications, which are not
+recognized because callbacks into Curry are not yet supported by the
+runtime system.
 \begin{verbatim}
 
 > checkForeign :: Position -> Ident -> CallConv -> Maybe String
 >              -> Error (Maybe String)
-> checkForeign _ _ CallConvPrimitive ie = return ie
-> checkForeign p f CallConvCCall ie =
->   maybe (checkFunName f >> return Nothing)
->         (impEnt . words . join . break ('&' ==))
->         ie
+> checkForeign p f cc ie
+>   | cc == CallConvPrimitive = return ie
+>   | otherwise =
+>       maybe (checkFunName f >> return Nothing)
+>             (impEnt . words . join . break ('&' ==))
+>             ie
 >   where join (cs,[]) = cs
 >         join (cs,c':cs') = cs ++ [' ',c',' '] ++ cs'
 >         impEnt ie = kind ie >> return (Just (unwords ie))

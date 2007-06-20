@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2289 2007-06-19 16:30:52Z wlux $
+% $Id: Desugar.lhs 2305 2007-06-20 11:32:33Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -235,9 +235,9 @@ further declarations to the group that must be desugared as well.
 
 \end{verbatim}
 The import entity specification of foreign functions using the
-\texttt{ccall} calling convention is expanded to always include the
-kind of the declaration (either \texttt{static} or \texttt{dynamic})
-and the name of the imported function.
+\texttt{ccall} and \texttt{rawcall} calling conventions is expanded to
+always include the kind of the declaration (either \texttt{static} or
+\texttt{dynamic}) and the name of the imported function.
 \begin{verbatim}
 
 > desugarDeclRhs :: ModuleIdent -> Decl Type -> DesugarState (Decl Type)
@@ -245,9 +245,9 @@ and the name of the imported function.
 >   liftM (FunctionDecl p f) (mapM (desugarEquation m) eqs)
 > desugarDeclRhs _ (ForeignDecl p cc s ie f ty) =
 >   return (ForeignDecl p cc (s `mplus` Just Safe) (desugarImpEnt cc ie) f ty)
->   where desugarImpEnt CallConvPrimitive ie = ie `mplus` Just (name f)
->         desugarImpEnt CallConvCCall ie =
->           Just (unwords (kind (maybe [] words ie)))
+>   where desugarImpEnt cc ie
+>           | cc == CallConvPrimitive = ie `mplus` Just (name f)
+>           | otherwise = Just (unwords (kind (maybe [] words ie)))
 >         kind [] = "static" : ident []
 >         kind (x:xs)
 >           | x == "static" = x : ident xs
@@ -261,7 +261,7 @@ and the name of the imported function.
 >           | x == "&" = [h,x,name f]
 >           | otherwise = [h,x]
 >         ident [h,amp,f] = [h,amp,f]
->         ident _ = internalError "desugarImpEnt CallConvCCall"
+>         ident _ = internalError "desugarImpEnt"
 > desugarDeclRhs m (PatternDecl p t rhs) =
 >   liftM (PatternDecl p t) (desugarRhs m p rhs)
 > desugarDeclRhs _ (FreeDecl p vs) = return (FreeDecl p vs)

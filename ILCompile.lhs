@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 2290 2007-06-19 21:48:25Z wlux $
+% $Id: ILCompile.lhs 2305 2007-06-20 11:32:33Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -78,7 +78,11 @@ node being returned from the foreign function in this case. Obviously,
 the called function must be very careful with those pointers and make
 sure that they are not invalidated by a garbage collection. Therefore,
 and because there are absolutely no assurances about type correctness,
-such arguments are allowed only in unsafe calls.
+such arguments are allowed only in unsafe calls. The non-standard
+\texttt{rawcall} calling convention is similar to the \texttt{ccall}
+calling convention except that no marshaling takes place at all, i.e.,
+the compiler passes and expects node pointers even for arguments and
+results of the basic data types.
 
 For functions with result type \texttt{IO}~$t$, the compiler generates
 two functions. The first of these returns an I/O action and the other
@@ -122,9 +126,10 @@ reader monad for the type \texttt{IO}.
 
 > foreignCall :: CallConv -> String -> [Cam.Name] -> [Type] -> Type
 >             -> [Cam.Name] -> Cam.Stmt
-> foreignCall Primitive f vs _ _ _ = Cam.Exec (Cam.mangle f) vs
-> foreignCall CCall f vs tys ty ws =
->   foldr2 rigidArg (foreignCCall (resultType ty) f tys vs') vs vs'
+> foreignCall cc f vs tys ty ws
+>   | cc == Primitive = Cam.Exec (Cam.mangle f) vs
+>   | otherwise =
+>       foldr2 rigidArg (foreignCCall cc (resultType ty) f tys vs') vs vs'
 >   where vs' = take (length tys) ws
 >         resultType (TypeConstructor tc tys)
 >           | tc == qIOId && length tys == 1 = head tys
@@ -135,8 +140,8 @@ reader monad for the type \texttt{IO}.
 >   Cam.Seq (v2 Cam.:<- Cam.Enter v1)
 >           (Cam.Switch Cam.Rigid v2 [Cam.Case Cam.DefaultCase st])
 
-> foreignCCall :: Type -> String -> [Type] -> [Cam.Name] -> Cam.Stmt
-> foreignCCall ty ie tys vs
+> foreignCCall :: CallConv -> Type -> String -> [Type] -> [Cam.Name] -> Cam.Stmt
+> foreignCCall cc ty ie tys vs
 >   | "static" `isPrefixOf` ie =
 >       case words (drop 6 ie) of                    {- 6 == length "static" -}
 >         [f] -> callStmt Nothing (Cam.StaticCall f xs)
@@ -151,24 +156,26 @@ reader monad for the type \texttt{IO}.
 >         (Cam.TypeFunPtr,x'):xs' -> callStmt Nothing (Cam.DynamicCall x' xs')
 >         _ -> internalError "foreignCCall (dynamic)"
 >   | otherwise = internalError "foreignCCall"
->   where xs = zip (map cArgType tys) vs
->         callStmt h cc = Cam.CCall h (cRetType ty) cc
+>   where xs = zip (map (cArgType cc) tys) vs
+>         callStmt h = Cam.CCall h (cRetType cc ty)
 
-> cArgType :: Type -> Cam.CArgType
-> cArgType ty = fromMaybe Cam.TypeNodePtr (cRetType ty)
+> cArgType :: CallConv -> Type -> Cam.CArgType
+> cArgType CCall ty = fromMaybe Cam.TypeNodePtr (cRetType CCall ty)
+> cArgType RawCall _ = Cam.TypeNodePtr
 
-> cRetType :: Type -> Cam.CRetType
-> cRetType (TypeConstructor tc [])
+> cRetType :: CallConv -> Type -> Cam.CRetType
+> cRetType _ (TypeConstructor tc [])
 >   | tc == qUnitId = Nothing
+> cRetType CCall (TypeConstructor tc [])
 >   | tc == qBoolId = Just Cam.TypeBool
 >   | tc == qCharId = Just Cam.TypeChar
 >   | tc == qIntId = Just Cam.TypeInt
 >   | tc == qFloatId = Just Cam.TypeFloat
-> cRetType (TypeConstructor tc [_])
+> cRetType CCall (TypeConstructor tc [_])
 >   | tc == qPtrId = Just Cam.TypePtr
 >   | tc == qFunPtrId = Just Cam.TypeFunPtr
 >   | tc == qStablePtrId = Just Cam.TypeStablePtr
-> cRetType ty = Just Cam.TypeNodePtr
+> cRetType _ ty = Just Cam.TypeNodePtr
 
 \end{verbatim}
 The selector functions, which are introduced by the compiler in order

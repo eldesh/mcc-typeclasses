@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2289 2007-06-19 16:30:52Z wlux $
+% $Id: CurryPP.lhs 2305 2007-06-20 11:32:33Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -132,6 +132,7 @@ Declarations
 >        indent (ppDecl (TypeSig p [f] (QualTypeExpr [] ty)))]
 >   where ppCallConv CallConvPrimitive = text "primitive"
 >         ppCallConv CallConvCCall = text "ccall"
+>         ppCallConv CallConvRawCall = text "rawcall"
 >         ppSafety Unsafe = text "unsafe"
 >         ppSafety Safe = text "safe"
 > ppDecl (PatternDecl _ t rhs) = ppRule (ppConstrTerm 0 t) equals rhs

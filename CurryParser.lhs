@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2289 2007-06-19 16:30:52Z wlux $
+% $Id: CurryParser.lhs 2305 2007-06-20 11:32:33Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -320,6 +320,7 @@ directory path to the module is ignored.
 >   where mkDecl p cc (s,ie,f) ty = ForeignDecl p cc s ie f ty
 >         callConv = CallConvPrimitive <$-> token Id_primitive
 >                <|> CallConvCCall <$-> token Id_ccall
+>                <|> CallConvRawCall <$-> token Id_rawcall
 >         entitySpec = withSafety <$> safety <*> option importSpec
 >                  <|> withoutSafety <$> importSpec <\> safety
 >         safety = (,) Unsafe <$> token Id_unsafe
@@ -800,7 +801,7 @@ prefix of a let expression.
 
 > specialIdents, specialSyms :: [Category]
 > specialIdents = [Id_as,Id_ccall,Id_forall,Id_hiding,Id_interface,
->                  Id_primitive,Id_qualified,Id_safe,Id_unsafe]
+>                  Id_primitive,Id_qualified,Id_rawcall,Id_safe,Id_unsafe]
 > specialSyms = [Sym_Dot,Sym_Minus,Sym_Star]
 
 > ident :: Parser Token Ident a

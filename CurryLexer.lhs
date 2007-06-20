@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryLexer.lhs 2285 2007-06-19 12:23:18Z wlux $
+% $Id: CurryLexer.lhs 2305 2007-06-20 11:32:33Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -49,7 +49,7 @@ In this section a lexer for Curry is implemented.
 >   | LeftArrow | RightArrow | DoubleRightArrow | Tilde
 >   -- special identifiers
 >   | Id_as | Id_ccall | Id_forall | Id_hiding | Id_interface
->   | Id_primitive | Id_qualified | Id_safe | Id_unsafe
+>   | Id_primitive | Id_qualified | Id_rawcall | Id_safe | Id_unsafe
 >   -- pragmas
 >   | PragmaBegin Pragma | PragmaEnd
 >   -- special operators
@@ -182,6 +182,7 @@ all tokens in their source representation.
 >   showsPrec _ (Token Id_interface _) = showString "identifier `interface'"
 >   showsPrec _ (Token Id_primitive _) = showString "identifier `primitive'"
 >   showsPrec _ (Token Id_qualified _) = showString "identifier `qualified'"
+>   showsPrec _ (Token Id_rawcall _) = showString "identifier `rawcall'"
 >   showsPrec _ (Token Id_safe _) = showString "identifier `safe'"
 >   showsPrec _ (Token Id_unsafe _) = showString "identifier `unsafe'"
 >   showsPrec _ (Token (PragmaBegin p) _) =
@@ -252,6 +253,7 @@ pragmas.
 >     ("interface", Id_interface),
 >     ("primitive", Id_primitive),
 >     ("qualified", Id_qualified),
+>     ("rawcall",   Id_rawcall),
 >     ("safe",      Id_safe),
 >     ("unsafe",    Id_unsafe)
 >   ]

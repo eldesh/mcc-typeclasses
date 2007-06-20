@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2289 2007-06-19 16:30:52Z wlux $
+% $Id: CurrySyntax.lhs 2305 2007-06-20 11:32:33Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -82,7 +82,9 @@ parsed representation of a Curry program.
 >   deriving (Eq,Show)
 
 > data Infix = Infix | InfixL | InfixR deriving (Eq,Show)
-> data CallConv = CallConvPrimitive | CallConvCCall deriving (Eq,Show)
+> data CallConv =
+>   CallConvPrimitive | CallConvCCall | CallConvRawCall
+>   deriving (Eq,Show)
 > data Safety = Unsafe | Safe deriving (Eq,Show)
 > data Trust = Suspect | Trust deriving (Eq,Show)
 

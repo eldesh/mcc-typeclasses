@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: random.nw 2300 2007-06-20 07:10:49Z wlux $
+% $Id: random.nw 2310 2007-06-20 11:56:29Z wlux $
 %
 % Copyright (c) 2004-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -13,6 +13,7 @@ The functions in this file implement the primitives for the
 #include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <sys/time.h>
 #include "debug.h"
 #include "run.h"
@@ -70,27 +71,30 @@ carefully maintains the state of the default random number generator
 so as to not disrupt its operation.
 
 <<random.h>>=
-extern Node *primMkStdGen(unsigned long seed);
+extern Node *primMkStdGen(Node *);
 
 @ 
 <<random.c>>=
 Node *
-primMkStdGen(unsigned long seed)
+primMkStdGen(Node *seed)
 {
+    char   *state;
     StdGen *rng;
+
+    state = (char *)malloc(STATESIZE);
+    if ( !state )
+	sys_error("mkStdGen");
+    setstate(initstate(long_val(seed), state, STATESIZE));
 
     CHECK_HEAP(0, stdgen_node_size);
     rng		= (StdGen *)regs.hp;
     rng->info   = &stdgen_info;
-    rng->state  = (char *)malloc(STATESIZE);
+    rng->state  = state;
     rng->valid  = 0;
     rng->random = 0;
     regs.hp    += stdgen_node_size;
     register_final((Node *)rng);
 
-    if ( rng->state == NULL )
-	sys_error("mkStdGen");
-    setstate(initstate(seed, rng->state, STATESIZE));
     return (Node *)rng;
 }
 
@@ -115,21 +119,24 @@ may be executed more than once if a 32-bit or larger result is
 requested.
 
 <<random.h>>=
-extern long primNextRStdGen(long, long, Node *);
+extern Node *primNextRStdGen(Node *, Node *, Node *);
 
 @ 
 <<random.c>>=
-long
-primNextRStdGen(long lo, long hi, Node *node)
+Node *
+primNextRStdGen(Node *lowBound, Node *highBound, Node *node)
 {
     char	  *o;
     int		  bits;
-    long	  r;
+    long	  lo, hi, r;
     unsigned long diff, mask;
+    Node	  *i;
     StdGen	  *rng;
 
     assert(node->info == &stdgen_info);
-    rng = (StdGen *)node;
+    lo	= long_val(lowBound);
+    hi	= long_val(highBound);
+    rng	= (StdGen *)node;
 
     /* determine the number of bits required */
     assert(hi >= lo);
@@ -158,14 +165,27 @@ repeat:
 	goto repeat;
     setstate(o);
 
-    return r;
+#if !NO_POINTER_TAGS
+    if ( !is_large_int(r) )
+	i = tag_int(r);
+    else
+#endif
+    {
+	CHECK_HEAP(0, int_node_size);
+	i	 = (Node *)regs.hp;
+	i->info	 = &int_info;
+	i->i.i	 = r;
+	regs.hp += int_node_size;
+    }
+
+    return i;
 }
 
 @ 
 The functions [[primGetStdGen]] and [[primSetStdGen]] manage a global
 variable that maintains the default random number generator of the
 \texttt{IO} monad. If the global variable has not been set,
-[[getSetGen]] creates a new random number generator and seeds this
+[[primGetSetGen]] creates a new random number generator and seeds this
 generator with the current time.
 
 There is a fundamental problem with updating global variables like
@@ -176,9 +196,10 @@ recording the update on the trail, things do not work out straight
 when a search continuation is copied whose code did update [[stdGen]].
 In this case, the global variable cannot be copied and therefore the
 copy would start using wrong values for [[stdGen]]. For that reason,
-we simply abort the program with an error message when [[setStdGen]]
-is called in non-deterministic code. Note that this can happen only
-when this functions is used in an [[unsafePerformIO]] context.
+we simply abort the program with an error message when
+[[primSetStdGen]] is called in non-deterministic code. Note that this
+can happen only when this function is used in an [[unsafePerformIO]]
+context.
 
 <<random.h>>=
 extern void primSetStdGen(Node *);
@@ -208,11 +229,26 @@ primGetStdGen()
 {
     if ( !stdGen )
     {
-	struct timeval tv;
+	long		seed;
+	Node		*s;
+	struct timeval	tv;
+	struct int_node	seed_node;
 
 	gettimeofday(&tv, NULL);
 	srandom(tv.tv_sec ^ tv.tv_usec);
-	primSetStdGen(primMkStdGen(random()));
+	seed = random();
+
+#if !NO_POINTER_TAGS
+	if ( !is_large_int(seed) )
+	    s = tag_int(seed);
+	else
+#endif
+	{
+	    seed_node.info = &int_info;
+	    seed_node.i	   = seed;
+	    s		   = (Node *)&seed_node;
+	}
+	primSetStdGen(primMkStdGen(s));
     }
 
     return stdGen;

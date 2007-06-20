@@ -1,4 +1,4 @@
--- $Id: Random.curry 2295 2007-06-19 22:15:13Z wlux $
+-- $Id: Random.curry 2310 2007-06-20 11:56:29Z wlux $
 --
 -- Copyright (c) 2004-2007, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -12,7 +12,7 @@ instance Show StdGen where
   -- FIXME: use a dedicated primitive for this
   showsPrec _ = shows where foreign import primitive shows :: a -> ShowS
 
-foreign import ccall unsafe "random.h primMkStdGen" mkStdGen :: Int -> StdGen
+foreign import rawcall "random.h primMkStdGen" mkStdGen :: Int -> StdGen
 
 next :: StdGen -> (Int,StdGen)
 next rng = randomR (genRange rng) rng
@@ -34,7 +34,7 @@ randomR (lo,hi) | hi >= lo = unsafeRandomR lo hi
 unsafeRandomR :: Int -> Int -> StdGen -> (Int,StdGen)
 unsafeRandomR lo hi rng = r `seq` (r,rng)
   where r = primNextRStdGen lo hi rng
-	foreign import ccall unsafe "random.h"
+	foreign import rawcall "random.h"
   		       primNextRStdGen :: Int -> Int -> StdGen -> Int
 
 randoms :: StdGen -> [Int]
@@ -53,10 +53,8 @@ randomIO = getStdRandom random
 randomRIO :: (Int,Int) -> IO Int
 randomRIO range = getStdRandom (randomR range)
 
-foreign import ccall unsafe "random.h primGetStdGen"
-	       getStdGen :: IO StdGen
-foreign import ccall unsafe "random.h primSetStdGen"
-	       setStdGen :: StdGen -> IO ()
+foreign import rawcall "random.h primGetStdGen" getStdGen :: IO StdGen
+foreign import rawcall "random.h primSetStdGen" setStdGen :: StdGen -> IO ()
 
 newStdGen :: IO StdGen
 newStdGen =

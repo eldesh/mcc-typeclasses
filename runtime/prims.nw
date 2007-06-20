@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: prims.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: prims.nw 2300 2007-06-20 07:10:49Z wlux $
 %
-% Copyright (c) 2004-2006, Wolfgang Lux
+% Copyright (c) 2004-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Primitive Operations}
@@ -244,7 +244,7 @@ int
 primChr(long c)
 {
     if ( c < primMinChar() || c > primMaxChar() )
-	fail_with("chr: code %ld is out-of-range", c);
+	fail_with("chr: %ld is out of range", c);
     return c;
 }
 

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: io_monad.nw 2299 2007-06-19 22:58:22Z wlux $
+% $Id: io_monad.nw 2300 2007-06-20 07:10:49Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -12,9 +12,14 @@ executes a monadic goal.
 The function [[curry_exit]] stops the execution of the program with
 the given return code, which will be returned from [[curry_exec]].
 
-The function [[fail_with]] prints an error message and stops
+The function [[abort_with]] prints an error message and stops
 execution with return code 1. It is effectively equivalent to calling
 \texttt{Prelude.error} with the formatted error message.
+
+The function [[fail_with]] is equivalent to [[abort_with]] when it is
+called in an I/O context. However, in global and encapsulated search,
+this function simply jumps to the current non-deterministic failure
+handler and ignores the supplied error message.
 
 The functions [[ioError]] and [[ioError_withErrno]] can be used to
 raise an exception from C code. The exception message is composed of a
@@ -30,6 +35,8 @@ that were passed to [[curry_exec]].
 extern int  curry_exec(NodeInfo *main_info_table, int argc, char **argv);
 extern void curry_exit(int rc) __attribute__((noreturn));
 
+extern void abort_with(const char *format, ...)
+    __attribute__((noreturn, format(printf, 1, 2)));
 extern void fail_with(const char *format, ...)
     __attribute__((noreturn, format(printf, 1, 2)));
 
@@ -77,7 +84,6 @@ Non-deterministic code will raise an error in monadic code, deadlocks
 and failures will terminate the program with an appropriate (error)
 message.
 
-@ 
 <<io_monad.c>>=
 static const struct nondet_handlers io_handlers = {
     choices_io, deadlock_io, fail_io
@@ -87,21 +93,21 @@ static
 FUNCTION(choices_io)
 {
  ENTRY_LABEL(static, choices_io)
-    fail_with("cannot duplicate the world");
+    abort_with("cannot duplicate the world");
 }
 
 static
 FUNCTION(deadlock_io)
 {
  ENTRY_LABEL(static, deadlock_io)
-    fail_with("deadlock");
+    abort_with("deadlock");
 }
 
 static
 FUNCTION(fail_io)
 {
  ENTRY_LABEL(static, fail_io)
-    fail_with("failed");
+    abort_with("failed");
 }
 
 @
@@ -190,18 +196,40 @@ FUNCTION(stop_io)
     curry_exit(0);
 }
 
+static void
+print_error(const char *format, va_list args)
+{
+    fprintf(stderr, "Error: ");
+    vfprintf(stderr, format, args);
+    fprintf(stderr, "\n");
+}
+
+void
+abort_with(const char *format, ...)
+{
+    va_list args;
+
+    va_start(args, format);
+    print_error(format, args);
+    va_end(args);
+
+    curry_exit(1);
+}
+
 void
 fail_with(const char *format, ...)
 {
     va_list args;
 
-    va_start(args, format);
-    fprintf(stderr, "Error: ");
-    vfprintf(stderr, format, args);
-    fprintf(stderr, "\n");
-    va_end(args);
+    if ( regs.handlers == &io_handlers )
+    {
+	va_start(args, format);
+	print_error(format, args);
+	va_end(args);
+	curry_exit(1);
+    }
 
-    curry_exit(1);
+    jump(regs.handlers->fail);
 }
 
 @

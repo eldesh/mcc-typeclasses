@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: trace.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: trace.nw 2303 2007-06-20 07:22:47Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Tracing}
@@ -140,9 +140,9 @@ trace_showaddr(Node *node)
 {
     if ( node == 0 )
 	fprintf(stderr, "-null-");
-#if !ONLY_BOXED_OBJECTS
-    else if ( is_unboxed(node) )
-	fprintf(stderr, "-unboxed%ld-", unboxed_val(node));
+#if !NO_POINTER_TAGS
+    else if ( is_tagged_int(node) )
+	fprintf(stderr, "-int %ld-", untag_int(node));
 #endif
     else if ( heap_base <= (word *)node && (word *)node <= heap_end )
 	fprintf(stderr, "-node%lu-", (long)(node - (Node *)heap_base));
@@ -160,9 +160,9 @@ trace_shownode(int depth, Node *node)
 
     if ( node == 0 )
 	fprintf(stderr, "-null-");
-#if !ONLY_BOXED_OBJECTS
-    else if ( is_unboxed(node) )
-	fprintf(stderr, "%ld", unboxed_val(node));
+#if !NO_POINTER_TAGS
+    else if ( is_tagged_int(node) )
+	fprintf(stderr, "%ld", untag_int(node));
 #endif
     else
 	switch ( node_kind(node) )

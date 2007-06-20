@@ -1,6 +1,6 @@
-dnl $Id: configure.in 2288 2007-06-19 15:53:44Z wlux $
+dnl $Id: configure.in 2303 2007-06-20 07:22:47Z wlux $
 dnl
-dnl Copyright (c) 2002-2006, Wolfgang Lux
+dnl Copyright (c) 2002-2007, Wolfgang Lux
 dnl See LICENSE for the full license.
 dnl
 
@@ -44,10 +44,11 @@ case $enable_trampoline in
     fi;;
 esac
 
-AC_ARG_ENABLE(unboxed,
- [  --disable-unboxed       do not use unboxed integer representation])
-case $enable_unboxed in
-   no ) AC_DEFINE(ONLY_BOXED_OBJECTS);;
+AC_ARG_ENABLE(pointer-tags,
+ [  --disable-pointer-tags  do not use tagged pointer representation for
+                          (small) integer numbers])
+case $enable_pointer_tags in
+   no ) AC_DEFINE(NO_POINTER_TAGS);;
 esac
 
 AC_ARG_ENABLE(copying,

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cam.nw 2301 2007-06-20 07:14:29Z wlux $
+% $Id: cam.nw 2303 2007-06-20 07:22:47Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -108,7 +108,7 @@ return address $k$ to the return address register [[regs.ret]].
 @ 
 An important special case of [[CALL1]] is implemented by the macro
 [[CALL_ENT(x,k)]], which calls the evaluation method of [[x]] such
-that execution continues at address [[k]] after the node has been
+that execution continues at address [[k]] after the argument has been
 evaluated.
 
 <<cam.h>>=
@@ -161,14 +161,17 @@ address from the stack and drop [[n]] values from the stack.
     } while ( 0 )
 
 @ 
-The macros [[EVAL]] and [[EVAL_BOXED]] evaluate the node in argument
+The macros [[EVAL]] and [[EVAL_NODE]] evaluate the argument in
 register \texttt{regs.r[0]} and continue execution at the specified
-label after the node is evaluated to head normal form.
+label after the argument is evaluated to head normal form. The
+[[EVAL]] macro is prepared to handle tagged integers, whereas the
+[[EVAL_NODE]] macro assumes that the argument register always contains
+a node pointer.
 
 <<cam.h>>=
 #define EVAL(l) do {							\
     for (;;) {								\
-	if ( is_boxed(regs.r[0]) )					\
+	if ( is_tagged_ptr(regs.r[0]) )					\
 	    switch ( regs.r[0]->info->kind ) {				\
 	    case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue;	\
 	    case LAZY_KIND: regs.ret = (l); GOTO(regs.r[0]->info->eval); \
@@ -178,7 +181,7 @@ label after the node is evaluated to head normal form.
     GOTO(l);								\
 } while ( 0 )
 
-#define EVAL_BOXED(l) do {					     \
+#define EVAL_NODE(l) do {					     \
     for (;;) {							     \
 	switch ( regs.r[0]->info->kind ) {			     \
 	case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue;    \
@@ -190,7 +193,7 @@ label after the node is evaluated to head normal form.
 } while ( 0 )
 
 @ 
-The macro [[SWAPn]] exchanges the nodes in argument register
+The macro [[SWAPn]] exchanges the arguments in register
 \texttt{regs.r[0]} and at offset $n$ in the stack. This is useful for
 functions with two or more arguments that must be evaluated.
 
@@ -211,16 +214,17 @@ The [[FAIL]] macro invokes the current failure handler.
     } while ( 0 )
 
 @
-The following macros implement (kind) matching of the node in argument
+The following macros implement (kind) matching of the argument in
 register \texttt{regs.r[0]}, which is expected to be in head normal
 form already. [[MATCH_RIGID_INT]] and [[MATCH_RIGID]] carefully check
-for unboxed values while the other macros assume that the node is
-always boxed. The argument of all macros is the label where execution
-is resumed after an unbound variable has been instantiated. In general
-this is the entry point of the function that uses the [[MATCH]] macro.
+for tagged integers while the other macros assume that the argument is
+always a node pointer. The argument of all macros is the label where
+execution is resumed after an unbound variable has been instantiated.
+In general this is the entry point of the function that uses the
+[[MATCH]] macro.
 
 <<cam.h>>=
-#define MATCH_RIGID_BOXED(what, l)				  \
+#define MATCH_RIGID_NODE(what, l)				  \
     for (;;) {							  \
 	switch ( regs.r[0]->info->kind ) {			  \
 	case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue; \
@@ -231,18 +235,18 @@ this is the entry point of the function that uses the [[MATCH]] macro.
 	break;							  \
     }
 
-#define MATCH_RIGID_CHAR(l)		MATCH_RIGID_BOXED(CHAR, l)
-#define MATCH_RIGID_FLOAT(l)		MATCH_RIGID_BOXED(FLOAT, l)
-#define MATCH_RIGID_PTR(l)		MATCH_RIGID_BOXED(PTR, l)
-#define MATCH_RIGID_FOREIGN_PTR(l)	MATCH_RIGID_BOXED(FOREIGN_PTR, l)
-#define MATCH_RIGID_DATA(l)		MATCH_RIGID_BOXED(CAPP, l)
-#define MATCH_RIGID_PAPP(l)		MATCH_RIGID_BOXED(PAPP, l)
-#define MATCH_RIGID_VECTOR(l)		MATCH_RIGID_BOXED(VECTOR, l)
-#define MATCH_RIGID_ABSTRACT(l)		MATCH_RIGID_BOXED(ABSTRACT, l)
+#define MATCH_RIGID_CHAR(l)		MATCH_RIGID_NODE(CHAR, l)
+#define MATCH_RIGID_FLOAT(l)		MATCH_RIGID_NODE(FLOAT, l)
+#define MATCH_RIGID_PTR(l)		MATCH_RIGID_NODE(PTR, l)
+#define MATCH_RIGID_FOREIGN_PTR(l)	MATCH_RIGID_NODE(FOREIGN_PTR, l)
+#define MATCH_RIGID_DATA(l)		MATCH_RIGID_NODE(CAPP, l)
+#define MATCH_RIGID_PAPP(l)		MATCH_RIGID_NODE(PAPP, l)
+#define MATCH_RIGID_VECTOR(l)		MATCH_RIGID_NODE(VECTOR, l)
+#define MATCH_RIGID_ABSTRACT(l)		MATCH_RIGID_NODE(ABSTRACT, l)
 
 #define MATCH_RIGID_INT(l)					      \
     for (;;) {							      \
-	if ( is_boxed(regs.r[0]) )				      \
+	if ( is_tagged_ptr(regs.r[0]) )				      \
 	    switch ( regs.r[0]->info->kind ) {			      \
 	    case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue; \
 	    case LVAR_KIND: regs.ret = (l); GOTO(sync_var);	      \
@@ -254,7 +258,7 @@ this is the entry point of the function that uses the [[MATCH]] macro.
 
 #define MATCH_RIGID(l)						      \
     for (;;) {							      \
-	if ( is_boxed(regs.r[0]) )				      \
+	if ( is_tagged_ptr(regs.r[0]) )				      \
 	    switch ( regs.r[0]->info->kind ) {			      \
 	    case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue; \
 	    case LVAR_KIND: regs.ret = (l); GOTO(sync_var);	      \

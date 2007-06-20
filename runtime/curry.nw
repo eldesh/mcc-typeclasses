@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: curry.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: curry.nw 2303 2007-06-20 07:22:47Z wlux $
 %
-% Copyright (c) 2002-2006, Wolfgang Lux
+% Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \section{The Runtime System}
@@ -77,10 +77,12 @@ Currently, the following configuration options are supported.
   assembler jump instructions into the code (see
   Sect.~\ref{sec:execution}). This flag is controlled by the
   \texttt{--enable-trampoline} option of \texttt{configure}.
-\item [[ONLY_BOXED_OBJECTS]]: This flag determines whether integer
-  numbers are implemented as (boxed) nodes in the heap or by encoding
-  their values in the pointers. This flag is controlled by the
-  \texttt{--disable-unboxed} option of \texttt{configure}.
+\item [[NO_POINTER_TAGS]]: This flag determines whether the runtime
+  system uses tagged pointers, which allow encoding integer numbers in
+  pointer values rather than allocating nodes for them. If this flag
+  is non-zero, all integer numbers are allocated in the heap and
+  pointer tagging is not used. This flag is controlled by the
+  \texttt{--disable-pointer-tags} option of \texttt{configure}.
 \item [[COPY_SEARCH_SPACE]]: If this flag is non-zero, a copying
   implementation is used for encapsulated
   search~\cite{Lux04:CopyTrail} as well as for global search. In this
@@ -120,12 +122,14 @@ from   n = n : from (n + 1)
   the expression $e$ is in normal form (see
   Sect.~\ref{sec:unification}).
 \end{itemize}
-The template definitions below ensure that the symbols
-[[USE_TRAMPOLINE]], [[ONLY_BOXED_OBJECTS]], [[COPY_SEARCH_SPACE]],
-[[YIELD_NONDET]], and [[NO_OCCURS_CHECK]] are always defined. This
-will ensure a consistent use of these options throughout the runtime
-system, as a redefinition will raise a compilation error.
+\begin{sloppy}
+  The template definitions below ensure that the symbols
+  [[USE_TRAMPOLINE]], [[NO_POINTER_TAGS]], [[COPY_SEARCH_SPACE]],
+  [[YIELD_NONDET]], and [[NO_OCCURS_CHECK]] are always defined. This
+  will ensure a consistent use of these options throughout the runtime
+  system, as a redefinition will raise a compilation error.
 
+\end{sloppy}
 <<Configuration options>>=
 /* Define to empty if doubles have alignment constraints */
 #undef UNALIGNED_DOUBLE
@@ -133,8 +137,8 @@ system, as a redefinition will raise a compilation error.
 /* Define as 1 to use trampoline code for tail calls */
 #define USE_TRAMPOLINE 0
 
-/* Define as 1 to use a boxed representation for all objects */
-#define ONLY_BOXED_OBJECTS 0
+/* Define as 1 to disable use of tagged pointers */
+#define NO_POINTER_TAGS 0
 
 /* Define as 1 to use a copying implementation for non-deterministic search */
 #define COPY_SEARCH_SPACE 0

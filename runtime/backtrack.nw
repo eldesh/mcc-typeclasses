@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 2302 2007-06-20 07:17:11Z wlux $
+% $Id: backtrack.nw 2303 2007-06-20 07:22:47Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -378,9 +378,9 @@ do_eval(Label ip)
 	return 0;
 
     susp = regs.bp ? ((Node **)regs.bp)[-1] : stack_end[-1];
-    while ( is_boxed(susp) && is_indir_node(susp) )
+    while ( is_tagged_ptr(susp) && is_indir_node(susp) )
 	susp = susp->n.node;
-    if ( is_boxed(susp) && is_lazy_node(susp) )
+    if ( is_tagged_ptr(susp) && is_lazy_node(susp) )
 	return (Node *)-1;
 
     return regs.bp ? ((Node **)regs.bp)[-2] : stack_end[-2];

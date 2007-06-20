@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2299 2007-06-19 22:58:22Z wlux $
+% $Id: heap.nw 2303 2007-06-20 07:22:47Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -41,27 +41,27 @@ typedef void *word;	/* already declared in regs.h */
 #endif
 
 @ 
-In the default configuration, all data except for integer numbers is
-allocated in the heap. Integer numbers are usually encoded directly in
-the pointer. Since all pointers into the heap must be aligned to -- at
-least -- a 4 byte boundary, the two least significant bits of a
-pointer are available as tag bits. The runtime system uses only the
-least significant bit, where 0 is used for pointers and 1 for integer
-numbers. Obviously, only integer numbers that can be represented in
-$n-1$ bits, where $n$ is the bit size of the target machine, can be
-encoded in this way; larger numbers must be allocated in the heap.
-This optimization can be disabled with the \texttt{--disable-unboxed}
-configuration option, which in turn sets the [[ONLY_BOXED_OBJECTS]]
-preprocessor flag.
+In the default configuration, we use a tagged pointer scheme that
+allows encoding integer numbers directly in pointer values rather than
+allocating heap nodes for them. Since all pointers into the heap must
+be aligned to -- at least -- a 4 byte boundary, the two least
+significant bits of a pointer are available as tag bits. The runtime
+system uses only the least significant bit, where 0 is used for
+pointers and 1 for integer numbers. Obviously, only integer numbers
+that can be represented in $n-1$ bits, where $n$ is the number of bits
+in a word on the target machine, can be encoded in this way; larger
+numbers must be allocated in the heap. This optimization can be
+disabled with the \texttt{--disable-pointer-tags} configuration
+option, which in turn sets the [[NO_POINTER_TAGS]] preprocessor flag.
 
 <<heap.h>>=
-/* check for boxed-ness of a node */
-#define is_unboxed(node)        (!ONLY_BOXED_OBJECTS && ((long)(node) & 0x01))
-#define is_boxed(node)          !is_unboxed(node)
+/* check for tagged integer values */
+#define is_tagged_ptr(p)	!is_tagged_int(p)
+#define is_tagged_int(p)	(!NO_POINTER_TAGS && ((long)(p) & 0x01))
 
-#if !ONLY_BOXED_OBJECTS
-# define mk_unboxed(x)		(Node *)(((x) << 1) | 0x01)
-# define unboxed_val(node)	((long)(node) >> 1)
+#if !NO_POINTER_TAGS
+# define tag_int(i)		(Node *)(((i) << 1) + 0x01)
+# define untag_int(p)		((long)(p) >> 1)
 #endif
 
 @
@@ -244,7 +244,7 @@ number must be allocated in the heap.
 
 <<heap.h>>=
 #define is_large_int(i) \
-    (ONLY_BOXED_OBJECTS || (i) < LONG_MIN/2 || (i) > LONG_MAX/2)
+    (NO_POINTER_TAGS || (i) < LONG_MIN/2 || (i) > LONG_MAX/2)
 
 extern NodeInfo int_info;
 struct int_node {
@@ -253,10 +253,10 @@ struct int_node {
 };
 #define int_node_size	wordsof(struct int_node)
 
-#if ONLY_BOXED_OBJECTS
+#if NO_POINTER_TAGS
 # define long_val(node)	(node)->i.i
 #else
-# define long_val(node)	(is_unboxed(node) ? unboxed_val(node) : (node)->i.i)
+# define long_val(node)	(is_tagged_int(node) ? untag_int(node) : (node)->i.i)
 #endif
 
 @
@@ -333,9 +333,9 @@ NodeInfo float_info = {
 };
 
 @ 
-Character nodes are mostly similar to (boxed) integer nodes. However,
-the characters in the range 0--255 are preallocated in the runtime
-system.
+Character nodes are mostly similar to heap allocated integer nodes.
+However, the characters in the range 0--255 are preallocated in the
+runtime system.
 
 <<heap.h>>=
 extern NodeInfo char_info;

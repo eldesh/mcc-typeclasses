@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2302 2007-06-20 07:17:11Z wlux $
+% $Id: CGen.lhs 2303 2007-06-20 07:22:47Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -163,7 +163,8 @@ machine. The generated code uses the preprocessor macro
 \texttt{is\_large\_int} defined in the runtime system (see
 Sect.~\ref{sec:heap}) in order to determine whether allocation is
 necessary. Note that this macro always returns true if the system was
-configured with the \texttt{--disable-unboxed} configuration option.
+configured with the \texttt{--disable-pointer-tags} configuration
+option.
 \begin{verbatim}
 
 > genTypes :: [Decl] -> [(Name,[Name],[ConstrDecl])] -> [Stmt] -> [Expr]
@@ -245,7 +246,7 @@ configured with the \texttt{--disable-unboxed} configuration option.
 >     [CVarDef CPrivate (CConstType "struct int_node") (constInt i)
 >              (CStruct $ map CInit [addr "int_info",CInt i]),
 >      CppDefine (constInt i) (constRef (constInt i))]
->     [CppDefine (constInt i) (CFunCall "mk_unboxed" [CInt i])]
+>     [CppDefine (constInt i) (CFunCall "tag_int" [CInt i])]
 
 > floatConstant :: Double -> CTopDecl
 > floatConstant f =
@@ -911,8 +912,8 @@ translation function.
 > cCode f consts vs0 (CPSSeq st1 st2) ks =
 >   cCode0 consts st1 ++ cCode f consts vs0 st2 ks
 > cCode f consts vs0 (CPSWithCont k st) ks = cCode f consts vs0 st (k:ks)
-> cCode f _ vs0 (CPSSwitch unboxed v cases) [] =
->   switchOnTerm f unboxed vs0 v
+> cCode f _ vs0 (CPSSwitch tagged v cases) [] =
+>   switchOnTerm f tagged vs0 v
 >                [(t,caseCode f vs0 v t st) | CaseBlock t st <- cases]
 > cCode _ _ vs0 (CPSChoices v ks) ks' = choices vs0 v ks ks'
 
@@ -994,7 +995,7 @@ translation function.
 
 > assertLazyNode :: Name -> String -> CStmt
 > assertLazyNode v tag =
->   rtsAssertList [isBoxed v,CRel (nodeKind v) "==" (CExpr "LAZY_KIND"),
+>   rtsAssertList [isTaggedPtr v,CRel (nodeKind v) "==" (CExpr "LAZY_KIND"),
 >                  CRel (nodeTag v) "==" (CExpr tag),
 >                  CFunCall "is_local_space" [field v "s.spc"]]
 
@@ -1044,24 +1045,24 @@ switches. The outer switch matches the common tag and the inner switch
 the literal's value. Furthermore, integer literals are either encoded
 in the pointer or stored in a heap allocated node depending on their
 value and the setting of the preprocessor constant
-\texttt{ONLY\_BOXED\_OBJECTS}, which forces heap allocation of all
+\texttt{NO\_POINTER\_TAGS}, which forces heap allocation of all
 integer numbers when set to a non-zero value.
 \begin{verbatim}
 
 > switchOnTerm :: Name -> Bool -> (Bool,[Name],[Name]) -> Name
 >              -> [(CPSTag,[CStmt])] -> [CStmt]
-> switchOnTerm f maybeUnboxed vs0 v cases =
->   kindSwitch v [updVar vs0 v] unboxedCase otherCases :
+> switchOnTerm f tagged vs0 v cases =
+>   kindSwitch v [updVar vs0 v] tagCase otherCases :
 >   head (dflts ++ [failAndBacktrack f])
 >   where (lits,constrs,vars,dflts) = foldr partition ([],[],[],[]) cases
 >         (chars,ints,floats) = foldr litPartition ([],[],[]) lits
->         unboxedCase
->           | maybeUnboxed =
->               Just [CppCondStmts "ONLY_BOXED_OBJECTS"
+>         tagCase
+>           | tagged =
+>               Just [CppCondStmts "NO_POINTER_TAGS"
 >                       [CProcCall "curry_panic"
->                                  [CString "impossible: is_unboxed(%p)\n",
+>                                  [CString "impossible: is_tagged_int(%p)\n",
 >                                   var v]]
->                       [intSwitch (CFunCall "unboxed_val" [var v]) ints]
+>                       [intSwitch (CFunCall "untag_int" [var v]) ints]
 >                    | not (null ints)]
 >           | otherwise = Nothing
 >         otherCases =
@@ -1087,16 +1088,16 @@ integer numbers when set to a non-zero value.
 >           (chars,ints,(f,stmts):floats)
 
 > kindSwitch :: Name -> [CStmt] -> Maybe [CStmt] -> [CCase] -> CStmt
-> kindSwitch v upd unboxed cases =
->   CLoop [unboxedSwitch unboxed (CSwitch (nodeKind v) allCases),CBreak]
+> kindSwitch v upd tagCase cases =
+>   CLoop [taggedSwitch tagCase (CSwitch (nodeKind v) allCases),CBreak]
 >   where allCases =
 >           CCase "INDIR_KIND"
 >             (setVar v (field v "n.node") : upd ++ [CContinue]) :
 >           cases
->         unboxedSwitch (Just sts) switch
->           | null sts = CIf (isBoxed v) [switch] []
->           | otherwise = CIf (isUnboxed v) sts [switch]
->         unboxedSwitch Nothing switch = switch
+>         taggedSwitch (Just sts) switch
+>           | null sts = CIf (isTaggedPtr v) [switch] []
+>           | otherwise = CIf (isTaggedInt v) sts [switch]
+>         taggedSwitch Nothing switch = switch
 
 > charSwitch :: Name -> [(Char,[CStmt])] -> CStmt
 > charSwitch v cases =
@@ -1238,10 +1239,10 @@ first loads this address into a temporary variable and then boxes it.
 >       setField v "info" (addr "int_info"),
 >       setField v "i.i" e,
 >       incrAlloc (ctypeSize TypeInt)]
->      [CppCondStmts "ONLY_BOXED_OBJECTS"
+>      [CppCondStmts "NO_POINTER_TAGS"
 >         [CProcCall "curry_panic"
 >                    [CString "impossible: !is_large_int(%ld)\n",e]]
->         [setVar v (CFunCall "mk_unboxed" [e])]]]
+>         [setVar v (CFunCall "tag_int" [e])]]]
 > box (Just TypeFloat) v e =
 >   [localVar v (Just alloc),
 >    setField v "info" (addr  "float_info"),
@@ -1566,9 +1567,9 @@ of the abstract syntax tree.
 > constRef :: String -> CExpr
 > constRef = asNode . addr
 
-> isBoxed, isUnboxed :: Name -> CExpr
-> isBoxed v = CFunCall "is_boxed" [var v]
-> isUnboxed v = CFunCall "is_unboxed" [var v]
+> isTaggedPtr, isTaggedInt :: Name -> CExpr
+> isTaggedPtr v = CFunCall "is_tagged_ptr" [var v]
+> isTaggedInt v = CFunCall "is_tagged_int" [var v]
 
 > nodeKind, nodeTag :: Name -> CExpr
 > nodeKind v = field v "info->kind"

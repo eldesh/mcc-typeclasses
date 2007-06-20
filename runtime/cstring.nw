@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cstring.nw 2297 2007-06-19 22:51:03Z wlux $
+% $Id: cstring.nw 2303 2007-06-20 07:22:47Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -162,9 +162,9 @@ copy_string(Node *list, char *buf)
 	if ( list->info->tag == CONS_TAG )
 	{
 	    head = list->c.args[0];
-	    while ( is_boxed(head) && head->info->kind == INDIR_KIND )
+	    while ( is_tagged_ptr(head) && head->info->kind == INDIR_KIND )
 		head = head->n.node;
-	    assert(is_boxed(head) && head->info->kind == CHAR_KIND);
+	    assert(is_tagged_ptr(head) && head->info->kind == CHAR_KIND);
 	    *cp++ = head->ch.ch;
 	    list  = list->c.args[1];
 	}

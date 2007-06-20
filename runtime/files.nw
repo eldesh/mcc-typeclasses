@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2299 2007-06-19 22:58:22Z wlux $
+% $Id: files.nw 2303 2007-06-20 07:22:47Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -861,9 +861,9 @@ primHGetBuffering(Node *hdl)
 	    CHECK_HEAP(0, int_node_size + 2 * closure_node_size(1));
 	    if ( bsize )
 	    {
-#if !ONLY_BOXED_OBJECTS
+#if !NO_POINTER_TAGS
 		if ( !is_large_int(bsize) )
-		    r = mk_unboxed(bsize);
+		    r = tag_int(bsize);
 		else
 #endif
 		{
@@ -934,7 +934,7 @@ primHSetBuffering(Node *hdl, Node *bufferMode)
 	    break;
 	case Just_tag:
 	    bufferMode = bufferMode->c.args[0];
-	    while ( is_boxed(bufferMode) && is_indir_node(bufferMode) )
+	    while ( is_tagged_ptr(bufferMode) && is_indir_node(bufferMode) )
 		bufferMode = bufferMode->n.node;
 	    bsize = long_val(bufferMode);
 	    if ( bsize > 0 )

@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 2269 2007-06-16 14:57:15Z wlux $
+% $Id: print.nw 2303 2007-06-20 07:22:47Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Printing the Result}
@@ -65,7 +65,7 @@ print_result(const char **var_names, Node **vars, Node *result)
     tail      = names_tail;
     hasAnswer = false;
     for ( n = 0; var_names[n]; n++ )
-	if ( is_unboxed(vars[n]) || !is_variable_node(vars[n]) )
+	if ( is_tagged_int(vars[n]) || !is_variable_node(vars[n]) )
 	{
 	    if ( !hasAnswer )
 	    {
@@ -85,9 +85,9 @@ print_result(const char **var_names, Node **vars, Node *result)
 	print_node(0, result);
     else
     {
-	while ( is_boxed(result) && is_indir_node(result) )
+	while ( is_tagged_ptr(result) && is_indir_node(result) )
 	    result = result->n.node;
-	if ( is_unboxed(result) || result->info != INFO(__Success) )
+	if ( is_tagged_int(result) || result->info != INFO(__Success) )
 	{
 	    printf("} ");
 	    print_node(0, result);
@@ -122,10 +122,10 @@ print_node(unsigned int prec, Node *node)
 
     for (;;)
     {
-#if !ONLY_BOXED_OBJECTS
-	if ( is_unboxed(node) )
-	    printf(prec > 0 && unboxed_val(node) < 0 ? "(%ld)" : "%ld",
-		   unboxed_val(node));
+#if !NO_POINTER_TAGS
+	if ( is_tagged_int(node) )
+	    printf(prec > 0 && untag_int(node) < 0 ? "(%ld)" : "%ld",
+		   untag_int(node));
 	else
 #endif
 	    switch ( node_kind(node) )
@@ -263,9 +263,9 @@ is_string(Node *list)
     while ( list->info == &cons_info )
     {
 	head = list->c.args[0];
-	while ( is_boxed(head) && head->info->kind == INDIR_KIND )
+	while ( is_tagged_ptr(head) && head->info->kind == INDIR_KIND )
 	    head = head->n.node;
-	if ( is_unboxed(head) || head->info->kind != CHAR_KIND )
+	if ( is_tagged_int(head) || head->info->kind != CHAR_KIND )
 	    return false;
 
 	list = list->c.args[1];
@@ -288,9 +288,9 @@ print_string(Node *list)
     while ( list->info == &cons_info )
     {
 	head = list->c.args[0];
-	while ( is_boxed(head) && head->info->kind == INDIR_KIND )
+	while ( is_tagged_ptr(head) && head->info->kind == INDIR_KIND )
 	    head = head->n.node;
-	ASSERT(is_boxed(head) && head->info->kind == CHAR_KIND);
+	ASSERT(is_tagged_ptr(head) && head->info->kind == CHAR_KIND);
 	c = head->ch.ch;
 	printf("%s", lit_char(buf, c0, c, '"'));
 	c0 = c;;
@@ -364,7 +364,7 @@ print_constraints(Node *node)
 
     for (;;)
     {
-	if ( is_boxed(node) )
+	if ( is_tagged_ptr(node) )
 	    switch ( node_kind(node) )
 	    {
 	    case CAPP_KIND:

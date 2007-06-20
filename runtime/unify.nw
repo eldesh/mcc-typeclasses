@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2301 2007-06-20 07:14:29Z wlux $
+% $Id: unify.nw 2303 2007-06-20 07:22:47Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -16,7 +16,7 @@ DECLARE_LABEL(extern, ___61__58__61_);
 DECLARE_LABEL(extern, bind_var);
 
 #if NO_OCCURS_CHECK
-# define occurs(var,arg,nf)	(*(nf) = is_unboxed(arg), false)
+# define occurs(var,arg,nf)	(*(nf) = is_tagged_int(arg), false)
 #else
 extern boolean occurs(Node *, Node *, boolean *);
 #endif
@@ -85,9 +85,9 @@ FUNCTION(___61__58__61__2)
     arg1 = regs.sp[0];
     arg2 = regs.r[0];
 
-    while ( is_boxed(arg1) && is_indir_node(arg1) )
+    while ( is_tagged_ptr(arg1) && is_indir_node(arg1) )
 	arg1 = arg1->n.node;
-    if ( is_boxed(arg1) && is_variable_node(arg1) )
+    if ( is_tagged_ptr(arg1) && is_variable_node(arg1) )
     {
 	/* check for trivial unification */
 	if ( arg1 != arg2 )
@@ -97,7 +97,7 @@ FUNCTION(___61__58__61__2)
 	    GOTO(unify_var);
 	}
     }
-    else if ( is_boxed(arg2) && is_variable_node(arg2) )
+    else if ( is_tagged_ptr(arg2) && is_variable_node(arg2) )
     {
 	regs.r[0]  = arg2;
 	regs.sp[0] = arg1;
@@ -175,17 +175,17 @@ eq_root(Node *arg1, Node *arg2, unsigned int *argc)
 
     *argc = 0;
 
-#if !ONLY_BOXED_OBJECTS
-    if ( is_unboxed(arg1) )
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(arg1) )
     {
-	if ( is_unboxed(arg2) )
+	if ( is_tagged_int(arg2) )
 	    eq = arg1 == arg2;
 	else
-	    eq = is_int_node(arg2) && unboxed_val(arg1) == arg2->i.i;
+	    eq = is_int_node(arg2) && untag_int(arg1) == arg2->i.i;
     }
-    else if ( is_unboxed(arg2) )
+    else if ( is_tagged_int(arg2) )
     {
-	eq = is_int_node(arg1) && arg1->i.i == unboxed_val(arg2);
+	eq = is_int_node(arg1) && arg1->i.i == untag_int(arg2);
     }
     else
 #endif
@@ -229,10 +229,10 @@ eq_root(Node *arg1, Node *arg2, unsigned int *argc)
 	    invalid_arg("eq_root", node_kind(arg1));
         }
     }
-    else if ( is_tuple(arg1->info) && is_tuple(arg2->info)
-	      && arg1->info->kind == arg2->info->kind
-	      && arg1->info->tag == arg2->info->tag
-	      && arg1->info->length == arg2->info->length )
+    else if ( is_tuple(arg1->info) && is_tuple(arg2->info) &&
+	      arg1->info->kind == arg2->info->kind &&
+	      arg1->info->tag == arg2->info->tag &&
+	      arg1->info->length == arg2->info->length )
     {
 	eq = true;
 	*argc = closure_argc(arg1);
@@ -282,15 +282,15 @@ eq_args(unsigned int n_regs, Node *arg1, Node *arg2,
     {
 	x = *--argp1;
 	y = *--argp2;
-	while ( is_boxed(x) && is_indir_node(x) )
+	while ( is_tagged_ptr(x) && is_indir_node(x) )
 	    x = x->n.node;
-	while ( is_boxed(y) && is_indir_node(y) )
+	while ( is_tagged_ptr(y) && is_indir_node(y) )
 	    y = y->n.node;
 
-#if !ONLY_BOXED_OBJECTS
-	if ( is_unboxed(x) )
+#if !NO_POINTER_TAGS
+	if ( is_tagged_int(x) )
 	{
-	    if ( is_unboxed(y) )
+	    if ( is_tagged_int(y) )
 	    {
 		if ( x != y )
 		    return false;
@@ -298,16 +298,16 @@ eq_args(unsigned int n_regs, Node *arg1, Node *arg2,
 	    }
 	    else if ( is_int_node(y) )
 	    {
-		if ( unboxed_val(x) != y->i.i )
+		if ( untag_int(x) != y->i.i )
 		    return false;
 		continue;
 	    }
 	}
-	else if ( is_unboxed(y) )
+	else if ( is_tagged_int(y) )
 	{
 	    if ( is_int_node(x) )
 	    {
-		if ( x->i.i != unboxed_val(y) )
+		if ( x->i.i != untag_int(y) )
 		    return false;
 		continue;
 	    }
@@ -320,9 +320,9 @@ eq_args(unsigned int n_regs, Node *arg1, Node *arg2,
 	    case CAPP_KIND:
 		if ( is_capp_node(y) )
 		{
-		    if ( x->info != y->info
-			 && (!is_tuple(x->info) || !is_tuple(y->info)
-			     || x->info->length != y->info->length) )
+		    if ( x->info != y->info &&
+			 (!is_tuple(x->info) || !is_tuple(y->info) ||
+			  x->info->length != y->info->length) )
 			return false;
 		    if ( closure_argc(x) == 0 )
 			continue;
@@ -331,10 +331,10 @@ eq_args(unsigned int n_regs, Node *arg1, Node *arg2,
 	    case PAPP_KIND:
 		if ( is_papp_node(y) )
 		{
-		    if ( x->info != y->info
-			 && (!is_tuple(x->info) || !is_tuple(y->info)
-			     || x->info->tag != y->info->tag
-			     || x->info->length != y->info->length) )
+		    if ( x->info != y->info &&
+			 (!is_tuple(x->info) || !is_tuple(y->info) ||
+			  x->info->tag != y->info->tag ||
+			  x->info->length != y->info->length) )
 			return false;
 		    if ( closure_argc(x) == 0 )
 			continue;
@@ -570,7 +570,7 @@ occurs(Node *var, Node *arg, boolean *nf)
     unsigned i, argc;
     Node     **argp;
 
-    while ( is_boxed(arg) )
+    while ( is_tagged_ptr(arg) )
     {
 	if ( arg == var )
 	    return true;
@@ -614,8 +614,8 @@ FUNCTION(unify_var)
  ENTRY_LABEL(static, unify_var)
     if ( !is_local_space(regs.r[0]->v.spc) )
     {
-	if ( is_boxed(regs.sp[0]) && is_variable_node(regs.sp[0])
-	     && is_local_space(regs.sp[0]->v.spc) )
+	if ( is_tagged_ptr(regs.sp[0]) && is_variable_node(regs.sp[0]) &&
+	     is_local_space(regs.sp[0]->v.spc) )
 	    SWAPn(0);
 	else
 	    CALL1(sync_var, ___61__58__61__1, regs.r[0]);
@@ -662,9 +662,9 @@ FUNCTION(unify_var)
 	    for ( i = n; i-- > 0; )
 	    {
 		arg = *--argp;
-		while ( is_boxed(arg) && is_indir_node(arg) )
+		while ( is_tagged_ptr(arg) && is_indir_node(arg) )
 		    arg = arg->n.node;
-		if ( is_boxed(arg) &&
+		if ( is_tagged_ptr(arg) &&
 		     ((is_capp_node(arg) && closure_argc(arg) > 0) ||
 		      (is_papp_node(arg) && closure_argc(arg) > 0) ||
 		      (is_vector_node(arg) && vector_argc(arg) > 0) ||
@@ -758,8 +758,8 @@ FUNCTION(bind_var)
     var	 = regs.r[0];
     node = regs.r[1];
 
-    if ( !is_boxed(var) || !is_variable_node(var)
-	 || !is_local_space(var->v.spc) )
+    if ( !is_tagged_ptr(var) || !is_variable_node(var) ||
+	 !is_local_space(var->v.spc) )
     {
 	SAVE_RET1(node);
 	CALL2(___61__58__61_, bind_var_1, regs.r[0], regs.r[1]);
@@ -770,7 +770,7 @@ FUNCTION(bind_var)
     is_var = false;
     for (;;)
     {
-	if ( is_boxed(node) )
+	if ( is_tagged_ptr(node) )
 	    switch ( node->info->kind )
 	    {
 	    case INDIR_KIND:

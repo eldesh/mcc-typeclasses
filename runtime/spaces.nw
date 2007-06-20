@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: spaces.nw 2303 2007-06-20 07:22:47Z wlux $
 %
-% Copyright (c) 2003-2006, Wolfgang Lux
+% Copyright (c) 2003-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Managing Search Spaces}\label{sec:spaces}
@@ -627,8 +627,8 @@ copy_node(Node *node, SearchSpace *space)
     boolean	 do_copy;
     unsigned int sz;
 
-    while ( is_boxed(node) && node >= (Node *)heap_base
-	    && node < (Node *)regs.hp )
+    while ( is_tagged_ptr(node) && node >= (Node *)heap_base &&
+	    node < (Node *)regs.hp )
     {
 	/* check for a node that is already forwarded */
 	if ( is_forwarded(node) )
@@ -660,8 +660,8 @@ copy_node(Node *node, SearchSpace *space)
 
 	    case INDIR_KIND:
 #if !COPY_SEARCH_SPACE
-		if ( is_forwarded(node->n.spc)
-		     && space && node->n.spc->root != space->root )
+		if ( is_forwarded(node->n.spc) &&
+		     space && node->n.spc->root != space->root )
 		{
 		    do_copy = true;
 		    break;

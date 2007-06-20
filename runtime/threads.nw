@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: threads.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: threads.nw 2303 2007-06-20 07:22:47Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Thread Management}
@@ -277,7 +277,7 @@ FUNCTION(suspend_thread)
     thd = interrupt_thread(1, regs.ret, Eval);
 
     susp = regs.r[0];
-    ASSERT(is_boxed(susp) && is_queueMe_node(susp));
+    ASSERT(is_tagged_ptr(susp) && is_queueMe_node(susp));
     assert(is_local_space(susp->q.spc));
     SAVE(susp, q.wq);
     thd->t.next = susp->q.wq;
@@ -294,7 +294,7 @@ FUNCTION(delay_thread)
     thd = interrupt_thread(1, regs.ret, Delay);
 
     var = regs.r[0];
-    ASSERT(is_boxed(var) && is_variable_node(var));
+    ASSERT(is_tagged_ptr(var) && is_variable_node(var));
     assert(is_local_space(var->v.spc));
     SAVE(var, v.wq);
     thd->t.next = var->v.wq;
@@ -337,7 +337,7 @@ FUNCTION(yield_delay_thread)
     END_LOCAL_ROOTS
 
     var = regs.r[0];
-    ASSERT(is_boxed(var) && is_variable_node(var));
+    ASSERT(is_tagged_ptr(var) && is_variable_node(var));
     assert(is_local_space(var->v.spc));
     SAVE(var, v.wq);
     thd		= (ThreadQueue)regs.hp;

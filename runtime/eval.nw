@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2301 2007-06-20 07:14:29Z wlux $
+% $Id: eval.nw 2303 2007-06-20 07:22:47Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -64,9 +64,10 @@ FUNCTION(eval_whnf)
 @
 An indirection node is evaluated by dereferencing the node and calling
 the evaluation method of the referenced node. In order to speed up the
-evaluation of indirection chains, we use a loop that checks whether
-the referenced node is itself an indirection node.  If the referenced
-node is an unboxed integer number we return immediately to the caller.
+evaluation of indirection chains, we use a loop that follows such
+chains until finding a node which is not an indirection node. If the
+referenced node is a tagged integer, we return to the caller
+immediately.
 
 <<eval.h>>=
 DECLARE_LABEL(extern, eval_indir);
@@ -78,15 +79,15 @@ FUNCTION(eval_indir)
     Node *node;
  ENTRY_LABEL(extern, eval_indir)
     node = regs.r[0];
-    ASSERT(is_boxed(node) && is_indir_node(node));
+    ASSERT(is_tagged_ptr(node) && is_indir_node(node));
 
     /* dereference the indirection */
     do
         node = node->n.node;
-    while ( is_boxed(node) && is_indir_node(node) );
+    while ( is_tagged_ptr(node) && is_indir_node(node) );
 
     /* enter the node */
-    if ( is_boxed(node) )
+    if ( is_tagged_ptr(node) )
 	ENT(node);
     RET(node);
 }
@@ -177,7 +178,7 @@ FUNCTION(resume)
  ENTRY_LABEL(extern, resume)
     /* dereference the indirection */
     result = regs.sp[0];
-    while ( is_boxed(result) && result->info->kind == INDIR_KIND )
+    while ( is_tagged_ptr(result) && is_indir_node(result) )
 	result = result->n.node;
 
     /* return to the caller */
@@ -202,7 +203,7 @@ FUNCTION(update)
  ENTRY_LABEL(extern, update)
     result = regs.r[0];
     susp   = regs.sp[0];
-    ASSERT(is_boxed(susp) && is_queueMe_node(susp) &&
+    ASSERT(is_tagged_ptr(susp) && is_queueMe_node(susp) &&
 	   is_local_space(susp->q.spc));
 
     /* update the suspended application */
@@ -272,7 +273,7 @@ FUNCTION(flex_yield_resume)
     node = regs.sp[1];
     for (;;)
     {
-	if ( is_boxed(node) )
+	if ( is_tagged_ptr(node) )
 	    switch ( node->info->kind )
 	    {
 	    case INDIR_KIND:
@@ -396,7 +397,7 @@ FUNCTION(___64_)
  ENTRY_LABEL(extern, ___64_)
     TRACE_FUN("@", 2);
     SAVE_REGS(1);
-    EVAL_BOXED(___64__1);
+    EVAL_NODE(___64__1);
 }
 
 FUNCTION(___64__1)
@@ -449,7 +450,7 @@ FUNCTION(__seq_1)
     Node *x;
  ENTRY_LABEL(static, __seq_1)
     x = regs.sp[0];
-    if ( is_boxed(x) )
+    if ( is_tagged_ptr(x) )
 	ENTER(x, 1);
     RETURN(x, 1);
 }
@@ -491,7 +492,7 @@ FUNCTION(__isVar_1)
 {
     Node *r;
  ENTRY_LABEL(static, __isVar_1)
-    if ( is_boxed(regs.r[0]) && is_variable_node(regs.r[0]) )
+    if ( is_tagged_ptr(regs.r[0]) && is_variable_node(regs.r[0]) )
 	r = CONST(__Prelude__True);
     else
 	r = CONST(__Prelude__False);
@@ -606,7 +607,7 @@ FUNCTION(__ensureGround_1)
  ENTRY_LABEL(static, __ensureGround_1)
     MATCH_RIGID(__ensureGround_1);
     node = regs.r[0];
-    if ( is_boxed(node) )
+    if ( is_tagged_ptr(node) )
     {
 	switch ( node_kind(node) )
 	{

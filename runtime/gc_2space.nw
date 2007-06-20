@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: gc_2space.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: gc_2space.nw 2303 2007-06-20 07:22:47Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Garbage Collection}\label{sec:copying-gc}
@@ -290,7 +290,8 @@ therefore it is not recorded on the trail.
 static inline Node *
 GC_copy(Node ***p_alloc, word *hlim, Node *node)
 {
-    while ( is_boxed(node) && node >= (Node *)heap_base && node < (Node *)hlim )
+    while ( is_tagged_ptr(node) && node >= (Node *)heap_base &&
+	    node < (Node *)hlim )
     {
         if ( is_forwarded(node) )
             node = get_forward(node);

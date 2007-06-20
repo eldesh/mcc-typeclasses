@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2301 2007-06-20 07:14:29Z wlux $
+% $Id: disequal.nw 2303 2007-06-20 07:22:47Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -86,9 +86,9 @@ FUNCTION(___61__47__61__2)
     arg1 = regs.sp[0];
     arg2 = regs.r[0];
 
-    while ( is_boxed(arg1) && is_indir_node(arg1) )
+    while ( is_tagged_ptr(arg1) && is_indir_node(arg1) )
 	arg1 = arg1->n.node;
-    if ( is_boxed(arg1) && is_variable_node(arg1) )
+    if ( is_tagged_ptr(arg1) && is_variable_node(arg1) )
     {
 	/* check for trivial disequality (x=/=x) */
 	if ( arg1 != arg2 )
@@ -98,7 +98,7 @@ FUNCTION(___61__47__61__2)
 	    GOTO(diseq_var);
 	}
     }
-    else if ( is_boxed(arg2) && is_variable_node(arg2) )
+    else if ( is_tagged_ptr(arg2) && is_variable_node(arg2) )
     {
 	regs.r[0]  = arg2;
 	regs.sp[0] = arg1;
@@ -184,8 +184,8 @@ FUNCTION(diseq_var)
  ENTRY_LABEL(static, diseq_var)
     if ( !is_local_space(regs.r[0]->v.spc) )
     {
-	if ( is_boxed(regs.sp[0]) && is_variable_node(regs.sp[0])
-	     && is_local_space(regs.sp[0]->v.spc) )
+	if ( is_tagged_ptr(regs.sp[0]) && is_variable_node(regs.sp[0]) &&
+	     is_local_space(regs.sp[0]->v.spc) )
 	    SWAPn(0);
 	else
 	    CALL1(sync_var, ___61__47__61__1, regs.r[0]);

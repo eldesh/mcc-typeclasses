@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: constraints.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: constraints.nw 2303 2007-06-20 07:22:47Z wlux $
 %
-% Copyright (c) 2002-2006, Wolfgang Lux
+% Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Basic Constraints}
@@ -271,7 +271,7 @@ FUNCTION(__spawnConstraint)
     }
 
     x = regs.r[1];
-    if ( is_boxed(x) )
+    if ( is_tagged_ptr(x) )
 	ENT(x);
     RET(x);
 }
@@ -282,7 +282,7 @@ FUNCTION(__spawnConstraint_1)
     Node *x;
  ENTRY_LABEL(static, __spawnConstraint_1)
     x = regs.sp[0];
-    if ( is_boxed(x) )
+    if ( is_tagged_ptr(x) )
 	ENTER(x, 1);
     RETURN(x, 1);
 }

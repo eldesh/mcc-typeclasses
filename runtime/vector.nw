@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: vector.nw 2294 2007-06-19 22:08:56Z wlux $
+% $Id: vector.nw 2303 2007-06-20 07:22:47Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -63,7 +63,7 @@ primNewIOVector(long n, Node *wrappedArg)
     else
     {
 	init = wrappedArg->c.args[0];
-	while ( is_boxed(init) && is_indir_node(init) )
+	while ( is_tagged_ptr(init) && is_indir_node(init) )
 	    init = init->n.node;
 	BEGIN_LOCAL_ROOTS1(init)
 	CHECK_HEAP(0, vector_node_size(n));

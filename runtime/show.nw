@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2298 2007-06-19 22:55:06Z wlux $
+% $Id: show.nw 2303 2007-06-20 07:22:47Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -58,7 +58,7 @@ DECLARE_LABEL(static, showString_1);
 DECLARE_LABEL(static, showStringTail);
 DECLARE_LABEL(static, showStringTail_1);
 
-#if ONLY_BOXED_OBJECTS
+#if NO_POINTER_TAGS
 static const struct int_node zero_node = { &int_info, 0 };
 static const struct int_node one_node  = { &int_info, 1 };
 static const struct int_node two_node  = { &int_info, 2 };
@@ -67,9 +67,9 @@ static const struct int_node two_node  = { &int_info, 2 };
 # define one  CONST(one)
 # define two  CONST(two)
 #else
-# define zero mk_unboxed(0)
-# define one  mk_unboxed(1)
-# define two  mk_unboxed(2)
+# define zero tag_int(0)
+# define one  tag_int(1)
+# define two  tag_int(2)
 #endif
 
 #define space	 (Node *)(char_table + ' ')
@@ -272,10 +272,10 @@ FUNCTION(showp_1)
     isneg = false;
 
  again:
-#if !ONLY_BOXED_OBJECTS
-    if ( is_unboxed(node) )
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(node) )
     {
-	sprintf(buf, "%ld", unboxed_val(node));
+	sprintf(buf, "%ld", untag_int(node));
 	isneg = buf[0] == '-';
     }
     else
@@ -730,9 +730,9 @@ recognized.
 static boolean
 is_char(Node *node)
 {
-    while ( is_boxed(node) && is_indir_node(node) )
+    while ( is_tagged_ptr(node) && is_indir_node(node) )
 	node = node->n.node;
-    return is_boxed(node) && is_char_node(node);
+    return is_tagged_ptr(node) && is_char_node(node);
 }
 
 static boolean
@@ -740,14 +740,14 @@ is_string(Node *node)
 {
     unsigned int n = 0;
 
-    while ( is_boxed(node) && is_indir_node(node) )
+    while ( is_tagged_ptr(node) && is_indir_node(node) )
 	node = node->n.node;
     while ( n++ < 10000 && node != nil )
     {
 	if ( node->info != &cons_info || !is_char(node->c.args[0]) )
 	    return false;
 	node = node->c.args[1];
-	while ( is_boxed(node) && is_indir_node(node) )
+	while ( is_tagged_ptr(node) && is_indir_node(node) )
 	    node = node->n.node;
     }
     return node == nil;
@@ -772,7 +772,7 @@ FUNCTION(showList_1)
     show = regs.sp[1];
     for (;;)
     {
-	if ( is_boxed(hd) )
+	if ( is_tagged_ptr(hd) )
 	    switch ( hd->info->kind )
 	    {
 	    case INDIR_KIND:
@@ -860,7 +860,7 @@ FUNCTION(showTail)
     SAVE_REGS(2);
     if ( regs.r[1] == zero )
 	GOTO(showTail_1);
-    EVAL_BOXED(showTail_1);
+    EVAL_NODE(showTail_1);
 }
 
 static
@@ -979,7 +979,7 @@ FUNCTION(showString)
 {
  ENTRY_LABEL(static, showString)
     SAVE_REGS(3);
-    EVAL_BOXED(showString_1);
+    EVAL_NODE(showString_1);
 }
 
 static
@@ -1013,7 +1013,7 @@ FUNCTION(showStringTail)
 {
  ENTRY_LABEL(static, showStringTail)
     SAVE_REGS(2);
-    EVAL_BOXED(showStringTail_1);
+    EVAL_NODE(showStringTail_1);
 }
 
 static

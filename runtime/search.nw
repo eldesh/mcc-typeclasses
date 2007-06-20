@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: search.nw 2302 2007-06-20 07:17:11Z wlux $
+% $Id: search.nw 2303 2007-06-20 07:22:47Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -138,7 +138,7 @@ FUNCTION(__try)
 {
  ENTRY_LABEL(extern, __try)
     SAVE_REGS(0);
-    EVAL_BOXED(__try_1);
+    EVAL_NODE(__try_1);
 }
 
 static
@@ -240,9 +240,10 @@ FUNCTION(solved_goal)
     res	 = copy_graph(2, cont->sc.var, cont->sc.spc);
 
     arg = regs.r[1];
-    while ( is_boxed(arg) && arg->info->kind == INDIR_KIND )
+    while ( is_tagged_ptr(arg) && is_indir_node(arg) )
 	arg = arg->n.node;
-    if ( is_boxed(arg) && is_variable_node(arg) && is_local_space(arg->v.spc) )
+    if ( is_tagged_ptr(arg) && is_variable_node(arg) &&
+	 is_local_space(arg->v.spc) )
     {
 	SAVE_REGS(0);
 	CALL2(bind_var, search_goal_success, arg, res);
@@ -299,11 +300,12 @@ FUNCTION(search_cont)
     /* NB reload cont -- restore_continuation might invoke gc */
     cont = regs.r[0];
     arg  = regs.r[1];
-    while ( is_boxed(arg) && arg->info->kind == INDIR_KIND )
+    while ( is_tagged_ptr(arg) && is_indir_node(arg) )
 	arg = arg->n.node;
 
     SAVE_RET1(cont->sc.susp);
-    if ( is_boxed(arg) && is_variable_node(arg) && is_local_space(arg->v.spc) )
+    if ( is_tagged_ptr(arg) && is_variable_node(arg) &&
+	 is_local_space(arg->v.spc) )
 	CALL2(bind_var, search_goal_proceed, arg, cont->sc.var);
     CALL2(___61__58__61_, search_goal_proceed, arg, cont->sc.var);
 }
@@ -314,7 +316,7 @@ FUNCTION(search_goal_proceed)
     Node *susp;
  ENTRY_LABEL(static, search_goal_proceed)
     susp = regs.sp[0];
-    ASSERT(is_boxed(susp));
+    ASSERT(is_tagged_ptr(susp));
     ENTER(susp, 1);
 }
 
@@ -364,7 +366,7 @@ FUNCTION(deadlock_search)
     TRACE(("leaving encapsulated search with solved search goal\n"));
 
     /* dereference the goal variable in order to avoid some garbage */
-    while ( is_boxed(regs.sp[1]) && regs.sp[1]->info->kind == INDIR_KIND )
+    while ( is_tagged_ptr(regs.sp[1]) && is_indir_node(regs.sp[1]) )
 	regs.sp[1] = regs.sp[1]->n.node;
 
     /* save the local space */
@@ -424,9 +426,9 @@ suspend_search(unsigned int n_regs, SearchSpace *space)
 
 	/* dereference the goal nodes in order to avoid some garbage */
 	assert(regs.sp == (Node **)regs.bp - 2);
-	while ( is_boxed(regs.sp[0]) && regs.sp[0]->info->kind == INDIR_KIND )
+	while ( is_tagged_ptr(regs.sp[0]) && is_indir_node(regs.sp[0]) )
 	    regs.sp[0] = regs.sp[0]->n.node;
-	while ( is_boxed(regs.sp[1]) && regs.sp[1]->info->kind == INDIR_KIND )
+	while ( is_tagged_ptr(regs.sp[1]) && is_indir_node(regs.sp[1]) )
 	    regs.sp[1] = regs.sp[1]->n.node;
 
 	/* save the local space */
@@ -468,7 +470,7 @@ FUNCTION(resume_search)
     Node *sc;
  ENTRY_LABEL(static, resume_search)
     sc = *regs.sp++;
-    assert(is_boxed(sc) && is_search_cont_node(sc));
+    assert(is_tagged_ptr(sc) && is_search_cont_node(sc));
 
     TRACE(("resuming encapsulated search\n"));
     push_search_context();
@@ -509,9 +511,9 @@ FUNCTION(choices_search)
 
     /* dereference the goal nodes in order to avoid some garbage */
     assert(regs.sp == (Node **)regs.bp - 2);
-    while ( is_boxed(regs.sp[0]) && regs.sp[0]->info->kind == INDIR_KIND )
+    while ( is_tagged_ptr(regs.sp[0]) && is_indir_node(regs.sp[0]) )
 	regs.sp[0] = regs.sp[0]->n.node;
-    while ( is_boxed(regs.sp[1]) && regs.sp[1]->info->kind == INDIR_KIND )
+    while ( is_tagged_ptr(regs.sp[1]) && is_indir_node(regs.sp[1]) )
 	regs.sp[1] = regs.sp[1]->n.node;
 
     /* save the local space */

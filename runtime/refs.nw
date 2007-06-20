@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: refs.nw 2293 2007-06-19 22:03:00Z wlux $
+% $Id: refs.nw 2308 2007-06-20 11:50:25Z wlux $
 %
 % Copyright (c) 2004-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -37,7 +37,21 @@ Two mutable references are considered equal, if they are physically
 the same.
 
 <<refs.h>>=
-#define primEqIORef(x,y) ((x) == (y))
+extern Node *primEqIORef(Node *, Node *);
+
+@ 
+<<refs.c>>=
+DECLARE_CONST(__Prelude__False);
+DECLARE_CONST(__Prelude__True);
+
+#define Prelude_False CONST(__Prelude__False)
+#define Prelude_True  CONST(__Prelude__True)
+
+Node *
+primEqIORef(Node *x, Node *y)
+{
+    return x == y ? Prelude_True : Prelude_False;
+}
 
 @ 
 The function [[primNewIORef]] creates a new mutable reference and

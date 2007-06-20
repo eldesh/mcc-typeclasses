@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cstring.nw 2304 2007-06-20 07:33:57Z wlux $
+% $Id: cstring.nw 2311 2007-06-20 11:58:18Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -52,16 +52,17 @@ functions. In order to prepend a C string to a given list of
 characters, use the functions [[prefix_string]] and
 [[prefix_string_len]] instead.
 
-The macros [[primPeekString]] and [[primPeekCStringLen]] make these
-function available to the foreign function interface.
+The macros [[primPeekCString]] and [[primPeekCStringLen]] make these
+functions available to the foreign function interface.
 [[PrimPeekCString]] computes the length of the C string using
 [[strlen]], whereas the length is passed explicitly to
-[[primPeekCString]]. This allows converting C strings with embedded
+[[primPeekCStringLen]]. This allows converting C strings with embedded
 \verb|\NUL| characters as well as substrings.
 
 <<cstring.h>>=
-#define primPeekCString(str)		from_string(0, str)
-#define primPeekCStringLen(str, len)	from_string_len(0, str, len)
+#define primPeekCString(str)	     from_string(0, (char *)(str)->p.ptr)
+#define primPeekCStringLen(str, len) from_string_len(0, (char *)(str)->p.ptr, \
+						     long_val(len))
 
 @ 
 <<cstring.c>>=
@@ -123,11 +124,11 @@ buffer terminated with a final [['\0']] character. The buffer must be
 large enough to hold the string including the terminator character.
 Finally, the function [[to_string]] uses [[malloc]] to allocate a
 suitable buffer and copies the Curry string argument into this buffer.
-The macro [[primNewCString]] makes this function available to the
+The function [[primNewCString]] makes this function available to the
 foreign function interface.
 
 <<cstring.h>>=
-#define primNewCString(str)	to_string(str)
+extern Node *primNewCString(Node *);
 
 @ 
 <<cstring.c>>=
@@ -192,6 +193,23 @@ to_string(Node *list)
     if ( cp == NULL )
 	sys_error("to_string");
     return copy_string(list, cp);
+}
+
+Node *
+primNewCString(Node *str)
+{
+    char *cp;
+    Node *p;
+
+    cp = to_string(str);
+
+    CHECK_HEAP(0, ptr_node_size);
+    p	     = (Node *)regs.hp;
+    p->info  = &ptr_info;
+    p->p.ptr = cp;
+    regs.hp += ptr_node_size;
+
+    return p;
 }
 
 @ 

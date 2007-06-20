@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: eval.nw 2301 2007-06-20 07:14:29Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Evaluation}\label{sec:eval}
@@ -464,7 +464,7 @@ DECLARE_LABEL(extern, __failed);
 FUNCTION(__failed)
 {
  ENTRY_LABEL(extern, __failed)
-    FAIL();
+    FAIL("failed");
 }
 
 @ 

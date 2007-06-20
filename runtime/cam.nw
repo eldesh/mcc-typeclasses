@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cam.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: cam.nw 2301 2007-06-20 07:14:29Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Abstract Machine Code Macros}
@@ -87,9 +87,9 @@ procedures.
 @ 
 The macros [[CALL]]$n(f,k,\emph{arg}_1,\dots,\emph{arg}_n)$ implement
 recursive calls. Similar to the [[EXEC]]$n$ macros, they assign the
-expressions $\emph{arg}_1$ to $\emph{arg}_n$ to the argument
-registers \texttt{regs.r[0]} to \texttt{regs.r[$n-1$]} and jump to the
-entry point of function $f$. In addition, these macros also assign the
+expressions $\emph{arg}_1$ to $\emph{arg}_n$ to the argument registers
+\texttt{regs.r[0]} to \texttt{regs.r[$n-1$]} and jump to the entry
+point of function $f$. In addition, these macros also assign the
 return address $k$ to the return address register [[regs.ret]].
 
 <<cam.h>>=
@@ -107,8 +107,8 @@ return address $k$ to the return address register [[regs.ret]].
 
 @ 
 An important special case of [[CALL1]] is implemented by the macro
-[[CALL_ENT(x,k)]], which calls the evaluation method of [[x]] such that
-execution continues at address [[k]] after the node has been
+[[CALL_ENT(x,k)]], which calls the evaluation method of [[x]] such
+that execution continues at address [[k]] after the node has been
 evaluated.
 
 <<cam.h>>=
@@ -205,7 +205,10 @@ functions with two or more arguments that must be evaluated.
 The [[FAIL]] macro invokes the current failure handler.
 
 <<cam.h>>=
-#define FAIL() GOTO(regs.handlers->fail)
+#define FAIL(msg) do {		   \
+	regs.r[0] = (Node *)msg;   \
+	GOTO(regs.handlers->fail); \
+    } while ( 0 )
 
 @
 The following macros implement (kind) matching of the node in argument

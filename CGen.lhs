@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2290 2007-06-19 21:48:25Z wlux $
+% $Id: CGen.lhs 2301 2007-06-20 07:14:29Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -512,18 +512,19 @@ beginning of the function.
 \begin{verbatim}
 
 > funCode :: Bool -> CPSFunction -> [CStmt]
-> funCode ent (CPSFunction _ _ vs ws st) =
+> funCode ent (CPSFunction f _ vs ws st) =
 >   elimUnused (stackCheck us st ++ heapCheck us (allocSize consts ds tys) ++
->               loadVars us ++ constDefs consts ds ++ cCode consts us st [])
+>               loadVars us ++ constDefs consts ds ++ cCode f consts us st [])
 >   where us = (ent,vs,ws)
 >         ds = concat dss
 >         (tys,dss) = allocs st
 >         consts = constants dss
 
-> caseCode :: (Bool,[Name],[Name]) -> Name -> CPSTag -> CPSStmt -> [CStmt]
-> caseCode vs v t st =
+> caseCode :: Name -> (Bool,[Name],[Name]) -> Name -> CPSTag -> CPSStmt
+>          -> [CStmt]
+> caseCode f vs v t st =
 >   [CBlock (stackCheck vs st ++ heapCheck' vs (allocSize consts ds tys) ++
->            fetchArgs v t ++ constDefs consts ds ++ cCode consts vs st [])]
+>            fetchArgs v t ++ constDefs consts ds ++ cCode f consts vs st [])]
 >   where ds = concat dss
 >         (tys,dss) = allocs st
 >         consts = constants dss
@@ -888,31 +889,31 @@ Every abstract machine code statement is translated by its own
 translation function.
 \begin{verbatim}
 
-> cCode :: FM Name CExpr -> (Bool,[Name],[Name]) -> CPSStmt -> [CPSCont]
+> cCode :: Name -> FM Name CExpr -> (Bool,[Name],[Name]) -> CPSStmt -> [CPSCont]
 >       -> [CStmt]
-> cCode _ vs0 (CPSJump k) ks = jump vs0 k ks
-> cCode consts vs0 (CPSReturn e) ks =
+> cCode _ _ vs0 (CPSJump k) ks = jump vs0 k ks
+> cCode _ consts vs0 (CPSReturn e) ks =
 >   case e of
 >     Var v -> ret vs0 v ks
 >     _ -> freshNode consts resName e ++ ret vs0 resName ks
-> cCode _ vs0 (CPSEnter v) ks = enter vs0 v ks
-> cCode _ vs0 (CPSExec f vs) ks = exec vs0 f vs ks
-> cCode _ vs0 (CPSCCall ty cc) ks = cCall ty resName cc ++ ret vs0 resName ks
-> cCode _ vs0 (CPSApply v vs) ks = apply vs0 v vs ks
-> cCode consts vs0 (CPSUnify v e) ks =
+> cCode _ _ vs0 (CPSEnter v) ks = enter vs0 v ks
+> cCode _ _ vs0 (CPSExec f vs) ks = exec vs0 f vs ks
+> cCode _ _ vs0 (CPSCCall ty cc) ks = cCall ty resName cc ++ ret vs0 resName ks
+> cCode _ _ vs0 (CPSApply v vs) ks = apply vs0 v vs ks
+> cCode _ consts vs0 (CPSUnify v e) ks =
 >   case e of
 >     Var v' -> unifyVar vs0 v v' ks
 >     _ -> freshNode consts resName e ++ unifyVar vs0 v resName ks
-> cCode _ vs0 (CPSDelay v) ks = delay vs0 v ks
-> cCode consts vs0 (CPSDelayNonLocal v st) ks =
->   delayNonLocal vs0 v ks ++ cCode consts vs0 st ks
-> cCode consts vs0 (CPSSeq st1 st2) ks =
->   cCode0 consts st1 ++ cCode consts vs0 st2 ks
-> cCode consts vs0 (CPSWithCont k st) ks = cCode consts vs0 st (k:ks)
-> cCode _ vs0 (CPSSwitch unboxed v cases) [] =
->   switchOnTerm unboxed vs0 v
->                [(t,caseCode vs0 v t st) | CaseBlock t st <- cases]
-> cCode _ vs0 (CPSChoices v ks) ks' = choices vs0 v ks ks'
+> cCode _ _ vs0 (CPSDelay v) ks = delay vs0 v ks
+> cCode f consts vs0 (CPSDelayNonLocal v st) ks =
+>   delayNonLocal vs0 v ks ++ cCode f consts vs0 st ks
+> cCode f consts vs0 (CPSSeq st1 st2) ks =
+>   cCode0 consts st1 ++ cCode f consts vs0 st2 ks
+> cCode f consts vs0 (CPSWithCont k st) ks = cCode f consts vs0 st (k:ks)
+> cCode f _ vs0 (CPSSwitch unboxed v cases) [] =
+>   switchOnTerm f unboxed vs0 v
+>                [(t,caseCode f vs0 v t st) | CaseBlock t st <- cases]
+> cCode _ _ vs0 (CPSChoices v ks) ks' = choices vs0 v ks ks'
 
 > cCode0 :: FM Name CExpr -> Stmt0 -> [CStmt]
 > cCode0 _ (Lock v) = lock v
@@ -1030,8 +1031,10 @@ translation function.
 >           [setRet (CExpr "regs.handlers->choices"),
 >            goto "yield_thread"]
 
-> failAndBacktrack :: [CStmt]
-> failAndBacktrack = [goto "regs.handlers->fail"]
+> failAndBacktrack :: Name -> [CStmt]
+> failAndBacktrack f =
+>   [setReg 0 (asNode (CString (demangle f ++ ": no match"))),
+>    goto "regs.handlers->fail"]
 
 \end{verbatim}
 Code generation for \texttt{CPSSwitch} statements is a little bit more
@@ -1044,11 +1047,11 @@ value and the setting of the preprocessor constant
 integer numbers when set to a non-zero value.
 \begin{verbatim}
 
-> switchOnTerm :: Bool -> (Bool,[Name],[Name]) -> Name -> [(CPSTag,[CStmt])]
->              -> [CStmt]
-> switchOnTerm maybeUnboxed vs0 v cases =
+> switchOnTerm :: Name -> Bool -> (Bool,[Name],[Name]) -> Name
+>              -> [(CPSTag,[CStmt])] -> [CStmt]
+> switchOnTerm f maybeUnboxed vs0 v cases =
 >   kindSwitch v [updVar vs0 v] unboxedCase otherCases :
->   head (dflts ++ [failAndBacktrack])
+>   head (dflts ++ [failAndBacktrack f])
 >   where (lits,constrs,vars,dflts) = foldr partition ([],[],[],[]) cases
 >         (chars,ints,floats) = foldr litPartition ([],[],[]) lits
 >         unboxedCase

@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: disequal.nw 2301 2007-06-20 07:14:29Z wlux $
 %
-% Copyright (c) 2002-2006, Wolfgang Lux
+% Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Disequality Constraints}
@@ -59,6 +59,8 @@ DECLARE_LABEL(static, check_diseq);
 NodeInfo diseq_constraint_info = {
     CAPP_KIND, 0, diseq_constraint_size, 0, 0, check_diseq, 0, 0, 0
 };
+
+#define NO_SOLUTION "(=/=): no solution"
 
 FUNCTION(___61__47__61_)
 {
@@ -135,7 +137,7 @@ FUNCTION(___61__47__61__2)
 	}
     }
 
-    FAIL();
+    FAIL(NO_SOLUTION);
 }
 
 @
@@ -296,7 +298,7 @@ FUNCTION(diseq_papp_args)
 
     arglist = regs.sp[0];
     if ( arglist == nil )
-	FAIL();
+	FAIL(NO_SOLUTION);
     regs.sp[0] = arglist->c.args[2];
     CALL2(___61__61_, diseq_papp_args, arglist->c.args[0], arglist->c.args[1]);
 }

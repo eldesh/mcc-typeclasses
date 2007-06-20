@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: unify.nw 2301 2007-06-20 07:14:29Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Unification}\label{sec:unification}
@@ -59,6 +59,8 @@ DECLARE_LABEL(static, unify_args_1);
 DECLARE_LABEL(static, unify_args_2);
 DECLARE_LABEL(static, unify_papp_args);
 
+#define NO_SOLUTION "(=:=): no solution"
+
 FUNCTION(___61__58__61_)
 {
  ENTRY_LABEL(extern, ___61__58__61_)
@@ -106,7 +108,7 @@ FUNCTION(___61__58__61__2)
 	unsigned int n = 0;
 
 	if ( !eq_root(arg1, arg2, &n) )
-	    FAIL();
+	    FAIL(NO_SOLUTION);
 	else if ( n > 0 )
 	{
 	    boolean exist_type;
@@ -118,7 +120,7 @@ FUNCTION(___61__58__61__2)
 		|| (is_capp_node(arg1) && node_tag(arg1) < 0);
 	    arglist = nil;
 	    if ( !eq_args(0, arg1, arg2, n, &arglist) )
-		FAIL();
+		FAIL(NO_SOLUTION);
 
 	    if ( arglist != nil )
 	    {
@@ -529,7 +531,7 @@ FUNCTION(unify_papp_args)
     Node *arglist;
  ENTRY_LABEL(static, unify_papp_args)
     if ( regs.r[0] != CONST(__Prelude__True) )
-	FAIL();
+	FAIL(NO_SOLUTION);
 
     arglist = regs.sp[0];
     if ( arglist == nil )
@@ -623,7 +625,7 @@ FUNCTION(unify_var)
     var = regs.r[0];
     arg = regs.sp[0];
     if ( occurs(var, arg, &nf) )
-	FAIL();
+	FAIL(NO_SOLUTION);
 
     arglist = nil;
     if ( !nf )

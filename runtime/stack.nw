@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: stack.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: stack.nw 2301 2007-06-20 07:14:29Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{The Stack}
@@ -136,8 +136,12 @@ is saved in the [[handlers]] register. When the abstract machine
 enters or leaves an encapsulated search, this register is updated
 appropriately.
 
-The [[choices]] handlers expect a pointer to a null-terminated array
-containing all continuation addresses on the top of the stack.
+The [[choices]] handler expects a pointer to a null-terminated array
+containing all continuation addresses on the top of the stack. The
+[[fail]] handler expects an error message string in the first argument
+register. \textbf{This must be a C string, not a Curry string.} At
+present, the error message is ignored in non-deterministic search and
+printed only when the failure handler is executed in an I/O context.
 
 <<stack.h>>=
 struct nondet_handlers {

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: stack.nw 2301 2007-06-20 07:14:29Z wlux $
+% $Id: stack.nw 2302 2007-06-20 07:17:11Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -139,9 +139,10 @@ appropriately.
 The [[choices]] handler expects a pointer to a null-terminated array
 containing all continuation addresses on the top of the stack. The
 [[fail]] handler expects an error message string in the first argument
-register. \textbf{This must be a C string, not a Curry string.} At
-present, the error message is ignored in non-deterministic search and
-printed only when the failure handler is executed in an I/O context.
+register. \textbf{This must be a C string, not a Curry string.} This
+error message is printed when the failure handler is executed in an
+I/O context and also during non-deterministic search when the global
+flag [[print_fail]] is set.
 
 <<stack.h>>=
 struct nondet_handlers {

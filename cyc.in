@@ -3,9 +3,9 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 2288 2007-06-19 15:53:44Z wlux $
+# $Id: cyc.in 2302 2007-06-20 07:17:11Z wlux $
 #
-# Copyright (c) 2002-2006, Wolfgang Lux
+# Copyright (c) 2002-2007, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -43,6 +43,7 @@ ldopts=
 hsize=
 ssize=
 tsize=
+pfail=
 stats=
 trace=
 saveTemps=
@@ -169,6 +170,7 @@ while test $# -gt 0; do
 
     # Default values for the executable
     -d ) incr trace 1;;
+    -f ) incr pfail 1;;
     -p ) incr stats 1;;
     -h ) hsize=$2; shift; check_size -h hsize;;
     -h* ) hsize=`expr "$1" : '-h\(.*\)'`; check_size -h hsize;;
@@ -333,6 +335,7 @@ if test -z "$toC$toS$toO"; then
   test -n "$hsize" && ldopts="$ldopts -DDEFAULT_HEAPSIZE=$hsize"
   test -n "$ssize" && ldopts="$ldopts -DDEFAULT_STACKSIZE=$ssize"
   test -n "$tsize" && ldopts="$ldopts -DDEFAULT_TRAILSIZE=$tsize"
+  test -n "$pfail" && ldopts="$ldopts -DDEFAULT_PRINT_FAIL=$pfail"
   test -n "$stats" && ldopts="$ldopts -DDEFAULT_SHOW_STATS=$stats"
   test -n "$trace" && ldopts="$ldopts -DDEFAULT_DO_TRACE=$trace"
   test -n "$ofile" && ldopts="$ldopts -o $ofile"

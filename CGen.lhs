@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2301 2007-06-20 07:14:29Z wlux $
+% $Id: CGen.lhs 2302 2007-06-20 07:17:11Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -44,6 +44,7 @@ defines the array holding the names of the goal's free variables.
 >             (ulongType, "heapsize"),
 >             (uintType,  "stacksize"),
 >             (uintType,  "trailsize"),
+>             (intType,   "print_fail"),
 >             (intType,   "do_trace"),
 >             (intType,   "show_stats")
 >           ]
@@ -1033,7 +1034,7 @@ translation function.
 
 > failAndBacktrack :: Name -> [CStmt]
 > failAndBacktrack f =
->   [setReg 0 (asNode (CString (demangle f ++ ": no match"))),
+>   [setReg 0 (asNode (CString (undecorate (demangle f) ++ ": no match"))),
 >    goto "regs.handlers->fail"]
 
 \end{verbatim}

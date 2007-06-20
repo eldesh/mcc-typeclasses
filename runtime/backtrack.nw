@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 2301 2007-06-20 07:14:29Z wlux $
+% $Id: backtrack.nw 2302 2007-06-20 07:17:11Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -113,6 +113,8 @@ FUNCTION(fail)
     const Label	 *choice_conts;
  ENTRY_LABEL(static, fail)
     TRACE(("%I fail (%s)\n", (const char *)regs.r[0]));
+    if ( print_fail )
+	fprintf(stderr, "Failure: %s\n", (const char *)regs.r[0]);
 
     /* if no alternatives are available terminate the program */
     if ( regs.bp == 0 )

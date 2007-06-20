@@ -4,9 +4,9 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cyc.1.in 2233 2007-06-08 09:57:47Z wlux $
+.\" $Id: cyc.1.in 2302 2007-06-20 07:17:11Z wlux $
 .\"
-.\" Copyright (c) 2004-2006, Wolfgang Lux
+.\" Copyright (c) 2004-2007, Wolfgang Lux
 .\" See LICENSE for the full license.
 .\"
 .Dd 17.11.05               \" DATE 
@@ -338,6 +338,9 @@ and
 .Ar size Ns Li M
 can be used for specifying the size in kBytes and MBytes,
 respectively. The default is to use a 512 kByte trail stack.
+.It Fl f
+Print all failures during execution of a non-deterministic goal. If
+given multiple times, print also failures inside encapsulated search.
 .It Fl p
 Print cumulated execution times and memory usage statistics at the end
 of the run. If specified more than once, also print memory statistics
@@ -514,6 +517,9 @@ and
 .Ar n Ns Li M
 can be used for specifying the size in kBytes and MBytes,
 respectively.
+.It Fl f
+Print all failures during execution of a non-deterministic goal. If
+given multiple times, print also failures inside encapsulated search.
 .It Fl p
 Print cumulated execution times and memory usage statistics at the end
 of the run. If specified more than once, also print memory statistics

@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: search.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: search.nw 2302 2007-06-20 07:17:11Z wlux $
 %
-% Copyright (c) 2002-2006, Wolfgang Lux
+% Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Encapsulated Search}
@@ -561,6 +561,8 @@ FUNCTION(fail_search)
 {
  ENTRY_LABEL(static, fail_search)
     assert(is_search_context(regs.bp));
+    if ( print_fail > 1 )
+	fprintf(stderr, "Failure: %s\n", (const char *)regs.r[0]);
 
     /* discard the current search space and context */
     discard_search_space();

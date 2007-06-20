@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 2305 2007-06-20 11:32:33Z wlux $
+% $Id: ILCompile.lhs 2314 2007-06-20 12:11:35Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -70,19 +70,13 @@ does not return a result, the constant \texttt{()} is returned from
 the compiled function. Arguments and results of the basic data types
 \texttt{Bool}, \texttt{Char}, \texttt{Int}, \texttt{Float},
 \texttt{Ptr}, \texttt{FunPtr}, and \texttt{StablePtr} are marshaled to
-and from their corresponding C types. Marshaling for arguments and
-results of other types must be implemented completely by the foreign
-function. The generated code simply passes a pointer to the node
-representing the argument to the C function and expects a pointer to a
-node being returned from the foreign function in this case. Obviously,
-the called function must be very careful with those pointers and make
-sure that they are not invalidated by a garbage collection. Therefore,
-and because there are absolutely no assurances about type correctness,
-such arguments are allowed only in unsafe calls. The non-standard
+and from their corresponding C types. The non-standard
 \texttt{rawcall} calling convention is similar to the \texttt{ccall}
-calling convention except that no marshaling takes place at all, i.e.,
-the compiler passes and expects node pointers even for arguments and
-results of the basic data types.
+calling convention except that no marshaling takes place, i.e., the
+compiler simply passes node pointers to the foreign function and
+expects a node pointer as result. The foreign function must be careful
+to ensure that those pointers are not invalidated by a garbage
+collection while it is still using them.
 
 For functions with result type \texttt{IO}~$t$, the compiler generates
 two functions. The first of these returns an I/O action and the other
@@ -160,13 +154,14 @@ reader monad for the type \texttt{IO}.
 >         callStmt h = Cam.CCall h (cRetType cc ty)
 
 > cArgType :: CallConv -> Type -> Cam.CArgType
-> cArgType CCall ty = fromMaybe Cam.TypeNodePtr (cRetType CCall ty)
+> cArgType CCall ty =
+>   fromMaybe (internalError ("ccall: invalid argument type " ++ show ty))
+>             (cRetType CCall ty)
 > cArgType RawCall _ = Cam.TypeNodePtr
 
 > cRetType :: CallConv -> Type -> Cam.CRetType
-> cRetType _ (TypeConstructor tc [])
->   | tc == qUnitId = Nothing
 > cRetType CCall (TypeConstructor tc [])
+>   | tc == qUnitId = Nothing
 >   | tc == qBoolId = Just Cam.TypeBool
 >   | tc == qCharId = Just Cam.TypeChar
 >   | tc == qIntId = Just Cam.TypeInt
@@ -175,7 +170,10 @@ reader monad for the type \texttt{IO}.
 >   | tc == qPtrId = Just Cam.TypePtr
 >   | tc == qFunPtrId = Just Cam.TypeFunPtr
 >   | tc == qStablePtrId = Just Cam.TypeStablePtr
-> cRetType _ ty = Just Cam.TypeNodePtr
+> cRetType CCall ty = internalError ("ccall: invalid result type " ++ show ty)
+> cRetType RawCall (TypeConstructor tc [])
+>   | tc == qUnitId = Nothing
+> cRetType RawCall _ = Just Cam.TypeNodePtr
 
 \end{verbatim}
 The selector functions, which are introduced by the compiler in order

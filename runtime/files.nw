@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2304 2007-06-20 07:33:57Z wlux $
+% $Id: files.nw 2313 2007-06-20 12:04:50Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -148,7 +148,21 @@ Two file \verb|Handle|s are considered equal, if they are physically
 the same.
 
 <<files.h>>=
-#define primEqHandle(x,y) ((x) == (y))
+extern Node *primEqHandle(Node *, Node *);
+
+@ 
+<<files.c>>=
+DECLARE_CONST(__Prelude__False);
+DECLARE_CONST(__Prelude__True);
+
+#define Prelude_False CONST(__Prelude__False)
+#define Prelude_True  CONST(__Prelude__True)
+
+Node *
+primEqHandle(Node *x, Node *y)
+{
+    return x == y ? Prelude_True : Prelude_False;
+}
 
 @ 
 The functions [[primStdin]], [[primStdout]], and [[primStderr]] return
@@ -289,12 +303,12 @@ The function [[primOpenFd]] is a variant of [[primOpenFile]] that
 creates a new file node for a file descriptor.
 
 <<files.h>>=
-extern Node *primOpenFd(long, Node *);
+extern Node *primOpenFd(Node *, Node *);
 
 @ 
 <<files.c>>=
 Node *
-primOpenFd(long fd, Node *ioMode)
+primOpenFd(Node *fd, Node *ioMode)
 {
     const char *mode;
     short      flags;
@@ -303,7 +317,7 @@ primOpenFd(long fd, Node *ioMode)
 
     /* open the file */
     mode = decodeIOMode(ioMode, &flags);
-    fp	 = fdopen(fd, mode);
+    fp	 = fdopen(long_val(fd), mode);
     if ( fp == NULL )
 	ioError_withErrno("openFd");
 
@@ -341,57 +355,56 @@ primHClose(Node *hdl)
 @
 The predicates [[primHIsOpen]] and [[primHIsClosed]] test whether a
 file handle is open and closed, respectively. Note that for a
-semi-closed handle neither of these predicates returns [[true]]. The
+semi-closed handle neither of these predicates returns [[True]]. The
 predicates [[primHIsReadable]], [[primHIsWritable]], and
 [[primHIsSeekable]] test whether the handle is readable, writable, and
 seekable, respectively.
 
 <<files.h>>=
-extern int primHIsOpen(Node *);
-extern int primHIsClosed(Node *);
-extern int primHIsReadable(Node *);
-extern int primHIsWritable(Node *);
-extern int primHIsSeekable(Node *);
+extern Node *primHIsOpen(Node *);
+extern Node *primHIsClosed(Node *);
+extern Node *primHIsReadable(Node *);
+extern Node *primHIsWritable(Node *);
+extern Node *primHIsSeekable(Node *);
 
 @ 
 <<files.c>>=
-int
+Node *
 primHIsOpen(Node *hdl)
 {
-    return is_open((Handle *)hdl);
+    return is_open((Handle *)hdl) ? Prelude_True : Prelude_False;
 }
 
-int
+Node *
 primHIsClosed(Node *hdl)
 {
-    return ((Handle *)hdl)->fp == NULL;
+    return ((Handle *)hdl)->fp == NULL ? Prelude_True : Prelude_False;
 }
 
-int
+Node *
 primHIsReadable(Node *hdl)
 {
-    return is_readable((Handle *)hdl);
+    return is_readable((Handle *)hdl) ? Prelude_True : Prelude_False;
 }
 
-int
+Node *
 primHIsWritable(Node *hdl)
 {
-    return is_writable((Handle *)hdl);
+    return is_writable((Handle *)hdl) ? Prelude_True : Prelude_False;
 }
 
-int
+Node *
 primHIsSeekable(Node *hdl)
 {
     Handle *file = (Handle *)hdl;
 
     if ( is_open(file) )
     {
-	if ( ftell(file->fp) == - 1 )
-	    clearerr(file->fp);
-	else
-	    return true;
+	if ( ftell(file->fp) != - 1 )
+	    return Prelude_True;
+	clearerr(file->fp);
     }
-    return false;
+    return Prelude_False;
 }
 
 @
@@ -400,7 +413,7 @@ has been read, i.e., whether the next call to [[primHGetChar]] for the
 handle will raise an end-of-file exception.
 
 Note that the semantics of [[primHIsEOF]] is different from the C
-semantics. Whereas [[primHIsEOF]] returns [[true]] after the last
+semantics. Whereas [[primHIsEOF]] returns [[True]] after the last
 character of the file has been read, the C library sets the
 end-of-file condition only after reading the end-of-file character.
 Therefore, our implementation reads the next character from the file
@@ -408,11 +421,11 @@ and puts it back with [[ungetc]]. Unfortunately, this may block the
 program until the next character is available.
 
 <<files.h>>=
-extern int primHIsEOF(Node *);
+extern Node *primHIsEOF(Node *);
 
 @ 
 <<files.c>>=
-int
+Node *
 primHIsEOF(Node *hdl)
 {
     int	   c;
@@ -427,7 +440,7 @@ primHIsEOF(Node *hdl)
 	ioError_withErrno("hIsEOF");
     ungetc(c, file->fp);
 
-    return c == EOF;
+    return c == EOF ? Prelude_True : Prelude_False;
 }
 
 @ 
@@ -439,11 +452,11 @@ that this also happens when the handle is in a semi-closed state after
 [[primHGetContents]] has been applied to it.
 
 <<files.h>>=
-extern int primHGetChar(Node *);
+extern Node *primHGetChar(Node *);
 
 @ 
 <<files.c>>=
-int
+Node *
 primHGetChar(Node *hdl)
 {
     int	   c;
@@ -462,7 +475,11 @@ primHGetChar(Node *hdl)
 	    ioError_withErrno("hGetChar");
     }
 
-    return c;
+#if NO_POINTER_TAGS
+    return (Node *)(char_table + (c & 0xff));
+#else
+    return tag_char(c & 0xff);
+#endif
 }
 
 @
@@ -470,11 +487,11 @@ The function [[primHLookAhead]] returns the next character from the
 input file without removing it from the input stream.
 
 <<files.h>>=
-extern int primHLookAhead(Node *);
+extern Node *primHLookAhead(Node *);
 
 @ 
 <<files.c>>=
-int
+Node *
 primHLookAhead(Node *hdl)
 {
     int	   c;
@@ -494,7 +511,11 @@ primHLookAhead(Node *hdl)
     }
     ungetc(c, file->fp);
 
-    return c;
+#if NO_POINTER_TAGS
+    return (Node *)(char_table + (c & 0xff));
+#else
+    return tag_char(c & 0xff);
+#endif
 }
 
 @
@@ -733,12 +754,12 @@ The function [[primHPutChar]] writes a single character to the
 specified handle.
 
 <<files.h>>=
-extern void primHPutChar(Node *, int);
+extern void primHPutChar(Node *, Node *);
 
 @ 
 <<files.c>>=
 void
-primHPutChar(Node *hdl, int c)
+primHPutChar(Node *hdl, Node *chr)
 {
     Handle *file = (Handle *)hdl;
 
@@ -746,7 +767,7 @@ primHPutChar(Node *hdl, int c)
 	ioError("hPutChar", "Handle not writable");
 
     assert(file->fp != NULL);
-    if ( putc(c, file->fp) == EOF )
+    if ( putc(char_val(chr), file->fp) == EOF )
 	ioError_withErrno("hPutChar");
 }
 
@@ -755,14 +776,15 @@ The function [[primHFileSize]] returns the size of a file in bytes,
 provided that the file is seekable.
 
 <<files.h>>=
-extern long primHFileSize(Node *);
+extern Node *primHFileSize(Node *);
 
 @ 
 <<files.c>>=
-long
+Node *
 primHFileSize(Node *hdl)
 {
     long   curpos, endpos;
+    Node   *r;
     Handle *file = (Handle *)hdl;
 
     if ( !is_open(file) )
@@ -777,20 +799,33 @@ primHFileSize(Node *hdl)
     if ( endpos == -1 || fseek(file->fp, curpos, SEEK_SET) == -1 )
 	ioError_withErrno("hFileSize");
 
-    return endpos;
+#if !NO_POINTER_TAGS
+    if ( !is_large_int(endpos) )
+	r = tag_int(endpos);
+    else
+#endif
+    {
+	CHECK_HEAP(0, int_node_size);
+	r	 = (Node *)regs.hp;
+	r->info	 = &int_info;
+	r->i.i	 = endpos;
+	regs.hp	+= int_node_size;
+    }
+
+    return r;
 }
 
 @
-The function [[primHIsTerminalDevice]] returns [[true]] if the
-specified handle is connected to a terminal and [[false]] otherwise.
+The function [[primHIsTerminalDevice]] returns [[True]] if the
+specified handle is connected to a terminal and [[False]] otherwise.
 We use the [[isatty]] function for testing this property.
 
 <<files.h>>=
-extern int primHIsTerminalDevice(Node *);
+extern Node *primHIsTerminalDevice(Node *);
 
 @ 
 <<files.c>>=
-int
+Node *
 primHIsTerminalDevice(Node *hdl)
 {
     Handle *file = (Handle *)hdl;
@@ -799,7 +834,7 @@ primHIsTerminalDevice(Node *hdl)
 	ioError("hIsTerminalDevice", "Handle not open");
 
     assert(file->fp != NULL);
-    return isatty(fileno(file->fp));
+    return isatty(fileno(file->fp)) ? Prelude_True : Prelude_False;
 }
 
 @
@@ -995,14 +1030,15 @@ The function [[primHTell]] returns the current I/O position of the
 file associated with the specified handle.
 
 <<files.h>>=
-extern long primHTell(Node *);
+extern Node *primHTell(Node *);
 
 @ 
 <<files.c>>=
-long
+Node *
 primHTell(Node *hdl)
 {
     long   curpos;
+    Node   *r;
     Handle *file = (Handle *)hdl;
 
     if ( !is_open(file) )
@@ -1012,7 +1048,20 @@ primHTell(Node *hdl)
     if ( curpos == -1 )
 	ioError_withErrno("hTell");
 
-    return curpos;
+#if !NO_POINTER_TAGS
+    if ( !is_large_int(curpos) )
+	r = tag_int(curpos);
+    else
+#endif
+    {
+	CHECK_HEAP(0, int_node_size);
+	r	 = (Node *)regs.hp;
+	r->info	 = &int_info;
+	r->i.i	 = curpos;
+	regs.hp += int_node_size;
+    }
+
+    return r;
 }
 
 @
@@ -1026,14 +1075,14 @@ follows.
 \end{verbatim}
 
 <<files.h>>=
-extern void primHSeek(Node *, Node *, long);
+extern void primHSeek(Node *, Node *, Node *);
 
 @ 
 <<files.c>>=
 enum { AbsoluteSeek_tag, RelativeSeek_tag, SeekFromEnd_tag };
 
 void
-primHSeek(Node *hdl, Node *seekMode, long offset)
+primHSeek(Node *hdl, Node *seekMode, Node *offset)
 {
     int	   smode;
     Handle *file = (Handle *)hdl;
@@ -1057,7 +1106,7 @@ primHSeek(Node *hdl, Node *seekMode, long offset)
     }
 
     assert(file->fp != NULL);
-    if ( fseek(file->fp, offset, smode) == -1 )
+    if ( fseek(file->fp, long_val(offset), smode) == -1 )
 	ioError_withErrno("hSeek");
 }
 
@@ -1177,14 +1226,15 @@ it is safe to call [[primPClose]] more than once for a handle that was
 created by [[primOpenProcess]].
 
 <<files.h>>=
-extern long primPClose(Node *);
+extern Node *primPClose(Node *);
 
 @ 
 <<files.c>>=
-long
+Node *
 primPClose(Node *hdl)
 {
     int		  res;
+    Node	  *r;
     ProcessHandle *proc = (ProcessHandle *)hdl;
 
     if ( proc->info != &process_info )
@@ -1214,7 +1264,20 @@ primPClose(Node *hdl)
 	res = WEXITSTATUS(proc->status);
     }
 
-    return res;
+#if !NO_POINTER_TAGS
+    if ( !is_large_int(res) )
+	r = tag_int((long)res);
+    else
+#endif
+    {
+	CHECK_HEAP(0, int_node_size);
+	r	 = (Node *)regs.hp;
+	r->info	 = &int_info;
+	r->i.i	 = res;
+	regs.hp += int_node_size;
+    }
+
+    return r;
 }
 
 @ 
@@ -1222,12 +1285,12 @@ The function [[primConnectTcpSocket]] creates a socket that is
 connected to a specified port at a given host.
 
 <<files.h>>=
-extern Node *primConnectTcpSocket(Node *, long, Node *);
+extern Node *primConnectTcpSocket(Node *, Node *, Node *);
 
 @ 
 <<files.c>>=
 Node *
-primConnectTcpSocket(Node *hostString, long port, Node *ioMode)
+primConnectTcpSocket(Node *hostString, Node *port, Node *ioMode)
 {
     int		       fd;
     short	       flags;
@@ -1244,7 +1307,7 @@ primConnectTcpSocket(Node *hostString, long port, Node *ioMode)
     host	    = to_string(hostString);
     hostent	    = gethostbyname(host);
     addr.sin_family = AF_INET;
-    addr.sin_port   = htons(port);
+    addr.sin_port   = htons(long_val(port));
     if ( hostent )
 	addr.sin_addr.s_addr = *(unsigned long *)hostent->h_addr_list[0];
     else if ( (addr.sin_addr.s_addr = inet_addr(host)) == (in_addr_t)~0 )

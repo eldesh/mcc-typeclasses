@@ -1,4 +1,4 @@
--- $Id: IOExts.curry 2308 2007-06-20 11:50:25Z wlux $
+-- $Id: IOExts.curry 2313 2007-06-20 12:04:50Z wlux $
 --
 -- Copyright (c) 2004-2007, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -85,23 +85,22 @@ unsafeThawIOArray a =
     return (IOArray (bounds a) v)
 
 -- assorted IO functions
-foreign import ccall unsafe "files.h primHIsTerminalDevice"
+foreign import rawcall "files.h primHIsTerminalDevice"
 	       hIsTerminalDevice :: Handle -> IO Bool
 
-foreign import ccall unsafe "files.h primOpenFd"
+foreign import rawcall "files.h primOpenFd"
 	       openFd :: Int -> IOMode -> IO Handle
 
 openProcess :: String -> IOMode -> IO Handle
 openProcess cmd mode = (primOpenProcess $## cmd) mode
-  where foreign import ccall unsafe "files.h"
+  where foreign import rawcall "files.h"
   		       primOpenProcess :: String -> IOMode -> IO Handle
 
-foreign import ccall unsafe "files.h primPClose"
-	       pClose :: Handle -> IO Int
+foreign import rawcall "files.h primPClose" pClose :: Handle -> IO Int
 
 connectTcpSocket :: String -> Int -> IOMode -> IO Handle
 connectTcpSocket host port mode = (primConnectTcpSocket $## host) port mode
-  where foreign import ccall unsafe "files.h"
+  where foreign import rawcall "files.h"
   		       primConnectTcpSocket :: String -> Int -> IOMode -> IO Handle
 
 -- perform a garbage collection

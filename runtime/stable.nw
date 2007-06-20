@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: stable.nw 2300 2007-06-20 07:10:49Z wlux $
+% $Id: stable.nw 2306 2007-06-20 11:37:22Z wlux $
 %
 % Copyright (c) 2005-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -10,9 +10,20 @@ code. Stable pointers are implemented as [[malloc]]ed pointers to heap
 nodes. In order to prevent the referenced nodes from being garbage
 collected, stable pointers are automatically registered as global
 roots. Therefore, they must be released explicitly when they are no
-longer used. The header file [[stable.h]] provides three functions
-that create new stable pointers, dereference stable pointers, and
-release stable pointers, respectively.
+longer used. The runtime system provides three functions that create
+new stable pointers, dereference stable pointers, and release stable
+pointers, respectively.
+
+<<stable.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include "debug.h"
+#include "run.h"
+#include "regs.h"
+#include "heap.h"
+#include "io_monad.h"
+#include "stable.h"
 
 @ 
 The argument of [[primNewStablePtr]] is a data term of the form
@@ -26,15 +37,28 @@ evaluation of the expression by the foreign function interface code.
   itself.}
 
 <<stable.h>>=
-static inline Node **
+extern Node *primNewStablePtr(Node *);
+
+@ 
+<<stable.c>>=
+Node *
 primNewStablePtr(Node *wrappedPtr)
 {
-    Node **stabPtr = (Node **)malloc(sizeof(Node *));
+    Node *ptr, **stabPtr;
+
+    stabPtr = (Node **)malloc(sizeof(Node *));
     if ( stabPtr == NULL )
 	sys_error("newStablePtr");
     *stabPtr = wrappedPtr->c.args[0];
     add_global_root(stabPtr);
-    return stabPtr;
+
+    CHECK_HEAP(0, ptr_node_size);
+    ptr	       = (Node *)regs.hp;
+    ptr->info  = &stabptr_info;
+    ptr->p.ptr = stabPtr;
+    regs.hp   += ptr_node_size;
+
+    return ptr;
 }
 
 @ 
@@ -48,8 +72,10 @@ pointers.
 
 <<stable.h>>=
 static inline Node *
-primDeRefStablePtr(Node **stabPtr)
+primDeRefStablePtr(Node *ptr)
 {
+    Node **stabPtr = (Node **)ptr->p.ptr;
+
     if ( *stabPtr == 0 )
 	abort_with("deRefStablePtr: value released by failed computation");
     return *stabPtr;
@@ -61,8 +87,10 @@ and annuls its registration as a global root.
 
 <<stable.h>>=
 static inline void
-primFreeStablePtr(Node **stabPtr)
+primFreeStablePtr(Node *ptr)
 {
+    Node **stabPtr = (Node **)ptr->p.ptr;
+
     remove_global_root(stabPtr);
     free(stabPtr);
 }

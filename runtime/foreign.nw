@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: foreign.nw 2300 2007-06-20 07:10:49Z wlux $
+% $Id: foreign.nw 2307 2007-06-20 11:39:57Z wlux $
 %
 % Copyright (c) 2005-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -38,7 +38,7 @@ static NodeInfo foreign_ptr_info = {
 
 @ 
 Two kinds of finalization functions are supported. Functions with type
-\texttt{FinalizerPtr} have one argument, viz. the pointer to be
+\texttt{FinalizerPtr} have one argument, viz.\ the pointer to be
 finalized, and functions with type \texttt{FinalizerEnvPtr} have two
 arguments. The first is an environment pointer supplied when the
 function is associated with a foreign pointer, and the second is the
@@ -122,14 +122,17 @@ this function implements \texttt{newForeignPtr\_} from module
   first finalization function is added to the node?}
 
 <<foreign.h>>=
-extern Node *primNewForeignPtr(void *ptr);
+extern Node *primNewForeignPtr(Node *);
 
 @ 
 <<foreign.c>>=
 Node *
-primNewForeignPtr(void *ptr)
+primNewForeignPtr(Node *p)
 {
+    void *ptr;
     Node *fp;
+
+    ptr = p->p.ptr;
 
     CHECK_HEAP(0, foreign_ptr_node_size);
     fp		= (Node *)regs.hp;
@@ -153,25 +156,28 @@ with [[unsafePerformIO]], these functions must be executed in the same
 search space where the finalized foreign pointer node was created.
 
 <<foreign.h>>=
-extern void primAddForeignPtrFinalizer(void *, Node *);
-extern void primAddForeignPtrFinalizerEnv(void *, void *, Node *);
+extern void primAddForeignPtrFinalizer(Node *, Node *);
+extern void primAddForeignPtrFinalizerEnv(Node *, Node *, Node *);
 
 @ 
 <<foreign.c>>=
 void
-primAddForeignPtrFinalizer(void *finalize, Node *fp)
+primAddForeignPtrFinalizer(Node *finPtr, Node *fp)
 {
     union finalizer_list *fptr;
+    void (*finalize)(void *);
 
     if ( fp->fp.spc != regs.ss )
 	abort_with("addForeignPtrFinalizer: non-local pointer");
+
+    finalize = (void (*)(void *))finPtr->p.ptr;
 
     BEGIN_LOCAL_ROOTS1(fp)
     CHECK_HEAP(0, finalizer_node_size);
     fptr	     = (union finalizer_list *)regs.hp;
     fptr->info	     = &finalizer_info;
     fptr->f.next     = fp->fp.fptr;
-    fptr->f.finalize = (void (*)(void *))finalize;
+    fptr->f.finalize = finalize;
     regs.hp	    += finalizer_node_size;
 
     fp->fp.fptr = fptr;
@@ -179,19 +185,24 @@ primAddForeignPtrFinalizer(void *finalize, Node *fp)
 }
 
 void
-primAddForeignPtrFinalizerEnv(void *finalize, void *env, Node *fp)
+primAddForeignPtrFinalizerEnv(Node *finPtr, Node *envPtr, Node *fp)
 {
+    void		 *env;
     union finalizer_list *fptr;
+    void (*finalize)(void *, void *);
 
     if ( fp->fp.spc != regs.ss )
 	abort_with("addForeignPtrFinalizerEnv: non-local pointer");
+
+    finalize = (void (*)(void *, void *))finPtr->p.ptr;
+    env	     = envPtr->p.ptr;
 
     BEGIN_LOCAL_ROOTS1(fp)
     CHECK_HEAP(0, finalizer_env_node_size);
     fptr	      = (union finalizer_list *)regs.hp;
     fptr->info	      = &finalizer_env_info;
     fptr->fe.next     = fp->fp.fptr;
-    fptr->fe.finalize = (void (*)(void *, void *))finalize;
+    fptr->fe.finalize = finalize;
     fptr->fe.env      = env;
     regs.hp	     += finalizer_env_node_size;
 
@@ -200,13 +211,36 @@ primAddForeignPtrFinalizerEnv(void *finalize, void *env, Node *fp)
 }
 
 @ 
-The macro [[primUnsafeForeignPtrToPtr]] returns the pointer value of
-a foreign pointer node. It is unsafe because the pointer may be
+The function [[primUnsafeForeignPtrToPtr]] returns the pointer value
+of a foreign pointer node. It is unsafe because the pointer may be
 finalized and therefore become invalid when the program retains no
 reference to the foreign pointer node itself.
 
 <<foreign.h>>=
-#define primUnsafeForeignPtrToPtr(node)	((node)->fp.ptr)
+extern Node *primUnsafeForeignPtrToPtr(Node *);
+
+@ 
+<<foreign.c>>=
+Node *
+primUnsafeForeignPtrToPtr(Node *fp)
+{
+    void *ptr;
+    Node *p;
+
+    ptr = fp->fp.ptr;
+    if ( ptr )
+    {
+	CHECK_HEAP(0, ptr_node_size);
+	p	 = (Node *)regs.hp;
+	p->info	 = &ptr_info;
+	p->p.ptr = ptr;
+	regs.hp	+= ptr_node_size;
+    }
+    else
+	p = (Node *)&null_ptr;
+
+    return p;
+}
 
 @ 
 The only purpose of function [[primTouchForeignPtr]] is to retain a

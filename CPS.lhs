@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CPS.lhs 2303 2007-06-20 07:22:47Z wlux $
+% $Id: CPS.lhs 2304 2007-06-20 07:33:57Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -218,11 +218,12 @@ when transforming a CPS graph into a linear sequence of CPS functions.
 >   where freshVar v = Let [Bind v Free]
 
 > taggedSwitch :: [Tag] -> Bool
-> taggedSwitch [] = True
-> taggedSwitch (LitCase (Int _) : _) = True
-> taggedSwitch (LitCase _ : _) = False
-> taggedSwitch (ConstrCase _ _ : _) = False
-> taggedSwitch (DefaultCase : cases) = taggedSwitch cases
+> taggedSwitch = foldr tagged True
+>   where tagged (LitCase (Char _)) _ = True
+>         tagged (LitCase (Int _)) _ = True
+>         tagged (LitCase (Float _)) _ = False
+>         tagged (ConstrCase _ _) _ = False
+>         tagged DefaultCase t = t
 
 > contVars :: CPSCont -> [Name]
 > contVars (CPSCont k) = cpsEnv k

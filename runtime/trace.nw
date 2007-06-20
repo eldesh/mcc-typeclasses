@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: trace.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: trace.nw 2304 2007-06-20 07:33:57Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -143,6 +143,12 @@ trace_showaddr(Node *node)
 #if !NO_POINTER_TAGS
     else if ( is_tagged_int(node) )
 	fprintf(stderr, "-int %ld-", untag_int(node));
+    else if ( is_tagged_char(node) )
+    {
+	char buf[14];
+	fprintf(stderr, "-char '%s'-",
+		lit_char(buf, '\0', untag_char(node), '\''));
+    }
 #endif
     else if ( heap_base <= (word *)node && (word *)node <= heap_end )
 	fprintf(stderr, "-node%lu-", (long)(node - (Node *)heap_base));
@@ -161,6 +167,8 @@ trace_shownode(int depth, Node *node)
     if ( node == 0 )
 	fprintf(stderr, "-null-");
 #if !NO_POINTER_TAGS
+    else if ( is_tagged_char(node) )
+	fprintf(stderr, "'%s'", lit_char(buf, '\0', untag_char(node), '\''));
     else if ( is_tagged_int(node) )
 	fprintf(stderr, "%ld", untag_int(node));
 #endif
@@ -168,8 +176,12 @@ trace_shownode(int depth, Node *node)
 	switch ( node_kind(node) )
 	{
 	case CHAR_KIND:
+#if NO_POINTER_TAGS
 	    fprintf(stderr, "'%s'", lit_char(buf, '\0', node->ch.ch, '\''));
 	    break;
+#else
+	    curry_panic("impossible: trace_shownode: CHAR_KIND\n");
+#endif
 	case INT_KIND:
 	    fprintf(stderr, "%ld", node->i.i);
 	    break;

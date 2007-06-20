@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cstring.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: cstring.nw 2304 2007-06-20 07:33:57Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -102,7 +102,11 @@ prefix_string_len(unsigned int n_regs, const char *cp,
 	{
 	    list	    = (Node *)regs.hp;
 	    list->info	    = &cons_info;
+#if NO_POINTER_TAGS
 	    list->c.args[0] = (Node *)(char_table + (*--cp & 0xff));
+#else
+	    list->c.args[0] = tag_char((*--cp) & 0xff);
+#endif
 	    list->c.args[1] = tail;
 	    regs.hp	   += cons_node_size;
 	    tail	    = list;
@@ -164,8 +168,12 @@ copy_string(Node *list, char *buf)
 	    head = list->c.args[0];
 	    while ( is_tagged_ptr(head) && head->info->kind == INDIR_KIND )
 		head = head->n.node;
-	    assert(is_tagged_ptr(head) && head->info->kind == CHAR_KIND);
-	    *cp++ = head->ch.ch;
+#if NO_POINTER_TAGS
+	    assert(head->info->kind == CHAR_KIND);
+#else
+	    assert(is_tagged_char(head));
+#endif
+	    *cp++ = char_val(head);
 	    list  = list->c.args[1];
 	}
 	else

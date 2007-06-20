@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cam.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: cam.nw 2304 2007-06-20 07:33:57Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -164,9 +164,9 @@ address from the stack and drop [[n]] values from the stack.
 The macros [[EVAL]] and [[EVAL_NODE]] evaluate the argument in
 register \texttt{regs.r[0]} and continue execution at the specified
 label after the argument is evaluated to head normal form. The
-[[EVAL]] macro is prepared to handle tagged integers, whereas the
-[[EVAL_NODE]] macro assumes that the argument register always contains
-a node pointer.
+[[EVAL]] macro is prepared to handle tagged characters and tagged
+integers, whereas the [[EVAL_NODE]] macro assumes that the argument
+register always contains a node pointer.
 
 <<cam.h>>=
 #define EVAL(l) do {							\
@@ -216,12 +216,12 @@ The [[FAIL]] macro invokes the current failure handler.
 @
 The following macros implement (kind) matching of the argument in
 register \texttt{regs.r[0]}, which is expected to be in head normal
-form already. [[MATCH_RIGID_INT]] and [[MATCH_RIGID]] carefully check
-for tagged integers while the other macros assume that the argument is
-always a node pointer. The argument of all macros is the label where
-execution is resumed after an unbound variable has been instantiated.
-In general this is the entry point of the function that uses the
-[[MATCH]] macro.
+form already. The macros [[MATCH_RIGID_CHAR]], [[MATCH_RIGID_INT]],
+and [[MATCH_RIGID]] carefully check for tagged characters and tagged
+integers while the other macros assume that the argument is always a
+node pointer. The argument of all macros is the label where execution
+is resumed after an unbound variable has been instantiated. In general
+this is the entry point of the function that uses the [[MATCH]] macro.
 
 <<cam.h>>=
 #define MATCH_RIGID_NODE(what, l)				  \
@@ -235,7 +235,10 @@ In general this is the entry point of the function that uses the
 	break;							  \
     }
 
-#define MATCH_RIGID_CHAR(l)		MATCH_RIGID_NODE(CHAR, l)
+#if NO_POINTER_TAGS
+# define MATCH_RIGID_CHAR(l)		MATCH_RIGID_NODE(CHAR, l)
+# define MATCH_RIGID_INT(l)		MATCH_RIGID_NODE(INT, l)
+#endif
 #define MATCH_RIGID_FLOAT(l)		MATCH_RIGID_NODE(FLOAT, l)
 #define MATCH_RIGID_PTR(l)		MATCH_RIGID_NODE(PTR, l)
 #define MATCH_RIGID_FOREIGN_PTR(l)	MATCH_RIGID_NODE(FOREIGN_PTR, l)
@@ -244,7 +247,19 @@ In general this is the entry point of the function that uses the
 #define MATCH_RIGID_VECTOR(l)		MATCH_RIGID_NODE(VECTOR, l)
 #define MATCH_RIGID_ABSTRACT(l)		MATCH_RIGID_NODE(ABSTRACT, l)
 
-#define MATCH_RIGID_INT(l)					      \
+#if !NO_POINTER_TAGS
+#define MATCH_RIGID_CHAR(l)					      \
+    for (;;) {							      \
+	if ( is_tagged_ptr(regs.r[0]) )				      \
+	    switch ( regs.r[0]->info->kind ) {			      \
+	    case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue; \
+	    case LVAR_KIND: regs.ret = (l); GOTO(sync_var);	      \
+	    default: invalid_arg(#l, regs.r[0]->info->kind);	      \
+	    }							      \
+	break;							      \
+    }
+
+# define MATCH_RIGID_INT(l)					      \
     for (;;) {							      \
 	if ( is_tagged_ptr(regs.r[0]) )				      \
 	    switch ( regs.r[0]->info->kind ) {			      \
@@ -255,6 +270,7 @@ In general this is the entry point of the function that uses the
 	    }							      \
 	break;							      \
     }
+#endif
 
 #define MATCH_RIGID(l)						      \
     for (;;) {							      \

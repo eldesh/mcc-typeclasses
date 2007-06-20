@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2303 2007-06-20 07:22:47Z wlux $
+% $Id: CGen.lhs 2304 2007-06-20 07:33:57Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -146,7 +146,7 @@ function because there is not much chance for them to be shared.
 \subsection{Data Types and Constants}
 For every data type, the compiler defines an enumeration that assigns
 tag numbers to its data constructors. Normally, tags starting at zero
-are assigned from left to right to the constructors of each type.
+are assigned to the constructors of each type from left to right.
 However, in order to distinguish constructors of existentially
 quantified types, those constructors are assigned negative tag values
 starting at $-1$. The \verb|enum| declarations are not strictly
@@ -155,16 +155,20 @@ determine the tag value of a constructor when it is used.
 
 In addition to the tag enumerations, the compiler also defines node
 info structures for every data constructor and preallocates constant
-constructors and literal constants. Character constants with codes
-below 256 are allocated in a table defined by the runtime system.
-Integer constants need to be allocated only if they cannot be
-represented in $n-1$ bits where $n$ is the bit size of the target
-machine. The generated code uses the preprocessor macro
-\texttt{is\_large\_int} defined in the runtime system (see
-Sect.~\ref{sec:heap}) in order to determine whether allocation is
-necessary. Note that this macro always returns true if the system was
-configured with the \texttt{--disable-pointer-tags} configuration
-option.
+constructors and literal constants. Integer constants need to be
+allocated only if they cannot be represented in $n-1$ bits where $n$
+is the number of bits per word of the target architecture. The
+generated code uses the preprocessor macro \texttt{is\_large\_int}
+defined in the runtime system (see Sect.~\ref{sec:heap}) in order to
+determine whether allocation is necessary. Note that this macro always
+returns true if the system was configured with the
+\texttt{--disable-pointer-tags} configuration option. Character
+constants are encoded in pointers unless the system was configured
+with the \texttt{--disable-pointer-tags} configuration option. In that
+case, character constants with codes below 256, which are most
+commonly used, are allocated in a table defined by the runtime system
+and only constants with larger codes need to be preallocated in the
+generated code.
 \begin{verbatim}
 
 > genTypes :: [Decl] -> [(Name,[Name],[ConstrDecl])] -> [Stmt] -> [Expr]
@@ -231,14 +235,23 @@ option.
 
 > literals :: [Literal] -> [CTopDecl]
 > literals cs =
->   map charConstant (nub [c | Char c <- cs, ord c >= 0x100]) ++
+>   map charConstant (nub [c | Char c <- cs]) ++
 >   map intConstant (nub [i | Int i <- cs]) ++
 >   map floatConstant (nub [f | Float f <- cs])
 
 > charConstant :: Char -> CTopDecl
 > charConstant c =
->   CVarDef CPrivate (CConstType "struct char_node") (constChar c)
->           (CStruct $ map CInit [addr "char_info",CInt (ord c)])
+>   CppCondDecls (CExpr "NO_POINTER_TAGS") (charNode c) (taggedChar c)
+>   where charNode c
+>           | ord c < 0x100 =
+>               [CppDefine (constChar c)
+>                          (asNode (CAdd (CExpr "char_table") (CInt (ord c))))]
+>           | otherwise =
+>               [CVarDef CPrivate (CConstType "struct char_node") (constChar c)
+>                        (CStruct $ map CInit [addr "char_info",CInt (ord c)]),
+>                CppDefine (constChar c) (constRef (constChar c))]
+>         taggedChar c =
+>           [CppDefine (constChar c) (CFunCall "tag_char" [CInt (ord c)])]
 
 > intConstant :: Int -> CTopDecl
 > intConstant i =
@@ -798,9 +811,7 @@ split into minimal binding groups.
 >         isConst vs0 (Var v) = v `elemSet` vs0
 
 > literal :: Literal -> CExpr
-> literal (Char c)
->   | ord c < 0x100 = asNode (CAdd (CExpr "char_table") (CInt (ord c)))
->   | otherwise = constRef (constChar c)
+> literal (Char c) = CExpr (constChar c)
 > literal (Int i) = CExpr (constInt i)
 > literal (Float f) = constRef (constFloat f)
 
@@ -936,10 +947,11 @@ translation function.
 > enter :: (Bool,[Name],[Name]) -> Name -> [CPSCont] -> [CStmt]
 > enter vs0 v ks =
 >   saveCont vs0 [v] [] ks ++
->   [kindSwitch v [updVar (null ks,[v],[]) v] (Just [])
+>   [kindSwitch v [updVar (null ks,[v],[]) v] taggedSwitch
 >               [CCase "LAZY_KIND"
 >                      (saveRet vs0 ks ++ [gotoExpr (field v "info->eval")])],
 >    gotoRet ks]
+>   where taggedSwitch switch = CIf (isTaggedPtr v) [switch] []
 
 > exec :: (Bool,[Name],[Name]) -> Name -> [Name] -> [CPSCont] -> [CStmt]
 > exec vs0 f vs ks = saveCont vs0 vs [] ks ++ saveRet vs0 ks ++ [goto (cName f)]
@@ -1042,35 +1054,37 @@ translation function.
 Code generation for \texttt{CPSSwitch} statements is a little bit more
 complicated because matching literal constants requires two nested
 switches. The outer switch matches the common tag and the inner switch
-the literal's value. Furthermore, integer literals are either encoded
-in the pointer or stored in a heap allocated node depending on their
-value and the setting of the preprocessor constant
+the literal's value. Furthermore, character and integer literals are
+either encoded in the pointer or stored in a heap allocated node
+depending on their value and the setting of the preprocessor constant
 \texttt{NO\_POINTER\_TAGS}, which forces heap allocation of all
-integer numbers when set to a non-zero value.
+literals when set to a non-zero value.
 \begin{verbatim}
 
 > switchOnTerm :: Name -> Bool -> (Bool,[Name],[Name]) -> Name
 >              -> [(CPSTag,[CStmt])] -> [CStmt]
 > switchOnTerm f tagged vs0 v cases =
->   kindSwitch v [updVar vs0 v] tagCase otherCases :
+>   kindSwitch v [updVar vs0 v] taggedSwitch otherCases :
 >   head (dflts ++ [failAndBacktrack f])
 >   where (lits,constrs,vars,dflts) = foldr partition ([],[],[],[]) cases
 >         (chars,ints,floats) = foldr litPartition ([],[],[]) lits
->         tagCase
->           | tagged =
->               Just [CppCondStmts "NO_POINTER_TAGS"
->                       [CProcCall "curry_panic"
->                                  [CString "impossible: is_tagged_int(%p)\n",
->                                   var v]]
->                       [intSwitch (CFunCall "untag_int" [var v]) ints]
->                    | not (null ints)]
->           | otherwise = Nothing
+>         taggedSwitch switch
+>           | tagged && null chars && null ints =
+>               CIf (isTaggedPtr v) [switch] []
+>           | otherwise =
+>               taggedCharSwitch v chars (taggedIntSwitch v ints switch)
 >         otherCases =
 >           map varCase vars ++ [charCase | not (null chars)] ++
 >           [intCase | not (null ints)] ++ [floatCase | not (null floats)] ++
 >           [constrCase | not (null constrs)]
 >         varCase = CCase "LVAR_KIND"
->         charCase = CCase "CHAR_KIND" [charSwitch v chars,CBreak]
+>         charCase =
+>           CCase "CHAR_KIND"
+>             [CppCondStmts "NO_POINTER_TAGS"
+>                [charSwitch (field v "ch.ch") chars,CBreak]
+>                [CProcCall "curry_panic"
+>                           [CString "impossible: kind(%p) == CHAR_KIND\n",
+>                            var v]]]
 >         intCase = CCase "INT_KIND" [intSwitch (field v "i.i") ints,CBreak]
 >         floatCase = CCase "FLOAT_KIND" (floatSwitch v floats ++ [CBreak])
 >         constrCase = CCase "CAPP_KIND" [tagSwitch v constrs,CBreak]
@@ -1087,21 +1101,39 @@ integer numbers when set to a non-zero value.
 >         litPartition (Float f,stmts) ~(chars,ints,floats) =
 >           (chars,ints,(f,stmts):floats)
 
-> kindSwitch :: Name -> [CStmt] -> Maybe [CStmt] -> [CCase] -> CStmt
-> kindSwitch v upd tagCase cases =
->   CLoop [taggedSwitch tagCase (CSwitch (nodeKind v) allCases),CBreak]
+> taggedCharSwitch :: Name -> [(Char,[CStmt])] -> CStmt -> CStmt
+> taggedCharSwitch v chars stmt
+>   | null chars = stmt
+>   | otherwise =
+>       CIf (isTaggedChar v)
+>           [CppCondStmts "NO_POINTER_TAGS"
+>              [CProcCall "curry_panic"
+>                         [CString "impossible: is_tagged_char(%p)\n",var v]]
+>              [charSwitch (CFunCall "untag_char" [var v]) chars]]
+>           [stmt]
+
+> taggedIntSwitch :: Name -> [(Int,[CStmt])] -> CStmt -> CStmt
+> taggedIntSwitch v ints stmt
+>   | null ints = stmt
+>   | otherwise =
+>       CIf (isTaggedInt v)
+>           [CppCondStmts "NO_POINTER_TAGS"
+>              [CProcCall "curry_panic"
+>                         [CString "impossible: is_tagged_int(%p)\n",var v]]
+>              [intSwitch (CFunCall "untag_int" [var v]) ints]]
+>           [stmt]
+
+> kindSwitch :: Name -> [CStmt] -> (CStmt -> CStmt) -> [CCase] -> CStmt
+> kindSwitch v upd taggedSwitch cases =
+>   CLoop [taggedSwitch (CSwitch (nodeKind v) allCases),CBreak]
 >   where allCases =
 >           CCase "INDIR_KIND"
 >             (setVar v (field v "n.node") : upd ++ [CContinue]) :
 >           cases
->         taggedSwitch (Just sts) switch
->           | null sts = CIf (isTaggedPtr v) [switch] []
->           | otherwise = CIf (isTaggedInt v) sts [switch]
->         taggedSwitch Nothing switch = switch
 
-> charSwitch :: Name -> [(Char,[CStmt])] -> CStmt
-> charSwitch v cases =
->   CSwitch (field v "ch.ch") [CCase (show (ord c)) stmts | (c,stmts) <- cases]
+> charSwitch :: CExpr -> [(Char,[CStmt])] -> CStmt
+> charSwitch e cases =
+>   CSwitch e [CCase (show (ord c)) stmts | (c,stmts) <- cases]
 
 > intSwitch :: CExpr -> [(Int,[CStmt])] -> CStmt
 > intSwitch e cases = CSwitch e [CCase (show i) stmts | (i,stmts) <- cases]
@@ -1197,7 +1229,7 @@ first loads this address into a temporary variable and then boxes it.
 > unbox TypeBool v e =
 >   [CLocalVar (ctype TypeBool) v (Just (CField e "info->tag"))]
 > unbox TypeChar v e =
->   [CLocalVar (ctype TypeChar) v (Just (CField e "ch.ch"))]
+>   [CLocalVar (ctype TypeChar) v (Just (CFunCall "char_val" [e]))]
 > unbox TypeInt v e =
 >   [CLocalVar (ctype TypeInt) v (Just (CFunCall "long_val" [e]))]
 > unbox TypeFloat v e = getFloat v e
@@ -1226,12 +1258,14 @@ first loads this address into a temporary variable and then boxes it.
 >   where const = constRef . constNode
 > box (Just TypeChar) v e =
 >   [localVar v Nothing,
->    CIf (CRel (CRel e ">=" (CInt 0)) "&&" (CRel e "<" (CInt 0x100)))
->      [setVar v (asNode (CExpr "char_table" `CAdd` e))]
->      [setVar v alloc,
->       setField v "info" (addr "char_info"),
->       setField v "ch.ch" e,
->       incrAlloc (ctypeSize TypeChar)]]
+>    CppCondStmts "NO_POINTER_TAGS"
+>      [CIf (CRel (CRel e ">=" (CInt 0)) "&&" (CRel e "<" (CInt 0x100)))
+>        [setVar v (asNode (CExpr "char_table" `CAdd` e))]
+>        [setVar v alloc,
+>         setField v "info" (addr "char_info"),
+>         setField v "ch.ch" e,
+>         incrAlloc (ctypeSize TypeChar)]]
+>      [setVar v (CFunCall "tag_char" [e])]]
 > box (Just TypeInt) v e =
 >   [localVar v Nothing,
 >    CIf (CFunCall "is_large_int" [e])
@@ -1567,9 +1601,10 @@ of the abstract syntax tree.
 > constRef :: String -> CExpr
 > constRef = asNode . addr
 
-> isTaggedPtr, isTaggedInt :: Name -> CExpr
+> isTaggedPtr, isTaggedInt, isTaggedChar :: Name -> CExpr
 > isTaggedPtr v = CFunCall "is_tagged_ptr" [var v]
 > isTaggedInt v = CFunCall "is_tagged_int" [var v]
+> isTaggedChar v = CFunCall "is_tagged_char" [var v]
 
 > nodeKind, nodeTag :: Name -> CExpr
 > nodeKind v = field v "info->kind"

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: show.nw 2304 2007-06-20 07:33:57Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -66,20 +66,33 @@ static const struct int_node two_node  = { &int_info, 2 };
 # define zero CONST(zero)
 # define one  CONST(one)
 # define two  CONST(two)
+
+# define space	  (Node *)(char_table + ' ')
+# define comma	  (Node *)(char_table + ',')
+# define lparen	  (Node *)(char_table + '(')
+# define rparen	  (Node *)(char_table + ')')
+# define lbracket (Node *)(char_table + '[')
+# define rbracket (Node *)(char_table + ']')
+# define bar	  (Node *)(char_table + '|')
+# define dblquote (Node *)(char_table + '\"')
+
 #else
+
 # define zero tag_int(0)
 # define one  tag_int(1)
 # define two  tag_int(2)
+
+# define space	  tag_char(' ')
+# define comma	  tag_char(',')
+# define lparen	  tag_char('(')
+# define rparen	  tag_char(')')
+# define lbracket tag_char('[')
+# define rbracket tag_char(']')
+# define bar	  tag_char('|')
+# define dblquote tag_char('\"')
+
 #endif
 
-#define space	 (Node *)(char_table + ' ')
-#define comma	 (Node *)(char_table + ',')
-#define lparen	 (Node *)(char_table + '(')
-#define rparen	 (Node *)(char_table + ')')
-#define lbracket (Node *)(char_table + '[')
-#define rbracket (Node *)(char_table + ']')
-#define bar	 (Node *)(char_table + '|')
-#define dblquote (Node *)(char_table + '\"')
 
 DECLARE_LABEL(static, eval_lazy_3);
 DECLARE_LABEL(static, eval_lazy_4);
@@ -273,7 +286,12 @@ FUNCTION(showp_1)
 
  again:
 #if !NO_POINTER_TAGS
-    if ( is_tagged_int(node) )
+    if ( is_tagged_char(node) )
+    {
+	buf[0] = '\'';
+	strcat(lit_char(buf + 1, '\0', untag_char(node), '\''), "'");
+    }
+    else if ( is_tagged_int(node) )
     {
 	sprintf(buf, "%ld", untag_int(node));
 	isneg = buf[0] == '-';
@@ -297,9 +315,13 @@ FUNCTION(showp_1)
 	    break;
 
 	case CHAR_KIND:
+#if NO_POINTER_TAGS
 	    buf[0] = '\'';
 	    strcat(lit_char(buf + 1, '\0', node->ch.ch, '\''), "'");
 	    break;
+#else
+	    curry_panic("impossible: showp_1: CHAR_KIND\n");
+#endif
 
 	case INT_KIND:
 	    sprintf(buf, "%ld", node->i.i);
@@ -732,7 +754,11 @@ is_char(Node *node)
 {
     while ( is_tagged_ptr(node) && is_indir_node(node) )
 	node = node->n.node;
-    return is_tagged_ptr(node) && is_char_node(node);
+#if NO_POINTER_TAGS
+    return is_char_node(node);
+#else
+    return is_tagged_char(node);
+#endif
 }
 
 static boolean
@@ -772,6 +798,43 @@ FUNCTION(showList_1)
     show = regs.sp[1];
     for (;;)
     {
+#if !NO_POINTER_TAGS
+	if ( is_tagged_char(hd) )
+	{
+	    if ( show != zero || is_string(regs.sp[0]) )
+	    {
+		regs.r[0] = hd;
+		CHECK_HEAP(1, suspend_node_size(3) + 2 * cons_node_size);
+
+		hd   = regs.r[0];
+		tl   = regs.sp[0];
+		tail = regs.sp[2];
+
+		cons		= (Node *)regs.hp;
+		cons->info	= &cons_info;
+		cons->c.args[0] = hd;
+		cons->c.args[1] = tl;
+		regs.hp	       += cons_node_size;
+
+		susp		= (Node *)regs.hp;
+		susp->info	= showStringTail_lazy_info_table;
+		susp->s.spc	= regs.ss;
+		susp->s.args[0] = cons;
+		susp->s.args[1] = tag_char('\0');
+		susp->s.args[2] = tail;
+		regs.hp        += suspend_node_size(3);
+
+		cons		= (Node *)regs.hp;
+		cons->info	= &cons_info;
+		cons->c.args[0] = dblquote;
+		cons->c.args[1] = susp;
+		regs.hp	       += cons_node_size;
+
+		RETURN(cons, 3);
+	    }
+	}
+	else
+#endif
 	if ( is_tagged_ptr(hd) )
 	    switch ( hd->info->kind )
 	    {
@@ -783,6 +846,7 @@ FUNCTION(showList_1)
 		    CALL1(sync_var, showList_1, hd);
 		break;
 	    case CHAR_KIND:
+#if NO_POINTER_TAGS
 		if ( show != zero || is_string(regs.sp[0]) )
 		{
 		    regs.r[0] = hd;
@@ -815,6 +879,9 @@ FUNCTION(showList_1)
 		    RETURN(cons, 3);
 		}
 		break;
+#else
+		curry_panic("impossible: showList_1: CHAR_KIND\n");
+#endif
 	    }
 	break;
     }
@@ -979,7 +1046,7 @@ FUNCTION(showString)
 {
  ENTRY_LABEL(static, showString)
     SAVE_REGS(3);
-    EVAL_NODE(showString_1);
+    EVAL(showString_1);
 }
 
 static
@@ -1004,7 +1071,8 @@ FUNCTION(showString_1)
     susp->s.args[2] = tail;
     regs.hp	   += suspend_node_size(3);
 
-    RETURN(prefix_string(0, lit_char(buf, prev->ch.ch, hd->ch.ch, '"'), susp),
+    RETURN(prefix_string(0, lit_char(buf, char_val(prev), char_val(hd), '"'),
+			 susp),
 	   3);
 }
 
@@ -1137,9 +1205,9 @@ primConvertToFloat(Node *str)
     while ( str != nil )
     {
 	chr = str->c.args[0];
-	while ( is_indir_node(chr) )
+	while ( is_tagged_ptr(chr) && is_indir_node(chr) )
 	    chr = chr->n.node;
-	if ( chr->ch.ch != '0' )
+	if ( char_val(chr) != '0' )
 	    break;
 	str = str->c.args[1];
 	while ( is_indir_node(str) )

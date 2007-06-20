@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: unify.nw 2304 2007-06-20 07:33:57Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -16,7 +16,7 @@ DECLARE_LABEL(extern, ___61__58__61_);
 DECLARE_LABEL(extern, bind_var);
 
 #if NO_OCCURS_CHECK
-# define occurs(var,arg,nf)	(*(nf) = is_tagged_int(arg), false)
+# define occurs(var,arg,nf)	(*(nf) = !is_tagged_ptr(arg), false)
 #else
 extern boolean occurs(Node *, Node *, boolean *);
 #endif
@@ -176,7 +176,11 @@ eq_root(Node *arg1, Node *arg2, unsigned int *argc)
     *argc = 0;
 
 #if !NO_POINTER_TAGS
-    if ( is_tagged_int(arg1) )
+    if ( is_tagged_char(arg1) )
+	eq = arg1 == arg2;
+    else if ( is_tagged_char(arg2) )
+	eq = false;
+    else if ( is_tagged_int(arg1) )
     {
 	if ( is_tagged_int(arg2) )
 	    eq = arg1 == arg2;
@@ -194,8 +198,12 @@ eq_root(Node *arg1, Node *arg2, unsigned int *argc)
 	switch ( node_kind(arg1) )
 	{
 	case CHAR_KIND:
+#if NO_POINTER_TAGS
 	    eq = arg1->ch.ch == arg2->ch.ch;
 	    break;
+#else
+	    curry_panic("impossible: eq_root: CHAR_KIND\n");
+#endif
         case INT_KIND:
 	    eq = arg1->i.i == arg2->i.i;
 	    break;
@@ -288,7 +296,21 @@ eq_args(unsigned int n_regs, Node *arg1, Node *arg2,
 	    y = y->n.node;
 
 #if !NO_POINTER_TAGS
-	if ( is_tagged_int(x) )
+	if ( is_tagged_char(x) )
+	{
+	    if ( !is_tagged_ptr(y) )
+	    {
+		if ( x != y )
+		    return false;
+		continue;
+	    }
+	}
+	else if ( is_tagged_char(y) )
+	{
+	    if ( !is_tagged_ptr(x) )
+		return false;
+	}
+	else if ( is_tagged_int(x) )
 	{
 	    if ( is_tagged_int(y) )
 	    {
@@ -356,6 +378,7 @@ eq_args(unsigned int n_regs, Node *arg1, Node *arg2,
 		}
 		break;
 	    case CHAR_KIND:
+#if NO_POINTER_TAGS
 		if ( is_char_node(y) )
 		{
 		    if ( x->ch.ch != y->ch.ch )
@@ -363,6 +386,9 @@ eq_args(unsigned int n_regs, Node *arg1, Node *arg2,
 		    continue;
 		}
 		break;
+#else
+		curry_panic("impossible: eq_args: CHAR_KIND\n");
+#endif
 	    case INT_KIND:
 		if ( is_int_node(y) )
 		{

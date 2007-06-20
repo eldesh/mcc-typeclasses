@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: print.nw 2304 2007-06-20 07:33:57Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -65,7 +65,7 @@ print_result(const char **var_names, Node **vars, Node *result)
     tail      = names_tail;
     hasAnswer = false;
     for ( n = 0; var_names[n]; n++ )
-	if ( is_tagged_int(vars[n]) || !is_variable_node(vars[n]) )
+	if ( !is_tagged_ptr(vars[n]) || !is_variable_node(vars[n]) )
 	{
 	    if ( !hasAnswer )
 	    {
@@ -87,7 +87,7 @@ print_result(const char **var_names, Node **vars, Node *result)
     {
 	while ( is_tagged_ptr(result) && is_indir_node(result) )
 	    result = result->n.node;
-	if ( is_tagged_int(result) || result->info != INFO(__Success) )
+	if ( !is_tagged_ptr(result) || result->info != INFO(__Success) )
 	{
 	    printf("} ");
 	    print_node(0, result);
@@ -123,7 +123,9 @@ print_node(unsigned int prec, Node *node)
     for (;;)
     {
 #if !NO_POINTER_TAGS
-	if ( is_tagged_int(node) )
+	if ( is_tagged_char(node) )
+	    printf("'%s'", lit_char(buf, '\0', untag_char(node), '\''));
+	else if ( is_tagged_int(node) )
 	    printf(prec > 0 && untag_int(node) < 0 ? "(%ld)" : "%ld",
 		   untag_int(node));
 	else
@@ -178,8 +180,12 @@ print_node(unsigned int prec, Node *node)
 		    print_app(prec, node, vector_argc(node), node->a.args);
 		break;
 	    case CHAR_KIND:
+#if NO_POINTER_TAGS
 		printf("'%s'", lit_char(buf, '\0', node->ch.ch, '\''));
 		break;
+#else
+		curry_panic("impossible: print_node: CHAR_KIND\n");
+#endif
 	    case INT_KIND:
 		printf(prec > 0 && node->i.i < 0 ? "(%ld)" : "%ld",
 		       node->i.i);
@@ -265,7 +271,11 @@ is_string(Node *list)
 	head = list->c.args[0];
 	while ( is_tagged_ptr(head) && head->info->kind == INDIR_KIND )
 	    head = head->n.node;
-	if ( is_tagged_int(head) || head->info->kind != CHAR_KIND )
+#if NO_POINTER_TAGS
+	if ( head->info->kind != CHAR_KIND )
+#else
+	if ( !is_tagged_char(head) )
+#endif
 	    return false;
 
 	list = list->c.args[1];
@@ -290,8 +300,12 @@ print_string(Node *list)
 	head = list->c.args[0];
 	while ( is_tagged_ptr(head) && head->info->kind == INDIR_KIND )
 	    head = head->n.node;
-	ASSERT(is_tagged_ptr(head) && head->info->kind == CHAR_KIND);
-	c = head->ch.ch;
+#if NO_POINTER_TAGS
+	ASSERT(head->info->kind == CHAR_KIND);
+#else
+	ASSERT(is_tagged_char(head));
+#endif
+	c = char_val(head);
 	printf("%s", lit_char(buf, c0, c, '"'));
 	c0 = c;;
 

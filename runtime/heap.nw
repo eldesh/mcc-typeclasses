@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: heap.nw 2304 2007-06-20 07:33:57Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -42,24 +42,57 @@ typedef void *word;	/* already declared in regs.h */
 
 @ 
 In the default configuration, we use a tagged pointer scheme that
-allows encoding integer numbers directly in pointer values rather than
-allocating heap nodes for them. Since all pointers into the heap must
-be aligned to -- at least -- a 4 byte boundary, the two least
-significant bits of a pointer are available as tag bits. The runtime
-system uses only the least significant bit, where 0 is used for
-pointers and 1 for integer numbers. Obviously, only integer numbers
-that can be represented in $n-1$ bits, where $n$ is the number of bits
-in a word on the target machine, can be encoded in this way; larger
-numbers must be allocated in the heap. This optimization can be
-disabled with the \texttt{--disable-pointer-tags} configuration
-option, which in turn sets the [[NO_POINTER_TAGS]] preprocessor flag.
+allows encoding characters and integer numbers directly in pointer
+values rather than allocating heap nodes for them. Since all pointers
+into the heap must be aligned to -- at least -- a 4 byte boundary, the
+two least significant bits of a pointer are available as tag bits.
+
+Node pointers are tagged trivially, i.e., their two least significant
+bits are both zero. Integers are tagged by setting the least
+significant bit to 1 and encoding the number in the remaining $n-1$
+bits of a machine word. Integers that do not fit into $n-1$ bits are
+allocated in the heap. The remaining combination, i.e., least
+significant bit 0 and next bit 1 is used for characters, whose value
+is encoded in the remaining $n-2$ bits. Note that 21 bits are
+sufficient in order to encode the complete Unicode character set
+range. Table~\ref{tab:pointer-tags} summarizes the encoding where $n$
+is the number of bits per word of the target architecture and bits are
+numbered start with the least significant bit. The optimization of
+using tagged pointers can be disabled with the
+\texttt{--disable-pointer-tags} configuration option, which in turn
+sets the [[NO_POINTER_TAGS]] preprocessor flag.
+\begin{table}[ht]
+  \centering
+  \begin{tabular}{|ccccccc|l|}
+    \hline
+    \multicolumn{7}{|c|}{Bits} & Description \\
+    $n$-1 & \dots & 23 & 22 & \dots & 2 & 1 0 & \\
+    \hline
+    \multicolumn{6}{|c|}{$\emph{adr} / 4$} & 0 0 &
+      Pointer to node at \emph{adr} \\
+    \hline
+    \multicolumn{6}{|c|}{$i / 2$} & 0 1 & Even integer $i$ \\
+    \hline
+    \multicolumn{3}{|c|}{unused} & \multicolumn{3}{c|}{$c$} &1 0 &
+      Character $c$ ($\texttt{0} \leq c \leq \texttt{0x10ffff}$) \\
+    \hline
+    \multicolumn{6}{|c|}{$(i-1) / 2$} & 1 1 & Odd integer $i$ \\
+    \hline
+  \end{tabular}
+  \caption{Tagged pointer encoding}
+  \label{tab:pointer-tags}
+\end{table}
 
 <<heap.h>>=
 /* check for tagged integer values */
-#define is_tagged_ptr(p)	!is_tagged_int(p)
+#define is_tagged_ptr(p)	(NO_POINTER_TAGS || ((long)(p) & 0x03) == 0)
+#define is_tagged_char(p)	(!NO_POINTER_TAGS && ((long)(p) & 0x03) == 2)
 #define is_tagged_int(p)	(!NO_POINTER_TAGS && ((long)(p) & 0x01))
 
 #if !NO_POINTER_TAGS
+# define tag_char(c)		(Node *)(((long)(c) << 2) + 0x02)
+# define untag_char(p)		(int)((long)(p) >> 2)
+
 # define tag_int(i)		(Node *)(((i) << 1) + 0x01)
 # define untag_int(p)		((long)(p) >> 1)
 #endif
@@ -333,24 +366,34 @@ NodeInfo float_info = {
 };
 
 @ 
-Character nodes are mostly similar to heap allocated integer nodes.
-However, the characters in the range 0--255 are preallocated in the
-runtime system.
+In the default configuration, characters are encoded in tagged
+pointers just like integer numbers. However, if tagging is disabled
+using the \texttt{--disable-pointer-tags} configuration option,
+character nodes are allocated in the heap except for the characters in
+the range $[0,255]$, which are preallocated here.
 
 <<heap.h>>=
+#if !NO_POINTER_TAGS
+# define char_val(p)	untag_char(p)
+# define char_node_size 0
+# define init_chars()
+#else
+# define char_val(p)	(p)->ch.ch
 extern NodeInfo char_info;
 struct char_node {
     NodeInfo *info;
     int	     ch;
 };
 
-#define char_node_size		wordsof(struct char_node)
+# define char_node_size		wordsof(struct char_node)
 
 extern struct char_node char_table[256];
 extern void init_chars(void);
+#endif
 
 @
 <<heap.c>>=
+#if NO_POINTER_TAGS
 NodeInfo char_info = {
     CHAR_KIND, 0, char_node_size, ot_binary, 0, eval_whnf, 0, 0, 0
 };
@@ -368,6 +411,7 @@ init_chars()
 	char_table[i].ch   = i;
     }
 }
+#endif
 
 @ 
 Foreign pointer nodes encompass the info pointer and a generic pointer
@@ -621,7 +665,9 @@ union node {
     NodeInfo *info;
     struct closure_node c;
     struct vector_node a;
+#if NO_POINTER_TAGS
     struct char_node ch;
+#endif
     struct int_node i;
 #if UNALIGNED_DOUBLE
     struct float_node f;
@@ -793,8 +839,10 @@ after the collection, the program will be aborted. The global flag
 <<heap.h>>=
 extern boolean in_gc;
 extern void collect(unsigned int, unsigned int);
-#define CHECK_HEAP(n_regs, n) \
-    do { if ( regs.hp + (n) > heap_end ) collect(n_regs, n); } while ( 0 )
+
+#define CHECK_HEAP(n_regs, n) do {				       \
+	if ( (n) > 0 && regs.hp + (n) > heap_end ) collect(n_regs, n); \
+    } while ( 0 )
 
 @
 <<heap.c>>=

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2304 2007-06-20 07:33:57Z wlux $
+% $Id: show.nw 2312 2007-06-20 12:00:06Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -1119,18 +1119,22 @@ precision argument is not negative, it specifies the number of decimal
 digits of the result.
 
 <<show.h>>=
-Node *primShowEFloat(long, double);
-Node *primShowFFloat(long, double);
+extern Node *primShowEFloat(Node *, Node *);
+extern Node *primShowFFloat(Node *, Node *);
 
 @ 
 <<show.c>>=
 Node *
-primShowEFloat(long p, double d)
+primShowEFloat(Node *prec, Node *num)
 {
+    long       p;
+    double     d;
     char       fmt[20], *buf;
     const char *loc;
     Node       *str;
 
+    get_double_val(d, num);
+    p = long_val(prec);
     if ( p >= 0 )
 	sprintf(fmt, "%%.%lde", p);
     else
@@ -1150,13 +1154,17 @@ primShowEFloat(long p, double d)
 }
 
 Node *
-primShowFFloat(long p, double d)
+primShowFFloat(Node *prec, Node *num)
 {
     int	       n;
+    long       p;
+    double     d;
     char       fmt[20], *buf;
     const char *loc;
     Node       *str;
 
+    get_double_val(d, num);
+    p = long_val(prec);
     if ( p >= 0 )
 	sprintf(fmt, "%%.%ldf", p);
     else
@@ -1187,17 +1195,17 @@ floating-point number. The conversion is based on the C function
 reduce the size of the temporary string buffer.
 
 <<show.h>>=
-extern double primConvertToFloat(Node *str);
+extern Node *primConvertToFloat(Node *);
 
 @ 
 <<show.c>>=
-double
+Node *
 primConvertToFloat(Node *str)
 {
     char       *buf;
     const char *loc;
     double     d;
-    Node       *chr;
+    Node       *chr, *r;
 
     /* drop leading zeros */
     while ( is_indir_node(str) )
@@ -1227,5 +1235,12 @@ primConvertToFloat(Node *str)
     else
 	d = 0;
 
-    return d;
+    /* return a fresh number */
+    CHECK_HEAP(0, float_node_size);
+    r	     = (Node *)regs.hp;
+    r->info  = &float_info;
+    put_double_val(r, d);
+    regs.hp += float_node_size;
+
+    return r;
 }

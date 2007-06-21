@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2319 2007-06-21 10:15:04Z wlux $
+% $Id: DTransform.lhs 2320 2007-06-21 10:17:30Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -194,8 +194,14 @@ constructing expressions of the form (a,b) and the name of function
 > debugTry :: QualIdent 
 > debugTry  = debugQualPreludeName "try'"
 
+> debugReturn :: QualIdent
+> debugReturn  = debugQualPreludeName "return'"
+
 > debugBind :: QualIdent
 > debugBind  = debugQualPreludeName "bind'"
+
+> debugBind_ :: QualIdent
+> debugBind_  = debugQualPreludeName "bind_'"
 
 > debugCatch :: QualIdent
 > debugCatch  = debugQualPreludeName "catch'"
@@ -303,8 +309,6 @@ We have to introduce an auxiliary function for the lambda in the intermediate co
 >         fMain = if isIOType ty then newMainIO m goalId else newMain m goalId
 >         debugOldMainId = qualifyWith m (debugRenameId "" goalId)
 >         debugResultType (TypeConstructor debugIdentPair [ty,_]) = ty
->         isIOType (TypeConstructor tc [_]) = tc == qIOId
->         isIOType _                        = False
 
 > newMainIO :: ModuleIdent -> Ident -> [Decl]
 > newMainIO m f = [fMain]
@@ -456,15 +460,31 @@ Next function  gets the current module identifier,
 >       varsId           = map (mkIdent.("_"++).show) [0..n-1]
 >       vars             = map Variable varsId
 >       fType'           = transformType n  fType
+>       bind             = qualifyWith preludeMIdent (mkIdent ">>=")
 >       finalApp         = createApply (Function qId n) vars
->       body             = case cc of
->                            Primitive
->                              | s=="try" -> createApply (Function debugTry n) vars
->                              | s==">>=" -> createApply (Function debugBind n) vars
->                              | s=="catch" -> createApply (Function debugCatch n) vars
->                              | s=="fixIO" -> createApply (Function debugFixIO n) vars
->                              | s=="encapsulate" -> createApply (Function debugEncapsulate n) vars
->                            _ -> debugBuildPairExp finalApp void
+>       finalAppIO       = createApply (Function bind 2)
+>                                      [finalApp, Function debugReturn 1]
+>       finalApp'        = case foreignWrapper cc s of
+>                            Just qId'' -> createApply (Function qId'' n) vars
+>                            Nothing
+>                              | isIOType (resultType fType) -> finalAppIO
+>                              | otherwise                   -> finalApp
+>       body             = if cc==Primitive && s=="unsafePerformIO"
+>                          then finalApp
+>                          else debugBuildPairExp finalApp' void
+
+> foreignWrapper :: CallConv -> String -> Maybe QualIdent
+> foreignWrapper Primitive s
+>   | s=="try"             = Just debugTry
+>   | s=="return"          = Just debugReturn
+>   | s==">>="             = Just debugBind
+>   | s==">>"              = Just debugBind_
+>   | s=="catch"           = Just debugCatch
+>   | s=="fixIO"           = Just debugFixIO
+>   | s=="encapsulate"     = Just debugEncapsulate
+>   | otherwise            = Nothing
+> foreignWrapper CCall   _ = Nothing
+> foreignWrapper RawCall _ = Nothing
 
 
 > generateAuxFunc :: ModuleIdent ->(QualIdent, (SymbolType,Int,Type)) -> Int -> Decl
@@ -507,9 +527,36 @@ Next function  gets the current module identifier,
 \end{verbatim}
 
 
-Transformation of the function type. The first argument is the function arity, needed for 
-the transformation.
+The function \texttt{transformType} transforms the type
+$\tau_1 \rightarrow \dots \rightarrow \tau_n \rightarrow \tau$
+of a function with arity $n$ into
+$\tau'_1 \rightarrow \dots \rightarrow \tau'_n \rightarrow (\tau',\texttt{CTree})$.
+The arity $n$ is passed as first argument to \texttt{transformType}.
 
+The function \texttt{transformType'} implements the basic
+transformation of types:
+\begin{displaymath}
+  \begin{array}{rcll}
+    \alpha' &=& \alpha \\
+    \texttt{IO}\:\tau &=& \texttt{IO}\:(\tau',\texttt{CTree}) \\
+    C\,\tau_1\dots\tau_n &=& C\,\tau'_1\dots\tau'_n & (C\not=\texttt{IO}) \\
+    (\mu \rightarrow \nu)' &=& \mu' \rightarrow (\nu',\texttt{CTree})
+  \end{array}
+\end{displaymath}
+Note the special case for \texttt{IO}, which is necessary in order to
+implement debugging for actions. Recall that $\texttt{IO}\:\tau$ is
+equivalent to $\textit{World} \rightarrow (\tau,\textit{World})$ for
+some abstract representation \textit{World} of the state of the
+external world. With the standard rules, this type would be
+transformed into
+$\textit{World} \rightarrow ((\tau',\textit{World}), \texttt{CTree})$.
+Since this is no longer an instance of \texttt{IO}, this would mean
+that we cannot use the standard runtime system primitives in order to
+implement the primitives transformed for debugging. Therefore, we
+prefer using the isomorphic type
+$\textit{World} \rightarrow ((\tau',\texttt{CTree}), \textit{World})$
+for transforming the type \texttt{IO}, giving rise to the special case
+for \texttt{IO}.
 \begin{verbatim}
 
 > ---------------------------------------------------------------------------
@@ -525,12 +572,22 @@ the transformation.
 > transformType' ::  Type -> Type
 > transformType'  t@(TypeArrow type1 type2) = transformType 1  t
 > transformType'  (TypeConstructor ident lTypes) = 
->    TypeConstructor ident (map transformType'  lTypes)
+>    if ident == qIOId
+>    then TypeConstructor ident [transformType 0 (head lTypes)]
+>    else TypeConstructor ident (map transformType'  lTypes)
 > transformType'  (TypeVariable v) = TypeVariable v
 
 > typeArity :: Type -> Int
 > typeArity (TypeArrow _ ty) = 1 + typeArity ty
 > typeArity _ = 0
+
+> resultType :: Type -> Type
+> resultType (TypeArrow _ ty) = resultType ty
+> resultType ty               = ty
+
+> isIOType :: Type -> Bool
+> isIOType (TypeConstructor tc [_]) = tc == qIOId
+> isIOType _                        = False
 > ---------------------------------------------------------------------------
 
 

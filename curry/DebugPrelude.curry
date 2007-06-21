@@ -4,7 +4,7 @@
 -- Rafa 03-07-2001
 
 module DebugPrelude(CTree(..),startDebugging,startIODebugging,clean,dEval,
-                    try',bind',catch',fixIO',encapsulate') where
+                    try',return',bind',bind_',catch',fixIO',encapsulate') where
 import IO
 
 foreign import primitive dvals :: a -> ShowS
@@ -30,33 +30,80 @@ clean ((p,x):xs) = if p=="_"
 		
 
 -- 08-05-02 Try defined for debugging
-try' :: (a -> (Success,CTree)) -> ([a -> (Success,CTree)], CTree)
-try' g = (map wrap (try (unwrap g)), CTreeVoid)
+try' :: (a -> (Success,CTree)) -> [a -> (Success,CTree)]
+try' g = map wrap (try (unwrap g))
 
 
 unwrap   g (x,t) | r = t =:= t' where (r,t') = g x 
 wrap     g x | g (x,t) = (success,t) where t free
 
 
-bind' :: IO a -> (a -> (IO b, CTree)) -> (IO b, CTree)
-m `bind'` f = (m >>= \x -> case f x of (m',t') | t=:=t' -> m', t)
-  where t free
+type IOT a = IO (a, CTree)
 
-catch' :: IO a -> (IOError -> (IO a, CTree)) -> (IO a, CTree)
-catch' m f = (catch m (\ioe -> case f ioe of (m,_) -> m), CTreeVoid)
+return' :: a -> IOT a
+return' x = return (x, CTreeVoid)
 
-fixIO' :: (a -> (IO a, CTree)) -> (IO a, CTree)
-fixIO' f = (fixIO (\x -> case f x of (m,t') | t=:=t' -> m), t)
+bind' :: IOT a -> (a -> (IOT b, CTree)) -> IOT b
+m `bind'` f =
+  do
+    (x,t1) <- m
+    case f x of
+      (m',t2) ->
+        do
+          (y,t3) <- m'
+          return (y, EmptyCTreeNode (clean [(dEval x,t1),(dEval m',t2),(dEval y,t3)]))
+
+bind_' :: IOT a -> IOT b -> IOT b
+m1 `bind_'` m2 =
+  do
+    (x,t1) <- m1
+    (y,t2) <- m2
+    return (y, EmptyCTreeNode (clean [(dEval x,t1),(dEval y,t2)]))
+
+catch' :: IOT a -> (IOError -> (IOT a, CTree)) -> IOT a
+catch' m f = catch m (wrap f)
+  where wrap f ioe =
+          case f ioe of
+            (m,t1) ->
+              do
+                (x,t2) <- m
+                return (x, EmptyCTreeNode (clean [(dEval m,t1),(dEval x,t2)]))
+
+-- NB It is important that wrap uses a lazy pattern; otherwise, the result
+--    of the (transformed) recursive IO action would be requested before it
+--    even had a chance to produce (a prefix of) it.
+fixIO' :: (a -> (IOT a, CTree)) -> IOT a
+fixIO' f = fixIO (wrap f)
   where foreign import primitive fixIO :: (a -> IO a) -> IO a
-        t free
+        wrap f ~(x,_) =
+          case f x of
+            (m,t1) ->
+              do
+                (y,t2) <- m
+                return (y, EmptyCTreeNode (clean [(dEval m,t1),(dEval y,t2)]))
 
-encapsulate' :: a -> (IO (a -> (Success, CTree)), CTree)
-encapsulate' e = (encapsulate e >>= \g -> return (\x -> (g x,CTreeVoid)), CTreeVoid)
+-- NB The computation tree CTreeVoid associated with the application f x
+--    means one cannot detect any bugs in expression e (at least as far
+--    as e is evaluated within the encapsulated search). Unfortunately,
+--    there is nothing we can do about that. Encapsulate creates an
+--    independent copy of its argument, which includes all computation
+--    trees created locally during e's evaluation.
+encapsulate' :: a -> IOT (a -> (Success, CTree))
+encapsulate' e =
+  do
+    g <- encapsulate e
+    return' (\x -> (g x, CTreeVoid))
   where foreign import primitive encapsulate :: a -> IO (a -> Success)
 
 
+startDebugging :: ((a, CTree) -> Success) -> IO ()
 startDebugging = navigate . map snd . findall
-startIODebugging (g,t) = g >> navigate [t]
+
+startIODebugging :: (IOT a, CTree) -> IO ()
+startIODebugging (m, CTreeNode name args result rule trees) =
+  do
+    (x,t) <- m
+    navigate [CTreeNode name args result rule (trees ++ clean [(dEval x,t)])]
 
 
 -- rhs=debugging for navigating, rhs=prettyTree for pretty printing

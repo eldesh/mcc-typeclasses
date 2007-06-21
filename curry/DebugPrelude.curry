@@ -37,6 +37,10 @@ unwrap   g (x,t) | r = t =:= t' where (r,t') = g x
 wrap     g x | g (x,t) = (success,t) where t free
 
 
+-- 09-03-07 (>>=)  defined for debugging
+m `bind'` f = (m >>= \x -> case f x of (m',ct') | ct=:=ct' -> m', ct)
+  where ct free
+
 
 startDebugging = navigate . map snd . findall
 

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2247 2007-06-14 12:57:40Z wlux $
+% $Id: DTransform.lhs 2315 2007-06-21 10:05:46Z wlux $
 %
 % 2002/04/10 19:00:00 Added emptyNode as constructor in type cTree
 \nwfilename{DTransform.lhs}
@@ -186,6 +186,9 @@ constructing expressions of the form (a,b) and the name of function
 
 > debugTry :: QualIdent 
 > debugTry  = debugQualPreludeName "try'"
+
+> debugBind :: QualIdent
+> debugBind  = debugQualPreludeName "bind'"
 
 
 > dEvalApply :: Expression -> Expression
@@ -380,7 +383,9 @@ The first phase of the transformation process performs two diferent tasks:
 >                   then qIdent 
 >                   else if name ident == "try" 
 >                        then debugTry
->                        else qualifyWith idModule' ident''
+>                        else if name ident == ">>="
+>                             then debugBind
+>                             else qualifyWith idModule' ident''
 
 \end{verbatim}
 

@@ -1,5 +1,8 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2315 2007-06-21 10:05:46Z wlux $
+% $Id: DTransform.lhs 2316 2007-06-21 10:07:33Z wlux $
+%
+% Copyright (c) 2001-2002, Rafael Caballero
+% Copyright (c) 2003-2007, Wolfgang Lux
 %
 % 2002/04/10 19:00:00 Added emptyNode as constructor in type cTree
 \nwfilename{DTransform.lhs}
@@ -381,11 +384,7 @@ The first phase of the transformation process performs two diferent tasks:
 >       qIdent'   = qualifyWith idModule' ident'
 >       qIdent''  = if not isFunction 
 >                   then qIdent 
->                   else if name ident == "try" 
->                        then debugTry
->                        else if name ident == ">>="
->                             then debugBind
->                             else qualifyWith idModule' ident''
+>                   else qualifyWith idModule' ident''
 
 \end{verbatim}
 
@@ -396,20 +395,17 @@ Next function  gets the current module identifier,
 
 \begin{verbatim}
 
-> generateAuxFuncs :: ModuleIdent -> (QualIdent, (SymbolType,Int,Type)) -> [Decl]
 > generateAuxFuncs m (qId,(sType,n,fType)) = 
 >       if isQSelectorId qId then []
->       else if sType==IsForeign then (newforeign:auxiliary)
->       else auxiliary
+>       else case sType of
+>              IsForeign cc s -> generateForeign m qId cc s n fType : auxiliary
+>              _              -> auxiliary
 >       where
->         newforeign = generateForeign m qId n fType
->         k = if  sType==IsForeign then n-2 
->             else if sType==IsFunction then n-2 
->                  else n-1
+>         k = if  sType==IsConstructor then n-1 else n-2 
 >         auxiliary = map (generateAuxFunc m (qId,(sType,k,fType))) [0..k]
 
-> generateForeign :: ModuleIdent -> QualIdent -> Int -> Type -> Decl
-> generateForeign m qId n fType = 
+> generateForeign :: ModuleIdent -> QualIdent -> CallConv -> String -> Int -> Type -> Decl
+> generateForeign m qId cc s n fType = 
 >       FunctionDecl qId' varsId fType' body
 >       where
 >       qId'             = changeFunctionqId qId
@@ -417,7 +413,11 @@ Next function  gets the current module identifier,
 >       vars             = map Variable varsId
 >       fType'           = transformType n  fType
 >       finalApp         = createApply (Function qId n) vars
->       body             = debugBuildPairExp finalApp void
+>       body             = if cc==Primitive && s=="try"
+>                          then createApply (Function debugTry n) vars
+>                          else if cc==Primitive && s==">>="
+>                               then createApply (Function debugBind n) vars
+>                               else debugBuildPairExp finalApp void
 
 
 > generateAuxFunc :: ModuleIdent ->(QualIdent, (SymbolType,Int,Type)) -> Int -> Decl
@@ -498,7 +498,7 @@ is a module function.
 
 \begin{verbatim}
 
-> data SymbolType = IsFunction | IsConstructor | IsForeign deriving (Eq,Show)
+> data SymbolType = IsFunction | IsConstructor | IsForeign CallConv String deriving (Eq,Show)
 
 > type DebugTypeList = [(QualIdent,(SymbolType,Int,Type))]
 
@@ -525,7 +525,7 @@ is a module function.
 > typesDatum (TypeDecl _ _ _) env = env
 >
 > typesForeign (ForeignDecl qId cc s ftype) env  = 
->       (qId,(IsForeign, typeArity ftype,ftype)):env
+>       (qId,(IsForeign cc s, typeArity ftype,ftype)):env
 
 > typesConst:: QualIdent -> Int -> ConstrDecl -> DebugTypeList -> DebugTypeList
 > typesConst dataId n (ConstrDecl qId lTypes) env  = 

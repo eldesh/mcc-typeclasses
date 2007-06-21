@@ -3,7 +3,7 @@
 -- transformed for debugging purposes
 -- Rafa 03-07-2001
 
-module DebugPrelude(CTree(..),startDebugging,clean,dEval,
+module DebugPrelude(CTree(..),startDebugging,startIODebugging,clean,dEval,
                     try',bind',catch',fixIO',encapsulate') where
 import IO
 
@@ -56,6 +56,7 @@ encapsulate' e = (encapsulate e >>= \g -> return (\x -> (g x,CTreeVoid)), CTreeV
 
 
 startDebugging = navigate . map snd . findall
+startIODebugging (g,t) = g >> navigate [t]
 
 
 -- rhs=debugging for navigating, rhs=prettyTree for pretty printing

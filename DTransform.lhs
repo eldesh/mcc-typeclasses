@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2318 2007-06-21 10:12:37Z wlux $
+% $Id: DTransform.lhs 2319 2007-06-21 10:15:04Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -35,9 +35,10 @@ will be imported by all the transformed modules.
 
 \begin{verbatim}
 
-> debugPrefix,debugFunctionName :: String
-> debugPrefix       = "_debug#"
-> debugFunctionName =  "startDebugging"
+> debugPrefix,debugFunctionName,debugIOFunctionName :: String
+> debugPrefix         = "_debug#"
+> debugFunctionName   =  "startDebugging"
+> debugIOFunctionName =  "startIODebugging"
 
 
 \end{verbatim}
@@ -115,6 +116,9 @@ Some auxiliar functions widely used throughout the module
 
 > debugFunctionqId :: QualIdent
 > debugFunctionqId = debugQualPrelude (mkIdent debugFunctionName)
+
+> debugIOFunctionqId :: QualIdent
+> debugIOFunctionqId = debugQualPrelude (mkIdent debugIOFunctionName)
 
 > debugRenameId :: String -> Ident -> Ident
 > debugRenameId suffix ident =
@@ -261,9 +265,25 @@ list of declarations in three.
 \end{verbatim}
 
 The newMain is only added if we are in the module main. 
-It will start de debugging process.
+It will start the debugging process.
 
-Its definition:
+Its definition depends on the goal's type. If the goal's type is
+\texttt{IO}~$t$, the new main function simply executes the transformed
+goal under control of the debugger.
+
+\begin{verbatim}
+
+
+main.main = DebugPrelude.startIODebugging main._debug#main
+
+\end{verbatim}
+
+Otherwise, the goal must be solved using encapsulated search and
+navigation then allows picking a wrong solution. In order to make this
+work, the transformed goal function must be converted into a form that
+is suitable as argument to the encapsulated search primitive
+\texttt{try}. Therefore, we use the following definition for the new
+main function.
 
 \begin{verbatim}
 
@@ -278,7 +298,22 @@ We have to introduce an auxiliary function for the lambda in the intermediate co
 \begin{verbatim}
 
 > dAddMain :: Ident -> Module -> Module
-> dAddMain goalId (Module m is ds) = Module m is (newMain m goalId ++ ds)
+> dAddMain goalId (Module m is ds) = Module m is (fMain ++ ds)
+>   where ty = head [debugResultType ty | FunctionDecl f _ ty _ <- ds, f == debugOldMainId]
+>         fMain = if isIOType ty then newMainIO m goalId else newMain m goalId
+>         debugOldMainId = qualifyWith m (debugRenameId "" goalId)
+>         debugResultType (TypeConstructor debugIdentPair [ty,_]) = ty
+>         isIOType (TypeConstructor tc [_]) = tc == qIOId
+>         isIOType _                        = False
+
+> newMainIO :: ModuleIdent -> Ident -> [Decl]
+> newMainIO m f = [fMain]
+>       where 
+>       fMain = FunctionDecl fId [] fType fBody
+>       fId   = qualifyWith m f
+>       fType = TypeConstructor qIOId [TypeConstructor qUnitId []]
+>       fBody = Apply (Function debugIOFunctionqId 1) (Function debugOldMainId 0)
+>       debugOldMainId = qualifyWith m (debugRenameId "" f)
 
 > newMain :: ModuleIdent -> Ident -> [Decl]
 > newMain m f = [fMain,auxMain]

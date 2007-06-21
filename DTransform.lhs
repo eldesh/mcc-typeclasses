@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2316 2007-06-21 10:07:33Z wlux $
+% $Id: DTransform.lhs 2317 2007-06-21 10:11:05Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -192,6 +192,15 @@ constructing expressions of the form (a,b) and the name of function
 
 > debugBind :: QualIdent
 > debugBind  = debugQualPreludeName "bind'"
+
+> debugCatch :: QualIdent
+> debugCatch  = debugQualPreludeName "catch'"
+
+> debugFixIO :: QualIdent
+> debugFixIO  = debugQualPreludeName "fixIO'"
+
+> debugEncapsulate :: QualIdent
+> debugEncapsulate  = debugQualPreludeName "encapsulate'"
 
 
 > dEvalApply :: Expression -> Expression
@@ -413,11 +422,14 @@ Next function  gets the current module identifier,
 >       vars             = map Variable varsId
 >       fType'           = transformType n  fType
 >       finalApp         = createApply (Function qId n) vars
->       body             = if cc==Primitive && s=="try"
->                          then createApply (Function debugTry n) vars
->                          else if cc==Primitive && s==">>="
->                               then createApply (Function debugBind n) vars
->                               else debugBuildPairExp finalApp void
+>       body             = case cc of
+>                            Primitive
+>                              | s=="try" -> createApply (Function debugTry n) vars
+>                              | s==">>=" -> createApply (Function debugBind n) vars
+>                              | s=="catch" -> createApply (Function debugCatch n) vars
+>                              | s=="fixIO" -> createApply (Function debugFixIO n) vars
+>                              | s=="encapsulate" -> createApply (Function debugEncapsulate n) vars
+>                            _ -> debugBuildPairExp finalApp void
 
 
 > generateAuxFunc :: ModuleIdent ->(QualIdent, (SymbolType,Int,Type)) -> Int -> Decl

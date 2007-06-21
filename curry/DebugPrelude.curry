@@ -3,7 +3,8 @@
 -- transformed for debugging purposes
 -- Rafa 03-07-2001
 
-module DebugPrelude(CTree(..),startDebugging,clean,try',dEval) where
+module DebugPrelude(CTree(..),startDebugging,clean,dEval,
+                    try',bind',catch',fixIO',encapsulate') where
 import IO
 
 foreign import primitive dvals :: a -> ShowS
@@ -37,9 +38,21 @@ unwrap   g (x,t) | r = t =:= t' where (r,t') = g x
 wrap     g x | g (x,t) = (success,t) where t free
 
 
--- 09-03-07 (>>=)  defined for debugging
-m `bind'` f = (m >>= \x -> case f x of (m',ct') | ct=:=ct' -> m', ct)
-  where ct free
+bind' :: IO a -> (a -> (IO b, CTree)) -> (IO b, CTree)
+m `bind'` f = (m >>= \x -> case f x of (m',t') | t=:=t' -> m', t)
+  where t free
+
+catch' :: IO a -> (IOError -> (IO a, CTree)) -> (IO a, CTree)
+catch' m f = (catch m (\ioe -> case f ioe of (m,_) -> m), CTreeVoid)
+
+fixIO' :: (a -> (IO a, CTree)) -> (IO a, CTree)
+fixIO' f = (fixIO (\x -> case f x of (m,t') | t=:=t' -> m), t)
+  where foreign import primitive fixIO :: (a -> IO a) -> IO a
+        t free
+
+encapsulate' :: a -> (IO (a -> (Success, CTree)), CTree)
+encapsulate' e = (encapsulate e >>= \g -> return (\x -> (g x,CTreeVoid)), CTreeVoid)
+  where foreign import primitive encapsulate :: a -> IO (a -> Success)
 
 
 startDebugging = navigate . map snd . findall

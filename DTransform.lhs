@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2320 2007-06-21 10:17:30Z wlux $
+% $Id: DTransform.lhs 2321 2007-06-21 10:19:17Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -467,11 +467,14 @@ Next function  gets the current module identifier,
 >       finalApp'        = case foreignWrapper cc s of
 >                            Just qId'' -> createApply (Function qId'' n) vars
 >                            Nothing
+>                              | any isFunctType (argumentTypes fType) ->
+>                                  error ("generateForeign: unsupported higher order primitive " ++ s)
 >                              | isIOType (resultType fType) -> finalAppIO
 >                              | otherwise                   -> finalApp
 >       body             = if cc==Primitive && s=="unsafePerformIO"
 >                          then finalApp
 >                          else debugBuildPairExp finalApp' void
+>       isFunctType ty   = isArrowType ty || isIOType ty
 
 > foreignWrapper :: CallConv -> String -> Maybe QualIdent
 > foreignWrapper Primitive s
@@ -578,8 +581,11 @@ for \texttt{IO}.
 > transformType'  (TypeVariable v) = TypeVariable v
 
 > typeArity :: Type -> Int
-> typeArity (TypeArrow _ ty) = 1 + typeArity ty
-> typeArity _ = 0
+> typeArity ty = length (argumentTypes ty)
+
+> argumentTypes :: Type -> [Type]
+> argumentTypes (TypeArrow ty1 ty2) = ty1 : argumentTypes ty2
+> argumentTypes _                   = []
 
 > resultType :: Type -> Type
 > resultType (TypeArrow _ ty) = resultType ty
@@ -588,6 +594,10 @@ for \texttt{IO}.
 > isIOType :: Type -> Bool
 > isIOType (TypeConstructor tc [_]) = tc == qIOId
 > isIOType _                        = False
+
+> isArrowType :: Type -> Bool
+> isArrowType (TypeArrow _ _) = True
+> isArrowType _               = False
 > ---------------------------------------------------------------------------
 
 

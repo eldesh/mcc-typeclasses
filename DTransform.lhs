@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2317 2007-06-21 10:11:05Z wlux $
+% $Id: DTransform.lhs 2318 2007-06-21 10:12:37Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -78,7 +78,7 @@ groups:
 > debugDecls :: ModuleIdent -> (QualIdent -> Bool) -> [Decl] -> [Decl]
 > debugDecls m  trusted lDecls = 
 >       foreigns  ++
->       types ++
+>       debugTypes types ++
 >       debugAuxiliary m lTypes ++ 
 >       secondPhase 
 >       where
@@ -285,7 +285,7 @@ We have to introduce an auxiliary function for the lambda in the intermediate co
 >       where 
 >       fMain = FunctionDecl fId [] fType fBody
 >       fId   = qualifyWith m f
->       fType = TypeVariable 0
+>       fType = TypeConstructor qIOId [TypeConstructor qUnitId []]
 >       fBody = Apply (Function debugFunctionqId 1) (Function debugAuxMainId 1)
 >       fType' = debugTypeMainAux
 >       r   = mkIdent "r"
@@ -602,7 +602,20 @@ is linked with an explicit goal.
 
 
 
+Function types appearing in data constructor declarations must be changed.
+\begin{verbatim}
 
+> debugTypes :: [Decl] -> [Decl]
+> debugTypes ds = map debugTypeDecl ds
+
+> debugTypeDecl :: Decl -> Decl
+> debugTypeDecl (DataDecl tc n cs) = DataDecl tc n (map debugConstrDecl cs)
+> debugTypeDecl (TypeDecl tc n ty) = TypeDecl tc n (transformType' ty)
+
+> debugConstrDecl :: ConstrDecl -> ConstrDecl
+> debugConstrDecl (ConstrDecl c tys) = ConstrDecl c (map transformType' tys)
+
+\end{verbatim}
 Auxiliary functions are introduced to deal with HO parameter applications
 \begin{verbatim}
 

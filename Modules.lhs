@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2322 2007-06-22 07:14:02Z wlux $
+% $Id: Modules.lhs 2324 2007-06-22 07:26:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -267,10 +267,12 @@ scope with their unqualified names. In addition, the entities exported
 from all loaded interfaces are in scope with their qualified names.
 \begin{verbatim}
 
+> data Task = Eval | Type deriving Eq
+
 > compileGoal :: Options -> Maybe String -> [FilePath] -> ErrorT IO ()
 > compileGoal opts g fns =
 >   do
->     (mEnv,tcEnv,iEnv,tyEnv,_,g') <- loadGoal True paths dbg cm ws m g fns
+>     (mEnv,tcEnv,iEnv,tyEnv,_,g') <- loadGoal Eval paths dbg cm ws m g fns
 >     let (vs,m',tyEnv') = goalModule dbg tyEnv m mainId g'
 >     let (tyEnv'',trEnv,m'',dumps) = transModule dbg tr tcEnv tyEnv' m'
 >     liftErr $ mapM_ (doDump opts) dumps
@@ -292,21 +294,21 @@ from all loaded interfaces are in scope with their qualified names.
 > typeGoal opts g fns =
 >   do
 >     (_,tcEnv,_,tyEnv,cx,Goal _ e _) <-
->       loadGoal False paths False cm ws (mkMIdent []) (Just g) fns
+>       loadGoal Type paths False cm ws (mkMIdent []) (Just g) fns
 >     liftErr $ print (ppQualType tcEnv (QualType cx (typeOf e)))
 >   where paths = importPath opts
 >         cm = caseMode opts
 >         ws = warn opts
 
-> loadGoal :: Bool -> [FilePath] -> Bool -> CaseMode -> [Warn]
+> loadGoal :: Task -> [FilePath] -> Bool -> CaseMode -> [Warn]
 >          -> ModuleIdent -> Maybe String -> [FilePath]
 >          -> ErrorT IO (ModuleEnv,TCEnv,InstEnv,ValueEnv,Context,Goal Type)
-> loadGoal forEval paths debug caseMode warn m g fns =
+> loadGoal task paths debug caseMode warn m g fns =
 >   do
 >     (mEnv,m') <- loadGoalModules paths debug fns
 >     (tcEnv,iEnv,tyEnv,cx,g') <-
 >       okM $ maybe (return (mainGoal m')) parseGoal g >>=
->             checkGoal forEval mEnv m (nub [m',preludeMIdent])
+>             checkGoal task mEnv m (nub [m',preludeMIdent])
 >     liftErr $ mapM_ putErrLn $ warnGoal caseMode warn m g'
 >     return (mEnv,tcEnv,iEnv,tyEnv,cx,g')
 >   where mainGoal m = Goal (first "") (Variable () (qualifyWith m mainId)) []
@@ -336,9 +338,9 @@ from all loaded interfaces are in scope with their qualified names.
 >           case break ('.' ==) cs of
 >             (cs',cs'') -> cs' : components cs''
 
-> checkGoal :: Bool -> ModuleEnv -> ModuleIdent -> [ModuleIdent] -> Goal ()
+> checkGoal :: Task -> ModuleEnv -> ModuleIdent -> [ModuleIdent] -> Goal ()
 >           -> Error (TCEnv,InstEnv,ValueEnv,Context,Goal Type)
-> checkGoal forEval mEnv m ms g =
+> checkGoal task mEnv m ms g =
 >   do
 >     let (pEnv,tcEnv,iEnv,tyEnv) = importInterfaces mEnv ms
 >     (tEnv,g') <- typeSyntaxCheckGoal tcEnv g
@@ -347,22 +349,22 @@ from all loaded interfaces are in scope with their qualified names.
 >     let (pEnv',tcEnv',tyEnv') =
 >           qualifyEnv1 mEnv (map importModule ms) pEnv tcEnv tyEnv
 >     g'''' <- precCheckGoal m pEnv' (qual1 tEnv vEnv g''')
->     (tyEnv'',cx,g''''') <- kindCheckGoal tcEnv' g'''' >>
->                            typeCheckGoal forEval m tcEnv' iEnv tyEnv' g''''
->     let (_,tcEnv'',tyEnv''') =
->           qualifyGoalEnv forEval mEnv m pEnv' tcEnv' tyEnv''
->     return (tcEnv'',iEnv,tyEnv''',cx,qualifyGoal forEval tEnv vEnv g''''')
->   where importModule m = importDecl (first "") m False True
+>     (tyEnv'',cx,g''''') <-
+>       kindCheckGoal tcEnv' g'''' >>
+>       typeCheckGoal (task == Eval) m tcEnv' iEnv tyEnv' g''''
+>     let (_,tcEnv'',tyEnv''') = qualifyGoalEnv task mEnv m pEnv' tcEnv' tyEnv''
+>     return (tcEnv'',iEnv,tyEnv''',cx,qualifyGoal task tEnv vEnv g''''')
+>   where importModule m = importDecl (first "") m True
 
-> qualifyGoalEnv :: Bool -> ModuleEnv -> ModuleIdent
+> qualifyGoalEnv :: Task -> ModuleEnv -> ModuleIdent
 >                -> PEnv -> TCEnv -> ValueEnv -> (PEnv,TCEnv,ValueEnv)
-> qualifyGoalEnv True mEnv m pEnv tcEnv tyEnv =
+> qualifyGoalEnv Eval mEnv m pEnv tcEnv tyEnv =
 >   qualifyEnv2 mEnv m pEnv tcEnv tyEnv
-> qualifyGoalEnv False _ _ pEnv tcEnv tyEnv = (pEnv,tcEnv,tyEnv)
+> qualifyGoalEnv Type _ _ pEnv tcEnv tyEnv = (pEnv,tcEnv,tyEnv)
 
-> qualifyGoal :: Bool -> TypeEnv -> FunEnv -> Goal a -> Goal a
-> qualifyGoal True tEnv vEnv = qual2 tEnv vEnv
-> qualifyGoal False _ _ = id
+> qualifyGoal :: Task -> TypeEnv -> FunEnv -> Goal a -> Goal a
+> qualifyGoal Eval tEnv vEnv = qual2 tEnv vEnv
+> qualifyGoal Type _ _ = id
 
 > warnGoal :: CaseMode -> [Warn] -> ModuleIdent -> Goal Type -> [String]
 > warnGoal caseMode warn m g =
@@ -455,11 +457,11 @@ intermediate language.
 >   imp True preludeMIdent True ++ imp debug debugPreludeMIdent False ++ is
 >   where p = first fn
 >         ms = m : [m | ImportDecl _ m _ _ _ <- is]
->         imp cond m all = [importDecl p m False all | cond && m `notElem` ms]
+>         imp cond m all = [importDecl p m all | cond && m `notElem` ms]
 
-> importDecl :: Position -> ModuleIdent -> Qualified -> Bool -> ImportDecl
-> importDecl p m q all =
->   ImportDecl p m q Nothing
+> importDecl :: Position -> ModuleIdent -> Bool -> ImportDecl
+> importDecl p m all =
+>   ImportDecl p m False Nothing
 >              (if all then Nothing else Just (Importing p []))
 
 \end{verbatim}

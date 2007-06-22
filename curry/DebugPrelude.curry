@@ -113,14 +113,18 @@ navigate trees =
 	do
 	     putStrLn "" 
              putStrLn "Entering debugger..." 
-	     debugging trees
+	     navigateAux trees
 
-debugging []  =
+navigateAux []  =
 	do
              putStrLn "" 
              putStrLn "No error has been found"
              putStrLn "Debugger exiting" 
-debugging (EmptyCTreeNode trees : other) = 
+navigateAux (CTreeVoid : other) = navigateAux other
+navigateAux (CTreeNode _ _ _ _ trees : other) = debugging trees other
+navigateAux (EmptyCTreeNode trees : other) = debugging trees other
+
+debugging trees other =
 	do
              bugFound <- buggyChildren trees
              putStrLn "" 
@@ -129,8 +133,8 @@ debugging (EmptyCTreeNode trees : other) =
 	     	   do
 		      putStrLn "Buggy node found"
 		      putStrLn "Debugger exiting" 
-                No    -> debugging other
-                Abort -> debugging []
+                No    -> navigateAux other
+                Abort -> navigateAux []
 
              
 buggyTree CTreeVoid = return No

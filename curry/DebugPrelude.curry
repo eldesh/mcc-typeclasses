@@ -5,8 +5,12 @@
 
 module DebugPrelude(CTree(..),startDebugging,startIODebugging,clean,dEval,
                     try',return',bind',bind_',catch',fixIO',encapsulate') where
+import Prelude hiding(Monad(..))
 import IO
 
+foreign import primitive return :: a -> IO a
+foreign import primitive (>>=) :: IO a -> (a -> IO b) -> IO b
+foreign import primitive (>>)  :: IO a -> IO b -> IO b
 foreign import primitive dvals :: a -> ShowS
 
 -- data type representing computation trees		   	
@@ -45,29 +49,25 @@ return' x = return (x, CTreeVoid)
 
 bind' :: IOT a -> (a -> (IOT b, CTree)) -> IOT b
 m `bind'` f =
-  do
-    (x,t1) <- m
-    case f x of
-      (m',t2) ->
-        do
-          (y,t3) <- m'
-          return (y, EmptyCTreeNode (clean [(dEval x,t1),(dEval m',t2),(dEval y,t3)]))
+  m >>= \(x,t1) ->
+  case f x of
+    (m',t2) ->
+      m' >>= \(y,t3) ->
+      return (y, EmptyCTreeNode (clean [(dEval x,t1),(dEval m',t2),(dEval y,t3)]))
 
 bind_' :: IOT a -> IOT b -> IOT b
 m1 `bind_'` m2 =
-  do
-    (x,t1) <- m1
-    (y,t2) <- m2
-    return (y, EmptyCTreeNode (clean [(dEval x,t1),(dEval y,t2)]))
+  m1 >>= \(x,t1) ->
+  m2 >>= \(y,t2) ->
+  return (y, EmptyCTreeNode (clean [(dEval x,t1),(dEval y,t2)]))
 
 catch' :: IOT a -> (IOError -> (IOT a, CTree)) -> IOT a
 catch' m f = catch m (wrap f)
   where wrap f ioe =
           case f ioe of
             (m,t1) ->
-              do
-                (x,t2) <- m
-                return (x, EmptyCTreeNode (clean [(dEval m,t1),(dEval x,t2)]))
+              m >>= \(x,t2) ->
+              return (x, EmptyCTreeNode (clean [(dEval m,t1),(dEval x,t2)]))
 
 -- NB It is important that wrap uses a lazy pattern; otherwise, the result
 --    of the (transformed) recursive IO action would be requested before it
@@ -78,9 +78,8 @@ fixIO' f = fixIO (wrap f)
         wrap f ~(x,_) =
           case f x of
             (m,t1) ->
-              do
-                (y,t2) <- m
-                return (y, EmptyCTreeNode (clean [(dEval m,t1),(dEval y,t2)]))
+              m >>= \(y,t2) ->
+              return (y, EmptyCTreeNode (clean [(dEval m,t1),(dEval y,t2)]))
 
 -- NB The computation tree CTreeVoid associated with the application f x
 --    means one cannot detect any bugs in expression e (at least as far
@@ -89,10 +88,7 @@ fixIO' f = fixIO (wrap f)
 --    independent copy of its argument, which includes all computation
 --    trees created locally during e's evaluation.
 encapsulate' :: a -> IOT (a -> (Success, CTree))
-encapsulate' e =
-  do
-    g <- encapsulate e
-    return' (\x -> (g x, CTreeVoid))
+encapsulate' e = encapsulate e >>= \g -> return' (\x -> (g x, CTreeVoid))
   where foreign import primitive encapsulate :: a -> IO (a -> Success)
 
 

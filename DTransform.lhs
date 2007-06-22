@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2325 2007-06-22 07:28:42Z wlux $
+% $Id: DTransform.lhs 2326 2007-06-22 17:51:19Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -461,9 +461,10 @@ Next function  gets the current module identifier,
 >       vars             = map Variable varsId
 >       fType'           = transformType n  fType
 >       bind             = qualifyWith preludeMIdent (mkIdent ">>=")
+>       ioDict           = qualifyWith preludeMIdent (mkIdent "_Inst#Prelude.Monad#Prelude.IO")
 >       finalApp         = createApply (Function qId n) vars
->       finalAppIO       = createApply (Function bind 2)
->                                      [finalApp, Function debugReturn 1]
+>       finalAppIO       = createApply (Function bind 1)
+>                                      [Function ioDict 0, finalApp, Function debugReturn 1]
 >       finalApp'        = case foreignWrapper cc s of
 >                            Just qId'' -> createApply (Function qId'' n) vars
 >                            Nothing

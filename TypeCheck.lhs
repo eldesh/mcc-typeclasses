@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2314 2007-06-20 12:11:35Z wlux $
+% $Id: TypeCheck.lhs 2327 2007-06-22 18:01:01Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -732,6 +732,12 @@ restricted further to be of the form $\texttt{FunPtr}\;t \rightarrow
 t$, where $t$ is a valid foreign function type, and the type of a
 foreign address must be either $\texttt{Ptr}\;a$ or
 $\texttt{FunPtr}\;a$, where $a$ is an arbitrary type.
+
+Note that a foreign function with type $t_1 \rightarrow \dots
+\rightarrow t_n \rightarrow t$ has arity $n$ unless the result type
+$t$ is $\texttt{IO}\;t'$, in which case its arity will be $n+1$. This
+special case reflects the fact that the type $\texttt{IO}\;t$ is
+equivalent to $\emph{World}\rightarrow(t,\emph{World})$.
 \begin{verbatim}
 
 > tcForeignFunct :: ModuleIdent -> TCEnv -> Position -> CallConv
@@ -739,13 +745,19 @@ $\texttt{FunPtr}\;a$, where $a$ is an arbitrary type.
 > tcForeignFunct m tcEnv p cc ie f ty =
 >   do
 >     checkForeignType cc (rawType ty')
->     updateSt_ (bindFun m f (arrowArity (rawType ty')) ty')
+>     updateSt_ (bindFun m f (foreignArity (rawType ty')) ty')
 >   where ty' = typeScheme (expandPolyType tcEnv (QualTypeExpr [] ty))
 >         checkForeignType cc ty
 >           | cc == CallConvPrimitive = return ()
 >           | ie == Just "dynamic" = checkCDynCallType tcEnv p cc ty
 >           | maybe False ('&' `elem`) ie = checkCAddrType tcEnv p ty
 >           | otherwise = checkCCallType tcEnv p cc ty
+>         foreignArity ty
+>           | isIO (arrowBase ty') = length tys + 1
+>           | otherwise = length tys
+>           where (tys,ty') = arrowUnapply ty
+>         isIO (TypeApply (TypeConstructor tc) _) = tc == qIOId
+>         isIO _ = False
 
 > checkCCallType :: TCEnv -> Position -> CallConv -> Type -> TcState ()
 > checkCCallType tcEnv p CallConvCCall (TypeArrow ty1 ty2)

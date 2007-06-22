@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 2314 2007-06-20 12:11:35Z wlux $
+% $Id: ILCompile.lhs 2327 2007-06-22 18:01:01Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -37,7 +37,7 @@ language into abstract machine code.
 > compileDecl (DataDecl tc n cs) = [compileData tc n cs]
 > compileDecl (TypeDecl _ _ _) = []
 > compileDecl (FunctionDecl f vs _ e) = [compileFun f vs e]
-> compileDecl (ForeignDecl f cc ie ty) = compileForeign f cc ie ty
+> compileDecl (ForeignDecl f cc ie ty) = [compileForeign f cc ie ty]
 
 > compileData :: QualIdent -> Int -> [ConstrDecl] -> Cam.Decl
 > compileData tc n cs =
@@ -78,45 +78,29 @@ expects a node pointer as result. The foreign function must be careful
 to ensure that those pointers are not invalidated by a garbage
 collection while it is still using them.
 
-For functions with result type \texttt{IO}~$t$, the compiler generates
-two functions. The first of these returns an I/O action and the other
-function implements the I/O action itself. The runtime system employs
-the usual state monad approach in order to implement I/O actions, but
-with a minor optimization. The type \texttt{IO} can be defined as
+Note that foreign functions with result type \texttt{IO}~$t$ have an
+arity which is one greater than the arity of their type. This reflects
+the fact that the runtime system employs the usual state monad
+approach for implementing I/O actions where type \texttt{IO} is
+defined by
 \begin{verbatim}
   type IO a = World -> (a,World)
 \end{verbatim}
-where \texttt{World} is a type representing the state of the external
-world. As this state is already present implicitly in the runtime
-system, we can simply use \texttt{()} for it. Because this
-representation is constant, the runtime system actually uses a simpler
-reader monad for the type \texttt{IO}.
-\begin{verbatim}
-  type IO a = () -> a
-\end{verbatim}
-
+and \texttt{World} is a type representing the state of the external
+world.
 \begin{verbatim}
 
-> compileForeign :: QualIdent -> CallConv -> String -> Type -> [Cam.Decl]
-> compileForeign f cc fExt ty
->   | isIO ty' = let (vs,vs') = splitAt (length tys + 1) (nameSupply "_") in
->                [ioFun f' f'_io (init vs),extFun f'_io vs vs']
->   | otherwise = let (vs,vs') = splitAt (length tys) (nameSupply "_") in
->                 [extFun f' vs vs']
->   where f' = fun f
->         f'_io = Cam.mangleQualified (Cam.demangle f' ++ "/IO")
->         tys = argTypes ty
->         ty' = resultType ty
->         extFun f vs vs' =
->           Cam.FunctionDecl f vs (foreignCall cc fExt vs tys ty' vs')
->         ioFun f f_io vs =
->           Cam.FunctionDecl f vs (Cam.Return (Cam.Papp f_io vs))
->         isIO (TypeConstructor tc tys) = tc == qIOId && length tys == 1
+> compileForeign :: QualIdent -> CallConv -> String -> Type -> Cam.Decl
+> compileForeign f cc fExt ty =
+>   Cam.FunctionDecl (fun f) vs (foreignCall cc fExt vs tys ty' vs')
+>   where (tys,ty') = arrowUnapply ty
+>         (vs,vs') = splitAt n (nameSupply "_")
+>         n = if isIO ty' then length tys + 1 else length tys
+>         isIO (TypeConstructor tc [_]) = tc == qIOId
 >         isIO _ = False
->         argTypes (TypeArrow ty1 ty2) = ty1 : argTypes ty2
->         argTypes _ = []
->         resultType (TypeArrow _ ty) = resultType ty
->         resultType ty = ty
+>         arrowUnapply (TypeArrow ty1 ty2) = (ty1 : tys,ty)
+>           where (tys,ty) = arrowUnapply ty2
+>         arrowUnapply ty = ([],ty)
 
 > foreignCall :: CallConv -> String -> [Cam.Name] -> [Type] -> Type
 >             -> [Cam.Name] -> Cam.Stmt
@@ -125,8 +109,7 @@ reader monad for the type \texttt{IO}.
 >   | otherwise =
 >       foldr2 rigidArg (foreignCCall cc (resultType ty) f tys vs') vs vs'
 >   where vs' = take (length tys) ws
->         resultType (TypeConstructor tc tys)
->           | tc == qIOId && length tys == 1 = head tys
+>         resultType (TypeConstructor tc [ty]) | tc == qIOId = ty
 >         resultType ty = ty
 
 > rigidArg :: Cam.Name -> Cam.Name -> Cam.Stmt -> Cam.Stmt

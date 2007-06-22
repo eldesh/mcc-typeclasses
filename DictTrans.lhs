@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2277 2007-06-18 15:55:56Z wlux $
+% $Id: DictTrans.lhs 2329 2007-06-22 22:45:18Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -748,9 +748,14 @@ newtypes lazily.
 
 > type NewtypeEnv = Env QualIdent Type
 
+> -- FIXME: this definition should be shared with module Simplify
 > newtypeEnv :: ValueEnv -> NewtypeEnv
-> newtypeEnv tyEnv = foldr bindNewtype emptyEnv (allEntities tyEnv)
->   where bindNewtype (DataConstructor _ _ _) = id
+> newtypeEnv tyEnv = foldr bindNewtype initNewtypeEnv (allEntities tyEnv)
+>   where initNewtypeEnv = bindEnv qIOId ioType' emptyEnv
+>         ioType' = TypeArrow worldType (tupleType [TypeVariable 0,worldType])
+>         qWorldId = qualify (mkIdent "World")
+>         worldType = TypeConstructor qWorldId
+>         bindNewtype (DataConstructor _ _ _) = id
 >         bindNewtype (NewtypeConstructor _ ty) = bindAlias (rawType ty)
 >         bindNewtype (Value _ _ _) = id 
 >         bindAlias (TypeArrow ty ty0) = bindEnv (rootOfType ty0) ty

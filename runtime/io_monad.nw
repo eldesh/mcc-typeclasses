@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: io_monad.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: io_monad.nw 2329 2007-06-22 22:45:18Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -32,7 +32,7 @@ The functions [[curry_argc]] and [[curry_argv]] return the arguments
 that were passed to [[curry_exec]].
 
 <<io_monad.h>>=
-extern int  curry_exec(NodeInfo *main_info_table, int argc, char **argv);
+extern int  curry_exec(Node *main, int argc, char **argv);
 extern void curry_exit(int rc) __attribute__((noreturn));
 
 extern void abort_with(const char *format, ...)
@@ -145,15 +145,21 @@ static char **io_argv;
 static int  curry_rc = 0;
 
 int
-curry_exec(NodeInfo *main_info, int argc, char **argv)
+curry_exec(Node *main, int argc, char **argv)
 {
     io_argc = argc;
     io_argv = argv;
 
-    assert(main_info->kind == LAZY_KIND && main_info->tag == NOUPD_TAG &&
-	   main_info->length == closure_node_size(0));
+    if ( main->info->kind == LAZY_KIND )
+	assert(main->info->tag == NOUPD_TAG &&
+	       main->info->length == closure_node_size(0));
+    else if ( main->info->kind == PAPP_KIND )
+	assert(main->info->tag == 1 &&
+	       main->info->length == closure_node_size(0));
+    else
+	invalid_arg("curry_exec", main->info->kind);
 
-    regs.r[0] = (Node *)&main_info;
+    regs.r[0] = main;
     run(start_io);
     regs.hlim = heap_base;
     release_mem();

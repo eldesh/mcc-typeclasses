@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TopEnv.lhs 1991 2006-11-01 18:15:48Z wlux $
+% $Id: TopEnv.lhs 2329 2007-06-22 22:45:18Z wlux $
 %
-% Copyright (c) 1999-2006, Wolfgang Lux
+% Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TopEnv.lhs}

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2304 2007-06-20 07:33:57Z wlux $
+% $Id: CGen.lhs 2329 2007-06-22 22:45:18Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -56,7 +56,7 @@ defines the array holding the names of the goal's free variables.
 >     (maybe [] (return . fvDecl "fv_names") fvs ++
 >      [procCall "curry_init" ["&argc","argv"],
 >       CLocalVar intType "rc"
->         (Just (curry_main fvs (nodeInfo f) "fv_names" ["argc","argv"])),
+>         (Just (curry_main fvs f "fv_names" ["argc","argv"])),
 >       procCall "curry_terminate" [],
 >       procCall "exit" ["rc"],
 >       CReturn (CInt 0)])]
@@ -65,9 +65,10 @@ defines the array holding the names of the goal's free variables.
 >                        (map CInit (map CString vs ++ [CNull]))
 >         curry_main (Just _) = curry_eval
 >         curry_main Nothing = const . curry_exec
->         curry_exec g args = CFunCall "curry_exec" (addr g : map CExpr args)
+>         curry_exec g args =
+>           CFunCall "curry_exec" (constRef (constFunc g) : map CExpr args)
 >         curry_eval g v args =
->           CFunCall "curry_eval" (addr g : map CExpr (v:args))
+>           CFunCall "curry_eval" (addr (nodeInfo g) : map CExpr (v:args))
 
 \end{verbatim}
 \subsection{Modules}

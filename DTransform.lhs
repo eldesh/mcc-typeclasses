@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2328 2007-06-22 18:01:40Z wlux $
+% $Id: DTransform.lhs 2329 2007-06-22 22:45:18Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -749,6 +749,20 @@ We only need:
       appropiate name and include only the function variables in the node.
 \end{itemize}
 
+Two special cases handle the selector functions introduced by the
+pattern binding update strategy (see p.~\pageref{pattern-binding} in
+Sect.~\ref{pattern-binding}) and $\eta$-expanded functions with result
+type \texttt{IO}~$t$. The former are not transformed at all and the
+latter do not return a pair composed of a result and a computation
+tree, but simply the result of the monadic action called in the body
+of the function. This is a consequence of the special rule that
+applies to the \texttt{IO} type (see notes on \texttt{transformType}
+above). Ignoring the local computation trees in this case is safe
+since $\eta$ expansion across \texttt{IO} is valid only if the body of
+the function is a non-expansive expression, which means that all local
+computation trees are void (cf.\ p.~\pageref{eta-expansion} in
+Sect.~\ref{eta-expansion} for the definition of non-expansive
+expressions.)
 \begin{verbatim}
 
 > ---------------------------------------------------------------------------
@@ -758,7 +772,12 @@ We only need:
 >   | isQSelectorId qId = FunctionDecl qId lVars fType expr
 >   | otherwise         = FunctionDecl qId' lVars fType expr'
 >   where
->     expr' = newLocalDeclarations  qId trust expr lVars (length lVars)
+>     isIO  = isIOType (resultType fType)
+>     arity = length lVars
+>     n     = typeArity fType
+>     expr' = if isIO && arity > n
+>             then newLocalDeclarationsEtaIO qId trust expr lVars arity
+>             else newLocalDeclarations      qId trust expr lVars arity
 >     qId' = changeFunctionqId qId
 >     trust = trusted qId
         
@@ -770,6 +789,29 @@ We only need:
 >       where   
 >         (_,exp',_) = newBindings qId exp lVars' 0 [] True trust
 >         lVars'        = drop ((length lVars)-arity) lVars
+
+> newLocalDeclarationsEtaIO :: QualIdent -> Bool -> Expression -> [Ident] ->
+>                          Int -> Expression
+> newLocalDeclarationsEtaIO qId trust exp lVars arity  = 
+>       etaExpandIO exp'' v
+>       where   
+>         (exp', v)   = etaReduceIO exp
+>         (_,exp'',_) = newBindings qId exp' lVars' 0 [] False trust
+>         lVars'        = drop ((length lVars)-arity) lVars
+
+> etaExpandIO :: Expression -> Expression -> Expression
+> etaExpandIO (Exist v e)   = Exist v . etaExpandIO e
+> etaExpandIO (Let d e)     = Let d . etaExpandIO e
+> etaExpandIO (Letrec ds e) = Letrec ds . etaExpandIO e
+> etaExpandIO e             = Apply e
+
+> etaReduceIO :: Expression -> (Expression,Expression)
+> etaReduceIO (Apply e1 e2) = (e1, e2)
+> etaReduceIO (Exist v e)   = (Exist v e', v')  where (e', v') = etaReduceIO e
+> etaReduceIO (Let d e)     = (Let d e', v)     where (e', v) = etaReduceIO e
+> etaReduceIO (Letrec ds e) = (Letrec ds e', v) where (e', v) = etaReduceIO e
+> etaReduceIO e = error ("etaReduceIO " ++ showsPrec 11 e "")
+
 
 \end{verbatim}
 

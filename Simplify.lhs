@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2289 2007-06-19 16:30:52Z wlux $
+% $Id: Simplify.lhs 2329 2007-06-22 22:45:18Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -28,15 +28,19 @@ Currently, the following optimizations are implemented:
 > import Env
 > import Monad
 > import SCC
+> import TopEnv
+> import TypeSubst
 > import Typing
 > import Utils
 
-> type SimplifyState a = StateT ValueEnv (ReaderT TrustEnv (StateT Int Id)) a
+> type SimplifyState a =
+>   StateT ValueEnv (ReaderT NewtypeEnv (ReaderT TrustEnv (StateT Int Id))) a
 > type InlineEnv = Env Ident (Expression Type)
 
 > simplify :: ValueEnv -> TrustEnv -> Module Type -> (Module Type,ValueEnv)
 > simplify tyEnv trEnv m =
->   runSt (callRt (callSt (simplifyModule m) tyEnv) trEnv) 1
+>   runSt (callRt (callRt (callSt (simplifyModule m) tyEnv) nEnv) trEnv) 1
+>   where nEnv = newtypeEnv tyEnv
 
 > simplifyModule :: Module Type -> SimplifyState (Module Type,ValueEnv)
 > simplifyModule (Module m es is ds) =
@@ -81,6 +85,7 @@ Currently, the following optimizations are implemented:
 >     return (SimpleRhs p e' [])
 
 \end{verbatim}
+\label{eta-expansion}
 After transforming the bodies of each equation defining a function,
 the compiler tries to $\eta$-expand the definition. Using
 $\eta$-expanded definitions has the advantage that the compiler can
@@ -139,27 +144,72 @@ only a single equation whose body is a non-expansive expression and
 whose arguments are all plain variables. The latter restriction is
 necessary in order to ensure that no arguments need to be evaluated in
 order to compute the equation's body.
+
+We perform $\eta$-expansion even across newtypes, so that, for
+instance, \texttt{doneST} and \texttt{returnST} in the program
+fragment 
+\begin{verbatim}
+  newtype ST s a = ST (s -> (a,s))
+  doneST     = returnST ()
+  returnST x = ST (\s -> (x,s))
+\end{verbatim}
+are expanded into functions with arity one and two, respectively. In
+order to determine the types of the variables added by
+$\eta$-expansion in such cases, the compiler must expand the types as
+well. To this end, the compiler uses a simple environment that maps
+newtype identifiers onto the argument type of their newtype
+constructor. This environment is derived from the value type
+environment in function \texttt{newtypeEnv} below. The compiler does
+not expand functions across newtypes that cannot be expanded
+themselves, which happens for newtypes that are exported abstractly.
+In order to support $\eta$-expansion of functions with type
+\texttt{IO}, we consider the type \texttt{IO} to be defined as a
+newtype as well.
 \begin{verbatim}
 
+> type NewtypeEnv = Env QualIdent Type
+
+> -- FIXME: this definition should be shared with module DictTrans
+> newtypeEnv :: ValueEnv -> NewtypeEnv
+> newtypeEnv tyEnv = foldr bindNewtype initNewtypeEnv (allEntities tyEnv)
+>   where initNewtypeEnv = bindEnv qIOId ioType' emptyEnv
+>         ioType' = TypeArrow worldType (tupleType [TypeVariable 0,worldType])
+>         qWorldId = qualify (mkIdent "World")
+>         worldType = TypeConstructor qWorldId
+>         bindNewtype (DataConstructor _ _ _) = id
+>         bindNewtype (NewtypeConstructor _ ty) = bindEnv (rootOfType ty2) ty1
+>           where TypeArrow ty1 ty2 = rawType ty
+>         bindNewtype (Value _ _ _) = id
+
 > etaExpand :: ModuleIdent -> [Equation Type] -> SimplifyState [Equation Type]
-> etaExpand m [eq] = fetchSt >>= \tyEnv -> etaEquation m tyEnv eq
+> etaExpand m [eq] =
+>   do
+>     tyEnv <- fetchSt
+>     nEnv <- liftSt envRt
+>     etaEquation m tyEnv nEnv eq
 > etaExpand m eqs = return eqs
 
-> etaEquation :: ModuleIdent -> ValueEnv -> Equation Type
+> etaEquation :: ModuleIdent -> ValueEnv -> NewtypeEnv -> Equation Type
 >             -> SimplifyState [Equation Type]
-> etaEquation m tyEnv (Equation p1 (FunLhs f ts) (SimpleRhs p2 e _))
+> etaEquation m tyEnv nEnv (Equation p1 (FunLhs f ts) (SimpleRhs p2 e _))
 >   | all isVariablePattern ts && isNonExpansive tyEnv 0 e && not (null tys) =
 >       do
 >         vs <- mapM (freshVar m etaId) tys
 >         updateSt_ (changeArity m f (length ts + length tys))
 >         return [Equation p1 (FunLhs f (ts ++ map (uncurry VariablePattern) vs))
->                          (SimpleRhs p2 (etaApply e (map (uncurry mkVar) vs)) [])]
+>                          (SimpleRhs p2 (etaApply ty e (map (uncurry mkVar) vs)) [])]
 >   | otherwise = return [Equation p1 (FunLhs f ts) (SimpleRhs p2 e [])]
->   where ty = typeOf e
->         tys = take (exprArity tyEnv e) (arrowArgs ty)
+>   where n = exprArity tyEnv e
+>         ty = etaType nEnv n (typeOf e)
+>         tys = take n (arrowArgs ty)
 >         etaId n = mkIdent ("_#eta" ++ show n)
->         etaApply (Let ds e) es = Let ds (etaApply e es)
->         etaApply e es = apply e es
+>         etaApply ty (Literal _ l) es = apply (Literal ty l) es
+>         etaApply ty (Variable _ x) es = apply (Variable ty x) es
+>         etaApply ty (Constructor _ c) es = apply (Constructor ty c) es
+>         etaApply ty (Apply f e) es =
+>           etaApply (TypeArrow (typeOf e) ty) f (e:es)
+>         etaApply _ (Case _ _) _ = internalError "etaApply"
+>         etaApply ty (Let ds e) es = Let ds (etaApply ty e es)
 
 > isNonExpansive :: ValueEnv -> Int -> Expression a -> Bool
 > isNonExpansive _ _ (Literal _ _) = True
@@ -187,6 +237,17 @@ order to compute the equation's body.
 > exprArity tyEnv (Apply e _) = exprArity tyEnv e - 1
 > exprArity tyEnv (Let _ e) = exprArity tyEnv e
 > exprArity _ (Case _ _) = 0
+
+> etaType :: NewtypeEnv -> Int -> Type -> Type
+> etaType nEnv 0 ty = ty
+> etaType nEnv n (TypeArrow ty1 ty2) = TypeArrow ty1 (etaType nEnv (n - 1) ty2)
+> etaType nEnv n ty =
+>   case unapplyType True ty of
+>     (TypeConstructor tc,tys) ->
+>       case lookupEnv tc nEnv of
+>         Just ty -> etaType nEnv n (expandAliasType tys ty)
+>         Nothing -> ty
+>     _ -> ty
 
 \end{verbatim}
 After simplifying the right hand sides of all equations of a function
@@ -260,7 +321,7 @@ in Curry expressions.
 > inlineBodies m eqs =
 >   do
 >     tyEnv <- fetchSt
->     trEnv <- liftSt envRt
+>     trEnv <- liftSt (liftRt envRt)
 >     return (concatMap (inlineBody m tyEnv trEnv) eqs)
 
 > inlineBody :: ModuleIdent -> ValueEnv -> TrustEnv -> Equation Type
@@ -616,7 +677,7 @@ Auxiliary functions
 >            -> SimplifyState Ident
 > freshIdent m f n ty =
 >   do
->     x <- liftM f (liftSt (liftRt (updateSt (1 +))))
+>     x <- liftM f (liftSt (liftRt (liftRt (updateSt (1 +)))))
 >     updateSt_ (bindFun m x n ty)
 >     return x
 

@@ -100,10 +100,10 @@ startDebugging :: ((a, CTree) -> Success) -> IO ()
 startDebugging = navigate . map snd . findall
 
 startIODebugging :: (IOT a, CTree) -> IO ()
-startIODebugging (m, CTreeNode name args result rule trees) =
+startIODebugging (m,t1) =
   do
-    (x,t) <- m
-    navigate [CTreeNode name args result rule (trees ++ clean [(dEval x,t)])]
+    (x,t2) <- m
+    navigate [EmptyCTreeNode (clean [(dEval m,t1),(dEval x,t2)])]
 
 
 -- rhs=debugging for navigating, rhs=prettyTree for pretty printing
@@ -120,7 +120,7 @@ debugging []  =
              putStrLn "" 
              putStrLn "No error has been found"
              putStrLn "Debugger exiting" 
-debugging (CTreeNode name args result rule trees : other) = 
+debugging (EmptyCTreeNode trees : other) = 
 	do
              bugFound <- buggyChildren trees
              putStrLn "" 

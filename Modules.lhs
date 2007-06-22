@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2287 2007-06-19 14:54:09Z wlux $
+% $Id: Modules.lhs 2322 2007-06-22 07:14:02Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -273,11 +273,10 @@ from all loaded interfaces are in scope with their qualified names.
 >     (mEnv,tcEnv,iEnv,tyEnv,_,g') <- loadGoal True paths dbg cm ws m g fns
 >     let (vs,m',tyEnv') = goalModule dbg tyEnv m mainId g'
 >     let (tyEnv'',trEnv,m'',dumps) = transModule dbg tr tcEnv tyEnv' m'
->     let trEnv' = if dbg then bindEnv mainId Suspect trEnv else trEnv
 >     liftErr $ mapM_ (doDump opts) dumps
 >     let (mEnv',tyEnv''',m''',dumps) = dictTrans mEnv tcEnv iEnv tyEnv'' m''
 >     liftErr $ mapM_ (doDump opts) dumps
->     let (il,dumps) = ilTransModule1 (dAddMain mainId) dbg tyEnv''' trEnv' m'''
+>     let (il,dumps) = ilTransModule1 (dAddMain mainId) dbg tyEnv''' trEnv m'''
 >     liftErr $ mapM_ (doDump opts) dumps
 >     let (ccode,dumps) = genCodeGoal mEnv' (qualifyWith m mainId) vs il
 >     liftErr $ mapM_ (doDump opts) dumps >>

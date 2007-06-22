@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Lift.lhs 2289 2007-06-19 16:30:52Z wlux $
+% $Id: Lift.lhs 2332 2007-06-22 23:26:01Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -171,26 +171,28 @@ is no need for reordering.
 >                   -> [Decl Type] -> Expression Type
 >                   -> AbstractState (Expression Type)
 > abstractDeclGroup m pre lvs env ds e =
->   abstractFunDecls m pre (lvs ++ bv vds) env (scc bv (qfv m) fds) vds e
+>   liftSt fetchSt >>= \trEnv ->
+>   abstractFunDecls m pre (lvs ++ bv vds) trEnv env (scc bv (qfv m) fds) vds e
 >   where (fds,vds) = partition isFunDecl ds
 
-> abstractFunDecls :: ModuleIdent -> String -> [Ident] -> AbstractEnv
->                  -> [[Decl Type]] -> [Decl Type] -> Expression Type
->                  -> AbstractState (Expression Type)
-> abstractFunDecls m pre lvs env [] vds e =
+> abstractFunDecls :: ModuleIdent -> String -> [Ident] -> TrustEnv
+>                  -> AbstractEnv -> [[Decl Type]] -> [Decl Type]
+>                  -> Expression Type -> AbstractState (Expression Type)
+> abstractFunDecls m pre lvs _ env [] vds e =
 >   do
 >     vds' <- mapM (abstractDecl m pre lvs env) vds
 >     e' <- abstractExpr m pre lvs env e
 >     return (Let vds' e')
-> abstractFunDecls m pre lvs env (fds:fdss) vds e =
+> abstractFunDecls m pre lvs trEnv env (fds:fdss) vds e =
 >   do
 >     tyEnv <- fetchSt
 >     let tys = map (rawType . flip varType tyEnv) fvs
 >     case fds of
 >       [FunctionDecl _ f [Equation _ (FunLhs _ ts) (SimpleRhs _ e' _)]]
->         | all isVarPattern ts && isFunction e'' &&
+>         | maybe True (Trust==) (lookupEnv f trEnv) &&
+>           all isVarPattern ts && isFunction e'' &&
 >             fvs' ++ [mkVar ty v | VariablePattern ty v <- ts] == es ->
->             abstractFunDecls m pre lvs env' fdss vds e
+>             abstractFunDecls m pre lvs trEnv env' fdss vds e
 >         where (e'',es) = unapply e' []
 >               fvs' = zipWith mkVar tys fvs
 >               env' = bindEnv f (apply e'' fvs') env
@@ -202,7 +204,7 @@ is no need for reordering.
 >           liftSt (updateSt_ (abstractFunAnnots m pre fs'))
 >           fds' <- mapM (abstractFunDecl m pre (zip tys fvs) lvs env')
 >                        [d | d <- fds, any (`elem` fs') (bv d)]
->           e' <- abstractFunDecls m pre lvs env' fdss vds e
+>           e' <- abstractFunDecls m pre lvs trEnv env' fdss vds e
 >           return (Let fds' e')
 >         where fs' = filter (not . isLifted tyEnv) fs
 >               env' = foldr (bindF (zipWith mkVar tys fvs)) env fs

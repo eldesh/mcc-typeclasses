@@ -1,8 +1,8 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 2280 2007-06-19 11:40:35Z wlux $
+# $Id: Makefile.in 2344 2007-06-23 09:55:53Z wlux $
 #
-# Copyright (c) 2004-2006, Wolfgang Lux
+# Copyright (c) 2004-2007, Wolfgang Lux
 # See ../LICENSE for the full license.
 #
 
@@ -170,6 +170,7 @@ all: curry
 
 # Curry modules
 curry: $(curry_LIBS) $($(debug)_LIBS)
+icurry: $(curry_INTF) $($(debug)_INTF)
 
 $(curry_CSRC) $(debug_CSRC): ../cycc
 $(curry_DCSRC): ../cycc DebugPrelude.icurry

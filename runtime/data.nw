@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: data.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: data.nw 2345 2007-06-23 09:58:12Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Predefined Data Types}
@@ -45,11 +45,13 @@ DECLARE_CONST(___91__93_);
 DECLARE_DATA(___58_);
 DECLARE_CONST(__Success);
 
-#define nil		CONST(___91__93_)
-#define unit		CONST(___40__41_)
-#define Success		CONST(__Success)
-#define cons_info	___58__info
-#define cons_node_size	closure_node_size(2)
+#ifdef CURRY_RTS
+# define nil		CONST(___91__93_)
+# define unit		CONST(___40__41_)
+# define Success	CONST(__Success)
+# define cons_info	___58__info
+# define cons_node_size	closure_node_size(2)
+#endif
 
 @ 
 <<data.c>>=

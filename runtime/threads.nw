@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: threads.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: threads.nw 2345 2007-06-23 09:58:12Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -64,13 +64,14 @@ safe to check whether [[regs.rq != 0]] in order to test whether other
 runnable threads exist.
 
 <<threads.h>>=
+#ifdef CURRY_RTS
 enum { THREAD_TAG, SURROGATE_TAG };
 
-#if 0
+# if 0
 typedef union thread_node *ThreadQueue; /* already declared in heap.h */
-#endif
+# endif
 
-#define THREAD_INFO \
+# define THREAD_INFO \
     NodeInfo	     *info; \
     unsigned int     id;		/* (unique) thread id */ \
     ThreadQueue	     next;		/* link to next thread of queue */
@@ -95,6 +96,7 @@ union thread_node {
     struct thread_state	    t;
     struct thread_surrogate s;
 };
+#endif
 
 @
 <<threads.c>>=
@@ -130,12 +132,14 @@ used if the thread is suspended due to a queue-me and unbound variable
 node, respectively.
 
 <<threads.h>>=
+#ifdef CURRY_RTS
 enum suspend_reason {
     None,			/* interrupted */
     Yield,			/* rescheduled due non-determinism */
     Delay,			/* suspended due to unbound variable */
     Eval			/* suspended due to locked application */
 };
+#endif
 
 @
 <<threads.c>>=

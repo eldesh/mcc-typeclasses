@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: disequal.nw 2345 2007-06-23 09:58:12Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -10,11 +10,13 @@ The representation of disequality constraints extends the common
 be different.
 
 <<disequal.h>>=
+#ifdef CURRY_RTS
 extern NodeInfo diseq_constraint_info;
 typedef struct diseq_constraint {
     Constraint cstr;
     Node       *node;
 } Disequality;
+#endif
 
 @ 
 The primitive function [[=/=]] implements disequality constraints.

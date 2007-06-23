@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: regs.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: regs.nw 2338 2007-06-23 09:42:14Z wlux $
 %
-% Copyright (c) 2006, Wolfgang Lux
+% Copyright (c) 2006-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{The Abstract Machine Registers}\label{sec:registers}
@@ -47,7 +47,7 @@ available as fields of the global [[regs]] structure.
 
 typedef void *word;
 
-struct regs {
+extern struct regs {
     unsigned int		 cid;
     union node			 **sp;
     union node			 **ds_base;
@@ -82,6 +82,8 @@ extern void init_regs(void);
 #include "trail.h"
 #include "threads.h"
 #include "spaces.h"
+
+struct regs regs;
 
 void
 init_regs()

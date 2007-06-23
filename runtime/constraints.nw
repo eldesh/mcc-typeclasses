@@ -1,14 +1,12 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: constraints.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: constraints.nw 2334 2007-06-23 09:33:35Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
-\subsection{Basic Constraints}
-This file implements two basic constraint functions, viz.\ the trivial
-constraint \texttt{success}, which is always satisfied, and the
-concurrent conjunction of two constraints \texttt{\&}. The equality
-constraint \texttt{=:=} is defined in section~\ref{sec:unification}.
+\subsection{Concurrent Conjunction}
+This file implements the concurrent conjunction of two constraints
+\texttt{(\&)}.
 
 <<constraints.c>>=
 #include "config.h"
@@ -21,17 +19,7 @@ constraint \texttt{=:=} is defined in section~\ref{sec:unification}.
 #include "stack.h"
 #include "eval.h"
 #include "threads.h"
-#include "spaces.h"
-#include "data.h"
 #include "cam.h"
-
-DECLARE_LABEL(extern, __success);
-
-FUNCTION(__success)
-{
- ENTRY_LABEL(extern, __success)
-    RET(Success);
-}
 
 @
 The code for a parallel conjunction of two constraints tries to avoid

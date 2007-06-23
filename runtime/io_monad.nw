@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: io_monad.nw 2329 2007-06-22 22:45:18Z wlux $
+% $Id: io_monad.nw 2334 2007-06-23 09:33:35Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -240,70 +240,6 @@ fail_with(const char *format, ...)
 }
 
 @
-The code for the primitive I/O actions \texttt{return}, \texttt{(>>)},
-and \texttt{(>>=)} is implemented in this file, too. The function
-\texttt{(>>)} could be defined as prelude function but we can
-implement it more efficiently here. Note that all functions take an
-additional argument due to the underlying representation of the
-\texttt{IO} monad. Also note that \texttt{return} does not evaluate
-its argument because of the lazy IO monad semantics.
-
-<<io_monad.c>>=
-DECLARE_LABEL(extern, __return);
-
-FUNCTION(__return)
-{
- ENTRY_LABEL(extern, __return)
-    RET(regs.r[0]);
-}
-
-DECLARE_LABEL(extern, ___62__62_);
-DECLARE_LABEL(static, ___62__62__1);
-
-FUNCTION(___62__62_)
-{
- ENTRY_LABEL(extern, ___62__62_)
-    SAVE_REGS(2);
-    CALL2(___64_, ___62__62__1, regs.r[0], regs.r[2]);
-}
-
-static
-FUNCTION(___62__62__1)
-{
- ENTRY_LABEL(static, ___62__62__1)
-    CALL_RET2(___64_, 2, regs.sp[0], regs.sp[1]);
-}
-
-DECLARE_LABEL(extern, ___62__62__61_);
-DECLARE_LABEL(static, ___62__62__61__1);
-DECLARE_LABEL(static, ___62__62__61__2);
-
-FUNCTION(___62__62__61_)
-{
- ENTRY_LABEL(extern, ___62__62__61_)
-    SAVE_REGS(2);
-    CALL2(___64_, ___62__62__61__1, regs.r[0], regs.r[2]);
-}
-
-static
-FUNCTION(___62__62__61__1)
-{
-    Node *f, *x;
- ENTRY_LABEL(static, ___62__62__61__1)
-    f = *regs.sp++;
-    x = regs.r[0];
-    CALL2(___64_, ___62__62__61__2, f, x);
-}
-
-static
-FUNCTION(___62__62__61__2)
-{
- ENTRY_LABEL(static, ___62__62__61__2)
-    assert(regs.r[0]->info->kind == PAPP_KIND && regs.r[0]->info->tag == 1);
-    GOTO(regs.r[0]->info->apply);
-}
-
-@
 The function [[catch]] lets the user catch I/O exceptions in monadic
 code. The function is passed a monadic action and an exception
 handler. It creates a new exception frame on the stack and saves the
@@ -412,87 +348,4 @@ void
 ioError_withErrno(const char *loc)
 {
     ioError(loc, strerror(errno));
-}
-
-@
-The function [[unsafePerformIO]] allows executing a monadic action
-and returning its result into a regular function. The function can be
-used for implementing a simple (unsafe) trace function and can also
-serve for generating unique entities~\cite{AugustssonRittriSynek94:Unique}.
-
-Recall that the IO monad is lazy, therefore we must evaluate the result
-of the monadic action to head normal form, eventually.
-
-\textbf{As the name of the function suggests, its use is totally
-unsafe. This function is a hack and should not be used casually.}
-
-<<io_monad.c>>=
-DECLARE_LABEL(extern, __unsafePerformIO);
-DECLARE_LABEL(static, __unsafePerformIO_1);
-
-FUNCTION(__unsafePerformIO)
-{
- ENTRY_LABEL(extern, __unsafePerformIO)
-    SAVE_REGS(0);
-    CALL2(___64_, __unsafePerformIO_1, regs.r[0], unit);
-}
-
-static
-FUNCTION(__unsafePerformIO_1)
-{
-    Node *x;
- ENTRY_LABEL(static, __unsafePerformIO_1)
-    x = regs.r[0];
-    if ( is_tagged_ptr(x) )
-	ENTER(x, 0);
-    RETURN(x, 0);
-}
-
-@
-The [[fixIO]] function was recently introduced in Haskell in order to
-allow recursive bindings in a monad. The function is the fixpoint
-operator in the IO monad with type [[(a -> IO a) -> IO a]] and
-corresponds to the regular fix point operator [[fix :: (a -> a) -> a]]
-that can be defined as
-\begin{equation}
-  \mbox{\texttt{fix f = let x = f x in x}}\label{eq:fix}
-\end{equation}
-in Curry.\footnote{Actually, this definition is not valid according to
-the Curry report because of the recursive value binding. However, it
-is accepted as an extension by our compiler.} The following is an
-attempt to implement fixIO in Curry. Using the
-representation~(\ref{eq:monadic-io}) of \texttt{IO a} together with
-\texttt{type World = ()}, [[fixIO]] can be defined as follows.
-\begin{equation}
-  \mbox{\texttt{fixIO f () = let (x,()) = f x () in (x,())}}\label{eq:fixIO}
-\end{equation}
-As we use the representation~(\ref{eq:our-io}) instead
-of~(\ref{eq:monadic-io}), our implementation is even closer to the
-definition of \texttt{fix}.
-\begin{equation}
-  \mbox{\texttt{fixIO f () = let x = f x () in x}}\label{eq:our-fixIO}
-\end{equation}
-
-<<io_monad.c>>=
-DECLARE_LABEL(extern, __fixIO);
-
-FUNCTION(__fixIO)
-{
-    Node *clos, *susp;
- ENTRY_LABEL(extern, __fixIO)
-    CHECK_HEAP(2, closure_node_size(2) + suspend_node_size(2));
-    clos     = (Node *)regs.hp;
-    susp     = (Node *)(regs.hp + closure_node_size(2));
-    regs.hp += closure_node_size(2) + suspend_node_size(2);
-
-    clos->info	    = &___64__info;
-    clos->c.args[0] = regs.r[0];
-    clos->c.args[1] = susp;
-
-    susp->info	    = ___64__lazy_info_table;
-    susp->s.spc	    = regs.ss;
-    susp->s.args[0] = clos;
-    susp->s.args[1] = regs.r[1];
-
-    ENT(susp);
 }

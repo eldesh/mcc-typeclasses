@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 2327 2007-06-22 18:01:01Z wlux $
+% $Id: ILCompile.lhs 2334 2007-06-23 09:33:35Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -61,22 +61,24 @@ language into abstract machine code.
 >           liftM (f (map var vs) . unalias) (compileStrict [] e [])
 
 \end{verbatim}
-The code for foreign functions using the \texttt{primitive} calling
-convention simply consists of a tail call to the entry point of the
-foreign code. For functions using the \texttt{ccall} calling
-convention, all arguments are evaluated to ground terms before calling
-the foreign function. The result of the call or, if the C function
-does not return a result, the constant \texttt{()} is returned from
-the compiled function. Arguments and results of the basic data types
-\texttt{Bool}, \texttt{Char}, \texttt{Int}, \texttt{Float},
-\texttt{Ptr}, \texttt{FunPtr}, and \texttt{StablePtr} are marshaled to
-and from their corresponding C types. The non-standard
-\texttt{rawcall} calling convention is similar to the \texttt{ccall}
-calling convention except that no marshaling takes place, i.e., the
-compiler simply passes node pointers to the foreign function and
-expects a node pointer as result. The foreign function must be careful
-to ensure that those pointers are not invalidated by a garbage
-collection while it is still using them.
+The code of a few known foreign functions using the \texttt{primitive}
+calling convention is generated directly by the compiler. For all
+other functions using the \texttt{primitive} calling convention, the
+compiler simply generates a tail call to the entry point of the
+foreign code, which is expected to be implemented in the runtime
+system. For functions using the \texttt{ccall} calling convention, all
+arguments are evaluated to ground terms before calling the foreign
+function. The result of the call or, if the C function does not return
+a result, the constant \texttt{()} is returned from the compiled
+function. Arguments and results of the basic data types \texttt{Bool},
+\texttt{Char}, \texttt{Int}, \texttt{Float}, \texttt{Ptr},
+\texttt{FunPtr}, and \texttt{StablePtr} are marshaled to and from
+their corresponding C types. The non-standard \texttt{rawcall} calling
+convention is similar to the \texttt{ccall} calling convention except
+that no marshaling takes place, i.e., the compiler simply passes node
+pointers to the foreign function and expects a node pointer as result.
+The foreign function must be careful to ensure that those pointers are
+not invalidated by a garbage collection while it is still using them.
 
 Note that foreign functions with result type \texttt{IO}~$t$ have an
 arity which is one greater than the arity of their type. This reflects
@@ -105,12 +107,45 @@ world.
 > foreignCall :: CallConv -> String -> [Cam.Name] -> [Type] -> Type
 >             -> [Cam.Name] -> Cam.Stmt
 > foreignCall cc f vs tys ty ws
->   | cc == Primitive = Cam.Exec (Cam.mangle f) vs
+>   | cc == Primitive = foreignPrimitive f vs ws
 >   | otherwise =
 >       foldr2 rigidArg (foreignCCall cc (resultType ty) f tys vs') vs vs'
 >   where vs' = take (length tys) ws
 >         resultType (TypeConstructor tc [ty]) | tc == qIOId = ty
 >         resultType ty = ty
+
+> foreignPrimitive :: String -> [Cam.Name] -> [Cam.Name] -> Cam.Stmt
+> foreignPrimitive f =
+>   case f of
+>     "failed" -> failed
+>     "success" -> success
+>     "seq" -> seq
+>     "ensureNotFree" -> ensureNotFree
+>     "return" -> return
+>     ">>" -> (>>)
+>     ">>=" -> (>>=)
+>     "unsafePerformIO" -> unsafePerformIO
+>     "fixIO" -> fixIO
+>     _ -> const . (Cam.Exec (Cam.mangle f))
+>   where failed _ _ = Cam.Choices []
+>         success _ _ = Cam.Return (Cam.Constr (Cam.mangle "Success") [])
+>         seq (v1:v2:_) (w1:_) =
+>           Cam.Seq (w1 Cam.:<- Cam.Enter v1) (Cam.Enter v2)
+>         ensureNotFree (v1:_) (w1:_) = rigidArg v1 w1 (Cam.Return (Cam.Var w1))
+>         return (v1:_) _ = Cam.Return (Cam.Var v1)
+>         (>>) (v1:v2:v3:_) (w1:_) = 
+>           Cam.Seq (w1 Cam.:<- Cam.Exec (apFun 1) [v1,v3])
+>                   (Cam.Exec (apFun 1) [v2,v3])
+>         (>>=) (v1:v2:v3:_) (w1:_) =
+>           Cam.Seq (w1 Cam.:<- Cam.Exec (apFun 1) [v1,v3])
+>                   (Cam.Exec (apFun 2) [v2,w1,v3])
+>         unsafePerformIO (v1:_) (w1:w2:_) =
+>           Cam.Seq (w1 Cam.:<- Cam.Return (Cam.Constr (con qUnitId) [])) $
+>           Cam.Seq (w2 Cam.:<- Cam.Exec (apFun 1) [v1,w1]) $
+>           Cam.Enter w2
+>         fixIO (v1:v2:_) (w1:_) =
+>           Cam.Seq (Cam.Let [Cam.Bind w1 (Cam.Lazy (apFun 2) [v1,w1,v2])])
+>                   (Cam.Enter w1)
 
 > rigidArg :: Cam.Name -> Cam.Name -> Cam.Stmt -> Cam.Stmt
 > rigidArg v1 v2 st =

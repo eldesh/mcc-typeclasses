@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: eval.nw 2334 2007-06-23 09:33:35Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -430,45 +430,6 @@ FUNCTION(___64__1)
 }
 
 @ 
-The primitive function \texttt{seq} evaluates both of its argument to
-head normal form starting with the left argument.
-
-<<eval.c>>=
-DECLARE_LABEL(extern, __seq);
-DECLARE_LABEL(static, __seq_1);
-
-FUNCTION(__seq)
-{
- ENTRY_LABEL(extern, __seq)
-    SAVE_REGS(1);
-    EVAL(__seq_1);
-}
-
-static
-FUNCTION(__seq_1)
-{
-    Node *x;
- ENTRY_LABEL(static, __seq_1)
-    x = regs.sp[0];
-    if ( is_tagged_ptr(x) )
-	ENTER(x, 1);
-    RETURN(x, 1);
-}
-
-@ 
-The primitive function \texttt{failed} simply invokes the current
-failure handler.
-
-<<eval.c>>=
-DECLARE_LABEL(extern, __failed);
-
-FUNCTION(__failed)
-{
- ENTRY_LABEL(extern, __failed)
-    FAIL("failed");
-}
-
-@ 
 The unsafe primitive function \texttt{isVar} returns \texttt{True} if
 its argument evaluates to an unbound variable. This function is
 implemented only for compatibility with PAKCS.
@@ -497,30 +458,6 @@ FUNCTION(__isVar_1)
     else
 	r = CONST(__Prelude__False);
     RETURN(r, 0);
-}
-
-@ 
-The primitive function \texttt{ensureNotFree} evaluates its argument
-to head normal form and suspends until it is instantiated to a
-non-variable term.
-
-<<eval.c>>=
-DECLARE_LABEL(extern, __ensureNotFree);
-DECLARE_LABEL(static, __ensureNotFree_1);
-
-FUNCTION(__ensureNotFree)
-{
- ENTRY_LABEL(extern, __ensureNotFree)
-    SAVE_REGS(0);
-    EVAL(__ensureNotFree_1);
-}
-
-static
-FUNCTION(__ensureNotFree_1)
-{
- ENTRY_LABEL(static, __ensureNotFree_1)
-    MATCH_RIGID(__ensureNotFree_1);
-    RETURN(regs.r[0], 0);
 }
 
 @ 

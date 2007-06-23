@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2329 2007-06-22 22:45:18Z wlux $
+% $Id: CGen.lhs 2334 2007-06-23 09:33:35Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -758,7 +758,8 @@ performing a stack check.
 > stackDepth (CPSSeq _ st) = stackDepth st
 > stackDepth (CPSWithCont k st) = stackDepthCont k + stackDepth st
 > stackDepth (CPSSwitch _ _ _) = 0
-> stackDepth (CPSChoices _ (k:_)) = 1 + stackDepthCont k
+> stackDepth (CPSChoices _ ks) =
+>   if null ks then 0 else 1 + stackDepthCont (head ks)
 
 > stackDepthCont :: CPSCont -> Int
 > stackDepthCont k = 1 + length (contVars k)
@@ -927,7 +928,7 @@ translation function.
 > cCode f _ vs0 (CPSSwitch tagged v cases) [] =
 >   switchOnTerm f tagged vs0 v
 >                [(t,caseCode f vs0 v t st) | CaseBlock t st <- cases]
-> cCode _ _ vs0 (CPSChoices v ks) ks' = choices vs0 v ks ks'
+> cCode f _ vs0 (CPSChoices v ks) ks' = choices f vs0 v ks ks'
 
 > cCode0 :: FM Name CExpr -> Stmt0 -> [CStmt]
 > cCode0 _ (Lock v) = lock v
@@ -1025,17 +1026,19 @@ translation function.
 >        (delay vs0 v ks)
 >        []]
 
-> choices :: (Bool,[Name],[Name]) -> Maybe Name -> [CPSCont] -> [CPSCont]
->         -> [CStmt]
-> choices vs0 v ks ks' =
->   CStaticArray constLabelType choices
->                (map (CInit . CExpr . contName) ks ++ [CInit CNull]) :
->   localVar ips (Just (asNode (CExpr choices))) :
->   saveCont vs0 [] [ips] (head ks : ks') ++
->   [CppCondStmts "YIELD_NONDET"
->      [CIf (CExpr "regs.rq") (yieldCall v) []]
->      [],
->    goto "regs.handlers->choices"]
+> choices :: Name -> (Bool,[Name],[Name]) -> Maybe Name -> [CPSCont]
+>         -> [CPSCont] -> [CStmt]
+> choices f vs0 v ks ks'
+>   | null ks = failAndBacktrack (undecorate (demangle f))
+>   | otherwise =
+>       CStaticArray constLabelType choices
+>                    (map (CInit . CExpr . contName) ks ++ [CInit CNull]) :
+>       localVar ips (Just (asNode (CExpr choices))) :
+>       saveCont vs0 [] [ips] (head ks : ks') ++
+>       [CppCondStmts "YIELD_NONDET"
+>          [CIf (CExpr "regs.rq") (yieldCall v) []]
+>          [],
+>        goto "regs.handlers->choices"]
 >   where ips = Name "_choice_ips"
 >         choices = "_choices"
 >         yieldCall (Just v) =
@@ -1046,9 +1049,9 @@ translation function.
 >           [setRet (CExpr "regs.handlers->choices"),
 >            goto "yield_thread"]
 
-> failAndBacktrack :: Name -> [CStmt]
-> failAndBacktrack f =
->   [setReg 0 (asNode (CString (undecorate (demangle f) ++ ": no match"))),
+> failAndBacktrack :: String -> [CStmt]
+> failAndBacktrack msg =
+>   [setReg 0 (asNode (CString msg)),
 >    goto "regs.handlers->fail"]
 
 \end{verbatim}
@@ -1066,7 +1069,7 @@ literals when set to a non-zero value.
 >              -> [(CPSTag,[CStmt])] -> [CStmt]
 > switchOnTerm f tagged vs0 v cases =
 >   kindSwitch v [updVar vs0 v] taggedSwitch otherCases :
->   head (dflts ++ [failAndBacktrack f])
+>   head (dflts ++ [failAndBacktrack (undecorate (demangle f) ++ ": no match")])
 >   where (lits,constrs,vars,dflts) = foldr partition ([],[],[],[]) cases
 >         (chars,ints,floats) = foldr litPartition ([],[],[]) lits
 >         taggedSwitch switch

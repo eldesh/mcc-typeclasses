@@ -3,7 +3,7 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 2359 2007-06-23 11:34:41Z wlux $
+# $Id: cyi.in 2360 2007-06-23 11:35:43Z wlux $
 #
 # Copyright (c) 2002-2006, Wolfgang Lux
 # See LICENSE for the full license.
@@ -68,28 +68,26 @@ EOF
 
 read_test ( ) {
   input='foo\nbar'
-  read $read_r line <<EOF
+  read $1 line <<EOF
 $input
 EOF
   test "$input" = "$line"
 }
 
-# Some shells (e.g. Solaris /bin/sh, AIX /bin/bsh) terminate if read -r
-# is used with a here document, therefore check that read -r is accepted
-# before checking that it works. Note that some versions of GNU bash
-# (e.g. the one distributed with Mac OS X 10.2) fail to read from an
-# input pipe.
+# Some shells (e.g. Solaris /bin/sh, AIX /bin/bsh) terminate immediately
+# if read -r is used; therefore perform the check whether read -r works
+# in a subshell.
 
-rawread=no
-read_r=
 if read_test; then
   rawread=yes
+  read_r=
+elif ( read_test -r ) 2>/dev/null; then
+  rawread=yes
+  read_r=-r
 else
-  if echo "" | read -r line 2>/dev/null; then
-    read_r=-r
-    if read_test; then rawread=yes; else read_r=; fi
-  fi
-  test $rawread = yes || backslash_warning
+  rawread=no
+  read_r=
+  backslash_warning
 fi
 
 help ( ) {

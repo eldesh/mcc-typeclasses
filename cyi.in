@@ -3,9 +3,9 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 2362 2007-06-23 11:38:19Z wlux $
+# $Id: cyi.in 2365 2007-06-23 13:43:10Z wlux $
 #
-# Copyright (c) 2002-2006, Wolfgang Lux
+# Copyright (c) 2002-2007, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -32,18 +32,20 @@ export CURRY_PATH CURRY_IMPORT_PATH
 
 echo "    _____ __ __"
 echo "   / ___/ |  / _               Muenster Curry Compiler"
-echo "  / /     | / | |              Version $version, Copyright (c) 1998-2006"
+echo "  / /     | / | |              Version $version, Copyright (c) 1998-2007"
 echo " / /___  / /  | |"
 echo " \____/ /_/   |_|              Type :h for help"
 echo 
 
 cyc=$CYC
 cymake=$CYMAKE
+pager=${PAGER-/bin/cat}
 editor=${VISUAL-${EDITOR-/usr/bin/vi}}
 srcdir=
 source=
 cyopts=
 interfaces=
+module=
 objects=
 dobjects=
 prompt='> '
@@ -100,7 +102,9 @@ help ( ) {
   echo "  :l[oad]               unload current module"
   echo "  :r[eload]             repeat last :load command"
   echo "  :f[reshen]            recompile current module"
-  echo "  :clean                remove compile files for current module"
+  echo "  :clean                remove compiled files for current module"
+  echo "  :i[nterface] MODULE   show interface of MODULE"
+  echo "  :i[nterface]          show interface of current module"
   echo "  :e[dit] FILE          edit FILE"
   echo "  :e[dit]               edit current module"
   echo "  :s[et] OPTION...      add OPTIONs to current compiler options"
@@ -126,6 +130,10 @@ compile_target ( ) {
   (cd "$srcdir" && $cyc $cyopts $interfaces -M "$source" "$@")
 }
 
+find_module ( ) {
+  (cd "$srcdir" && $cymake --find $cyopts "$1") | sed 's/^.*: //'
+}
+
 set_goal ( ) {
   set dummy "$1" $1; shift
   case $# in
@@ -146,10 +154,11 @@ run_goal ( ) {
   rm -f /tmp/cyi$$@EXEEXT@
 }
 
-set_prompt ( ) {
+set_module ( ) {
     read line < $1.icurry
     set $line
-    prompt="$2> "
+    module=$2
+    prompt="$module> "
 }
 
 load ( ) {
@@ -158,10 +167,11 @@ load ( ) {
     0 )
       srcdir=.
       source=
+      module=Prelude
       interfaces=
       objects=
       dobjects=
-      prompt="Prelude> "
+      prompt="$module> "
       ;;
     1 )
       case $1 in
@@ -188,7 +198,7 @@ load ( ) {
 		  interfaces=-M$f
 		  objects=
 		  dobjects=
-		  set_prompt "$d/$f"
+		  set_module "$d/$f"
 		  return
 		fi
 	      done
@@ -221,14 +231,39 @@ reload ( ) {
     case $source in
       *.curry ) stem=`expr "$source" : '\(.*\).curry'`;;
       *.lcurry ) stem=`expr "$source" : '\(.*\).lcurry'`;;
-      * ) echo 2>&1 "$cyi: internal error: unknown source extension"; return;;
+      * ) echo >&2 "$cyi: internal error: unknown source extension"; return;;
     esac
-    set_prompt "$stem"
+    set_module "$stem"
   fi
 }
 
 clean ( ) {
   compile_source -q --clean
+}
+
+interface ( ) {
+  eval set dummy $1; shift
+  case $# in
+    0 ) if test -n "$source"; then m=$source; else m=$module; fi;;
+    1 ) m=$1;;
+    * ) echo "too many modules"; return;;
+  esac
+  i=`find_module "$m"`
+  case $i in
+    "" ) ;;
+    *.curry ) i=`expr "$i" : '\(.*\).curry'`.icurry;;
+    *.lcurry ) i=`expr "$i" : '\(.*\).lcurry'`.icurry;;
+    *.icurry ) ;;
+    * )
+      echo >&2 "$cyi: internal error: unexpected result from cymake --find"
+      return;;
+  esac
+  if test -n "$i" && (cd "$srcdir" && test -f "$i"); then
+    (cd "$srcdir"; $pager $i)
+  else
+    echo "Interface of module $m not found";
+    return 1
+  fi
 }
 
 edit ( ) {
@@ -364,6 +399,7 @@ interpret ( ) {
     :r | :reload ) reload;;
     :f | :freshen ) clean && reload;;
     :clean ) clean;;
+    :i | :interface ) line=`expr "$line" : $1'\([^;]*\)'`; interface "$line";;
     :e | :edit ) line=`expr "$line" : $1'\([^;]*\)'`; edit "$line";;
     :t ) line=`expr "$line" : ':t\(.*\)'`; type_goal "  $line";;
     :type ) line=`expr "$line" : ':type\(.*\)'`; type_goal "     $line";;

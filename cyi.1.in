@@ -4,9 +4,9 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cyi.1.in 2233 2007-06-08 09:57:47Z wlux $
+.\" $Id: cyi.1.in 2365 2007-06-23 13:43:10Z wlux $
 .\"
-.\" Copyright (c) 2004-2006, Wolfgang Lux
+.\" Copyright (c) 2004-2007, Wolfgang Lux
 .\" See LICENSE for the full license.
 .\"
 .Dd 17.11.05               \" DATE 
@@ -110,6 +110,15 @@ Recompile the current module and all imported source files.
 .It Ic :clean
 Remove all compiled files for the current module and all imported
 source files.
+.It Ic :interface Ar module
+Display the interface of
+.Ar module .
+If the environment variable
+.Ev PAGER
+is set, the interface file is displayed with this command. Otherwise
+the interface is simply written to the standard output. 
+.It Ic :interface
+Display the interface of the current module.
 .It Ic :edit Ar file
 Invoke the editor for
 .Ar file .
@@ -154,6 +163,10 @@ and
 may be abbreviated to their first letter.
 .Sh ENVIRONMENT
 .Bl -tag -width -indent -compact
+.It Ev PAGER
+If defined, this commmand is used by the
+.Ic :interface
+command for displaying module interfaces.
 .It Ev EDITOR
 .It Ev VISUAL
 If defined, these environment variables determine the name of the

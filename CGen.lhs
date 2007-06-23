@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2334 2007-06-23 09:33:35Z wlux $
+% $Id: CGen.lhs 2335 2007-06-23 09:37:26Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -78,13 +78,11 @@ the module. Code generation is complicated by a few special cases that
 need to be handled. In particular, the compiler must provide
 definitions for those tuples that are used in the module and for the
 functions \texttt{@}$_n$ that implement applications of a higher order
-variable to $n$ arguments.\footnote{Only functions with $n\geq2$ are
-generated. Instead of \texttt{@}$_1$, the function \texttt{@}, which
-is implemented in the runtime system, is used.} These functions cannot
-be predefined because there are no upper limits on the arity of a
-tuple or application. Since these functions may be added in each
-module, they must be declared as private -- i.e., \verb|static| --
-functions.
+variable to $n$ arguments.\footnote{The function name \texttt{@} is
+used instead of \texttt{@}$_1$.} These functions cannot be predefined
+because there are no upper limits on the arity of a tuple or
+application. Since these functions may be added in each module, they
+must be declared as private -- i.e., \verb|static| -- functions.
 
 \ToDo{The runtime system should preallocate tuple descriptors up to a
 reasonable size (e.g., 10). Thus the compiler only has to create
@@ -318,10 +316,10 @@ is generated.
 >   map (instEntryDecl CPrivate . fst) flexTuples ++
 >   [instFunction CPrivate c n | (c,n) <- flexTuples] ++
 >   -- (private) @ functions
->   [entryDecl CPrivate (apName n) | n <- [3..maxApArity]] ++
->   concat [evalDef CPrivate f n | f <- apClos, let n = apArity f, n > 2] ++
->   concat [lazyDef CPrivate f n | f <- apLazy, let n = apArity f, n > 2] ++
->   concat [apFunction (apName n) n | n <- [3..maxApArity]] ++
+>   [entryDecl CPrivate (apName n) | n <- [2..maxApArity]] ++
+>   concat [evalDef CPrivate f (apArity f) | f <- apClos] ++
+>   concat [lazyDef CPrivate f (apArity f) | f <- apLazy] ++
+>   concat [apFunction (apName n) n | n <- [2..maxApArity]] ++
 >   -- (private) auxiliary functions for partial applications of tuples
 >   map (entryDecl CPrivate) tuplePapp ++
 >   concat [pappDef CPrivate f (tupleArity f) | f <- tuplePapp] ++
@@ -357,8 +355,8 @@ is generated.
 >         fun0' = filter (used fun0 . fst) fs'
 >         pappArities =
 >           nub (map snd cs ++ map tupleArity tuplePapp ++ map snd papp')
->         closArities = nub (filter (> 2) (map apArity apClos) ++ map snd clos')
->         lazyArities = nub (filter (> 2) (map apArity apLazy) ++ map snd lazy')
+>         closArities = nub (map apArity apClos ++ map snd clos')
+>         lazyArities = nub (map apArity apLazy ++ map snd lazy')
 >         ts = [t | Switch Flex _ cs <- sts, Case t _ <- cs]
 >         flexLits = nub [l | LitCase l <- ts]
 >         (flexTuples,flexData) =

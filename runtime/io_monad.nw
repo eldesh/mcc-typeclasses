@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: io_monad.nw 2334 2007-06-23 09:33:35Z wlux $
+% $Id: io_monad.nw 2335 2007-06-23 09:37:26Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -63,7 +63,6 @@ DECLARE_LABEL(extern, __ioError);
 #include "heap.h"
 #include "stack.h"
 #include "threads.h"
-#include "spaces.h"
 #include "eval.h"
 #include "data.h"
 #include "io_monad.h"
@@ -184,6 +183,8 @@ curry_argv()
     return io_argv;
 }
 
+DECLARE_LABEL(static, start_io_1);
+
 static
 FUNCTION(start_io)
 {
@@ -192,7 +193,18 @@ FUNCTION(start_io)
     TRACE(("start program\n"));
     start_thread(1, 0);
     /* Hack: Change the return address of the main thread */
-    CALL2(___64_, stop_io, regs.r[0], unit);
+    regs.ret = stop_io;
+    SAVE_RET1(unit);
+    EVAL_NODE(start_io_1);
+}
+
+static
+FUNCTION(start_io_1)
+{
+ ENTRY_LABEL(static, start_io_1)
+    MATCH_RIGID_PAPP(start_io_1);
+    assert(regs.r[0]->info->tag == 1);
+    GOTO(regs.r[0]->info->apply);
 }
 
 static
@@ -251,6 +263,7 @@ is returned to the caller.
 <<io_monad.c>>=
 DECLARE_LABEL(extern, __catch);
 DECLARE_LABEL(static, __catch_1);
+DECLARE_LABEL(static, __catch_2);
 
 FUNCTION(__catch)
 {
@@ -258,24 +271,35 @@ FUNCTION(__catch)
     ExceptionFrame *prevFrame;
  ENTRY_LABEL(extern, __catch)
     frm_sz = wordsof(ExceptionFrame);
-    CHECK_STACK(frm_sz + 1);
+    CHECK_STACK(frm_sz + 3);
 
     /* create and initialize the new exception frame */
     prevFrame	      = regs.efp;
-    regs.sp	     -= frm_sz + 1;
-    regs.efp	      = (ExceptionFrame *)regs.sp;
+    regs.sp	     -= frm_sz + 3;
+    regs.efp	      = (ExceptionFrame *)(regs.sp + 2);
     regs.efp->handler = regs.r[1];
     regs.efp->frame   = prevFrame;
-    regs.sp[frm_sz]   = (Node *)regs.ret;
+    regs.sp[frm_sz+2] = (Node *)regs.ret;
 
     /* invoke the action */
-    CALL2(___64_, __catch_1, regs.r[0], regs.r[2]);
+    regs.sp[0] = regs.r[2];
+    regs.sp[1] = (Node *)__catch_2;
+    EVAL_NODE(__catch_1);
 }
 
 static
 FUNCTION(__catch_1)
 {
  ENTRY_LABEL(static, __catch_1)
+    MATCH_RIGID_PAPP(__catch_1);
+    assert(regs.r[0]->info->tag == 1);
+    GOTO(regs.r[0]->info->apply);
+}
+
+static
+FUNCTION(__catch_2)
+{
+ ENTRY_LABEL(static, __catch_2)
     assert((Node **)regs.efp == regs.sp);
     regs.efp = regs.efp->frame;
     RETURN(regs.r[0], wordsof(ExceptionFrame));
@@ -292,6 +316,7 @@ exception handler is available -- as may happen when
 <<io_monad.c>>=
 DECLARE_LABEL(extern, __Prelude__error);
 DECLARE_LABEL(static, __ioError_1);
+DECLARE_LABEL(static, __ioError_2);
 
 FUNCTION(__ioError)
 {
@@ -309,15 +334,39 @@ FUNCTION(__ioError)
     handler  = regs.efp->handler;
     regs.efp = regs.efp->frame;
 
-    regs.sp    = (Node **)curFrame + wordsof(ExceptionFrame) - 1;
-    regs.sp[0] = regs.r[1];
-    CALL2(___64_, __ioError_1, handler, exc);
+    regs.sp    = (Node **)curFrame + wordsof(ExceptionFrame) - 2;
+    regs.r[0]  = handler;
+    regs.sp[0] = exc;
+    regs.sp[1] = regs.r[1];
+    EVAL_NODE(__ioError_1);
 }
 
 static
 FUNCTION(__ioError_1)
 {
  ENTRY_LABEL(static, __ioError_1)
+    MATCH_RIGID_PAPP(__ioError_1);
+    switch ( regs.r[0]->info->tag )
+    {
+    case 1:
+	CHECK_STACK1();
+	regs.sp	  -= 1;
+	regs.sp[0] = regs.sp[1];
+	regs.sp[1] = (Node *)__ioError_2;
+	break;
+    case 2:
+	break;
+    default:
+	curry_panic("ioError: invalid handler (arity %d)\n",
+		    regs.r[0]->info->tag);
+    }
+    GOTO(regs.r[0]->info->apply);
+}
+
+static
+FUNCTION(__ioError_2)
+{
+ ENTRY_LABEL(static, __ioError_2)
     assert(regs.r[0]->info->kind == PAPP_KIND && regs.r[0]->info->tag == 1);
     GOTO(regs.r[0]->info->apply);
 }

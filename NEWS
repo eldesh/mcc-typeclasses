@@ -1,3 +1,86 @@
+Main changes in release 0.9.11
+
+Build Environment:
+- On Microsoft Windows, the compiler can now also be built with MinGW.
+- Versioned installation will allow multiple versions of the Münster
+  Curry compiler to coexist on a single machine in the future.
+- New make target TeXShop for typesetting the documentation on Mac OS
+  X with TeXShop.app.
+- It is now possible to build universal libraries on Mac OS X.
+
+Compiler:
+- Function definitions are no longer eta-expanded automatically.
+- Let-bound variables can have a polymorphic type in some cases.
+- The precedence level in a fixity declaration is now optional and
+  defaults to 9 if omitted.
+- Only the exported entities of the main module and the Prelude are
+  visible with unqualified names in a goal. On the other hand, the
+  entities of all other modules imported directly or indirectly from
+  the main module can now be accessed with qualified names.
+- Code generation is now based on a register-based abstract machine
+  code model, which yields more efficient code.
+- The compiler omits redundant module qualifiers from type expressions
+  in error messages.
+- Limited support for compiling mutually recursive modules.
+- Compiler options --ccopts and --ldopts allow passing multiple comma
+  separated options to the C compiler.
+- Compiler accepts options -F and -framework and passes them on to the
+  C compiler.
+
+Debugger:
+- Debugging of goals involving IO computations now works.
+
+Interactive Environment:
+- The interpreter's :load command takes changes of the search path
+  with the :set command into account.
+- The interpreter allows :loading standard library interfaces so that,
+  e.g., :l Array no longer fails with an error message "missing source
+  file for Array".
+- The interpreter no longer recompiles source modules each time a goal
+  is evaluated.
+- Only the exported entities of the main module and the Prelude are
+  visible with unqualified names in a goal. On the other hand, the
+  entities of all other modules imported directly or indirectly from
+  the current module can now be accessed with qualified names.
+- New command :interface that displays the interface of the current or
+  a specified module.
+
+Curry Library and Runtime System:
+- Improved trampoline implementation (used by default on Mac OS X),
+  which reduces execution times by 5 to 10% on a PowerPC, and up to
+  30% on x86.
+- Expressions like chr (-1) and const 0 <= id now fail only the
+  current solution instead of aborting the program with an error
+  message.
+- When a program fails due to a pattern match failure, the error
+  message now includes the function where the failure was detected.
+- Pattern matching (and other) failures are reported in non-IO goals
+  if the goal was compiled with the -f option or if the program is
+  invoked with the -f runtime system option.
+- The runtime system now uses tagged characters (similar to tagged
+  integers) by default. This avoids allocation for characters with
+  codes above 255 (decimal).
+- Avoid many name conflicts when interfacing with foreign C code.
+- Many portability fixes to allow compilation on Windows with MinGW.
+
+Foreign Function Interface:
+- New non-standard calling convention rawcall.
+
+Noteworthy Bug Fixes:
+- The compiler no longer fails with an internal error in function
+  constrKind when importing a module whose interface contains types
+  T_1 and T_2 whose names differ only by their module qualifiers.
+- The compiler no longer fails with a non-exhaustive match when
+  reporting case mode warnings for a program with explicit type
+  signatures.
+- Setting the initial buffering mode for the standard input and output
+  channels with the -b runtime system option now works.
+- The compiler no longer infers too general types for some functions
+  in mutually recursive binding groups involving pattern declarations.
+- The parser no longer rejects patterns of the form (op) t_1 ... t_n
+  when op is a qualified operator, e.g., (Assoc.:=) x y.
+
+
 Main changes in release 0.9.10
 
 Build Environment:

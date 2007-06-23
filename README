@@ -1,4 +1,4 @@
-This is release 0.9.10 of the Münster Curry compiler.
+This is release 0.9.11 of the Münster Curry compiler.
 
 The Münster Curry compiler is a mature native code compiler for the
 declarative multi-paradigm language Curry. The language supported by
@@ -17,12 +17,12 @@ interface is available separately for Mac OS X.
 The Münster Curry compiler is portable to many Unix operating systems
 with precompiled binaries being available for Linux (x86), Mac OS X,
 and eventually other Unix variants. It is possible to build and use
-the Münster Curry compiler on Windows systems using the CygWin
-environment. The only additional software needed for compiling and
-running Curry programs is the Gnu C compiler. Building and installing
-the Münster Curry compiler from its sources requires a Haskell 98
-compiler, too. Building and installing the compiler from source and
-binary distributions can be achieved with the commands
+the Münster Curry compiler on Windows systems using the CygWin and
+MinGW environments. The only additional software needed for compiling
+and running Curry programs is the Gnu C compiler. Building and
+installing the Münster Curry compiler from its sources requires a
+Haskell 98 compiler, too. Building and installing the compiler from
+source and binary distributions can be achieved with the commands
 
   ./configure
   make install
@@ -76,29 +76,47 @@ More options for installation can be found in the user's guide.
 Installation on Windows systems:
 ================================
 The Münster Curry compiler can be built on Windows systems with CygWin
--- provided the development packages (make, gcc) are installed -- and
-a working Haskell compiler. Currently, this appears to work only for
-the native Win32 binaries of ghc. The following installation
-instructions are derived from notes kindly provided by Diego Berrueta.
+as well as with MinGW.
 
-Note: In the following, <CYGWIN> represents the directory where CygWin
-is installed.
+CygWin:
+  In order to build the Münster Curry compiler with CygWin, the
+  development packages (make, gcc) and a working Haskell compiler are
+  required. Currently, this appears to work only for the native Win32
+  binaries of ghc. The installation instructions below are derived
+  from notes kindly provided by Diego Berrueta.
 
-1) Install the Win32 version of ghc in <CYGWIN>/usr/local/ghc.
+  Note: In the following, <CYGWIN> represents the directory where
+  CygWin is installed.
 
-2) Add /usr/local/ghc/bin to the path. Make sure that the executable
-   is found by typing ghc -v in the CygWin console. This should print
-   out a long list configuration and package information for ghc.
+  1) Install the Win32 version of ghc in <CYGWIN>/usr/local/ghc.
 
-3) Unpack the sources of the Münster Curry compiler in some convenient
-   place and change into the curry-0.9.10 directory.
+  2) Add /usr/local/ghc/bin to the path. Make sure that the executable
+     is found by typing ghc -v in the CygWin console. This should
+     print out a long list configuration and package information for
+     ghc.
 
-4) Configure, compile, and install the compiler:
-     ./configure
-     make
-     make install
+  3) Unpack the sources of the Münster Curry compiler in some
+     convenient place and change into the curry-0.9.10 directory.
 
-5) Ready to test. Make sure that /usr/local/bin is in your PATH.
+  4) Configure, compile, and install the compiler:
+       ./configure
+       make
+       make install
+
+  5) Ready to test. Make sure that /usr/local/bin is in your PATH.
+
+MinGW:
+  In order to build the Münster Curry compiler with MinGW, a minimal
+  development environment (gcc-core, binutils, mingw-runtime, and
+  win32-api) is needed. In addition, the MSYS shell must be installed
+  and a working Haskell compiler is required. The compiler can be
+  built with the usual commands
+    ./configure
+    make
+    make install
+  The last step may be omitted and the compiler can be used from its
+  build directory, too. Note that at present, the networking related
+  functions from modules IOExts and Socket do not work with MinGW.
 
 Usage:
 ======
@@ -193,6 +211,24 @@ Extensions:
   cyclic data structures, e.g.,
 
     let xs = 0:ys; ys = 1:xs in xs
+
+* Polymorphic Generalization of Let-Bound Variables
+  In general, the types of let-bound variables cannot be generalized
+  in Curry because this is not sound in the presence of unbound
+  logical variables. The Münster Curry compiler detects some cases
+  where the bound expression cannot contain free variables and
+  generalizes its type in that case. Thus, the following declarations
+  all are now accepted by the compiler (the type signatures are not
+  necessary, the annotated types are inferred automatically by the
+  compiler).
+    f1 = (1:nil, 'a':nil) where { nil :: a; nil = [] }
+    f2 = [z (), z False] where { z :: a -> Int; z = const 0 }
+    f3 = last (last ["Curry"])
+      where last :: [a] -> a
+            last = \xs -> let y,ys free in (xs =:= ys++[y]) &> y
+  However note that the following variant of f1 is still not accepted
+  by the compiler (cf. Sect. 8.1.13 of the User's Guide).
+    f4 = (1:nil, 'a':nil) where { nil :: a; nil = id [] }
 
 * Many syntax extensions for compatibility with Haskell. See
   Sect. 8.1 in the User's Guide.

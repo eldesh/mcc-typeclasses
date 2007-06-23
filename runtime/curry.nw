@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: curry.nw 2350 2007-06-23 11:07:00Z wlux $
+% $Id: curry.nw 2351 2007-06-23 11:07:54Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -200,12 +200,21 @@ its header file) may not be available on older systems.
 #define HAVE__BOOL 0
 
 @ 
-Not all systems have a working [[vfork]] implementation. On those
-systems, [[fork]] will be used in order to fork a new process.
+In order to implement the [[openProcess]] primitive, the runtime
+system uses either [[vfork]], [[fork]], or [[popen]].
 
 <<Portability definitions>>=
+/* Define to empty if the system does not have a working fork */
+#undef HAVE_WORKING_FORK
+
 /* Define to empty if the system does not have a working vfork */
 #undef HAVE_WORKING_VFORK
+
+/* Define to empty if the system does not have vfork.h */
+#undef HAVE_VFORK_H
+
+/* Define to empty if the system does not have popen */
+#undef HAVE_POPEN
 
 @ 
 The garbage collector uses the [[mprotect]] system call on machines
@@ -213,7 +222,7 @@ where it is available in order to protect the inactive semi-space of
 the heap.
 
 <<Portability definitions>>=
-/* Define to empty if the system not have mprotect */
+/* Define to empty if the system does not have mprotect */
 #undef HAVE_MPROTECT
 
 @ 

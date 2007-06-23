@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2313 2007-06-20 12:04:50Z wlux $
+% $Id: files.nw 2351 2007-06-23 11:07:54Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -24,6 +24,9 @@ extern void init_files(int, long);
 #include <limits.h>
 #include <errno.h>
 #include <unistd.h>
+#if HAVE_VFORK_H
+# include <vfork.h>
+#endif
 #include <netdb.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -63,10 +66,12 @@ the file pointer is not [[0]]. This is used for file handles to which
 [[hGetContents]] has been applied.
 
 When a file handle that is connected to a process is finalized, the
-runtime system tries to read its termination status in order not to
-leave zombie processes around. Since the garbage collection
-should not be blocked until the process really terminates,
-[[finalize_process]] calls [[waitpid]] with the [[WNOHANG]] flag.
+runtime system tries to read its termination status in order to not
+leave zombie processes around. Since the garbage collection should not
+be blocked until the process really terminates, [[finalize_process]]
+calls [[waitpid]] with the [[WNOHANG]] flag. For the same reason, we
+do not call [[pclose]] for the file handle in [[finalize_process]]
+if the process handle was opened with [[popen]].
 
 <<files.c>>=
 enum file_flags { readable, writable };
@@ -92,7 +97,9 @@ typedef struct process_node {
     short    bmode;
     long     bsize;
     char     *buffer;
+#if HAVE_WORKING_FORK || HAVE_WORKING_VFORK
     pid_t    pid;
+#endif
     int	     status;
 } ProcessHandle;
 
@@ -102,7 +109,11 @@ typedef struct process_node {
 
 static void close_handle(Handle *file);
 static void finalize_file(Node *node);
+#if HAVE_WORKING_FORK || HAVE_WORKING_VFORK
 static void finalize_process(Node *node);
+#else
+# define finalize_process finalize_file
+#endif
 
 static NodeInfo file_info = {
     ABSTRACT_KIND, FILE_TAG, file_node_size, ot_binary, "<Handle>",
@@ -133,6 +144,7 @@ finalize_file(Node *file)
     close_handle((Handle *)file);
 }
 
+#ifndef finalize_process
 static void
 finalize_process(Node *node)
 {
@@ -142,6 +154,7 @@ finalize_process(Node *node)
     if ( proc->pid )
 	waitpid(proc->pid, &proc->status, WNOHANG);
 }
+#endif
 
 @ 
 Two file \verb|Handle|s are considered equal, if they are physically
@@ -1113,8 +1126,8 @@ primHSeek(Node *hdl, Node *seekMode, Node *offset)
 @ 
 The function [[primOpenProcess]] executes a shell command and returns
 a file descriptor connected to the standard input and output of the
-subprocess. We cannot use [[popen]] here, as using it with the [[r+]]
-mode is a non-portable extension.
+subprocess. We try to avoid using [[popen]] as opening a process for
+both reading and writing is a non-portable extension.
 
 <<files.h>>=
 extern Node *primOpenProcess(Node *, Node *);
@@ -1124,15 +1137,21 @@ extern Node *primOpenProcess(Node *, Node *);
 Node *
 primOpenProcess(Node *cmdString, Node *ioMode)
 {
-    int		  r, fds[2];
     short	  flags;
-    pid_t	  pid;
     const char	  *cmd, *mode;
     FILE	  *fp;
     ProcessHandle *proc;
+#if HAVE_WORKING_FORK || HAVE_WORKING_VFORK
+    int		  r, fds[2];
+    pid_t	  pid;
+#endif
 
-    /* depending on the access mode create either a pipe or a socket pair */
+    /* determine the command and access mode */
+    cmd	 = to_string(cmdString);
     mode = decodeIOMode(ioMode, &flags);
+
+#if HAVE_WORKING_FORK || HAVE_WORKING_VFORK
+    /* depending on the access mode create either a pipe or a socket pair */
     if ( flags == (mask(readable) | mask(writable)) )
 	r = socketpair(AF_UNIX, SOCK_STREAM, 0, fds);
     else
@@ -1141,7 +1160,6 @@ primOpenProcess(Node *cmdString, Node *ioMode)
 	ioError_withErrno("openProcess");
 
     /* start a new process for the command */
-    cmd = to_string(cmdString);
     pid = vfork();
     switch ( pid )
     {
@@ -1191,7 +1209,7 @@ primOpenProcess(Node *cmdString, Node *ioMode)
 	close(fds[1]);
 
     /* create a file for the pipe/socketpair */
-    fp	= fdopen(fds[0], mode);
+    fp = fdopen(fds[0], mode);
     if ( fp == NULL )
     {
 	int e = errno;
@@ -1199,6 +1217,16 @@ primOpenProcess(Node *cmdString, Node *ioMode)
 	errno = e;
 	ioError_withErrno("openProcess");
     }
+#elif HAVE_POPEN
+    /* start a new process for the command */
+    fp = popen(cmd, mode);
+    if ( fp == NULL )
+	ioError_withErrno("openProcess");
+#else
+    /* report an error */
+    fp = NULL;
+    ioError("openProcess", "not supported");
+#endif
 
     /* create the process node */
     CHECK_HEAP(0, process_node_size);
@@ -1209,7 +1237,9 @@ primOpenProcess(Node *cmdString, Node *ioMode)
     proc->bmode  = _IOFBF;
     proc->bsize	 = 0;
     proc->buffer = NULL;
+#if HAVE_WORKING_FORK || HAVE_WORKING_VFORK
     proc->pid	 = pid;
+#endif
     proc->status = 0;
     regs.hp	+= process_node_size;
     register_final((Node *)proc);
@@ -1242,19 +1272,23 @@ primPClose(Node *hdl)
 
     if ( proc->fp )
     {
+#if !HAVE_WORKING_FORK && !HAVE_WORKING_VFORK && HAVE_POPEN
+	proc->status = pclose(proc->fp);
+#else
 	fclose(proc->fp);
+#endif
 	proc->fp    = NULL;
 	proc->flags = 0;
 	if ( proc->buffer )
 	    free(proc->buffer);
-	waitpid(proc->pid, &proc->status, 0);
-	proc->pid = 0;
     }
-    else if ( proc->pid )
+#if HAVE_WORKING_FORK || HAVE_WORKING_VFORK
+    if ( proc->pid )
     {
 	waitpid(proc->pid, &proc->status, 0);
 	proc->pid = 0;
     }
+#endif
 
     if ( WIFSIGNALED(proc->status) )
 	res = -WTERMSIG(proc->status);

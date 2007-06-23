@@ -1,4 +1,4 @@
-dnl $Id: configure.in 2352 2007-06-23 11:09:53Z wlux $
+dnl $Id: configure.in 2353 2007-06-23 11:20:17Z wlux $
 dnl
 dnl Copyright (c) 2002-2007, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -224,6 +224,7 @@ dnl Checks for header files.
 AC_CHECK_HEADERS([stdbool.h])
 AC_CHECK_HEADERS([sys/socket.h])
 AC_CHECK_HEADERS([sys/resource.h])
+AC_CHECK_HEADERS([winsock.h],[LIBS="$LIBS -lwsock32"])
 AC_CHECK_HEADERS([ieeefp.h])
 AC_HEADER_SYS_WAIT
 

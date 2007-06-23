@@ -1,7 +1,7 @@
 /*
- * $Id: Socket.h 1903 2006-04-22 18:49:09Z wlux $
+ * $Id: Socket.h 2353 2007-06-23 11:20:17Z wlux $
  *
- * Copyright (c) 2006, Wolfgang Lux
+ * Copyright (c) 2006-2007, Wolfgang Lux
  *
  * See ../LICENSE for the full license
  *
@@ -12,10 +12,14 @@
 #include <sys/types.h>
 #include <sys/time.h>
 #include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
+#if HAVE_SYS_SOCKET_H
+# include <netdb.h>
+# include <sys/socket.h>
+# include <netinet/in.h>
+# include <arpa/inet.h>
+#elif HAVE_WINSOCK_H
+# include <winsock.h>
+#endif
 
 /* compatibility */
 /* NB use a pre-processor definition just in case configure got it wrong */

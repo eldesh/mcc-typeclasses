@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2352 2007-06-23 11:09:53Z wlux $
+% $Id: files.nw 2353 2007-06-23 11:20:17Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -27,13 +27,18 @@ extern void init_files(int, long);
 #if HAVE_VFORK_H
 # include <vfork.h>
 #endif
-#include <netdb.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #if HAVE_SYS_WAIT_H
+# include <sys/types.h>
 # include <sys/wait.h>
+#endif
+#if HAVE_SYS_SOCKET_H
+# include <netdb.h>
+# include <sys/types.h>
+# include <sys/socket.h>
+# include <netinet/in.h>
+# include <arpa/inet.h>
+#elif HAVE_WINSOCK_H
+# include <winsock.h>
 #endif
 #include "debug.h"
 #include "run.h"
@@ -54,6 +59,10 @@ extern void init_files(int, long);
 
 #if !HAVE_WORKING_VFORK
 # define vfork fork
+#endif
+
+#ifndef INADDR_NONE
+# define INADDR_NONE (in_addr_t)(-1)
 #endif
 
 @ 
@@ -1377,7 +1386,7 @@ primConnectTcpSocket(Node *hostString, Node *port, Node *ioMode)
     addr.sin_port   = htons(long_val(port));
     if ( hostent )
 	addr.sin_addr.s_addr = *(unsigned long *)hostent->h_addr_list[0];
-    else if ( (addr.sin_addr.s_addr = inet_addr(host)) == (in_addr_t)~0 )
+    else if ( (addr.sin_addr.s_addr = inet_addr(host)) == INADDR_NONE )
     {
 	free((char *)host);
 	ioError("connectTcpSocket", "Unknown host");
@@ -1432,7 +1441,13 @@ optionally changes the buffer mode for standard input and output.
 void
 init_files(int bmode, long bsize)
 {
-    char *buffer;
+    char    *buffer;
+#if HAVE_WINSOCK_H
+    WSADATA wsaData;
+
+    if ( WSAStartup(MAKEWORD(2, 0), &wsaData) )
+	curry_panic("could not initialize Windows sockets\n");
+#endif
 
     /* set up the standard file pointers */
     stdin_node.fp = stdin;

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: curry.nw 2352 2007-06-23 11:09:53Z wlux $
+% $Id: curry.nw 2353 2007-06-23 11:20:17Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -267,6 +267,17 @@ On many systems, the prototypes of these functions are defined in
 #undef HAVE_IEEEFP_H
 
 @
+On Unix systems, the socket functions are declared in
+[[sys/socket.h]]. On Windows systems, we use [[winsock.h]] instead.
+
+<<Portability definitions>>=
+/* Define to empty if the system does not have sys/socket.h */
+#undef HAVE_SYS_SOCKET_H
+
+/* Define to empty if the system does not have winsock.h */
+#undef HAVE_WINSOCK_H
+
+@ 
 Traditionally, the socket functions [[accept]], [[getsockname]],
 [[getpeername]], etc.\ were using [[int *]] as parameter. However,
 since the size of [[int]] can differ on 64-bit systems, newer

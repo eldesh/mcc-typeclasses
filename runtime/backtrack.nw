@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 2347 2007-06-23 10:34:08Z wlux $
+% $Id: backtrack.nw 2372 2007-06-23 14:09:45Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -256,8 +256,13 @@ curry_eval(NodeInfo *goal_info, const char *fv_names[], int argc, char **argv)
     bool first = true, interactive;
     Node *goal;
 
+#if !defined(_WIN32) || defined(__CYGWIN__)
     /* check if process is connected to a terminal */
     interactive = isatty(0) == 1;
+#else
+    /* always run interactively on Windows as isatty seems to be broken */
+    interactive = true;
+#endif
 
     /* process command line options */
     while ( (opt = getopt(argc, argv, "in")) != EOF )

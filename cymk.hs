@@ -1,6 +1,6 @@
--- $Id: cymk.hs 1838 2005-11-17 08:03:45Z wlux $
+-- $Id: cymk.hs 2363 2007-06-23 13:40:58Z wlux $
 --
--- Copyright (c) 2002-2003, Wolfgang Lux
+-- Copyright (c) 2002-2007, Wolfgang Lux
 -- See LICENSE for the full license.
 
 import CurryDeps
@@ -13,8 +13,7 @@ import System
 
 data Options =
   Options{
-    importPaths :: [FilePath],
-    libPaths :: [FilePath],
+    importPaths :: [(Bool,FilePath)],
     output :: Maybe FilePath,
     debug :: Bool,
     linkAlways :: Bool,
@@ -25,7 +24,6 @@ data Options =
 defaultOptions =
   Options{
     importPaths = [],
-    libPaths = [],
     output = Nothing,
     debug = False,
     linkAlways = False,
@@ -58,8 +56,9 @@ options = [
   ]
 
 selectOption (ImportPath dir) opts =
-  opts{ importPaths = dir : importPaths opts }
-selectOption (LibPath dir) opts = opts{ libPaths = dir : libPaths opts }
+  opts{ importPaths = (True,dir) : importPaths opts }
+selectOption (LibPath dir) opts =
+  opts{ importPaths = (False,dir) : importPaths opts }
 selectOption (Output file) opts = opts{ output = Just file }
 selectOption Debug opts = opts{ debug = True }
 selectOption LinkAlways opts = opts{ linkAlways = True }
@@ -82,7 +81,9 @@ cymk prog args curryImportPath
   | otherwise = badUsage prog errs
   where (opts,files,errs) = getOpt Permute options args
         cymkOpts =
-	  foldr selectOption defaultOptions{ libPaths = curryImportPath } opts
+	  foldr selectOption
+                defaultOptions{ importPaths = map ((,) False) curryImportPath }
+                opts
 
 printUsage :: String -> IO ()
 printUsage prog =
@@ -104,8 +105,7 @@ processFiles opts prog files
   | null files = badUsage prog ["no modules\n"]
   | mkDepend opts && mkClean opts =
       badUsage prog ["cannot specify --clean with --depend\n"]
-  | mkDepend opts =
-      makeDepend (importPaths opts) (libPaths opts) (output opts) files
+  | mkDepend opts = makeDepend (importPaths opts) (output opts) files
   | isJust (output opts) && length files > 1 =
       badUsage prog ["cannot specify -o with multiple targets\n"]
   | otherwise =
@@ -113,7 +113,7 @@ processFiles opts prog files
         es <- fmap concat (mapM script files)
 	unless (null es) (mapM putErrLn es >> exitWith (ExitFailure 2))
   where script = buildScript (mkClean opts) (debug opts) (linkAlways opts)
-			     (importPaths opts) (libPaths opts) (output opts)
+			     (importPaths opts) (output opts)
 
 putErr, putErrLn :: String -> IO ()
 putErr = hPutStr stderr

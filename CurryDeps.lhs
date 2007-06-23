@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryDeps.lhs 2167 2007-04-24 13:46:23Z wlux $
+% $Id: CurryDeps.lhs 2363 2007-06-23 13:40:58Z wlux $
 %
-% Copyright (c) 2002-2006, Wolfgang Lux
+% Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryDeps.lhs}
@@ -33,18 +33,16 @@ dependencies and to update programs composed of multiple modules.
 
 \end{verbatim}
 The module has two entry points. The function \texttt{buildScript}
-computes either a build or clean script for a module while
+computes either a build or a clean script for a module while
 \texttt{makeDepend} computes dependency rules for inclusion into a
 Makefile.
 \begin{verbatim}
 
-> buildScript :: Bool -> Bool -> Bool -> [FilePath] -> [FilePath]
->             -> Maybe FilePath -> FilePath -> IO [String]
-> buildScript clean debug linkAlways paths libPaths target fn =
+> buildScript :: Bool -> Bool -> Bool -> [(Bool,FilePath)] -> Maybe FilePath
+>             -> FilePath -> IO [String]
+> buildScript clean debug linkAlways paths target fn =
 >   do
->     (ms,es) <-
->       fmap (flattenDeps . sortDeps)
->            (deps paths (filter (`notElem` paths) libPaths) emptyEnv fn)
+>     (ms,es) <- fmap (flattenDeps . sortDeps) (deps paths emptyEnv fn)
 >     when (null es) (putStr (makeScript clean debug linkAlways outputFile ms))
 >     return es
 >   where outputFile
@@ -52,83 +50,73 @@ Makefile.
 >           | otherwise = target `mplus` Just fn
 >         makeScript clean = if clean then makeCleanScript else makeBuildScript
 
-> makeDepend :: [FilePath] -> [FilePath] -> Maybe FilePath -> [FilePath]
->            -> IO ()
-> makeDepend paths libPaths target ms =
->   foldM (deps paths (filter (`notElem` paths) libPaths)) emptyEnv ms >>=
->   maybe putStr writeFile target . makeDeps
+> makeDepend :: [(Bool,FilePath)] -> Maybe FilePath -> [FilePath] -> IO ()
+> makeDepend paths target ms =
+>   foldM (deps paths) emptyEnv ms >>= maybe putStr writeFile target . makeDeps
 
-> deps :: [FilePath] -> [FilePath] -> SourceEnv -> FilePath -> IO SourceEnv
-> deps paths libPaths mEnv fn
->   | e `elem` sourceExts = sourceDeps paths libPaths (mkMIdent [r]) mEnv fn
+> deps :: [(Bool,FilePath)] -> SourceEnv -> FilePath -> IO SourceEnv
+> deps paths mEnv fn
+>   | e `elem` sourceExts = sourceDeps paths (mkMIdent [r]) mEnv fn
 >   | e == icurryExt = return mEnv
->   | e == oExt = targetDeps paths libPaths mEnv r
->   | otherwise = targetDeps paths libPaths mEnv fn
+>   | e == oExt = targetDeps paths mEnv r
+>   | otherwise = targetDeps paths mEnv fn
 >   where r = rootname fn
 >         e = extension fn
 
-> targetDeps :: [FilePath] -> [FilePath] -> SourceEnv -> FilePath
->            -> IO SourceEnv
-> targetDeps paths libPaths mEnv fn =
+> targetDeps :: [(Bool,FilePath)] -> SourceEnv -> FilePath -> IO SourceEnv
+> targetDeps paths mEnv fn =
 >   lookupFile [fn ++ e | e <- sourceExts] >>=
->   maybe (return (bindEnv m Unknown mEnv)) (sourceDeps paths libPaths m mEnv)
+>   maybe (return (bindEnv m Unknown mEnv)) (sourceDeps paths m mEnv)
 >   where m = mkMIdent [fn]
 
 \end{verbatim}
-The following functions are used to lookup files related to a given
-module. Source files for targets are looked up in the current
-directory only. Two different search paths are used to look up
-imported modules, the first is used to find source modules, whereas
-the library path is used only for finding matching interface files. As
-the compiler does not distinguish these paths, we actually check for
-interface files in the source paths as well.
-
-Note that the functions \texttt{buildScript} and \texttt{makeDepend}
-already remove all directories that are included in the both search
-paths from the library paths in order to avoid scanning such
-directories more than twice.
+The following function is used to look up files related to a given
+module. Whereas source files for targets are looked up in the current
+directory only, imported modules are looked up also in the search
+path. Directories specified with \texttt{-i} options are used for
+looking up source and interface files, whereas directories specified
+with \texttt{-P} options are used for looking up only interface files.
 \begin{verbatim}
 
-> lookupModule :: [FilePath] -> [FilePath] -> ModuleIdent
->              -> IO (Maybe FilePath)
-> lookupModule paths libPaths m =
->   lookupFile ([p `catPath` fn ++ e | p <- "" : paths, e <- moduleExts] ++
->               [p `catPath` fn ++ icurryExt | p <- libPaths])
+> lookupModule :: [(Bool,FilePath)] -> ModuleIdent -> IO (Maybe FilePath)
+> lookupModule paths m =
+>   lookupFile ([fn ++ e | e <- moduleExts] ++
+>               [p `catPath` fn ++ e | (source,p) <- paths, e <- exts source])
 >   where fn = foldr1 catPath (moduleQualifiers m)
+>         exts source = if source then moduleExts else [icurryExt]
 
 \end{verbatim}
 In order to compute the dependency graph, source files for each module
 need to be looked up. When a source module is found, its header is
 parsed in order to determine the modules that it imports, and
-dependencies for these modules are computed recursively. The prelude
+dependencies for these modules are computed recursively. The Prelude
 is added implicitly to the list of imported modules except for the
-prelude itself. Any errors reported by the parser are ignored.
+Prelude itself. Any errors reported by the parser are ignored.
 \begin{verbatim}
 
-> moduleDeps :: [FilePath] -> [FilePath] -> SourceEnv -> ModuleIdent
->            -> IO SourceEnv
-> moduleDeps paths libPaths mEnv m =
+> moduleDeps :: [(Bool,FilePath)] -> SourceEnv -> ModuleIdent -> IO SourceEnv
+> moduleDeps paths mEnv m =
 >   case lookupEnv m mEnv of
 >     Just _ -> return mEnv
 >     Nothing ->
 >       do
->         mbFn <- lookupModule paths libPaths m
+>         mbFn <- lookupModule paths m
 >         case mbFn of
 >           Just fn
 >             | icurryExt `isSuffixOf` fn ->
 >                 return (bindEnv m (Interface fn) mEnv)
->             | otherwise -> sourceDeps paths libPaths m mEnv fn
+>             | otherwise -> sourceDeps paths m mEnv fn
 >           Nothing -> return (bindEnv m Unknown mEnv)
 
-> sourceDeps :: [FilePath] -> [FilePath] -> ModuleIdent -> SourceEnv
->            -> FilePath -> IO SourceEnv
-> sourceDeps paths libPaths m mEnv fn =
+> sourceDeps :: [(Bool,FilePath)] -> ModuleIdent -> SourceEnv -> FilePath
+>            -> IO SourceEnv
+> sourceDeps paths m mEnv fn =
 >   do
 >     s <- readFile fn
 >     case parseHeader fn (unlitLiterate fn s) of
 >       Ok (Module m' _ is _) ->
 >         let ms = imports m' is in
->         foldM (moduleDeps paths libPaths) (bindEnv m (Source fn ms) mEnv) ms
+>         foldM (moduleDeps paths) (bindEnv m (Source fn ms) mEnv) ms
 >       Errors _ -> return (bindEnv m (Source fn []) mEnv)
 
 > imports :: ModuleIdent -> [ImportDecl] -> [ModuleIdent]
@@ -151,7 +139,7 @@ the Makefile must include a rule
 This dependency rule introduces an indirect dependency between a
 module and its interface. In particular, the interface may be updated
 when the module is recompiled and a new object file is generated but
-it does not matter if the interface is out-of-date with respect to the
+it does not matter if the interface is out of date with respect to the
 object code.
 \begin{verbatim}
 
@@ -170,8 +158,13 @@ object code.
 
 \end{verbatim}
 If we want to compile the program instead of generating Makefile
-dependencies the environment has to be sorted topologically. Note
-that the dependency graph should not contain any cycles.
+dependencies, the environment has to be sorted topologically. Note
+that the dependency graph must not contain any cycles, i.e., we cannot
+handle modules which are mutually recursive at present.
+
+\ToDo{Accept cyclic import dependencies between modules, but require
+  that enough boot (source or interface) files are present in order to
+  break each cycle.}
 \begin{verbatim}
 
 > sortDeps :: SourceEnv -> [[(ModuleIdent,Source)]]
@@ -258,9 +251,9 @@ reasonable value in the environment where the script is executed.
 
 \end{verbatim}
 The functions \texttt{interfName} and \texttt{objectName} compute the
-name of an interface and object file for a source module. Note that
-output files are always created in the same directory as the source
-file.
+name of the interface and object file, respectively, corresponding to
+a source module. Note that output files are always created in the same
+directory as the source file.
 \begin{verbatim}
 
 > interfName :: FilePath -> FilePath

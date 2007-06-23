@@ -3,9 +3,9 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 2284 2007-06-19 12:19:42Z wlux $
+# $Id: cymake.in 2340 2007-06-23 09:46:36Z wlux $
 #
-# Copyright (c) 2002-2006, Wolfgang Lux
+# Copyright (c) 2002-2007, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -118,7 +118,7 @@ while test $# -gt 0; do
 
     # Pass all other flags to the Curry compiler
     # NB some options require an argument; must keep this list in sync with cyc
-    -[DUIhkt] | -cc | -ccopt | --ccopt | -ccopts | --ccopts )
+    -[DUIFhkt] | -cc | -ccopt | --ccopt | -ccopts | --ccopts | -arch | -framework )
 	 cyopts="$cyopts $1 $2"; shift;;
     -* ) cyopts="$cyopts $1";;
 

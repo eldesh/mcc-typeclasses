@@ -4,7 +4,7 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cyc.1.in 2302 2007-06-20 07:17:11Z wlux $
+.\" $Id: cyc.1.in 2340 2007-06-23 09:46:36Z wlux $
 .\"
 .\" Copyright (c) 2004-2007, Wolfgang Lux
 .\" See LICENSE for the full license.
@@ -117,6 +117,12 @@ its assembler file in
 .Ar source Ns Pa .s ,
 and its C file in 
 .Ar source Ns Pa .c .
+.It Fl arch Ar arch
+Mac OS X: Compile for the specified target architecture
+.Ar arch .
+Multiple options work, and direct the compiler to produce
+``universal'' binaries. Using this option on other systems is likely
+to produce a C compiler error.
 .El
 .Ss Compiling Curry Modules
 The names of Curry source files must end with
@@ -276,6 +282,11 @@ to the list of paths used to locate header files. The standard library
 directory
 .Pa ( @libdir@/curry-@version@ )
 is always included in this list.
+.It Fl F Ar dir
+Mac OS X: Add the framework directory
+.Ar dir
+to the list of paths used to locate header files. Using this option on
+other systems is likely to produce a C compiler error.
 .It Fl O
 equivalent to
 .Fl O1 .
@@ -418,6 +429,10 @@ is always included in this list.
 Search the library named
 .Ar lib
 when linking.
+.It Fl framework Ar name
+Mac OS X: Link against framework
+.Ar name .
+Using this option on other systems is likely to produce a C compiler error.
 .It Fl -ldopt Ar opt
 Passes the option
 .Ar opt

@@ -3,7 +3,7 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 2302 2007-06-20 07:17:11Z wlux $
+# $Id: cyc.in 2340 2007-06-23 09:46:36Z wlux $
 #
 # Copyright (c) 2002-2007, Wolfgang Lux
 # See LICENSE for the full license.
@@ -135,6 +135,7 @@ while test $# -gt 0; do
     -ccopt-* | -ccopts-* | --ccopt-* | --ccopts-* )
       ccopts=$ccopts\ `expr "$1" : '-*ccopts*\(-.*\)'`;;
     -ccopt | -ccopts | --ccopt | --ccopts ) ccopts="$ccopts $2"; shift;;
+    -arch ) ccopts="$ccopts $1 $2"; shift;;
     -O* ) ccopts="$ccopts $1";;
 
     # Include files and imported modules
@@ -149,6 +150,8 @@ while test $# -gt 0; do
       arg=`expr "$1" : '-P\(.*\)'`
       ccopts="$ccopts -I$arg"; ldopts="$ldopts -L$arg"
       imports="$imports -i $arg";;
+    -F ) ccopts="$ccopts -F$2"; shift;;
+    -F* ) ccopts="$ccopts $1";;
 
     # Linker options
     -ldopt-* | -ldopts-* | --ldopt-* | --ldopts-* )
@@ -158,6 +161,7 @@ while test $# -gt 0; do
     -L* ) ldopts="$ldopts $1";;
     -l ) libs="$libs -l$2"; shift;;
     -l* ) libs="$libs $1";;
+    -framework ) ldopts="$ldopts $1 $2"; shift;;
 
     # Runtime system options for cycc
     -H* ) rtopts="$rtopts $1";;

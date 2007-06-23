@@ -1,4 +1,4 @@
-dnl $Id: configure.in 2353 2007-06-23 11:20:17Z wlux $
+dnl $Id: configure.in 2369 2007-06-23 13:58:53Z wlux $
 dnl
 dnl Copyright (c) 2002-2007, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -224,6 +224,7 @@ dnl Checks for header files.
 AC_CHECK_HEADERS([stdbool.h])
 AC_CHECK_HEADERS([sys/socket.h])
 AC_CHECK_HEADERS([sys/resource.h])
+AC_CHECK_HEADERS([sys/mman.h],[have_sys_mman_h=yes],[have_sys_mman_h=no])
 AC_CHECK_HEADERS([winsock.h],[LIBS="$LIBS -lwsock32"])
 AC_CHECK_HEADERS([ieeefp.h])
 AC_HEADER_SYS_WAIT
@@ -250,11 +251,12 @@ AC_CHECK_FUNCS([popen])
 AC_CHECK_FUNCS([random])
 AC_ARG_ENABLE(mprotect,
  [  --disable-mprotect      do not mprotect the inactive semi-space of the heap])
-case $enable_mprotect in
-  no ) ;;
-  * )
-    AC_CHECK_FUNCS([mprotect])
-    ;;
+case $have_sys_mman_h in
+  yes )
+    case $enable_mprotect in
+      no ) ;;
+      * ) AC_CHECK_FUNCS([mprotect]);;
+    esac;;
 esac
 
 

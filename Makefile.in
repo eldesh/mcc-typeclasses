@@ -1,6 +1,6 @@
 # Makefile for the Curry compiler
 #
-# $Id: Makefile.in 2344 2007-06-23 09:55:53Z wlux $
+# $Id: Makefile.in 2371 2007-06-23 14:08:14Z wlux $
 #
 # Copyright (c) 2000-2007 Wolfgang Lux
 # See LICENSE for the full license.
@@ -25,6 +25,7 @@ mandir = @mandir@
 # compiler definitions
 HC = @HC@
 HCFLAGS = @HCFLAGS@
+HC_PATH_STYLE = @HC_PATH_STYLE@
 
 LATEX = latex
 BIBTEX = bibtex
@@ -111,8 +112,8 @@ cycc_SRCS = \
 	Set.lhs \
 	Position.lhs \
 	GetOpt.hs \
-	PathUtils.lhs \
 	Utils.lhs \
+	$(PATHUTILS_LHS) \
 	$(IOEXTS_LHS)
 cycc_XXX  = $(cycc_SRCS:.hs=.hi)
 cycc_INTF = $(cycc_XXX:.lhs=.hi)
@@ -135,7 +136,7 @@ cymk_SRCS = \
 	Set.lhs \
 	Position.lhs \
 	GetOpt.hs \
-	PathUtils.lhs
+	$(PATHUTILS_LHS)
 cymk_XXX  = $(cymk_SRCS:.hs=.hi)
 cymk_INTF = $(cymk_XXX:.lhs=.hi)
 cymk_OBJS = $(cymk_INTF:.hi=.o)
@@ -164,8 +165,8 @@ cam2c_SRCS = \
 	Map.lhs \
 	Set.lhs \
 	Position.lhs \
-	PathUtils.lhs \
-	Utils.lhs
+	Utils.lhs \
+	$(PATHUTILS_LHS)
 cam2c_XXX  = $(cam2c_SRCS:.hs=.hi)
 cam2c_INTF = $(cam2c_XXX:.lhs=.hi)
 cam2c_OBJS = $(cam2c_INTF:.hi=.o)
@@ -199,6 +200,9 @@ mach_XXX  = $(mach_SRCS:.hs=.hi)
 mach_INTF = $(mach_XXX:.lhs=.hi)
 mach_OBJS = $(mach_INTF:.hi=.o)
 
+PATHUTILS_LHS = $(HC_PATH_STYLE)/PathUtils.lhs
+PATHUTILS_SRCS = unix/PathUtils.lhs windows/PathUtils.lhs
+
 IOEXTS_LHS = @IOExts_lhs@
 IOEXTS_SRCS = ghc/IOExts.lhs hbc/IOExts.lhs nhc/IOExts.lhs
 
@@ -210,7 +214,7 @@ DISTFILES = README LICENSE NEWS curry.tex curry.bib \
 	configure configure.in aclocal.m4 config.guess config.sub install-sh \
 	Makefile.in ghc.mk ghc-make.mk hbc.mk nhc.mk makedoc.in in-place-config \
 	configure-bin.in Makefile-bin.in in-place-config-bin \
-	$(SCRIPTS:=.in) $(man_MANS:=.in) $(SRCS) $(IOEXTS_SRCS)
+	$(SCRIPTS:=.in) $(man_MANS:=.in) $(SRCS) $(PATHUTILS_SRCS) $(IOEXTS_SRCS)
 
 # default target, build all programs and the library
 all: scripts programs runtime curry mans
@@ -355,7 +359,9 @@ dist: distdir
 	rm -rf $(distdir)
 distdir:
 	rm -rf $(distdir)
-	mkdir $(distdir) $(distdir)/ghc $(distdir)/hbc $(distdir)/nhc
+	mkdir $(distdir)
+	mkdir $(distdir)/unix $(distdir)/windows
+	mkdir $(distdir)/ghc $(distdir)/hbc $(distdir)/nhc
 	for f in $(DISTFILES); do cp $(srcdir)/$$f $(distdir)/$$f; done
 	for d in $(SUBDIRS); do \
 		mkdir $(distdir)/$$d && \
@@ -379,7 +385,7 @@ bindistdir: cycc cymk newer runtime curry
 	    -e 's/%TARGET%/@target_cpu@-@target_os@/' \
 	    -e 's/%VERSION%/@PACKAGE_VERSION@/' \
 	    -e 's/%CURRY_CFLAGS%/@CURRY_CFLAGS@/' \
-	    -e 's/%USE_CYGPATH_WORKAROUND%/@USE_CYGPATH_WORKAROUND@/' \
+	    -e 's/%HC_PATH_STYLE%/@HC_PATH_STYLE@/' \
 	    $(srcdir)/configure-bin.in > $(bindistdir)/configure.in
 	cp $(srcdir)/Makefile-bin.in $(bindistdir)/Makefile.in
 	cp $(srcdir)/in-place-config-bin $(bindistdir)/in-place-config

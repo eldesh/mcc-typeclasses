@@ -1,6 +1,6 @@
-# $Id: aclocal.m4 2253 2007-06-15 17:47:50Z wlux $
+# $Id: aclocal.m4 2371 2007-06-23 14:08:14Z wlux $
 #
-# Copyright (c) 2002-2006, Wolfgang Lux
+# Copyright (c) 2002-2007, Wolfgang Lux
 #
 
 ########################################################################
@@ -313,8 +313,8 @@ esac])
 
 # CURRY_HC_PATH_STYLE
 # Checks whether Haskell compiler HC understands Posix-style paths
-# Sets the variable USE_CYGPATH_WORKAROUND to empty if Posix-style
-# paths can be used and to yet otherwise
+# Sets the variable HC_PATH_STYLE to posix if Posix-style paths can
+# be used and to windows yet otherwise
 AC_DEFUN([CURRY_HC_PATH_STYLE],
 [AC_MSG_CHECKING([whether $HC understands Posix-style paths])
 cat <<EOF >conftest.hs
@@ -324,10 +324,10 @@ rm -f conftest$EXEEXT
 $HC conftest.hs -o conftest$EXEEXT 2>/dev/null
 if ./conftest$EXEEXT 2>/dev/null; then
    AC_MSG_RESULT([yes])
-   USE_CYGPATH_WORKAROUND=
+   HC_PATH_STYLE=unix
 else
    AC_MSG_RESULT([no])
-   USE_CYGPATH_WORKAROUND=yes
+   HC_PATH_STYLE=windows
 fi
 rm -f conftest* Main.hi
 ])

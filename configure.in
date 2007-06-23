@@ -1,4 +1,4 @@
-dnl $Id: configure.in 2370 2007-06-23 14:03:39Z wlux $
+dnl $Id: configure.in 2371 2007-06-23 14:08:14Z wlux $
 dnl
 dnl Copyright (c) 2002-2007, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -191,7 +191,7 @@ CURRY_HC_PATH_STYLE
 
 
 dnl Check for Cygpath
-if test "$USE_CYGPATH_WORKAROUND" = "yes"; then
+if test "$HC_PATH_STYLE" = windows; then
   AC_PATH_PROG(CYGPATH, cygpath)
 fi
 
@@ -270,7 +270,7 @@ AC_SUBST(STDLIB)
 AC_SUBST(DEBUG)
 AC_SUBST(CAM2C)
 AC_SUBST(MACH)
-AC_SUBST(USE_CYGPATH_WORKAROUND)
+AC_SUBST(HC_PATH_STYLE)
 
 AC_SUBST_FILE(in_place_config)
 in_place_config=$srcdir/in-place-config

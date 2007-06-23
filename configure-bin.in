@@ -1,4 +1,4 @@
-dnl $Id: configure-bin.in 2370 2007-06-23 14:03:39Z wlux $
+dnl $Id: configure-bin.in 2371 2007-06-23 14:08:14Z wlux $
 dnl
 dnl Copyright (c) 2002-2007, Wolfgang Lux
 dnl
@@ -21,8 +21,8 @@ if test "$GCC" = yes; then
 fi
 
 dnl Check for Cygpath
-USE_CYGPATH_WORKAROUND="%USE_CYGPATH_WORKAROUND%"
-if test "$USE_CYGPATH_WORKAROUND" = "yes"; then
+HC_PATH_STYLE="%HC_PATH_STYLE%"
+if test "$HC_PATH_STYLE" = Windows; then
   AC_PATH_PROG(CYGPATH, cygpath)
 fi
 
@@ -36,7 +36,7 @@ CURRY_CYI_SHELL
 
 AC_SUBST(CURRY_CFLAGS)
 AC_SUBST(INSTALL_DIR)
-AC_SUBST(USE_CYGPATH_WORKAROUND)
+AC_SUBST(HC_PATH_STYLE)
 AC_SUBST_FILE(in_place_config)
 in_place_config=$srcdir/in-place-config
 

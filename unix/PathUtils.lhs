@@ -1,26 +1,30 @@
 % -*- LaTeX -*-
-% $Id: PathUtils.lhs 1744 2005-08-23 16:17:12Z wlux $
+% $Id: PathUtils.lhs 2371 2007-06-23 14:08:14Z wlux $
 %
-% Copyright (c) 1999-2003, Wolfgang Lux
-% See LICENSE for the full license.
+% Copyright (c) 1999-2007, Wolfgang Lux
+% See ../LICENSE for the full license.
 %
-\nwfilename{PathUtils.lhs}
-\section{Pathnames}
-This module implements some utility functions for manipulating path
-names and finding files.
+\nwfilename{unix/PathUtils.lhs}
+\section{Path Names}
+The module \texttt{PathUtils} implements some utility functions for
+manipulating path names and finding files. Depending on the Haskell
+compiler and target system, one of the following implementations is
+chosen.
+
+\subsection{Unix}
+The following implementation of \texttt{PathUtils} uses Unix style
+path semantics.
 \begin{verbatim}
 
 > module PathUtils(pathSep,curDirPath, isRelative,isAbsolute,
 >                  dirname,basename, rootname,extension, catPath,
 >                  listSep, pathList, lookupFile) where
-> -- import List
 > import Directory
 
 \end{verbatim}
-Within this module we assume Unix style path semantics, i.e.\ 
-components of a path name are separated by forward slash characters
-(\texttt{/}) and file extensions are separated with a dot character
-(\texttt{.}).
+With Unix style path semantics, components of a path name are
+separated by forward slash characters (\texttt{/}) and file extensions
+are separated with a dot character (\texttt{.}).
 \begin{verbatim}
 
 > pathSep :: Char
@@ -30,13 +34,14 @@ components of a path name are separated by forward slash characters
 > curDirPath = "."
 
 \end{verbatim}
-Absolute path names start with a slash while relative paths don't.
+Absolute path names start with a path separator while relative paths
+don't.
 \begin{verbatim}
 
 > isRelative,isAbsolute :: FilePath -> Bool
 > isRelative = not . isAbsolute
 > isAbsolute "" = False
-> isAbsolute (c:cs) = c == '/'
+> isAbsolute (c:cs) = c == pathSep
 
 \end{verbatim}
 Path concatenation on Unix systems is trivial as an empty path also
@@ -81,8 +86,8 @@ cannot be implemented portably in Haskell 98.}
 >           where cs' = dropWhile (pathSep ==) cs
 
 \end{verbatim}
-When we split a path into its basename and directory we will make
-sure that the basename does not contain any path separators.
+When we split a path into its directory and base names, we make
+sure that the base name does not contain any path separators.
 \begin{verbatim}
  
 > dirname, basename :: FilePath -> FilePath
@@ -97,8 +102,8 @@ sure that the basename does not contain any path separators.
 >       (if null dirname then [pathSep] else dirname,basename)
 
 \end{verbatim}
-The extension of a filename is the component starting at the last dot
-of the filename. Note that only an extension in the basename will be
+The extension of a file name is the component starting at the last dot
+of the file name. Note that only an extension in the base name will be
 considered. Also note that the extension will always start with a dot.
 \begin{verbatim}
 
@@ -114,7 +119,7 @@ considered. Also note that the extension will always start with a dot.
 >       | otherwise -> (rootname,extension)
 
 \end{verbatim}
-Conventionally the colon is used on Unix system to separate
+Conventionally the colon is used on Unix systems to separate
 directories in a list of path specifications. The function
 \texttt{pathList} converts a single string containing these separators
 into a list of strings.
@@ -144,7 +149,7 @@ exists in the file system.
 
 \end{verbatim}
 The function \texttt{breakLast} is similar to the standard
-\texttt{break} function, except that it splits the argument list at
+\texttt{break} function, except that it splits its argument list at
 the last position for which the predicate returns \texttt{True}.
 \begin{verbatim}
 

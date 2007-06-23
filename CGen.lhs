@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2336 2007-06-23 09:39:23Z wlux $
+% $Id: CGen.lhs 2337 2007-06-23 09:40:57Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -22,38 +22,28 @@
 
 \end{verbatim}
 \subsection{Start-up Code}
-The function \texttt{genMain} generates the start-up code for a Curry
-program. It defines the main function of the program and also the
-global variables that hold the default sizes of the heap, the stack,
-and the trail. The main function first initializes the runtime system
-by calling \verb|curry_init|, then executes the main function of the
-Curry program by invoking \verb|curry_exec| for a monadic goal and
-\verb|curry_eval| for a non-monadic goal, respectively, and finally
-calls \verb|curry_terminate|, which eventually prints the statistics
-for the run. In case of a non-monadic goal, the main function also
-defines the array holding the names of the goal's free variables.
+The function \texttt{genMain} defines the main function of a Curry
+program. This function first sets the global runtime system variables
+that hold the default sizes of the heap, the stack, and the trail,
+respectively, if non-standard sizes were specified for them at compile
+time. Next, it initializes the runtime system by calling
+\verb|curry_init|. Then, the goal of the Curry program is executed by
+invoking either \verb|curry_exec| for a monadic goal or
+\verb|curry_eval| for a non-monadic goal, and finally
+\verb|curry_terminate| is called, which eventually prints the
+statistics for the run. In case of a non-monadic goal, the main
+function also defines the array holding the names of the goal's free
+variables.
 \begin{verbatim}
 
 > genMain :: Name -> Maybe [String] -> [CTopDecl]
-> genMain f fvs = CppInclude "curry.h" : defaultVars ++ mainFunction f fvs
-
-> defaultVars :: [CTopDecl]
-> defaultVars =
->   [CVarDef CPublic ty v (CInit (CExpr (defaultValue v))) | (ty,v) <- vars]
->   where vars = [
->             (ulongType, "heapsize"),
->             (uintType,  "stacksize"),
->             (uintType,  "trailsize"),
->             (intType,   "print_fail"),
->             (intType,   "do_trace"),
->             (intType,   "show_stats")
->           ]
->         defaultValue v = "DEFAULT_" ++ map toUpper v
+> genMain f fvs = CppInclude "curry.h" : mainFunction f fvs
 
 > mainFunction :: Name -> Maybe [String] -> [CTopDecl]
 > mainFunction f fvs =
 >   [CMainFunc "main" ["argc","argv"]
 >     (maybe [] (return . fvDecl "fv_names") fvs ++
+>      [initVar v (defaultValue v) | v <- rtsVars] ++
 >      [procCall "curry_init" ["&argc","argv"],
 >       CLocalVar intType "rc"
 >         (Just (curry_main fvs f "fv_names" ["argc","argv"])),
@@ -63,12 +53,24 @@ defines the array holding the names of the goal's free variables.
 >   where fvDecl v vs =
 >           CStaticArray (CPointerType (CConstType "char")) v
 >                        (map CInit (map CString vs ++ [CNull]))
+>         initVar v d = CppCondStmts d [setVar (Name v) (CExpr d)] []
+>         defaultValue v = "DEFAULT_" ++ map toUpper v
 >         curry_main (Just _) = curry_eval
 >         curry_main Nothing = const . curry_exec
 >         curry_exec g args =
 >           CFunCall "curry_exec" (constRef (constFunc g) : map CExpr args)
 >         curry_eval g v args =
 >           CFunCall "curry_eval" (addr (nodeInfo g) : map CExpr (v:args))
+
+> rtsVars :: [String]
+> rtsVars = [
+>     "heapsize",
+>     "stacksize",
+>     "trailsize",
+>     "print_fail",
+>     "do_trace",
+>     "show_stats"
+>   ]
 
 \end{verbatim}
 \subsection{Modules}

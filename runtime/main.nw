@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: main.nw 2302 2007-06-20 07:17:11Z wlux $
+% $Id: main.nw 2337 2007-06-23 09:40:57Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -12,15 +12,15 @@ the command line options and initializes the runtime system
 accordingly. At the end, the program should call [[curry_terminate]]
 in order to display the statistics gathered during the run.
 
-The main program is also responsible for providing default sizes for
-the heap, the stack, and the trail. To this end, it must define the
-global variables [[heapsize]], [[stacksize]], and [[trailsize]]. The
-actual sizes can be changed at runtime with the runtime system options
-\texttt{-h}, \texttt{-k}, and \texttt{-t}, respectively. The defaults
-sizes (4 MBytes for the heap and 512 kBytes for the stack and the
-trail) are available with the preprocessor constants
-[[DEFAULT_HEAPSIZE]], [[DEFAULT_STACKSIZE]], and
-[[DEFAULT_TRAILSIZE]], which can be redefined at compile time.
+The main program can provide its own default sizes for the heap, the
+stack, and the trail. To this end, it can set the global variables
+[[heapsize]], [[stacksize]], and [[trailsize]] before initializing the
+runtime system with [[curry_init]]. The actual sizes still can be
+changed at runtime with the runtime system options \texttt{-h},
+\texttt{-k}, and \texttt{-t}, respectively. In a similar way, the main
+program can also request tracing, printing statistics, and printing
+failures by default, by setting the global variables [[do_trace]],
+[[show_stats]], and [[print_failures]], respectively.
 
 The sizes and base addresses of the heap, the stack, and the trail are
 rounded to the next page boundary. For the purpose of rounding, the
@@ -29,32 +29,6 @@ system's page size. If the page size cannot be determined
 from the operating system, a default of 4k is used. %'
 
 <<main.h>>=
-#define k 1024
-#define M k*k
-
-#ifndef DEFAULT_HEAPSIZE
-# define DEFAULT_HEAPSIZE 4*M
-#endif
-
-#ifndef DEFAULT_STACKSIZE
-# define DEFAULT_STACKSIZE 512*k
-#endif
-#ifndef DEFAULT_TRAILSIZE
-# define DEFAULT_TRAILSIZE 512*k
-#endif
-
-#ifndef DEFAULT_PRINT_FAIL
-# define DEFAULT_PRINT_FAIL 0
-#endif
-
-#ifndef DEFAULT_SHOW_STATS
-# define DEFAULT_SHOW_STATS 0
-#endif
-
-#ifndef DEFAULT_DO_TRACE
-# define DEFAULT_DO_TRACE 0
-#endif
-
 extern unsigned long heapsize;
 extern unsigned int  stacksize;
 extern unsigned int  trailsize;
@@ -97,7 +71,29 @@ from the argument vector.
 static void	     bad_option(void) __attribute__((noreturn));
 static unsigned long parse_size(long max, const char *, const char *);
 
+#define k 1024
+#define M k*k
+
+#ifndef DEFAULT_HEAPSIZE
+# define DEFAULT_HEAPSIZE 4*M
+#endif
+
+#ifndef DEFAULT_STACKSIZE
+# define DEFAULT_STACKSIZE 512*k
+#endif
+#ifndef DEFAULT_TRAILSIZE
+# define DEFAULT_TRAILSIZE 512*k
+#endif
+
 #define DEFAULT_PAGESIZE 4*k
+
+unsigned long heapsize  = DEFAULT_HEAPSIZE;
+unsigned int  stacksize = DEFAULT_STACKSIZE;
+unsigned int  trailsize = DEFAULT_TRAILSIZE;
+
+int do_trace   = 0;
+int show_stats = 0;
+int print_fail = 0;
 
 unsigned long pagemask;
 

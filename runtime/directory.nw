@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: directory.nw 1744 2005-08-23 16:17:12Z wlux $
+% $Id: directory.nw 2354 2007-06-23 11:21:52Z wlux $
 %
-% Copyright (c) 2003-2005, Wolfgang Lux
+% Copyright (c) 2003-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Directories}
@@ -20,6 +20,10 @@ functions in the C library.
 
 #define maxpathlen()		MAXPATHLEN
 #define dirent_d_name(dp)	((struct dirent *)dp)->d_name
+
+#if defined(_WIN32) && !defined(__CYGWIN__)
+# define mkdir(d,m)		mkdir(d)
+#endif
 
 @ 
 The function [[exist_d]] returns [[true]] if the argument exists and

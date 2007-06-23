@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: stats.nw 2258 2007-06-16 13:35:37Z wlux $
+% $Id: stats.nw 2349 2007-06-23 11:03:35Z wlux $
 %
-% Copyright (c) 2002-2006, Wolfgang Lux
+% Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Gathering Statistical Information}
@@ -28,14 +28,20 @@ extern void stats_backtrack(unsigned long freed);
 @ 
 The implementation of the statistics module is pretty straight
 forward. In order to determine expired run times, we use the
-[[rusage]] function, which is defined together with the necessary
-constants in the header file [[sys/resource.h]].
+[[getrusage]] function on systems that support it and the ANSI C
+[[clock]] function otherwise. The [[getrusage]] function is defined
+together with the necessary constants in the header file
+[[sys/resource.h]].
 
 <<stats.c>>=
 #include "config.h"
 #include <stdio.h>
-#include <sys/time.h>
-#include <sys/resource.h>
+#if HAVE_SYS_RESOURCE_H
+# include <sys/time.h>
+# include <sys/resource.h>
+#else
+# include <time.h>
+#endif
 #include "stats.h"
 
 <<Function prototypes>>
@@ -61,7 +67,11 @@ returns user and system time information since the program start. In
 addition, elapsed wall clock time is computed using [[gettimeofday]].
 
 <<Global variables>>=
+#if HAVE_SYS_RESOURCE_H
 static struct timeval user_time, gc_time, sys_time, real_time;
+#else
+clock_t user_time, gc_time;
+#endif
 
 @ 
 Regarding memory allocation, the statistics module computes the number
@@ -85,15 +95,21 @@ been performed.
 void
 stats_init(int level)
 {
+#if HAVE_SYS_RESOURCE_H
     struct rusage  ru;
     struct timeval tv;
-    show_stats = level;
+#endif
 
+    show_stats = level;
+#if HAVE_SYS_RESOURCE_H
     gettimeofday(&tv, NULL);
     getrusage(RUSAGE_SELF, &ru);
     sub_timeval(&user_time, ru.ru_utime);
     sub_timeval(&sys_time, ru.ru_stime);
     sub_timeval(&real_time, tv);
+#else
+    user_time -= clock();
+#endif
 }
 
 @ 
@@ -106,6 +122,7 @@ in normal execution mode and not performing a garbage collection.
 void
 stats_terminate()
 {
+#if HAVE_SYS_RESOURCE_H
     struct rusage  ru;
     struct timeval tv;
 
@@ -114,9 +131,13 @@ stats_terminate()
     add_timeval(&user_time, ru.ru_utime);
     add_timeval(&sys_time, ru.ru_stime);
     add_timeval(&real_time, tv);
+#else
+    user_time += clock();
+#endif
 
     if ( show_stats > 0 )
     {
+#if HAVE_SYS_RESOURCE_H
         fprintf(stderr,
 		"[user: %lu.%03us, gc: %lu.%03us,"
 		" sys: %lu.%03us, real: %lu.%03us]\n",
@@ -128,6 +149,11 @@ stats_terminate()
 		(unsigned)sys_time.tv_usec / 1000,
                 (unsigned long)real_time.tv_sec,
 		(unsigned)real_time.tv_usec / 1000);
+#else
+        fprintf(stderr, "[user: %.3fs, gc: %.3fs]\n",
+                (double)user_time / CLOCKS_PER_SEC,
+                (double)gc_time / CLOCKS_PER_SEC);
+#endif
 
         fprintf(stderr, "[%llu words allocated", total_collect + total_release);
         if ( n_gc > 0 )
@@ -161,11 +187,21 @@ static unsigned long n_alloc_before_gc;
 void
 stats_begin_gc(unsigned long n_alloc)
 {
+#if HAVE_SYS_RESOURCE_H
     struct rusage ru;
+#else
+    clock_t t;
+#endif
 
+#if HAVE_SYS_RESOURCE_H
     getrusage(RUSAGE_SELF, &ru);
     add_timeval(&user_time, ru.ru_utime);
     sub_timeval(&gc_time, ru.ru_utime);
+#else
+    t	       = clock();
+    user_time += t;
+    gc_time   -= t;
+#endif
 
     n_alloc_before_gc = n_alloc;
     if ( show_stats > 1 )
@@ -175,15 +211,25 @@ stats_begin_gc(unsigned long n_alloc)
 void
 stats_end_gc(unsigned long n_alloc)
 {
+#if HAVE_SYS_RESOURCE_H
     struct rusage ru;
+#else
+    clock_t t;
+#endif
 
     n_gc++;
     total_collect += n_alloc_before_gc - n_alloc;
     total_live	  += n_alloc;
 
+#if HAVE_SYS_RESOURCE_H
     getrusage(RUSAGE_SELF, &ru);
     add_timeval(&gc_time, ru.ru_utime);
     sub_timeval(&user_time, ru.ru_utime);
+#else
+    t	       = clock();
+    gc_time   += t;
+    user_time -= t;
+#endif
 
     if ( show_stats > 1 )
         fprintf(stderr, "%lu live words, %lu words freed>\n",
@@ -209,11 +255,14 @@ microseconds part is always a positive number in the range between 0
 and 999999.
 
 <<Function prototypes>>=
+#if HAVE_SYS_RESOURCE_H
 static void add_timeval(struct timeval *, struct timeval);
 static void sub_timeval(struct timeval *, struct timeval);
+#endif
 
 @ 
 <<stats.c>>=
+#if HAVE_SYS_RESOURCE_H
 static void
 add_timeval(struct timeval *p_tv1, struct timeval tv2)
 {
@@ -238,3 +287,4 @@ sub_timeval(struct timeval *p_tv1, struct timeval tv2)
         p_tv1->tv_usec += 1000000 - tv2.tv_usec;
     }
 }
+#endif

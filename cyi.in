@@ -3,7 +3,7 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 2365 2007-06-23 13:43:10Z wlux $
+# $Id: cyi.in 2366 2007-06-23 13:48:09Z wlux $
 #
 # Copyright (c) 2002-2007, Wolfgang Lux
 # See LICENSE for the full license.
@@ -131,7 +131,7 @@ compile_target ( ) {
 }
 
 find_module ( ) {
-  (cd "$srcdir" && $cymake --find $cyopts "$1") | sed 's/^.*: //'
+  $cymake --find $cyopts "$1" | sed 's/^.*: //'
 }
 
 set_goal ( ) {
@@ -155,7 +155,14 @@ run_goal ( ) {
 }
 
 set_module ( ) {
-    read line < $1.icurry
+    case $1 in
+      *.curry ) stem=`expr "$1" : '\(.*\).curry'`;;
+      *.lcurry ) stem=`expr "$1" : '\(.*\).lcurry'`;;
+      *.icurry ) stem=`expr "$m" : '\(.*\)'.icurry`;;
+      *.o ) stem=`expr "$m" : '\(.*\)'.o`;;
+      * ) stem=$1;;
+    esac
+    read line < $stem.icurry
     set $line
     module=$2
     prompt="$module> "
@@ -174,42 +181,27 @@ load ( ) {
       prompt="$module> "
       ;;
     1 )
-      case $1 in
-        *.curry | *.lcurry ) 
-	    if test -f "$1"; then
-              srcdir=`pwd`; source=$1
+      m=`find_module "$1"`
+      case $m in
+        "" ) echo "missing source file for $1";;
+	*.curry | *.lcurry )
+	    if test -f "$m"; then
+              srcdir=`pwd`; source=$m
             else
-	      echo "source file $1 does not exist"
+	      echo "source file $m does not exist"
 	    fi
-	    ;;
-        * ) f=`echo $1 | tr '.' '/'`
-            if test -f "$f.lcurry"; then
-              srcdir=`pwd`; source="$f.lcurry"
-            elif test -f "$f.curry"; then
-              srcdir=`pwd`; source="$f.curry"
-            else
-	      ifs=$IFS
-	      IFS=:
-	      for d in $CURRY_IMPORT_PATH; do
-		if test -f "$d/$f.icurry"; then
-		  IFS=$ifs
-		  srcdir=.
-		  source=
-		  interfaces=-M$f
-		  objects=
-		  dobjects=
-		  set_module "$d/$f"
-		  return
-		fi
-	      done
-	      IFS=$ifs
-	      echo "missing source file for $1"
-	      return
-            fi
-            ;;
-      esac
-      reload
-      ;;
+	    reload;;
+	*.icurry )
+	    srcdir=`pwd`
+	    source=
+	    interfaces=-M$m
+	    objects=
+	    dobjects=
+	    set_module "$m";;
+	* )
+	  echo >&2 "$cyi: internal error: unexpected result from cymake --find"
+	  return;;
+      esac;;
     * ) echo "too many files";;
   esac
 }
@@ -228,12 +220,7 @@ reload ( ) {
     done
     objects=`compile_source -M | sed 's/:.*$//'`
     dobjects=
-    case $source in
-      *.curry ) stem=`expr "$source" : '\(.*\).curry'`;;
-      *.lcurry ) stem=`expr "$source" : '\(.*\).lcurry'`;;
-      * ) echo >&2 "$cyi: internal error: unknown source extension"; return;;
-    esac
-    set_module "$stem"
+    set_module "$source"
   fi
 }
 
@@ -244,11 +231,11 @@ clean ( ) {
 interface ( ) {
   eval set dummy $1; shift
   case $# in
-    0 ) if test -n "$source"; then m=$source; else m=$module; fi;;
-    1 ) m=$1;;
+    0 ) d=$srcdir; if test -n "$source"; then m=$source; else m=$module; fi;;
+    1 ) d=.; m=$1;;
     * ) echo "too many modules"; return;;
   esac
-  i=`find_module "$m"`
+  i=`cd "$d" && find_module "$m"`
   case $i in
     "" ) ;;
     *.curry ) i=`expr "$i" : '\(.*\).curry'`.icurry;;
@@ -258,8 +245,8 @@ interface ( ) {
       echo >&2 "$cyi: internal error: unexpected result from cymake --find"
       return;;
   esac
-  if test -n "$i" && (cd "$srcdir" && test -f "$i"); then
-    (cd "$srcdir"; $pager $i)
+  if test -n "$i" && (cd "$d" && test -f "$i"); then
+    (cd "$d"; $pager $i)
   else
     echo "Interface of module $m not found";
     return 1

@@ -3,7 +3,7 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 2359 2007-06-23 11:34:41Z wlux $
+# $Id: cymake.in 2362 2007-06-23 11:38:19Z wlux $
 #
 # Copyright (c) 2002-2007, Wolfgang Lux
 # See LICENSE for the full license.
@@ -166,7 +166,7 @@ fi
 trap 'rc=$?; rm -f /tmp/cymake$$; exit $rc' 0 1 2 3 15
 
 # Process all targets
-set -- $files
+set dummy $files; shift
 if test -n "$output" -a $# -gt 1; then
   echo 1>&2 "$cymake: cannot specify -o with multiple targets"
   exit 1

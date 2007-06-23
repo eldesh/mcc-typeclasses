@@ -3,7 +3,7 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 2359 2007-06-23 11:34:41Z wlux $
+# $Id: cyc.in 2362 2007-06-23 11:38:19Z wlux $
 #
 # Copyright (c) 2002-2007, Wolfgang Lux
 # See LICENSE for the full license.
@@ -240,7 +240,7 @@ fi
 trap 'rc=$?; test "$temps" && rm -f $temps; exit $rc' 0 1 2 3 15
 
 # Process all files
-set -- $files
+set dummy $files; shift
 if test -n "$ofile" -a -n "$toC$toS$toO" -a $# -gt 1; then
   echo 1>&2 "$cyc: cannot specify -o with -c, -S, or -C and multiple input files"
   exit 1

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Lift.lhs 2332 2007-06-22 23:26:01Z wlux $
+% $Id: Lift.lhs 2358 2007-06-23 11:32:36Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -189,7 +189,7 @@ is no need for reordering.
 >     let tys = map (rawType . flip varType tyEnv) fvs
 >     case fds of
 >       [FunctionDecl _ f [Equation _ (FunLhs _ ts) (SimpleRhs _ e' _)]]
->         | maybe True (Trust==) (lookupEnv f trEnv) &&
+>         | f `notElem` qfv m e' && maybe True (Trust==) (lookupEnv f trEnv) &&
 >           all isVarPattern ts && isFunction e'' &&
 >             fvs' ++ [mkVar ty v | VariablePattern ty v <- ts] == es ->
 >             abstractFunDecls m pre lvs trEnv env' fdss vds e

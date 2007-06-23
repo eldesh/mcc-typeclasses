@@ -1,4 +1,4 @@
-dnl $Id: configure.in 2346 2007-06-23 10:23:59Z wlux $
+dnl $Id: configure.in 2347 2007-06-23 10:34:08Z wlux $
 dnl
 dnl Copyright (c) 2002-2007, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -221,6 +221,7 @@ AC_SEARCH_LIBS(socket, socket)
 
 
 dnl Checks for header files.
+AC_CHECK_HEADERS([stdbool.h])
 AC_CHECK_HEADERS([sys/socket.h])
 AC_CHECK_HEADERS([ieeefp.h])
 
@@ -233,6 +234,7 @@ CURRY_UNALIGNED_DOUBLE
 
 
 dnl Check for typedefs and structures
+AC_CHECK_TYPES([_Bool])
 AC_CHECK_TYPES([socklen_t],,,[AC_INCLUDES_DEFAULT
 #ifdef HAVE_SYS_SOCKET_H
 # include <sys/socket.h>

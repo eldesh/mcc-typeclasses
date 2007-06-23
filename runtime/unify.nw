@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2346 2007-06-23 10:23:59Z wlux $
+% $Id: unify.nw 2347 2007-06-23 10:34:08Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -18,10 +18,10 @@ DECLARE_LABEL(extern, bind_var);
 #if NO_OCCURS_CHECK
 # define occurs(var,arg,nf)	(*(nf) = !is_tagged_ptr(arg), false)
 #else
-extern boolean occurs(Node *, Node *, boolean *);
+extern bool occurs(Node *, Node *, bool *);
 #endif
-extern boolean eq_root(Node *, Node *, unsigned int *);
-extern boolean eq_args(unsigned int, Node *, Node *, unsigned int, Node **);
+extern bool eq_root(Node *, Node *, unsigned int *);
+extern bool eq_args(unsigned int, Node *, Node *, unsigned int, Node **);
 
 @ 
 <<unify.c>>=
@@ -111,8 +111,8 @@ FUNCTION(___61__58__61__2)
 	    FAIL(NO_SOLUTION);
 	else if ( n > 0 )
 	{
-	    boolean exist_type;
-	    Node    *arglist;
+	    bool exist_type;
+	    Node *arglist;
 
 	    /* NB assign exist_type before calling eq_args because a
 	     *    garbage collection in eq_args will invalidate arg1 */
@@ -167,11 +167,11 @@ this unsoundness, we support equality for partial applications because
 it allows returning functional values through logic variables.
 
 <<unify.c>>=
-boolean
+bool
 eq_root(Node *arg1, Node *arg2, unsigned int *argc)
 {
-    boolean eq;
-    double  d, e;
+    bool   eq;
+    double d, e;
 
     *argc = 0;
 
@@ -265,11 +265,11 @@ applications with different roots, [[eq_args]] returns [[false]]
 immediately.
 
 <<unify.c>>=
-boolean
+bool
 eq_args(unsigned int n_regs, Node *arg1, Node *arg2,
 	unsigned int n, Node **arglist)
 {
-    boolean	 is_vect;
+    bool	 is_vect;
     unsigned int i;
     double	 d, e;
     Node	 *x, *y, *next, **argp1, **argp2;
@@ -590,8 +590,8 @@ unification is not trivial are replaced by fresh variables.
 
 <<unify.c>>=
 #if !NO_OCCURS_CHECK
-boolean
-occurs(Node *var, Node *arg, boolean *nf)
+bool
+occurs(Node *var, Node *arg, bool *nf)
 {
     unsigned i, argc;
     Node     **argp;
@@ -634,7 +634,7 @@ occurs(Node *var, Node *arg, boolean *nf)
 static
 FUNCTION(unify_var)
 {
-    boolean	 nf, is_vect;
+    bool	 nf, is_vect;
     unsigned int i, n, sz;
     Node	 *var, *arg, *next, *arglist, **argp;
  ENTRY_LABEL(static, unify_var)
@@ -776,7 +776,7 @@ DECLARE_LABEL(static, wake_1);
 
 FUNCTION(bind_var)
 {
-    boolean	is_var;
+    bool	is_var;
     Node	*var, *node;
     Constraint	*cstrs;
     ThreadQueue	wq;

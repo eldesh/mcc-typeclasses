@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2335 2007-06-23 09:37:26Z wlux $
+% $Id: eval.nw 2347 2007-06-23 10:34:08Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -396,7 +396,7 @@ FUNCTION(__ensureGround)
 static
 FUNCTION(__ensureGround_1)
 {
-    boolean	    is_vect;
+    bool	    is_vect;
     unsigned int    n, sz;
     Node	    *node, **argp, *susp;
     static NodeInfo ensureGround_lazy_info_table[] =

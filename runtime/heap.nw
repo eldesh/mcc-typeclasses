@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2304 2007-06-20 07:33:57Z wlux $
+% $Id: heap.nw 2347 2007-06-23 10:34:08Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -20,18 +20,35 @@
 #include "main.h"
 
 @ 
+Before starting with the description of the heap and its data
+structures, we first define a boolean type which is compatible with
+the ISO C99 [[bool]] type.
+
+<<heap.h>>=
+/* booleans */
+#if HAVE_STDBOOL_H
+# include <stdbool.h>
+#endif
+#if !HAVE__BOOL
+# ifdef __cplusplus
+typedef bool _Bool;
+# else
+typedef unsigned char _Bool;
+# endif
+#endif
+#if !defined(__cplusplus) && !defined(__bool_true_false_are_defined)
+# define bool _Bool
+# define false 0
+# define true  1
+# define __bool_true_false_are_defined 1
+#endif
+
+@ 
 The heap is organized as an array of words, where the size of a word
 is equal to the size of pointers and (long) integer numbers on the
 target architecture.
 
 <<heap.h>>=
-/* booleans */
-#ifndef __cplusplus
-typedef enum bool { false, true } boolean;
-#else
-# define boolean bool
-#endif /*__cplusplus*/
-
 /* words */
 #define word_size	sizeof(word)
 #define wordsof(x)	((sizeof(x) + word_size - 1) / word_size)
@@ -770,12 +787,12 @@ that the empty list and unit constructors are not considered as
 operators.
 
 <<heap.h>>=
-extern boolean is_tuple(NodeInfo *info);
-extern boolean is_operator(NodeInfo *info);
+extern bool is_tuple(NodeInfo *info);
+extern bool is_operator(NodeInfo *info);
 
 @ 
 <<heap.c>>=
-boolean
+bool
 is_tuple(NodeInfo *info)
 {
     const char *cp = info->cname;
@@ -787,7 +804,7 @@ is_tuple(NodeInfo *info)
     return *cp++ == ')' && *cp == '\0';
 }
 
-boolean
+bool
 is_operator(NodeInfo *info)
 {
     const char *cp;
@@ -837,7 +854,7 @@ after the collection, the program will be aborted. The global flag
 [[in_gc]] is set while the garbage collector is executing.
 
 <<heap.h>>=
-extern boolean in_gc;
+extern bool in_gc;
 extern void collect(unsigned int, unsigned int);
 
 #define CHECK_HEAP(n_regs, n) do {				       \
@@ -846,7 +863,7 @@ extern void collect(unsigned int, unsigned int);
 
 @
 <<heap.c>>=
-boolean in_gc = false;
+bool in_gc = false;
 
 @ 
 The macro \texttt{primPerformGC} forcibly invokes the garbage

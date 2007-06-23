@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2346 2007-06-23 10:23:59Z wlux $
+% $Id: disequal.nw 2347 2007-06-23 10:34:08Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -114,8 +114,8 @@ FUNCTION(___61__47__61__2)
 	    RETURN(Success, 1);
 	else if ( n > 0 )
 	{
-	    boolean exist_type;
-	    Node    *arglist;
+	    bool exist_type;
+	    Node *arglist;
 
 	    /* NB assign exist_type before calling eq_args because a
 	     *    garbage collection in eq_args will invalidate arg1 */
@@ -181,7 +181,7 @@ data constructors are not known in the runtime system.
 static
 FUNCTION(diseq_var)
 {
-    boolean	nf;
+    bool	nf;
     Disequality *cstr;
  ENTRY_LABEL(static, diseq_var)
     if ( !is_local_space(regs.r[0]->v.spc) )

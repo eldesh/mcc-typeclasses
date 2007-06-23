@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: spaces.nw 2347 2007-06-23 10:34:08Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -368,7 +368,7 @@ continuation must be copied into the current space.
 
 <<spaces.h>>=
 #if !COPY_SEARCH_SPACE
-extern boolean inject_search_space(SearchSpace *);
+extern bool inject_search_space(SearchSpace *);
 #else
 # define inject_search_space(space)  false
 #endif
@@ -376,7 +376,7 @@ extern boolean inject_search_space(SearchSpace *);
 @
 <<spaces.c>>=
 #if !COPY_SEARCH_SPACE
-boolean
+bool
 inject_search_space(SearchSpace *space)
 {
     /* fail if current space is not a root space */
@@ -624,7 +624,7 @@ allocated to them.}
 static Node *
 copy_node(Node *node, SearchSpace *space)
 {
-    boolean	 do_copy;
+    bool	 do_copy;
     unsigned int sz;
 
     while ( is_tagged_ptr(node) && node >= (Node *)heap_base &&
@@ -760,7 +760,7 @@ nodes are restored.
 Node *
 copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space)
 {
-    boolean	 gc_done = false;
+    bool	 gc_done = false;
     unsigned int sz;
     Node	 *copy, **scan;
 #if !COPY_SEARCH_SPACE

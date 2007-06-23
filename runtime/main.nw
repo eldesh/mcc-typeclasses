@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: main.nw 2337 2007-06-23 09:40:57Z wlux $
+% $Id: main.nw 2347 2007-06-23 10:34:08Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -122,10 +122,10 @@ bad_option()
 void
 curry_init(int *p_argc, char *argv[])
 {
-    boolean rts;
-    char    *cp, *arg;
-    int	    i, j, argc;
-    int     pagesize, bufmode = -1, bufsize = 0;
+    bool rts;
+    char *cp, *arg;
+    int	 i, j, argc;
+    int  pagesize, bufmode = -1, bufsize = 0;
 
     /* get system page size */
     pagesize = getpagesize();

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2346 2007-06-23 10:23:59Z wlux $
+% $Id: show.nw 2347 2007-06-23 10:34:08Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -266,7 +266,7 @@ FUNCTION(showp)
 static
 FUNCTION(showp_1)
 {
-    boolean	 isop, isneg;
+    bool	 isop, isneg;
     char	 buf[32];
     const char   *str;
     unsigned int i, argc;
@@ -749,7 +749,7 @@ where x:xs} -- only strings with less than 10000 characters are
 recognized.
 
 <<show.c>>=
-static boolean
+static bool
 is_char(Node *node)
 {
     while ( is_tagged_ptr(node) && is_indir_node(node) )
@@ -761,7 +761,7 @@ is_char(Node *node)
 #endif
 }
 
-static boolean
+static bool
 is_string(Node *node)
 {
     unsigned int n = 0;

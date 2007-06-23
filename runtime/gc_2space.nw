@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: gc_2space.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: gc_2space.nw 2347 2007-06-23 10:34:08Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -526,7 +526,7 @@ been copied.
 <<Scan to-space and copy all reachable nodes into to-space>>=
 for ( ; scan != copy; scan += len )
 {
-    boolean   is_vect;
+    bool      is_vect;
     int       n, el_len;
     NodeInfo  *info;
     const int *otable;
@@ -541,7 +541,7 @@ for ( ; scan != copy; scan += len )
 
     if ( otable == 0 )
     {
-	for ( i = is_vect ? 2 : 1 ; i < len; i++ )
+	for ( i = is_vect ? 2 : 1; i < len; i++ )
 	    scan[i] = GC_copy(&copy, hlim, scan[i]);
     }
     else

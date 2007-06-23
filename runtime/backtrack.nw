@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 2346 2007-06-23 10:23:59Z wlux $
+% $Id: backtrack.nw 2347 2007-06-23 10:34:08Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -233,12 +233,12 @@ are returned when a deadlock has occurred and when the are no
 solutions, respectively.
 
 <<backtrack.c>>=
-static Node    *eval_apply(NodeInfo *, const char **);
-static Node    *eval_first(Node *);
-static Node    *eval_next(void);
-static Node    *do_eval(Label ip);
-static boolean eval_continue(boolean *);
-static void    bad_usage(const char *) __attribute__((noreturn));
+static Node *eval_apply(NodeInfo *, const char **);
+static Node *eval_first(Node *);
+static Node *eval_next(void);
+static Node *do_eval(Label ip);
+static bool eval_continue(bool *);
+static void bad_usage(const char *) __attribute__((noreturn));
 
 static void
 bad_usage(const char *pname)
@@ -252,9 +252,9 @@ bad_usage(const char *pname)
 int
 curry_eval(NodeInfo *goal_info, const char *fv_names[], int argc, char **argv)
 {
-    int	    opt;
-    boolean first = true, interactive;
-    Node    *goal;
+    int	 opt;
+    bool first = true, interactive;
+    Node *goal;
 
     /* check if process is connected to a terminal */
     interactive = isatty(0) == 1;
@@ -386,8 +386,8 @@ do_eval(Label ip)
     return regs.bp ? ((Node **)regs.bp)[-2] : stack_end[-2];
 }
 
-static boolean
-eval_continue(boolean *interactive)
+static bool
+eval_continue(bool *interactive)
 {
     int c, c1;
 

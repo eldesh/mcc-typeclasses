@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 2304 2007-06-20 07:33:57Z wlux $
+% $Id: print.nw 2347 2007-06-23 10:34:08Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -30,15 +30,15 @@ extern void print_result(const char *var_names[], Node *vars[], Node *result);
 #include "cstring.h"
 #include "print.h"
 
-static void    print_node(unsigned int, Node *);
-static void    print_app(unsigned int, Node *, unsigned int, Node **);
-static boolean is_string(Node *);
-static void    print_string(Node *);
-static void    print_list(Node *);
-static void    print_tuple(Node *, unsigned int, Node **);
-static void    print_constraints(Node *);
-static void    print_app_constraints(unsigned int, Node **);
-static void    print_constrained_var(Node *);
+static void print_node(unsigned int, Node *);
+static void print_app(unsigned int, Node *, unsigned int, Node **);
+static bool is_string(Node *);
+static void print_string(Node *);
+static void print_list(Node *);
+static void print_tuple(Node *, unsigned int, Node **);
+static void print_constraints(Node *);
+static void print_app_constraints(unsigned int, Node **);
+static void print_constrained_var(Node *);
 
 @ 
 The function [[print_result]] prints the computed result of a goal and
@@ -54,7 +54,7 @@ for a variable is printed. In that case, also the redundant value
 \texttt{success} is not shown in the result of a constraint goal.
 
 <<print.c>>=
-static boolean hasAnswer;
+static bool hasAnswer;
 
 void
 print_result(const char **var_names, Node **vars, Node *result)
@@ -221,9 +221,9 @@ static void
 print_app(unsigned int prec, Node *node, unsigned int argc, Node **argv)
 {
     unsigned int i;
-    boolean	 isop   = is_operator(node->info) && !is_tuple(node->info);
-    boolean	 infix  = isop && argc == 2;
-    boolean	 parens = infix ? prec > 0 : prec > 1 && argc != 0;
+    bool	 isop   = is_operator(node->info) && !is_tuple(node->info);
+    bool	 infix  = isop && argc == 2;
+    bool	 parens = infix ? prec > 0 : prec > 1 && argc != 0;
 
     if ( parens )
 	putchar('(');
@@ -261,7 +261,7 @@ check this property. Fortunately, we know that the printing code is
 applied to finite data terms only.
 
 <<print.c>>=
-static boolean
+static bool
 is_string(Node *list)
 {
     Node *head;
@@ -346,7 +346,7 @@ static void
 print_tuple(Node *node, unsigned int argc, Node **argv)
 {
     unsigned int i;
-    boolean	 first = true;
+    bool	 first = true;
 
     putchar('(');
 

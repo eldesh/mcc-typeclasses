@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: threads.nw 2346 2007-06-23 10:23:59Z wlux $
+% $Id: threads.nw 2347 2007-06-23 10:34:08Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -541,7 +541,7 @@ interrupt_thread(unsigned int n_regs, Label l, enum suspend_reason reason)
 {
     Node	 *ds;
     ThreadQueue  thd;
-    boolean	 save_ds = reason != None;
+    bool	 save_ds = reason != None;
     unsigned int ds_size = regs.ds_base - regs.sp;
 
     CHECK_HEAP(n_regs,

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 2289 2007-06-19 16:30:52Z wlux $
+% $Id: UnusedCheck.lhs 2357 2007-06-23 11:29:51Z wlux $
 %
 % Copyright (c) 2005-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -120,7 +120,10 @@ implemented by a traversal of the syntax tree.
 >   unused _ _ (TrustMethod _ _ _) = id
 
 > instance SyntaxTree (Decl a) where
->   used m (FunctionDecl _ _ eqs) = used m eqs
+>   used m (FunctionDecl _ f eqs) =
+>     unionSet (deleteFromSet f (used m eqs zeroSet))
+>   used m (PatternDecl _ (VariablePattern _ v) rhs) =
+>     unionSet (deleteFromSet v (used m rhs zeroSet))
 >   used m (PatternDecl _ t rhs) = used m t . used m rhs
 >   used _ _ = id
 >

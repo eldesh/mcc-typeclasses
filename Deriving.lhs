@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2275 2007-06-18 09:30:41Z wlux $
+% $Id: Deriving.lhs 2368 2007-06-23 13:55:45Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -335,7 +335,7 @@ respectively.
 > prec :: QualIdent -> PEnv -> OpPrec
 > prec op env =
 >   case qualLookupTopEnv op env of
->     [] -> defaultP
+>     [] -> defaultPrec
 >     PrecInfo _ p : _ -> p
 
 \end{verbatim}

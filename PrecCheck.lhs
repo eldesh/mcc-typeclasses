@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 2247 2007-06-14 12:57:40Z wlux $
+% $Id: PrecCheck.lhs 2368 2007-06-23 13:55:45Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -16,6 +16,7 @@ according to the relative precedences of the operators involved.
 > module PrecCheck(precCheck,precCheckGoal) where
 > import Base
 > import Error
+> import Maybe
 > import TopEnv
 
 \end{verbatim}
@@ -28,9 +29,9 @@ default precedence to an operator.
 > bindPrecs :: ModuleIdent -> [Decl a] -> PEnv -> PEnv
 > bindPrecs m ds pEnv = foldr bindPrec pEnv ds
 >   where bindPrec (InfixDecl _ fix pr ops) pEnv
->           | p == defaultP = pEnv
+>           | p == defaultPrec = pEnv
 >           | otherwise = foldr (bindP m p) pEnv ops
->           where p = OpPrec fix pr
+>           where p = OpPrec fix (fromMaybe defaultP pr)
 >         bindPrec _ pEnv = pEnv
 
 > bindP :: ModuleIdent -> OpPrec -> Ident -> PEnv -> PEnv
@@ -412,7 +413,7 @@ definition.
 > prec :: QualIdent -> PEnv -> OpPrec
 > prec op env =
 >   case qualLookupTopEnv op env of
->     [] -> defaultP
+>     [] -> defaultPrec
 >     PrecInfo _ p : _ -> p
 
 \end{verbatim}

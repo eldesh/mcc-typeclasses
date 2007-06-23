@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2289 2007-06-19 16:30:52Z wlux $
+% $Id: Base.lhs 2368 2007-06-23 13:55:45Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -386,8 +386,11 @@ precedence 9 and assumed to be a left-associative operator.
 >           assoc InfixR = "right "
 >           assoc Infix  = "non-assoc "
 
-> defaultP :: OpPrec
-> defaultP = OpPrec InfixL 9
+> defaultPrec :: OpPrec
+> defaultPrec = OpPrec InfixL defaultP
+
+> defaultP :: Int
+> defaultP = 9
 
 \end{verbatim}
 Operator precedences that are different from the default are recorded

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2305 2007-06-20 11:32:33Z wlux $
+% $Id: CurryParser.lhs 2368 2007-06-23 13:55:45Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -221,7 +221,8 @@ directory path to the module is ignored.
 >   --    as this will yield a parse error if the context is omitted
 
 > methodFixity :: Parser Token (MethodDecl ()) a
-> methodFixity = infixDeclLhs MethodFixity <*> funop `sepBy1` comma
+> methodFixity =
+>   infixDeclLhs MethodFixity <*> option int <*> funop `sepBy1` comma
 
 > methodSig :: Parser Token (MethodDecl ()) a
 > methodSig =
@@ -244,10 +245,10 @@ directory path to the module is ignored.
 >               <|> Just <$> fun `sepBy1` comma
 
 > infixDecl :: Parser Token (Decl ()) a
-> infixDecl = infixDeclLhs InfixDecl <*> funop `sepBy1` comma
+> infixDecl = infixDeclLhs InfixDecl <*> option int <*> funop `sepBy1` comma
 
-> infixDeclLhs :: (Position -> Infix -> Int -> a) -> Parser Token a b
-> infixDeclLhs f = f <$> position <*> tokenOps infixKW <*> int
+> infixDeclLhs :: (Position -> Infix -> a) -> Parser Token a b
+> infixDeclLhs f = f <$> position <*> tokenOps infixKW
 >   where infixKW = [(KW_infix,Infix),(KW_infixl,InfixL),(KW_infixr,InfixR)]
 
 > functionDecl :: Parser Token (Decl ()) a
@@ -349,7 +350,7 @@ directory path to the module is ignored.
 >        <|> iClassDecl <|> iInstanceDecl <|> iFunctionDecl <\> token Id_hiding
 
 > iInfixDecl :: Parser Token IDecl a
-> iInfixDecl = infixDeclLhs IInfixDecl <*> qfunop
+> iInfixDecl = infixDeclLhs IInfixDecl <*> int <*> qfunop
 
 > iHidingDecl :: Parser Token IDecl a
 > iHidingDecl =

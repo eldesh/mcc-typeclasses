@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2335 2007-06-23 09:37:26Z wlux $
+% $Id: CGen.lhs 2336 2007-06-23 09:39:23Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1349,24 +1349,32 @@ private and exported functions without an explicit export list, which
 is not yet part of the abstract machine code syntax. This function
 uses the following heuristics. All entities whose (demangled) name
 ends with a suffix \texttt{.}$n$, where $n$ is a non-empty sequence of
-decimal digits are considered private, since that suffix can occur
-only for renamed identifiers, and all entities whose (demangled) name
-contains one of the substrings \verb"_#lambda" an \verb"_#app" are
-considered private, too. These names are used by the compiler for
-naming lambda abstractions and the implicit functions introduced for
-lifted argument expressions.
+decimal digits, are considered private, since that suffix can occur
+only in renamed identifiers, and all entities whose (demangled) name
+contains one of the substrings \verb"_#lambda", \verb"_#sel", and
+\verb"_#app" are considered private, too. These names are used by the
+compiler for naming lambda abstractions, lazy pattern selection
+functions, and the implicit functions introduced for lifted argument
+expressions. Furthermore, the auxiliary functions introduced by the
+debugging transformation for partial applications of the (non-empty)
+list constructor and the tuple constructors, respectively, are
+considered private as well.
 \begin{verbatim}
 
 > isPublic, isPrivate :: Name -> Bool
 > isPublic x = not (isPrivate x)
 > isPrivate (Name x) =
->   any (\cs -> any (`isPrefixOf` cs) [app,lambda]) (tails x) ||
+>   any (\cs -> any (`isPrefixOf` cs) [app,lambda,sel,debugCons,debugTuple])
+>       (tails x) ||
 >   case span isDigit (reverse x) of
 >     ([],_) -> False
 >     (_:_,cs) -> reverse dot `isPrefixOf` cs
 >   where Name dot = mangle "."
 >         Name app = mangle "_#app"
 >         Name lambda = mangle "_#lambda"
+>         Name sel = mangle "_#sel"
+>         Name debugCons = mangle "_debug#:"
+>         Name debugTuple = mangle "_debug#(,"
 
 \end{verbatim}
 In order to avoid some trivial name conflicts with the standard C

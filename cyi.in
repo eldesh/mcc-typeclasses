@@ -3,7 +3,7 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 2356 2007-06-23 11:26:37Z wlux $
+# $Id: cyi.in 2359 2007-06-23 11:34:41Z wlux $
 #
 # Copyright (c) 2002-2006, Wolfgang Lux
 # See LICENSE for the full license.
@@ -141,7 +141,8 @@ set_goal ( ) {
   esac
 }
 
-trap 'rm -f /tmp/cyi$$@EXEEXT@' 0 1 2 3 15
+trap 'rc=$?; rm -f /tmp/cyi$$@EXEEXT@; exit $rc' 0 1 15
+trap 'rm -f /tmp/cyi$$@EXEEXT@' 2 3
 run_goal ( ) {
   compile_target -e "$goal" $* -o /tmp/cyi$$ && /tmp/cyi$$
   rm -f /tmp/cyi$$@EXEEXT@

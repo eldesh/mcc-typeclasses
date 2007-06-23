@@ -3,7 +3,7 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 2341 2007-06-23 09:47:44Z wlux $
+# $Id: cyc.in 2359 2007-06-23 11:34:41Z wlux $
 #
 # Copyright (c) 2002-2007, Wolfgang Lux
 # See LICENSE for the full license.
@@ -237,7 +237,7 @@ fi
 
 # Remove all temporary files upon exit
 # NB check for empty temps for non POSIX compliant rm's (e.g. Mac OS X 10.1)
-trap 'test "$temps" && rm -f $temps' 0 1 2 3 15
+trap 'rc=$?; test "$temps" && rm -f $temps; exit $rc' 0 1 2 3 15
 
 # Process all files
 set -- $files

@@ -3,7 +3,7 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 2340 2007-06-23 09:46:36Z wlux $
+# $Id: cymake.in 2359 2007-06-23 11:34:41Z wlux $
 #
 # Copyright (c) 2002-2007, Wolfgang Lux
 # See LICENSE for the full license.
@@ -163,7 +163,7 @@ if test -n "$depend"; then
 fi
 
 # Remove build script upon exit
-trap 'rm -f /tmp/cymake$$' 0 1 2 3 15
+trap 'rc=$?; rm -f /tmp/cymake$$; exit $rc' 0 1 2 3 15
 
 # Process all targets
 set -- $files

@@ -1,4 +1,4 @@
-dnl $Id: configure-bin.in 2288 2007-06-19 15:53:44Z wlux $
+dnl $Id: configure-bin.in 2367 2007-06-23 13:49:45Z wlux $
 dnl
 dnl Copyright (c) 2002-2007, Wolfgang Lux
 dnl
@@ -17,12 +17,12 @@ INSTALL_DIR='${INSTALL: -c=} -d -m 755'
 dnl Include additional compiler options for Gnu C
 if test "$GCC" = yes; then
   CURRY_C_DYNAMIC_NO_PIC
-  CURRY_CFLAGS=%CURRY_CFLAGS%
+  CURRY_CFLAGS="%CURRY_CFLAGS%"
 fi
 
 dnl Check for Cygpath
 AC_PATH_PROG(CYGPATH, cygpath)
-USE_CYGPATH_WORKAROUND=%USE_CYGPATH_WORKAROUND%
+USE_CYGPATH_WORKAROUND="%USE_CYGPATH_WORKAROUND%"
 if test "$USE_CYGPATH_WORKAROUND" = "yes" -a -z "$CYGPATH" ; then
   AC_MSG_ERROR([cygpath not found])
 fi

@@ -3,7 +3,7 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 2360 2007-06-23 11:35:43Z wlux $
+# $Id: cyi.in 2361 2007-06-23 11:36:36Z wlux $
 #
 # Copyright (c) 2002-2006, Wolfgang Lux
 # See LICENSE for the full license.
@@ -290,7 +290,11 @@ chdir ( ) {
   set -- $line
   case $# in
     0 ) pwd;;
-    * ) eval cd $line;;
+    * )
+     # First check whether we can change to the new directory in a subshell.
+     # This is a workaround for some brain-dead old Bourne shells that
+     # exit immediately when an internal command like cd fails.
+     ( eval cd $line ) && eval cd $line;;
   esac
 }
 

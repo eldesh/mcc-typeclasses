@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2347 2007-06-23 10:34:08Z wlux $
+% $Id: heap.nw 2355 2007-06-23 11:24:01Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -712,14 +712,16 @@ extern NodeInfo *const name##_node
 #define DECLARE_DATA(name) \
 extern NodeInfo name##_info
 
-#define DEFINE_CONST(name,cname,tag) \
+#ifdef CURRY_RTS
+# define DEFINE_CONST(name,cname,tag) \
 DEFINE_DATA(name,cname,tag,0); \
 NodeInfo *const name##_node = &name##_info
 
-#define DEFINE_DATA(name,cname,tag,arity) \
+# define DEFINE_DATA(name,cname,tag,arity) \
 NodeInfo name##_info = { \
     CAPP_KIND, tag, closure_node_size(arity), 0, cname, eval_whnf, 0, 0, 0 \
 }
+#endif
 
 @ 
 The macro [[CONST]] returns a correctly typed pointer to the
@@ -727,8 +729,10 @@ preallocated node of a constant constructor, and [[INFO]] returns the
 info pointer of a data constructor.
 
 <<heap.h>>=
-#define CONST(name)		(Node *)(&name##_node)
-#define INFO(name)		&name##_info
+#ifdef CURRY_RTS
+# define CONST(name)		(Node *)(&name##_node)
+# define INFO(name)		&name##_info
+#endif
 
 @ 
 For a function, an info vector has to be defined for each arity at

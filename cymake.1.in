@@ -4,9 +4,9 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cymake.1.in 2233 2007-06-08 09:57:47Z wlux $
+.\" $Id: cymake.1.in 2364 2007-06-23 13:42:09Z wlux $
 .\"
-.\" Copyright (c) 2004-2006, Wolfgang Lux
+.\" Copyright (c) 2004-2007, Wolfgang Lux
 .\" See LICENSE for the full license.
 .\"
 .Dd 17.11.05               \" DATE 
@@ -79,6 +79,27 @@ No execution mode. Print commands but do not execute them.
 Quiet mode. Do not print commands before executing them.
 .It Fl M
 Output a Makefile compatible dependency list on the standard output.
+.It Fl -find
+For each command line target
+.Ar t ,
+.Nm
+will print a line of the form 
+.Sm off
+.Ar t Li :
+.Sm on
+.Ar f ,
+where
+.Ar f
+is the name of the source or interface file corresponding to
+.Ar t .
+If 
+.Ar t
+is a module name,
+.Nm
+will look for the source or interface file first in the current
+directory and then along the search path. If no file is found,
+.Ar f
+is empty. 
 .It Fl a
 Always link the executable, even if it is not out of date with respect
 to its object files. This is useful if only the goal to be evaluated

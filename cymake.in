@@ -3,7 +3,7 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 2362 2007-06-23 11:38:19Z wlux $
+# $Id: cymake.in 2364 2007-06-23 13:42:09Z wlux $
 #
 # Copyright (c) 2002-2007, Wolfgang Lux
 # See LICENSE for the full license.
@@ -40,6 +40,7 @@ goal=
 typeIt=
 output=
 clean=
+find=
 depend=
 imports=
 libs=
@@ -98,6 +99,7 @@ while test $# -gt 0; do
     -T* ) typeIt=`expr "$1" : '-T\(.*\)'`;;
     -g | --debug ) mkopts="$mkopts $1"; cyopts="$cyopts $1";;
     --clean ) clean=--clean;;
+    --find ) find=--find;;
     -o ) mkopts="$mkopts -o $2"; output="$2"; shift;;
     -o* ) mkopts="$mkopts $1"; output=`expr "$1" : '-o\(.*\)'`;;
     -n ) exec=echo;;
@@ -139,8 +141,9 @@ while test $# -gt 0; do
   esac
   shift
 done
-if test -n "$depend" &&  test -n "$clean"; then
-  echo 1>&2 "$cymake: cannot specify -M and --clean together"
+set dummy $depend $clean $find; shift
+if test $# -gt 1; then
+  echo 1>&2 "$cymake: specify only one of -M, --clean, and --find"
   exit 1
 fi
 
@@ -148,18 +151,22 @@ fi
 test -n "$verbose" && echo 1>&2 "$cymake version $version (built on $build)"
 test "$exec" && verbose= echo=noecho
 
+# Generate only dependencies if requested
+if test -n "$depend$find"; then
+  if test -z "$files"; then
+    echo 1>&2 "$cymake: no targets"
+    exit 1
+  fi
+  test -n "$verbose" && echo 1>&2 $cymk $depend $find $mkopts $imports $files
+  $exec $cymk $depend $find $mkopts $imports $files
+  exit $?
+fi
+
 # Check for input files
 if test -z "$files$goal$typeIt"; then
   test -n "$verbose" && exit 0
   echo 1>&2 "$cymake: no targets"
   exit 1
-fi
-
-# Generate only dependencies if requested
-if test -n "$depend"; then
-  test -n "$verbose" && echo 1>&2 $cymk $depend $mkopts $imports $files
-  $exec $cymk $depend $mkopts $imports $files
-  exit $?
 fi
 
 # Remove build script upon exit

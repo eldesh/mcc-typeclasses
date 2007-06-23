@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryDeps.lhs 2363 2007-06-23 13:40:58Z wlux $
+% $Id: CurryDeps.lhs 2364 2007-06-23 13:42:09Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -32,10 +32,11 @@ dependencies and to update programs composed of multiple modules.
 > type SourceEnv = Env ModuleIdent Source
 
 \end{verbatim}
-The module has two entry points. The function \texttt{buildScript}
-computes either a build or a clean script for a module while
+The module has three entry points. The function \texttt{buildScript}
+computes either a build or a clean script for a module, the function
 \texttt{makeDepend} computes dependency rules for inclusion into a
-Makefile.
+Makefile, and the function \texttt{findModules} tries to find a source
+or interface file for each module.
 \begin{verbatim}
 
 > buildScript :: Bool -> Bool -> Bool -> [(Bool,FilePath)] -> Maybe FilePath
@@ -68,6 +69,25 @@ Makefile.
 >   lookupFile [fn ++ e | e <- sourceExts] >>=
 >   maybe (return (bindEnv m Unknown mEnv)) (sourceDeps paths m mEnv)
 >   where m = mkMIdent [fn]
+
+> findModules :: [(Bool,FilePath)] -> Maybe FilePath -> [FilePath] -> IO ()
+> findModules paths target ms =
+>   mapM (\fn -> liftM ((fn ++ ": ") ++) (findModule paths fn)) ms >>=
+>   maybe putStr writeFile target . unlines
+
+> findModule :: [(Bool,FilePath)] -> FilePath -> IO FilePath
+> findModule paths fn
+>   | e `elem` sourceExts = return fn
+>   | e == icurryExt = lookupModule [] (mkMIdent [r]) >>= return . fromMaybe fn
+>   | e == oExt = lookupModule [] (mkMIdent [r]) >>= return . fromMaybe ""
+>   | otherwise =
+>       lookupModule paths (mkMIdent (components fn)) >>= return . fromMaybe ""
+>   where r = rootname fn
+>         e = extension fn
+>         components fn =
+>           case break ('.' ==) fn of
+>             (fn',"") -> [fn']
+>             (fn',_:fn'') -> fn' : components fn''
 
 \end{verbatim}
 The following function is used to look up files related to a given

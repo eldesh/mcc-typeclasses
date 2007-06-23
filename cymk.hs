@@ -1,4 +1,4 @@
--- $Id: cymk.hs 2363 2007-06-23 13:40:58Z wlux $
+-- $Id: cymk.hs 2364 2007-06-23 13:42:09Z wlux $
 --
 -- Copyright (c) 2002-2007, Wolfgang Lux
 -- See LICENSE for the full license.
@@ -18,7 +18,8 @@ data Options =
     debug :: Bool,
     linkAlways :: Bool,
     mkDepend :: Bool,
-    mkClean :: Bool
+    mkClean :: Bool,
+    find :: Bool
   }
 
 defaultOptions =
@@ -28,12 +29,13 @@ defaultOptions =
     debug = False,
     linkAlways = False,
     mkDepend = False,
-    mkClean = False
+    mkClean = False,
+    find = False
   }
 
 data Option =
     Help | ImportPath FilePath | LibPath FilePath | Output FilePath
-  | Debug | LinkAlways | Clean | Depend
+  | Debug | LinkAlways | Clean | Depend | Find
   deriving Eq
 
 options = [
@@ -51,6 +53,8 @@ options = [
            "search for library interfaces in DIR",
     Option ""  ["clean"] (NoArg Clean)
            "remove compiled file for all targets",
+    Option ""  ["find"] (NoArg Find)
+           "find source/interface for all targets",
     Option "?h" ["help"] (NoArg Help)
            "display this help and exit"
   ]
@@ -64,6 +68,7 @@ selectOption Debug opts = opts{ debug = True }
 selectOption LinkAlways opts = opts{ linkAlways = True }
 selectOption Depend opts = opts{ mkDepend = True }
 selectOption Clean opts = opts{ mkClean = True }
+selectOption Find opts = opts{ find = True }
 
 main :: IO ()
 main =
@@ -103,9 +108,10 @@ badUsage prog errs =
 processFiles :: Options -> String -> [String] -> IO ()
 processFiles opts prog files
   | null files = badUsage prog ["no modules\n"]
-  | mkDepend opts && mkClean opts =
-      badUsage prog ["cannot specify --clean with --depend\n"]
+  | length (filter id [mkDepend opts,mkClean opts,find opts]) > 1 =
+      badUsage prog ["cannot mix --clean, --depend, and --find\n"]
   | mkDepend opts = makeDepend (importPaths opts) (output opts) files
+  | find opts = findModules (importPaths opts) (output opts) files
   | isJust (output opts) && length files > 1 =
       badUsage prog ["cannot specify -o with multiple targets\n"]
   | otherwise =

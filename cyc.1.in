@@ -4,7 +4,7 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cyc.1.in 2340 2007-06-23 09:46:36Z wlux $
+.\" $Id: cyc.1.in 2341 2007-06-23 09:47:44Z wlux $
 .\"
 .\" Copyright (c) 2004-2007, Wolfgang Lux
 .\" See LICENSE for the full license.
@@ -304,6 +304,10 @@ to the C compiler without interpretation. For instance, in order to
 include debugging symbols in the compiled C code, invoke the compiler
 with
 .Fl -ccopt Fl g .
+.It Fl -ccopts Ar opts
+Passes each option from the comma separated list
+.Ar opts
+to the C compiler without further interpretation.
 .El
 .Ss Linking
 The following options are relevant while linking a program. The
@@ -441,6 +445,13 @@ to the C compiler without interpretation. In contrast to
 (see above),
 .Ar opt
 is used only during the link phase.
+.It Fl -ldopts Ar opts
+Passes each option from the comma separated list
+.Ar opts
+to the C compiler without further interpretation. As with
+.Fl -ldopt ,
+.Ar opts
+are used only during the link phase.
 .El
 .Pp
 .Ss Running Programs

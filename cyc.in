@@ -3,7 +3,7 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 2340 2007-06-23 09:46:36Z wlux $
+# $Id: cyc.in 2341 2007-06-23 09:47:44Z wlux $
 #
 # Copyright (c) 2002-2007, Wolfgang Lux
 # See LICENSE for the full license.
@@ -132,9 +132,12 @@ while test $# -gt 0; do
 
     # C Compiler options
     -cc ) CC=$2; shift;;
-    -ccopt-* | -ccopts-* | --ccopt-* | --ccopts-* )
+    -ccopt-* | --ccopt-* )
       ccopts=$ccopts\ `expr "$1" : '-*ccopts*\(-.*\)'`;;
-    -ccopt | -ccopts | --ccopt | --ccopts ) ccopts="$ccopts $2"; shift;;
+    -ccopt | --ccopt ) ccopts="$ccopts $2"; shift;;
+    -ccopts-* | --ccopts-* )
+      ccopts=$ccopts\ `expr "$1" : '-*ccopts*\(-.*\)' | tr , ' '`;;
+    -ccopts | --ccopts ) ccopts=$ccopts\ `echo "$2" | tr , ' '`; shift;;
     -arch ) ccopts="$ccopts $1 $2"; shift;;
     -O* ) ccopts="$ccopts $1";;
 
@@ -154,9 +157,12 @@ while test $# -gt 0; do
     -F* ) ccopts="$ccopts $1";;
 
     # Linker options
-    -ldopt-* | -ldopts-* | --ldopt-* | --ldopts-* )
+    -ldopt-* | --ldopt-* )
       ldopts=$ldopts\ `expr "$1" : '-*ldopts*\(-.*\)'`;;
-    -ldopt | -ldopts | --ldopt | --ldopts ) ldopts="$ldopts $2"; shift;;
+    -ldopt | --ldopt ) ldopts="$ldopts $2"; shift;;
+    -ldopts-* | --ldopts-* )
+      ldopts=$ldopts\ `expr "$1" : '-*ldopts*\(-.*\)' | tr , ' '`;;
+    -ldopts | --ldopts ) ldopts=$ldopts\ `echo "$2" | tr , ' '`; shift;;
     -L ) ldopts="$ldopts -L$2"; shift;;
     -L* ) ldopts="$ldopts $1";;
     -l ) libs="$libs -l$2"; shift;;

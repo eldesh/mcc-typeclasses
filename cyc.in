@@ -3,7 +3,7 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 2362 2007-06-23 11:38:19Z wlux $
+# $Id: cyc.in 2370 2007-06-23 14:03:39Z wlux $
 #
 # Copyright (c) 2002-2007, Wolfgang Lux
 # See LICENSE for the full license.
@@ -231,7 +231,7 @@ done
 IFS=$ifs
 
 # Cygpath workaround: converts path to Windows-style
-if test -n "@USE_CYGPATH_WORKAROUND@"; then
+if test -n "@CYGPATH@"; then
   CURRY_IMPORT_PATH=`@CYGPATH@ -w -p $CURRY_IMPORT_PATH`
 fi
 
@@ -285,7 +285,7 @@ for f in $files; do
 	fi
       fi
       # Cygpath workaround: converts paths to Windows-style
-      if test -n "@USE_CYGPATH_WORKAROUND@"; then
+      if test -n "@CYGPATH@"; then
         target2=`@CYGPATH@ -w $target`
         f2=`@CYGPATH@ -w $f`
        else 
@@ -334,7 +334,7 @@ if test -z "$toC$toS$toO"; then
   temps="$temps /tmp/cyc$$.c"
   target=/tmp/cyc$$.c
   # Cygpath workaround: converts path to Windows-style
-  if test -n "@USE_CYGPATH_WORKAROUND@"; then
+  if test -n "@CYGPATH@"; then
     target2=`@CYGPATH@ -w $target`
   else
     target2=$target

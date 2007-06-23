@@ -1,4 +1,4 @@
-dnl $Id: configure.in 2369 2007-06-23 13:58:53Z wlux $
+dnl $Id: configure.in 2370 2007-06-23 14:03:39Z wlux $
 dnl
 dnl Copyright (c) 2002-2007, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -191,9 +191,8 @@ CURRY_HC_PATH_STYLE
 
 
 dnl Check for Cygpath
-AC_PATH_PROG(CYGPATH, cygpath)
-if test "$USE_CYGPATH_WORKAROUND" = "yes" -a -z "$CYGPATH" ; then
-  AC_MSG_ERROR([cygpath not found])
+if test "$USE_CYGPATH_WORKAROUND" = "yes"; then
+  AC_PATH_PROG(CYGPATH, cygpath)
 fi
 
 

@@ -1,4 +1,4 @@
-dnl $Id: configure-bin.in 2367 2007-06-23 13:49:45Z wlux $
+dnl $Id: configure-bin.in 2370 2007-06-23 14:03:39Z wlux $
 dnl
 dnl Copyright (c) 2002-2007, Wolfgang Lux
 dnl
@@ -21,10 +21,9 @@ if test "$GCC" = yes; then
 fi
 
 dnl Check for Cygpath
-AC_PATH_PROG(CYGPATH, cygpath)
 USE_CYGPATH_WORKAROUND="%USE_CYGPATH_WORKAROUND%"
-if test "$USE_CYGPATH_WORKAROUND" = "yes" -a -z "$CYGPATH" ; then
-  AC_MSG_ERROR([cygpath not found])
+if test "$USE_CYGPATH_WORKAROUND" = "yes"; then
+  AC_PATH_PROG(CYGPATH, cygpath)
 fi
 
 dnl Checks for libraries.

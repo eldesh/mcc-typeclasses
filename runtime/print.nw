@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 2347 2007-06-23 10:34:08Z wlux $
+% $Id: print.nw 2348 2007-06-23 11:01:02Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -35,7 +35,7 @@ static void print_app(unsigned int, Node *, unsigned int, Node **);
 static bool is_string(Node *);
 static void print_string(Node *);
 static void print_list(Node *);
-static void print_tuple(Node *, unsigned int, Node **);
+static void print_tuple(unsigned int, Node **);
 static void print_constraints(Node *);
 static void print_app_constraints(unsigned int, Node **);
 static void print_constrained_var(Node *);
@@ -141,7 +141,7 @@ print_node(unsigned int prec, Node *node)
 			print_list(node);
 		}
 		else if ( is_tuple(node->info) )
-		    print_tuple(node, closure_argc(node), node->c.args);
+		    print_tuple(closure_argc(node), node->c.args);
 		else
 		    print_app(prec, node, closure_argc(node), node->c.args);
 		break;
@@ -175,7 +175,7 @@ print_node(unsigned int prec, Node *node)
 		continue;
 	    case VECTOR_KIND:
 		if ( is_tuple(node->info) )
-		    print_tuple(node, vector_argc(node), node->a.args);
+		    print_tuple(vector_argc(node), node->a.args);
 		else
 		    print_app(prec, node, vector_argc(node), node->a.args);
 		break;
@@ -187,8 +187,7 @@ print_node(unsigned int prec, Node *node)
 		curry_panic("impossible: print_node: CHAR_KIND\n");
 #endif
 	    case INT_KIND:
-		printf(prec > 0 && node->i.i < 0 ? "(%ld)" : "%ld",
-		       node->i.i);
+		printf(prec > 0 && node->i.i < 0 ? "(%ld)" : "%ld", node->i.i);
 		break;
 	    case FLOAT_KIND:
 		get_double_val(d, node);
@@ -343,7 +342,7 @@ print_list(Node *list)
 }
 
 static void
-print_tuple(Node *node, unsigned int argc, Node **argv)
+print_tuple(unsigned int argc, Node **argv)
 {
     unsigned int i;
     bool	 first = true;

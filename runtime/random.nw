@@ -1,20 +1,24 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: random.nw 2310 2007-06-20 11:56:29Z wlux $
+% $Id: random.nw 2350 2007-06-23 11:07:00Z wlux $
 %
 % Copyright (c) 2004-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Random Numbers}
 The functions in this file implement the primitives for the
-\texttt{Random} module. The implementation is based on the
-[[random]] function from the standard C library.
+\texttt{Random} module. The implementation is based on either the
+[[random]] or the [[rand]] function from the standard C library.
 
 <<random.c>>=
 #include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
-#include <sys/time.h>
+#if HAVE_RANDOM
+# include <sys/time.h>
+#else
+# include <time.h>
+#endif
 #include "debug.h"
 #include "run.h"
 #include "regs.h"
@@ -23,32 +27,43 @@ The functions in this file implement the primitives for the
 #include "io_monad.h"
 #include "random.h"
 
-@
-We use state arrays with a size of 128 bytes. While larger state
-arrays of 256 bytes are possible, it turns out that the first random
-number is always an even number for them.
+@ 
+For the [[random]] function we use state arrays with a size of 128
+bytes. While larger state arrays of 256 bytes are possible, it turns
+out that the first random number is always an even number for them.
 
 <<random.c>>=
-#define STATESIZE 128
+#if HAVE_RANDOM
+# define STATESIZE 128
+#endif
 
 @ 
 In order to support multiple independent random number generators,
 each generator uses its own state array, which is saved in the
 corresponding [[StdGen]] node. The state arrays are allocated outside
 of the heap in order to avoid problems with the garbage collection
-moving nodes around, and are released when their [[StdGen]] nodes
-becomes garbage.
+moving nodes around and are released when their [[StdGen]] node
+becomes garbage. When using the [[rand]] function, the [[state]] is
+just a seed value for the generator.
 
 <<random.c>>=
 #define stdgen_node_size	wordsof(StdGen)
 
+#if HAVE_RANDOM
 static void finalize_stdgen(Node *);
+#else
+# define finalize_stdgen	0
+#endif
 
 typedef struct stdgen_node {
     NodeInfo *info;
     int	     random;		/* buffer for random bits */
     int      valid;		/* number of valid bits in the buffer */
+#if HAVE_RANDOM
     char     *state;
+#else
+    int	     state;
+#endif
 } StdGen;
 
 static NodeInfo stdgen_info = {
@@ -56,6 +71,7 @@ static NodeInfo stdgen_info = {
     eval_whnf, 0, 0, finalize_stdgen
 };
 
+#ifndef finalize_stdgen
 static void
 finalize_stdgen(Node *node)
 {
@@ -63,6 +79,7 @@ finalize_stdgen(Node *node)
 
     free(rng->state);
 }
+#endif
 
 @ 
 The function [[primMkStdGen]] creates a new random number generator
@@ -78,13 +95,21 @@ extern Node *primMkStdGen(Node *);
 Node *
 primMkStdGen(Node *seed)
 {
+#if HAVE_RANDOM
     char   *state;
+#else
+    int	   state;
+#endif
     StdGen *rng;
 
+#if HAVE_RANDOM
     state = (char *)malloc(STATESIZE);
     if ( !state )
 	sys_error("mkStdGen");
     setstate(initstate(long_val(seed), state, STATESIZE));
+#else
+    state = long_val(seed);
+#endif
 
     CHECK_HEAP(0, stdgen_node_size);
     rng		= (StdGen *)regs.hp;
@@ -93,7 +118,9 @@ primMkStdGen(Node *seed)
     rng->valid  = 0;
     rng->random = 0;
     regs.hp    += stdgen_node_size;
+#if HAVE_RANDOM
     register_final((Node *)rng);
+#endif
 
     return (Node *)rng;
 }
@@ -126,7 +153,9 @@ extern Node *primNextRStdGen(Node *, Node *, Node *);
 Node *
 primNextRStdGen(Node *lowBound, Node *highBound, Node *node)
 {
+#if HAVE_RANDOM
     char	  *o;
+#endif
     int		  bits;
     long	  lo, hi, r;
     unsigned long diff, mask;
@@ -146,7 +175,9 @@ primNextRStdGen(Node *lowBound, Node *highBound, Node *node)
 	mask = (mask << 1) + 1;
 
     /* get the next random number in range */
+#if HAVE_RANDOM
     o = setstate(rng->state);
+#endif
 repeat:
     r = 0;
     while ( rng->valid < bits )
@@ -154,8 +185,14 @@ repeat:
     	bits	   -= rng->valid;
      	mask	  >>= rng->valid;
    	r	   |= rng->random << bits;
+#if HAVE_RANDOM
     	rng->random = random();
 	rng->valid  = 31;
+#else
+	srand(rng->state);
+    	rng->random = rng->state = rand();
+	rng->valid  = 15;			/* ISO C: RAND_MAX >= 32767 */
+#endif
     }
     r		 |= rng->random & mask;
     rng->valid   -= bits;
@@ -163,7 +200,9 @@ repeat:
     r		 += lo;
     if ( r > hi )
 	goto repeat;
+#if HAVE_RANDOM
     setstate(o);
+#endif
 
 #if !NO_POINTER_TAGS
     if ( !is_large_int(r) )
@@ -231,12 +270,22 @@ primGetStdGen()
     {
 	long		seed;
 	Node		*s;
+#if HAVE_RANDOM
 	struct timeval	tv;
+#else
+	time_t		t;
+#endif
 	struct int_node	seed_node;
 
+#if HAVE_RANDOM
 	gettimeofday(&tv, NULL);
 	srandom(tv.tv_sec ^ tv.tv_usec);
 	seed = random();
+#else
+	t = time(NULL);
+	srand((t >> 16) ^ t);
+	seed = rand();
+#endif
 
 #if !NO_POINTER_TAGS
 	if ( !is_large_int(seed) )

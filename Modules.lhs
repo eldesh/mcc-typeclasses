@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2324 2007-06-22 07:26:08Z wlux $
+% $Id: Modules.lhs 2333 2007-06-23 09:13:26Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -32,7 +32,7 @@ This module controls the compilation of modules.
 > import IntfEquiv(fixInterface,intfEquiv)
 > import Imports(importInterface,importInterfaceIntf,importUnifyData)
 > import Exports(exportInterface)
-> import Trust(trustEnv,trustEnvGoal)
+> import Trust(trustEnv)
 > import Qual(qual1,qual2)
 > import Desugar(desugar,goalModule)
 > import Simplify(simplify)
@@ -143,8 +143,8 @@ declaration to the module.
 > transModule :: Bool -> Trust -> TCEnv -> ValueEnv -> Module Type
 >             -> (ValueEnv,TrustEnv,Module Type,[(Dump,Doc)])
 > transModule debug tr tcEnv tyEnv m = (tyEnv'',trEnv,simplified,dumps)
->   where trEnv = if debug then trustEnv tr m else emptyEnv
->         (desugared,tyEnv') = desugar tcEnv tyEnv m
+>   where (desugared,tyEnv') = desugar tcEnv tyEnv m
+>         trEnv = if debug then trustEnv tr desugared else emptyEnv
 >         (simplified,tyEnv'') = simplify tyEnv' trEnv desugared
 >         dumps =
 >           [(DumpRenamed,ppModule m),

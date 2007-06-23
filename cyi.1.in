@@ -4,7 +4,7 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cyi.1.in 2365 2007-06-23 13:43:10Z wlux $
+.\" $Id: cyi.1.in 2373 2007-06-23 14:16:25Z wlux $
 .\"
 .\" Copyright (c) 2004-2007, Wolfgang Lux
 .\" See LICENSE for the full license.
@@ -86,19 +86,26 @@ Set the current evaluation context to
 .Ar module .
 This command will compile
 .Ar module
-and all modules it depends on. The module can be specified either by
-the name of its source file (ending in
+and all modules it depends on if necessary.
+.Ar Module
+can be specified either by the name of its source file (ending in
 .Pa .lcurry
 or
 .Pa .curry )
 or a plain module name. In the latter case,
 .Nm
-will first look for a source file for
+will look for a source or interface file for
 .Ar module
-in the current directory, and then look for an interface file for
-.Ar module
-using the search path determined by the environment variable
+in the current directory and the current search path as determined by
+the
+.Fl i
+and
+.Fl P
+options set with the
+.Ic :set
+command and the environment variable
 .Ev CURRY_IMPORT_PATH .
+.Pp
 .Nm
 displays the name of the current module in its prompt.
 .It Ic :load

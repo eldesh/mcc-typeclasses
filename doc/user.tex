@@ -16,7 +16,9 @@
 
 \setlength{\arraycolsep}{0.2em}
 
-\title{Münster Curry \\ User's Guide \\ {\normalsize Release 0.9.10}}
+\newcommand{\version}{0.9.11}
+
+\title{Münster Curry \\ User's Guide \\ {\normalsize Release \version}}
 \author{Wolfgang Lux}
 
 %\setcounter{tocdepth}{2}
@@ -30,7 +32,7 @@
 \section{Overview}
 The Münster Curry compiler is a mature native code compiler for the declarative multi-paradigm language \href{http://www.informatik.uni-kiel.de/~mh/curry/}{Curry}~\cite{Hanus06:Report}. The language supported by the compiler is compatible with version 0.8.2 of the Curry report except for some minor differences with respect to the module system. Many syntax extensions including \texttt{newtype} declarations, infix data constructors, lazy patterns, and recursive pattern bindings are available for compatibility with Haskell~\cite{PeytonJones03:Haskell98}.\footnote{Type classes and the record syntax may be supported in future releases.} Other supported extensions include existentially quantified data types, disequality constraints, and I/O exceptions. A distinctive feature of the Münster Curry compiler is the integration of a declarative debugger of wrong answers~\cite{CL02:ENTCS76}. An interactive Curry environment and a make-like build tool for Curry programs are also part of the distribution. A graphical user interface is available separately for Mac OS X.
 
-The Münster Curry compiler is portable to many Unix operating systems with precompiled binaries being available for Linux (i386), Mac OS X, and eventually other Unix variants. It is possible to build and use the Münster Curry compiler on Windows systems using the CygWin environment. The only additional software needed for compiling and running Curry programs is the Gnu C compiler. Building and installing the Münster Curry compiler from its sources requires a Haskell 98 compiler, too. Building and installing the compiler from source and binary distributions can be achieved with the commands
+The Münster Curry compiler is portable to many Unix operating systems with precompiled binaries being available for Linux (i386), Mac OS X, and eventually other Unix variants. It is possible to build and use the Münster Curry compiler on Windows systems using the CygWin and MinGW environments. The only additional software needed for compiling and running Curry programs is the Gnu C compiler. Building and installing the Münster Curry compiler from its sources requires a Haskell 98 compiler, too. Building and installing the compiler from source and binary distributions can be achieved with the commands
 \begin{verbatim}
 ./configure
 make install
@@ -41,15 +43,13 @@ Source and binary distributions as well as further information can be found at \
 
 \section{Installation}
 \subsection{Binary Distribution}\label{sec:binary}
-Precompiled binary distributions are available for Linux (i386), Mac OS X, and eventually other systems. After unpacking the archive, change into the directory corresponding to your platform and run the configure script in that directory. You can then use the scripts \verb"cyc", \verb"cymake", and \verb"cyi" from the \verb"bin" directory (e.g., by setting up soft links from a directory which is included in \verb"$PATH") or install the compiler with \verb"make install". It is possible to uninstall the compiler with the command \verb"make uninstall". By default, the compiler binaries are installed in the directory \verb"/usr/local/bin", interface files, header files, and libraries in \verb"/usr/local/lib/curry", and manual pages in \verb"/usr/local/man/man1".
-
-It is recommended that you uninstall a previous release of the Münster Curry compiler before installing a new version in the same directory. You can use \verb"make uninstall" from the unpacked and configured binary distribution for that purpose. This command will correctly remove older releases of the compiler.
+Precompiled binary distributions are available for Linux (i386), Mac OS X, and eventually other systems. After unpacking the archive, change into the directory corresponding to your platform and run the configure script in that directory. You can then use the scripts\footnote{The scripts \texttt{cyc}, \texttt{cymake}, and \texttt{cyi} are in fact soft links to \texttt{cyc-\version}, \texttt{cymake-\version}, and \texttt{cyi-\version}, respectively, allowing multiple versions of the Münster Curry compiler to coexist on a single machine.} \verb"cyc", \verb"cymake", and \verb"cyi" from the \verb"bin" directory (e.g., by setting up soft links from a directory which is included in \verb"$PATH") or install the compiler with \verb"make install". It is possible to uninstall the compiler with the command \verb"make uninstall". By default, the compiler binaries are installed in the directory \verb"/usr/local/bin", interface files, header files, and libraries in \texttt{/usr/local/lib/curry-\version}, and manual pages in \verb"/usr/local/man/man1".
 
 The configure script is a standard Gnu configure script that understands the following options:
 \begin{description}
-  \item[\texttt{--prefix=}\emph{prefix}] Use \emph{prefix} instead of \verb"/usr/local" as base directory for the installation. For instance, in order to install the compiler in the directories \verb"bin" and \verb"lib/curry" in your home directory, you can use the command \verb"configure --prefix=$HOME".
+  \item[\texttt{--prefix=}\emph{prefix}] Use \emph{prefix} instead of \verb"/usr/local" as base directory for the installation. For instance, in order to install the compiler in the directories \verb"bin" and \texttt{lib/curry-\version} in your home directory, you can use the command \verb"configure --prefix=$HOME".
   \item[\texttt{--bindir=}\emph{bindir}] Install the compiler binaries in directory \emph{bindir} instead of \verb"/usr/local/bin".
-  \item[\texttt{--libdir=}\emph{libdir}] Install the library files in directory \emph{libdir}\verb"/curry" instead of \verb"/usr/local/lib/curry".
+  \item[\texttt{--libdir=}\emph{libdir}] Install the library files in directory \emph{libdir}\texttt{/curry-\version} instead of \texttt{/usr/local/lib/curry-\version}.
   \item [\texttt{--mandir=}\emph{mandir}] Install the manual pages in directory \emph{mandir}\verb"/man1" instead of \verb"/usr/local/man/man1".
 \end{description}
 
@@ -63,15 +63,15 @@ Compilation from the unpacked source directory is achieved with the commands
 ./configure
 make
 \end{verbatim}
-After successful compilation, you can use the scripts \verb"cyc", \verb"cymake", and \verb"cyi" from the build directory (e.g., by setting up soft links from a directory which is included in \verb"$PATH") or install the compiler with the command \verb"make install". An installed compiler can be uninstalled with the command \verb"make uninstall". This is generally recommended before installing a new version of the compiler.
+After successful compilation, you can use the scripts\footnote{The scripts \texttt{cyc}, \texttt{cymake}, and \texttt{cyi} are in fact soft links to \texttt{cyc-\version}, \texttt{cymake-\version}, and \texttt{cyi-\version}, respectively, allowing multiple versions of the Münster Curry compiler to coexist on a single machine.} \verb"cyc", \verb"cymake", and \verb"cyi" from the build directory (e.g., by setting up soft links from a directory which is included in \verb"$PATH") or install the compiler with the command \verb"make install". An installed compiler can be uninstalled with the command \verb"make uninstall".
 
 The configure script automatically determines the required software. In particular, it will check for one of the supported Haskell compilers in the path, trying \verb"ghc", \verb"hbc", and \verb"nhc98" in that order. It is also possible to select a particular compiler with the \verb"--with-hc" option.
 
 The configure script understands the following options.
 \begin{description}
-  \item[\texttt{--prefix=}\emph{prefix}] Use \emph{prefix} instead of \verb"/usr/local" as base directory for the installation. For instance, in order to install the compiler in the directories \verb"bin" and \verb"lib/curry" in your home directory, you can use the command \verb"configure --prefix=$HOME".
+  \item[\texttt{--prefix=}\emph{prefix}] Use \emph{prefix} instead of \verb"/usr/local" as base directory for the installation. For instance, in order to install the compiler in the directories \verb"bin" and \texttt{lib/curry-\version} in your home directory, you can use the command \verb"configure --prefix=$HOME".
   \item[\texttt{--bindir=}\emph{bindir}] Install the compiler binaries in directory \emph{bindir} instead of \verb"/usr/local/bin".
-  \item[\texttt{--libdir=}\emph{libdir}] Install the library files in directory \emph{libdir}\verb"/curry" instead of \verb"/usr/local/lib/curry".
+  \item[\texttt{--libdir=}\emph{libdir}] Install the library files in directory \emph{libdir}\texttt{/curry-\version} instead of \texttt{/usr/local/lib/curry-\version}.
   \item [\texttt{--mandir=}\emph{mandir}] Install the manual pages in directory \emph{mandir}\verb"/man1" instead of \verb"/usr/local/man/man1".
   \item[\texttt{--with-hc=}\emph{hc}] Use the command \emph{hc} for compiling Haskell sources. E.g., if you have \verb"ghc" and \verb"hbc" installed on your machine and prefer building the compiler with \verb"hbc", you can use \verb"configure --with-hc=hbc". \verb"configure" will check that the compiler \emph{hc} is a supported Haskell 98 compiler.
   \item[\texttt{--disable-ghc-make}] With this option, you can specify that ghc's \verb"--make" option should not be used and Haskell source files are compiled individually. The advantage of this configuration is that it allows you to specify options for particular source files on the make command line. E.g., if you want to build a compiler for profiling and get profiling data for all top-level functions in file \texttt{TypeCheck.lhs}, you can use the command
@@ -93,7 +93,7 @@ the expression \verb"let n free in nat n & n =:= S Z" is evaluated deterministic
   \item[\texttt{--enable-trampoline}] By default, the compiler uses some extensions of the Gnu C compiler in order to implement tail calls efficiently by inserting assembler jump instructions into the code. This trick works on many architectures, but is not fully portable. For instance, it does not work under Mac OS X and is also incompatible with building code for shared libraries on most systems.
 
 If the compiler is configured with \texttt{--enable-trampoline}, it uses a portable but slower implementation where a global loop (the so-called trampoline) is used for dispatching tail calls. If your Curry programs keep crashing with bus errors or segmentation faults try reconfiguring the compiler with this option. Note that \texttt{--enable-trampoline} is the default when using a C compiler other than Gnu C and also on Mac OS X.
-  \item[\texttt{--disable-unboxed}] Normally, the runtime system encodes integer values that fit into $n-1$ bits, where $n$ is the number of bits in a machine word, in pointers rather than allocating a node in the heap for them. This improves efficiency mostly due to the avoided allocations, but makes pattern matching and integer operations slightly more complex. When the system is configured with \texttt{--disable-unboxed} all integer numbers are allocated in the heap. This option is useful only for measuring the performance gain of the default configuration and should not be used otherwise.
+  \item[\texttt{--disable-pointer-tags}] Normally, the runtime system encodes character values and integer values that fit into $n-1$ bits, where $n$ is the number of bits in a machine word, in pointers rather than allocating a node in the heap for them. This improves efficiency mostly due to avoiding allocation, but makes pattern matching and character and integer operations slightly more complex. When the system is configured with \texttt{--disable-pointer-tags}, all characters and integer numbers are allocated in the heap. This option is useful only for measuring the performance gain of the default configuration and is not recommended otherwise.
   \item[\texttt{--disable-mprotect}] In order to detect errors in the two-space copying garbage collector early, the runtime system makes the inactive semi-space of the heap inaccessible using the \texttt{mprotect}(2) system call. This requires that \texttt{mprotect} is able to protect individual memory pages, which should be the case on most operating systems. The configure script checks only for the availability of the \texttt{mprotect} call, but does not check whether it actually works. On systems where \texttt{mprotect} exists, but is not able to protect individual pages, its use can be disabled by passing the \texttt{--disable-mprotect} option to \texttt{configure}.
   \item[\texttt{--enable-cam2c}] The source distribution includes a compiler from abstract machine code to C. This compiler is built by default only when the \texttt{--enable-cam2c} option is passed to \texttt{configure}. Note that this compiler is mainly intended for testing the C code generator of the Curry compiler and is not other integrated with the compiler.
   \item[\texttt{--enable-mach}] The source distribution also includes an interpreter for the abstract machine underlying the implementation of the Münster Curry compiler. This interpreter is built when the \texttt{--enable-mach} option is passed to \texttt{configure}. Note that the interpreter is poorly maintained and may be removed in a future release.
@@ -111,8 +111,20 @@ The internal documentation of the Münster Curry compiler, which describes the co
 
 The source distribution includes pre-built \TeX{} sources for the runtime system, which were created with noweb version 2.10c. These files may cause errors when used together with a \verb"noweb.sty" from an earlier noweb release. In that case you have two options. Either upgrade noweb from a CTAN mirror or remove all \verb".tex" files except for \verb"runtime.tex" from the runtime directory in the source tree. This is achieved best by changing into the runtime directory in your build(!) directory and invoking \verb"make maintainerclean" there. Note that this will also remove the \verb".h" and \verb".c" files in the runtime directory and cause them to be rebuilt with your local noweb installation when the runtime system is built with \verb"make" the next time.
 
+On Mac OS X, if you have \texttt{TeXShop}\footnote{\url{http://darkwing.uoregon.edu/~koch/texshop/texshop.html}} installed, you can use it in order to typeset the documentation by using \verb"make TeXShop" instead of \verb"make curry.pdf". However, in contrast to the standard targets, the \verb"TeXShop" target does not yet take care of invoking \verb"bibtex" when necessary or typesetting the document once again if the cross references were updated.
+
+\subsubsection{Building universal libraries and programs on Mac OS X}\label{sec:source-universal}
+It is easily possible to build the Münster Curry compiler with universal libraries that can be used on both Intel and PowerPC based Macintosh computers by passing appropriate \verb"-arch" options to the C compiler either during configuration or while building the compiler. For instance, the command
+\begin{verbatim}
+  ./configure CFLAGS='-arch i386 -arch x86_64 -arch ppc -g -O2'
+\end{verbatim}
+will configure the Münster Curry compiler such that it can be used to link native executables on Intel based machines in 32-bit and 64-bit modes as well as on 32-bit PowerPC machines. It is also possible to build universal programs by specifying the appropriate \verb"-arch" options during the link step (see Sect.~\ref{sec:overall}).
+
 \subsection{Installation on Microsoft Windows}\label{sec:ins-windows}
-The Münster Curry compiler can be built on Windows systems with CygWin -- provided the development packages (make, gcc) are installed -- and a working Haskell compiler. Currently, this appears to work only for the native Win32 binaries of ghc. The following installation instructions are derived from notes kindly provided by Diego Berrueta.
+The Münster Curry compiler can be built on Windows systems with CygWin as well as with MinGW.
+
+\subsubsection{CygWin}
+In order to build the Münster Curry compiler with CygWin, the development packages (make, gcc) and a working Haskell compiler are required. Currently, this appears to work only for the native Win32 binaries of ghc. The installation instructions below are derived from notes kindly provided by Diego Berrueta.
 
 \noindent
 Note: In the following, \verb"<CYGWIN>" represents the directory where CygWin is installed.
@@ -121,7 +133,7 @@ Note: In the following, \verb"<CYGWIN>" represents the directory where CygWin is
 \begin{enumerate}
 \item Install the Win32 version of ghc in \verb"<CYGWIN>/usr/local/ghc".
 \item Add \verb"/usr/local/ghc/bin" to the path. Make sure that the executable is found by typing \verb"ghc -v" in the CygWin console. This should print out a long list configuration and package information for ghc.
-\item Unpack the sources of the Münster Curry compiler in some convenient place and change into the \verb"curry-0.9.10" directory.
+\item Unpack the sources of the Münster Curry compiler in some convenient place and change into the \texttt{curry-\version} directory.
 \item Configure, compile, and install the compiler:
 \begin{verbatim}
 ./configure
@@ -131,6 +143,15 @@ make install
 \item Ready to test. Make sure that \verb"/usr/local/bin" is in your \verb"PATH".
 
 \end{enumerate}
+
+\subsubsection{MinGW}
+In order to build the Münster Curry compiler with MinGW, a minimal development environment (gcc-core, binutils, mingw-runtime, and win32-api) is needed. In addition, the MSYS shell must be installed and a working Haskell compiler is required. The compiler can be built with the usual commands
+\begin{verbatim}
+./configure
+make
+make install
+\end{verbatim}
+The last step may be omitted and the compiler can be used from its build directory, too. Note that at present, the networking related functions from modules \verb"IOExts" and \verb"Socket" do not work with MinGW.
 
 \section{Using the Compiler}\label{sec:cyc}
 The Curry compiler is invoked with the command \verb"cyc". Normally, it performs compilation, assembly, and linking. The ``overall options'' allow stopping this process at an intermediate stage. For example, the \verb"-c" option says not to run the linker. The output then consists of object files output by the assembler.
@@ -149,6 +170,7 @@ By default, a program linked with \verb"cyc" executes the \verb"main" function i
 The following options control the general processing of source files.
 \begin{description}
   \item[-n] Do not execute any command, but display each command that normally would be executed.
+  \item[-q] This option has no effect.
   \item[-v] Display each command before it is executed by \verb"cyc".
   \item[-C] Stop processing after generating C code from the Curry source modules.
   \item[-S] Stop processing after generating assembler code from the Curry and C source files.
@@ -156,6 +178,7 @@ The following options control the general processing of source files.
   \item[-o \emph{file}] Place the output in a file named \emph{file}. Since only one output file can be specified, it does not make sense to use \verb"-o" when compiling more than one input file unless you are producing an executable file as output.
 
 If \verb"-o" is not specified, the default is to put an executable file in \verb"a.out", the object file for \emph{source.suffix} in \emph{source}\verb".o", its assembler file in \emph{source}\verb".s", and its C file in \emph{source}\verb".c".
+  \item[-arch \emph{arch}] Mac OS X: Compile for the specified target architecture \emph{arch}. Multiple options work, and direct the compiler to produce ``universal'' binaries. Using this option on other systems is likely to produce a C compiler error.
 \end{description}
 
 \subsection{Compiling Curry Modules}\label{sec:compiling}
@@ -168,7 +191,13 @@ The following options control the compilation of Curry source into C code.
 
 Note that code compiled with this option is incompatible with code compiled without this option. This option must therefore be used consistently for compiling and linking all modules of a program.
   \item[-\relax-trusted] This flag has an effect only in conjunction with one of previous options. It tells that debugger that it can trust all functions from a module compiled with this flag. The debugger will not ask questions about such functions.
-  \item[-i\emph{dir}] Add directory \emph{dir} to the list of paths used to locate interface files. By default, the compiler searches for interface files in the current directory and in its standard library directory (usually \verb"/usr/local/lib/curry").
+  \item[-i\emph{dir}] Add directory \emph{dir} to the list of paths used to locate interface files. By default, the compiler searches for interface files in the current directory and in its standard library directory (usually \texttt{/usr/local/lib/curry-\version}).
+
+The directory \emph{dir} is also added to the list of paths used to locate header files, as if \verb"-I"\emph{dir} was present on the command line.
+  \item[-P\emph{dir}] Add directory \emph{dir} to the list of paths used to locate interface files. By default, the compiler searches for interface files in the current directory and in its standard library directory (usually \texttt{/usr/local/lib/curry-\version}) .
+
+The directory \emph{dir} is also added to the lists of paths used to locate header and library
+files, respectively, as if \verb"-I"\emph{dir} and \verb"-L"\emph{dir} were present on the command line.
   \item[-Whaskell]
   \item[-Wprolog] \vspace{-\medskipamount}
   \item[-Wgoedel] \vspace{-\medskipamount}Warn whenever a definition does not obey the selected case mode (cf. Sect. C.1 of the Curry report~\cite{Hanus06:Report}).
@@ -190,10 +219,12 @@ The following list describes only the most common options understood by \verb"cy
   \item[-D\emph{name}] Predefine \emph{name} as a macro, with definition \verb"1".
   \item[-D\emph{name}=\emph{defn}] Predefine \emph{name} as a macro with definition \emph{defn}.
   \item[-U\emph{name}] Cancel any previous definition of \emph{name}, either built in or provided with a \verb"-D" definition.
-  \item[-I\emph{dir}] Add directory \emph{dir} to the list of paths used to locate header files. The standard library directory (usually \verb"/usr/local/lib/curry") is always included in this list.
+  \item[-I\emph{dir}] Add directory \emph{dir} to the list of paths used to locate header files. The standard library directory (usually \texttt{/usr/local/lib/curry-\version}) is always included in this list.
+  \item[-F\emph{dir}] Mac OS X: Add the framework directory \emph{dir} to the list of paths used to locate header files. Using this option on other systems is likely to produce a C compiler error.
   \item[-O] equivalent to \verb"-O1"
   \item[-O\emph{level}] Controls optimization of the compiled code. \verb"-O0" disables all optimizations. Note that \verb"-O3" and higher levels will fail to produce valid code for Curry modules on many architectures.
   \item[-\relax-ccopt \emph{opt}] Passes the option \emph{opt} to the C compiler without interpretation. For instance, in order to include debugging symbols in the compiled C code, invoke the compiler with \verb"--ccopt -g".
+  \item[-\relax-ccopts \emph{opts}] Passes each option from the comma separated list \emph{opts} to the C compiler without further interpretation.
 \end{description}
 
 \subsection{Linking}\label{sec:linking}
@@ -204,20 +235,27 @@ The following options are relevant while linking a program. The compiler creates
   \item[-h\emph{size}] Use \emph{size} bytes for the heap of the Curry program. Note that actually twice as much memory is allocated for the heap because the runtime system uses a two-space copying collector. The abbreviations \emph{size}\verb"k" and \emph{size}\verb"M" can be used for specifying the size in kBytes and MBytes, respectively. The default is to use a 4~MByte heap.
   \item[-k\emph{size}] Use \emph{size} bytes for the stack of the Curry program. The abbreviations \emph{size}\verb"k" and \emph{size}\verb"M" can be used for specifying the size in kBytes and MBytes, respectively. The default is to use a 512~kByte stack.
   \item[-t\emph{size}] Use \emph{size} bytes for the trail stack of the Curry program. The abbreviations \emph{size}\verb"k" and \emph{size}\verb"M" can be used for specifying the size in kBytes and MBytes, respectively. The default is to use a 512~kByte trail stack.
+  \item[-f] Print all failures during execution of a non-deterministic goal. If given multiple times, print also failures inside encapsulated search.
   \item[-p] Print cumulated execution times and memory usage statistics at the end of the run. If specified more than once, also print memory statistics at each garbage collection.
-  \item[-e\emph{goal}] Evaluate \emph{goal} instead of \verb"main". See Sect.~\ref{sec:goals} for a description of the goal syntax. The \emph{goal} is evaluated with respect to the Curry module specified explicitly with the \verb"-M" option, the last module occurring on the command line, or the \verb"Prelude" otherwise.
-  \item[-T\emph{goal}] Compute the type of \emph{goal}. See Sect.~\ref{sec:goals} for a description of the goal syntax. The \emph{goal}'s type is computed with respect to the Curry module specified explicitly with the \verb"-M" option, the last module occurring on the command line, or the \verb"Prelude" otherwise.
-  \item[-M\emph{module}] Use \emph{module} as main module of the program. An explicit goal specified with the \verb"-e" option is evaluated in the context of \emph{module}. By default, the compiler assumes that the last Curry source file appearing on the command line contains the main module of the program. It may be necessary to specify the main module explicitly when there are no source file arguments.
+  \item[-e\emph{goal}] Evaluate \emph{goal} instead of \verb"main". See Sect.~\ref{sec:goals} for a description of the goal syntax. The \emph{goal} is evaluated with respect to the modules specified with \verb"-M" options and the Curry source files appearing on the command line. All
+entities exported from the \verb"Prelude" and the Curry source file that appears last on the command line or the last module specified with a \verb"-M" option, if there are no source file arguments, are in scope with unqualified and qualified names. The exported entities of all other
+modules are in scope with qualified names only.
+  \item[-T\emph{goal}] Compute the type of \emph{goal}. See Sect.~\ref{sec:goals} for a description of the goal syntax. The \emph{goal}'s type is computed with respect to the modules specified with \verb"-M" options and the Curry source files appearing on the command line. All
+entities exported from the \verb"Prelude" and the Curry source file that appears last on the command line or the last module specified with a \verb"-M" option, if there are no source file arguments, are in scope with unqualified and qualified names. The exported entities of all other
+modules are in scope with qualified names only.
+  \item[-M\emph{module}] Brings all entities exported from \emph{module} into scope with their qualified names for a goal specified with the \verb"-e" and \verb"-T" options. By default, only the entities exported from the \verb"Prelude" and the Curry source files occurring on the command line are in scope. The entities exported from the \verb"Prelude" and the last source file appearing on the command line or specified with the last \verb"-M" option, if there are no source file arguments, are brought into scope with their unqualified names, too.
 
-  \emph{Module} is either the name of a source file (ending in \verb".lcurry" or \verb".curry") or the name of a module whose source can be located in the current directory.
-  \item[-L\emph{dir}] Add directory \emph{dir} to the list of paths used to locate libraries specified with \verb"-l" options. The standard library directory (in the standard configuration: \verb"/usr/local/lib/curry") is always included in this list.
+  \emph{Module} is either the name of a source file (ending in  \verb".lcurry" or \verb".curry"), the name of an interface file (ending in \verb".icurry"), or the name of a module whose interface can be located in the interface search path.
+  \item[-L\emph{dir}] Add directory \emph{dir} to the list of paths used to locate libraries specified with \verb"-l" options. The standard library directory (in the standard configuration: \texttt{/usr/local/lib/curry-\version}) is always included in this list.
   \item[-l\emph{lib}] Search the library named \emph{lib} when linking.
+  \item[-framework \emph{name}] Mac OS X: Link against framework \emph{name}. Using this option on other systems is likely to produce a C compiler error.
   \item[-\relax-ldopt \emph{opt}] Passes the option \emph{opt} to the C compiler without interpretation. In contrast to \verb"--ccopt" (see Sect.~\ref{sec:compiling-c}), \emph{opt} is used only during the link phase.
+  \item[-\relax-ldopts \emph{opts}] Passes each option from the comma separated list \emph{opts} to the C compiler without further interpretation. As with \verb"--ldopt", \emph{opts} are used only during the link phase.
 \end{description}
 
 \subsection{Environment}
 \begin{description}
-\item[CURRY\_PATH] The environment variable \verb"CURRY_PATH" is used to locate the compiler executables. The default value is \verb"/usr/local/lib/curry".
+\item[CURRY\_PATH] The environment variable \verb"CURRY_PATH" is used to locate the compiler executables. The default value is \texttt{/usr/local/lib/curry-\version}.
 \item[CURRY\_IMPORT\_PATH]
 \item[CURRY\_INCLUDE\_PATH] \vspace{-\medskipamount}
 \item[CURRY\_LIBRARY\_PATH] \vspace{-\medskipamount}
@@ -264,6 +302,7 @@ The Curry runtime system understands the following options:
   \item[-h \emph{n}] Use \emph{n} bytes for the heap in this run of the program. Note that actually twice as much memory is allocated for the heap because the runtime system uses a two-space copying collector. The abbreviations \emph{n}\verb"k" and \emph{n}\verb"M" can be used for specifying the size in kBytes and MBytes, respectively.
   \item[-k \emph{n}] Use \emph{n} bytes for the stack in this run of the program. The abbreviations \emph{n}\verb"k" and \emph{n}\verb"M" can be used for specifying the size in kBytes and MBytes, respectively.
  \item[-t \emph{n}] Use \emph{n} bytes for the trail stack in this run of the program. The abbreviations \emph{n}\verb"k" and \emph{n}\verb"M" can be used for specifying the size in kBytes and MBytes, respectively.
+  \item[-f] Print all failures during execution of a non-deterministic goal. If given multiple times, print also failures inside encapsulated search.
   \item[-p] Print cumulated execution times and memory usage statistics at the end of the run. If specified more than once, also print memory statistics at each garbage collection.
   \item[-d] Turn on the low-level tracer of the abstract machine. In general you do not want to see its output, but it may give hints to why a program does not compute an expected solution or runs into a deadlock. Beware that tracing can slow down program execution considerably and the output may be excessively large.
 \end{description}
@@ -316,13 +355,20 @@ An explicit trust annotation \verb"{-# TRUST" $f_{1}$, $\dots$, $f_{n}$ \verb"#-
   \item[-n] No execution mode. Print commands but do not execute them.
   \item[-q] Quiet mode. Do not print commands before executing them.
   \item[-M] Output a Makefile compatible dependency list on the standard output.
+  \item[-\relax-find] For each command line target $t$, \verb"cymake" will print a line of the form $t$\verb": "$f$, where $f$ is the name of the source or interface file corresponding to $t$. If $t$ is a module name, \verb"cymake" will look for the source or interface file first in the current directory and then along the search path. If no file is found, $f$ is empty.
   \item[-a] Always link the executable, even if it is not out of date with respect to its object files. This is useful if only the goal to be evaluated by the program is changed.
   \item[-e \emph{goal}] Evaluate \emph{goal} instead of function \verb"main". This option cannot be used when compiling more than one module. See Sect.~\ref{sec:goals} for a description of the syntax of goals.
   \item[-T\emph{goal}] Compute the type of \emph{goal}. This option cannot be used when compiling more than one module. See Sect.~\ref{sec:goals} for a description of the goal syntax.
   \item[-\relax-debug] Compile the program for use with the debugger. As object files compiled with \verb"--debug" cannot be linked with object files compiled without \verb"--debug", \verb"cymake" uses the suffix \verb".d.o" instead of \verb".o" for object files when this option is specified.
   \item[-i\emph{dir}] Add directory \emph{dir} to the list of paths used to locate imported modules. By default, the compiler searches only the current directory for source files. Note that the current directory is always searched first.
-  \item[-P\emph{dir}] Add directory \emph{dir} to the list of paths used to locate interface files for library modules. By default, the compiler searches for interface files in its standard library directory (usually \verb"/usr/local/lib/curry").
+
+  The directory \emph{dir} is also added to the list of paths used to locate C header files, as
+if \verb"-I"\emph{dir} was present on the command line.
+  \item[-P\emph{dir}] Add directory \emph{dir} to the list of paths used to locate interface files for library modules. By default, the compiler searches for interface files in its standard library directory (usually \texttt{/usr/local/lib/curry-\version}).
   
+  The directory \emph{dir} is also added to the lists of paths used to locate C header files and
+libraries, respectively, as if \verb"-I"\emph{dir} and \verb"-L"\emph{dir} were present on the command line.
+
   The compiler scans the directories specified with \verb"-P" before the installation directory; thus, it is possible to hide the interfaces of the standard library by using this option.
   \item[-o \emph{file}] Puts the executable file in \emph{file}. This option cannot be used when compiling more than one module. This option is ignored if compiling to an object file.
   \item[-\relax-clean] Remove all compiled files for a program. If specified in conjunction with \verb"--debug" only the object files for the debugger, i.e. with suffix \verb".d.o", are removed.
@@ -331,7 +377,7 @@ Most other flags are assumed to be compiler options and are passed to \verb"cyc"
 
 \subsection{Environment}
 \begin{description}
-\item[CURRY\_PATH] The environment variable \verb"CURRY_PATH" is used to locate the auxiliary executables used by \verb"cymake".  The default value is \verb"/usr/local/lib/curry".
+\item[CURRY\_PATH] The environment variable \verb"CURRY_PATH" is used to locate the auxiliary executables used by \verb"cymake".  The default value is \texttt{/usr/local/lib/curry-\version}.
 \item[CURRY\_IMPORT\_PATH] 
 \item[CURRY\_INCLUDE\_PATH] \vspace{-\medskipamount}
 \item[CURRY\_LIBRARY\_PATH] \vspace{-\medskipamount}The environment variables \verb"CURRY_IMPORT_PATH", \verb"CURRY_INCLUDE_PATH", and \verb"CURRY_LIBRARY_PATH" contain colon-separated lists of directories that are searched for imported interfaces, included header files, and library files, respectively. Their default value is \verb"$CURRY_PATH".
@@ -368,12 +414,12 @@ where the files in directory \verb"modules" are part of the program and the file
 
 Assuming that the files \verb"L1.curry" and \verb"L2.curry" define the modules \verb"L1" and \verb"L2", respectively, it is possible to bring the library up to date with the command
 \begin{verbatim}
-(cd library; cymake L[12].curry; ar rc Lib.a L[12].o; ranlib Lib.a)
+(cd library; cymake L[12].curry; ar rc libL12.a L[12].o; ranlib libL12.a)
 \end{verbatim}
 
 In order to bring the program \verb"prog" up to date when the files \verb"M1.curry" and \verb"M2.curry" define the modules \verb"M1" and \verb"M2", respectively, the following command can be used:
 \begin{verbatim}
-cymake -imodules -Plibrary prog library/Lib.a
+cymake -imodules -Plibrary prog -lL12
 \end{verbatim}
 Note that this command will not recompile the files \verb"L1.curry" and \verb"L2.curry" if they are newer than the corresponding object files in directory \verb"library". Nevertheless, the interface files \verb"L1.icurry" and \verb"L2.icurry" can cause a recompilation of \verb"prog.curry", \verb"M1.curry", and \verb"M2.curry", respectively, if these modules are out of date with respect to the interfaces.
 
@@ -396,14 +442,15 @@ in order to compile Curry modules. The \verb".o.icurry" rule is essential for a 
 \verb"cyi" is an interactive environment that allows evaluating and debugging Curry goals with respect to a Curry module loaded into the interpreter. At startup, \verb"cyi" reads and interprets commands from the file \verb".cyirc" in the current directory if it exists, or from \verb".cyirc" in your home directory otherwise, and then loads either the first module specified on the command line or the Curry prelude.
 
 \subsection{Goals}\label{sec:goals}
-A goal is a Curry expression optionally followed by a where-clause that can be used for providing local definitions for the goal (see appendix C.3 in~\cite{Hanus06:Report} for the context free syntax of Curry).
+A goal is a Curry expression optionally followed by a where-clause, which can be used for providing local definitions for the goal (see appendix C.3 in~\cite{Hanus06:Report} for the context free syntax of Curry).
 \begin{eqnarray*}
 \emph{Goal} & ::= & \mbox{\emph{Expr} [\texttt{where} \emph{LocalDefs}]}
 \end{eqnarray*}
-All free variables of the goal must be declared either in the where clause or by using a let expression as goal.
 
-The bindings of the free variables are displayed together with the normal form of the goal after successful evaluation unless the goal is of type \verb"IO"~$t$.
+All entities exported from the \verb"Prelude" and the module specified in the last \verb":load"
+command are in scope with unqualified and qualified names unless they are shadowed by one of the declarations from the where-clause. Entities from modules that are imported directly or indirectly from the module specified in the last \verb":load" command are also in scope, but only with qualified names.
 
+All free variables of the goal must be declared either in the where-clause or by using a let expression as goal. The bindings of the free variables are displayed together with the normal form of the goal after successful evaluation unless the goal is of type \verb"IO"~$t$.
 \subsection{Commands}
 At the prompt of the interactive environment, the following commands can be entered:
 \begin{description}
@@ -411,11 +458,15 @@ At the prompt of the interactive environment, the following commands can be ente
   \item[:\texttt{\^}[\emph{goal}]] Evaluate \emph{goal} in the context of the current module. If \emph{goal} is omitted, the previous goal is evaluated again.
   \item[:debug [\emph{goal}]] Invoke the debugger for \emph{goal}. It may take some time to recompile the source modules with debugging information. If \emph{goal} is omitted, the debugger is invoked for the previous goal.
   \item[:type [\emph{goal}]] Print the type of \emph{goal} instead of evaluating it. If \emph{goal} is omitted, the type of the previous goal is shown.
-  \item[:load \emph{module}] Set the current evaluation context to \emph{module}. This command will compile \emph{module} and all modules it depends on. The module can be specified either by the name of its source file (ending in \verb".lcurry" or \verb".curry") or a plain module name. \verb"cyi" displays the name of the current module in its prompt.
+  \item[:load \emph{module}] Set the current evaluation context to \emph{module}. This command will compile \emph{module} and all modules it depends on if necessary. \emph{Module} can be specified either by the name of its source file (ending in \verb".lcurry" or \verb".curry") or a plain module name. In the latter case, \verb"cyi" will look for a source or interface file for \emph{module} in the current directory and the current search path as determined by the \verb"-i" and \verb"-P" options set with the \verb":set" command and the environment variable \verb"CURRY_IMPORT_PATH".
+
+  \verb"cyi" displays the name of the current module in its prompt.
   \item[:load] Reset the current evaluation context to the Curry prelude.
   \item[:reload] Repeat the last load command.
   \item[:freshen] Recompile the current module and all imported source files.
   \item[:clean] Remove all compiled files for the current module and all imported source files.
+  \item[:interface \emph{module}] Display the interface of \emph{module}. If the environment variable \verb"PAGER" is set, the interface file is displayed with this command. Otherwise the interface is simply written to the standard output.
+  \item[:interface] Display the interface of the current module.
   \item[:edit \emph{file}] Invoke the editor for \emph{file}. The default editor is \verb"/usr/bin/vi", but this can be changed by setting one of the environment variables \verb"VISUAL" and \verb"EDITOR" to your preferred editor before starting \verb"cyi".
   \item[:edit] Edit the source file of the current module.
   \item[:set \emph{option} \dots] Add \emph{option}s to the list of compiler options.
@@ -460,7 +511,7 @@ Note that \verb"add" deliberately contains an error, which is corrected during t
 lux@localhost:~ % cyi
 \verb"    _____ __ __"
 \verb"   / ___/ |  / _               Muenster Curry Compiler"
-\verb"  / /     | / | |              Version 0.9.10, Copyright (c) 1998-2006"
+\verb"  / /     | / | |              Version 0.9.11, Copyright (c) 1998-2007"
 \verb" / /___  / /  | |"
 \verb" \____/ /_/   |_|              Type :h for help"
 
@@ -490,6 +541,8 @@ More solutions? [Y(es)/n(o)/a(ll)] \cyiinput{n}
 \begin{figure}
 \begin{alltt}
 nat> \cyiinput{:d}
+Preparing nat.curry for debugging; this may take some time...
+/usr/local/bin/cyc --debug -c nat.curry -o nat.d.o
 
 Entering debugger...
  
@@ -1502,7 +1555,7 @@ suspends instead of binding the variables \texttt{x} and \texttt{f}. Note that t
 let x free in x =:= Key 'a' ord
 \end{verbatim}
 
-A similar issue applies to the polymorphic function \texttt{compare}. However, since there is no apparent order between terms of different types, this operations fails with a runtime error when it is applied to arguments with existentially quantified types. This happens even if the arguments of the constructors happen to have compatible types at runtime as, for instance, in the expression \texttt{C 1 `compare`  C 2}. This restriction may be lifted in a future version of the compiler.
+A similar issue applies to the polymorphic function \texttt{compare}. However, since there is no apparent order between terms of different types, this operation simply fails when it is applied to arguments with existentially quantified types. This happens even if the arguments of the constructors happen to have compatible types at runtime as, for instance, in the expression \texttt{C 1 `compare`  C 2}. This restriction may be lifted in a future version of the compiler.
 
 \paragraph{Local Universal Quantification}
 Local universal quantification of types is not yet supported but planned for a future release.
@@ -1518,14 +1571,16 @@ let x free in const x =:= id (const (2 * 2))
 \end{verbatim}
 does not bind \verb"x" to 4, but suspends. This is necessary because equality of partial applications cannot be checked without runtime type checking and the current runtime system provides enough type information only for ground terms, but not for variables. This restriction may be lifted in a future release.
 
-\subsubsection{Local Fixity Declarations}\label{sec:ext-fixity}
+\subsubsection{Fixity Declarations}\label{sec:ext-fixity}
 The Münster Curry compiler accepts fixity declarations within local binding groups. Thus, it is possible to assign fixities to operators defined in such groups. In particular, this allows defining operators with associated fixities for a goal in the interactive top-level (see Sect.~\ref{sec:goals} for the syntax of goals). You can freely mix fixity and value declarations in a group. This is also true for fixity and block declarations at the module level.
 
 For instance, you can enter the following goal at the interactive prompt:
 \begin{verbatim}
 length xs <== xs =:= [1] where xs free; infix 0 <==; x <== c | c = x
 \end{verbatim}
-Note that the operator \verb"<==" is also defined in the library module \texttt{Success} (Sect.~\ref{sec:lib-Success}).
+Note that the operator \verb"<==" is also defined in library module \texttt{Success} (Sect.~\ref{sec:lib-Success}).
+
+For compatibility with Haskell, the precedence level in fixity declarations may be omitted, in which case it defaults to 9. Thus, the declarations \verb"infixr 9 ." and \verb"infixr ." are equivalent.
 
 \subsubsection{Lazy Patterns}\label{sec:ext-lazy-pattern}
 The Münster Curry compiler extends pattern syntax further by supporting lazy pattern matching as in Haskell. Lazy patterns are useful for delaying pattern matching of the arguments of a function until those arguments are actually needed. A pattern is turned into a lazy pattern by prefixing it with the character \verb"~".
@@ -1623,7 +1678,7 @@ The Münster Curry compiler allows defining and using infix constructor operators
 \begin{verbatim}
 data Assoc a b = a := b
 \end{verbatim}
-Such constructors can be used in patterns in the expected way. For instance, the following function exchanges the rôles of both arguments.
+Such constructors can be used in patterns in the expected way. For instance, the following function exchanges the roles of both arguments.
 \begin{verbatim}
 flipAssoc (x := y) = y := x
 \end{verbatim}
@@ -1643,6 +1698,24 @@ In order to accommodate constructor operators, the following rules of the Curry 
 \end{eqnarray*}
 The Münster Curry compiler does not impose any restrictions on the names of constructor operators -- i.e., $\meta{InfixConID} = \meta{InfixOpID}$ -- but it is recommended to use only names starting with a colon for infix constructors. This convention is compatible with Haskell.
 
+\subsubsection{No Automatic Eta-expansion of Function Definitions}\label{sec:ext-eta}
+Similar to PAKCS version 1.8 and \Toy{}, the arity of a function is determined by the number of arguments in its declaration rather than by its type as the Curry report implies. For instance, the declaration \verb"sum = foldr (+) 0" defines \verb"sum" as a nullary function even though it has type \texttt{[Int] -> Int}.
+
+Note that $\eta$-expansion can change the semantics of a program. Consider the two programs
+\begin{center}\tt
+  \begin{tabular}{ll}
+    zero 0 = success & zero 0 = success \\
+    one 1 = success &  one 1 = success \\
+    fcoin = zero & fcoin x = zero x \\
+    fcoin = one & fcoin x = one x \\
+    goal f | f x \& f y = x + y & goal f | f x \& f y = x + y \\
+    \quad where x,y free & \quad where x,y free \\
+  \end{tabular}
+\end{center}
+For the left program, \verb"goal fcoin" has just two solutions, namely \verb"0" and \verb"2", whereas for the right program, which is the $\eta$-expanded version of the left program, \verb"goal fcoin" has three different solutions, namely \verb"0", \verb"1", and \verb"2".
+
+Nevertheless, the compiler performs $\eta$-expansion as an optimization when it can prove that the semantics of the program remains unaffected. In particular, function definitions with only a single equation and whose right hand side is a non-expansive expression (cf.\ Sect.~\ref{sec:poly-let}) are always $\eta$-expanded.
+
 \subsubsection{Generalized Function Left-Hand Sides}\label{sec:ext-curried-lhs}
 Similar to Haskell, the Münster Curry compiler allows using a curried style for the left-hand side of a function rule. This is very convenient for defining higher-order operator symbols. For instance, the curried syntax can be used in the definition of the function composition operator \verb"(.)".
 \begin{verbatim}
@@ -1659,6 +1732,29 @@ The definition of \meta{FunLHS} in the Curry syntax is changed as follows.
       & | & \mbox{\literal{(} \meta{FunLHS$_1$} \literal{)} \meta{SimplePattern$_1$} \dots{} \meta{SimplePattern$_n$}} & (n\geq1)
   \end{array}
 \end{displaymath}
+
+\subsubsection{Polymorphic Generalization of Let-Bound Variables}\label{sec:poly-let}
+The compiler implements a variant of ML's value restriction that allows polymorphic generalization of let-bound variables if the bound expression is a non-expansive expression. The class of non-expansive expressions is defined inductively as the set of expressions built from
+\begin{itemize}
+\item literals,
+\item local variables,
+\item applications of a constructor with arity $n$ to at most $n$ non-expansive argument expressions,
+\item applications of a function or $\lambda$-expression with arity $n$ to at most $n-1$ non-expansive argument expressions, and
+\item let-expressions which comprise only function declarations and variable declarations of the form $x=e$ where $e$ is a non-expansive expression and whose body is also a non-expansive expression.
+\end{itemize}
+
+With this extension, the compiler accepts all of the following definitions
+\begin{verbatim}
+f1 = (1:nil, 'a':nil) where nil = []
+f2 = [z (), z False] where z = const 0
+f3 = last (last ["Curry"])
+  where last = \xs -> let y,ys free in (xs =:= ys++[y]) &> y
+\end{verbatim}
+where the types $\forall\alpha. [\alpha]$, $\forall\alpha. \alpha\rightarrow[\texttt{Int}]$, and $\forall\alpha. [\alpha]\rightarrow\alpha$ are inferred for the local variables \verb"nil", \verb"z", and \verb"last", respectively. On the other hand, the definition
+\begin{verbatim}
+f4 = (1:nil, 'a':nil) where nil = id []
+\end{verbatim}
+is still rejected because \verb"id []" is an expansive expression and therefore \verb"nil"'s type is not generalized.
 
 \subsubsection{Mutually Recursive Variable Bindings}
 The compiler allows mutually recursive variable bindings; for instance,
@@ -1688,12 +1784,12 @@ The syntax is as follows
 \end{eqnarray*}
 
 \subsubsection{Foreign Function Interface}\label{sec:ext-ffi}
-The Münster Curry compiler supports a subset of the Haskell foreign function interface~\cite{Chakravarty03:FFI}. The current implementation allows only importing foreign functions and supports only calling conventions \verb"primitive" and \verb"ccall". The calling convention \verb"primitive" is a non-portable addition of the Münster Curry compiler and must be used only for C functions that use the calling conventions of the compiler's runtime system. Argument types of functions using the \verb"ccall" calling convention are restricted to the types \verb"Bool", \verb"Char", \verb"Int", \verb"Float", \verb"Ptr"~$t$, \verb"FunPtr"~$t$, and \verb"StablePtr"~$t$ in this release where $t$ is an arbitrary type. In addition to these, types of the form \verb"IO"~$t$ can be used as result types, where $t$ must be either \verb"()" or a valid argument type.
+The Münster Curry compiler supports a subset of the Haskell foreign function interface~\cite{Chakravarty03:FFI}. The current implementation allows only importing foreign functions and supports the calling conventions \verb"primitive", \verb"ccall", and \verb"rawcall". The calling convention \verb"primitive" is a non-portable addition of the Münster Curry compiler and must be used only for C functions that use the calling conventions of the compiler's runtime system. Argument types of functions using the \verb"ccall" calling convention are restricted to the types \verb"Bool", \verb"Char", \verb"Int", \verb"Float", \verb"Ptr"~$t$, \verb"FunPtr"~$t$, and \verb"StablePtr"~$t$ in this release where $t$ is an arbitrary type. In addition to these, types of the form \verb"IO"~$t$ can be used as result types, where $t$ must be either \verb"()" or a valid argument type. The non-standard calling convention \verb"rawcall" is similar to \verb"ccall" except that no marshaling takes place. Thus all arguments of the foreign function must have type \verb"Node *" and its result type must be either \verb"Node *" or \verb"void".
 
-The syntax of foreign function declarations is\footnote{The identifiers \literal{primitive} and \literal{ccall} are not keywords, but given a special meaning only in foreign function declarations. For instance, the declaration \literal{foreign import primitive ccall :: IO ()} is accepted by the compiler.}
+The syntax of foreign function declarations is\footnote{The identifiers \literal{primitive}, \literal{ccall}, \literal{rawcall}, \literal{safe}, and \literal{unsafe} are not keywords, but given a special meaning only in foreign function declarations. For instance, the declaration \literal{foreign import primitive ccall :: IO ()} is accepted by the compiler.}
 \begin{eqnarray*}
 \mbox{\meta{ForeignDecl}} & ::= & \mbox{\literal{foreign} \begin{tabular}[t]{@{}l}\literal{import} \meta{CallConv} [\meta{Safety}] [\meta{ImpEnt}] \\ \meta{FunctionName} \literal{::} \meta{TypeExpr} \end{tabular}} \\
-\mbox{\meta{CallConv}} & ::= & \literal{primitive} \mid \literal{ccall} \\
+\mbox{\meta{CallConv}} & ::= & \literal{primitive} \mid \literal{ccall} \mid \literal{rawcall} \\
 \mbox{\meta{Safety}} & ::= & \literal{safe} \mid \literal{unsafe}
 \end{eqnarray*}
 At present, the safety level is ignored and present only for compatibility with the Haskell Foreign Function Interface addendum. The syntax of import entity specifications depends on the calling convention being used. For functions using the \verb"primitive" calling convention the string is used as the name of the foreign function. Name mangling is applied to this name and therefore, there are no restrictions on valid names. For functions using the \verb"ccall" calling convention, this string must comply with the following grammar.
@@ -1769,13 +1865,12 @@ Because strong encapsulation is nevertheless useful, the Münster Curry compiler 
 bug   = x where x = x
 cycle = x where { x = y; y = x }
 \end{verbatim}
+
 \item The \verb"send" constraint in the \verb"Ports" library (Sect.~\ref{sec:lib-Ports}) may loose messages because of unintended sharing. For instance, \texttt{foldr (\&) success (replicate 5 (send "Hello" p))} sends the string \verb'"Hello"' only once to the port and not five times.
 
 \item Equality and disequality constraints may lead to segmentation faults when applied to cyclic data structures, e.g. in the goal \texttt{xs =:= repeat 'x' where repeat x = let xs = x:xs in xs}. Note that the prelude's definition of \verb"repeat" does not create cyclic data structures.
 
 \item It is not possible to debug programs that involve cyclic data structures.
-
-\item It is not possible to debug programs that involve computations of type \verb"IO"~$t$ in any way, including expressions using \verb"unsafePerformIO". Unfortunately, this means that the debugger cannot be used for programs that use arrays, as the Array module uses \verb"unsafePerformIO" (in a safe way) in order to implement non-mutable arrays on top of mutable arrays.
 
 \item The basic facts shown by the debugger can be way too complex to understand and there is no provision to omit inner terms of deeply nested data terms.
 
@@ -1855,6 +1950,61 @@ Reconfigure the compiler with \verb"--enable-trampoline" (see Sect.~\ref{sec:sou
 \end{itemize}
 
 \section{Release History}\label{sec:release-notes}
+\subsection*{Release 0.9.11 (June 10\textsuperscript{th}, 2007)}
+\paragraph{Build Environment}
+  \begin{itemize}
+  \item On Microsoft Windows, the compiler can now also be built with MinGW.
+  \item Versioned installation will allow multiple versions of the Münster Curry compiler to coexist on a single machine in the future.
+  \item New make target \verb"TeXShop" for typesetting the documentation on Mac OS X with \texttt{TeXShop.app} (cf.\ Sect.~\ref{sec:source-documentation}).
+  \item It is now possible to build universal libraries on Mac OS X (cf.\ Sect.~\ref{sec:source-universal}).
+  \end{itemize}
+\paragraph{Compiler}
+  \begin{itemize}
+  \item Function definitions are no longer $\eta$-expanded automatically (cf.\ Sect.~\ref{sec:ext-eta}).
+  \item Let-bound variables can have a polymorphic type in some cases (cf.\ Sect.~\ref{sec:poly-let}).
+  \item The precedence level in a fixity declaration is now optional and defaults to 9 if omitted (cf.\ Sect.~\ref{sec:ext-fixity}).
+  \item Only the exported entities of the main module and the Prelude are visible with unqualified names in a goal. On the other hand, the entities of all other modules imported directly or indirectly from the main module can now be accessed with qualified names.
+  \item Code generation is now based on a register-based abstract machine code model, which yields more efficient code.
+  \item The compiler omits redundant module qualifiers from type expressions in error messages.
+  \item Limited support for compiling mutually recursive modules.
+  \item Compiler options \verb"--ccopts" and \verb"--ldopts" allow passing multiple comma separated options to the C compiler (cf.\ Sects.~\ref{sec:compiling-c} and~\ref{sec:linking}).
+  \item Compiler accepts options \verb"-F" and \verb"-framework" and passes them on to the C compiler.
+  \end{itemize}
+\paragraph{Debugger}
+  \begin{itemize}
+  \item Debugging of goals involving \texttt{IO} computations now works.
+  \end{itemize}
+\paragraph{Interactive Environment}
+  \begin{itemize}
+  \item The interpreter's \verb":load" command takes changes of the search path with the \verb":set" command into account.
+  \item The interpreter allows \verb":load"ing standard library interfaces so that, e.g., \verb":l Array" no longer fails with an error message \texttt{missing source file for Array}.
+  \item The interpreter no longer recompiles source modules each time a goal is evaluated.
+  \item Only the exported entities of the main module and the Prelude are visible with unqualified names in a goal. On the other hand, the entities of all other modules imported directly or indirectly from the current module can now be accessed with qualified names (cf.\ Sect.~\ref{sec:goals}).
+  \item New command \verb":interface" that displays the interface of the current or a specified module.
+  \end{itemize}
+\paragraph{Curry Library and Runtime System}
+  \begin{itemize}
+  \item Improved trampoline implementation (used by default on Mac OS X), which reduces execution times by 5 to 10\% on a PowerPC, and up to 30\% on x86.
+  \item Expressions like \verb"chr (-1)" and \verb"const 0 <= id" now fail only the current solution instead of aborting the program with an error message.
+  \item When a program fails due to a pattern match failure, the error message now includes the function where the failure was detected.
+  \item Pattern matching (and other) failures are reported in non-IO goals if the goal was compiled with the \verb"-f" option (cf.\ Sect.~\ref{sec:linking}) or if the program is invoked with the \verb"-f" runtime system option (cf.\ Sect.~\ref{sec:running}).
+  \item The runtime system now uses tagged characters (similar to tagged integers) by default. This avoids allocation for characters with codes above 255 (decimal).
+  \item Avoid many name conflicts when interfacing with foreign C code.
+  \item Many portability fixes to allow compilation on Windows with MinGW.
+  \end{itemize}
+\paragraph{Foreign Function Interface}
+  \begin{itemize}
+  \item New non-standard calling convention \texttt{rawcall} (cf.\ Sect.~\ref{sec:ext-ffi}).
+  \end{itemize}
+\paragraph{Noteworthy Bug Fixes}
+  \begin{itemize}
+  \item The compiler no longer fails with an internal error in function \verb"constrKind" when importing a module whose interface contains types $T_{1}$ and $T_{2}$ whose names differ only by their module qualifiers.
+  \item The compiler no longer fails with a non-exhaustive match when reporting case mode warnings for a program with explicit type signatures.
+  \item Setting the initial buffering mode for the standard input and output channels with the \verb"-b" runtime system option (cf.\ Sect.~\ref{sec:running}) now works.
+  \item The compiler no longer infers too general types for some functions in mutually recursive binding groups involving pattern declarations.
+  \item The parser no longer rejects patterns of the form $(\emph{op})\,t_{1}\dots t_{n}$ when \emph{op} is a qualified operator, e.g., \verb"(Assoc.:=) x y".
+  \end{itemize}
+
 \subsection*{Release 0.9.10 (May 10\textsuperscript{th}, 2006)}
 \paragraph{Build Environment}
   \begin{itemize}

@@ -15,7 +15,7 @@
 
 <title> Münster Curry User's Guide</title>
  
-<h1 align="center">Münster Curry <br />User's Guide <br /><font size="+0">Release 0.9.10</font> </h1>
+<h1 align="center">Münster Curry <br />User's Guide <br /><font size="+0">Release 0.9.11</font> </h1>
 
 <h3 align="center">Wolfgang Lux </h3>
 
@@ -35,8 +35,14 @@
 >2.2.1&nbsp; Porting to a New Architecture</a><br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc2.2.2"
 >2.2.2&nbsp; Building the Documentation</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc2.2.3"
+>2.2.3&nbsp; Building universal libraries and programs on Mac OS X</a><br />
 &nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc2.3"
 >2.3&nbsp; Installation on Microsoft Windows</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc2.3.1"
+>2.3.1&nbsp; CygWin</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc2.3.2"
+>2.3.2&nbsp; MinGW</a><br />
 <a href="#tth_sEc3"
 >3&nbsp; Using the Compiler</a><br />
 &nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc3.1"
@@ -205,7 +211,7 @@
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc8.1.4"
 >8.1.4&nbsp; Partial Applications in Equality and Disequality Constraints</a><br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc8.1.5"
->8.1.5&nbsp; Local Fixity Declarations</a><br />
+>8.1.5&nbsp; Fixity Declarations</a><br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc8.1.6"
 >8.1.6&nbsp; Lazy Patterns</a><br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc8.1.7"
@@ -217,13 +223,17 @@
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc8.1.10"
 >8.1.10&nbsp; Constructor Operators</a><br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc8.1.11"
->8.1.11&nbsp; Generalized Function Left-Hand Sides</a><br />
+>8.1.11&nbsp; No Automatic Eta-expansion of Function Definitions</a><br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc8.1.12"
->8.1.12&nbsp; Mutually Recursive Variable Bindings</a><br />
+>8.1.12&nbsp; Generalized Function Left-Hand Sides</a><br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc8.1.13"
->8.1.13&nbsp; Extended Import/Export Specifications</a><br />
+>8.1.13&nbsp; Polymorphic Generalization of Let-Bound Variables</a><br />
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc8.1.14"
->8.1.14&nbsp; Foreign Function Interface</a><br />
+>8.1.14&nbsp; Mutually Recursive Variable Bindings</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc8.1.15"
+>8.1.15&nbsp; Extended Import/Export Specifications</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc8.1.16"
+>8.1.16&nbsp; Foreign Function Interface</a><br />
 &nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc8.2"
 >8.2&nbsp; Limitiations and Incompatibilities</a><br />
 &nbsp;&nbsp;&nbsp;&nbsp;<a href="#tth_sEc8.3"
@@ -232,6 +242,13 @@
 >9&nbsp; Common Problems and Solutions</a><br />
 <a href="#tth_sEc10"
 >10&nbsp; Release History</a><br />
+
+
+
+
+
+
+
 
 
 
@@ -277,21 +294,18 @@ Source and binary distributions as well as further information can be found at <
      <h3><a name="tth_sEc2.1">
 2.1</a>&nbsp;&nbsp;Binary Distribution</h3><a name="sec:binary">
 </a>
-Precompiled binary distributions are available for Linux (i386), Mac OS X, and eventually other systems. After unpacking the archive, change into the directory corresponding to your platform and run the configure script in that directory. You can then use the scripts <tt>cyc</tt>, <tt>cymake</tt>, and <tt>cyi</tt> from the <tt>bin</tt> directory (e.g., by setting up soft links from a directory which is included in <tt>$PATH</tt>) or install the compiler with <tt>make install</tt>. It is possible to uninstall the compiler with the command <tt>make uninstall</tt>. By default, the compiler binaries are installed in the directory <tt>/usr/local/bin</tt>, interface files, header files, and libraries in <tt>/usr/local/lib/curry</tt>, and manual pages in <tt>/usr/local/man/man1</tt>.
-
-<div class="p"><!----></div>
-It is recommended that you uninstall a previous release of the Münster Curry compiler before installing a new version in the same directory. You can use <tt>make uninstall</tt> from the unpacked and configured binary distribution for that purpose. This command will correctly remove older releases of the compiler.
+Precompiled binary distributions are available for Linux (i386), Mac OS X, and eventually other systems. After unpacking the archive, change into the directory corresponding to your platform and run the configure script in that directory. You can then use the scripts<a href="#tthFtNtAAC" name="tthFrefAAC"><sup>2</sup></a> <tt>cyc</tt>, <tt>cymake</tt>, and <tt>cyi</tt> from the <tt>bin</tt> directory (e.g., by setting up soft links from a directory which is included in <tt>$PATH</tt>) or install the compiler with <tt>make install</tt>. It is possible to uninstall the compiler with the command <tt>make uninstall</tt>. By default, the compiler binaries are installed in the directory <tt>/usr/local/bin</tt>, interface files, header files, and libraries in <tt>/usr/local/lib/curry-0.9.11</tt>, and manual pages in <tt>/usr/local/man/man1</tt>.
 
 <div class="p"><!----></div>
 The configure script is a standard Gnu configure script that understands the following options:
 
 <dl compact="compact">
  <dt><b><tt>--prefix=</tt><em>prefix</em></b></dt>
-	<dd> Use <em>prefix</em> instead of <tt>/usr/local</tt> as base directory for the installation. For instance, in order to install the compiler in the directories <tt>bin</tt> and <tt>lib/curry</tt> in your home directory, you can use the command <tt>configure --prefix=$HOME</tt>.</dd>
+	<dd> Use <em>prefix</em> instead of <tt>/usr/local</tt> as base directory for the installation. For instance, in order to install the compiler in the directories <tt>bin</tt> and <tt>lib/curry-0.9.11</tt> in your home directory, you can use the command <tt>configure --prefix=$HOME</tt>.</dd>
  <dt><b><tt>--bindir=</tt><em>bindir</em></b></dt>
 	<dd> Install the compiler binaries in directory <em>bindir</em> instead of <tt>/usr/local/bin</tt>.</dd>
  <dt><b><tt>--libdir=</tt><em>libdir</em></b></dt>
-	<dd> Install the library files in directory <em>libdir</em><tt>/curry</tt> instead of <tt>/usr/local/lib/curry</tt>.</dd>
+	<dd> Install the library files in directory <em>libdir</em><tt>/curry-0.9.11</tt> instead of <tt>/usr/local/lib/curry-0.9.11</tt>.</dd>
  <dt><b><tt>--mandir=</tt><em>mandir</em></b></dt>
 	<dd> Install the manual pages in directory <em>mandir</em><tt>/man1</tt> instead of <tt>/usr/local/man/man1</tt>.</dd>
 </dl>
@@ -313,7 +327,7 @@ Compilation from the unpacked source directory is achieved with the commands
 make
 
 </pre>
-After successful compilation, you can use the scripts <tt>cyc</tt>, <tt>cymake</tt>, and <tt>cyi</tt> from the build directory (e.g., by setting up soft links from a directory which is included in <tt>$PATH</tt>) or install the compiler with the command <tt>make install</tt>. An installed compiler can be uninstalled with the command <tt>make uninstall</tt>. This is generally recommended before installing a new version of the compiler.
+After successful compilation, you can use the scripts<a href="#tthFtNtAAD" name="tthFrefAAD"><sup>3</sup></a> <tt>cyc</tt>, <tt>cymake</tt>, and <tt>cyi</tt> from the build directory (e.g., by setting up soft links from a directory which is included in <tt>$PATH</tt>) or install the compiler with the command <tt>make install</tt>. An installed compiler can be uninstalled with the command <tt>make uninstall</tt>.
 
 <div class="p"><!----></div>
 The configure script automatically determines the required software. In particular, it will check for one of the supported Haskell compilers in the path, trying <tt>ghc</tt>, <tt>hbc</tt>, and <tt>nhc98</tt> in that order. It is also possible to select a particular compiler with the <tt>--with-hc</tt> option.
@@ -323,11 +337,11 @@ The configure script understands the following options.
 
 <dl compact="compact">
  <dt><b><tt>--prefix=</tt><em>prefix</em></b></dt>
-	<dd> Use <em>prefix</em> instead of <tt>/usr/local</tt> as base directory for the installation. For instance, in order to install the compiler in the directories <tt>bin</tt> and <tt>lib/curry</tt> in your home directory, you can use the command <tt>configure --prefix=$HOME</tt>.</dd>
+	<dd> Use <em>prefix</em> instead of <tt>/usr/local</tt> as base directory for the installation. For instance, in order to install the compiler in the directories <tt>bin</tt> and <tt>lib/curry-0.9.11</tt> in your home directory, you can use the command <tt>configure --prefix=$HOME</tt>.</dd>
  <dt><b><tt>--bindir=</tt><em>bindir</em></b></dt>
 	<dd> Install the compiler binaries in directory <em>bindir</em> instead of <tt>/usr/local/bin</tt>.</dd>
  <dt><b><tt>--libdir=</tt><em>libdir</em></b></dt>
-	<dd> Install the library files in directory <em>libdir</em><tt>/curry</tt> instead of <tt>/usr/local/lib/curry</tt>.</dd>
+	<dd> Install the library files in directory <em>libdir</em><tt>/curry-0.9.11</tt> instead of <tt>/usr/local/lib/curry-0.9.11</tt>.</dd>
  <dt><b><tt>--mandir=</tt><em>mandir</em></b></dt>
 	<dd> Install the manual pages in directory <em>mandir</em><tt>/man1</tt> instead of <tt>/usr/local/man/man1</tt>.</dd>
  <dt><b><tt>--with-hc=</tt><em>hc</em></b></dt>
@@ -363,9 +377,9 @@ the expression <tt>let n free in nat n &amp; n =:= S Z</tt> is evaluated determi
 
 <div class="p"><!----></div>
 If the compiler is configured with <tt>--enable-trampoline</tt>, it uses a portable but slower implementation where a global loop (the so-called trampoline) is used for dispatching tail calls. If your Curry programs keep crashing with bus errors or segmentation faults try reconfiguring the compiler with this option. Note that <tt>--enable-trampoline</tt> is the default when using a C compiler other than Gnu C and also on Mac OS X.</dd>
- <dt><b><tt>--disable-unboxed</tt></b></dt>
-	<dd> Normally, the runtime system encodes integer values that fit into n<font face="symbol">-</font
->1 bits, where n is the number of bits in a machine word, in pointers rather than allocating a node in the heap for them. This improves efficiency mostly due to the avoided allocations, but makes pattern matching and integer operations slightly more complex. When the system is configured with <tt>--disable-unboxed</tt> all integer numbers are allocated in the heap. This option is useful only for measuring the performance gain of the default configuration and should not be used otherwise.</dd>
+ <dt><b><tt>--disable-pointer-tags</tt></b></dt>
+	<dd> Normally, the runtime system encodes character values and integer values that fit into n<font face="symbol">-</font
+>1 bits, where n is the number of bits in a machine word, in pointers rather than allocating a node in the heap for them. This improves efficiency mostly due to avoiding allocation, but makes pattern matching and character and integer operations slightly more complex. When the system is configured with <tt>--disable-pointer-tags</tt>, all characters and integer numbers are allocated in the heap. This option is useful only for measuring the performance gain of the default configuration and is not recommended otherwise.</dd>
  <dt><b><tt>--disable-mprotect</tt></b></dt>
 	<dd> In order to detect errors in the two-space copying garbage collector early, the runtime system makes the inactive semi-space of the heap inaccessible using the <tt>mprotect</tt>(2) system call. This requires that <tt>mprotect</tt> is able to protect individual memory pages, which should be the case on most operating systems. The configure script checks only for the availability of the <tt>mprotect</tt> call, but does not check whether it actually works. On systems where <tt>mprotect</tt> exists, but is not able to protect individual pages, its use can be disabled by passing the <tt>--disable-mprotect</tt> option to <tt>configure</tt>.</dd>
  <dt><b><tt>--enable-cam2c</tt></b></dt>
@@ -381,7 +395,7 @@ If the compiler is configured with <tt>--enable-trampoline</tt>, it uses a porta
 The Münster Curry compiler was designed to be as portable as possible and should work on systems where an ANSI C compiler and a POSIX compatible environment are available. It has been tested on different 32-bit and 64-bit architectures, and should work on all 32-bit and 64-bit systems where the size of a C <tt>long</tt> is equal to that of a pointer.
 
 <div class="p"><!----></div>
-In order to generate efficient code, the Münster Curry compiler uses some Gnu C extensions which work on a lot of architectures, but are not strictly portable. In particular, the default code generation model is incompatible with position independent code on most architectures. On systems where position independent code is the default - e.g., Apple's Mac OS X and IBM's AIX - and eventually on other systems, the compiler may have to be configured with the <tt>--enable-trampoline</tt> option in order to produce working executables.<a href="#tthFtNtAAC" name="tthFrefAAC"><sup>2</sup></a>
+In order to generate efficient code, the Münster Curry compiler uses some Gnu C extensions which work on a lot of architectures, but are not strictly portable. In particular, the default code generation model is incompatible with position independent code on most architectures. On systems where position independent code is the default - e.g., Apple's Mac OS X and IBM's AIX - and eventually on other systems, the compiler may have to be configured with the <tt>--enable-trampoline</tt> option in order to produce working executables.<a href="#tthFtNtAAE" name="tthFrefAAE"><sup>4</sup></a>
 
 <div class="p"><!----></div>
 In order to test the compiler on an unsupported architecture, you can use the test suites in <a href="http://danae.uni-muenster.de/~lux/curry/examples.tar.gz"><tt>http://danae.uni-muenster.de/~lux/curry/examples.tar.gz</tt></a> and <a href="http://danae.uni-muenster.de/~lux/curry/more-examples.tar.gz"><tt>http://danae.uni-muenster.de/~lux/curry/more-examples.tar.gz</tt></a>. After unpacking the archives, execute <tt>make test CYC=</tt><em>path-to-cyc</em> for both of them. This should report <tt>All tests completed successfully</tt> at the end. In that case, you can ignore the error messages produced while running the tests. Otherwise, send a bug report to <a href="mailto:wlux@uni-muenster.de">wlux@uni-muenster.de</a>.
@@ -390,16 +404,36 @@ In order to test the compiler on an unsupported architecture, you can use the te
       <h4><a name="tth_sEc2.2.2">
 2.2.2</a>&nbsp;&nbsp;Building the Documentation</h4><a name="sec:source-documentation">
 </a>
-The internal documentation of the Münster Curry compiler, which describes the compiler and runtime system implementation, can be built from the build directory by invoking either <tt>make curry.dvi</tt> or <tt>make curry.pdf</tt> depending on the format you prefer. These targets require a working <span class="roman">L</span><sup><span class="roman">A</span></sup><span class="roman">T</span><sub><span class="roman">E</span></sub><span class="roman">X</span> installation (which must include <tt>pdflatex</tt> in order to build <tt>curry.pdf</tt>) and in addition <tt>noweb.sty</tt> from Norman Ramsey's noweb literate programming tool<a href="#tthFtNtAAD" name="tthFrefAAD"><sup>3</sup></a>.
+The internal documentation of the Münster Curry compiler, which describes the compiler and runtime system implementation, can be built from the build directory by invoking either <tt>make curry.dvi</tt> or <tt>make curry.pdf</tt> depending on the format you prefer. These targets require a working <span class="roman">L</span><sup><span class="roman">A</span></sup><span class="roman">T</span><sub><span class="roman">E</span></sub><span class="roman">X</span> installation (which must include <tt>pdflatex</tt> in order to build <tt>curry.pdf</tt>) and in addition <tt>noweb.sty</tt> from Norman Ramsey's noweb literate programming tool<a href="#tthFtNtAAF" name="tthFrefAAF"><sup>5</sup></a>.
 
 <div class="p"><!----></div>
 The source distribution includes pre-built <span class="roman">T</span><sub><span class="roman">E</span></sub><span class="roman">X</span> sources for the runtime system, which were created with noweb version 2.10c. These files may cause errors when used together with a <tt>noweb.sty</tt> from an earlier noweb release. In that case you have two options. Either upgrade noweb from a CTAN mirror or remove all <tt>.tex</tt> files except for <tt>runtime.tex</tt> from the runtime directory in the source tree. This is achieved best by changing into the runtime directory in your build(!) directory and invoking <tt>make maintainerclean</tt> there. Note that this will also remove the <tt>.h</tt> and <tt>.c</tt> files in the runtime directory and cause them to be rebuilt with your local noweb installation when the runtime system is built with <tt>make</tt> the next time.
 
 <div class="p"><!----></div>
+On Mac OS X, if you have <tt>TeXShop</tt><a href="#tthFtNtAAG" name="tthFrefAAG"><sup>6</sup></a> installed, you can use it in order to typeset the documentation by using <tt>make TeXShop</tt> instead of <tt>make curry.pdf</tt>. However, in contrast to the standard targets, the <tt>TeXShop</tt> target does not yet take care of invoking <tt>bibtex</tt> when necessary or typesetting the document once again if the cross references were updated.
+
+<div class="p"><!----></div>
+      <h4><a name="tth_sEc2.2.3">
+2.2.3</a>&nbsp;&nbsp;Building universal libraries and programs on Mac OS X</h4><a name="sec:source-universal">
+</a>
+It is easily possible to build the Münster Curry compiler with universal libraries that can be used on both Intel and PowerPC based Macintosh computers by passing appropriate <tt>-arch</tt> options to the C compiler either during configuration or while building the compiler. For instance, the command
+
+<pre>
+  ./configure CFLAGS='-arch i386 -arch x86_64 -arch ppc -g -O2'
+
+</pre>
+will configure the Münster Curry compiler such that it can be used to link native executables on Intel based machines in 32-bit and 64-bit modes as well as on 32-bit PowerPC machines. It is also possible to build universal programs by specifying the appropriate <tt>-arch</tt> options during the link step (see Sect.&nbsp;<a href="#sec:overall">3.1</a>).
+
+<div class="p"><!----></div>
      <h3><a name="tth_sEc2.3">
 2.3</a>&nbsp;&nbsp;Installation on Microsoft Windows</h3><a name="sec:ins-windows">
 </a>
-The Münster Curry compiler can be built on Windows systems with CygWin - provided the development packages (make, gcc) are installed - and a working Haskell compiler. Currently, this appears to work only for the native Win32 binaries of ghc. The following installation instructions are derived from notes kindly provided by Diego Berrueta.
+The Münster Curry compiler can be built on Windows systems with CygWin as well as with MinGW.
+
+<div class="p"><!----></div>
+      <h4><a name="tth_sEc2.3.1">
+2.3.1</a>&nbsp;&nbsp;CygWin</h4>
+In order to build the Münster Curry compiler with CygWin, the development packages (make, gcc) and a working Haskell compiler are required. Currently, this appears to work only for the native Win32 binaries of ghc. The installation instructions below are derived from notes kindly provided by Diego Berrueta.
 
 <div class="p"><!----></div>
 Note: In the following, <tt>&lt;CYGWIN&gt;</tt> represents the directory where CygWin is installed.
@@ -411,7 +445,7 @@ Note: In the following, <tt>&lt;CYGWIN&gt;</tt> represents the directory where C
 
 <li> Add <tt>/usr/local/ghc/bin</tt> to the path. Make sure that the executable is found by typing <tt>ghc -v</tt> in the CygWin console. This should print out a long list configuration and package information for ghc.<br /><br /></li>
 
-<li> Unpack the sources of the Münster Curry compiler in some convenient place and change into the <tt>curry-0.9.10</tt> directory.<br /><br /></li>
+<li> Unpack the sources of the Münster Curry compiler in some convenient place and change into the <tt>curry-0.9.11</tt> directory.<br /><br /></li>
 
 <li> Configure, compile, and install the compiler:
 
@@ -424,6 +458,19 @@ make install
 
 <li> Ready to test. Make sure that <tt>/usr/local/bin</tt> is in your <tt>PATH</tt>.<br /><br /></li>
 </ol>
+
+<div class="p"><!----></div>
+      <h4><a name="tth_sEc2.3.2">
+2.3.2</a>&nbsp;&nbsp;MinGW</h4>
+In order to build the Münster Curry compiler with MinGW, a minimal development environment (gcc-core, binutils, mingw-runtime, and win32-api) is needed. In addition, the MSYS shell must be installed and a working Haskell compiler is required. The compiler can be built with the usual commands
+
+<pre>
+./configure
+make
+make install
+
+</pre>
+The last step may be omitted and the compiler can be used from its build directory, too. Note that at present, the networking related functions from modules <tt>IOExts</tt> and <tt>Socket</tt> do not work with MinGW.
 
 <div class="p"><!----></div>
  <h2><a name="tth_sEc3">
@@ -455,6 +502,8 @@ The following options control the general processing of source files.
 <dl compact="compact">
  <dt><b>-n</b></dt>
 	<dd> Do not execute any command, but display each command that normally would be executed.</dd>
+ <dt><b>-q</b></dt>
+	<dd> This option has no effect.</dd>
  <dt><b>-v</b></dt>
 	<dd> Display each command before it is executed by <tt>cyc</tt>.</dd>
  <dt><b>-C</b></dt>
@@ -468,13 +517,15 @@ The following options control the general processing of source files.
 
 <div class="p"><!----></div>
 If <tt>-o</tt> is not specified, the default is to put an executable file in <tt>a.out</tt>, the object file for <em>source.suffix</em> in <em>source</em><tt>.o</tt>, its assembler file in <em>source</em><tt>.s</tt>, and its C file in <em>source</em><tt>.c</tt>.</dd>
+ <dt><b>-arch <em>arch</em></b></dt>
+	<dd> Mac OS X: Compile for the specified target architecture <em>arch</em>. Multiple options work, and direct the compiler to produce "universal" binaries. Using this option on other systems is likely to produce a C compiler error.</dd>
 </dl>
 
 <div class="p"><!----></div>
      <h3><a name="tth_sEc3.2">
 3.2</a>&nbsp;&nbsp;Compiling Curry Modules</h3><a name="sec:compiling">
 </a>
-The names of Curry source files must end with <tt>.curry</tt> or <tt>.lcurry</tt>. The latter are taken to contain literate Curry source and are deliterated first. All Curry source files are compiled into C code. In addition, for every source file <em>file</em><tt>.curry</tt> and <em>file</em><tt>.lcurry</tt>, respectively, the compiler creates a file <em>file</em><tt>.icurry</tt> containing the module's interface. The compiler uses module interfaces when processing import declarations in a source module. In order for the compiler to find the interfaces of imported modules, the name of the source file should agree with its module name. Hierarchical module names of the form <tt>A.B.C</tt> are mapped onto the filesystem as in Java, i.e., the compiler expects to find the interface of this module in file <tt>C.icurry</tt> in directory <tt>A/B</tt> relative to the directory where the compiler was invoked or to one of the directories specifying the import search path (see also Sect.&nbsp;<a href="#sec:hierarchical">5.2</a>).
+The names of Curry source files must end with <tt>.curry</tt> or <tt>.lcurry</tt>. The latter are taken to contain literate Curry source and are deliterated first. All Curry source files are compiled into C code. In addition, for every source file <em>file</em><tt>.curry</tt> and <em>file</em><tt>.lcurry</tt>, respectively, the compiler creates a file <em>file</em><tt>.icurry</tt> containing the module's interface. The compiler uses module interfaces when processing import declarations in a source module. In order for the compiler to find the interfaces of imported modules, the name of the source file should agree with its module name. Hierarchical module names of the form <tt>A.B.C</tt> are mapped onto the filesystem as in Java, i.e., the compiler expects to find the interface of this module in file <tt>C.icurry</tt> in directory <tt>A/B</tt> relative to the directory where the compiler was invoked or to one of the directories specifying the import search path (see also Sect.&nbsp;<a href="#sec:hierarchical">5.3</a>).
 
 <div class="p"><!----></div>
 The following options control the compilation of Curry source into C code.
@@ -490,7 +541,16 @@ Note that code compiled with this option is incompatible with code compiled with
  <dt><b>--trusted</b></dt>
 	<dd> This flag has an effect only in conjunction with one of previous options. It tells that debugger that it can trust all functions from a module compiled with this flag. The debugger will not ask questions about such functions.</dd>
  <dt><b>-i<em>dir</em></b></dt>
-	<dd> Add directory <em>dir</em> to the list of paths used to locate interface files. By default, the compiler searches for interface files in the current directory and in its standard library directory (usually <tt>/usr/local/lib/curry</tt>).</dd>
+	<dd> Add directory <em>dir</em> to the list of paths used to locate interface files. By default, the compiler searches for interface files in the current directory and in its standard library directory (usually <tt>/usr/local/lib/curry-0.9.11</tt>).
+
+<div class="p"><!----></div>
+The directory <em>dir</em> is also added to the list of paths used to locate header files, as if <tt>-I</tt><em>dir</em> was present on the command line.</dd>
+ <dt><b>-P<em>dir</em></b></dt>
+	<dd> Add directory <em>dir</em> to the list of paths used to locate interface files. By default, the compiler searches for interface files in the current directory and in its standard library directory (usually <tt>/usr/local/lib/curry-0.9.11</tt>) .
+
+<div class="p"><!----></div>
+The directory <em>dir</em> is also added to the lists of paths used to locate header and library
+files, respectively, as if <tt>-I</tt><em>dir</em> and <tt>-L</tt><em>dir</em> were present on the command line.</dd>
  <dt><b>-Whaskell</b></dt>
 	<dd></dd>
  <dt><b>-Wprolog</b></dt>
@@ -532,13 +592,17 @@ The following list describes only the most common options understood by <tt>cyc<
  <dt><b>-U<em>name</em></b></dt>
 	<dd> Cancel any previous definition of <em>name</em>, either built in or provided with a <tt>-D</tt> definition.</dd>
  <dt><b>-I<em>dir</em></b></dt>
-	<dd> Add directory <em>dir</em> to the list of paths used to locate header files. The standard library directory (usually <tt>/usr/local/lib/curry</tt>) is always included in this list.</dd>
+	<dd> Add directory <em>dir</em> to the list of paths used to locate header files. The standard library directory (usually <tt>/usr/local/lib/curry-0.9.11</tt>) is always included in this list.</dd>
+ <dt><b>-F<em>dir</em></b></dt>
+	<dd> Mac OS X: Add the framework directory <em>dir</em> to the list of paths used to locate header files. Using this option on other systems is likely to produce a C compiler error.</dd>
  <dt><b>-O</b></dt>
 	<dd> equivalent to <tt>-O1</tt></dd>
  <dt><b>-O<em>level</em></b></dt>
 	<dd> Controls optimization of the compiled code. <tt>-O0</tt> disables all optimizations. Note that <tt>-O3</tt> and higher levels will fail to produce valid code for Curry modules on many architectures.</dd>
  <dt><b>--ccopt <em>opt</em></b></dt>
 	<dd> Passes the option <em>opt</em> to the C compiler without interpretation. For instance, in order to include debugging symbols in the compiled C code, invoke the compiler with <tt>--ccopt -g</tt>.</dd>
+ <dt><b>--ccopts <em>opts</em></b></dt>
+	<dd> Passes each option from the comma separated list <em>opts</em> to the C compiler without further interpretation.</dd>
 </dl>
 
 <div class="p"><!----></div>
@@ -558,23 +622,33 @@ The following options are relevant while linking a program. The compiler creates
 	<dd> Use <em>size</em> bytes for the stack of the Curry program. The abbreviations <em>size</em><tt>k</tt> and <em>size</em><tt>M</tt> can be used for specifying the size in kBytes and MBytes, respectively. The default is to use a 512&nbsp;kByte stack.</dd>
  <dt><b>-t<em>size</em></b></dt>
 	<dd> Use <em>size</em> bytes for the trail stack of the Curry program. The abbreviations <em>size</em><tt>k</tt> and <em>size</em><tt>M</tt> can be used for specifying the size in kBytes and MBytes, respectively. The default is to use a 512&nbsp;kByte trail stack.</dd>
+ <dt><b>-f</b></dt>
+	<dd> Print all failures during execution of a non-deterministic goal. If given multiple times, print also failures inside encapsulated search.</dd>
  <dt><b>-p</b></dt>
 	<dd> Print cumulated execution times and memory usage statistics at the end of the run. If specified more than once, also print memory statistics at each garbage collection.</dd>
  <dt><b>-e<em>goal</em></b></dt>
-	<dd> Evaluate <em>goal</em> instead of <tt>main</tt>. See Sect.&nbsp;<a href="#sec:goals">6.1</a> for a description of the goal syntax. The <em>goal</em> is evaluated with respect to the Curry module specified explicitly with the <tt>-M</tt> option, the last module occurring on the command line, or the <tt>Prelude</tt> otherwise.</dd>
+	<dd> Evaluate <em>goal</em> instead of <tt>main</tt>. See Sect.&nbsp;<a href="#sec:goals">6.1</a> for a description of the goal syntax. The <em>goal</em> is evaluated with respect to the modules specified with <tt>-M</tt> options and the Curry source files appearing on the command line. All
+entities exported from the <tt>Prelude</tt> and the Curry source file that appears last on the command line or the last module specified with a <tt>-M</tt> option, if there are no source file arguments, are in scope with unqualified and qualified names. The exported entities of all other
+modules are in scope with qualified names only.</dd>
  <dt><b>-T<em>goal</em></b></dt>
-	<dd> Compute the type of <em>goal</em>. See Sect.&nbsp;<a href="#sec:goals">6.1</a> for a description of the goal syntax. The <em>goal</em>'s type is computed with respect to the Curry module specified explicitly with the <tt>-M</tt> option, the last module occurring on the command line, or the <tt>Prelude</tt> otherwise.</dd>
+	<dd> Compute the type of <em>goal</em>. See Sect.&nbsp;<a href="#sec:goals">6.1</a> for a description of the goal syntax. The <em>goal</em>'s type is computed with respect to the modules specified with <tt>-M</tt> options and the Curry source files appearing on the command line. All
+entities exported from the <tt>Prelude</tt> and the Curry source file that appears last on the command line or the last module specified with a <tt>-M</tt> option, if there are no source file arguments, are in scope with unqualified and qualified names. The exported entities of all other
+modules are in scope with qualified names only.</dd>
  <dt><b>-M<em>module</em></b></dt>
-	<dd> Use <em>module</em> as main module of the program. An explicit goal specified with the <tt>-e</tt> option is evaluated in the context of <em>module</em>. By default, the compiler assumes that the last Curry source file appearing on the command line contains the main module of the program. It may be necessary to specify the main module explicitly when there are no source file arguments.
+	<dd> Brings all entities exported from <em>module</em> into scope with their qualified names for a goal specified with the <tt>-e</tt> and <tt>-T</tt> options. By default, only the entities exported from the <tt>Prelude</tt> and the Curry source files occurring on the command line are in scope. The entities exported from the <tt>Prelude</tt> and the last source file appearing on the command line or specified with the last <tt>-M</tt> option, if there are no source file arguments, are brought into scope with their unqualified names, too.
 
 <div class="p"><!----></div>
-  <em>Module</em> is either the name of a source file (ending in <tt>.lcurry</tt> or <tt>.curry</tt>) or the name of a module whose source can be located in the current directory.</dd>
+  <em>Module</em> is either the name of a source file (ending in  <tt>.lcurry</tt> or <tt>.curry</tt>), the name of an interface file (ending in <tt>.icurry</tt>), or the name of a module whose interface can be located in the interface search path.</dd>
  <dt><b>-L<em>dir</em></b></dt>
-	<dd> Add directory <em>dir</em> to the list of paths used to locate libraries specified with <tt>-l</tt> options. The standard library directory (in the standard configuration: <tt>/usr/local/lib/curry</tt>) is always included in this list.</dd>
+	<dd> Add directory <em>dir</em> to the list of paths used to locate libraries specified with <tt>-l</tt> options. The standard library directory (in the standard configuration: <tt>/usr/local/lib/curry-0.9.11</tt>) is always included in this list.</dd>
  <dt><b>-l<em>lib</em></b></dt>
 	<dd> Search the library named <em>lib</em> when linking.</dd>
+ <dt><b>-framework <em>name</em></b></dt>
+	<dd> Mac OS X: Link against framework <em>name</em>. Using this option on other systems is likely to produce a C compiler error.</dd>
  <dt><b>--ldopt <em>opt</em></b></dt>
 	<dd> Passes the option <em>opt</em> to the C compiler without interpretation. In contrast to <tt>--ccopt</tt> (see Sect.&nbsp;<a href="#sec:compiling-c">3.3</a>), <em>opt</em> is used only during the link phase.</dd>
+ <dt><b>--ldopts <em>opts</em></b></dt>
+	<dd> Passes each option from the comma separated list <em>opts</em> to the C compiler without further interpretation. As with <tt>--ldopt</tt>, <em>opts</em> are used only during the link phase.</dd>
 </dl>
 
 <div class="p"><!----></div>
@@ -583,7 +657,7 @@ The following options are relevant while linking a program. The compiler creates
 
 <dl compact="compact">
  <dt><b>CURRY_PATH</b></dt>
-	<dd> The environment variable <tt>CURRY_PATH</tt> is used to locate the compiler executables. The default value is <tt>/usr/local/lib/curry</tt>.</dd>
+	<dd> The environment variable <tt>CURRY_PATH</tt> is used to locate the compiler executables. The default value is <tt>/usr/local/lib/curry-0.9.11</tt>.</dd>
  <dt><b>CURRY_IMPORT_PATH</b></dt>
 	<dd></dd>
  <dt><b>CURRY_INCLUDE_PATH</b></dt>
@@ -656,6 +730,8 @@ The Curry runtime system understands the following options:
 	<dd> Use <em>n</em> bytes for the stack in this run of the program. The abbreviations <em>n</em><tt>k</tt> and <em>n</em><tt>M</tt> can be used for specifying the size in kBytes and MBytes, respectively.</dd>
  <dt><b>-t <em>n</em></b></dt>
 	<dd> Use <em>n</em> bytes for the trail stack in this run of the program. The abbreviations <em>n</em><tt>k</tt> and <em>n</em><tt>M</tt> can be used for specifying the size in kBytes and MBytes, respectively.</dd>
+ <dt><b>-f</b></dt>
+	<dd> Print all failures during execution of a non-deterministic goal. If given multiple times, print also failures inside encapsulated search.</dd>
  <dt><b>-p</b></dt>
 	<dd> Print cumulated execution times and memory usage statistics at the end of the run. If specified more than once, also print memory statistics at each garbage collection.</dd>
  <dt><b>-d</b></dt>
@@ -698,7 +774,7 @@ When debugging larger programs, it is very inconvenient to answer questions abou
 A whole module can be trusted by invoking with the compiler with the <tt>--trusted</tt> option in addition to <tt>--debug</tt>.  Individual functions can be trusted by means of trust annotations in the source code.
 
 <div class="p"><!----></div>
-Lexically, trust annotations appear as nested comments using <tt>{-#</tt> and <tt>#-}</tt> as delimiters<a href="#tthFtNtAAE" name="tthFrefAAE"><sup>4</sup></a>. Syntactically, trust annotations are declarations that can appear where a function declaration is allowed. To this end, the Curry grammar is extended as follows (cf. appendix C.3 in&nbsp;[<a href="#Hanus06:Report" name="CITEHanus06:Report">Han06</a>]).
+Lexically, trust annotations appear as nested comments using <tt>{-#</tt> and <tt>#-}</tt> as delimiters<a href="#tthFtNtAAH" name="tthFrefAAH"><sup>7</sup></a>. Syntactically, trust annotations are declarations that can appear where a function declaration is allowed. To this end, the Curry grammar is extended as follows (cf. appendix C.3 in&nbsp;[<a href="#Hanus06:Report" name="CITEHanus06:Report">Han06</a>]).
 
 <br clear="all" /><table border="0" cellspacing="0" cellpadding="0" width="100%">
 <table border="0" cellspacing="0" cellpadding="0">
@@ -752,6 +828,8 @@ An explicit trust annotation <tt>{-# TRUST</tt> f<sub>1</sub>, ..., f<sub>n</sub
 	<dd> Quiet mode. Do not print commands before executing them.</dd>
  <dt><b>-M</b></dt>
 	<dd> Output a Makefile compatible dependency list on the standard output.</dd>
+ <dt><b>--find</b></dt>
+	<dd> For each command line target t, <tt>cymake</tt> will print a line of the form t<tt>: </tt>f, where f is the name of the source or interface file corresponding to t. If t is a module name, <tt>cymake</tt> will look for the source or interface file first in the current directory and then along the search path. If no file is found, f is empty.</dd>
  <dt><b>-a</b></dt>
 	<dd> Always link the executable, even if it is not out of date with respect to its object files. This is useful if only the goal to be evaluated by the program is changed.</dd>
  <dt><b>-e <em>goal</em></b></dt>
@@ -761,9 +839,17 @@ An explicit trust annotation <tt>{-# TRUST</tt> f<sub>1</sub>, ..., f<sub>n</sub
  <dt><b>--debug</b></dt>
 	<dd> Compile the program for use with the debugger. As object files compiled with <tt>--debug</tt> cannot be linked with object files compiled without <tt>--debug</tt>, <tt>cymake</tt> uses the suffix <tt>.d.o</tt> instead of <tt>.o</tt> for object files when this option is specified.</dd>
  <dt><b>-i<em>dir</em></b></dt>
-	<dd> Add directory <em>dir</em> to the list of paths used to locate imported modules. By default, the compiler searches only the current directory for source files. Note that the current directory is always searched first.</dd>
+	<dd> Add directory <em>dir</em> to the list of paths used to locate imported modules. By default, the compiler searches only the current directory for source files. Note that the current directory is always searched first.
+
+<div class="p"><!----></div>
+  The directory <em>dir</em> is also added to the list of paths used to locate C header files, as
+if <tt>-I</tt><em>dir</em> was present on the command line.</dd>
  <dt><b>-P<em>dir</em></b></dt>
-	<dd> Add directory <em>dir</em> to the list of paths used to locate interface files for library modules. By default, the compiler searches for interface files in its standard library directory (usually <tt>/usr/local/lib/curry</tt>).
+	<dd> Add directory <em>dir</em> to the list of paths used to locate interface files for library modules. By default, the compiler searches for interface files in its standard library directory (usually <tt>/usr/local/lib/curry-0.9.11</tt>).
+
+<div class="p"><!----></div>
+  The directory <em>dir</em> is also added to the lists of paths used to locate C header files and
+libraries, respectively, as if <tt>-I</tt><em>dir</em> and <tt>-L</tt><em>dir</em> were present on the command line.
 
 <div class="p"><!----></div>
   The compiler scans the directories specified with <tt>-P</tt> before the installation directory; thus, it is possible to hide the interfaces of the standard library by using this option.</dd>
@@ -780,7 +866,7 @@ Most other flags are assumed to be compiler options and are passed to <tt>cyc</t
 
 <dl compact="compact">
  <dt><b>CURRY_PATH</b></dt>
-	<dd> The environment variable <tt>CURRY_PATH</tt> is used to locate the auxiliary executables used by <tt>cymake</tt>.  The default value is <tt>/usr/local/lib/curry</tt>.</dd>
+	<dd> The environment variable <tt>CURRY_PATH</tt> is used to locate the auxiliary executables used by <tt>cymake</tt>.  The default value is <tt>/usr/local/lib/curry-0.9.11</tt>.</dd>
  <dt><b>CURRY_IMPORT_PATH</b></dt>
 	<dd></dd>
  <dt><b>CURRY_INCLUDE_PATH</b></dt>
@@ -835,7 +921,7 @@ where the files in directory <tt>modules</tt> are part of the program and the fi
 Assuming that the files <tt>L1.curry</tt> and <tt>L2.curry</tt> define the modules <tt>L1</tt> and <tt>L2</tt>, respectively, it is possible to bring the library up to date with the command
 
 <pre>
-(cd library; cymake L[12].curry; ar rc Lib.a L[12].o; ranlib Lib.a)
+(cd library; cymake L[12].curry; ar rc libL12.a L[12].o; ranlib libL12.a)
 
 </pre>
 
@@ -843,7 +929,7 @@ Assuming that the files <tt>L1.curry</tt> and <tt>L2.curry</tt> define the modul
 In order to bring the program <tt>prog</tt> up to date when the files <tt>M1.curry</tt> and <tt>M2.curry</tt> define the modules <tt>M1</tt> and <tt>M2</tt>, respectively, the following command can be used:
 
 <pre>
-cymake -imodules -Plibrary prog library/Lib.a
+cymake -imodules -Plibrary prog -lL12
 
 </pre>
 Note that this command will not recompile the files <tt>L1.curry</tt> and <tt>L2.curry</tt> if they are newer than the corresponding object files in directory <tt>library</tt>. Nevertheless, the interface files <tt>L1.icurry</tt> and <tt>L2.icurry</tt> can cause a recompilation of <tt>prog.curry</tt>, <tt>M1.curry</tt>, and <tt>M2.curry</tt>, respectively, if these modules are out of date with respect to the interfaces.
@@ -877,7 +963,7 @@ in order to compile Curry modules. The <tt>.o.icurry</tt> rule is essential for 
      <h3><a name="tth_sEc6.1">
 6.1</a>&nbsp;&nbsp;Goals</h3><a name="sec:goals">
 </a>
-A goal is a Curry expression optionally followed by a where-clause that can be used for providing local definitions for the goal (see appendix C.3 in&nbsp;[<a href="#Hanus06:Report" name="CITEHanus06:Report">Han06</a>] for the context free syntax of Curry).
+A goal is a Curry expression optionally followed by a where-clause, which can be used for providing local definitions for the goal (see appendix C.3 in&nbsp;[<a href="#Hanus06:Report" name="CITEHanus06:Report">Han06</a>] for the context free syntax of Curry).
 
 <br clear="all" /><table border="0" cellspacing="0" cellpadding="0" width="100%">
 <table border="0" cellspacing="0" cellpadding="0">
@@ -889,12 +975,14 @@ A goal is a Curry expression optionally followed by a where-clause that can be u
 
 
 
-All free variables of the goal must be declared either in the where clause or by using a let expression as goal.
 
 <div class="p"><!----></div>
-The bindings of the free variables are displayed together with the normal form of the goal after successful evaluation unless the goal is of type <tt>IO</tt>&nbsp;t.
+All entities exported from the <tt>Prelude</tt> and the module specified in the last <tt>:load</tt>
+command are in scope with unqualified and qualified names unless they are shadowed by one of the declarations from the where-clause. Entities from modules that are imported directly or indirectly from the module specified in the last <tt>:load</tt> command are also in scope, but only with qualified names.
 
 <div class="p"><!----></div>
+All free variables of the goal must be declared either in the where-clause or by using a let expression as goal. The bindings of the free variables are displayed together with the normal form of the goal after successful evaluation unless the goal is of type <tt>IO</tt>&nbsp;t.
+
      <h3><a name="tth_sEc6.2">
 6.2</a>&nbsp;&nbsp;Commands</h3>
 At the prompt of the interactive environment, the following commands can be entered:
@@ -909,7 +997,10 @@ At the prompt of the interactive environment, the following commands can be ente
  <dt><b>:type [<em>goal</em>]</b></dt>
 	<dd> Print the type of <em>goal</em> instead of evaluating it. If <em>goal</em> is omitted, the type of the previous goal is shown.</dd>
  <dt><b>:load <em>module</em></b></dt>
-	<dd> Set the current evaluation context to <em>module</em>. This command will compile <em>module</em> and all modules it depends on. The module can be specified either by the name of its source file (ending in <tt>.lcurry</tt> or <tt>.curry</tt>) or a plain module name. <tt>cyi</tt> displays the name of the current module in its prompt.</dd>
+	<dd> Set the current evaluation context to <em>module</em>. This command will compile <em>module</em> and all modules it depends on if necessary. <em>Module</em> can be specified either by the name of its source file (ending in <tt>.lcurry</tt> or <tt>.curry</tt>) or a plain module name. In the latter case, <tt>cyi</tt> will look for a source or interface file for <em>module</em> in the current directory and the current search path as determined by the <tt>-i</tt> and <tt>-P</tt> options set with the <tt>:set</tt> command and the environment variable <tt>CURRY_IMPORT_PATH</tt>.
+
+<div class="p"><!----></div>
+  <tt>cyi</tt> displays the name of the current module in its prompt.</dd>
  <dt><b>:load</b></dt>
 	<dd> Reset the current evaluation context to the Curry prelude.</dd>
  <dt><b>:reload</b></dt>
@@ -918,6 +1009,10 @@ At the prompt of the interactive environment, the following commands can be ente
 	<dd> Recompile the current module and all imported source files.</dd>
  <dt><b>:clean</b></dt>
 	<dd> Remove all compiled files for the current module and all imported source files.</dd>
+ <dt><b>:interface <em>module</em></b></dt>
+	<dd> Display the interface of <em>module</em>. If the environment variable <tt>PAGER</tt> is set, the interface file is displayed with this command. Otherwise the interface is simply written to the standard output.</dd>
+ <dt><b>:interface</b></dt>
+	<dd> Display the interface of the current module.</dd>
  <dt><b>:edit <em>file</em></b></dt>
 	<dd> Invoke the editor for <em>file</em>. The default editor is <tt>/usr/bin/vi</tt>, but this can be changed by setting one of the environment variables <tt>VISUAL</tt> and <tt>EDITOR</tt> to your preferred editor before starting <tt>cyi</tt>.</dd>
  <dt><b>:edit</b></dt>
@@ -984,7 +1079,7 @@ Note that <tt>add</tt> deliberately contains an error, which is corrected during
 lux@localhost:~ % cyi
     _____ __ __
    / ___/ |  / _               Muenster Curry Compiler
-  / /     | / | |              Version 0.9.10, Copyright (c) 1998-2006
+  / /     | / | |              Version 0.9.11, Copyright (c) 1998-2007
  / /___  / /  | |
  \____/ /_/   |_|              Type :h for help
 
@@ -1020,6 +1115,8 @@ More solutions? [Y(es)/n(o)/a(ll)] <i>n</i>
 <a name="tth_fIg2">
 </a> <pre>
 nat&#62; <i>:d</i>
+Preparing nat.curry for debugging; this may take some time...
+/usr/local/bin/cyc --debug -c nat.curry -o nat.d.o
 
 Entering debugger...
 
@@ -2211,7 +2308,7 @@ The prefix operator <tt>-</tt> can be used for negating integer as well as float
       <h4><a name="tth_sEc8.1.2">
 8.1.2</a>&nbsp;&nbsp;Disequality Constraints</h4><a name="sec:ext-disequal">
 </a>
-The Münster Curry compiler supports disequality constraints similar to <i>TOY</i><a href="#tthFtNtAAF" name="tthFrefAAF"><sup>5</sup></a>. The constraint e<sub>1</sub>&nbsp;<tt>=/=</tt>&nbsp;e<sub>2</sub> is satisfied when e<sub>1</sub> and e<sub>2</sub> reduce to different - not necessarily finite - data terms. Disequality constraints for the free variables of a solved goal are printed together with their bindings at the end of evaluation.
+The Münster Curry compiler supports disequality constraints similar to <i>TOY</i><a href="#tthFtNtAAI" name="tthFrefAAI"><sup>8</sup></a>. The constraint e<sub>1</sub>&nbsp;<tt>=/=</tt>&nbsp;e<sub>2</sub> is satisfied when e<sub>1</sub> and e<sub>2</sub> reduce to different - not necessarily finite - data terms. Disequality constraints for the free variables of a solved goal are printed together with their bindings at the end of evaluation.
 
 <div class="p"><!----></div>
 Disequality constraints are never instantiated by the runtime system, which can lead to problems with finite domains. For instance, <tt>x =/= False</tt> is not replaced by <tt>x =:= True</tt>. The runtime system therefore does not notice that the constraint <tt>x =/= False &amp; x =/= True</tt>, where <tt>x</tt> is unbound, cannot be satisfied. This incompleteness can even lead to wrong results. For instance, given the definition
@@ -2220,7 +2317,7 @@ Disequality constraints are never instantiated by the runtime system, which can 
 f x | y =/= False &amp; y =/= True = x where y free
 
 </pre>
-the goal <tt>f "Wrong"</tt> will return the string <tt>"Wrong</tt>", even though <tt>f</tt>'s guard can never be satisfied<a href="#tthFtNtAAG" name="tthFrefAAG"><sup>6</sup></a>.
+the goal <tt>f "Wrong"</tt> will return the string <tt>"Wrong</tt>", even though <tt>f</tt>'s guard can never be satisfied<a href="#tthFtNtAAJ" name="tthFrefAAJ"><sup>9</sup></a>.
 
 <div class="p"><!----></div>
       <h4><a name="tth_sEc8.1.3">
@@ -2244,7 +2341,7 @@ The Münster Curry compiler supports existentially quantified data types as propo
 
 
 
-where <em>TypeVarID<sub>1</sub></em>, ..., <em>TypeVarID<sub>m</sub></em> are the names of the existentially quantified type variables that can be used in the argument types of the data constructor.<a href="#tthFtNtAAH" name="tthFrefAAH"><sup>7</sup></a>
+where <em>TypeVarID<sub>1</sub></em>, ..., <em>TypeVarID<sub>m</sub></em> are the names of the existentially quantified type variables that can be used in the argument types of the data constructor.<a href="#tthFtNtABA" name="tthFrefABA"><sup>10</sup></a>
 
 <div class="p"><!----></div>
 For instance, the declaration
@@ -2304,7 +2401,7 @@ let x free in x =:= Key 'a' ord
 </pre>
 
 <div class="p"><!----></div>
-A similar issue applies to the polymorphic function <tt>compare</tt>. However, since there is no apparent order between terms of different types, this operations fails with a runtime error when it is applied to arguments with existentially quantified types. This happens even if the arguments of the constructors happen to have compatible types at runtime as, for instance, in the expression <tt>C 1 `compare`  C 2</tt>. This restriction may be lifted in a future version of the compiler.
+A similar issue applies to the polymorphic function <tt>compare</tt>. However, since there is no apparent order between terms of different types, this operation simply fails when it is applied to arguments with existentially quantified types. This happens even if the arguments of the constructors happen to have compatible types at runtime as, for instance, in the expression <tt>C 1 `compare`  C 2</tt>. This restriction may be lifted in a future version of the compiler.
 
 <div class="p"><!----></div>
 
@@ -2331,7 +2428,7 @@ does not bind <tt>x</tt> to 4, but suspends. This is necessary because equality 
 
 <div class="p"><!----></div>
       <h4><a name="tth_sEc8.1.5">
-8.1.5</a>&nbsp;&nbsp;Local Fixity Declarations</h4><a name="sec:ext-fixity">
+8.1.5</a>&nbsp;&nbsp;Fixity Declarations</h4><a name="sec:ext-fixity">
 </a>
 The Münster Curry compiler accepts fixity declarations within local binding groups. Thus, it is possible to assign fixities to operators defined in such groups. In particular, this allows defining operators with associated fixities for a goal in the interactive top-level (see Sect.&nbsp;<a href="#sec:goals">6.1</a> for the syntax of goals). You can freely mix fixity and value declarations in a group. This is also true for fixity and block declarations at the module level.
 
@@ -2342,7 +2439,10 @@ For instance, you can enter the following goal at the interactive prompt:
 length xs &lt;== xs =:= [1] where xs free; infix 0 &lt;==; x &lt;== c | c = x
 
 </pre>
-Note that the operator <tt>&lt;==</tt> is also defined in the library module <tt>Success</tt> (Sect.&nbsp;<a href="#sec:lib-Success">7.5.7</a>).
+Note that the operator <tt>&lt;==</tt> is also defined in library module <tt>Success</tt> (Sect.&nbsp;<a href="#sec:lib-Success">7.5.7</a>).
+
+<div class="p"><!----></div>
+For compatibility with Haskell, the precedence level in fixity declarations may be omitted, in which case it defaults to 9. Thus, the declarations <tt>infixr 9 .</tt> and <tt>infixr .</tt> are equivalent.
 
 <div class="p"><!----></div>
       <h4><a name="tth_sEc8.1.6">
@@ -2549,7 +2649,7 @@ The Münster Curry compiler allows defining and using infix constructor operators
 data Assoc a b = a := b
 
 </pre>
-Such constructors can be used in patterns in the expected way. For instance, the following function exchanges the rôles of both arguments.
+Such constructors can be used in patterns in the expected way. For instance, the following function exchanges the roles of both arguments.
 
 <pre>
 flipAssoc (x := y) = y := x
@@ -2607,7 +2707,36 @@ The Münster Curry compiler does not impose any restrictions on the names of cons
 
 <div class="p"><!----></div>
       <h4><a name="tth_sEc8.1.11">
-8.1.11</a>&nbsp;&nbsp;Generalized Function Left-Hand Sides</h4><a name="sec:ext-curried-lhs">
+8.1.11</a>&nbsp;&nbsp;No Automatic Eta-expansion of Function Definitions</h4><a name="sec:ext-eta">
+</a>
+Similar to PAKCS version 1.8 and <i>TOY</i>, the arity of a function is determined by the number of arguments in its declaration rather than by its type as the Curry report implies. For instance, the declaration <tt>sum = foldr (+) 0</tt> defines <tt>sum</tt> as a nullary function even though it has type <tt>[Int] -&#62; Int</tt>.
+
+<div class="p"><!----></div>
+Note that <font face="symbol">h</font
+>-expansion can change the semantics of a program. Consider the two programs
+
+<center><tt>
+  
+<table>
+<tr><td>zero 0 = success </td><td>zero 0 = success </td></tr>
+<tr><td>one 1 = success </td><td>one 1 = success </td></tr>
+<tr><td>fcoin = zero </td><td>fcoin x = zero x </td></tr>
+<tr><td>fcoin = one </td><td>fcoin x = one x </td></tr>
+<tr><td>goal f | f x &amp; f y = x + y </td><td>goal f | f x &amp; f y = x + y </td></tr>
+<tr><td>&nbsp;&nbsp;&nbsp; where x,y free </td><td>&nbsp;&nbsp;&nbsp; where x,y free </td></tr></table>
+
+</tt></center>
+For the left program, <tt>goal fcoin</tt> has just two solutions, namely <tt>0</tt> and <tt>2</tt>, whereas for the right program, which is the <font face="symbol">h</font
+>-expanded version of the left program, <tt>goal fcoin</tt> has three different solutions, namely <tt>0</tt>, <tt>1</tt>, and <tt>2</tt>.
+
+<div class="p"><!----></div>
+Nevertheless, the compiler performs <font face="symbol">h</font
+>-expansion as an optimization when it can prove that the semantics of the program remains unaffected. In particular, function definitions with only a single equation and whose right hand side is a non-expansive expression (cf.&nbsp;Sect.&nbsp;<a href="#sec:poly-let">8.1.13</a>) are always <font face="symbol">h</font
+>-expanded.
+
+<div class="p"><!----></div>
+      <h4><a name="tth_sEc8.1.12">
+8.1.12</a>&nbsp;&nbsp;Generalized Function Left-Hand Sides</h4><a name="sec:ext-curried-lhs">
 </a>
 Similar to Haskell, the Münster Curry compiler allows using a curried style for the left-hand side of a function rule. This is very convenient for defining higher-order operator symbols. For instance, the curried syntax can be used in the definition of the function composition operator <tt>(.)</tt>.
 
@@ -2650,8 +2779,58 @@ The definition of <span class="roman"><i>FunLHS</i></span> in the Curry syntax i
 
 
 <div class="p"><!----></div>
-      <h4><a name="tth_sEc8.1.12">
-8.1.12</a>&nbsp;&nbsp;Mutually Recursive Variable Bindings</h4>
+      <h4><a name="tth_sEc8.1.13">
+8.1.13</a>&nbsp;&nbsp;Polymorphic Generalization of Let-Bound Variables</h4><a name="sec:poly-let">
+</a>
+The compiler implements a variant of ML's value restriction that allows polymorphic generalization of let-bound variables if the bound expression is a non-expansive expression. The class of non-expansive expressions is defined inductively as the set of expressions built from
+
+<ul>
+<li> literals,<br /><br /></li>
+
+<li> local variables,<br /><br /></li>
+
+<li> applications of a constructor with arity n to at most n non-expansive argument expressions,<br /><br /></li>
+
+<li> applications of a function or <font face="symbol">l</font
+>-expression with arity n to at most n<font face="symbol">-</font
+>1 non-expansive argument expressions, and<br /><br /></li>
+
+<li> let-expressions which comprise only function declarations and variable declarations of the form x=e where e is a non-expansive expression and whose body is also a non-expansive expression.<br /><br /></li>
+</ul>
+
+<div class="p"><!----></div>
+With this extension, the compiler accepts all of the following definitions
+
+<pre>
+f1 = (1:nil, 'a':nil) where nil = []
+f2 = [z (), z False] where z = const 0
+f3 = last (last ["Curry"])
+  where last = \xs -&#62; let y,ys free in (xs =:= ys++[y]) &amp;&#62; y
+
+</pre>
+where the types <font face="symbol">"</font
+><font face="symbol">a</font
+>. [<font face="symbol">a</font
+>], <font face="symbol">"</font
+><font face="symbol">a</font
+>. <font face="symbol">a</font
+><font face="symbol">®</font
+>[Int], and <font face="symbol">"</font
+><font face="symbol">a</font
+>. [<font face="symbol">a</font
+>]<font face="symbol">®</font
+><font face="symbol">a</font
+> are inferred for the local variables <tt>nil</tt>, <tt>z</tt>, and <tt>last</tt>, respectively. On the other hand, the definition
+
+<pre>
+f4 = (1:nil, 'a':nil) where nil = id []
+
+</pre>
+is still rejected because <tt>id []</tt> is an expansive expression and therefore <tt>nil</tt>'s type is not generalized.
+
+<div class="p"><!----></div>
+      <h4><a name="tth_sEc8.1.14">
+8.1.14</a>&nbsp;&nbsp;Mutually Recursive Variable Bindings</h4>
 The compiler allows mutually recursive variable bindings; for instance,
 
 <pre>
@@ -2674,8 +2853,8 @@ let xs = coin : xs in xs
 returns either an infinite list of 0's or an infinite list of 1's.
 
 <div class="p"><!----></div>
-      <h4><a name="tth_sEc8.1.13">
-8.1.13</a>&nbsp;&nbsp;Extended Import/Export Specifications</h4>
+      <h4><a name="tth_sEc8.1.15">
+8.1.15</a>&nbsp;&nbsp;Extended Import/Export Specifications</h4>
 As in Haskell it is possible to import or export only some of the constructors of a data type by specifying the list of visible constructors explicitly. For instance, the import declaration <tt>import Prelude(Bool(True))</tt> brings the constructor <tt>True</tt> into scope but not <tt>False</tt>.
 
 <div class="p"><!----></div>
@@ -2713,13 +2892,13 @@ The syntax is as follows
 
 
 <div class="p"><!----></div>
-      <h4><a name="tth_sEc8.1.14">
-8.1.14</a>&nbsp;&nbsp;Foreign Function Interface</h4><a name="sec:ext-ffi">
+      <h4><a name="tth_sEc8.1.16">
+8.1.16</a>&nbsp;&nbsp;Foreign Function Interface</h4><a name="sec:ext-ffi">
 </a>
-The Münster Curry compiler supports a subset of the Haskell foreign function interface&nbsp;[<a href="#Chakravarty03:FFI" name="CITEChakravarty03:FFI">Cha03</a>]. The current implementation allows only importing foreign functions and supports only calling conventions <tt>primitive</tt> and <tt>ccall</tt>. The calling convention <tt>primitive</tt> is a non-portable addition of the Münster Curry compiler and must be used only for C functions that use the calling conventions of the compiler's runtime system. Argument types of functions using the <tt>ccall</tt> calling convention are restricted to the types <tt>Bool</tt>, <tt>Char</tt>, <tt>Int</tt>, <tt>Float</tt>, <tt>Ptr</tt>&nbsp;t, <tt>FunPtr</tt>&nbsp;t, and <tt>StablePtr</tt>&nbsp;t in this release where t is an arbitrary type. In addition to these, types of the form <tt>IO</tt>&nbsp;t can be used as result types, where t must be either <tt>()</tt> or a valid argument type.
+The Münster Curry compiler supports a subset of the Haskell foreign function interface&nbsp;[<a href="#Chakravarty03:FFI" name="CITEChakravarty03:FFI">Cha03</a>]. The current implementation allows only importing foreign functions and supports the calling conventions <tt>primitive</tt>, <tt>ccall</tt>, and <tt>rawcall</tt>. The calling convention <tt>primitive</tt> is a non-portable addition of the Münster Curry compiler and must be used only for C functions that use the calling conventions of the compiler's runtime system. Argument types of functions using the <tt>ccall</tt> calling convention are restricted to the types <tt>Bool</tt>, <tt>Char</tt>, <tt>Int</tt>, <tt>Float</tt>, <tt>Ptr</tt>&nbsp;t, <tt>FunPtr</tt>&nbsp;t, and <tt>StablePtr</tt>&nbsp;t in this release where t is an arbitrary type. In addition to these, types of the form <tt>IO</tt>&nbsp;t can be used as result types, where t must be either <tt>()</tt> or a valid argument type. The non-standard calling convention <tt>rawcall</tt> is similar to <tt>ccall</tt> except that no marshaling takes place. Thus all arguments of the foreign function must have type <tt>Node *</tt> and its result type must be either <tt>Node *</tt> or <tt>void</tt>.
 
 <div class="p"><!----></div>
-The syntax of foreign function declarations is<a href="#tthFtNtAAI" name="tthFrefAAI"><sup>8</sup></a>
+The syntax of foreign function declarations is<a href="#tthFtNtABB" name="tthFrefABB"><sup>11</sup></a>
 
 <br clear="all" /><table border="0" cellspacing="0" cellpadding="0" width="100%">
 <table border="0" cellspacing="0" cellpadding="0">
@@ -2741,7 +2920,7 @@ The syntax of foreign function declarations is<a href="#tthFtNtAAI" name="tthFre
 <table border="0" cellspacing="0" cellpadding="0"><tr><td nowrap="nowrap" align="left">
 :: = </td></tr></table></td><td nowrap="nowrap" align="left">
 <table border="0" cellspacing="0" cellpadding="0"><tr><td nowrap="nowrap" align="left">
-<tt>primitive</tt>  | <tt>ccall</tt> </td></tr></table></td><td width="50%"></td></tr>
+<tt>primitive</tt>  | <tt>ccall</tt>  | <tt>rawcall</tt> </td></tr></table></td><td width="50%"></td></tr>
  <tr><td width="50%"></td><td nowrap="nowrap" align="right" colspan="1"><table border="0" cellspacing="0" cellpadding="0"><tr><td nowrap="nowrap" align="left">
 <i>Safety</i> </td></tr></table></td><td nowrap="nowrap" align="left">
 <table border="0" cellspacing="0" cellpadding="0"><tr><td nowrap="nowrap" align="left">
@@ -2885,8 +3064,6 @@ cycle = x where { x = y; y = x }
 
 <li> It is not possible to debug programs that involve cyclic data structures.<br /><br /></li>
 
-<li> It is not possible to debug programs that involve computations of type <tt>IO</tt>&nbsp;t in any way, including expressions using <tt>unsafePerformIO</tt>. Unfortunately, this means that the debugger cannot be used for programs that use arrays, as the Array module uses <tt>unsafePerformIO</tt> (in a safe way) in order to implement non-mutable arrays on top of mutable arrays.<br /><br /></li>
-
 <li> The basic facts shown by the debugger can be way too complex to understand and there is no provision to omit inner terms of deeply nested data terms.<br /><br /></li>
 
 <li> The debugger has insane memory demands for some non-trivial programs and goals.<br /><br /></li>
@@ -2908,7 +3085,7 @@ This error means that the compiler was unable to determine the main function of 
 Curry requires all rules of a function to be adjacent.<br /><br /></li>
 
 <li> <i>The compiler complains about an "unexpected token qualified operator `<tt>m..</tt>'" in the expression <tt>[m..n]</tt>.</i> <br />
-The problem here is that the parser tokenizes the expression into the four tokens "[", "m..", "n", and "]", but not into "[", "m", "..", "n", and "]" as you might expect. This is due to the fact that Curry  - in contrast to Haskell - does not require module names to start with a capital letter, but we want to allow qualified uses of the dot operator (e.g., <tt>Prelude..</tt>).<a href="#tthFtNtAAJ" name="tthFrefAAJ"><sup>9</sup></a> In order to avoid this error, always use spaces before and after the <tt>..</tt> token. See also the thread "Slight change of the Curry syntax" in the Curry mailing list.<br /><br /></li>
+The problem here is that the parser tokenizes the expression into the four tokens "[", "m..", "n", and "]", but not into "[", "m", "..", "n", and "]" as you might expect. This is due to the fact that Curry  - in contrast to Haskell - does not require module names to start with a capital letter, but we want to allow qualified uses of the dot operator (e.g., <tt>Prelude..</tt>).<a href="#tthFtNtABC" name="tthFrefABC"><sup>12</sup></a> In order to avoid this error, always use spaces before and after the <tt>..</tt> token. See also the thread "Slight change of the Curry syntax" in the Curry mailing list.<br /><br /></li>
 
 <li> <i>My program fails with a stack or trail overflow or complains that there is not enough free memory after a garbage collection.</i> <br />
 First, make sure that your program did not enter an infinite loop.
@@ -2952,7 +3129,7 @@ let X free in nat X
 </pre><br /><br /></li>
 
 <li> <i>My program fails with <tt>ERROR: Cannot duplicate the world</tt>.</i> <br />
-This happens when your program performs a non-deterministic computation in an I/O context. Make sure that all non-determinism is encapsulated in a program with type <tt>IO</tt>&nbsp;t (see also the next item). Recall that the evaluation of a function can be non-deterministic for two reasons. Either it is called with an argument that is not sufficiently instantiated or the function's definition has overlapping patterns.<a href="#tthFtNtABA" name="tthFrefABA"><sup>10</sup></a> The latter happens regularly when converting Haskell functions to Curry, since in Haskell functions are matched from top to bottom and only the first match is used, whereas in Curry all matching equations are considered. For instance, in Haskell you could define <tt>null</tt> by
+This happens when your program performs a non-deterministic computation in an I/O context. Make sure that all non-determinism is encapsulated in a program with type <tt>IO</tt>&nbsp;t (see also the next item). Recall that the evaluation of a function can be non-deterministic for two reasons. Either it is called with an argument that is not sufficiently instantiated or the function's definition has overlapping patterns.<a href="#tthFtNtABD" name="tthFrefABD"><sup>13</sup></a> The latter happens regularly when converting Haskell functions to Curry, since in Haskell functions are matched from top to bottom and only the first match is used, whereas in Curry all matching equations are considered. For instance, in Haskell you could define <tt>null</tt> by
 
 <pre>
 null [] = True
@@ -2988,6 +3165,110 @@ Reconfigure the compiler with <tt>--enable-trampoline</tt> (see Sect.&nbsp;<a hr
  <h2><a name="tth_sEc10">
 10</a>&nbsp;&nbsp;Release History</h2><a name="sec:release-notes">
 </a>
+
+<h3>Release 0.9.11 (June 10, 2007)</h3>
+
+<div class="p"><!----></div>
+<b>Build Environment&nbsp;&nbsp;</b>
+  
+<ul>
+<li> On Microsoft Windows, the compiler can now also be built with MinGW.<br /><br /></li>
+
+<li> Versioned installation will allow multiple versions of the Münster Curry compiler to coexist on a single machine in the future.<br /><br /></li>
+
+<li> New make target <tt>TeXShop</tt> for typesetting the documentation on Mac OS X with <tt>TeXShop.app</tt> (cf.&nbsp;Sect.&nbsp;<a href="#sec:source-documentation">2.2.2</a>).<br /><br /></li>
+
+<li> It is now possible to build universal libraries on Mac OS X (cf.&nbsp;Sect.&nbsp;<a href="#sec:source-universal">2.2.3</a>).<br /><br /></li>
+</ul>
+
+<div class="p"><!----></div>
+<b>Compiler&nbsp;&nbsp;</b>
+  
+<ul>
+<li> Function definitions are no longer <font face="symbol">h</font
+>-expanded automatically (cf.&nbsp;Sect.&nbsp;<a href="#sec:ext-eta">8.1.11</a>).<br /><br /></li>
+
+<li> Let-bound variables can have a polymorphic type in some cases (cf.&nbsp;Sect.&nbsp;<a href="#sec:poly-let">8.1.13</a>).<br /><br /></li>
+
+<li> The precedence level in a fixity declaration is now optional and defaults to 9 if omitted (cf.&nbsp;Sect.&nbsp;<a href="#sec:ext-fixity">8.1.5</a>).<br /><br /></li>
+
+<li> Only the exported entities of the main module and the Prelude are visible with unqualified names in a goal. On the other hand, the entities of all other modules imported directly or indirectly from the main module can now be accessed with qualified names.<br /><br /></li>
+
+<li> Code generation is now based on a register-based abstract machine code model, which yields more efficient code.<br /><br /></li>
+
+<li> The compiler omits redundant module qualifiers from type expressions in error messages.<br /><br /></li>
+
+<li> Limited support for compiling mutually recursive modules.<br /><br /></li>
+
+<li> Compiler options <tt>--ccopts</tt> and <tt>--ldopts</tt> allow passing multiple comma separated options to the C compiler (cf.&nbsp;Sects.&nbsp;<a href="#sec:compiling-c">3.3</a> and&nbsp;<a href="#sec:linking">3.4</a>).<br /><br /></li>
+
+<li> Compiler accepts options <tt>-F</tt> and <tt>-framework</tt> and passes them on to the C compiler.<br /><br /></li>
+</ul>
+
+<div class="p"><!----></div>
+<b>Debugger&nbsp;&nbsp;</b>
+  
+<ul>
+<li> Debugging of goals involving <tt>IO</tt> computations now works.<br /><br /></li>
+</ul>
+
+<div class="p"><!----></div>
+<b>Interactive Environment&nbsp;&nbsp;</b>
+  
+<ul>
+<li> The interpreter's <tt>:load</tt> command takes changes of the search path with the <tt>:set</tt> command into account.<br /><br /></li>
+
+<li> The interpreter allows <tt>:load</tt>ing standard library interfaces so that, e.g., <tt>:l Array</tt> no longer fails with an error message <tt>missing source file for Array</tt>.<br /><br /></li>
+
+<li> The interpreter no longer recompiles source modules each time a goal is evaluated.<br /><br /></li>
+
+<li> Only the exported entities of the main module and the Prelude are visible with unqualified names in a goal. On the other hand, the entities of all other modules imported directly or indirectly from the current module can now be accessed with qualified names (cf.&nbsp;Sect.&nbsp;<a href="#sec:goals">6.1</a>).<br /><br /></li>
+
+<li> New command <tt>:interface</tt> that displays the interface of the current or a specified module.<br /><br /></li>
+</ul>
+
+<div class="p"><!----></div>
+<b>Curry Library and Runtime System&nbsp;&nbsp;</b>
+  
+<ul>
+<li> Improved trampoline implementation (used by default on Mac OS X), which reduces execution times by 5 to 10% on a PowerPC, and up to 30% on x86.<br /><br /></li>
+
+<li> Expressions like <tt>chr (-1)</tt> and <tt>const 0 &lt;= id</tt> now fail only the current solution instead of aborting the program with an error message.<br /><br /></li>
+
+<li> When a program fails due to a pattern match failure, the error message now includes the function where the failure was detected.<br /><br /></li>
+
+<li> Pattern matching (and other) failures are reported in non-IO goals if the goal was compiled with the <tt>-f</tt> option (cf.&nbsp;Sect.&nbsp;<a href="#sec:linking">3.4</a>) or if the program is invoked with the <tt>-f</tt> runtime system option (cf.&nbsp;Sect.&nbsp;<a href="#sec:running">3.7</a>).<br /><br /></li>
+
+<li> The runtime system now uses tagged characters (similar to tagged integers) by default. This avoids allocation for characters with codes above 255 (decimal).<br /><br /></li>
+
+<li> Avoid many name conflicts when interfacing with foreign C code.<br /><br /></li>
+
+<li> Many portability fixes to allow compilation on Windows with MinGW.<br /><br /></li>
+</ul>
+
+<div class="p"><!----></div>
+<b>Foreign Function Interface&nbsp;&nbsp;</b>
+  
+<ul>
+<li> New non-standard calling convention <tt>rawcall</tt> (cf.&nbsp;Sect.&nbsp;<a href="#sec:ext-ffi">8.1.16</a>).<br /><br /></li>
+</ul>
+
+<div class="p"><!----></div>
+<b>Noteworthy Bug Fixes&nbsp;&nbsp;</b>
+  
+<ul>
+<li> The compiler no longer fails with an internal error in function <tt>constrKind</tt> when importing a module whose interface contains types T<sub>1</sub> and T<sub>2</sub> whose names differ only by their module qualifiers.<br /><br /></li>
+
+<li> The compiler no longer fails with a non-exhaustive match when reporting case mode warnings for a program with explicit type signatures.<br /><br /></li>
+
+<li> Setting the initial buffering mode for the standard input and output channels with the <tt>-b</tt> runtime system option (cf.&nbsp;Sect.&nbsp;<a href="#sec:running">3.7</a>) now works.<br /><br /></li>
+
+<li> The compiler no longer infers too general types for some functions in mutually recursive binding groups involving pattern declarations.<br /><br /></li>
+
+<li> The parser no longer rejects patterns of the form (<em>op</em>)&nbsp;t<sub>1</sub>... t<sub>n</sub> when <em>op</em> is a qualified operator, e.g., <tt>(Assoc.:=) x y</tt>.<br /><br /></li>
+</ul>
+
+<div class="p"><!----></div>
 
 <h3>Release 0.9.10 (May 10, 2006)</h3>
 
@@ -3138,7 +3419,7 @@ Reconfigure the compiler with <tt>--enable-trampoline</tt> (see Sect.&nbsp;<a hr
 <b>Foreign Function Interface&nbsp;&nbsp;</b>
   
 <ul>
-<li> Foreign function declarations using the <tt>ccall</tt> calling convention have been extended to support the import of static addresses and dynamic function wrappers. In addition, the basic marshalable types now include pointers (see Sect.&nbsp;<a href="#sec:ext-ffi">8.1.14</a>).<br /><br /></li>
+<li> Foreign function declarations using the <tt>ccall</tt> calling convention have been extended to support the import of static addresses and dynamic function wrappers. In addition, the basic marshalable types now include pointers (see Sect.&nbsp;<a href="#sec:ext-ffi">8.1.16</a>).<br /><br /></li>
 
 <li> Most libraries from the Haskell 98 Foreign Function Interface addendum have been implemented as far as they do not require type classes (see Sect.&nbsp;<a href="#sec:lib-ffi">7.3</a>).<br /><br /></li>
 </ul>
@@ -3179,7 +3460,7 @@ Reconfigure the compiler with <tt>--enable-trampoline</tt> (see Sect.&nbsp;<a hr
 <b>Build Environment&nbsp;&nbsp;</b>
   
 <ul>
-<li> The compiler can now be built on Microsoft Windows with CygWin without special configuration options.<a href="#tthFtNtABB" name="tthFrefABB"><sup>11</sup></a><br /><br /></li>
+<li> The compiler can now be built on Microsoft Windows with CygWin without special configuration options.<a href="#tthFtNtABE" name="tthFrefABE"><sup>14</sup></a><br /><br /></li>
 
 <li> It is now possible to use g++ as backend C compiler.<br /><br /></li>
 
@@ -3201,7 +3482,7 @@ Reconfigure the compiler with <tt>--enable-trampoline</tt> (see Sect.&nbsp;<a hr
 
 <li> Syntax of external declarations now uses <tt>foreign import</tt> instead of <tt>external</tt>.<br /><br /></li>
 
-<li> Partial support for <tt>ccall</tt> calling convention in foreign function declarations (see Sect.&nbsp;<a href="#sec:ext-ffi">8.1.14</a>).<br /><br /></li>
+<li> Partial support for <tt>ccall</tt> calling convention in foreign function declarations (see Sect.&nbsp;<a href="#sec:ext-ffi">8.1.16</a>).<br /><br /></li>
 
 <li> Faster code for lazy applications of nullary and unary functions.<br /><br /></li>
 </ul>
@@ -3266,7 +3547,7 @@ Reconfigure the compiler with <tt>--enable-trampoline</tt> (see Sect.&nbsp;<a hr
 <h3>Release 0.9.7 (May 4, 2004)</h3>
 
 <ul>
-<li> Support for building and using the compiler on Microsoft Windows using the CygWin environment (cf. Sect.&nbsp;<a href="#sec:ins-windows">2.3</a>).<a href="#tthFtNtABC" name="tthFrefABC"><sup>12</sup></a><br /><br /></li>
+<li> Support for building and using the compiler on Microsoft Windows using the CygWin environment (cf. Sect.&nbsp;<a href="#sec:ins-windows">2.3</a>).<a href="#tthFtNtABF" name="tthFrefABF"><sup>15</sup></a><br /><br /></li>
 
 <li> <tt>cyc</tt>'s option <tt>-y</tt> renamed into <tt>-T</tt>. cymake now supports <tt>-T</tt>, too.<br /><br /></li>
 
@@ -3280,7 +3561,7 @@ Reconfigure the compiler with <tt>--enable-trampoline</tt> (see Sect.&nbsp;<a hr
 
 <li> Operator fixities must be declared in the same declaration group as the operator. To this end, fixity declarations are allowed in local declaration groups (cf. Sect.&nbsp;<a href="#sec:ext-fixity">8.1.5</a>). Fixity declarations can still be mixed freely with other declarations.<br /><br /></li>
 
-<li> Curried syntax is supported on the left-hand side of declarations (cf. Sect.&nbsp;<a href="#sec:ext-curried-lhs">8.1.11</a>).<br /><br /></li>
+<li> Curried syntax is supported on the left-hand side of declarations (cf. Sect.&nbsp;<a href="#sec:ext-curried-lhs">8.1.12</a>).<br /><br /></li>
 
 <li> Support constraint guards in case expressions. Actually, they have been supported since the introduction of guarded case alternatives in release 0.9.6, but the documentation did say otherwise.<br /><br /></li>
 
@@ -3396,7 +3677,7 @@ Reconfigure the compiler with <tt>--enable-trampoline</tt> (see Sect.&nbsp;<a hr
 
 <li> Module <tt>Monad</tt> from the Haskell library is now included. This module also implements the functions <tt>sequence</tt>, <tt>sequence_</tt>, <tt>mapM</tt>, and <tt>mapM_</tt> from the Haskell prelude (Sect.&nbsp;<a href="#sec:lib-Monad">7.2.9</a>).<br /><br /></li>
 
-<li> New syntax for external declarations which is closer to the proposed FFI for Haskell (Sect&nbsp;<a href="#sec:ext-ffi">8.1.14</a>).<br /><br /></li>
+<li> New syntax for external declarations which is closer to the proposed FFI for Haskell (Sect&nbsp;<a href="#sec:ext-ffi">8.1.16</a>).<br /><br /></li>
 
 <li> Bug fixes...<br /><br /></li>
 </ul>
@@ -3536,30 +3817,36 @@ Also available at: <a href="http://haskell.org/definition/"><tt>http://haskell.o
 <div class="p"><!----></div>
 <a name="tthFtNtAAB"></a><a href="#tthFrefAAB"><sup>1</sup></a>Type classes and the record syntax may be supported in future releases.
 <div class="p"><!----></div>
-<a name="tthFtNtAAC"></a><a href="#tthFrefAAC"><sup>2</sup></a>In fact, this option is already the default on Mac OS X systems.
+<a name="tthFtNtAAC"></a><a href="#tthFrefAAC"><sup>2</sup></a>The scripts <tt>cyc</tt>, <tt>cymake</tt>, and <tt>cyi</tt> are in fact soft links to <tt>cyc-0.9.11</tt>, <tt>cymake-0.9.11</tt>, and <tt>cyi-0.9.11</tt>, respectively, allowing multiple versions of the Münster Curry compiler to coexist on a single machine.
 <div class="p"><!----></div>
-<a name="tthFtNtAAD"></a><a href="#tthFrefAAD"><sup>3</sup></a><a href="http://www.eecs.harvard.edu/~nr/noweb/"><tt>http://www.eecs.harvard.edu/~nr/noweb/</tt></a>
+<a name="tthFtNtAAD"></a><a href="#tthFrefAAD"><sup>3</sup></a>The scripts <tt>cyc</tt>, <tt>cymake</tt>, and <tt>cyi</tt> are in fact soft links to <tt>cyc-0.9.11</tt>, <tt>cymake-0.9.11</tt>, and <tt>cyi-0.9.11</tt>, respectively, allowing multiple versions of the Münster Curry compiler to coexist on a single machine.
 <div class="p"><!----></div>
-<a name="tthFtNtAAE"></a><a href="#tthFrefAAE"><sup>4</sup></a>This is deliberately modeled after Haskell's pragma notation.
+<a name="tthFtNtAAE"></a><a href="#tthFrefAAE"><sup>4</sup></a>In fact, this option is already the default on Mac OS X systems.
 <div class="p"><!----></div>
-<a name="tthFtNtAAF"></a><a href="#tthFrefAAF"><sup>5</sup></a><a href="http://toy.sourceforge.net"><tt>http://toy.sourceforge.net</tt></a>
+<a name="tthFtNtAAF"></a><a href="#tthFrefAAF"><sup>5</sup></a><a href="http://www.eecs.harvard.edu/~nr/noweb/"><tt>http://www.eecs.harvard.edu/~nr/noweb/</tt></a>
 <div class="p"><!----></div>
-<a name="tthFtNtAAG"></a><a href="#tthFrefAAG"><sup>6</sup></a>Thanks to Rafael Caballero for making me aware of this issue.
+<a name="tthFtNtAAG"></a><a href="#tthFrefAAG"><sup>6</sup></a><a href="http://darkwing.uoregon.edu/~koch/texshop/texshop.html"><tt>http://darkwing.uoregon.edu/~koch/texshop/texshop.html</tt></a>
 <div class="p"><!----></div>
-<a name="tthFtNtAAH"></a><a href="#tthFrefAAH"><sup>7</sup></a>The <tt>forall</tt> syntax can also be used for infix data constructors, see Sect.&nbsp;<a href="#sec:ext-infix">8.1.10</a> below.
+<a name="tthFtNtAAH"></a><a href="#tthFrefAAH"><sup>7</sup></a>This is deliberately modeled after Haskell's pragma notation.
 <div class="p"><!----></div>
-<a name="tthFtNtAAI"></a><a href="#tthFrefAAI"><sup>8</sup></a>The identifiers <span class="roman"><tt>primitive</tt></span> and <span class="roman"><tt>ccall</tt></span> are not keywords, but given a special meaning only in foreign function declarations. For instance, the declaration <span class="roman"><tt>foreign import primitive ccall :: IO ()</tt></span> is accepted by the compiler.
+<a name="tthFtNtAAI"></a><a href="#tthFrefAAI"><sup>8</sup></a><a href="http://toy.sourceforge.net"><tt>http://toy.sourceforge.net</tt></a>
 <div class="p"><!----></div>
-<a name="tthFtNtAAJ"></a><a href="#tthFrefAAJ"><sup>9</sup></a>Incidentally, Haskell has the same problem with enumerations for data types, e.g., <tt>[False..True]</tt>
+<a name="tthFtNtAAJ"></a><a href="#tthFrefAAJ"><sup>9</sup></a>Thanks to Rafael Caballero for making me aware of this issue.
 <div class="p"><!----></div>
-<a name="tthFtNtABA"></a><a href="#tthFrefABA"><sup>10</sup></a>The compiler emits a warning for such functions when it is invoked with options <tt>-Woverlap</tt> or <tt>-Wall</tt> (see Sect.&nbsp;<a href="#sec:compiling">3.2</a>).
+<a name="tthFtNtABA"></a><a href="#tthFrefABA"><sup>10</sup></a>The <tt>forall</tt> syntax can also be used for infix data constructors, see Sect.&nbsp;<a href="#sec:ext-infix">8.1.10</a> below.
 <div class="p"><!----></div>
-<a name="tthFtNtABB"></a><a href="#tthFrefABB"><sup>11</sup></a>Thanks again to Diego Berrueta.
+<a name="tthFtNtABB"></a><a href="#tthFrefABB"><sup>11</sup></a>The identifiers <span class="roman"><tt>primitive</tt></span>, <span class="roman"><tt>ccall</tt></span>, <span class="roman"><tt>rawcall</tt></span>, <span class="roman"><tt>safe</tt></span>, and <span class="roman"><tt>unsafe</tt></span> are not keywords, but given a special meaning only in foreign function declarations. For instance, the declaration <span class="roman"><tt>foreign import primitive ccall :: IO ()</tt></span> is accepted by the compiler.
 <div class="p"><!----></div>
-<a name="tthFtNtABC"></a><a href="#tthFrefABC"><sup>12</sup></a>The necessary changes were kindly contributed by Diego Berrueta.
+<a name="tthFtNtABC"></a><a href="#tthFrefABC"><sup>12</sup></a>Incidentally, Haskell has the same problem with enumerations for data types, e.g., <tt>[False..True]</tt>
+<div class="p"><!----></div>
+<a name="tthFtNtABD"></a><a href="#tthFrefABD"><sup>13</sup></a>The compiler emits a warning for such functions when it is invoked with options <tt>-Woverlap</tt> or <tt>-Wall</tt> (see Sect.&nbsp;<a href="#sec:compiling">3.2</a>).
+<div class="p"><!----></div>
+<a name="tthFtNtABE"></a><a href="#tthFrefABE"><sup>14</sup></a>Thanks again to Diego Berrueta.
+<div class="p"><!----></div>
+<a name="tthFtNtABF"></a><a href="#tthFrefABF"><sup>15</sup></a>The necessary changes were kindly contributed by Diego Berrueta.
 <br /><br /><hr /><small>File translated from
 T<sub><font size="-1">E</font></sub>X
 by <a href="http://hutchinson.belmont.ma.us/tth/">
 T<sub><font size="-1">T</font></sub>H</a>,
-version 3.38.<br />On 10 May 2006, 18:20.</small>
+version 3.38.<br />On 10 Jun 2007, 19:35.</small>
 </html>

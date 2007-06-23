@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: curry.nw 2351 2007-06-23 11:07:54Z wlux $
+% $Id: curry.nw 2352 2007-06-23 11:09:53Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -215,6 +215,15 @@ system uses either [[vfork]], [[fork]], or [[popen]].
 
 /* Define to empty if the system does not have popen */
 #undef HAVE_POPEN
+
+@ 
+On POSIX systems, the exit code of a process is encoded in the status
+reported by functions like [[system]] and [[waitpid]]. The header file
+[[sys/wait.h]] contains definitions that allow decoding this status.
+
+<<Portability definitions>>=
+/* Define to empty if the system does not have a POSIX compatible sys/wait.h */
+#undef HAVE_SYS_WAIT_H
 
 @ 
 The garbage collector uses the [[mprotect]] system call on machines

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2351 2007-06-23 11:07:54Z wlux $
+% $Id: files.nw 2352 2007-06-23 11:09:53Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -30,9 +30,11 @@ extern void init_files(int, long);
 #include <netdb.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/wait.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#if HAVE_SYS_WAIT_H
+# include <sys/wait.h>
+#endif
 #include "debug.h"
 #include "run.h"
 #include "regs.h"
@@ -1124,6 +1126,43 @@ primHSeek(Node *hdl, Node *seekMode, Node *offset)
 }
 
 @ 
+The function [[primSystem]] executes a shell command and returns its
+exit status. This function is essentially a wrapper around the ANSI C
+[[system]] function that extracts the command's exit status from the
+result returned by [[system]]. If the command was interrupted by a
+signal, [[primSystem]] returns the negative signal number. %'
+
+<<files.h>>=
+extern int primSystem(const char *);
+
+@ 
+<<files.c>>=
+#if HAVE_SYS_WAIT_H
+static inline int
+decodeExitStatus(int status)
+{
+    if ( WIFSIGNALED(status) )
+	return -WTERMSIG(status);
+
+    assert(WIFEXITED(status));
+    return WEXITSTATUS(status);
+}
+#else
+# define decodeExitStatus(status) (status)
+#endif
+
+int
+primSystem(const char *cmd)
+{
+    int r;
+
+    r = system(cmd);
+    if ( r == -1 )
+	ioError_withErrno("system");
+    return decodeExitStatus(r);
+}
+
+@ 
 The function [[primOpenProcess]] executes a shell command and returns
 a file descriptor connected to the standard input and output of the
 subprocess. We try to avoid using [[popen]] as opening a process for
@@ -1250,10 +1289,11 @@ primOpenProcess(Node *cmdString, Node *ioMode)
 
 @ 
 The function [[primPClose]] closes the connection to a process and
-returns its termination status. This function raises an IO error when
-it is applied to a handle that is not connected to a process. However,
-it is safe to call [[primPClose]] more than once for a handle that was
-created by [[primOpenProcess]].
+returns its termination status (either the process' exit code or the
+negative signal number if the process was interrupted). This function
+raises an IO error when it is applied to a handle that is not
+connected to a process. However, it is safe to call [[primPClose]]
+more than once for a handle that was created by [[primOpenProcess]]. %'
 
 <<files.h>>=
 extern Node *primPClose(Node *);
@@ -1290,14 +1330,7 @@ primPClose(Node *hdl)
     }
 #endif
 
-    if ( WIFSIGNALED(proc->status) )
-	res = -WTERMSIG(proc->status);
-    else
-    {
-	assert(WIFEXITED(proc->status));
-	res = WEXITSTATUS(proc->status);
-    }
-
+    res = decodeExitStatus(proc->status);
 #if !NO_POINTER_TAGS
     if ( !is_large_int(res) )
 	r = tag_int((long)res);

@@ -1,4 +1,4 @@
--- $Id: System.curry 2041 2006-12-13 09:43:43Z wlux $
+-- $Id: System.curry 2352 2007-06-23 11:09:53Z wlux $
 --
 -- Copyright (c) 2002-2005, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -39,16 +39,9 @@ getEnv var = throwIfNull msg (withCString var getenv) >>= peekCString
         foreign import ccall "stdlib.h" getenv :: CString -> IO CString
 
 system :: String -> IO ExitCode
-system cmd =
-  throwErrnoIfMinus1 "system" (withCString cmd system) >>= return . exitCode
-  where exitCode r
-          | r == 0 = ExitSuccess
-          | ifSignaled r = ExitFailure (- termSig r)
-          | otherwise = ExitFailure (exitStatus r)
-        foreign import ccall "stdlib.h" system :: CString -> IO Int
-        foreign import ccall "sys/wait.h WIFSIGNALED" ifSignaled :: Int -> Bool
-        foreign import ccall "sys/wait.h WEXITSTATUS" exitStatus :: Int -> Int
-        foreign import ccall "sys/wait.h WTERMSIG" termSig :: Int -> Int
+system cmd = withCString cmd primSystem >>= return . exitCode
+  where exitCode r = if r == 0 then ExitSuccess else ExitFailure r
+        foreign import ccall "files.h" primSystem :: CString -> IO Int
 
 curryExit :: Int -> IO a
 curryExit rc = curry_exit rc >> undefined

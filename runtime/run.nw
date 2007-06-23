@@ -1,23 +1,48 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: run.nw 2273 2007-06-16 16:33:22Z wlux $
+% $Id: run.nw 2346 2007-06-23 10:23:59Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Execution}\label{sec:execution}
 While C can be used conveniently as a ``high-level'' assembly
-language, there is one gap which complicates the efficient
-implementation of declarative languages, viz. the lack of a general
-tail-call in the language.\footnote{The Gnu C compiler optimizes
-tail-calls into jumps to the beginning of the function. However,
-this works only for calls to the same function.}
+language, the lack of general tail-calls in the language\footnote{The
+  Gnu C compiler optimizes tail-calls into jumps to the beginning of
+  the function. However, this works only for calls to the same
+  function.} complicates the efficient implementation of declarative
+languages. The common workaround is to use a trampoline loop. In order
+to perform a tail call, a function simply returns the address of the
+callee to the trampoline, which then calls that function. This
+strategy is portable but inefficient because of the overhead
+introduced by returning to the trampoline. Furthermore, the indirect
+call sequence prevents intra-procedural optimizations by the C
+compiler and may also interfere with the processor's code prefetching.
 
-There are various possible strategies known to handle this
-problem. The most simple solution is to provide a trampoline loop. If
-a function wants to perform a tail call, it simply returns the address
-of the callee to the trampoline, which then in turn calls this
-function. This strategy is portable but inefficient because of its
-additional overhead.
+As a remedy, Baker~\cite{Baker95:CheneyMTA} has proposed to jump back
+to the trampoline only when the C runtime stack has been filled up,
+which can be detected either by an explicit address comparison or by
+using a protected virtual memory page at the high end of the stack. A
+variant of this technique was proposed for
+Java~\cite{SchinzOdersky01:TailCall}, which does not provide direct
+access to its stack. A tail call counter is used and the code returns
+to the trampoline after performing a fixed number of tail calls. Yet,
+experiments with our compiler show that these techniques do not always
+improve performance because naively growing the stack may invalidate
+the processor's cache lines to often. In addition, it is particularly
+expensive for architectures like SPARC, which are based on register
+windows.
+
+Therefore, we use our own variant of the trampoline technique. The
+decision whether to perform a tail call as a direct call or an
+indirect call through the trampoline is purely syntactic, which means
+that there is no runtime overhead (no need to compare addresses or
+maintain an explicit counter), nor are there any portability issues
+(for handling traps after touching a protected memory page at the
+top of the stack).  Essentially, we use indirect calls when returning
+to the caller and switching contexts, respectively, and direct calls
+otherwise. The main exception are tail calls in leaf procedures, which
+are always performed as indirect calls in order to ensure that every
+Curry function returns to the trampoline at least once.
 
 A more efficient solution is possible for the Gnu C compiler. With the
 help of assembler labels inserted into the code and using computed
@@ -27,13 +52,15 @@ sets up the local stack frame of the callee, is skipped over and no
 additional stack space is allocated. The stack space is allocated in
 the driver function, which now only has to jump to the first code
 address. This strategy will fail if the function prologue has to do
-more work than just setting up a stack frame; it can therefore be
-turned off by defining the pre-processor macro [[USE_TRAMPOLINE]].
+more work than just setting up a stack frame, which, for instance, is
+the case on many architectures when generating position independent
+code. Therefore, it can be turned off by defining the preprocessor
+macro [[USE_TRAMPOLINE]].
 
 The type of a code label which can be used in a tail call is either
 a function which returns a [[void]] pointer\footnote{In fact, the
-function returns another function with the same type. However, such a
-recursive type cannot be declared in C.} or is itself a [[void]]
+function returns another function with the same type. However, such
+recursive types cannot be declared in C.} or is itself a [[void]]
 pointer in order to be used in (computed) \texttt{goto} statements.
 
 <<run.h>>=
@@ -52,8 +79,10 @@ typedef void *Label;
 @ 
 Every code block of the abstract machine code is translated into a C
 function on its own. In case of the trampoline execution model, these
-functions simply return to their caller (the trampoline) when they
-want to perform a jump to another code block via the [[GOTO]] macro.
+functions can either invoke the callee directly via the [[GOTO]] macro
+or return the callee's address to the trampoline with the
+[[GOTO_INDIR]] macro. See the introduction of this section on when to
+use direct and indirect calls, respectively. %'
 
 In case of the direct jump model, which was derived from the
 implementation of the Mercury runtime
@@ -61,14 +90,15 @@ system~\cite{HendersonConwaySomogyi95:Portable}, we use Gnu C's
 ability to handle labels as values. With the extended assembler
 feature of Gnu C, a label is inserted immediately after the function's
 prologue with the [[ENTRY_LABEL]] macro. The code generated by the
-[[GOTO]] macro then jumps directly to that label. By renaming the
-function itself in the [[DECLARE_LABEL]] and [[FUNCTION]] macros and
-adding a function declaration in [[DECLARE_LABEL]], which associates
-the function name with its entry point, we can simply use the function
-name in both models to refer to the entry point of a function. The
-first argument of the macros [[DECLARE_LABEL]] and [[ENTRY_LABEL]]
-specifies whether the label has internal or external linkage using the
-C language keywords [[static]] and [[extern]], respectively.
+[[GOTO]] and [[GOTO_INDIR]] macros then jumps directly to that label.
+By renaming the function itself in the [[DECLARE_LABEL]] and
+[[FUNCTION]] macros and adding a function declaration in
+[[DECLARE_LABEL]], which associates the function name with its entry
+point, we can simply use the function name in both models to refer to
+the entry point of a function. The first argument of the macros
+[[DECLARE_LABEL]] and [[ENTRY_LABEL]] specifies whether the label has
+internal or external linkage using the C language keywords [[static]]
+and [[extern]], respectively.
 
 Getting the direct jump model to work is a little bit tricky. At least
 on the Intel x86 architecture, some versions of Gnu C may not pop the
@@ -93,6 +123,13 @@ target.\footnote{Many versions of Gnu C generate correct code without
 the clobber description, but at least for Gnu C version 3.2 on x86
 targets it is necessary.}
 
+In order to measure the effect of our improved trampoline
+implementation, the runtime system can be configured to perform
+\emph{every} tail call through the trampoline by defining the
+preprocessor macro [[USE_STANDARD_TRAMPOLINE]], which is set to a
+non-zero value when the compiler is configured with
+\texttt{--enable-trampoline=slow}.
+
 <<run.h>>=
 #if USE_TRAMPOLINE
 
@@ -100,7 +137,12 @@ targets it is necessary.}
 # define DECLARE_LABEL(link, l) link void *l(void)
 # define ENTRY_LABEL(link, l)
 
-# define GOTO(l)		return (void *)(l)
+# if USE_STANDARD_TRAMPOLINE
+#  define GOTO(l)		GOTO_INDIR(l)
+# else
+#  define GOTO(l)		return l()
+# endif
+# define GOTO_INDIR(l)		return (void *)(l)
 
 #else /* !USE_TRAMPOLINE */
 
@@ -140,6 +182,7 @@ extern Label ip;
 	_GOTO(l);			      \
     _l: halt();				      \
     })
+# define GOTO_INDIR(l)		GOTO(l)
 
 #endif /* !USE_TRAMPOLINE */
 
@@ -188,8 +231,16 @@ the code, which executes in [[do_run]]'s stack frame in the direct
 jump configuration, otherwise might overwrite register values saved in
 [[run]]'s stack frame.
 
+If the preprocessor macro [[COUNT_CALLS]] is defined while compiling
+the file [[run.c]], the number of tail calls performed via the
+trampoline is computed and shown on standard error when the program
+exits.
+
 <<run.c>>=
 #include "config.h"
+#if USE_TRAMPOLINE && defined(COUNT_CALLS)
+# include <stdio.h>
+#endif
 #include <setjmp.h>
 #include "run.h"
 
@@ -204,13 +255,26 @@ static jmp_buf jump_buf;
 
 static void do_run(Label ip) __attribute__((NOINLINE noreturn));
 
+#if USE_TRAMPOLINE && defined(COUNT_CALLS)
+static int	     depth;
+static unsigned long n_calls;
+#endif
+
 void
 run(Label ip)
 {
+#if USE_TRAMPOLINE && defined(COUNT_CALLS)
+    if ( depth++ == 0 )
+	n_calls = 0;
+#endif
     if ( setjmp(jump_buf) )
 	ip = jump_ip;
     if ( ip )
 	do_run(ip);
+#if USE_TRAMPOLINE && defined(COUNT_CALLS)
+    if ( --depth == 0 )
+	fprintf(stderr, "[%lu trampoline iterations]\n", n_calls);
+#endif
 }
 
 void
@@ -229,19 +293,26 @@ null pointer tests.
 
 <<run.c>>=
 #if USE_TRAMPOLINE
+
+# ifdef COUNT_CALLS
+#  define COUNT(ip)	(n_calls++, (ip))
+# else
+#  define COUNT(ip)	(ip)
+# endif
+
 static void
 do_run(Label ip)
 {
     for (;;)
     {
-	ip = (Label)ip();
-	ip = (Label)ip();
-	ip = (Label)ip();
-	ip = (Label)ip();
-	ip = (Label)ip();
-	ip = (Label)ip();
-	ip = (Label)ip();
-	ip = (Label)ip();
+	ip = COUNT((Label)ip());
+	ip = COUNT((Label)ip());
+	ip = COUNT((Label)ip());
+	ip = COUNT((Label)ip());
+	ip = COUNT((Label)ip());
+	ip = COUNT((Label)ip());
+	ip = COUNT((Label)ip());
+	ip = COUNT((Label)ip());
     }
 }
 #endif /* USE_TRAMPOLINE */

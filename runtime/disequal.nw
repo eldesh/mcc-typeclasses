@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2345 2007-06-23 09:58:12Z wlux $
+% $Id: disequal.nw 2346 2007-06-23 10:23:59Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -69,7 +69,7 @@ FUNCTION(___61__47__61_)
  ENTRY_LABEL(extern, ___61__47__61_)
     TRACE_FUN("=/=", 2);
     SAVE_REGS(1);
-    EVAL(___61__47__61__1);
+    EVAL_INDIR(___61__47__61__1);
 }
 
 static

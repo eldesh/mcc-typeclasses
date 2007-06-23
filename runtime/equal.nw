@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: equal.nw 2271 2007-06-16 16:30:52Z wlux $
+% $Id: equal.nw 2346 2007-06-23 10:23:59Z wlux $
 %
-% Copyright (c) 2001-2006, Wolfgang Lux
+% Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Strict Equality}
@@ -51,7 +51,7 @@ FUNCTION(___61__61_)
  ENTRY_LABEL(extern, ___61__61_)
     TRACE_FUN("==", 2);
     SAVE_REGS(1);
-    EVAL(___61__61__1);
+    EVAL_INDIR(___61__61__1);
 }
 
 static

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cam.nw 2304 2007-06-20 07:33:57Z wlux $
+% $Id: cam.nw 2346 2007-06-23 10:23:59Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -50,10 +50,12 @@ The macros [[EXEC]]$n(f,\emph{arg}_1,\dots,\emph{arg}_n)$ implement
 tail calls in leaf procedures. They assign the expressions
 $\emph{arg}_1$ to $\emph{arg}_n$ to the argument registers
 \texttt{regs.r[0]} to \texttt{regs.r[$n-1$]} and then jump to the
-entry point of function $f$. Note that these macros initialize the
-argument registers strictly from left to right and therefore
-\texttt{regs.r[$i$]} must not be used in an argument position that is
-loaded into register \texttt{regs.r[$j$]} when $i<j$.
+entry point of function $f$. Since these macros are used only in leaf
+procedures, they must use [[GOTO_INDIR]] in order to invoke the
+callee. Note that these macros initialize the argument registers
+strictly from left to right and therefore \texttt{regs.r[$i$]} must
+not be used in an argument position that is loaded into register
+\texttt{regs.r[$j$]} when $i<j$.
 
 <<cam.h>>=
 #define EXEC0(f)		DO_EXEC(0,f,())
@@ -64,7 +66,7 @@ loaded into register \texttt{regs.r[$j$]} when $i<j$.
 
 #define DO_EXEC(n,f,args) do { \
 	DO_LOAD_REGS_##n args; \
-	GOTO(f);	       \
+	GOTO_INDIR(f);	       \
     } while ( 0 )
 
 #define DO_LOAD_REGS_0()	/* empty */
@@ -85,34 +87,47 @@ procedures.
 #define ENT(x)			EXEC1((x)->info->eval, x)
 
 @ 
-The macros [[CALL]]$n(f,k,\emph{arg}_1,\dots,\emph{arg}_n)$ implement
+The macros [[CALL]]$n(f,k,\emph{arg}_1,\dots,\emph{arg}_n)$ and
+[[CALL_INDIR]]$n(f,k,\emph{arg}_1,\dots,\emph{arg}_n)$ implement
 recursive calls. Similar to the [[EXEC]]$n$ macros, they assign the
 expressions $\emph{arg}_1$ to $\emph{arg}_n$ to the argument registers
 \texttt{regs.r[0]} to \texttt{regs.r[$n-1$]} and jump to the entry
 point of function $f$. In addition, these macros also assign the
-return address $k$ to the return address register [[regs.ret]].
+return address $k$ to the return address register [[regs.ret]]. The
+[[CALL]]$n$ macros use [[GOTO]] and the [[CALL_INDIR]]$n$ macros use
+[[GOTO_INDIR]] in order to invoke the callee. Therefore, recursive
+calls in the entry code of a function must use [[CALL_INDIR]]$n$,
+whereas [[CALL]]$n$ maybe used in all other functions.
 
 <<cam.h>>=
-#define CALL0(f,k)		DO_CALL(0,f,k,())
-#define CALL1(f,k,x)		DO_CALL(1,f,k,(x))
-#define CALL2(f,k,x,y)		DO_CALL(2,f,k,(x,y))
-#define CALL3(f,k,x,y,z)	DO_CALL(3,f,k,(x,y,z))
-#define CALL4(f,k,x,y,z,t)	DO_CALL(4,f,k,(x,y,z,t))
+#define CALL0(f,k)		DO_CALL(GOTO,0,f,k,())
+#define CALL1(f,k,x)		DO_CALL(GOTO,1,f,k,(x))
+#define CALL2(f,k,x,y)		DO_CALL(GOTO,2,f,k,(x,y))
+#define CALL3(f,k,x,y,z)	DO_CALL(GOTO,3,f,k,(x,y,z))
+#define CALL4(f,k,x,y,z,t)	DO_CALL(GOTO,4,f,k,(x,y,z,t))
 
-#define DO_CALL(n,f,k,args) do { \
-	DO_LOAD_REGS_##n args;	 \
-	regs.ret = k;		 \
-	GOTO(f);		 \
+#define CALL_INDIR0(f,k)	 DO_CALL(GOTO_INDIR,0,f,k,())
+#define CALL_INDIR1(f,k,x)	 DO_CALL(GOTO_INDIR,1,f,k,(x))
+#define CALL_INDIR2(f,k,x,y)	 DO_CALL(GOTO_INDIR,2,f,k,(x,y))
+#define CALL_INDIR3(f,k,x,y,z)	 DO_CALL(GOTO_INDIR,3,f,k,(x,y,z))
+#define CALL_INDIR4(f,k,x,y,z,t) DO_CALL(GOTO_INDIR,4,f,k,(x,y,z,t))
+
+#define DO_CALL(goto,n,f,k,args) do { \
+	DO_LOAD_REGS_##n args;	      \
+	regs.ret = k;		      \
+	goto(f);		      \
     } while ( 0 )
 
 @ 
-An important special case of [[CALL1]] is implemented by the macro
-[[CALL_ENT(x,k)]], which calls the evaluation method of [[x]] such
-that execution continues at address [[k]] after the argument has been
-evaluated.
+An important special case of [[CALL1]] and [[CALL_INDIR1]],
+respectively, is implemented by the macros [[CALL_ENT(x,k)]] and
+[[CALL_INDIR_ENT(x,k)]], which call the evaluation method of [[x]]
+such that execution continues at address [[k]] after the argument has
+been evaluated.
 
 <<cam.h>>=
 #define CALL_ENT(x,k)		CALL1((x)->info->eval, k, x)
+#define CALL_INDIR_ENT(x,k)	CALL_INDIR1((x)->info->eval, k, x)
 
 @ 
 The macros [[CALL_RET]]$n(f,m,\emph{arg}_1,\dots,\emph{arg}_n)$
@@ -122,7 +137,9 @@ expressions $\emph{arg}_1$ to $\emph{arg}_n$ to the argument registers
 the stack, drop $m$ values from the stack, and then jump to the entry
 point of function $f$. Note that even though [[CALL_RET]]$n$ drops the
 current stack frame, it is safe to use \texttt{regs.sp[$i$]} in an
-argument expression.
+argument expression. These macro always use [[GOTO]] in order to
+invoke the callee because they are not useful in the entry code of a
+function.
 
 <<cam.h>>=
 #define CALL_RET0(f,m)		DO_CALL_RET(0,f,m,())
@@ -142,14 +159,15 @@ argument expression.
 The macros [[RETURN]] and [[ENTER]] implement two special cases of
 [[CALL_RET1]]. [[RETURN(x,n)]] returns [[x]] and [[ENTER(x,n)]] jumps
 to the evaluation method of [[x]]. Both functions restore their return
-address from the stack and drop [[n]] values from the stack.
+address from the stack and drop [[n]] values from the stack. Note that
+[[RETURN]] must use [[GOTO_INDIR]] rather than [[GOTO]].
 
 <<cam.h>>=
 #define RETURN(x,n) do {		 \
 	Label _ret_ = (Label)regs.sp[n]; \
 	regs.r[0]   = (x);		 \
 	regs.sp	   += n + 1;		 \
-	GOTO(_ret_);			 \
+	GOTO_INDIR(_ret_);		 \
     } while ( 0 )
 
 #define ENTER(x,n) do {			\
@@ -161,12 +179,14 @@ address from the stack and drop [[n]] values from the stack.
     } while ( 0 )
 
 @ 
-The macros [[EVAL]] and [[EVAL_NODE]] evaluate the argument in
-register \texttt{regs.r[0]} and continue execution at the specified
-label after the argument is evaluated to head normal form. The
-[[EVAL]] macro is prepared to handle tagged characters and tagged
-integers, whereas the [[EVAL_NODE]] macro assumes that the argument
-register always contains a node pointer.
+The macros [[EVAL]], [[EVAL_INDIR]], [[EVAL_NODE]] and
+[[EVAL_INDIR_NODE]] evaluate the argument in register
+\texttt{regs.r[0]} and continue execution at the specified label after
+the argument is evaluated to head normal form. The [[EVAL]] and
+[[EVAL_INDIR]] macros are prepared to handle tagged characters and
+tagged integers, whereas the [[EVAL_NODE]] and [[EVAL_INDIR_NODE]]
+macros assume that the argument register always contains a node
+pointer.
 
 <<cam.h>>=
 #define EVAL(l) do {							\
@@ -178,7 +198,19 @@ register always contains a node pointer.
 	    }								\
 	break;								\
     }									\
-    GOTO(l);								\
+    GOTO_INDIR(l);							\
+} while ( 0 )
+
+#define EVAL_INDIR(l) do {						\
+    for (;;) {								\
+	if ( is_tagged_ptr(regs.r[0]) )					\
+	    switch ( regs.r[0]->info->kind ) {				\
+	    case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue;	\
+	    case LAZY_KIND: regs.ret = (l); GOTO_INDIR(regs.r[0]->info->eval); \
+	    }								\
+	break;								\
+    }									\
+    GOTO_INDIR(l);							\
 } while ( 0 )
 
 #define EVAL_NODE(l) do {					     \
@@ -189,7 +221,18 @@ register always contains a node pointer.
 	}							     \
 	break;							     \
     }								     \
-    GOTO(l);							     \
+    GOTO_INDIR(l);						     \
+} while ( 0 )
+
+#define EVAL_INDIR_NODE(l) do {					     \
+    for (;;) {							     \
+	switch ( regs.r[0]->info->kind ) {			     \
+	case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue;    \
+	case LAZY_KIND: regs.ret = (l); GOTO_INDIR(regs.r[0]->info->eval); \
+	}							     \
+	break;							     \
+    }								     \
+    GOTO_INDIR(l);						     \
 } while ( 0 )
 
 @ 

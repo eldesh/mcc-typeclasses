@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: constraints.nw 2334 2007-06-23 09:33:35Z wlux $
+% $Id: constraints.nw 2346 2007-06-23 10:23:59Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -84,7 +84,7 @@ FUNCTION(___38_)
 		    start_thread(2, ___38__1);
 
 		    SAVE_REGS(1);
-		    CALL_ENT(regs.r[0], update);
+		    CALL_INDIR_ENT(regs.r[0], update);
 		case UPD_TAG:
 		    aux = c1;
 		    c1	= c2;
@@ -106,7 +106,7 @@ FUNCTION(___38_)
 		/* FALL THROUGH!!! */
 	    case LVAR_KIND:
 		SAVE_RET1(c2);
-		CALL_ENT(c1, ___38__2);
+		CALL_INDIR_ENT(c1, ___38__2);
 	    default:
 		assert(node_tag(c2) == CAPP_KIND);
 	    }
@@ -119,12 +119,12 @@ FUNCTION(___38_)
 		if ( node_kind(c2) != QUEUEME_TAG )
 		{
 		    SAVE_RET1(c1);
-		    CALL_ENT(c2, ___38__2);
+		    CALL_INDIR_ENT(c2, ___38__2);
 		}
 		/* FALL_THROUGH!!! */
 	    case LVAR_KIND:
 		SAVE_RET1(c2);
-		CALL_ENT(c1, ___38__2);
+		CALL_INDIR_ENT(c1, ___38__2);
 	    default:
 		assert(node_kind(c2) == CAPP_KIND);
 	    }
@@ -141,7 +141,7 @@ FUNCTION(___38_)
 	{
 	case LAZY_KIND:
 	    SAVE_RET1(c1);
-	    CALL_ENT(c2, ___38__2);
+	    CALL_INDIR_ENT(c2, ___38__2);
 	case LVAR_KIND:
 	    SAVE_RET1(c2);
 	    CALL1(sync_var, ___38__3, c1);

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: curry.nw 2345 2007-06-23 09:58:12Z wlux $
+% $Id: curry.nw 2346 2007-06-23 10:23:59Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -79,6 +79,11 @@ Currently, the following configuration options are supported.
   assembler jump instructions into the code (see
   Sect.~\ref{sec:execution}). This flag is controlled by the
   \texttt{--enable-trampoline} option of \texttt{configure}.
+\item [[USE_STANDARD_TRAMPOLINE]]: If [[USE_TRAMPOLINE]] is defined,
+  this flag determines whether \emph{all} tail calls are performed
+  through the trampoline loop. This flag can be set passing the
+  [[standard]] argument to \texttt{--enable-trampoline} configuration
+  option.
 \item [[NO_POINTER_TAGS]]: This flag determines whether the runtime
   system uses tagged pointers, which allow encoding integer numbers in
   pointer values rather than allocating nodes for them. If this flag
@@ -138,6 +143,10 @@ from   n = n : from (n + 1)
 
 /* Define as 1 to use trampoline code for tail calls */
 #define USE_TRAMPOLINE 0
+
+/* Define as 1 to perform all tail calls via the trampoline */
+/* NB This macro has an effect only if USE_TRAMPOLINE is non-zero */
+#define USE_STANDARD_TRAMPOLINE 0
 
 /* Define as 1 to disable use of tagged pointers */
 #define NO_POINTER_TAGS 0

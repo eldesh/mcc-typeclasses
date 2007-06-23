@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2337 2007-06-23 09:40:57Z wlux $
+% $Id: CGen.lhs 2346 2007-06-23 10:23:59Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -941,22 +941,25 @@ translation function.
 >   concatMap (allocNode consts) ds ++ concatMap (initNode consts) ds
 
 > jump :: (Bool,[Name],[Name]) -> CPSCont -> [CPSCont] -> [CStmt]
-> jump vs0 k ks = saveCont vs0 [] [] (k:ks) ++ [gotoRet (k:ks)]
+> jump vs0 k ks = saveCont vs0 [] [] (k:ks) ++ [gotoRet vs0 (k:ks)]
 
 > ret :: (Bool,[Name],[Name]) -> Name -> [CPSCont] -> [CStmt]
-> ret vs0 v ks = saveCont vs0 [v] [] ks ++ [gotoRet ks]
+> ret vs0 v ks = saveCont vs0 [v] [] ks ++ [gotoRet vs0 ks]
 
 > enter :: (Bool,[Name],[Name]) -> Name -> [CPSCont] -> [CStmt]
 > enter vs0 v ks =
 >   saveCont vs0 [v] [] ks ++
 >   [kindSwitch v [updVar (null ks,[v],[]) v] taggedSwitch
 >               [CCase "LAZY_KIND"
->                      (saveRet vs0 ks ++ [gotoExpr (field v "info->eval")])],
->    gotoRet ks]
->   where taggedSwitch switch = CIf (isTaggedPtr v) [switch] []
+>                      (saveRet vs0 ks ++ [goto vs0 (field v "info->eval")])],
+>    gotoRet vs0 ks]
+>   where goto vs0 = if fst3 vs0 then gotoIndirExpr else gotoExpr
+>         taggedSwitch switch = CIf (isTaggedPtr v) [switch] []
 
 > exec :: (Bool,[Name],[Name]) -> Name -> [Name] -> [CPSCont] -> [CStmt]
-> exec vs0 f vs ks = saveCont vs0 vs [] ks ++ saveRet vs0 ks ++ [goto (cName f)]
+> exec vs0 f vs ks =
+>   saveCont vs0 vs [] ks ++ saveRet vs0 ks ++ [exec vs0 (cName f)]
+>   where exec vs0 = if fst3 vs0 then gotoIndir else goto
 
 > saveCont :: (Bool,[Name],[Name]) -> [Name] -> [Name] -> [CPSCont] -> [CStmt]
 > saveCont vs0 vs ws ks =
@@ -968,10 +971,10 @@ translation function.
 > saveRet (ent,_,_) [] = [setRet (var retIpName) | not ent]
 > saveRet _ (k:_) = [setRet (CExpr (contName k))]
 
-> gotoRet :: [CPSCont] -> CStmt
-> gotoRet ks = goto (contIp ks)
->   where contIp [] = show retIpName
->         contIp (k:_) = contName k
+> gotoRet :: (Bool,[Name],[Name]) -> [CPSCont] -> CStmt
+> gotoRet _ [] = gotoIndir (show retIpName)
+> gotoRet vs0 (k:_) = ret vs0 (contName k)
+>   where ret vs0 = if fst3 vs0 then gotoIndir else goto
 
 > lock :: Name -> [CStmt]
 > lock v =
@@ -1283,7 +1286,7 @@ first loads this address into a temporary variable and then boxes it.
 >         [setVar v (CFunCall "tag_int" [e])]]]
 > box (Just TypeFloat) v e =
 >   [localVar v (Just alloc),
->    setField v "info" (addr  "float_info"),
+>    setField v "info" (addr "float_info"),
 >    CProcCall "put_double_val" [var v,e],
 >    incrAlloc (ctypeSize TypeFloat)]
 > box (Just TypePtr) v e =
@@ -1579,8 +1582,14 @@ of the abstract syntax tree.
 > goto :: String -> CStmt
 > goto l = gotoExpr (CExpr l)
 
+> gotoIndir :: String -> CStmt
+> gotoIndir l = gotoIndirExpr (CExpr l)
+
 > gotoExpr :: CExpr -> CStmt
 > gotoExpr l = CProcCall "GOTO" [l]
+
+> gotoIndirExpr :: CExpr -> CStmt
+> gotoIndirExpr l = CProcCall "GOTO_INDIR" [l]
 
 > funCall :: String -> [String] -> CExpr
 > funCall f xs = CFunCall f (map CExpr xs)

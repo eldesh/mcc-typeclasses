@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: search.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: search.nw 2346 2007-06-23 10:23:59Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -138,7 +138,7 @@ FUNCTION(__try)
 {
  ENTRY_LABEL(extern, __try)
     SAVE_REGS(0);
-    EVAL_NODE(__try_1);
+    EVAL_INDIR_NODE(__try_1);
 }
 
 static
@@ -183,7 +183,7 @@ FUNCTION(__try_1)
 #if !COPY_SEARCH_SPACE
 	restore_search_space(sc->sc.spc);
 #endif
-	GOTO(resume_continuation(sc->sc.code, sc->sc.rq));
+	GOTO_INDIR(resume_continuation(sc->sc.code, sc->sc.rq));
     }
 
 #if !COPY_SEARCH_SPACE
@@ -480,7 +480,7 @@ FUNCTION(resume_search)
     regs.sp[0] = sc->sc.susp;
     regs.sp[1] = sc->sc.var;
     restore_search_space(sc->sc.spc);
-    GOTO(resume_continuation(sc->sc.code, sc->sc.rq));
+    GOTO_INDIR(resume_continuation(sc->sc.code, sc->sc.rq));
 }
 
 @ 

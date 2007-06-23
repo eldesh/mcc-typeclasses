@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 2303 2007-06-20 07:22:47Z wlux $
+% $Id: backtrack.nw 2346 2007-06-23 10:23:59Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -103,7 +103,7 @@ FUNCTION(choices)
 #endif
 
     /* continue at the first alternative */
-    GOTO(choice_conts[0]);
+    GOTO_INDIR(choice_conts[0]);
 }
 
 static
@@ -170,7 +170,7 @@ FUNCTION(fail)
     }
 
     /* continue at the next alternative */
-    GOTO(choice_conts[0]);
+    GOTO_INDIR(choice_conts[0]);
 }
 
 #if COPY_SEARCH_SPACE

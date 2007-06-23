@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2312 2007-06-20 12:00:06Z wlux $
+% $Id: show.nw 2346 2007-06-23 10:23:59Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -259,8 +259,8 @@ FUNCTION(showp)
     TRACE_FUN("showp", 4);
     SAVE_REGS(3);
     if ( regs.r[2] == zero )
-	GOTO(showp_1);
-    EVAL(showp_1);
+	GOTO_INDIR(showp_1);
+    EVAL_INDIR(showp_1);
 }
 
 static
@@ -785,8 +785,8 @@ FUNCTION(showList)
  ENTRY_LABEL(static, showList)
     SAVE_REGS(3);
     if ( regs.r[2] == zero )
-	GOTO(showList_1);
-    EVAL(showList_1);
+	GOTO_INDIR(showList_1);
+    EVAL_INDIR(showList_1);
 }
 
 static
@@ -926,8 +926,8 @@ FUNCTION(showTail)
     TRACE_FUN("showTail", 3);
     SAVE_REGS(2);
     if ( regs.r[1] == zero )
-	GOTO(showTail_1);
-    EVAL_NODE(showTail_1);
+	GOTO_INDIR(showTail_1);
+    EVAL_INDIR_NODE(showTail_1);
 }
 
 static
@@ -1081,7 +1081,7 @@ FUNCTION(showStringTail)
 {
  ENTRY_LABEL(static, showStringTail)
     SAVE_REGS(2);
-    EVAL_NODE(showStringTail_1);
+    EVAL_INDIR_NODE(showStringTail_1);
 }
 
 static

@@ -1,6 +1,6 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 2344 2007-06-23 09:55:53Z wlux $
+# $Id: Makefile.in 2375 2007-06-26 13:16:14Z wlux $
 #
 # Copyright (c) 2004-2007, Wolfgang Lux
 # See ../LICENSE for the full license.
@@ -201,7 +201,7 @@ Prelude.c: Prelude.curry
 
 IO.c: IO.curry $(srcdir)/Prelude.icurry-boot
 	cmp -s Prelude.icurry $(srcdir)/Prelude.icurry-boot || \
-		cp -p $(srcdir)/Prelude.icurry-boot Prelude.icurry
+		sed -e'/import IO;/d' -e '/IO\./d' $(srcdir)/Prelude.icurry-boot > Prelude.icurry
 	rm -rf .IO
 	mkdir .IO
 	../cycc $(CYCCFLAGS) $(IO_CYCCFLAGS) --split-code -o .IO/IO IO.curry

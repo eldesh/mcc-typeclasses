@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2330 2007-06-22 23:00:23Z wlux $
+% $Id: DTransform.lhs 2378 2007-06-26 21:51:43Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -306,11 +306,16 @@ We have to introduce an auxiliary function for the lambda in the intermediate co
 > dAddMain :: Ident -> Module -> Module
 > dAddMain goalId (Module m is ds) = Module m is (fMain ++ ds)
 >   where (arity,ty) = head [(length lVars,ty) | FunctionDecl f lVars ty _ <- ds, f == debugOldMainId]
->         fMain = if isIOType ty || isIOType (debugResultType ty)
+>         fMain = if isIO
 >                 then newMainIO m goalId arity
->                 else newMain m goalId
+>                 else newMain m goalId arity
 >         debugOldMainId = qualifyWith m (debugRenameId "" goalId)
 >         debugResultType (TypeConstructor debugIdentPair [ty,_]) = ty
+>         isIO =
+>           case arity of
+>             0 -> isIOType (debugResultType ty)
+>             1 -> isIOType ty
+>             _ -> False
 
 > newMainIO :: ModuleIdent -> Ident -> Int -> [Decl]
 > newMainIO m f n = [fMain]
@@ -324,8 +329,8 @@ We have to introduce an auxiliary function for the lambda in the intermediate co
 >       fBody = Apply (Function debugIOFunctionqId 1) fApp
 >       debugOldMainId = qualifyWith m (debugRenameId "" f)
 
-> newMain :: ModuleIdent -> Ident -> [Decl]
-> newMain m f = [fMain,auxMain]
+> newMain :: ModuleIdent -> Ident -> Int -> [Decl]
+> newMain m f n = [fMain,auxMain]
 >       where 
 >       fMain = FunctionDecl fId [] fType fBody
 >       fId   = qualifyWith m f
@@ -345,7 +350,10 @@ We have to introduce an auxiliary function for the lambda in the intermediate co
 >       alt'     = Alt (ConstructorPattern debugIdentPair [x,ct]) expression
 >       caseExpr = Case Flex (Variable param) [alt']
 >       alt      = Alt (ConstructorPattern debugIdentPair [r,ct']) caseExpr
->       fBody'   = Case Rigid  (Function debugOldMainId 0) [alt]
+>       fApp     = if n == 0
+>                  then Function debugOldMainId n
+>                  else debugBuildPairExp (Function debugOldMainId n) void
+>       fBody'   = Case Rigid  fApp [alt]
 >       auxMain = FunctionDecl debugAuxMainId [param] fType' fBody'
 >       debugOldMainId = qualifyWith m (debugRenameId "" f)
 >       debugAuxMainId = qualifyWith m (debugRenameId "#Aux" f)

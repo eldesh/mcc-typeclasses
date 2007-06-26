@@ -111,8 +111,11 @@ class (Num a, Ord a) => Real a where {
 toFloat :: a -> Float
 };
 class (Fractional a, Real a) => RealFrac a where {
-truncate :: a -> Int;
-round :: a -> Int
+properFraction :: Integral b => a -> (b, a);
+truncate :: Integral b => a -> b;
+round :: Integral b => a -> b;
+ceiling :: Integral b => a -> b;
+floor :: Integral b => a -> b
 };
 class Show a where {
 showsPrec :: Int -> a -> [Char] -> [Char];

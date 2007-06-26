@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2280 2007-06-19 11:40:35Z wlux $
+-- $Id: Prelude.curry 2376 2007-06-26 13:32:13Z wlux $
 --
 -- Copyright (c) 1999-2006, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -868,10 +868,23 @@ class Num a => Fractional a where
   x / y   = x * recip y
 
 class (Real a, Fractional a) => RealFrac a where
-  -- NB Result of truncate and round restricted to Int because polymorphic
-  --    methods are not supported.
-  --    ProperFraction, ceiling, and floor currently not implemented.
-  truncate, round :: a -> Int
+  properFraction  :: Integral b => a -> (b,a)
+  truncate, round :: Integral b => a -> b
+  ceiling, floor  :: Integral b => a -> b
+
+  -- Minimal complete definition:
+  -- properFraction
+  truncate x = case properFraction x of (n,_) -> n
+  round x =
+    case properFraction x of
+      (n,r) ->
+        if s == -1 || s == 0 && n `rem` 2 == 0
+          then n
+	  else if r < 0 then n - 1 else n + 1
+        where s = signum (abs r - 0.5)
+  ceiling x = case properFraction x of (n,r) -> if r > 0 then n + 1 else n
+  floor x   = case properFraction x of (n,r) -> if r < 0 then n - 1 else n
+
 
 
 -- Types of primitive arithmetic functions and predicates
@@ -1006,9 +1019,13 @@ instance Fractional Float where
   fromFloat x = x
 
 instance RealFrac Float where
-  truncate = primTrunc
+  properFraction x =
+    case primTrunc x of
+      n -> (fromInt n, x - toFloat n)
     where foreign import ccall "prims.h" primTrunc :: Float -> Int
-  round = primRound
+  truncate x = fromInt (primTrunc x)
+    where foreign import ccall "prims.h" primTrunc :: Float -> Int
+  round x = fromInt (primRound x)
     where foreign import ccall "prims.h" primRound :: Float -> Int
 
 

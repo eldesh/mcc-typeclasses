@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2275 2007-06-18 09:30:41Z wlux $
+% $Id: InstCheck.lhs 2379 2007-06-27 09:24:28Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -21,6 +21,7 @@ compiler are added to the instance environment.
 > import Env
 > import Error
 > import List
+> import Maybe
 > import Monad
 > import Pretty
 > import SCC
@@ -31,7 +32,8 @@ compiler are added to the instance environment.
 > instCheck :: ModuleIdent -> TCEnv -> InstEnv -> [TopDecl a] -> Error InstEnv
 > instCheck m tcEnv iEnv ds =
 >   do
->     iEnv'' <- foldM (bindDerivedInstances m tcEnv) iEnv' (sortDeriving m tds)
+>     iEnv'' <-
+>       foldM (bindDerivedInstances m tcEnv) iEnv' (sortDeriving m tcEnv tds)
 >     mapE_ (checkInstance tcEnv iEnv'') ids
 >     return iEnv''
 >   where (tds,ods) = partition isTypeDecl ds
@@ -83,13 +85,13 @@ environment before instances of their subclasses.
 > bindDerivedInstances m tcEnv iEnv [DataDecl p cx tc tvs cs clss]
 >   | null cs = errorAt p noAbstractDerive
 >   | any (`notElem` tvs) (fv tys) = errorAt p noExistentialDerive
->   | tc `notElem` foldr (ft m) [] tys =
+>   | tc `notElem` concatMap (ft m tcEnv) tys =
 >       foldM (bindDerived m tcEnv p cx tc tvs tys) iEnv
 >             (sortClasses tcEnv clss)
 >   where tys = concatMap constrTypes cs
 > bindDerivedInstances m tcEnv iEnv
 >                      [NewtypeDecl p cx tc tvs (NewConstrDecl _ _ ty) clss]
->   | tc `notElem` ft m ty [] =
+>   | tc `notElem` ft m tcEnv ty =
 >       foldM (bindDerived m tcEnv p cx tc tvs [ty]) iEnv
 >             (sortClasses tcEnv clss)
 > bindDerivedInstances m tcEnv iEnv ds =
@@ -159,13 +161,13 @@ environment before instances of their subclasses.
 >   where (_,d1) `compareDepth` (_,d2) = d1 `compare` d2
 >         adjoinDepth tcEnv cls = (cls,length (allSuperClasses cls tcEnv))
 
-> sortDeriving :: ModuleIdent -> [TopDecl a] -> [[TopDecl a]]
-> sortDeriving m ds = scc bound free (filter hasDerivedInstance ds)
+> sortDeriving :: ModuleIdent -> TCEnv -> [TopDecl a] -> [[TopDecl a]]
+> sortDeriving m tcEnv ds = scc bound free (filter hasDerivedInstance ds)
 >   where bound (DataDecl _ _ tc _ _ _) = [tc]
 >         bound (NewtypeDecl _ _ tc _ _ _) = [tc]
->         free (DataDecl _ _ _ _ cs _) =
->           foldr (ft m) [] (concatMap constrTypes cs)
->         free (NewtypeDecl _ _ _ _ (NewConstrDecl _ _ ty) _) = ft m ty []
+>         free (DataDecl _ _ _ _ cs _) = concatMap (ft m tcEnv) tys
+>           where tys = concatMap constrTypes cs
+>         free (NewtypeDecl _ _ _ _ (NewConstrDecl _ _ ty) _) = ft m tcEnv ty
 
 > hasDerivedInstance :: TopDecl a -> Bool
 > hasDerivedInstance (DataDecl _ _ _ _ _ clss) = not (null clss)
@@ -175,13 +177,15 @@ environment before instances of their subclasses.
 > hasDerivedInstance (InstanceDecl _ _ _ _ _) = False
 > hasDerivedInstance (BlockDecl _) = False
 
-> ft :: ModuleIdent -> TypeExpr -> [Ident] -> [Ident]
-> ft m (ConstructorType tc) tcs = maybe id (:) (localIdent m tc) tcs
-> ft _ (VariableType _) tcs = tcs
-> ft m (TupleType tys) tcs = foldr (ft m) tcs tys
-> ft m (ListType ty) tcs = ft m ty tcs
-> ft m (ArrowType ty1 ty2) tcs = ft m ty1 $ ft m ty2 $ tcs
-> ft m (ApplyType ty1 ty2) tcs = ft m ty1 $ ft m ty2 $ tcs
+> ft :: ModuleIdent -> TCEnv -> TypeExpr -> [Ident]
+> ft m tcEnv ty = catMaybes (map (localIdent m) tys)
+>   where tys = types (expandMonoType tcEnv [] ty) []
+>         types (TypeConstructor tc) = (tc :)
+>         types (TypeVariable _) = id
+>         types (TypeConstrained _ _) = id
+>         types (TypeSkolem _) = id
+>         types (TypeApply ty1 ty2) = types ty1 . types ty2
+>         types (TypeArrow ty1 ty2) = types ty1 . types ty2
 
 \end{verbatim}
 Finally, the compiler checks the contexts of all explicit instance

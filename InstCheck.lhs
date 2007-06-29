@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2379 2007-06-27 09:24:28Z wlux $
+% $Id: InstCheck.lhs 2380 2007-06-29 12:25:43Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -17,11 +17,9 @@ compiler are added to the instance environment.
 
 > module InstCheck(instCheck) where
 > import Base
-> import CurryPP
 > import Env
 > import Error
 > import List
-> import Maybe
 > import Monad
 > import Pretty
 > import SCC
@@ -32,13 +30,37 @@ compiler are added to the instance environment.
 > instCheck :: ModuleIdent -> TCEnv -> InstEnv -> [TopDecl a] -> Error InstEnv
 > instCheck m tcEnv iEnv ds =
 >   do
+>     mapE_ checkDeriving tds'
 >     iEnv'' <-
->       foldM (bindDerivedInstances m tcEnv) iEnv' (sortDeriving m tcEnv tds)
+>       foldM (bindDerivedInstances m tcEnv) iEnv'
+>             (sortDeriving (map (declDeriving m tcEnv) tds'))
 >     mapE_ (checkInstance tcEnv iEnv'') ids
 >     return iEnv''
 >   where (tds,ods) = partition isTypeDecl ds
+>         tds' = filter hasDerivedInstance tds
 >         ids = filter isInstanceDecl ods
 >         iEnv' = foldr (bindInstance m tcEnv) iEnv ids
+
+> hasDerivedInstance :: TopDecl a -> Bool
+> hasDerivedInstance (DataDecl _ _ _ _ _ clss) = not (null clss)
+> hasDerivedInstance (NewtypeDecl _ _ _ _ _ clss) = not (null clss)
+> hasDerivedInstance (TypeDecl _ _ _ _) = False
+> hasDerivedInstance (ClassDecl _ _ _ _ _) = False
+> hasDerivedInstance (InstanceDecl _ _ _ _ _) = False
+> hasDerivedInstance (BlockDecl _) = False
+
+\end{verbatim}
+No instances can be derived for abstract data types as well as
+existentially quantified data types.
+\begin{verbatim}
+
+> checkDeriving :: TopDecl a -> Error ()
+> checkDeriving (DataDecl p _ _ _ cs _)
+>   | null cs = errorAt p noAbstractDerive
+>   | any (not . null . existVars) cs = errorAt p noExistentialDerive
+>   where existVars (ConstrDecl _ evs _ _) = evs
+>         existVars (ConOpDecl _ evs _ _ _) = evs
+> checkDeriving d = return ()
 
 \end{verbatim}
 First, the compiler adds all explicit instance declarations to the
@@ -71,79 +93,89 @@ each constituent type $t_{ij}$ of the data type declaration and that
 (mutually) recursive data types, inference of the appropriate contexts
 may require a fixpoint calculation.
 
+For the purpose of inferring derived instance contexts, we make no
+distinction between data type and newtype declarations. Furthermore,
+we are interested only in the argument types of all constructors of a
+type, not the constructors themselves. The compiler also carefully
+sorts derived classes with respect to the super class hierarchy so
+that subclass instances are added to the instance environment after
+their super classes.
+\begin{verbatim}
+
+> data Deriving =
+>   Deriving Position QualIdent QualType [Type] [QualIdent]
+>   deriving Show
+
+> declDeriving :: ModuleIdent -> TCEnv -> TopDecl a -> Deriving
+> declDeriving m tcEnv (DataDecl p cx tc tvs cs clss) =
+>   mkDeriving m tcEnv p cx tc tvs (concatMap constrTypes cs) clss
+>   where constrTypes (ConstrDecl _ _ _ tys) = tys
+>         constrTypes (ConOpDecl _ _ ty1 _ ty2) = [ty1,ty2]
+> declDeriving m tcEnv (NewtypeDecl p cx tc tvs nc clss) =
+>   mkDeriving m tcEnv p cx tc tvs [nconstrType nc] clss
+>   where nconstrType (NewConstrDecl _ _ ty) = ty
+
+> mkDeriving :: ModuleIdent -> TCEnv -> Position -> [ClassAssert] -> Ident
+>            -> [Ident] -> [TypeExpr] -> [QualIdent] -> Deriving
+> mkDeriving m tcEnv p cx tc tvs tys clss =
+>   Deriving p tc' (QualType cx' ty'') tys' (sortClasses tcEnv clss)
+>   where tc' = qualifyWith m tc
+>         (tys',ty'') = arrowUnapply ty'
+>         QualType cx' ty' = expandConstrType tcEnv cx tc' tvs tys
+
+> sortClasses :: TCEnv -> [QualIdent] -> [QualIdent]
+> sortClasses tcEnv clss =
+>   map fst (sortBy compareDepth (map (adjoinDepth tcEnv) clss))
+>   where (_,d1) `compareDepth` (_,d2) = d1 `compare` d2
+>         adjoinDepth tcEnv cls = (cls,length (allSuperClasses cls tcEnv))
+
+\end{verbatim}
 After adding all explicit instance declarations to the instance
 environment, the compiler sorts the data and newtype declarations with
 non-empty deriving clauses into minimal binding groups and infers
-contexts for their instance declarations. While inferring instance
-contexts, the compiler must carefully respect the super class
-hierarchy so that super class instances are added to the instance
-environment before instances of their subclasses.
+contexts for their instance declarations.
 \begin{verbatim}
 
-> bindDerivedInstances :: ModuleIdent -> TCEnv -> InstEnv -> [TopDecl a]
+> bindDerivedInstances :: ModuleIdent -> TCEnv -> InstEnv -> [Deriving]
 >                      -> Error InstEnv
-> bindDerivedInstances m tcEnv iEnv [DataDecl p cx tc tvs cs clss]
->   | null cs = errorAt p noAbstractDerive
->   | any (`notElem` tvs) (fv tys) = errorAt p noExistentialDerive
->   | tc `notElem` concatMap (ft m tcEnv) tys =
->       foldM (bindDerived m tcEnv p cx tc tvs tys) iEnv
->             (sortClasses tcEnv clss)
->   where tys = concatMap constrTypes cs
-> bindDerivedInstances m tcEnv iEnv
->                      [NewtypeDecl p cx tc tvs (NewConstrDecl _ _ ty) clss]
->   | tc `notElem` ft m tcEnv ty =
->       foldM (bindDerived m tcEnv p cx tc tvs [ty]) iEnv
->             (sortClasses tcEnv clss)
+> bindDerivedInstances m tcEnv iEnv [Deriving p tc ty tys clss]
+>   | tc `notElem` ft tys = foldM (bindDerived m tcEnv p tc ty tys) iEnv clss
 > bindDerivedInstances m tcEnv iEnv ds =
 >   foldM (bindInitialContexts m tcEnv) iEnv ds >>=
 >   fixpoint (\iEnv' -> updateContexts iEnv' . concat)
->            (\iEnv' -> mapE (inferContexts m tcEnv iEnv') ds)
+>            (\iEnv' -> mapE (inferContexts tcEnv iEnv') ds)
 >   where fixpoint f m x = m x >>= maybe (return x) (fixpoint f m) . f x
 
-> bindDerived :: ModuleIdent -> TCEnv -> Position -> [ClassAssert] -> Ident
->             -> [Ident] -> [TypeExpr] -> InstEnv -> QualIdent -> Error InstEnv
-> bindDerived m tcEnv p cx tc tvs tys iEnv cls =
->   liftM (bindInstance m iEnv) (inferContext m tcEnv iEnv p cx tc tvs tys cls)
+> bindDerived :: ModuleIdent -> TCEnv -> Position -> QualIdent -> QualType
+>             -> [Type] -> InstEnv -> QualIdent -> Error InstEnv
+> bindDerived m tcEnv p tc ty tys iEnv cls =
+>   liftM (bindInstance m iEnv) (inferContext tcEnv iEnv p tc ty tys cls)
 >   where bindInstance m iEnv (ct,cx) = bindEnv ct (m,cx) iEnv
 
-> bindInitialContexts :: ModuleIdent -> TCEnv -> InstEnv -> TopDecl a
+> bindInitialContexts :: ModuleIdent -> TCEnv -> InstEnv -> Deriving
 >                     -> Error InstEnv
-> bindInitialContexts m tcEnv iEnv (DataDecl p cx tc tvs cs clss)
->   | null cs = errorAt p noAbstractDerive
->   | any (`notElem` tvs) (fv tys) = errorAt p noExistentialDerive
->   | otherwise =
->       foldM (bindDerived m tcEnv p cx tc tvs []) iEnv (sortClasses tcEnv clss)
->   where tys = concatMap constrTypes cs
-> bindInitialContexts m tcEnv iEnv (NewtypeDecl p cx tc tvs _ clss) =
->   foldM (bindDerived m tcEnv p cx tc tvs []) iEnv (sortClasses tcEnv clss)
+> bindInitialContexts m tcEnv iEnv (Deriving p tc ty _ clss) =
+>   foldM (bindDerived m tcEnv p tc ty []) iEnv clss
 
-> inferContexts :: ModuleIdent -> TCEnv -> InstEnv -> TopDecl a
->               -> Error [(CT,Context)]
-> inferContexts m tcEnv iEnv (DataDecl p cx tc tvs cs clss) =
->   mapE (inferContext m tcEnv iEnv p cx tc tvs tys) clss
->   where tys = concatMap constrTypes cs
-> inferContexts m tcEnv iEnv
->               (NewtypeDecl p cx tc tvs (NewConstrDecl _ c ty) clss) =
->   mapE (inferContext m tcEnv iEnv p cx tc tvs [ty]) clss
+> inferContexts :: TCEnv -> InstEnv -> Deriving -> Error [(CT,Context)]
+> inferContexts tcEnv iEnv (Deriving p tc ty tys clss) =
+>   mapE (inferContext tcEnv iEnv p tc ty tys) clss
 
-> inferContext :: ModuleIdent -> TCEnv -> InstEnv -> Position -> [ClassAssert]
->              -> Ident -> [Ident] -> [TypeExpr] -> QualIdent
->              -> Error (CT,Context)
-> inferContext m tcEnv iEnv p cx tc tvs tys cls =
+> inferContext :: TCEnv -> InstEnv -> Position -> QualIdent -> QualType
+>              -> [Type] -> QualIdent -> Error (CT,Context)
+> inferContext tcEnv iEnv p tc (QualType cx ty) tys cls =
 >   do
->     cx''' <- reduceContext p what doc tcEnv iEnv cx''
->     mapE_ (reportUndecidable p what doc tcEnv) cx'''
->     return (CT cls' tc',sort cx''')
+>     cx'' <- reduceContext p what doc tcEnv iEnv cx'
+>     mapE_ (reportUndecidable p what doc tcEnv) cx''
+>     return (CT cls' tc,sort cx'')
 >   where what = "derived instance"
->         doc = ppInstance tcEnv (TypePred cls (arrowBase ty'))
->         QualType cx' ty' = expandConstrType tcEnv cx tc' tvs tys
->         tc' = qualifyWith m tc
+>         doc = ppInstance tcEnv (TypePred cls ty)
 >         (cls',clss) =
 >           case qualLookupTopEnv cls tcEnv of
 >             [TypeClass cls' _ clss _] -> (cls',clss)
 >             _ -> internalError "inferContext"
->         cx'' = nub (cx' ++ [TypePred cls (arrowBase ty') | cls <- clss] ++
->                     [TypePred cls' ty | ty <- arrowArgs ty'])
+>         cx' = nub (cx ++ [TypePred cls ty | cls <- clss] ++
+>                    [TypePred cls' ty | ty <- tys])
 
 > updateContexts :: InstEnv -> [(CT,Context)] -> Maybe InstEnv
 > updateContexts iEnv cxs = if or upds then Just iEnv' else Nothing
@@ -155,32 +187,14 @@ environment before instances of their subclasses.
 >               | otherwise -> (bindEnv ct (m,cx) iEnv,True)
 >             Nothing -> internalError "updateContext"
 
-> sortClasses :: TCEnv -> [QualIdent] -> [QualIdent]
-> sortClasses tcEnv clss =
->   map fst (sortBy compareDepth (map (adjoinDepth tcEnv) clss))
->   where (_,d1) `compareDepth` (_,d2) = d1 `compare` d2
->         adjoinDepth tcEnv cls = (cls,length (allSuperClasses cls tcEnv))
+> sortDeriving :: [Deriving] -> [[Deriving]]
+> sortDeriving ds = scc bound free ds
+>   where bound (Deriving _ tc _ _ _) = [tc]
+>         free (Deriving _ _ _ tys _) = ft tys
 
-> sortDeriving :: ModuleIdent -> TCEnv -> [TopDecl a] -> [[TopDecl a]]
-> sortDeriving m tcEnv ds = scc bound free (filter hasDerivedInstance ds)
->   where bound (DataDecl _ _ tc _ _ _) = [tc]
->         bound (NewtypeDecl _ _ tc _ _ _) = [tc]
->         free (DataDecl _ _ _ _ cs _) = concatMap (ft m tcEnv) tys
->           where tys = concatMap constrTypes cs
->         free (NewtypeDecl _ _ _ _ (NewConstrDecl _ _ ty) _) = ft m tcEnv ty
-
-> hasDerivedInstance :: TopDecl a -> Bool
-> hasDerivedInstance (DataDecl _ _ _ _ _ clss) = not (null clss)
-> hasDerivedInstance (NewtypeDecl _ _ _ _ _ clss) = not (null clss)
-> hasDerivedInstance (TypeDecl _ _ _ _) = False
-> hasDerivedInstance (ClassDecl _ _ _ _ _) = False
-> hasDerivedInstance (InstanceDecl _ _ _ _ _) = False
-> hasDerivedInstance (BlockDecl _) = False
-
-> ft :: ModuleIdent -> TCEnv -> TypeExpr -> [Ident]
-> ft m tcEnv ty = catMaybes (map (localIdent m) tys)
->   where tys = types (expandMonoType tcEnv [] ty) []
->         types (TypeConstructor tc) = (tc :)
+> ft :: [Type] -> [QualIdent]
+> ft tys = foldr types [] tys
+>   where types (TypeConstructor tc) = (tc :)
 >         types (TypeVariable _) = id
 >         types (TypeConstrained _ _) = id
 >         types (TypeSkolem _) = id
@@ -256,21 +270,20 @@ implied by other predicates in the context are removed.
 \end{verbatim}
 Constraints in instance contexts are restricted to the form $C\,u$,
 where $u$ is a type variable. The rationale behind this restriction is
-that it ensures termination of context reduction. To see the problem
+that it ensures termination of context reduction. For instance,
 consider the definition
 \begin{verbatim}
   data T f a = U a | T (f (T f a))
 \end{verbatim}
-The derived \texttt{Eq} instance declaration for this type would have
-context \texttt{(Eq a, Eq (f (T f a)))}. Now consider that this
-equality instance is used for $\texttt{f}=\texttt{[]}$. Whenever, the
-constraint \texttt{Eq (T [] a)} is reduced, a new \texttt{Eq (T [] a)}
-constraint enters the context.
-
-In order to prevent such infinite recursion, we comply strictly to the
-revised Haskell'98 report~\cite{PeytonJones03:Haskell} (cf.\ 
-Sect.~4.3.2) and report an error when an constraint that does not have
-the form $C\,u$ is found in the context of a derived instance.
+A derived \texttt{Eq} instance declaration for this type would have
+context \texttt{(Eq a, Eq (f (T f a)))}. If this equality instance is
+used for $\texttt{f}=\texttt{[]}$, a new \texttt{Eq (T [] a)}
+constraint enters the context whenever a constraint \texttt{Eq (T []
+a)} is reduced. In order to prevent this infinite recursion, we comply
+strictly to the revised Haskell'98 report~\cite{PeytonJones03:Haskell}
+(cf.\ Sect.~4.3.2) and report an error when a constraint that does
+not have the form $C\,u$ is found in the context of a derived
+instance.
 \begin{verbatim}
 
 > reportUndecidable :: Position -> String -> Doc -> TCEnv -> TypePred-> Error ()
@@ -278,15 +291,6 @@ the form $C\,u$ is found in the context of a derived instance.
 >   case ty of
 >     TypeVariable _ -> return ()
 >     _ -> errorAt p (invalidConstraint what doc tcEnv (TypePred cls ty))
-
-\end{verbatim}
-The function \texttt{constrTypes} extracts the argument types of a
-data constructor from its declaration.
-\begin{verbatim}
-
-> constrTypes :: ConstrDecl -> [TypeExpr]
-> constrTypes (ConstrDecl _ _ _ tys) = tys
-> constrTypes (ConOpDecl _ _ ty1 _ ty2) = [ty1,ty2]
 
 \end{verbatim}
 Error functions.

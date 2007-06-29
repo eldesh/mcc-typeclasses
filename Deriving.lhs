@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2368 2007-06-23 13:55:45Z wlux $
+% $Id: Deriving.lhs 2381 2007-06-29 12:30:34Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -295,7 +295,8 @@ respectively.
 
 > showsPrecMatch :: Ident -> QualIdent -> [Ident] -> [ConstrTerm ()]
 > showsPrecMatch l c xs =
->   [VariablePattern () l,ConstructorPattern () c (map (VariablePattern ()) xs)]
+>   [VariablePattern () (if null xs then anonId else l),
+>    ConstructorPattern () c (map (VariablePattern ()) xs)]
 
 > showsPrecExpr :: PEnv -> Ident -> QualIdent -> [Ident] -> Expression ()
 > showsPrecExpr pEnv l c xs

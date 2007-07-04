@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 2368 2007-06-23 13:55:45Z wlux $
+% $Id: PrecCheck.lhs 2389 2007-07-04 17:05:20Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -38,6 +38,31 @@ default precedence to an operator.
 > bindP m p op = bindTopEnv m op (PrecInfo (qualifyWith m op) p)
 
 \end{verbatim}
+At the top-level of a module, we must be careful to not use the
+precedence of an imported function with the same name as a locally
+defined function. For instance, if module $M$ imports module $M'$ and
+both $M$ and $M'$ define a function $f$, the compiler must not use the
+precedence of $M'.f$ while checking the left hand side of $M.f$, in
+particular if $M$ does not contain a fixity declaration for $f$. To
+this end, the compiler removes all precedences from the precedence
+environment which could conflict with a local function declaration
+before adding the local fixity declarations. Note that the problem
+does not apply to the right hand side of a function declaration
+because all occurrences of the unqualified identifier $f$ would be
+ambiguous in that case, except if the global declarations are shadowed
+by a local declaration of $f$.
+\begin{verbatim}
+
+> cleanPrecs :: Decl a -> PEnv -> PEnv
+> cleanPrecs (InfixDecl _ _c _ _) pEnv = pEnv
+> cleanPrecs (TypeSig _ fs _) pEnv = foldr localUnimportTopEnv pEnv fs
+> cleanPrecs (FunctionDecl _ f _) pEnv = localUnimportTopEnv f pEnv
+> cleanPrecs (ForeignDecl _ _ _ _ f _) pEnv = localUnimportTopEnv f pEnv
+> cleanPrecs (PatternDecl _ t _) pEnv = foldr localUnimportTopEnv pEnv (bv t)
+> cleanPrecs (FreeDecl _ vs) pEnv = foldr localUnimportTopEnv pEnv vs
+> cleanPrecs (TrustAnnot _ _ _) pEnv = pEnv
+
+\end{verbatim}
 With the help of the precedence environment, the compiler checks all
 infix applications and sections in the program. This pass will modify
 the parse tree such that for nested infix applications the operator
@@ -54,9 +79,10 @@ the correct operator precedence is used.
 > precCheck :: ModuleIdent -> PEnv -> [TopDecl a] -> Error (PEnv,[TopDecl a])
 > precCheck m pEnv ds =
 >   do
->     ds' <- mapE (checkTopDecl m pEnv') ds
->     return (pEnv',ds')
->   where pEnv' = bindPrecs m (concatMap decls ds) pEnv
+>     ds'' <- mapE (checkTopDecl m pEnv') ds
+>     return (pEnv',ds'')
+>   where ds' = concatMap decls ds
+>         pEnv' = bindPrecs m ds' (foldr cleanPrecs pEnv ds')
 >         decls (ClassDecl _ _ _ _ ds) = map decl ds
 >         decls (BlockDecl d) = [d]
 >         decls _ = []

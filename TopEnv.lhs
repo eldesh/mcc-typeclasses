@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TopEnv.lhs 2329 2007-06-22 22:45:18Z wlux $
+% $Id: TopEnv.lhs 2389 2007-07-04 17:05:20Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -39,7 +39,7 @@ imported.
 >               importTopEnv, qualImportTopEnv,
 >               bindTopEnv, globalBindTopEnv, localBindTopEnv, qualBindTopEnv,
 >               rebindTopEnv, globalRebindTopEnv, localRebindTopEnv,
->               qualRebindTopEnv, localUnbindTopEnv,
+>               qualRebindTopEnv, localUnimportTopEnv, localUnbindTopEnv,
 >               lookupTopEnv, qualLookupTopEnv, allEntities,
 >               allImports, moduleImports, localBindings) where
 > import Env
@@ -59,6 +59,12 @@ imported.
 > instance Functor TopEnv where
 >   fmap f (TopEnv tup env) =
 >     TopEnv (fmap (map f) tup) (fmap (map (apSnd f)) env)
+
+> bindEntities :: QualIdent -> [(Source,a)] -> Env QualIdent [(Source,a)]
+>              -> Env QualIdent [(Source,a)]
+> bindEntities x ys
+>   | null ys = unbindEnv x
+>   | otherwise = bindEnv x ys
 
 > entities :: QualIdent -> Env QualIdent [(Source,a)] -> [(Source,a)]
 > entities x env = fromMaybe [] (lookupEnv x env)
@@ -172,9 +178,17 @@ introduce bindings for both global and local definitions.
 >         rebindLocal ((Local,_) : ys) = (Local,y) : ys
 >         rebindLocal ((Import ms,y) : ys) = (Import ms,y) : rebindLocal ys
 
+> localUnimportTopEnv :: Ident -> TopEnv a -> TopEnv a
+> localUnimportTopEnv x (TopEnv tup env) =
+>   TopEnv tup (bindEntities x' (unbindImport (entities x' env)) env)
+>   where x' = qualify x
+>         unbindImport [] = []
+>         unbindImport ((Local,y) : ys) = [(Local,y)]
+>         unbindImport ((Import _,_) : ys) = unbindImport ys
+
 > localUnbindTopEnv :: Ident -> TopEnv a -> TopEnv a
 > localUnbindTopEnv x (TopEnv tup env) =
->   TopEnv tup (bindEnv x' (unbindLocal (entities x' env)) env)
+>   TopEnv tup (bindEntities x' (unbindLocal (entities x' env)) env)
 >   where x' = qualify x
 >         unbindLocal [] = error "internal error: unbindTopEnv"
 >         unbindLocal ((Local,_) : ys) = ys

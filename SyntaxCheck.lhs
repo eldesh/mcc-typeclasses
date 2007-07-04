@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2305 2007-06-20 11:32:33Z wlux $
+% $Id: SyntaxCheck.lhs 2386 2007-07-04 16:41:13Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -192,7 +192,7 @@ top-level.
 >         return (FreeDecl p vs)
 > checkDeclLhs top env (TrustAnnot p t fs) =
 >   do
->     maybe (return ()) (checkVars "trust annotation" p env) fs
+>     checkVars "trust annotation" p env fs
 >     return (TrustAnnot p t fs)
 
 > checkEquationLhs :: Bool -> VarEnv -> Position -> [Equation a]
@@ -249,7 +249,7 @@ top-level.
 >   reportDuplicates duplicateTypeSig repeatedTypeSig tys &&>
 >   reportDuplicates (const duplicateDefaultTrustAnnot)
 >                    (const repeatedDefaultTrustAnnot)
->                    [P p () | TrustAnnot p _ Nothing <- ds] &&>
+>                    [P p () | TrustAnnot p _ [] <- ds] &&>
 >   reportDuplicates duplicateTrustAnnot repeatedTrustAnnot trs &&>
 >   mapE_ (\(P p v) -> errorAt p (noBody v))
 >         (filter (`notElem` cs ++ fs ++ bvs) ops ++
@@ -328,7 +328,7 @@ report~\cite{PeytonJones03:Haskell}).
 >   reportDuplicates duplicateDefinition repeatedDefinition fs' &&>
 >   reportDuplicates (const duplicateDefaultTrustAnnot)
 >                    (const repeatedDefaultTrustAnnot)
->                    [P p () | TrustAnnot p _ Nothing <- ds] &&>
+>                    [P p () | TrustAnnot p _ [] <- ds] &&>
 >   reportDuplicates duplicateTrustAnnot repeatedTrustAnnot trs &&>
 >   mapE_ (\(P p f) -> errorAt p (undefinedMethod cls f))
 >         (filter (`notElem` fs) (ops' ++ fs')) &&>
@@ -615,7 +615,7 @@ Auxiliary definitions.
 > vars (ForeignDecl p _ _ _ f _) = [P p f]
 > vars (PatternDecl p t _) = map (P p) (bv t)
 > vars (FreeDecl p vs) = map (P p) vs
-> vars (TrustAnnot p _ fs) = maybe [] (map (P p)) fs
+> vars (TrustAnnot p _ fs) = map (P p) fs
 
 \end{verbatim}
 Due to the lack of a capitalization convention in Curry, it is

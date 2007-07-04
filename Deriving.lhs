@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2381 2007-06-29 12:30:34Z wlux $
+% $Id: Deriving.lhs 2386 2007-07-04 16:41:13Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -53,7 +53,7 @@ derived.
 >         constr (ConOpDecl _ _ _ op _) = (qualifyWith m op,2)
 >         toClassAssert tvs (TypePred cls (TypeVariable n)) =
 >           ClassAssert cls (tvs !! n) []
->         trustAll p ds = TrustMethod p Trust Nothing : ds
+>         trustAll p ds = TrustMethod p Trust [] : ds
 
 > deriveMethods :: PEnv -> TCEnv -> Position -> [Constr] -> QualIdent
 >               -> Error [MethodDecl ()]

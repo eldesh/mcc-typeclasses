@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2289 2007-06-19 16:30:52Z wlux $
+% $Id: Renaming.lhs 2386 2007-07-04 16:41:13Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -196,8 +196,7 @@ class method.
 >     f' <- renameVar env' f
 >     liftM (MethodDecl p f') (mapM (renameEqn f' emptyEnv) eqs)
 > renameMethodDecl _ _ env' (TrustMethod p tr fs) =
->   liftM (TrustMethod p tr)
->         (maybe (return Nothing) (liftM Just . mapM (renameVar env')) fs)
+>   liftM (TrustMethod p tr) (mapM (renameVar env') fs)
 
 > renameTypeSig :: QualTypeExpr -> RenameState QualTypeExpr
 > renameTypeSig ty =
@@ -242,8 +241,7 @@ class method.
 > renameDecl env (FreeDecl p vs) =
 >   liftM (FreeDecl p) (mapM (renameVar env) vs)
 > renameDecl env (TrustAnnot p t fs) =
->   liftM (TrustAnnot p t)
->         (maybe (return Nothing) (liftM Just . mapM (renameVar env)) fs)
+>   liftM (TrustAnnot p t) (mapM (renameVar env) fs)
 
 \end{verbatim}
 Note that the root of the left hand side term of an equation must be

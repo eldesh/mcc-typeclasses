@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2368 2007-06-23 13:55:45Z wlux $
+% $Id: CurrySyntax.lhs 2386 2007-07-04 16:41:13Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -69,7 +69,7 @@ parsed representation of a Curry program.
 >     MethodFixity Position Infix (Maybe Int) [Ident]
 >   | MethodSig Position [Ident] QualTypeExpr
 >   | MethodDecl Position Ident [Equation a]
->   | TrustMethod Position Trust (Maybe [Ident])
+>   | TrustMethod Position Trust [Ident]
 >   deriving (Eq,Show)
 > data Decl a =
 >     InfixDecl Position Infix (Maybe Int) [Ident]
@@ -78,7 +78,7 @@ parsed representation of a Curry program.
 >   | ForeignDecl Position CallConv (Maybe Safety) (Maybe String) Ident TypeExpr
 >   | PatternDecl Position (ConstrTerm a) (Rhs a)
 >   | FreeDecl Position [Ident]
->   | TrustAnnot Position Trust (Maybe [Ident])
+>   | TrustAnnot Position Trust [Ident]
 >   deriving (Eq,Show)
 
 > data Infix = Infix | InfixL | InfixR deriving (Eq,Show)

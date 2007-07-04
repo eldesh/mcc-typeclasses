@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2368 2007-06-23 13:55:45Z wlux $
+% $Id: CurryParser.lhs 2386 2007-07-04 16:41:13Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -241,8 +241,8 @@ directory path to the module is ignored.
 >               <*-> token PragmaEnd
 >   where pragmaKW = [(PragmaBegin SuspectPragma,Suspect),
 >                     (PragmaBegin TrustPragma,Trust)]
->         funList = Nothing <$-> token Underscore
->               <|> Just <$> fun `sepBy1` comma
+>         funList = fun `sepBy1` comma
+>               <|> [] <$-> token Underscore
 
 > infixDecl :: Parser Token (Decl ()) a
 > infixDecl = infixDeclLhs InfixDecl <*> option int <*> funop `sepBy1` comma
@@ -337,8 +337,8 @@ directory path to the module is ignored.
 >              <*-> token PragmaEnd
 >   where pragmaKW = [(PragmaBegin SuspectPragma,Suspect),
 >                     (PragmaBegin TrustPragma,Trust)]
->         funList = Nothing <$-> token Underscore
->               <|> Just <$> fun `sepBy1` comma
+>         funList = fun `sepBy1` comma
+>               <|> [] <$-> token Underscore
 
 \end{verbatim}
 \paragraph{Interface declarations}

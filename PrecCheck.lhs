@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 2389 2007-07-04 17:05:20Z wlux $
+% $Id: PrecCheck.lhs 2390 2007-07-05 16:14:20Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -63,6 +63,29 @@ by a local declaration of $f$.
 > cleanPrecs (TrustAnnot _ _ _) pEnv = pEnv
 
 \end{verbatim}
+We must also be careful with the left hand sides of class and instance
+method implementations because their method names have been renamed
+uniquely. In addition, for instance methods we must be careful to use
+the method's precedence as defined in the module defining the
+instance's class and not simply use the precedence which accidentally
+happens to be defined for the method's name in the current module. In
+order to get things straight, we extend the precedence environment
+locally for the renamed methods of a class or instance declaration,
+looking up the correct precedences in the environment with an
+appropriate qualification (see the \texttt{ClassDecl} and
+\texttt{InstanceDecl} equations of \texttt{checkTopDecl} below).
+\begin{verbatim}
+
+> bindMethodPrecs :: ModuleIdent -> (Ident -> QualIdent) -> [MethodDecl a]
+>                 -> PEnv -> PEnv
+> bindMethodPrecs m qual ds pEnv =
+>   foldr bindPrec pEnv [f | MethodDecl _ f _ <- ds]
+>   where bindPrec f pEnv =
+>           maybe id (bindTopEnv m f)
+>                 (listToMaybe (qualLookupTopEnv (qual (unRenameIdent f)) pEnv))
+>                 pEnv
+
+\end{verbatim}
 With the help of the precedence environment, the compiler checks all
 infix applications and sections in the program. This pass will modify
 the parse tree such that for nested infix applications the operator
@@ -70,16 +93,13 @@ with the lowest precedence becomes the root and that two adjacent
 operators with the same precedence will not have conflicting
 associativities. The top-level precedence environment is returned
 because it is used for constructing the module's interface.
-
-Note that the compiler must temporarily undo the renaming of method
-identifiers on the left hand sides of method implementations so that
-the correct operator precedence is used.
 \begin{verbatim}
 
-> precCheck :: ModuleIdent -> PEnv -> [TopDecl a] -> Error (PEnv,[TopDecl a])
-> precCheck m pEnv ds =
+> precCheck :: ModuleIdent -> TCEnv -> PEnv -> [TopDecl a]
+>           -> Error (PEnv,[TopDecl a])
+> precCheck m tcEnv pEnv ds =
 >   do
->     ds'' <- mapE (checkTopDecl m pEnv') ds
+>     ds'' <- mapE (checkTopDecl m tcEnv pEnv') ds
 >     return (pEnv',ds'')
 >   where ds' = concatMap decls ds
 >         pEnv' = bindPrecs m ds' (foldr cleanPrecs pEnv ds')
@@ -96,26 +116,25 @@ the correct operator precedence is used.
 >   liftE2 (Goal p) (checkExpr m p pEnv' e) (mapE (checkDecl m pEnv') ds)
 >   where pEnv' = bindPrecs m ds pEnv
 
-> checkTopDecl :: ModuleIdent -> PEnv -> TopDecl a -> Error (TopDecl a)
-> checkTopDecl m pEnv (ClassDecl p cx cls tv ds) =
->   liftE (ClassDecl p cx cls tv) (mapE (checkMethodDecl m pEnv) ds)
-> checkTopDecl m pEnv (InstanceDecl p cx cls ty ds) =
->   liftE (InstanceDecl p cx cls ty) (mapE (checkMethodDecl m pEnv) ds)
-> checkTopDecl m pEnv (BlockDecl d) = liftE BlockDecl (checkDecl m pEnv d)
-> checkTopDecl _ _ d = return d
+> checkTopDecl :: ModuleIdent -> TCEnv -> PEnv -> TopDecl a -> Error (TopDecl a)
+> checkTopDecl m _ pEnv (ClassDecl p cx cls tv ds) =
+>   liftE (ClassDecl p cx cls tv) (mapE (checkMethodDecl m pEnv') ds)
+>   where pEnv' = bindMethodPrecs m qualify ds pEnv
+> checkTopDecl m tcEnv pEnv (InstanceDecl p cx cls ty ds) =
+>   liftE (InstanceDecl p cx cls ty) (mapE (checkMethodDecl m pEnv') ds)
+>   where pEnv' = bindMethodPrecs m qual ds pEnv
+>         qual =
+>           maybe qualify (qualifyLike . origName)
+>                 (listToMaybe (qualLookupTopEnv cls tcEnv))
+> checkTopDecl m _ pEnv (BlockDecl d) = liftE BlockDecl (checkDecl m pEnv d)
+> checkTopDecl _ _ _ d = return d
 
 > checkMethodDecl :: ModuleIdent -> PEnv -> MethodDecl a -> Error (MethodDecl a)
 > checkMethodDecl _ _ (MethodFixity p fix pr ops) =
 >   return (MethodFixity p fix pr ops)
 > checkMethodDecl _ _ (MethodSig p fs ty) = return (MethodSig p fs ty)
 > checkMethodDecl m pEnv (MethodDecl p f eqs) =
->   liftE (MethodDecl p f) (mapE (checkMethodEqn m pEnv) eqs)
->   where checkMethodEqn m pEnv =
->           liftE (renameEqn f) . checkEqn m pEnv . renameEqn (unRenameIdent f)
->         renameEqn f (Equation p lhs rhs) = Equation p (renameLhs f lhs) rhs
->         renameLhs f (FunLhs _ ts) = FunLhs f ts
->         renameLhs f (OpLhs t1 _ t2) = OpLhs t1 f t2
->         renameLhs f (ApLhs lhs ts) = ApLhs (renameLhs f lhs) ts
+>   liftE (MethodDecl p f) (mapE (checkEqn m pEnv) eqs)
 > checkMethodDecl _ _ (TrustMethod p tr fs) = return (TrustMethod p tr fs)
 
 > checkDecl :: ModuleIdent -> PEnv -> Decl a -> Error (Decl a)

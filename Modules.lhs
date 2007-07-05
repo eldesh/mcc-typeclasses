@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2333 2007-06-23 09:13:26Z wlux $
+% $Id: Modules.lhs 2390 2007-07-05 16:14:20Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -124,7 +124,7 @@ declaration to the module.
 >     es' <- checkExports m is tEnv vEnv es
 >     let (k1,ds''') = rename k0 ds''
 >     let (pEnv',tcEnv',tyEnv') = qualifyEnv1 mEnv' is pEnv tcEnv tyEnv
->     (pEnv'',ds'''') <- precCheck m pEnv' (qual1 tEnv vEnv ds''')
+>     (pEnv'',ds'''') <- precCheck m tcEnv' pEnv' (qual1 tEnv vEnv ds''')
 >     tcEnv'' <- kindCheck m tcEnv' ds''''
 >     iEnv' <- instCheck m tcEnv'' iEnv ds''''
 >     (k2,deriv) <- liftM (rename k1) (derive m pEnv'' tcEnv'' iEnv' ds'''')

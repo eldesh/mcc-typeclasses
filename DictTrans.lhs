@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2391 2007-07-09 22:36:02Z wlux $
+% $Id: DictTrans.lhs 2392 2007-07-09 22:44:35Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -41,11 +41,11 @@ state monad.
 > run m tyEnv = runSt (callSt m tyEnv) 1
 
 \end{verbatim}
-The introduction of dictionaries proceeds in two phases. In the first
-phase, the compiler adds data type declarations for the dictionary
-constructors to the source code, introduces new top-level functions
-for creating instance dictionaries, and lifts class and instance
-method implementations to the top-level.
+The introduction of dictionaries proceeds in three phases. In the
+first phase, the compiler adds data type declarations for the
+dictionary constructors to the source code, introduces new top-level
+functions for creating instance dictionaries, and lifts class and
+instance method implementations to the top-level.
 
 Lifting default class method implementations is necessary so that the
 compiler can use them in place of omitted instance methods. Lifting
@@ -62,6 +62,17 @@ appropriate dictionary arguments.
 In addition, the compiler introduces a method stub function for each
 type class method that extracts the corresponding method implementation
 from a dictionary.
+
+In the final phase, the compiler optimizes method calls at known types
+by calling the appropriate instance methods directly. For instance,
+the application \verb|show 'a'| has been translated into
+\texttt{show \textit{dict\char`_Show\char`_Char} 'a'} during the
+second phase of the dictionary transformation and is now optimized
+into \texttt{\textit{show\char`_Char} 'a'}, where
+\texttt{\textit{dict\char`_Show\char`_Char}} denotes an expression
+that returns the dictionary of the \texttt{Show} \texttt{Char}
+instance and \texttt{\textit{show\char`_Char}} the \texttt{show}
+implementation of that instance.
 \begin{verbatim}
 
 > dictTransModule :: TCEnv -> InstEnv -> ValueEnv -> Module Type
@@ -72,7 +83,8 @@ from a dictionary.
 >                      (concatMap (liftDecls m tcEnv tyEnv') ds)
 >          dss <- mapM (methodStubs m tcEnv' tyEnv') ds
 >          tyEnv'' <- fetchSt
->          return (tcEnv',tyEnv'',Module m es is (ds' ++ concat dss)))
+>          let ds'' = map (dictSpecialize (methodEnv tcEnv')) ds'
+>          return (tcEnv',tyEnv'',Module m es is (ds'' ++ concat dss)))
 >       (rebindFuns tcEnv' tyEnv')
 >   where tcEnv' = bindDictTypes m tcEnv
 >         tyEnv' = bindClassDecls m tcEnv' (bindInstDecls m tcEnv' iEnv tyEnv)
@@ -356,14 +368,12 @@ method's class can be shared among all method stubs of that class.
 >     let t = dictPattern ty cls' vs
 >         ts = map (uncurry VariablePattern) us
 >         tss = map ((ts ++) . map (uncurry VariablePattern)) uss
->         es = zipWith3 (methodStubExpr (us!!n) t) ps vs uss
+>         es = zipWith3 (methodStubExpr (us!!i) t) ps vs uss
 >     return (zipWith4 funDecl ps fs tss es)
 >   where (tys,ty) = arrowUnapply (classDictType tcEnv tyEnv cls' (map Just fs))
 >         tyss = zipWith (methodDictTypes tyEnv) fs tys
 >         cls' = qualifyWith m cls
->         tp = TypePred cls' (TypeVariable 0)
->         cx = maxContext tcEnv [tp]
->         n = fromJust (elemIndex tp cx)
+>         (i,cx) = methodStubContext tcEnv cls'
 >         (ps,fs) = unzip [(p,f) | MethodSig p fs _ <- ds, f <- fs]
 > methodStubs _ _ _ _ = return []
 
@@ -378,6 +388,12 @@ method's class can be shared among all method stubs of that class.
 >                -> IDecl
 > intfMethodDecl cls tv p f (QualTypeExpr cx ty) =
 >   IFunctionDecl p f Nothing (QualTypeExpr (ClassAssert cls tv [] : cx) ty)
+
+> methodStubContext :: TCEnv -> QualIdent -> (Int,Context)
+> methodStubContext tcEnv cls = (i,cx)
+>   where tp = TypePred cls (TypeVariable 0)
+>         cx = maxContext tcEnv [tp]
+>         i = fromJust (elemIndex tp cx)
 
 > methodDictTypes :: ValueEnv -> Ident -> Type -> [Type]
 > methodDictTypes tyEnv f ty =
@@ -585,10 +601,7 @@ the concrete type at which $f$ is used in the application.
 > instance DictTrans Expression where
 >   dictTrans _ _ _ _ _ _ (Literal ty l) = return (Literal ty l)
 >   dictTrans m tcEnv nEnv iEnv tyEnv dictEnv (Variable ty v) =
->     case instanceMethod tcEnv iEnv cx v of
->       Just f -> dictTrans m tcEnv nEnv iEnv tyEnv dictEnv (Variable ty f)
->       Nothing ->
->         return (apply (Variable (foldr (TypeArrow . typeOf) ty xs) v) xs)
+>     return (apply (Variable (foldr (TypeArrow . typeOf) ty xs) v) xs)
 >     where xs = map (dictArg tcEnv iEnv dictEnv) cx
 >           cx = matchContext tcEnv nEnv (funType v tyEnv) ty
 >   dictTrans _ _ _ _ _ _ (Constructor ty c) = return (Constructor ty c)
@@ -657,41 +670,115 @@ computed for the context instantiated at the appropriate types.
 > transformType (QualType cx ty) = foldr (TypeArrow . dictType) ty cx
 
 \end{verbatim}
-When a type class method is applied at a known type, the compiler does
-not need to apply the method stub to a dictionary, but can apply the
-instance method directly. This improves performance considerably for a
-lot of examples. The function \texttt{instanceMethod} checks whether a
-function name denotes a type class method and whether it is used at a
-fixed type. If that is the case, \texttt{instanceMethod} returns the
-name of the instance method. Since the compiler does not distinguish
-(overloaded) functions and type class methods in the syntax tree nor
-in the type environment, we detect methods here by checking the
-(instantiated) context of the type at which the function is used. If
-the identifier denotes a type class method, the first elements of the
-context are type predicates for the method's type class and its super
-classes. Thus, it is sufficient to check whether the applied function
-is a member of any of these classes. Note that it is not sufficient to
-check only the first element of the context because
-\texttt{instanceMethod} is applied to expanded contexts.
+\paragraph{Optimizing method calls}
+When a type class method is applied at a known type, the compiler can
+apply the type instance's implementation directly. This improves
+performance considerably for a lot of examples. Therefore, the
+compiler looks for applications of method stubs at a fixed type in
+the transformed code and replaces them by applications of the
+corresponding instance methods.
+
+The dictionary transformation so far has replaced each occurrence of a
+method $f$ from class $C$ by an application $f\,d_1 \dots d_n$, where
+$d_1,\dots,d_n$ are expressions returning suitable dictionaries for
+the instances of $C$ and all of its super classes at the type where
+the method is used (cf.~the code of \texttt{methodStubs} above). Since
+only single parameter classes are allowed, all dictionary expressions
+$d_i$ must have a type of the form $D_i\,\tau$, where $D_i$ is the
+dictionary type constructor corresponding to $C$ or one of its super
+classes and $\tau$ is the type of the instance at which the method is
+used.
+
+In order to replace method calls efficiently, we collect all known
+type class methods in an environment that maps each method $f$ onto a
+triple consisting of the position of the method's class $C$ in the
+(sorted) list of all of its super classes, the number of super
+classes, and a function that computes the name of the instance method
+for $f$ at a particular type.
 \begin{verbatim}
 
-> instanceMethod :: TCEnv -> InstEnv -> Context -> QualIdent -> Maybe QualIdent
-> instanceMethod tcEnv iEnv cx f
->   | isRenamed (unqualify f) = Nothing
->   | otherwise = foldr mplus Nothing (map (instanceMethodOf tcEnv iEnv f) cx)
+> type MethodEnv = Env QualIdent (Int,Int,Type -> Ident)
 
-> instanceMethodOf :: TCEnv -> InstEnv -> QualIdent -> TypePred
->                  -> Maybe QualIdent
-> instanceMethodOf tcEnv iEnv f (TypePred cls ty)
->   -- FIXME: don't need to apply isKnownType to each type predicate in
->   --        a context; either isKnownType holds for all predicates or
->   --        for none at all
->   | isKnownType ty && f == qualifyLike cls f' =
->       fmap (qInstMethodIds m (TypePred cls ty) !!)
->            (Just f' `elemIndex` classMethods cls tcEnv)
->   | otherwise = Nothing
->   where m = fst (fromJust (lookupEnv (CT cls (rootOfType ty)) iEnv))
->         f' = unqualify f
+> methodEnv :: TCEnv -> MethodEnv
+> methodEnv tcEnv = foldr bindMethods emptyEnv (allEntities tcEnv)
+>   where bindMethods (DataType _ _ _) mEnv = mEnv
+>         bindMethods (RenamingType _ _ _) mEnv = mEnv
+>         bindMethods (AliasType _ _ _ _) mEnv = mEnv
+>         bindMethods (TypeClass cls _ _ fs) mEnv =
+>           foldr ($) mEnv (zipWith (bindMethod cls i (length cx)) fs [0..])
+>           where (i,cx) = methodStubContext tcEnv cls
+>         bindMethods (TypeVar _) mEnv = mEnv
+>         bindMethod cls i n (Just f) j =
+>           bindEnv (qualifyLike cls f) (i,n,instMethodId cls j)
+>         bindMethod _ _ _ Nothing _ = id
+>         instMethodId cls j ty = instMethodIds (TypePred cls ty) !! j
+
+> class DictSpecialize a where
+>   dictSpecialize :: MethodEnv -> a Type -> a Type
+
+> instance DictSpecialize TopDecl where
+>   dictSpecialize mEnv (BlockDecl d) = BlockDecl (dictSpecialize mEnv d)
+>   dictSpecialize _ d = d
+
+> instance DictSpecialize Decl where
+>   dictSpecialize mEnv (FunctionDecl p f eqs) =
+>     FunctionDecl p f (map (dictSpecialize mEnv) eqs)
+>   dictSpecialize _ (ForeignDecl p cc s ie f ty) = ForeignDecl p cc s ie f ty
+>   dictSpecialize mEnv (PatternDecl p t rhs) =
+>     PatternDecl p t (dictSpecialize mEnv rhs)
+>   dictSpecialize _ (FreeDecl p vs) = FreeDecl p vs
+
+> instance DictSpecialize Equation where
+>   dictSpecialize mEnv (Equation p lhs rhs) =
+>     Equation p lhs (dictSpecialize mEnv rhs)
+
+> instance DictSpecialize Rhs where
+>   dictSpecialize mEnv (SimpleRhs p e _) =
+>     SimpleRhs p (dictSpecialize mEnv e) []
+
+> instance DictSpecialize Expression where
+>   dictSpecialize mEnv e = dictSpecializeApp mEnv e []
+
+> instance DictSpecialize Alt where
+>   dictSpecialize mEnv (Alt p t rhs) = Alt p t (dictSpecialize mEnv rhs)
+
+\end{verbatim}
+When we change an application of a method stub $f$ from class $C$ into
+an application of the corresponding instance method $f'$ for type
+$\tau$, we must be careful to apply the instance method to all
+dictionaries required by the instance's context. These dictionaries
+can be determined by looking at the instance dictionary passed for the
+$C\,\tau$ instance. This dictionary is computed by applying the
+instance dictionary creation function to exactly the dictionaries
+required by the instance's context, i.e., we simply need to copy those
+dictionaries to the new application. Note the $C$'s dictionary is not
+necessarily the first to which the instance creation function is
+applied. This is the reason why the position of $C$ in the list of its
+super classes is recorded in the method environment.
+\begin{verbatim}
+
+> dictSpecializeApp :: MethodEnv -> Expression Type -> [Expression Type]
+>                   -> Expression Type
+> dictSpecializeApp _ (Literal ty l) es = apply (Literal ty l) es
+> dictSpecializeApp mEnv (Variable ty v) es =
+>   case lookupEnv v mEnv of
+>     Just (i,n,instMethodId)
+>       | isKnownType ty' -> apply (Variable ty'' f'') (es'' ++ es')
+>       | otherwise -> apply (Variable ty v) es
+>       where f = apply (Variable ty v) ds
+>             (ds,es') = splitAt n es
+>             (Variable _ f',es'') = unapply (ds !! i) []
+>             TypeApply (TypeConstructor _) ty' = typeOf (head ds)
+>             f'' = qualifyLike f' (instMethodId ty')
+>             ty'' = foldr (TypeArrow . typeOf) (typeOf f) es''
+>     Nothing -> apply (Variable ty v) es
+> dictSpecializeApp _ (Constructor ty c) es = apply (Constructor ty c) es
+> dictSpecializeApp mEnv (Apply e1 e2) es =
+>   dictSpecializeApp mEnv e1 (dictSpecialize mEnv e2 : es)
+> dictSpecializeApp mEnv (Let ds e) es =
+>   apply (Let (map (dictSpecialize mEnv) ds) (dictSpecialize mEnv e)) es
+> dictSpecializeApp mEnv (Case e as) es =
+>   apply (Case (dictSpecialize mEnv e) (map (dictSpecialize mEnv) as)) es
 
 > isKnownType :: Type -> Bool
 > isKnownType (TypeConstructor _) = True
@@ -700,6 +787,14 @@ check only the first element of the context because
 > isKnownType (TypeSkolem _) = False
 > isKnownType (TypeApply ty _) = isKnownType ty
 > isKnownType (TypeArrow _ _) = True
+
+> unapply :: Expression a -> [Expression a] -> (Expression a,[Expression a])
+> unapply (Literal ty l) es = (Literal ty l,es)
+> unapply (Variable ty x) es = (Variable ty x,es)
+> unapply (Constructor ty c) es = (Constructor ty c,es)
+> unapply (Apply e1 e2) es = unapply e1 (e2:es)
+> unapply (Let ds e) es = (Let ds e,es)
+> unapply (Case e as) es = (Case e as,es)
 
 \end{verbatim}
 \paragraph{Unification}

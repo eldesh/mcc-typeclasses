@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2329 2007-06-22 22:45:18Z wlux $
+% $Id: DictTrans.lhs 2391 2007-07-09 22:36:02Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -15,16 +15,6 @@ dictionaries for all classes and their super classes are immediately
 available as function arguments in the transformed code. The
 dictionaries themselves are derived from the type class and instance
 declarations in the module.
-
-This module applies the necessary transformations to the source code
-of a module. Note that all identifiers are expected to be qualified
-properly, but the source code has not been desugared yet. In
-particular, the compiler \emph{must not} remove newtype constructors
-from the source code before invoking the functions from this module.
-
-\ToDo{It would be useful if part of the desugaring that is performed
-  in module \texttt{Desugar} were performed before the transformations
-  from this module.}
 \begin{verbatim}
 
 > module DictTrans(dictTransModule, dictTransInterface) where

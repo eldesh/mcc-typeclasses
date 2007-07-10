@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Options.lhs 2163 2007-04-24 11:56:51Z wlux $
+% $Id: Options.lhs 2393 2007-07-10 08:09:47Z wlux $
 %
 % Copyright (c) 2001-2006, Wolfgang Lux
 % See LICENSE for the full license.
@@ -69,6 +69,7 @@ all compiler options.
 >   | DumpDesugared                     -- dump source after desugaring
 >   | DumpSimplified                    -- dump source after simplification
 >   | DumpDict                          -- dump source with dictionaries
+>   | DumpSpecialize                    -- dump source after specialization
 >   | DumpLifted                        -- dump source after lambda-lifting
 >   | DumpIL                            -- dump IL code after translation
 >   | DumpTransformed                   -- dump transformed code
@@ -144,6 +145,8 @@ recognized by the compiler.
 >            "dump source code after simplification",
 >     Option "" ["dump-dict"] (NoArg (Dump [DumpDict]))
 >            "dump source code with dictionaries",
+>     Option "" ["dump-specialize"] (NoArg (Dump [DumpSpecialize]))
+>            "dump source code after specialization",
 >     Option "" ["dump-lifted"] (NoArg (Dump [DumpLifted]))
 >            "dump source code after lambda-lifting",
 >     Option "" ["dump-il"] (NoArg (Dump [DumpIL]))

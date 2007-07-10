@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2392 2007-07-09 22:44:35Z wlux $
+% $Id: DictTrans.lhs 2393 2007-07-10 08:09:47Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -17,7 +17,8 @@ dictionaries themselves are derived from the type class and instance
 declarations in the module.
 \begin{verbatim}
 
-> module DictTrans(dictTransModule, dictTransInterface) where
+> module DictTrans(dictTransModule, dictTransInterface,
+>                  dictSpecializeModule) where
 > import Base
 > import Combined
 > import Env
@@ -73,6 +74,11 @@ into \texttt{\textit{show\char`_Char} 'a'}, where
 that returns the dictionary of the \texttt{Show} \texttt{Char}
 instance and \texttt{\textit{show\char`_Char}} the \texttt{show}
 implementation of that instance.
+
+The first two phases are implemented in function
+\texttt{dictTransModule} and the specialization phase is
+implemented in \texttt{dictSpecializeModule} on
+p.~\pageref{dict-specialize}.
 \begin{verbatim}
 
 > dictTransModule :: TCEnv -> InstEnv -> ValueEnv -> Module Type
@@ -83,8 +89,7 @@ implementation of that instance.
 >                      (concatMap (liftDecls m tcEnv tyEnv') ds)
 >          dss <- mapM (methodStubs m tcEnv' tyEnv') ds
 >          tyEnv'' <- fetchSt
->          let ds'' = map (dictSpecialize (methodEnv tcEnv')) ds'
->          return (tcEnv',tyEnv'',Module m es is (ds'' ++ concat dss)))
+>          return (tcEnv',tyEnv'',Module m es is (ds' ++ concat dss)))
 >       (rebindFuns tcEnv' tyEnv')
 >   where tcEnv' = bindDictTypes m tcEnv
 >         tyEnv' = bindClassDecls m tcEnv' (bindInstDecls m tcEnv' iEnv tyEnv)
@@ -695,9 +700,14 @@ triple consisting of the position of the method's class $C$ in the
 (sorted) list of all of its super classes, the number of super
 classes, and a function that computes the name of the instance method
 for $f$ at a particular type.
+\label{dict-specialize}
 \begin{verbatim}
 
 > type MethodEnv = Env QualIdent (Int,Int,Type -> Ident)
+
+> dictSpecializeModule :: TCEnv -> Module Type -> Module Type
+> dictSpecializeModule tcEnv (Module m es is ds) =
+>   Module m es is (map (dictSpecialize (methodEnv tcEnv)) ds)
 
 > methodEnv :: TCEnv -> MethodEnv
 > methodEnv tcEnv = foldr bindMethods emptyEnv (allEntities tcEnv)
@@ -717,8 +727,12 @@ for $f$ at a particular type.
 >   dictSpecialize :: MethodEnv -> a Type -> a Type
 
 > instance DictSpecialize TopDecl where
+>   dictSpecialize _ (DataDecl p cx tc tvs cs clss) =
+>     DataDecl p cx tc tvs cs clss
+>   dictSpecialize _ (NewtypeDecl p cx tc tvs nc clss) =
+>     NewtypeDecl p cx tc tvs nc clss
+>   dictSpecialize mEnv (TypeDecl p tc tvs ty) = TypeDecl p tc tvs ty
 >   dictSpecialize mEnv (BlockDecl d) = BlockDecl (dictSpecialize mEnv d)
->   dictSpecialize _ d = d
 
 > instance DictSpecialize Decl where
 >   dictSpecialize mEnv (FunctionDecl p f eqs) =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2390 2007-07-05 16:14:20Z wlux $
+% $Id: Modules.lhs 2393 2007-07-10 08:09:47Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -36,7 +36,7 @@ This module controls the compilation of modules.
 > import Qual(qual1,qual2)
 > import Desugar(desugar,goalModule)
 > import Simplify(simplify)
-> import DictTrans(dictTransModule,dictTransInterface)
+> import DictTrans(dictTransModule,dictTransInterface,dictSpecializeModule)
 > import Lift(lift)
 > import qualified IL
 > import ILTrans(ilTrans,ilTransIntf)
@@ -154,10 +154,13 @@ declaration to the module.
 
 > dictTrans :: ModuleEnv -> TCEnv -> InstEnv -> ValueEnv -> Module Type
 >           -> (ModuleEnv,ValueEnv,Module Type,[(Dump,Doc)])
-> dictTrans mEnv tcEnv iEnv tyEnv m = (mEnv',tyEnv',dict,dumps)
+> dictTrans mEnv tcEnv iEnv tyEnv m = (mEnv',tyEnv',spec,dumps)
 >   where mEnv' = fmap (dictTransInterface tcEnv tyEnv) mEnv
 >         (tcEnv',tyEnv',dict) = dictTransModule tcEnv iEnv tyEnv m
->         dumps = [(DumpDict,ppModule dict)]
+>         spec = dictSpecializeModule tcEnv' dict
+>         dumps =
+>           [(DumpDict,ppModule dict),
+>            (DumpSpecialize,ppModule spec)]
 
 > ilTransModule :: Bool -> Bool -> ValueEnv -> TrustEnv -> Module Type
 >               -> (Either IL.Module [IL.Module],[(Dump,Doc)])
@@ -611,6 +614,7 @@ standard output.
 > dumpHeader DumpDesugared = "Source code after desugaring"
 > dumpHeader DumpSimplified = "Source code after simplification"
 > dumpHeader DumpDict = "Source code with dictionaries"
+> dumpHeader DumpSpecialize = "Source code after specialization"
 > dumpHeader DumpLifted = "Source code after lifting"
 > dumpHeader DumpIL = "Intermediate code"
 > dumpHeader DumpTransformed = "Transformed code" 

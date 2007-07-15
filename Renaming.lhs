@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2386 2007-07-04 16:41:13Z wlux $
+% $Id: Renaming.lhs 2394 2007-07-15 15:37:38Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -142,7 +142,7 @@ syntax tree and renames all type and expression variables.
 >     liftM3 (flip (ClassDecl p) cls)
 >            (mapM (renameClassAssert env) cx)
 >            (renameVar env tv)
->            (mapM (renameMethodDecl tv env env') ds)
+>            (mapM (renameMethodDecl env env') ds)
 > renameTopDecl (InstanceDecl p cx cls ty ds) =
 >   do
 >     env <- bindVars emptyEnv (fv ty)
@@ -150,7 +150,7 @@ syntax tree and renames all type and expression variables.
 >     liftM3 (flip (InstanceDecl p) cls)
 >            (mapM (renameClassAssert env) cx)
 >            (renameType env ty)
->            (mapM (renameMethodDecl anonId emptyEnv env') ds)
+>            (mapM (renameMethodDecl emptyEnv env') ds)
 > renameTopDecl (BlockDecl d) = liftM BlockDecl (renameDecl emptyEnv d)
 
 > renameConstrDecl :: RenameEnv -> ConstrDecl -> RenameState ConstrDecl
@@ -183,26 +183,25 @@ a method identifier in the right hand side denotes the overloaded type
 class method.
 \begin{verbatim}
 
-> renameMethodDecl :: Ident -> RenameEnv -> RenameEnv -> MethodDecl a
+> renameMethodDecl :: RenameEnv -> RenameEnv -> MethodDecl a
 >                  -> RenameState (MethodDecl a)
-> renameMethodDecl _ _ _ (MethodFixity p fix pr ops) =
+> renameMethodDecl _ _ (MethodFixity p fix pr ops) =
 >   return (MethodFixity p fix pr ops)
-> renameMethodDecl tv env _ (MethodSig p fs ty) =
->   do
->     env <- bindVars env (filter (tv /=) (fv ty))
->     liftM (MethodSig p fs) (renameQualType env ty)
-> renameMethodDecl _ _ env' (MethodDecl p f eqs) =
+> renameMethodDecl env _ (MethodSig p fs ty) =
+>   liftM (MethodSig p fs) (renameTypeSig env ty)
+> renameMethodDecl _ env' (MethodDecl p f eqs) =
 >   do
 >     f' <- renameVar env' f
 >     liftM (MethodDecl p f') (mapM (renameEqn f' emptyEnv) eqs)
-> renameMethodDecl _ _ env' (TrustMethod p tr fs) =
+> renameMethodDecl _ env' (TrustMethod p tr fs) =
 >   liftM (TrustMethod p tr) (mapM (renameVar env') fs)
 
-> renameTypeSig :: QualTypeExpr -> RenameState QualTypeExpr
-> renameTypeSig ty =
+> renameTypeSig :: RenameEnv -> QualTypeExpr -> RenameState QualTypeExpr
+> renameTypeSig env ty =
 >   do
->     env' <- bindVars emptyEnv (fv ty)
+>     env' <- bindVars env (filter (`notElem` tvs) (fv ty))
 >     renameQualType env' ty
+>   where tvs = map fst (envToList env)
 
 > renameQualType :: RenameEnv -> QualTypeExpr -> RenameState QualTypeExpr
 > renameQualType env (QualTypeExpr cx ty) =
@@ -226,7 +225,7 @@ class method.
 > renameDecl env (InfixDecl p fix pr ops) =
 >   liftM (InfixDecl p fix pr) (mapM (renameVar env) ops)
 > renameDecl env (TypeSig p fs ty) =
->   liftM2 (TypeSig p) (mapM (renameVar env) fs) (renameTypeSig ty)
+>   liftM2 (TypeSig p) (mapM (renameVar env) fs) (renameTypeSig emptyEnv ty)
 > renameDecl env (FunctionDecl p f eqs) =
 >   do
 >     f' <- renameVar env f
@@ -234,7 +233,7 @@ class method.
 > renameDecl env (ForeignDecl p cc s ie f ty) =
 >   do
 >     f' <- renameVar env f
->     QualTypeExpr _ ty' <- renameTypeSig (QualTypeExpr [] ty)
+>     QualTypeExpr _ ty' <- renameTypeSig emptyEnv (QualTypeExpr [] ty)
 >     return (ForeignDecl p cc s ie f' ty')
 > renameDecl env (PatternDecl p t rhs) =
 >   liftM2 (PatternDecl p) (renameConstrTerm env t) (renameRhs env rhs)
@@ -309,7 +308,7 @@ not rename this identifier in the same environment as its arguments.
 > renameExpr _ (Constructor a c) = return (Constructor a c)
 > renameExpr env (Paren e) = liftM Paren (renameExpr env e)
 > renameExpr env (Typed e ty) =
->   liftM2 Typed (renameExpr env e) (renameTypeSig ty)
+>   liftM2 Typed (renameExpr env e) (renameTypeSig emptyEnv ty)
 > renameExpr env (Tuple es) = liftM Tuple (mapM (renameExpr env) es)
 > renameExpr env (List a es) = liftM (List a) (mapM (renameExpr env) es)
 > renameExpr env (ListCompr e qs) =

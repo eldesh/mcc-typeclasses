@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Trust.lhs 2386 2007-07-04 16:41:13Z wlux $
+% $Id: Trust.lhs 2398 2007-07-16 08:11:26Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -7,10 +7,6 @@
 \nwfilename{Trust.lhs}
 \section{Collecting Trust Annotations}
 The module \texttt{Trust} computes the trust annotation environment.
-It is applied to the desugared source code in order to allow providing
-trust annotations for anonymous lambda abstractions. Since lambda
-abstractions have no name and the desugarer does not change scopes, a
-lambda abstraction is trusted if its enclosing function is trusted.
 There is no need to check the annotations because this happens already
 while checking the definitions of the module.
 \begin{verbatim}
@@ -98,14 +94,39 @@ the local functions \texttt{h} and \texttt{i} are trusted, but
 
 > instance SyntaxTree (Rhs a) where
 >   trust tr (SimpleRhs _ e ds) = trust tr e . trust tr ds
+>   trust tr (GuardedRhs es ds) = trust tr es . trust tr ds
+
+> instance SyntaxTree (CondExpr a) where
+>   trust tr (CondExpr _ g e) = trust tr g . trust tr e
 
 > instance SyntaxTree (Expression a) where
 >   trust _ (Literal _ _) = id
 >   trust _ (Variable _ _) = id
 >   trust _ (Constructor _ _) = id
+>   trust tr (Paren e) = trust tr e
+>   trust tr (Typed e _) = trust tr e
+>   trust tr (Tuple es) = trust tr es
+>   trust tr (List _ es) = trust tr es
+>   trust tr (ListCompr e qs) = trust tr e . trust tr qs
+>   trust tr (EnumFrom e) = trust tr e
+>   trust tr (EnumFromThen e1 e2) = trust tr e1 . trust tr e2
+>   trust tr (EnumFromTo e1 e2) = trust tr e1 . trust tr e2
+>   trust tr (EnumFromThenTo e1 e2 e3) = trust tr e1 . trust tr e2 . trust tr e3
+>   trust tr (UnaryMinus e) = trust tr e
 >   trust tr (Apply e1 e2) = trust tr e1 . trust tr e2
+>   trust tr (InfixApply e1 _ e2) = trust tr e1 . trust tr e2
+>   trust tr (LeftSection e _) = trust tr e
+>   trust tr (RightSection _ e) = trust tr e
+>   trust tr (Lambda _ e) = trust tr e
 >   trust tr (Let ds e) = trust tr ds . trust tr e
+>   trust tr (Do sts e) = trust tr sts . trust tr e
+>   trust tr (IfThenElse e1 e2 e3) = trust tr e1 . trust tr e2 . trust tr e3
 >   trust tr (Case e as) = trust tr e . trust tr as
+
+> instance SyntaxTree (Statement a) where
+>   trust tr (StmtExpr e) = trust tr e
+>   trust tr (StmtDecl ds) = trust tr ds
+>   trust tr (StmtBind _ e) = trust tr e
 
 > instance SyntaxTree (Alt a) where
 >   trust tr (Alt _ _ rhs) = trust tr rhs

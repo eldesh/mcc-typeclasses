@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2387 2007-07-04 16:46:23Z wlux $
+% $Id: CurryPP.lhs 2399 2007-07-16 08:49:24Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -356,7 +356,7 @@ Expressions
 >                          indent (ppExpr 1 e2)])
 > ppExpr _ (LeftSection e op) = parens (ppExpr 1 e <+> ppQInfixOp (opName op))
 > ppExpr _ (RightSection op e) = parens (ppQInfixOp (opName op) <+> ppExpr 1 e)
-> ppExpr p (Lambda t e) =
+> ppExpr p (Lambda _ t e) =
 >   parenExp (p > 0)
 >            (sep [backsl <> fsep (map (ppConstrTerm 2) t) <+> rarrow,
 >                  indent (ppExpr 0 e)])
@@ -378,7 +378,8 @@ Expressions
 
 > ppStmt :: Statement a -> Doc
 > ppStmt (StmtExpr e) = ppExpr 0 e
-> ppStmt (StmtBind t e) = sep [ppConstrTerm 0 t <+> larrow,indent (ppExpr 0 e)]
+> ppStmt (StmtBind _ t e) =
+>   sep [ppConstrTerm 0 t <+> larrow,indent (ppExpr 0 e)]
 > ppStmt (StmtDecl ds) = text "let" <+> ppBlock ds
 
 > ppAlt :: Alt a -> Doc

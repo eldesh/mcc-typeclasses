@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 2357 2007-06-23 11:29:51Z wlux $
+% $Id: UnusedCheck.lhs 2399 2007-07-16 08:49:24Z wlux $
 %
 % Copyright (c) 2005-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -192,7 +192,7 @@ implemented by a traversal of the syntax tree.
 >   used m (InfixApply e1 op e2) = used m e1 . used m (opName op) . used m e2
 >   used m (LeftSection e op) = used m e . used m (opName op)
 >   used m (RightSection op e) = used m (opName op) . used m e
->   used m (Lambda ts e) = used m ts . used m e
+>   used m (Lambda _ ts e) = used m ts . used m e
 >   used m (Let ds e) = used m ds . used m e
 >   used m (Do sts e) = used m sts . used m e
 >   used m (IfThenElse e1 e2 e3) = used m e1 . used m e2 . used m e3
@@ -216,7 +216,7 @@ implemented by a traversal of the syntax tree.
 >   unused used p (InfixApply e1 _ e2) = unused used p e1 . unused used p e2
 >   unused used p (LeftSection e _) = unused used p e
 >   unused used p (RightSection _ e) = unused used p e
->   unused used p (Lambda ts e) = unused used p ts . unused used p e
+>   unused used _ (Lambda p ts e) = unused used p ts . unused used p e
 >   unused used p (Let ds e) = unused used p ds . unused used p e
 >   unused used p (Do sts e) = unused used p sts . unused used p e
 >   unused used p (IfThenElse e1 e2 e3) =
@@ -225,10 +225,10 @@ implemented by a traversal of the syntax tree.
 
 > instance SyntaxTree (Statement a) where
 >   used m (StmtExpr e) = used m e
->   used m (StmtBind t e) = used m t . used m e
+>   used m (StmtBind _ t e) = used m t . used m e
 >   used m (StmtDecl ds) = used m ds
 >   unused used p (StmtExpr e) = unused used p e
->   unused used p (StmtBind t e) = unused used p t . unused used p e
+>   unused used _ (StmtBind p t e) = unused used p t . unused used p e
 >   unused used p (StmtDecl ds) = unused used p ds
 
 > instance SyntaxTree (Alt a) where

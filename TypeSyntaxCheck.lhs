@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2289 2007-06-19 16:30:52Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2399 2007-07-16 08:49:24Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -236,7 +236,7 @@ declaration groups.
 >   liftE (flip LeftSection op) (checkExpr env p e)
 > checkExpr env p (RightSection op e) =
 >   liftE (RightSection op) (checkExpr env p e)
-> checkExpr env p (Lambda ts e) = liftE (Lambda ts) (checkExpr env p e)
+> checkExpr env _ (Lambda p ts e) = liftE (Lambda p ts) (checkExpr env p e)
 > checkExpr env p (Let ds e) =
 >   liftE2 Let (mapE (checkDecl env) ds) (checkExpr env p e)
 > checkExpr env p (Do sts e) =
@@ -251,8 +251,8 @@ declaration groups.
 
 > checkStmt :: TypeEnv -> Position -> Statement a -> Error (Statement a)
 > checkStmt env p (StmtExpr e) = liftE StmtExpr (checkExpr env p e)
-> checkStmt env p (StmtBind t e) = liftE (StmtBind t) (checkExpr env p e)
-> checkStmt env p (StmtDecl ds) = liftE StmtDecl (mapE (checkDecl env) ds)
+> checkStmt env _ (StmtBind p t e) = liftE (StmtBind p t) (checkExpr env p e)
+> checkStmt env _ (StmtDecl ds) = liftE StmtDecl (mapE (checkDecl env) ds)
 
 > checkAlt :: TypeEnv -> Alt a -> Error (Alt a)
 > checkAlt env (Alt p t rhs) = liftE (Alt p t) (checkRhs env rhs)

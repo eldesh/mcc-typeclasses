@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2327 2007-06-22 18:01:01Z wlux $
+% $Id: TypeCheck.lhs 2399 2007-07-16 08:49:24Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -600,7 +600,7 @@ matter whether it its evaluation is shared or not.
 > isNonExpansiveApp tcEnv tyEnv n (LeftSection e op) =
 >   isNonExpansiveApp tcEnv tyEnv (n + 1) (infixOp op) &&
 >   isNonExpansive tcEnv tyEnv e
-> isNonExpansiveApp _ _ n (Lambda ts _) = n < length ts
+> isNonExpansiveApp _ _ n (Lambda _ ts _) = n < length ts
 > isNonExpansiveApp tcEnv tyEnv n (Let ds e) =
 >   isNonExpansive tcEnv tyEnv ds && isNonExpansiveApp tcEnv tyEnv n e
 > isNonExpansiveApp _ _ _ _ = False
@@ -753,7 +753,7 @@ equivalent to $\emph{World}\rightarrow(t,\emph{World})$.
 >           | maybe False ('&' `elem`) ie = checkCAddrType tcEnv p ty
 >           | otherwise = checkCCallType tcEnv p cc ty
 >         foreignArity ty
->           | isIO (arrowBase ty') = length tys + 1
+>           | isIO ty' = length tys + 1
 >           | otherwise = length tys
 >           where (tys,ty') = arrowUnapply ty
 >         isIO (TypeApply (TypeConstructor tc) _) = tc == qIOId
@@ -1080,12 +1080,12 @@ Note that overloaded literals are not supported in patterns.
 >       unify p "right section" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1)
 >             tcEnv beta
 >     return (cx ++ cx',TypeArrow alpha gamma,RightSection op' e1')
-> tcExpr m tcEnv p (Lambda ts e) =
+> tcExpr m tcEnv _ (Lambda p ts e) =
 >   do
 >     bindLambdaVars m ts
 >     (cxs,tys,ts') <- liftM unzip3 $ mapM (tcConstrTerm tcEnv p) ts
 >     (cx',ty,e') <- tcExpr m tcEnv p e
->     return (concat cxs ++ cx',foldr TypeArrow ty tys,Lambda ts' e')
+>     return (concat cxs ++ cx',foldr TypeArrow ty tys,Lambda p ts' e')
 > tcExpr m tcEnv p (Let ds e) =
 >   do
 >     (cx,ds') <- tcDecls m tcEnv ds
@@ -1138,7 +1138,7 @@ Note that overloaded literals are not supported in patterns.
 >     (cx,e') <-
 >       tcExpr m tcEnv p e >>= unify p "guard" (ppExpr 0 e) tcEnv boolType
 >     return (cx,StmtExpr e')
-> tcQual m tcEnv p q@(StmtBind t e) =
+> tcQual m tcEnv _ q@(StmtBind p t e) =
 >   do
 >     bindLambdaVars m t
 >     (cx,ty,t') <- tcConstrTerm tcEnv p t
@@ -1146,8 +1146,8 @@ Note that overloaded literals are not supported in patterns.
 >       tcExpr m tcEnv p e >>=
 >       unify p "generator" (ppStmt q $-$ text "Term:" <+> ppExpr 0 e)
 >             tcEnv (listType ty)
->     return (cx ++ cx',StmtBind t' e')
-> tcQual m tcEnv p (StmtDecl ds) =
+>     return (cx ++ cx',StmtBind p t' e')
+> tcQual m tcEnv _ (StmtDecl ds) =
 >   do
 >     (cx,ds') <- tcDecls m tcEnv ds
 >     return (cx,StmtDecl ds')
@@ -1161,7 +1161,7 @@ Note that overloaded literals are not supported in patterns.
 >       tcExpr m tcEnv p e >>=
 >       unify p "statement" (ppExpr 0 e) tcEnv (TypeApply mTy alpha)
 >     return (cx',StmtExpr e')
-> tcStmt m tcEnv p mTy st@(StmtBind t e) =
+> tcStmt m tcEnv _ mTy st@(StmtBind p t e) =
 >   do
 >     bindLambdaVars m t
 >     (cx,ty,t') <- tcConstrTerm tcEnv p t
@@ -1169,8 +1169,8 @@ Note that overloaded literals are not supported in patterns.
 >       tcExpr m tcEnv p e >>=
 >       unify p "statement" (ppStmt st $-$ text "Term:" <+> ppExpr 0 e)
 >             tcEnv (TypeApply mTy ty)
->     return (cx ++ cx',StmtBind t' e')
-> tcStmt m tcEnv p _ (StmtDecl ds) =
+>     return (cx ++ cx',StmtBind p t' e')
+> tcStmt m tcEnv _ _ (StmtDecl ds) =
 >   do
 >     (cx,ds') <- tcDecls m tcEnv ds
 >     return (cx,StmtDecl ds')

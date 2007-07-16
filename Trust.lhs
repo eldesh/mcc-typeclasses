@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Trust.lhs 2398 2007-07-16 08:11:26Z wlux $
+% $Id: Trust.lhs 2399 2007-07-16 08:49:24Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -117,7 +117,7 @@ the local functions \texttt{h} and \texttt{i} are trusted, but
 >   trust tr (InfixApply e1 _ e2) = trust tr e1 . trust tr e2
 >   trust tr (LeftSection e _) = trust tr e
 >   trust tr (RightSection _ e) = trust tr e
->   trust tr (Lambda _ e) = trust tr e
+>   trust tr (Lambda _ _ e) = trust tr e
 >   trust tr (Let ds e) = trust tr ds . trust tr e
 >   trust tr (Do sts e) = trust tr sts . trust tr e
 >   trust tr (IfThenElse e1 e2 e3) = trust tr e1 . trust tr e2 . trust tr e3
@@ -125,8 +125,8 @@ the local functions \texttt{h} and \texttt{i} are trusted, but
 
 > instance SyntaxTree (Statement a) where
 >   trust tr (StmtExpr e) = trust tr e
+>   trust tr (StmtBind _ _ e) = trust tr e
 >   trust tr (StmtDecl ds) = trust tr ds
->   trust tr (StmtBind _ e) = trust tr e
 
 > instance SyntaxTree (Alt a) where
 >   trust tr (Alt _ _ rhs) = trust tr rhs

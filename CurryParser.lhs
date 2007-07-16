@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2387 2007-07-04 16:46:23Z wlux $
+% $Id: CurryParser.lhs 2399 2007-07-16 08:49:24Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -669,7 +669,7 @@ the left-hand side of a declaration.
 >         flip3 f x y z = f z y x
 
 > lambdaExpr :: Parser Token (Expression ()) a
-> lambdaExpr = Lambda <$-> token Backslash <*> many1 constrTerm2
+> lambdaExpr = Lambda <$> position <*-> token Backslash <*> many1 constrTerm2
 >                     <*-> (token RightArrow <?> "-> expected") <*> expr
 
 > letExpr :: Parser Token (Expression ()) a
@@ -736,7 +736,8 @@ prefix of a let expression.
 >                -> Parser Token (Expression () -> a) b
 >                -> Parser Token a b
 > exprOrBindStmt stmtCont exprCont =
->        StmtBind <$> constrTerm0 <*-> leftArrow <*> expr <**> stmtCont
+>        StmtBind <$> position <*> constrTerm0 <*-> leftArrow <*> expr
+>                 <**> stmtCont
 >   <|?> expr <\> token KW_let <**> exprCont
 
 \end{verbatim}

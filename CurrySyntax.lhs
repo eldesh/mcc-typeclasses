@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2386 2007-07-04 16:41:13Z wlux $
+% $Id: CurrySyntax.lhs 2399 2007-07-16 08:49:24Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -231,7 +231,7 @@ Interface declarations are restricted to type declarations and signatures.
 >   | InfixApply (Expression a) (InfixOp a) (Expression a)
 >   | LeftSection (Expression a) (InfixOp a)
 >   | RightSection (InfixOp a) (Expression a)
->   | Lambda [ConstrTerm a] (Expression a)
+>   | Lambda Position [ConstrTerm a] (Expression a)
 >   | Let [Decl a] (Expression a)
 >   | Do [Statement a] (Expression a)
 >   | IfThenElse (Expression a) (Expression a) (Expression a)
@@ -245,8 +245,8 @@ Interface declarations are restricted to type declarations and signatures.
 
 > data Statement a =
 >     StmtExpr (Expression a)
+>   | StmtBind Position (ConstrTerm a) (Expression a)
 >   | StmtDecl [Decl a]
->   | StmtBind (ConstrTerm a) (Expression a)
 >   deriving (Eq,Show)
 
 > data Alt a = Alt Position (ConstrTerm a) (Rhs a) deriving (Eq,Show)
@@ -342,7 +342,7 @@ The abstract syntax tree is a functor with respect to the attributes.
 >     InfixApply (fmap f e1) (fmap f op) (fmap f e2)
 >   fmap f (LeftSection e op) = LeftSection (fmap f e) (fmap f op)
 >   fmap f (RightSection op e) = RightSection (fmap f op) (fmap f e)
->   fmap f (Lambda ts e) = Lambda (map (fmap f) ts) (fmap f e)
+>   fmap f (Lambda p ts e) = Lambda p (map (fmap f) ts) (fmap f e)
 >   fmap f (Let ds e) = Let (map (fmap f) ds) (fmap f e)
 >   fmap f (Do sts e) = Do (map (fmap f) sts) (fmap f e)
 >   fmap f (IfThenElse e1 e2 e3) =
@@ -355,8 +355,8 @@ The abstract syntax tree is a functor with respect to the attributes.
 
 > instance Functor Statement where
 >   fmap f (StmtExpr e) = StmtExpr (fmap f e)
+>   fmap f (StmtBind p t e) = StmtBind p (fmap f t) (fmap f e)
 >   fmap f (StmtDecl ds) = StmtDecl (map (fmap f) ds)
->   fmap f (StmtBind t e) = StmtBind (fmap f t) (fmap f e)
 
 > instance Functor Alt where
 >   fmap f (Alt p t rhs) = Alt p (fmap f t) (fmap f rhs)

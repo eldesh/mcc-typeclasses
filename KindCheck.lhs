@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2289 2007-06-19 16:30:52Z wlux $
+% $Id: KindCheck.lhs 2399 2007-07-16 08:49:24Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -165,7 +165,7 @@ declarations.
 >   fts m (InfixApply e1 _ e2) = fts m e1 . fts m e2
 >   fts m (LeftSection e _) = fts m e
 >   fts m (RightSection _ e) = fts m e
->   fts m (Lambda _ e) = fts m e
+>   fts m (Lambda _ _ e) = fts m e
 >   fts m (Let ds e) = fts m ds . fts m e
 >   fts m (Do sts e) = fts m sts . fts m e
 >   fts m (IfThenElse e1 e2 e3) = fts m e1 . fts m e2 . fts m e3
@@ -173,7 +173,7 @@ declarations.
 
 > instance HasType (Statement a) where
 >   fts m (StmtExpr e) = fts m e
->   fts m (StmtBind _ e) = fts m e
+>   fts m (StmtBind _ _ e) = fts m e
 >   fts m (StmtDecl ds) = fts m ds
 
 > instance HasType (Alt a) where
@@ -444,7 +444,7 @@ latter.
 > kcExpr tcEnv p (InfixApply e1 _ e2) = kcExpr tcEnv p e1 >> kcExpr tcEnv p e2
 > kcExpr tcEnv p (LeftSection e _) = kcExpr tcEnv p e
 > kcExpr tcEnv p (RightSection _ e) = kcExpr tcEnv p e
-> kcExpr tcEnv p (Lambda _ e) = kcExpr tcEnv p e
+> kcExpr tcEnv _ (Lambda p _ e) = kcExpr tcEnv p e
 > kcExpr tcEnv p (Let ds e) = mapM_ (kcDecl tcEnv) ds >> kcExpr tcEnv p e
 > kcExpr tcEnv p (Do sts e) = mapM_ (kcStmt tcEnv p) sts >> kcExpr tcEnv p e
 > kcExpr tcEnv p (IfThenElse e1 e2 e3) =
@@ -453,7 +453,7 @@ latter.
 
 > kcStmt :: TCEnv -> Position -> Statement a -> KcState ()
 > kcStmt tcEnv p (StmtExpr e) = kcExpr tcEnv p e
-> kcStmt tcEnv p (StmtBind _ e) = kcExpr tcEnv p e
+> kcStmt tcEnv _ (StmtBind p _ e) = kcExpr tcEnv p e
 > kcStmt tcEnv _ (StmtDecl ds) = mapM_ (kcDecl tcEnv) ds
 
 > kcAlt :: TCEnv -> Alt a -> KcState ()

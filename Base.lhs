@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2368 2007-06-23 13:55:45Z wlux $
+% $Id: Base.lhs 2399 2007-07-16 08:49:24Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -552,7 +552,7 @@ variables cannot be computed independently for each declaration.
 >   qfv m (InfixApply e1 op e2) = qfv m op ++ qfv m e1 ++ qfv m e2
 >   qfv m (LeftSection e op) = qfv m op ++ qfv m e
 >   qfv m (RightSection op e) = qfv m op ++ qfv m e
->   qfv m (Lambda ts e) = filterBv ts (qfv m e)
+>   qfv m (Lambda _ ts e) = filterBv ts (qfv m e)
 >   qfv m (Let ds e) = filterBv ds (qfv m ds ++ qfv m e)
 >   qfv m (Do sts e) = foldr (qfvStmt m) (qfv m e) sts
 >   qfv m (IfThenElse e1 e2 e3) = qfv m e1 ++ qfv m e2 ++ qfv m e3
@@ -563,15 +563,15 @@ variables cannot be computed independently for each declaration.
 
 > instance QualExpr (Statement a) where
 >   qfv m (StmtExpr e) = qfv m e
+>   qfv m (StmtBind _ t e) = qfv m e
 >   qfv m (StmtDecl ds) = filterBv ds (qfv m ds)
->   qfv m (StmtBind t e) = qfv m e
 
 > instance QualExpr (Alt a) where
 >   qfv m (Alt _ t rhs) = filterBv t (qfv m rhs)
 
 > instance QuantExpr (Statement a) where
 >   bv (StmtExpr e) = []
->   bv (StmtBind t e) = bv t
+>   bv (StmtBind _ t e) = bv t
 >   bv (StmtDecl ds) = bv ds
 
 > instance QualExpr (InfixOp a) where

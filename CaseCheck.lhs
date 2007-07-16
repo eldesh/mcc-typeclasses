@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 2289 2007-06-19 16:30:52Z wlux $
+% $Id: CaseCheck.lhs 2399 2007-07-16 08:49:24Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -227,7 +227,7 @@ collect all defined identifiers.
 >   names p (InfixApply e1 _ e2) = names p e1 . names p e2
 >   names p (LeftSection e _) = names p e
 >   names p (RightSection _ e) = names p e
->   names p (Lambda ts e) = names p ts . names p e
+>   names _ (Lambda p ts e) = names p ts . names p e
 >   names p (Let ds e) = names p ds . names p e
 >   names p (Do sts e) = names p sts . names p e
 >   names p (IfThenElse e1 e2 e3) = names p e1 . names p e2 . names p e3
@@ -235,8 +235,8 @@ collect all defined identifiers.
 
 > instance SyntaxTree (Statement a) where
 >   names p (StmtExpr e) = names p e
+>   names _ (StmtBind p t e) = names p t . names p e
 >   names p (StmtDecl ds) = names p ds
->   names p (StmtBind t e) = names p t . names p e
 
 > instance SyntaxTree (Alt a) where
 >   names _ (Alt p t rhs) = names p t . names p rhs

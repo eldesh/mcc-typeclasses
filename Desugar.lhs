@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2305 2007-06-20 11:32:33Z wlux $
+% $Id: Desugar.lhs 2399 2007-07-16 08:49:24Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -222,7 +222,7 @@ further declarations to the group that must be desugared as well.
 > desugarDeclLhs :: ModuleIdent -> Decl Type -> DesugarState [Decl Type]
 > desugarDeclLhs m (PatternDecl p t rhs) =
 >   case (t,rhs) of
->     (VariablePattern _ f,SimpleRhs _ e@(Lambda _ _) ds) ->
+>     (VariablePattern _ f,SimpleRhs _ e@(Lambda _ _ _) ds) ->
 >       do
 >         dss' <- mapM (desugarDeclLhs m) ds
 >         return (funDecl p f [] e : concat dss')
@@ -459,9 +459,9 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 >     e' <- desugarExpr m p e
 >     return (Apply (Apply (prelFlip ty1 ty2 ty3) op') e')
 >   where TypeArrow ty1 (TypeArrow ty2 ty3) = typeOf (infixOp op)
-> desugarExpr m p (Lambda ts e) =
+> desugarExpr m _ (Lambda p ts e) =
 >   do
->     (ty,f) <- freshFun m "_#lambda" (length ts) (Lambda ts e)
+>     (ty,f) <- freshFun m "_#lambda" (length ts) (Lambda p ts e)
 >     desugarExpr m p (Let [funDecl p f ts e] (mkVar ty f))
 > desugarExpr m p (Let ds e) =
 >   do
@@ -471,8 +471,9 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 > desugarExpr m p (Do sts e) = desugarExpr m p (foldr desugarStmt e sts)
 >   where desugarStmt (StmtExpr e) e' =
 >           apply (prelBind_ (typeOf e) (typeOf e')) [e,e']
->         desugarStmt (StmtBind t e) e' =
->           apply (prelBind (typeOf e) (typeOf t) (typeOf e')) [e,Lambda [t] e']
+>         desugarStmt (StmtBind p t e) e' =
+>           apply (prelBind (typeOf e) (typeOf t) (typeOf e'))
+>                 [e,Lambda p [t] e']
 >         desugarStmt (StmtDecl ds) e' = Let ds e'
 > desugarExpr m p (IfThenElse e1 e2 e3) =
 >   do
@@ -716,7 +717,7 @@ instead of \texttt{(++)} and \texttt{map} in place of
 >             -> DesugarState (Expression Type)
 > desugarQual m p (StmtExpr b) e =
 >   desugarExpr m p (IfThenElse b e (List (typeOf e) []))
-> desugarQual m p (StmtBind t l) e
+> desugarQual m _ (StmtBind p t l) e
 >   | isVarPattern t = desugarExpr m p (qualExpr t e l)
 >   | otherwise =
 >       do
@@ -726,12 +727,12 @@ instead of \texttt{(++)} and \texttt{map} in place of
 >         desugarExpr m p
 >           (apply (prelFoldr ty ty') [foldFunct ty v ty' l' e,List ty' [],l])
 >   where qualExpr v (ListCompr e []) l =
->           apply (prelMap (typeOf v) (typeOf e)) [Lambda [v] e,l]
+>           apply (prelMap (typeOf v) (typeOf e)) [Lambda p [v] e,l]
 >         qualExpr v e l =
 >           apply (prelConcatMap (typeOf v) (elemType (typeOf e)))
->                 [Lambda [v] e,l]
+>                 [Lambda p [v] e,l]
 >         foldFunct ty v ty' l e =
->           Lambda [VariablePattern ty v,VariablePattern ty' l]
+>           Lambda p [VariablePattern ty v,VariablePattern ty' l]
 >             (Case (mkVar ty v)
 >                   [caseAlt p t (append ty' e (mkVar ty' l)),
 >                    caseAlt p (VariablePattern ty v) (mkVar ty' l)])

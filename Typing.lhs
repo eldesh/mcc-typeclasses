@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 2162 2007-04-24 09:19:29Z wlux $
+% $Id: Typing.lhs 2399 2007-07-16 08:49:24Z wlux $
 %
-% Copyright (c) 2003-2006, Wolfgang Lux
+% Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Typing.lhs}
@@ -76,7 +76,7 @@ perform any (non-trivial) unifications.
 >   case exprType (infixOp op) of
 >     TypeArrow ty1 (TypeArrow _ ty2) -> TypeArrow ty1 ty2
 >     _ -> internalError "exprType (RightSection)"
-> exprType (Lambda ts e) = foldr TypeArrow (exprType e) (map argType ts)
+> exprType (Lambda _ ts e) = foldr TypeArrow (exprType e) (map argType ts)
 > exprType (Let _ e) = exprType e
 > exprType (Do _ e) = exprType e
 > exprType (IfThenElse _ e _) = exprType e

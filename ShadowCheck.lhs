@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 2289 2007-06-19 16:30:52Z wlux $
+% $Id: ShadowCheck.lhs 2399 2007-07-16 08:49:24Z wlux $
 %
 % Copyright (c) 2005-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -133,7 +133,7 @@ traversal of the syntax tree.
 >   shadow p (InfixApply e1 _ e2) = shadow p e1 &&& shadow p e2
 >   shadow p (LeftSection e _) = shadow p e
 >   shadow p (RightSection _ e) = shadow p e
->   shadow p (Lambda ts e) = shadow p ts >>> shadow p e
+>   shadow _ (Lambda p ts e) = shadow p ts >>> shadow p e
 >   shadow p (Let ds e) = shadow p ds >>> shadow p e
 >   shadow p (Do sts e) = shadow p sts >>> shadow p e
 >   shadow p (IfThenElse e1 e2 e3) =
@@ -142,7 +142,7 @@ traversal of the syntax tree.
 
 > instance SyntaxTree (Statement a) where
 >   shadow p (StmtExpr e) = shadow p e
->   shadow p (StmtBind t e) = shadow p e &&& shadow p t
+>   shadow _ (StmtBind p t e) = shadow p e &&& shadow p t
 >   shadow p (StmtDecl ds) = shadow p ds
 
 >   shadowGroup p = foldr ((>>>) . shadow p) id

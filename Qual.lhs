@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2289 2007-06-19 16:30:52Z wlux $
+% $Id: Qual.lhs 2399 2007-07-16 08:49:24Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -183,8 +183,8 @@ order to compile this module with hbc.
 >     LeftSection (qual phase tEnv vEnv e) (qual phase tEnv vEnv op)
 >   qual phase tEnv vEnv (RightSection op e) =
 >     RightSection (qual phase tEnv vEnv op) (qual phase tEnv vEnv e)
->   qual phase tEnv vEnv (Lambda ts e) =
->     Lambda (qual phase tEnv vEnv ts) (qual phase tEnv vEnv e)
+>   qual phase tEnv vEnv (Lambda p ts e) =
+>     Lambda p (qual phase tEnv vEnv ts) (qual phase tEnv vEnv e)
 >   qual phase tEnv vEnv (Let ds e) =
 >     Let (qual phase tEnv vEnv ds) (qual phase tEnv vEnv e)
 >   qual phase tEnv vEnv (Do sts e) =
@@ -198,8 +198,8 @@ order to compile this module with hbc.
 
 > instance Qual (Statement a) where
 >   qual phase tEnv vEnv (StmtExpr e) = StmtExpr (qual phase tEnv vEnv e)
->   qual phase tEnv vEnv (StmtBind t e) =
->     StmtBind (qual phase tEnv vEnv t) (qual phase tEnv vEnv e)
+>   qual phase tEnv vEnv (StmtBind p t e) =
+>     StmtBind p (qual phase tEnv vEnv t) (qual phase tEnv vEnv e)
 >   qual phase tEnv vEnv (StmtDecl ds) = StmtDecl (qual phase tEnv vEnv ds)
 
 > instance Qual (Alt a) where

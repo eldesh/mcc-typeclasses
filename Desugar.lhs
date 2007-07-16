@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2399 2007-07-16 08:49:24Z wlux $
+% $Id: Desugar.lhs 2400 2007-07-16 08:56:51Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -461,8 +461,13 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 >   where TypeArrow ty1 (TypeArrow ty2 ty3) = typeOf (infixOp op)
 > desugarExpr m _ (Lambda p ts e) =
 >   do
->     (ty,f) <- freshFun m "_#lambda" (length ts) (Lambda p ts e)
+>     updateSt_ (bindLambda m f (length ts) ty)
 >     desugarExpr m p (Let [funDecl p f ts e] (mkVar ty f))
+>   where f = lambdaId p
+>         ty = typeOf (Lambda p ts e)
+>         bindLambda m f n ty tyEnv
+>           | null (lookupTopEnv f tyEnv) = bindFun m f n (polyType ty) tyEnv
+>           | otherwise = tyEnv
 > desugarExpr m p (Let ds e) =
 >   do
 >     ds' <- desugarDeclGroup m ds
@@ -756,11 +761,6 @@ Generation of fresh names
 > freshVar :: Typeable a => ModuleIdent -> String -> a
 >          -> DesugarState (Type,Ident)
 > freshVar m prefix x = liftM ((,) ty) (freshIdent m prefix 0 (monoType ty))
->   where ty = typeOf x
-
-> freshFun :: Typeable a => ModuleIdent -> String -> Int -> a
->          -> DesugarState (Type,Ident)
-> freshFun m prefix n x = liftM ((,) ty) (freshIdent m prefix n (polyType ty))
 >   where ty = typeOf x
 
 \end{verbatim}

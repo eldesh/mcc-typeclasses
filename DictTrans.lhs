@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2393 2007-07-10 08:09:47Z wlux $
+% $Id: DictTrans.lhs 2408 2007-07-22 21:51:27Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -731,16 +731,19 @@ for $f$ at a particular type.
 >     DataDecl p cx tc tvs cs clss
 >   dictSpecialize _ (NewtypeDecl p cx tc tvs nc clss) =
 >     NewtypeDecl p cx tc tvs nc clss
->   dictSpecialize mEnv (TypeDecl p tc tvs ty) = TypeDecl p tc tvs ty
+>   dictSpecialize _ (TypeDecl p tc tvs ty) = TypeDecl p tc tvs ty
 >   dictSpecialize mEnv (BlockDecl d) = BlockDecl (dictSpecialize mEnv d)
 
 > instance DictSpecialize Decl where
+>   dictSpecialize _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops
+>   dictSpecialize _ (TypeSig p fs ty) = TypeSig p fs ty
 >   dictSpecialize mEnv (FunctionDecl p f eqs) =
 >     FunctionDecl p f (map (dictSpecialize mEnv) eqs)
 >   dictSpecialize _ (ForeignDecl p cc s ie f ty) = ForeignDecl p cc s ie f ty
 >   dictSpecialize mEnv (PatternDecl p t rhs) =
 >     PatternDecl p t (dictSpecialize mEnv rhs)
 >   dictSpecialize _ (FreeDecl p vs) = FreeDecl p vs
+>   dictSpecialize _ (TrustAnnot p tr fs) = TrustAnnot p tr fs
 
 > instance DictSpecialize Equation where
 >   dictSpecialize mEnv (Equation p lhs rhs) =
@@ -844,20 +847,6 @@ successfully. However, one must be careful with expanding newtypes
 because they may be recursive. For that reason, \texttt{match} expands
 newtypes lazily.
 \begin{verbatim}
-
-> type NewtypeEnv = Env QualIdent Type
-
-> -- FIXME: this definition should be shared with module Simplify
-> newtypeEnv :: ValueEnv -> NewtypeEnv
-> newtypeEnv tyEnv = foldr bindNewtype initNewtypeEnv (allEntities tyEnv)
->   where initNewtypeEnv = bindEnv qIOId ioType' emptyEnv
->         ioType' = TypeArrow worldType (tupleType [TypeVariable 0,worldType])
->         qWorldId = qualify (mkIdent "World")
->         worldType = TypeConstructor qWorldId
->         bindNewtype (DataConstructor _ _ _) = id
->         bindNewtype (NewtypeConstructor _ ty) = bindAlias (rawType ty)
->         bindNewtype (Value _ _ _) = id 
->         bindAlias (TypeArrow ty ty0) = bindEnv (rootOfType ty0) ty
 
 > newExpand :: NewtypeEnv -> Type -> [Type]
 > newExpand nEnv ty = ty : expand nEnv (unapplyType True ty)

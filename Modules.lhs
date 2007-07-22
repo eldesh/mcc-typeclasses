@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2398 2007-07-16 08:11:26Z wlux $
+% $Id: Modules.lhs 2408 2007-07-22 21:51:27Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -36,6 +36,7 @@ This module controls the compilation of modules.
 > import Qual(qual1,qual2)
 > import Desugar(desugar,goalModule)
 > import Simplify(simplify)
+> import Unlambda(unlambda)
 > import DictTrans(dictTransModule,dictTransInterface,dictSpecializeModule)
 > import Lift(lift)
 > import qualified IL
@@ -142,15 +143,17 @@ declaration to the module.
 
 > transModule :: Bool -> Trust -> TCEnv -> ValueEnv -> Module Type
 >             -> (ValueEnv,TrustEnv,Module Type,[(Dump,Doc)])
-> transModule debug tr tcEnv tyEnv m = (tyEnv'',trEnv,simplified,dumps)
+> transModule debug tr tcEnv tyEnv m = (tyEnv''',trEnv,nolambda,dumps)
 >   where trEnv = if debug then trustEnv tr m else emptyEnv
 >         (desugared,tyEnv') = desugar tcEnv tyEnv m
 >         (simplified,tyEnv'') = simplify tyEnv' trEnv desugared
+>         (nolambda,tyEnv''') = unlambda tyEnv'' simplified
 >         dumps =
 >           [(DumpRenamed,ppModule m),
 >            (DumpTypes,ppTypes tcEnv (localBindings tyEnv)),
 >            (DumpDesugared,ppModule desugared),
->            (DumpSimplified,ppModule simplified)]
+>            (DumpSimplified,ppModule simplified),
+>            (DumpUnlambda,ppModule nolambda)]
 
 > dictTrans :: ModuleEnv -> TCEnv -> InstEnv -> ValueEnv -> Module Type
 >           -> (ModuleEnv,ValueEnv,Module Type,[(Dump,Doc)])
@@ -613,6 +616,7 @@ standard output.
 > dumpHeader DumpTypes = "Types"
 > dumpHeader DumpDesugared = "Source code after desugaring"
 > dumpHeader DumpSimplified = "Source code after simplification"
+> dumpHeader DumpUnlambda = "Source code after naming lambdas"
 > dumpHeader DumpDict = "Source code with dictionaries"
 > dumpHeader DumpSpecialize = "Source code after specialization"
 > dumpHeader DumpLifted = "Source code after lifting"

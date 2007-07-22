@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2400 2007-07-16 08:56:51Z wlux $
+% $Id: Desugar.lhs 2408 2007-07-22 21:51:27Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -27,6 +27,7 @@ properties.
   \item variables,
   \item constructors,
   \item (binary) applications,
+  \item lambda abstractions,
   \item let expressions, and
   \item case expressions.
   \end{itemize}
@@ -59,10 +60,10 @@ all names must be properly qualified before calling this module.}
 
 \end{verbatim}
 New identifiers may be introduced while desugaring pattern
-declarations, case and $\lambda$-expressions, and list comprehensions.
-As usual, we use a state monad transformer for generating unique
-names. In addition, the state is also used for passing through the
-type environment, which must be augmented with the types of these new
+declarations, case expressions, and list comprehensions. As usual, we
+use a state monad transformer for generating unique names. In
+addition, the state is also used for passing through the type
+environment, which must be augmented with the types of these new
 variables.
 \begin{verbatim}
 
@@ -221,16 +222,10 @@ further declarations to the group that must be desugared as well.
 
 > desugarDeclLhs :: ModuleIdent -> Decl Type -> DesugarState [Decl Type]
 > desugarDeclLhs m (PatternDecl p t rhs) =
->   case (t,rhs) of
->     (VariablePattern _ f,SimpleRhs _ e@(Lambda _ _ _) ds) ->
->       do
->         dss' <- mapM (desugarDeclLhs m) ds
->         return (funDecl p f [] e : concat dss')
->     _ ->
->         do
->           (ds',t') <- desugarTerm m p [] t
->           dss' <- mapM (desugarDeclLhs m) ds'
->           return (PatternDecl p t' rhs : concat dss')
+>   do
+>     (ds',t') <- desugarTerm m p [] t
+>     dss' <- mapM (desugarDeclLhs m) ds'
+>     return (PatternDecl p t' rhs : concat dss')
 > desugarDeclLhs _ d = return [d]
 
 \end{verbatim}
@@ -461,13 +456,9 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 >   where TypeArrow ty1 (TypeArrow ty2 ty3) = typeOf (infixOp op)
 > desugarExpr m _ (Lambda p ts e) =
 >   do
->     updateSt_ (bindLambda m f (length ts) ty)
->     desugarExpr m p (Let [funDecl p f ts e] (mkVar ty f))
->   where f = lambdaId p
->         ty = typeOf (Lambda p ts e)
->         bindLambda m f n ty tyEnv
->           | null (lookupTopEnv f tyEnv) = bindFun m f n (polyType ty) tyEnv
->           | otherwise = tyEnv
+>     (ds',ts') <- mapAccumM (desugarTerm m p) [] ts
+>     e' <- desugarExpr m p (Let ds' e)
+>     return (Lambda p ts' e')
 > desugarExpr m p (Let ds e) =
 >   do
 >     ds' <- desugarDeclGroup m ds

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 2399 2007-07-16 08:49:24Z wlux $
+% $Id: Typing.lhs 2408 2007-07-22 21:51:27Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -8,8 +8,12 @@
 \section{Computing the Type of Curry Expressions}
 \begin{verbatim}
 
-> module Typing(Typeable(..)) where
+> module Typing(Typeable(..), NewtypeEnv, newtypeEnv, matchType) where
 > import Base
+> import Env
+> import Maybe
+> import TopEnv
+> import TypeSubst
 
 \end{verbatim}
 After the compiler has attributed patterns and expressions with type
@@ -87,3 +91,85 @@ perform any (non-trivial) unifications.
 > rhsType (GuardedRhs es _) = head [exprType e | CondExpr _ _ e <- es]
 
 \end{verbatim}
+During desugaring, the compiler will remove newtype constructors and
+renaming types effectively become type synonyms. Therefore, given a
+definition \texttt{newtype $T\,u_1\dots,u_n$ = $N\,\tau$}, the types
+$T\,\tau_1\dots\tau_n$ and $\tau[u_1/\tau_1,\dots,u_n/\tau_n]$ are
+considered equal. However, renaming types -- in contrast to type
+synonyms -- can be recursive. Therefore, we expand renaming types
+lazily with the help of an auxiliary environment that maps each
+newtype type constructor $T$ onto the argument type $\tau$ of its
+newtype constructor. This environment is initialized trivially from
+the value type environment. Note that it always contains an entry for
+type \texttt{IO}, which is assumed to be defined implicitly as
+\begin{verbatim}
+  newtype IO a = IO (World -> (a,World))
+\end{verbatim}
+for some abstract type \texttt{World} representing the state of the
+external world.
+\begin{verbatim}
+
+> type NewtypeEnv = Env QualIdent Type
+
+> newtypeEnv :: ValueEnv -> NewtypeEnv
+> newtypeEnv tyEnv = foldr bindNewtype initNewtypeEnv (allEntities tyEnv)
+>   where initNewtypeEnv = bindEnv qIOId ioType' emptyEnv
+>         ioType' = TypeArrow worldType (tupleType [TypeVariable 0,worldType])
+>         worldType = TypeConstructor (qualify (mkIdent "World"))
+>         bindNewtype (DataConstructor _ _ _) = id
+>         bindNewtype (NewtypeConstructor _ ty) = bindEnv (rootOfType ty2) ty1
+>           where TypeArrow ty1 ty2 = rawType ty
+>         bindNewtype (Value _ _ _) = id
+
+\end{verbatim}
+When inlining expressions, the compiler must also update the type
+annotations of the inlined expression. To that end, the compiler must
+unify the types of the old expression being subsituted and the new
+expressions that is substituted for it. Since the program is type
+correct, this matching amounts to a simple one way matching where we
+only need to find for each type variable occurring in the type of the
+new expression the matching type in the type of the old expression.
+The only complication is that we eventually must expand newtypes in
+order to match the two types. Note that the first type argument of
+\texttt{matchType} is the type of the new expression.
+\begin{verbatim}
+
+> matchType :: NewtypeEnv -> Type -> Type -> TypeSubst -> TypeSubst
+> matchType nEnv ty1 ty2 = matchTypeApp nEnv ty1 ty2 []
+
+> matchTypeApp :: NewtypeEnv -> Type -> Type -> [(Type,Type)] -> TypeSubst
+>              -> TypeSubst
+> matchTypeApp nEnv (TypeVariable tv) ty tys
+>   | ty == TypeVariable tv = matchTypes nEnv tys
+>   | otherwise = bindSubst tv ty . matchTypes nEnv tys
+> matchTypeApp nEnv (TypeConstructor tc1) (TypeConstructor tc2) tys
+>   | tc1 == tc2 = matchTypes nEnv tys
+> matchTypeApp nEnv (TypeConstrained tv1 _) (TypeConstrained tv2 _) tys
+>   | tv1 == tv2 = matchTypes nEnv tys
+> matchTypeApp nEnv (TypeSkolem k1) (TypeSkolem k2) tys
+>   | k1 == k2 = matchTypes nEnv tys
+> matchTypeApp nEnv (TypeApply ty11 ty12) (TypeApply ty21 ty22) tys =
+>   matchTypeApp nEnv ty11 ty21 ((ty12,ty22) : tys)
+> matchTypeApp nEnv (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) tys =
+>   matchType nEnv ty11 ty21 . matchType nEnv ty12 ty22 . matchTypes nEnv tys
+> matchTypeApp nEnv (TypeConstructor tc) ty2 tys
+>   | isJust n = matchType nEnv ty1' ty2'
+>   where n = lookupEnv tc nEnv
+>         ty1' = expandAliasType (map fst tys) (fromJust n)
+>         ty2' = applyType ty2 (map snd tys)
+> matchTypeApp nEnv ty1 (TypeConstructor tc) tys
+>   | isJust n = matchType nEnv ty1' ty2'
+>   where n = lookupEnv tc nEnv
+>         ty1' = applyType ty1 (map fst tys)
+>         ty2' = expandAliasType (map snd tys) (fromJust n)
+> matchTypeApp _ ty1 ty2 tys =
+>   internalError ("matchType (" ++ show ty1' ++ ") (" ++ show ty2' ++ ")")
+>   where ty1' = applyType ty1 (map fst tys)
+>         ty2' = applyType ty2 (map snd tys)
+
+> matchTypes :: NewtypeEnv -> [(Type,Type)] -> TypeSubst -> TypeSubst
+> matchTypes nEnv tys theta =
+>   foldr (uncurry (matchType nEnv)) theta tys
+
+\end{verbatim}
+

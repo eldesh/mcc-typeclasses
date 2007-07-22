@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2399 2007-07-16 08:49:24Z wlux $
+% $Id: TypeCheck.lhs 2405 2007-07-22 17:43:40Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -561,10 +561,8 @@ matter whether it its evaluation is shared or not.
 > instance Binding (Decl a) where
 >   isNonExpansive _ _ (InfixDecl _ _ _ _) = True
 >   isNonExpansive _ _ (TypeSig _ _ _) = True
->   isNonExpansive _ _ (FunctionDecl _ _ (eq:eqs)) = eqnArity eq > 0
->   isNonExpansive tcEnv _ (ForeignDecl _ _ _ _ _ ty) =
->     arrowArity (rawType ty') > 0
->     where ty' = typeScheme (expandPolyType tcEnv (QualTypeExpr [] ty))
+>   isNonExpansive _ _ (FunctionDecl _ _ _) = True
+>   isNonExpansive _ _ (ForeignDecl _ _ _ _ _ _) = True
 >   isNonExpansive tcEnv tyEnv (PatternDecl _ t rhs) =
 >     isVariablePattern t && isNonExpansive tcEnv tyEnv rhs
 >   isNonExpansive _ _ (FreeDecl _ _) = False
@@ -578,7 +576,7 @@ matter whether it its evaluation is shared or not.
 > instance Binding (Expression a) where
 >   isNonExpansive tcEnv tyEnv = isNonExpansiveApp tcEnv tyEnv 0
 
-> isNonExpansiveApp :: TCEnv -> ValueEnv -> Int -> (Expression a) -> Bool
+> isNonExpansiveApp :: TCEnv -> ValueEnv -> Int -> Expression a -> Bool
 > isNonExpansiveApp _ _ _ (Literal _ _) = True
 > isNonExpansiveApp _ tyEnv n (Variable _ v)
 >   | isRenamed (unqualify v) = n == 0 || n < arity v tyEnv

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2406 2007-07-22 17:48:22Z wlux $
+% $Id: Simplify.lhs 2407 2007-07-22 18:20:40Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -436,15 +436,22 @@ functions in later phases of the compiler.
 The declaration groups of a let expression are first processed from
 outside to inside, simplifying the right hand sides and collecting
 inlineable expressions on the fly. At present, only simple constants
-and aliases to other variables are inlined. A constant is considered
-simple if it is either a literal, a constructor, or a non-nullary
-function. Note that it is not possible to define nullary functions in
-local declarations in Curry. Thus, an unqualified name always refers
-to either a variable or a non-nullary function.  Applications of
-constructors and partial applications of functions to at least one
-argument are not inlined because the compiler has to allocate space
-for them, anyway. In order to prevent non-termination, recursive
-binding groups are not processed.
+and aliases to other variables are inlined. In addition, for function
+definitions of the form $f\,x_{m+1}\dots x_n = g\,e_1\dots
+e_m\,x_{m+1} \dots x_n$ where $g$ is a function or constructor whose
+arity is greater than or equal to $n$ and where $e_1,\dots,e_m$ are
+either simple constants or free variables of $f$, the application
+$g\,e_1\dots e_m$ is inlined in place of $f$.
+
+A constant is considered simple if it is either a literal, a
+constructor, or a non-nullary function. Note that it is not possible
+to define nullary functions in local declarations in Curry. Thus, an
+unqualified name always refers to either a variable or a non-nullary
+function.  Applications of constructors and partial applications of
+functions to at least one argument are not inlined in order to avoid
+code duplication (for the allocation of the terms). In order to
+prevent non-termination, no inlining is performed for entities defined
+in recursive binding groups.
 
 With the list of inlineable expressions, the body of the let is
 simplified and then the declaration groups are processed from inside
@@ -461,20 +468,39 @@ functions to access the pattern variables.
 >   do
 >     ds' <- mapM (simplifyDecl m env) ds
 >     tyEnv <- fetchSt
->     e' <- simplifyLet m (inlineVars tyEnv ds' env) dss e
+>     trEnv <- liftSt (liftRt envRt)
+>     e' <- simplifyLet m (inlineVars m tyEnv trEnv ds' env) dss e
 >     dss'' <- mapM (expandPatternBindings m tyEnv (qfv m ds' ++ qfv m e')) ds'
 >     return (mkLet m (concat dss'') e')
 
-> inlineVars :: ValueEnv -> [Decl Type] -> InlineEnv -> InlineEnv
-> inlineVars tyEnv [PatternDecl _ (VariablePattern _ v) (SimpleRhs _ e _)] env
->   | canInline e = bindEnv v e env
->   where canInline (Literal _ _) = True
->         canInline (Constructor _ _) = True
->         canInline (Variable _ v')
->           | isQualified v' = arity v' tyEnv > 0
->           | otherwise = v /= unqualify v'
->         canInline _ = False
-> inlineVars _ _ env = env
+> inlineVars :: ModuleIdent -> ValueEnv -> TrustEnv -> [Decl Type] -> InlineEnv
+>            -> InlineEnv
+> inlineVars m tyEnv trEnv
+>            [FunctionDecl _ f [Equation _ (FunLhs _ ts) (SimpleRhs _ e _)]]
+>            env
+>   | all isVarPattern ts && funArity e' >= n && length ts <= n &&
+>     all (canInline tyEnv) es' && map (uncurry mkVar) vs == es'' &&
+>     all (`notElem` qfv m e'') (f : map snd vs) &&
+>     maybe True (Trust==) (lookupEnv f trEnv) = bindEnv f e'' env
+>   where n = length es
+>         vs = [(ty,v) | VariablePattern ty v <- ts]
+>         (e',es) = unapply e []
+>         (es',es'') = splitAt (n - length ts) es
+>         e'' = apply e' es'
+>         funArity (Variable _ v) = arity v tyEnv
+>         funArity (Constructor _ c) = arity c tyEnv
+>         funArity _ = -1
+> inlineVars m tyEnv _
+>            [PatternDecl _ (VariablePattern _ v) (SimpleRhs _ e _)]
+>            env
+>   | canInline tyEnv e && v `notElem` qfv m e = bindEnv v e env
+> inlineVars _ _ _ _ env = env
+
+> canInline :: ValueEnv -> Expression a -> Bool
+> canInline _ (Literal _ _) = True
+> canInline _ (Constructor _ _) = True
+> canInline tyEnv (Variable _ v) = not (isQualified v) || arity v tyEnv > 0
+> canInline _ _ = False
 
 > mkLet :: ModuleIdent -> [Decl Type] -> Expression Type -> Expression Type
 > mkLet m [FreeDecl p vs] e
@@ -518,29 +544,27 @@ form where all arguments of applications are variables.
 \begin{verbatim}
 
 > simplifyMatch :: Expression Type -> [Alt Type] -> Maybe (Expression Type)
+> simplifyMatch (Let ds e) = fmap (Let ds) . simplifyMatch e
 > simplifyMatch e =
 >   case unapply e [] of
->     (dss,Literal ty l,_) -> Just . match dss (Left (ty,l))
->     (dss,Constructor ty c,es) -> Just . match dss (Right (ty,c,es))
->     (_,_,_) -> const Nothing
+>     (Literal ty l,_) -> Just . match (Left (ty,l))
+>     (Constructor ty c,es) -> Just . match (Right (ty,c,es))
+>     (_,_) -> const Nothing
 
-> unapply :: Expression a -> [Expression a]
->         -> ([[Decl a]],Expression a,[Expression a])
-> unapply (Literal ty l) es = ([],Literal ty l,es)
-> unapply (Variable ty v) es = ([],Variable ty v,es)
-> unapply (Constructor ty c) es = ([],Constructor ty c,es)
+> unapply :: Expression a -> [Expression a] -> (Expression a,[Expression a])
+> unapply (Literal ty l) es = (Literal ty l,es)
+> unapply (Variable ty v) es = (Variable ty v,es)
+> unapply (Constructor ty c) es = (Constructor ty c,es)
 > unapply (Apply e1 e2) es = unapply e1 (e2:es)
-> unapply (Let ds e) es = (ds:dss',e',es')
->   where (dss',e',es') = unapply e es
-> unapply (Case e alts) es = ([],Case e alts,es)
+> unapply (Let ds e) es = (Let ds e,es)
+> unapply (Case e alts) es = (Case e alts,es)
 
-> match :: [[Decl Type]]
->       -> Either (Type,Literal) (Type,QualIdent,[Expression Type])
+> match :: Either (Type,Literal) (Type,QualIdent,[Expression Type])
 >       -> [Alt Type] -> Expression Type
-> match dss e alts =
+> match e alts =
 >   head ([expr p t rhs | Alt p t rhs <- alts, t `matches` e] ++
 >         [prelFailed (typeOf (Case (matchExpr e) alts))])
->   where expr p t (SimpleRhs _ e' _) = foldr Let e' (dss ++ bindPattern p e t)
+>   where expr p t (SimpleRhs _ e' _) = bindPattern p e t e'
 
 > matches :: ConstrTerm Type
 >         -> Either (Type,Literal) (Type,QualIdent,[Expression Type])
@@ -556,12 +580,13 @@ form where all arguments of applications are variables.
 
 > bindPattern :: Position
 >             -> Either (Type,Literal) (Type,QualIdent,[Expression Type])
->             -> ConstrTerm Type -> [[Decl Type]]
-> bindPattern _ (Left _) (LiteralPattern _ _) = []
-> bindPattern p (Right (_,_,es)) (ConstructorPattern _ _ ts) =
->   [zipWith (\(VariablePattern ty v) -> varDecl p ty v) ts es]
-> bindPattern p e (VariablePattern ty v) = [[varDecl p ty v (matchExpr e)]]
-> bindPattern p e (AsPattern v t) = bindPattern p e t ++ [[bindAs p v t]]
+>             -> ConstrTerm Type -> Expression Type -> Expression Type
+> bindPattern _ (Left _) (LiteralPattern _ _) e' = e'
+> bindPattern p (Right (_,_,es)) (ConstructorPattern _ _ ts) e' =
+>   foldr Let e' [zipWith (\(VariablePattern ty v) -> varDecl p ty v) ts es]
+> bindPattern p e (VariablePattern ty v) e' =
+>   Let [varDecl p ty v (matchExpr e)] e'
+> bindPattern p e (AsPattern v t) e' = bindPattern p e t (Let [bindAs p v t] e')
 
 > bindAs :: Position -> Ident -> ConstrTerm Type -> Decl Type
 > bindAs p v (LiteralPattern ty l) = varDecl p ty v (Literal ty l)
@@ -700,5 +725,11 @@ Auxiliary functions
 > funDecl :: Position -> Ident -> [ConstrTerm a] -> Expression a -> Decl a
 > funDecl p f ts e =
 >   FunctionDecl p f [Equation p (FunLhs f ts) (SimpleRhs p e [])]
+
+> isVarPattern :: ConstrTerm a -> Bool
+> isVarPattern (LiteralPattern _ _) = False
+> isVarPattern (VariablePattern _ _) = True
+> isVarPattern (ConstructorPattern _ _ _) = False
+> isVarPattern (AsPattern _ t) = isVarPattern t
 
 \end{verbatim}

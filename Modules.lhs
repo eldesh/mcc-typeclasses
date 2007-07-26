@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2418 2007-07-26 17:44:48Z wlux $
+% $Id: Modules.lhs 2419 2007-07-26 17:54:22Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -136,7 +136,7 @@ declaration to the module.
 >             Module m (Just es') is (qual2 tEnv vEnv ds'''''))
 >   where mEnv' = sanitizeInterfaces m mEnv
 
-> warnModule :: CaseMode -> [Warn] -> Module Type -> [String]
+> warnModule :: CaseMode -> [Warn] -> Module a -> [String]
 > warnModule caseMode warn m =
 >   caseCheck caseMode m ++ unusedCheck warn m ++
 >   shadowCheck warn m ++ overlapCheck warn m
@@ -372,7 +372,7 @@ from all loaded interfaces are in scope with their qualified names.
 > qualifyGoal Eval tEnv vEnv = qual2 tEnv vEnv
 > qualifyGoal Type _ _ = id
 
-> warnGoal :: CaseMode -> [Warn] -> ModuleIdent -> Goal Type -> [String]
+> warnGoal :: CaseMode -> [Warn] -> ModuleIdent -> Goal a -> [String]
 > warnGoal caseMode warn m g =
 >   caseCheckGoal caseMode g ++ unusedCheckGoal warn m g ++
 >   shadowCheckGoal warn g ++ overlapCheckGoal warn g

@@ -3,7 +3,7 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 2370 2007-06-23 14:03:39Z wlux $
+# $Id: cyc.in 2420 2007-07-26 18:03:23Z wlux $
 #
 # Copyright (c) 2002-2007, Wolfgang Lux
 # See LICENSE for the full license.
@@ -246,17 +246,6 @@ if test -n "$ofile" -a -n "$toC$toS$toO" -a $# -gt 1; then
   exit 1
 fi
 
-if test -n "$typeIt"; then
-  for f in $files; do
-    case $f in
-      *.curry | *.lcurry ) modules="$modules $f";;
-    esac
-  done
-  test -n "$verbose" && echo 1>&2 $cycc $imports -t \"$typeIt\" $cyccopts $modules
-  $exec $cycc $imports -t "$typeIt" $cyccopts $modules
-  exit $?
-fi
-
 i=0
 for f in $files; do
   i=`expr $i + 1`
@@ -329,8 +318,11 @@ for f in $files; do
   linkfiles="$linkfiles $f"
 done
 
-# Eventually link the program
-if test -z "$toC$toS$toO"; then
+# Eventually link the program or compute the goal's type
+if test -n "$typeIt"; then
+  test -n "$verbose" && echo 1>&2 $cycc $imports $cyccopts -t\""$typeIt"\" $modules
+  $exec $cycc $imports $cyccopts -t"$typeIt" $modules || exit $?
+elif test -z "$toC$toS$toO"; then
   temps="$temps /tmp/cyc$$.c"
   target=/tmp/cyc$$.c
   # Cygpath workaround: converts path to Windows-style
@@ -339,7 +331,7 @@ if test -z "$toC$toS$toO"; then
   else
     target2=$target
   fi
-  test -n "$verbose" && echo 1>&2 $cycc $imports $cyccopts -e\"$goal\" $modules -o $target2
+  test -n "$verbose" && echo 1>&2 $cycc $imports $cyccopts -e\""$goal"\" $modules -o $target2
   $exec $cycc $imports $cyccopts -e"$goal" $modules -o $target2 || exit $?
 
   test -n "$hsize" && ldopts="$ldopts -DDEFAULT_HEAPSIZE=$hsize"

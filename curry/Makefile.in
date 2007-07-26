@@ -1,6 +1,6 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 2421 2007-07-26 18:04:25Z wlux $
+# $Id: Makefile.in 2422 2007-07-26 18:05:30Z wlux $
 #
 # Copyright (c) 2004-2007, Wolfgang Lux
 # See ../LICENSE for the full license.
@@ -91,7 +91,7 @@ curry_stdlib_HDRS = \
 	CError.h \
 	Socket.h
 
-curry_SRCS = $(curry_prelude_SRCS) $(curry_$(stdlib)_SRCS)
+curry_SRCS = $(curry_prelude_SRCS) $(curry_$(stdlib:yes=stdlib)_SRCS)
 curry_INTF = $(curry_SRCS:.curry=.icurry)
 curry_CSRC = $(curry_INTF:.icurry=.c)
 curry_DCSRC= $(curry_INTF:.icurry=.d.c)
@@ -109,9 +109,9 @@ DISTFILES = Makefile.in Prelude.icurry-boot \
 	    $(curry_prelude_SRCS) $(curry_stdlib_SRCS) \
 	    $(curry_stdlib_HDRS) $(debug_SRCS)
 DISTFILES_PATH = $(DISTFILES:%=@srcdir@/%)
-BINDISTFILES = $(curry_SRCS) $($(debug)_SRCS) \
-	       $(curry_INTF) $($(debug)_INTF) \
-	       $(curry_LIBS) $($(debug)_LIBS)
+BINDISTFILES = $(curry_SRCS) $($(debug:yes=debug)_SRCS) \
+	       $(curry_INTF) $($(debug:yes=debug)_INTF) \
+	       $(curry_LIBS) $($(debug:yes=debug)_LIBS)
 
 # Getting the dependencies right for the runtime system header files
 # is a little bit tricky as most of them are found in the runtime source
@@ -169,9 +169,9 @@ rts_H = ../runtime/config.h $(rts_H_PATH:@top_srcdir@/runtime/config.h=)
 all: curry
 
 # Curry modules
-curry: $(curry_LIBS) $($(debug)_LIBS)
-icurry: $(curry_INTF) ($(debug)_INTF)
-ccurry: $(curry_CSRC) $($(debug)_CSRC)
+curry: $(curry_LIBS) $($(debug:yes=debug)_LIBS)
+icurry: $(curry_INTF) ($(debug:yes=debug)_INTF)
+ccurry: $(curry_CSRC) $($(debug:yes=debug)_CSRC)
 
 $(curry_CSRC) $(debug_CSRC): ../cycc
 $(curry_DCSRC): DebugPrelude.icurry
@@ -226,10 +226,10 @@ IO.o: Prelude.icurry
 	fi
 
 # install the binaries
-install: $(curry_LIBS) $($(debug)_LIBS)
+install: $(curry_LIBS) $($(debug:yes=debug)_LIBS)
 	$(INSTALL_DIR) $(DESTDIR)$(libdir)
 	$(INSTALL_DIR) $(DESTDIR)$(libdir)/curry-$(VERSION)
-	for f in $(curry_SRCS) $($(debug)_SRCS) $(curry_INTF) $($(debug)_INTF) $(curry_LIBS) $($(debug)_LIBS); do \
+	for f in $(curry_SRCS) $($(debug:yes=debug)_SRCS) $(curry_INTF) $($(debug:yes=debug)_INTF) $(curry_LIBS) $($(debug:yes=debug)_LIBS); do \
 		$(INSTALL_DATA) $$f $(DESTDIR)$(libdir)/curry-$(VERSION); \
 	done
 	for a in $(DESTDIR)$(libdir)/curry-$(VERSION)/*.a; do \

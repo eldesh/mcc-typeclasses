@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2399 2007-07-16 08:49:24Z wlux $
+% $Id: CurrySyntax.lhs 2418 2007-07-26 17:44:48Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -7,7 +7,10 @@
 \nwfilename{CurrySyntax.lhs}
 \section{The Parse Tree}
 This module provides the necessary data structures to maintain the
-parsed representation of a Curry program.
+parsed representation of a Curry program. The syntax tree carries
+attributes for literals, variables, and constructors appearing in
+patterns and expressions. At present, these attributes are used for
+associating types with patterns and expressions after type inference.
 \begin{verbatim}
 
 > module CurrySyntax where
@@ -194,6 +197,13 @@ Interface declarations are restricted to type declarations and signatures.
 
 \end{verbatim}
 \paragraph{Patterns}
+Note that the (type) attributes of constructor and infix patterns will
+apply to the whole pattern an not to the pattern's constructor itself.
+List patterns carry an attribute in order to accommodate the empty
+list.
+
+\ToDo{Use \texttt{ConstructorPattern qNilId} to represent the empty
+  list? If so, the attribute can be omitted from list patterns.}
 \begin{verbatim}
 
 > data ConstrTerm a =
@@ -211,6 +221,11 @@ Interface declarations are restricted to type declarations and signatures.
 
 \end{verbatim}
 \paragraph{Expressions}
+Note that the empty list expression carries an attribute in order to
+accommodate the empty list.
+
+\ToDo{Use \texttt{Constructor qNilId} to represent the empty list? If
+  so, the attribute can be omitted from list expressions.}
 \begin{verbatim}
 
 > data Expression a =
@@ -263,7 +278,8 @@ A goal is equivalent to an unconditional right hand side of an equation.
 > data Goal a = Goal Position (Expression a) [Decl a] deriving (Eq,Show)
 
 \end{verbatim}
-The abstract syntax tree is a functor with respect to the attributes.
+\paragraph{Attributes}
+The abstract syntax tree is a functor with respect to its attributes.
 \begin{verbatim}
 
 > instance Functor Module where

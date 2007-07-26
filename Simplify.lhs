@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2410 2007-07-24 07:22:08Z wlux $
+% $Id: Simplify.lhs 2418 2007-07-26 17:44:48Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -28,7 +28,6 @@ Currently, the following optimizations are implemented:
 > import Env
 > import Monad
 > import SCC
-> import TypeSubst
 > import Typing
 > import Utils
 
@@ -199,13 +198,13 @@ exported abstractly.
 >         tys = take n (arrowArgs ty)
 >         etaId n = mkIdent ("_#eta" ++ show n)
 >         etaApply ty (Literal _ l) es = apply (Literal ty l) es
->         etaApply ty (Variable _ x) es = apply (Variable ty x) es
+>         etaApply ty (Variable _ v) es = apply (Variable ty v) es
 >         etaApply ty (Constructor _ c) es = apply (Constructor ty c) es
->         etaApply ty (Apply f e) es =
->           etaApply (TypeArrow (typeOf e) ty) f (e:es)
+>         etaApply ty (Apply e1 e2) es =
+>           etaApply (TypeArrow (typeOf e2) ty) e1 (e2:es)
 >         etaApply _ (Lambda _ _ _) _ = internalError "etaApply"
->         etaApply _ (Case _ _) _ = internalError "etaApply"
 >         etaApply ty (Let ds e) es = Let ds (etaApply ty e es)
+>         etaApply _ (Case _ _) _ = internalError "etaApply"
 
 > isNonExpansive :: ValueEnv -> Int -> Expression a -> Bool
 > isNonExpansive _ _ (Literal _ _) = True
@@ -236,17 +235,6 @@ exported abstractly.
 > exprArity tyEnv (Lambda _ ts _) = length ts
 > exprArity tyEnv (Let _ e) = exprArity tyEnv e
 > exprArity _ (Case _ _) = 0
-
-> etaType :: NewtypeEnv -> Int -> Type -> Type
-> etaType nEnv 0 ty = ty
-> etaType nEnv n (TypeArrow ty1 ty2) = TypeArrow ty1 (etaType nEnv (n - 1) ty2)
-> etaType nEnv n ty =
->   case unapplyType True ty of
->     (TypeConstructor tc,tys) ->
->       case lookupEnv tc nEnv of
->         Just ty -> etaType nEnv n (expandAliasType tys ty)
->         Nothing -> ty
->     _ -> ty
 
 \end{verbatim}
 Before other optimizations are applied to expressions, the simplifier
@@ -294,10 +282,18 @@ declarations will be removed.
 \end{verbatim}
 Variables that are bound to (simple) constants and aliases to other
 variables are substituted. In terms of conventional compiler
-technology these optimizations correspond to constant folding and copy
-propagation, respectively. The transformation is applied recursively
-to a substituted variable in order to handle chains of variable
-definitions.
+technology, these optimizations correspond to constant folding and
+copy propagation, respectively. The transformation is applied
+recursively to a substituted variable in order to handle chains of
+variable definitions. Note that the compiler carefully updates the
+type annotations of the inlined expression. This is necessary in order
+to preserve soundness of the annotations when inlining a variable with
+a polymorphic type because in that case each occurrence of the
+variable uses fresh type variables, which are independent of the type
+variables used on the right hand side of the variable's definition.
+
+\ToDo{Apply the type substitution only when necessary, i.e., when the
+  inlined variable has a polymorphic type.}
 
 The bindings of a let expression are sorted topologically in
 order to split them into minimal binding groups. In addition,
@@ -319,10 +315,8 @@ functions in later phases of the compiler.
 >       do
 >         nEnv <- liftSt envRt
 >         maybe (return (Variable ty v))
->               (simplifyExpr m env . fixType nEnv ty)
+>               (simplifyExpr m env . withType nEnv ty)
 >               (lookupEnv (unqualify v) env)
->   where fixType nEnv ty e =
->             fmap (subst (matchType nEnv (typeOf e) ty idSubst)) e
 > simplifyExpr _ _ (Constructor ty c) = return (Constructor ty c)
 > simplifyExpr m env (Apply e1 e2) =
 >   do
@@ -417,7 +411,7 @@ functions to access the pattern variables.
 > etaReduce m tyEnv p ts e
 >   | all isVarPattern ts && funArity e' >= n && length ts <= n &&
 >     all (canInline tyEnv) es' && map (uncurry mkVar) vs == es'' &&
->     all (`notElem` qfv m e'') (map snd vs) = e''
+>     all ((`notElem` qfv m e'') . snd) vs = e''
 >   | otherwise = Lambda p ts e
 >   where n = length es
 >         vs = [(ty,v) | VariablePattern ty v <- ts]
@@ -434,7 +428,7 @@ functions to access the pattern variables.
 > canInline tyEnv (Variable _ v) = not (isQualified v) || arity v tyEnv > 0
 > canInline _ _ = False
 
-> mkLet :: ModuleIdent -> [Decl Type] -> Expression Type -> Expression Type
+> mkLet :: ModuleIdent -> [Decl a] -> Expression a -> Expression a
 > mkLet m [FreeDecl p vs] e
 >   | null vs' = e
 >   | otherwise = Let [FreeDecl p vs'] e
@@ -499,8 +493,7 @@ form where all arguments of applications are variables.
 >         [prelFailed (typeOf (Case (matchExpr e) alts))])
 >   where expr p t (SimpleRhs _ e' _) = bindPattern p e t e'
 
-> matches :: ConstrTerm Type
->         -> Either (Type,Literal) (Type,QualIdent,[Expression Type])
+> matches :: ConstrTerm a -> Either (a,Literal) (a,QualIdent,[Expression a])
 >         -> Bool
 > matches (LiteralPattern _ l1) (Left (_,l2)) = l1 == l2
 > matches (ConstructorPattern _ c1 _) (Right (_,c2,_)) = c1 == c2
@@ -516,7 +509,7 @@ form where all arguments of applications are variables.
 >             -> ConstrTerm Type -> Expression Type -> Expression Type
 > bindPattern _ (Left _) (LiteralPattern _ _) e' = e'
 > bindPattern p (Right (_,_,es)) (ConstructorPattern _ _ ts) e' =
->   foldr Let e' [zipWith (\(VariablePattern ty v) -> varDecl p ty v) ts es]
+>   foldr Let e' [zipWith (\(VariablePattern ty v) e -> varDecl p ty v e) ts es]
 > bindPattern p e (VariablePattern ty v) e' =
 >   Let [varDecl p ty v (matchExpr e)] e'
 > bindPattern p e (AsPattern v t) e' = bindPattern p e t (Let [bindAs p v t] e')
@@ -530,7 +523,7 @@ form where all arguments of applications are variables.
 > bindAs p v (AsPattern v' t') = varDecl p ty v (mkVar ty v')
 >   where ty = typeOf t'
 
-> prelFailed :: Type -> Expression Type
+> prelFailed :: a -> Expression a
 > prelFailed ty = Variable ty (qualifyWith preludeMIdent (mkIdent "failed"))
 
 \end{verbatim}
@@ -609,7 +602,7 @@ exactly one declaration for each used variable.
 >       where n = length vs
 >             vs = filter (`elem` fvs) (bv t)
 >             ty = typeOf t
->             tys = map (rawType . flip varType tyEnv) vs
+>             tys = [rawType (varType v tyEnv) | v <- vs]
 >             selectorTys = map (selectorType ty) (shuffle tys)
 >             selectorType ty0 (ty:tys) = foldr TypeArrow ty (ty0:tys)
 >             selectorDecl p f t (v:vs) =
@@ -638,7 +631,10 @@ Auxiliary functions
 
 > freshVar :: Typeable a => ModuleIdent -> (Int -> Ident) -> a
 >          -> SimplifyState (Type,Ident)
-> freshVar m f x = liftM ((,) ty) (freshIdent m f 0 (monoType ty))
+> freshVar m f x =
+>   do
+>     v <- freshIdent m f 0 (monoType ty)
+>     return (ty,v)
 >   where ty = typeOf x
 
 > shuffle :: [a] -> [[a]]

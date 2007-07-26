@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Lift.lhs 2407 2007-07-22 18:20:40Z wlux $
+% $Id: Lift.lhs 2418 2007-07-26 17:44:48Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -19,16 +19,15 @@ lifted to the top-level.
 
 > module Lift(lift) where
 > import Base
-> import Types
-> import TypeSubst
 > import Env
-> import TopEnv
 > import Combined
 > import List
 > import Monad
 > import SCC
 > import Set
 > import Subst
+> import TopEnv
+> import TypeSubst
 > import Typing
 > import Utils
 
@@ -229,13 +228,12 @@ variables in order to avoid an inadvertent name capturing.
 > abstractExpr m pre lvs env (Variable ty v)
 >   | isQualified v = return (Variable ty v)
 >   | otherwise =
->       maybe (return (Variable ty v)) (abstractExpr m pre lvs env . fixType ty)
+>       maybe (return (Variable ty v)) (abstractExpr m pre lvs env . absType ty)
 >             (lookupEnv (unqualify v) env)
->   where fixType ty (Variable _ v) = Variable ty v
->         fixType ty (Constructor _ c) = Constructor ty c
->         fixType ty (Apply e1 e2) =
->           Apply (fixType (typeOf e2 `TypeArrow` ty) e1) e2
->         fixType _ _ = internalError "fixType"
+>   where absType ty (Variable _ v) = Variable ty v
+>         absType ty (Apply e1 e2) =
+>           Apply (absType (typeOf e2 `TypeArrow` ty) e1) e2
+>         absType _ _ = internalError "absType"
 > abstractExpr _ _ _ _ (Constructor ty c) = return (Constructor ty c)
 > abstractExpr m pre lvs env (Apply e1 e2) =
 >   do
@@ -254,14 +252,6 @@ variables in order to avoid an inadvertent name capturing.
 >             -> AbstractState (Alt Type)
 > abstractAlt m pre lvs env (Alt p t rhs) =
 >   liftM (Alt p t) (abstractRhs m pre (lvs ++ bv t) env rhs)
-
-> abstractCondExpr :: ModuleIdent -> String -> [Ident] -> AbstractEnv
->                  -> CondExpr Type -> AbstractState (CondExpr Type)
-> abstractCondExpr m pre lvs env (CondExpr p g e) =
->   do
->     g' <- abstractExpr m pre lvs env g
->     e' <- abstractExpr m pre lvs env e
->     return (CondExpr p g' e')
 
 \end{verbatim}
 \paragraph{Lifting}
@@ -315,11 +305,6 @@ to the top-level.
 > liftAlt :: Alt a -> (Alt a,[Decl a])
 > liftAlt (Alt p t rhs) = (Alt p t rhs',ds')
 >   where (rhs',ds') = liftRhs rhs
-
-> liftCondExpr :: CondExpr a -> (CondExpr a,[Decl a])
-> liftCondExpr (CondExpr p g e) = (CondExpr p g' e',ds' ++ ds'')
->   where (g',ds') = liftExpr g
->         (e',ds'') = liftExpr e
 
 \end{verbatim}
 \paragraph{Auxiliary definitions}

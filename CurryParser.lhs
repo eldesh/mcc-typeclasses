@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2399 2007-07-16 08:49:24Z wlux $
+% $Id: CurryParser.lhs 2418 2007-07-26 17:44:48Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -267,8 +267,8 @@ directory path to the module is ignored.
 >           | not (isConstrId c) = funDecl (f,FunLhs f ts)
 >           where f = unqualify c
 >         valDecl t = opDecl id t
->         opDecl f (InfixPattern _ t1 op t2)
->           | isConstrId op = opDecl (f . InfixPattern () t1 op) t2
+>         opDecl f (InfixPattern a t1 op t2)
+>           | isConstrId op = opDecl (f . InfixPattern a t1 op) t2
 >           | otherwise = funDecl (op',OpLhs (f t1) op' t2)
 >           where op' = unqualify op
 >         opDecl f t = patDecl (f t)
@@ -510,7 +510,8 @@ directory path to the module is ignored.
 \begin{verbatim}
 
 > constrTerm0 :: Parser Token (ConstrTerm ()) a
-> constrTerm0 = constrTerm1 `chainr1` (flip (InfixPattern ()) <$> gconop)
+> constrTerm0 = constrTerm1 `chainr1` (infixPat <$> gconop)
+>   where infixPat op t1 t2 = InfixPattern () t1 op t2
 
 > constrTerm1 :: Parser Token (ConstrTerm ()) a
 > constrTerm1 = varId <**> identPattern
@@ -541,17 +542,18 @@ directory path to the module is ignored.
 
 > identPattern :: Parser Token (ConstrTerm ()) a
 > identPattern = varId <**> optAsPattern
->            <|> flip (ConstructorPattern ()) [] <$> qConId <\> varId
+>            <|> conPattern <$> qConId <\> varId
+>   where conPattern c = ConstructorPattern () c []
 
 > parenPattern :: Parser Token (ConstrTerm ()) a
 > parenPattern = leftParen <-*> parenPattern
 >   where parenPattern = minus <**> minusPattern
 >                    <|> funSym <\> minus <*-> rightParen <**> optAsPattern
->                    <|> flip (ConstructorPattern ()) [] <$> (gconSym <\> funSym)
->                                                        <*-> rightParen
+>                    <|> conPattern <$> (gconSym <\> funSym) <*-> rightParen
 >                    <|> parenTuplePattern <\> minus <*-> rightParen
 >         minusPattern = rightParen <-*> optAsPattern
 >                    <|> parenMinusPattern <*-> rightParen
+>         conPattern c = ConstructorPattern () c []
 
 > listPattern :: Parser Token (ConstrTerm ()) a
 > listPattern = ListPattern () <$> brackets (constrTerm0 `sepBy` comma)

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 2408 2007-07-22 21:51:27Z wlux $
+% $Id: Typing.lhs 2418 2007-07-26 17:44:48Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -8,7 +8,7 @@
 \section{Computing the Type of Curry Expressions}
 \begin{verbatim}
 
-> module Typing(Typeable(..), NewtypeEnv, newtypeEnv, matchType) where
+> module Typing(Typeable(..), NewtypeEnv, newtypeEnv, etaType, withType) where
 > import Base
 > import Env
 > import Maybe
@@ -64,23 +64,23 @@ perform any (non-trivial) unifications.
 > exprType (EnumFromTo e _) = listType (exprType e)
 > exprType (EnumFromThenTo e _ _) = listType (exprType e)
 > exprType (UnaryMinus e) = exprType e
-> exprType (Apply f e) =
->   case exprType f of
+> exprType (Apply e _) =
+>   case exprType e of
 >     TypeArrow _ ty -> ty
 >     _ -> internalError "exprType (Apply)"
-> exprType (InfixApply e1 op e2) =
+> exprType (InfixApply _ op _) =
 >   case exprType (infixOp op) of
 >     TypeArrow _ (TypeArrow _ ty) -> ty
 >     _ -> internalError "exprType (InfixApply)"
-> exprType (LeftSection e op) =
+> exprType (LeftSection _ op) =
 >   case exprType (infixOp op) of
 >     TypeArrow _ ty -> ty
 >     _ -> internalError "exprType (LeftSection)"
-> exprType (RightSection op e) =
+> exprType (RightSection op _) =
 >   case exprType (infixOp op) of
 >     TypeArrow ty1 (TypeArrow _ ty2) -> TypeArrow ty1 ty2
 >     _ -> internalError "exprType (RightSection)"
-> exprType (Lambda _ ts e) = foldr TypeArrow (exprType e) (map argType ts)
+> exprType (Lambda _ ts e) = foldr (TypeArrow . argType) (exprType e) ts
 > exprType (Let _ e) = exprType e
 > exprType (Do _ e) = exprType e
 > exprType (IfThenElse _ e _) = exprType e
@@ -97,11 +97,11 @@ definition \texttt{newtype $T\,u_1\dots,u_n$ = $N\,\tau$}, the types
 $T\,\tau_1\dots\tau_n$ and $\tau[u_1/\tau_1,\dots,u_n/\tau_n]$ are
 considered equal. However, renaming types -- in contrast to type
 synonyms -- can be recursive. Therefore, we expand renaming types
-lazily with the help of an auxiliary environment that maps each
-newtype type constructor $T$ onto the argument type $\tau$ of its
-newtype constructor. This environment is initialized trivially from
-the value type environment. Note that it always contains an entry for
-type \texttt{IO}, which is assumed to be defined implicitly as
+lazily when necessary with the help of an auxiliary environment that
+maps each newtype type constructor $T$ onto the argument type $\tau$
+of its newtype constructor. This environment is initialized trivially
+from the value type environment. Note that it always contains an entry
+for type \texttt{IO}, which is assumed to be defined implicitly as
 \begin{verbatim}
   newtype IO a = IO (World -> (a,World))
 \end{verbatim}
@@ -121,18 +121,31 @@ external world.
 >           where TypeArrow ty1 ty2 = rawType ty
 >         bindNewtype (Value _ _ _) = id
 
+> etaType :: NewtypeEnv -> Int -> Type -> Type
+> etaType _ 0 ty = ty
+> etaType nEnv n (TypeArrow ty1 ty2) = TypeArrow ty1 (etaType nEnv (n - 1) ty2)
+> etaType nEnv n ty =
+>   case unapplyType True ty of
+>     (TypeConstructor tc,tys) ->
+>       case lookupEnv tc nEnv of
+>         Just ty -> etaType nEnv n (expandAliasType tys ty)
+>         Nothing -> ty
+>     _ -> ty
+
 \end{verbatim}
-When inlining expressions, the compiler must also update the type
-annotations of the inlined expression. To that end, the compiler must
-unify the types of the old expression being subsituted and the new
-expressions that is substituted for it. Since the program is type
-correct, this matching amounts to a simple one way matching where we
-only need to find for each type variable occurring in the type of the
-new expression the matching type in the type of the old expression.
-The only complication is that we eventually must expand newtypes in
-order to match the two types. Note that the first type argument of
-\texttt{matchType} is the type of the new expression.
+When inlining variable and function definitions, the compiler must
+eventually update the type annotations of the inlined expression. To
+that end, the variable or function's annotated type and the type of
+the inlined expression must be unified. Since the program is type
+correct, this unification is just a simple one way matching where we
+only need to match the type variables in the inlined expression's type
+with the corresponding types in the variable or function's annotated
+type.
 \begin{verbatim}
+
+> withType :: (Functor f,Typeable (f Type))
+>          => NewtypeEnv -> Type -> f Type -> f Type
+> withType nEnv ty x = fmap (subst (matchType nEnv (typeOf x) ty idSubst)) x
 
 > matchType :: NewtypeEnv -> Type -> Type -> TypeSubst -> TypeSubst
 > matchType nEnv ty1 ty2 = matchTypeApp nEnv ty1 ty2 []
@@ -144,7 +157,7 @@ order to match the two types. Note that the first type argument of
 >   | otherwise = bindSubst tv ty . matchTypes nEnv tys
 > matchTypeApp nEnv (TypeConstructor tc1) (TypeConstructor tc2) tys
 >   | tc1 == tc2 = matchTypes nEnv tys
-> matchTypeApp nEnv (TypeConstrained tv1 _) (TypeConstrained tv2 _) tys
+> matchTypeApp nEnv (TypeConstrained _ tv1) (TypeConstrained _ tv2) tys
 >   | tv1 == tv2 = matchTypes nEnv tys
 > matchTypeApp nEnv (TypeSkolem k1) (TypeSkolem k2) tys
 >   | k1 == k2 = matchTypes nEnv tys
@@ -168,8 +181,6 @@ order to match the two types. Note that the first type argument of
 >         ty2' = applyType ty2 (map snd tys)
 
 > matchTypes :: NewtypeEnv -> [(Type,Type)] -> TypeSubst -> TypeSubst
-> matchTypes nEnv tys theta =
->   foldr (uncurry (matchType nEnv)) theta tys
+> matchTypes nEnv tys theta = foldr (uncurry (matchType nEnv)) theta tys
 
 \end{verbatim}
-

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2399 2007-07-16 08:49:24Z wlux $
+% $Id: CurryPP.lhs 2418 2007-07-26 17:44:48Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -153,7 +153,7 @@ Declarations
 > ppEquation :: Equation a -> Doc
 > ppEquation (Equation _ lhs rhs) = ppRule (ppLhs lhs) equals rhs
 
-> ppLhs :: Lhs  a -> Doc
+> ppLhs :: Lhs a -> Doc
 > ppLhs (FunLhs f ts) = ppIdent f <+> fsep (map (ppConstrTerm 2) ts)
 > ppLhs (OpLhs t1 f t2) =
 >   ppConstrTerm 1 t1 <+> ppInfixOp f <+> ppConstrTerm 1 t2

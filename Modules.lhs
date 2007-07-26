@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2408 2007-07-22 21:51:27Z wlux $
+% $Id: Modules.lhs 2418 2007-07-26 17:44:48Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -299,7 +299,7 @@ from all loaded interfaces are in scope with their qualified names.
 > typeGoal :: Options -> String -> [FilePath] -> ErrorT IO ()
 > typeGoal opts g fns =
 >   do
->     (_,tcEnv,_,tyEnv,cx,Goal _ e _) <-
+>     (_,tcEnv,_,_,cx,Goal _ e _) <-
 >       loadGoal Type paths False cm ws (mkMIdent []) (Just g) fns
 >     liftErr $ print (ppQualType tcEnv (QualType cx (typeOf e)))
 >   where paths = importPath opts

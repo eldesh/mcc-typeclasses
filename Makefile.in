@@ -1,6 +1,6 @@
 # Makefile for the Curry compiler
 #
-# $Id: Makefile.in 2421 2007-07-26 18:04:25Z wlux $
+# $Id: Makefile.in 2423 2007-07-26 18:07:06Z wlux $
 #
 # Copyright (c) 2000-2007 Wolfgang Lux
 # See LICENSE for the full license.
@@ -372,7 +372,7 @@ distdir:
 
 bindist: bindistdir
 	rm -f $(bindistdir).tar $(bindistdir).tar.gz
-	cd $(bindistdir) && autoconf
+	cd $(bindistdir) && autoconf && rm -rf autom4te.cache
 	tar -cf $(bindistdir).tar $(bindistdir)
 	gzip $(bindistdir).tar
 	rm -rf $(bindistdir)

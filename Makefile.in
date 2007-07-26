@@ -1,6 +1,6 @@
 # Makefile for the Curry compiler
 #
-# $Id: Makefile.in 2423 2007-07-26 18:07:06Z wlux $
+# $Id: Makefile.in 2424 2007-07-26 18:07:54Z wlux $
 #
 # Copyright (c) 2000-2007 Wolfgang Lux
 # See LICENSE for the full license.
@@ -290,11 +290,11 @@ TeXShop: tex
 	@test ! -r $@ -a -f $(srcdir)/$@ && \
 	(test -d $(@D) || mkdir $(@D)) && \
 	if expr $(srcdir) : '/.*' >/dev/null; then \
-		(case "$(MFLAGS)" in -*s*) ;; *) set -x;; esac; \
+		(case "$(MFLAGS)" in -*s* | *' '-s*) ;; *) set -x;; esac; \
 		 ln -s $(srcdir)/$@ $@); \
 	else \
 		srcdir=`echo $@ | sed -e 's:[^/]*$$::' -e 's:[^/]*/:../:g'` && \
-		(case "$(MFLAGS)" in -*s*) ;; *) set -x;; esac; \
+		(case "$(MFLAGS)" in -*s* | *' '-s*) ;; *) set -x;; esac; \
 		 ln -s $${srcdir}$(srcdir)/$@ $@); \
 	fi
 
@@ -458,9 +458,9 @@ depend-subdirs install-subdirs:
 	@fail=; subdirs="$(SUBDIRS)"; \
 	for d in $$subdirs; do \
 		target=`echo $@ | sed 's/-subdirs$$//'`; \
-		echo "Making $$target in $$d"; \
+		case "$(MFLAGS)" in -*s* | *' '-s* ) ;; *) echo "Making $$target in $$d"; esac; \
 		(cd $$d && $(MAKE) $(MFLAGS) $$target) || \
-		case "$(MFLAGS)" in -*k*) fail=yes;; *) exit $$?;; esac; \
+		case "$(MFLAGS)" in -*k* | *' '-k* ) fail=yes;; *) exit $$?;; esac; \
 	done; \
 	test -z "$$fail"
 

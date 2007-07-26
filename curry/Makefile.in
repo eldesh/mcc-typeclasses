@@ -1,6 +1,6 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 2375 2007-06-26 13:16:14Z wlux $
+# $Id: Makefile.in 2421 2007-07-26 18:04:25Z wlux $
 #
 # Copyright (c) 2004-2007, Wolfgang Lux
 # See ../LICENSE for the full license.
@@ -100,9 +100,9 @@ curry_DOBJS= $(curry_INTF:.icurry=.d.o)
 curry_LIBS = libcurry.a
 
 debug_SRCS = DebugPrelude.curry
-debug_INTF = $($(debug)_SRCS:.curry=.icurry)
-debug_CSRC = $(debug_INTF:.icurry=.c)
-debug_OBJS = $(debug_INTF:.icurry=.o)
+debug_INTF = $(debug_SRCS:.curry=.icurry)
+debug_CSRC = $(debug_INTF:.icurry=.c) $(curry_DCSRC)
+debug_OBJS = $(debug_INTF:.icurry=.o) $(curry_DOBJS)
 debug_LIBS = libcurry_g.a
 
 DISTFILES = Makefile.in Prelude.icurry-boot \
@@ -170,11 +170,12 @@ all: curry
 
 # Curry modules
 curry: $(curry_LIBS) $($(debug)_LIBS)
-icurry: $(curry_INTF) $($(debug)_INTF)
+icurry: $(curry_INTF) ($(debug)_INTF)
+ccurry: $(curry_CSRC) $($(debug)_CSRC)
 
 $(curry_CSRC) $(debug_CSRC): ../cycc
-$(curry_DCSRC): ../cycc DebugPrelude.icurry
-$(curry_OBJS) $(curry_DOBJS) $(debug_OBJS): $(rts_H)
+$(curry_DCSRC): DebugPrelude.icurry
+$(curry_OBJS) $(debug_OBJS): $(rts_H)
 
 obj_dirs = sed -e 's/\([A-Za-z_.]*\)\.o/.\1/g'
 
@@ -183,9 +184,9 @@ libcurry.a: $(rts_LIB) $(curry_OBJS) $(curry_INTF)
 	find `echo $(curry_OBJS) | $(obj_dirs)` -name '*.o' | \
 		xargs $(AR) q $@
 	$(RANLIB) $@
-libcurry_g.a: $(debug_OBJS) $(curry_DOBJS) $(debug_INTF) $(curry_INTF)
+libcurry_g.a: $(debug_OBJS) $(debug_INTF) $(curry_INTF)
 	rm -f $@
-	find `echo $(debug_OBJS) $(curry_DOBJS) | $(obj_dirs)` -name '*.o' | \
+	find `echo $(debug_OBJS) | $(obj_dirs)` -name '*.o' | \
 		xargs $(AR) qc $@
 	$(RANLIB) $@
 
@@ -259,9 +260,8 @@ Makefile: $(srcdir)/Makefile.in ../config.status
 # clean up
 mostlyclean:
 	rm -f $(curry_CSRC) $(curry_INTF) $(curry_OBJS)
-	rm -f $(curry_DCSRC) $(curry_DOBJS)
 	rm -f $(debug_CSRC) $(debug_INTF) $(debug_OBJS)
-	rm -rf $(curry_OBJS:%.o=.%) $(curry_DOBJS:%.o=.%) $(debug_OBJS:%.o=.%)
+	rm -rf $(curry_OBJS:%.o=.%) $(debug_OBJS:%.o=.%)
 	rm -f $(curry_LIBS) $(debug_LIBS) core *.core
 clean: mostlyclean
 	for f in $(curry_prelude_SRCS) $(curry_stdlib_SRCS) $(debug_SRCS); do \

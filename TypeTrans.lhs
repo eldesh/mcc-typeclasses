@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2095 2007-02-13 17:34:10Z wlux $
+% $Id: TypeTrans.lhs 2428 2007-07-30 16:52:33Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -161,44 +161,44 @@ all type constructors and type classes that are in scope with
 unqualified names.
 \begin{verbatim}
 
-> fromType :: TCEnv -> Type -> TypeExpr
-> fromType tcEnv ty = fromType' (unqualifyType tcEnv ty)
+> fromType :: TCEnv -> [Ident] -> Type -> TypeExpr
+> fromType tcEnv tvs ty = fromType' tvs (unqualifyType tcEnv ty)
 
-> fromQualType :: TCEnv -> QualType -> QualTypeExpr
-> fromQualType tcEnv ty = fromQualType' (unqualifyQualType tcEnv ty)
+> fromQualType :: TCEnv -> [Ident] -> QualType -> QualTypeExpr
+> fromQualType tcEnv tvs ty = fromQualType' tvs (unqualifyQualType tcEnv ty)
 
-> fromQualType' :: QualType -> QualTypeExpr
-> fromQualType' (QualType cx ty) =
->   QualTypeExpr (map fromTypePred' cx) (fromType' ty)
+> fromQualType' :: [Ident] -> QualType -> QualTypeExpr
+> fromQualType' tvs (QualType cx ty) =
+>   QualTypeExpr (map (fromTypePred' tvs) cx) (fromType' tvs ty)
 
-> fromTypePred' :: TypePred -> ClassAssert
-> fromTypePred' (TypePred cls ty) =
->   case unapply (fromType' ty) [] of
+> fromTypePred' :: [Ident] -> TypePred -> ClassAssert
+> fromTypePred' tvs (TypePred cls ty) =
+>   case unapply (fromType' tvs ty) [] of
 >     (VariableType tv,tys) -> ClassAssert cls tv tys
 >     _ -> internalError ("fromTypePred " ++ show ty)
 >   where unapply (ApplyType ty1 ty2) tys = unapply ty1 (ty2:tys)
 >         unapply ty tys = (ty,tys)
 
-> fromType' :: Type -> TypeExpr
-> fromType' ty = fromTypeApp ty []
+> fromType' :: [Ident] -> Type -> TypeExpr
+> fromType' tvs ty = fromTypeApp tvs ty []
 
-> fromTypeApp :: Type -> [TypeExpr] -> TypeExpr
-> fromTypeApp (TypeConstructor tc) tys
+> fromTypeApp :: [Ident] -> Type -> [TypeExpr] -> TypeExpr
+> fromTypeApp _ (TypeConstructor tc) tys
 >   | isQTupleId tc && length tys == qTupleArity tc = TupleType tys
 >   | tc == qListId && length tys == 1 = ListType (head tys)
 >   | otherwise = foldl ApplyType (ConstructorType tc) tys
-> fromTypeApp (TypeVariable tv) tys =
+> fromTypeApp tvs (TypeVariable tv) tys =
 >   foldl ApplyType
->         (VariableType (if tv >= 0 then nameSupply !! tv
+>         (VariableType (if tv >= 0 then tvs !! tv
 >                                   else mkIdent ('_' : show (-tv))))
 >         tys
-> fromTypeApp (TypeConstrained tys _) tys' = fromTypeApp (head tys) tys'
-> fromTypeApp (TypeSkolem k) tys =
+> fromTypeApp tvs (TypeConstrained tys _) tys' = fromTypeApp tvs (head tys) tys'
+> fromTypeApp _ (TypeSkolem k) tys =
 >   foldl ApplyType (VariableType (mkIdent ("_?" ++ show k))) tys
-> fromTypeApp (TypeApply ty1 ty2) tys =
->   fromTypeApp ty1 (fromType' ty2 : tys)
-> fromTypeApp (TypeArrow ty1 ty2) tys =
->   foldl ApplyType (ArrowType (fromType' ty1) (fromType' ty2)) tys
+> fromTypeApp tvs (TypeApply ty1 ty2) tys =
+>   fromTypeApp tvs ty1 (fromType' tvs ty2 : tys)
+> fromTypeApp tvs (TypeArrow ty1 ty2) tys =
+>   foldl ApplyType (ArrowType (fromType' tvs ty1) (fromType' tvs ty2)) tys
 
 > unqualifyQualType :: TCEnv -> QualType -> QualType
 > unqualifyQualType tcEnv (QualType cx ty) =
@@ -328,16 +328,17 @@ converting them into type expressions.
 \begin{verbatim}
 
 > ppType :: TCEnv -> Type -> Doc
-> ppType tcEnv = ppTypeExpr 0 . fromType tcEnv
+> ppType tcEnv = ppTypeExpr 0 . fromType tcEnv nameSupply
 
 > ppQualType :: TCEnv -> QualType -> Doc
-> ppQualType tcEnv = ppQualTypeExpr . fromQualType tcEnv
+> ppQualType tcEnv = ppQualTypeExpr . fromQualType tcEnv nameSupply
 
 > ppTypeScheme :: TCEnv -> TypeScheme -> Doc
 > ppTypeScheme tcEnv (ForAll _ ty) = ppQualType tcEnv ty
 
 > ppInstance :: TCEnv -> TypePred -> Doc
 > ppInstance tcEnv (TypePred cls ty) =
->   ppQIdent (unqualifyTC tcEnv cls) <+> ppTypeExpr 2 (fromType tcEnv ty)
+>   ppQIdent (unqualifyTC tcEnv cls) <+>
+>   ppTypeExpr 2 (fromType tcEnv nameSupply ty)
 
 \end{verbatim}

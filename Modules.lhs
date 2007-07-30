@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2419 2007-07-26 17:54:22Z wlux $
+% $Id: Modules.lhs 2428 2007-07-30 16:52:33Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -632,13 +632,14 @@ from the type environment.
 
 > ppTypes :: TCEnv -> [(Ident,ValueInfo)] -> Doc
 > ppTypes tcEnv = vcat . map ppInfo
->   where ppInfo (c,DataConstructor _ _ (ForAll _ ty)) =
+>   where ppInfo (c,DataConstructor _ _ ty) =
 >           ppIDecl (mkDecl c ty) <+> text "-- data constructor"
->         ppInfo (c,NewtypeConstructor _ (ForAll _ ty)) =
+>         ppInfo (c,NewtypeConstructor _ ty) =
 >           ppIDecl (mkDecl c ty) <+> text "-- newtype constructor"
->         ppInfo (x,Value _ _ (ForAll _ ty)) = ppIDecl (mkDecl x ty)
->         mkDecl f ty =
->           IFunctionDecl undefined (qualify f) Nothing (fromQualType tcEnv ty)
+>         ppInfo (x,Value _ _ ty) = ppIDecl (mkDecl x ty)
+>         mkDecl f (ForAll _ ty) =
+>           IFunctionDecl undefined (qualify f) Nothing
+>                         (fromQualType tcEnv nameSupply ty)
 
 \end{verbatim}
 Various file name extensions.

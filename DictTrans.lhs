@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2408 2007-07-22 21:51:27Z wlux $
+% $Id: DictTrans.lhs 2428 2007-07-30 16:52:33Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -139,7 +139,7 @@ generator.
 
 > dictTransIntfDecl :: ModuleIdent -> TCEnv -> IDecl -> IDecl
 > dictTransIntfDecl m tcEnv (IFunctionDecl p f n ty) =
->   IFunctionDecl p f (fmap (+ d) n) (fromQualType tcEnv ty'')
+>   IFunctionDecl p f (fmap (+ d) n) (fromQualType tcEnv (nub (fv ty)) ty'')
 >   where ty' = toQualType m ty
 >         ty'' = transformQualType tcEnv ty'
 >         d = arrowArity (rawType (typeScheme ty'')) -
@@ -229,13 +229,13 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 > classDecls :: TCEnv -> ValueEnv -> Position -> Ident -> Ident
 >            -> [MethodDecl Type] -> [TopDecl Type]
 > classDecls tcEnv tyEnv p cls tv ds =
->   dictDataDecl p cls [dictConstrDecl tcEnv p cls tys'] :
+>   dictDataDecl p cls tv [dictConstrDecl tcEnv p cls tvs tys'] :
 >   zipWith4 funDecl
 >            ps
 >            (defaultMethodIds cls)
 >            (repeat [])
 >            (zipWith (defaultMethodExpr tyEnv) fs vds')
->   where VariableType tv' = fromType tcEnv (TypeVariable 0)
+>   where tvs = filter (tv /=) nameSupply
 >         (vds,ods) = partition isMethodDecl ds
 >         (ps,fs,tys) = unzip3 [(p,f,ty) | MethodSig p fs ty <- ods, f <- fs]
 >         tys' = map (expandMethodType tcEnv (qualify cls) tv) tys
@@ -244,18 +244,19 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 > classIDecls :: ModuleIdent -> TCEnv -> Position -> QualIdent -> Maybe KindExpr
 >             -> Ident -> Maybe [Maybe IMethodDecl] -> [IDecl]
 > classIDecls m tcEnv p cls k tv (Just ds) =
->   dictIDataDecl IDataDecl p cls k
->                 [Just (dictConstrDecl tcEnv p (unqualify cls) tys')] :
+>   dictIDataDecl IDataDecl p cls k tv
+>                 [Just (dictConstrDecl tcEnv p (unqualify cls) tvs tys')] :
 >   zipWith3 (intfMethodDecl cls tv)
 >            (map (maybe p pos) ds)
 >            (qDefaultMethodIds cls)
 >            tys
->   where tys = map (maybe (QualTypeExpr [] (VariableType tv)) methodType) ds
+>   where tvs = filter (tv /=) nameSupply
+>         tys = map (maybe (QualTypeExpr [] (VariableType tv)) methodType) ds
 >         tys' = map (toMethodType m cls tv) tys
 >         pos (IMethodDecl p _ _) = p
 >         methodType (IMethodDecl _ _ ty) = ty
-> classIDecls _ _ p cls k _ Nothing =
->   [dictIDataDecl (const . HidingDataDecl) p cls k]
+> classIDecls _ _ p cls k tv Nothing =
+>   [dictIDataDecl (const . HidingDataDecl) p cls k tv]
 
 > classDictType :: TCEnv -> ValueEnv -> QualIdent -> [Maybe Ident] -> Type
 > classDictType tcEnv tyEnv cls =
@@ -268,21 +269,20 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 > classMethodType _ cls Nothing = ForAll 1 (QualType [TypePred cls ty] ty)
 >   where ty = TypeVariable 0
 
-> dictDataDecl :: Position -> Ident -> [ConstrDecl] -> TopDecl a
-> dictDataDecl p cls cs = DataDecl p [] (dictTypeId cls) [tv] cs []
->   where VariableType tv = fromType initTCEnv (TypeVariable 0)
+> dictDataDecl :: Position -> Ident -> Ident -> [ConstrDecl] -> TopDecl a
+> dictDataDecl p cls tv cs = DataDecl p [] (dictTypeId cls) [tv] cs []
 
 > dictIDataDecl :: (Position -> [ClassAssert] -> QualIdent -> Maybe KindExpr
 >                   -> [Ident] -> a)
->               -> Position -> QualIdent -> Maybe KindExpr -> a
-> dictIDataDecl f p cls k =
+>               -> Position -> QualIdent -> Maybe KindExpr -> Ident -> a
+> dictIDataDecl f p cls k tv =
 >   f p [] (qDictTypeId cls) (fmap (`ArrowKind` Star) k) [tv]
->   where VariableType tv = fromType initTCEnv (TypeVariable 0)
 
-> dictConstrDecl :: TCEnv -> Position -> Ident -> [QualType] -> ConstrDecl
-> dictConstrDecl tcEnv p cls tys =
+> dictConstrDecl :: TCEnv -> Position -> Ident -> [Ident] -> [QualType]
+>                -> ConstrDecl
+> dictConstrDecl tcEnv p cls tvs tys =
 >   ConstrDecl p [] (dictConstrId cls)
->              (map (fromType tcEnv . transformMethodType tcEnv) tys)
+>              (map (fromType tcEnv tvs . transformMethodType tcEnv) tys)
 
 > defaultMethodExpr :: ValueEnv -> Ident -> Maybe (MethodDecl Type)
 >                   -> Expression Type
@@ -497,15 +497,16 @@ of method $f_i$ in class $C$.
 > instIDecls tcEnv tyEnv p cls (QualType cx ty) m =
 >   -- FIXME: omit declarations for hidden methods since they cannot
 >   --        be used (and their type is almost always wrong)
->   zipWith (instIDecl tcEnv p)
+>   zipWith (instIDecl tcEnv nameSupply p)
 >           (qInstFunId m tp : qInstMethodIds m tp)
 >           (qualDictType cx' tp : map (instMethodType tyEnv cx tp) fs)
 >   where tp = TypePred cls ty
 >         cx' = maxContext tcEnv cx
 >         fs = classMethods cls tcEnv
 
-> instIDecl :: TCEnv -> Position -> QualIdent -> QualType -> IDecl
-> instIDecl tcEnv p f ty = IFunctionDecl p f Nothing (fromQualType tcEnv ty)
+> instIDecl :: TCEnv -> [Ident] -> Position -> QualIdent -> QualType -> IDecl
+> instIDecl tcEnv tvs p f ty =
+>   IFunctionDecl p f Nothing (fromQualType tcEnv tvs ty)
 
 > instDictType :: TCEnv -> ValueEnv -> TypePred -> [Maybe Ident] -> Type
 > instDictType tcEnv tyEnv (TypePred cls ty) fs =

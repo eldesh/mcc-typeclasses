@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2428 2007-07-30 16:52:33Z wlux $
+% $Id: DictTrans.lhs 2429 2007-07-31 08:09:07Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -142,8 +142,7 @@ generator.
 >   IFunctionDecl p f (fmap (+ d) n) (fromQualType tcEnv (nub (fv ty)) ty'')
 >   where ty' = toQualType m ty
 >         ty'' = transformQualType tcEnv ty'
->         d = arrowArity (rawType (typeScheme ty'')) -
->             arrowArity (rawType (typeScheme ty'))
+>         d = arrowArity (unqualType ty'') - arrowArity (unqualType ty')
 > dictTransIntfDecl _ _ d = d
 
 > transformQualType :: TCEnv -> QualType -> QualType

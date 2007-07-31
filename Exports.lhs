@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2428 2007-07-30 16:52:33Z wlux $
+% $Id: Exports.lhs 2429 2007-07-31 08:09:07Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -134,9 +134,8 @@ declarations which cannot be used in another module because
 > funDecl m tcEnv tyEnv tvs (Export f) ds =
 >   IFunctionDecl noPos (qualUnqualify m f) n' (fromQualType tcEnv tvs ty) : ds
 >   where n = arity f tyEnv
->         n' =
->           if arrowArity (rawType (ForAll u ty)) == n then Nothing else Just n
->         ForAll u ty = funType f tyEnv
+>         n' = if arrowArity (unqualType ty) == n then Nothing else Just n
+>         ForAll _ ty = funType f tyEnv
 > funDecl _ _ _ _ (ExportTypeWith _ _) ds = ds
 
 > instDecl :: ModuleIdent -> TCEnv -> [Ident] -> [QualIdent] -> CT

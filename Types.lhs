@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 2178 2007-04-27 16:48:58Z wlux $
+% $Id: Types.lhs 2429 2007-07-31 08:09:07Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -186,6 +186,9 @@ apply to the same type variable are grouped together.
 
 > qualType :: Type -> QualType
 > qualType ty = QualType [] ty
+
+> unqualType :: QualType -> Type
+> unqualType (QualType _ ty) = ty
 
 > canonType :: QualType -> QualType
 > canonType = contextMap sort

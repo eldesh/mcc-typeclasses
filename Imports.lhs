@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2275 2007-06-18 09:30:41Z wlux $
+% $Id: Imports.lhs 2429 2007-07-31 08:09:07Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -173,9 +173,9 @@ following functions.
 > values m (INewtypeDecl _ cx tc _ tvs nc) =
 >   (newConstr m cx (qualQualify m tc) tvs nc :)
 > values m (IFunctionDecl _ f n ty) =
->   qual f (Value (qualQualify m f) n' ty')
->   where n' = fromMaybe (arrowArity (rawType ty')) n
->         ty' = typeScheme (toQualType m ty)
+>   qual f (Value (qualQualify m f) n' (typeScheme ty'))
+>   where n' = fromMaybe (arrowArity (unqualType ty')) n
+>         ty' = toQualType m ty
 > values m (IClassDecl _ _ cls _ tv ds) =
 >   (map (classMethod m (qualQualify m cls) tv) (catMaybes ds) ++)
 > values _ _ = id

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2429 2007-07-31 08:09:07Z wlux $
+% $Id: Exports.lhs 2430 2007-08-01 06:14:02Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -67,22 +67,22 @@ declarations which cannot be used in another module because
 > typeDecl _ _ _ _ (Export _) ds = ds
 > typeDecl m tcEnv tyEnv tvs (ExportTypeWith tc xs) ds =
 >   case qualLookupTopEnv tc tcEnv of
->     [DataType _ k cs] -> iTypeDecl IDataDecl m tc tvs n k constrs : ds
+>     [DataType _ k cs]
+>       | null xs -> iTypeDecl IDataDecl m [] tc tvs n k [] : ds
+>       | otherwise -> iTypeDecl IDataDecl m cx' tc tvs n k cs' : ds
 >       where n = kindArity k
->             constrs
->               | null xs = ([],[])
->               | otherwise = (orderContext (take n tvs) (nub cx'),cs')
->               where (cx',cs') =
->                       mapAccumR mergeContext [] $
->                       map (hideDecl (constrDecl tcEnv tyEnv tc tvs n) xs) cs
+>             cx' = orderContext (take n tvs) (nub cx'')
+>             (cx'',cs') =
+>               mapAccumR mergeContext [] $
+>               map (hideDecl (constrDecl tcEnv tyEnv tc tvs n) xs) cs
 >             mergeContext cx c = (maybe [] fst c ++ cx,fmap snd c)
 >     [RenamingType _ k c]
->       | null xs -> iTypeDecl IDataDecl m tc tvs n k ([],[]) : ds
->       | otherwise -> iTypeDecl INewtypeDecl m tc tvs n k nc : ds
+>       | null xs -> iTypeDecl IDataDecl m [] tc tvs n k [] : ds
+>       | otherwise -> iTypeDecl INewtypeDecl m cx' tc tvs n k nc' : ds
 >       where n = kindArity k
->             nc = newConstrDecl tcEnv tyEnv tc tvs c
+>             (cx',nc') = newConstrDecl tcEnv tyEnv tc tvs c
 >     [AliasType _ n k ty] ->
->       iTypeDecl (const . ITypeDecl) m tc tvs n k ([],ty') : ds
+>       iTypeDecl (const . ITypeDecl) m [] tc tvs n k ty' : ds
 >       where ty' = fromType tcEnv tvs ty
 >     [TypeClass _ k clss fs] ->
 >       iClassDecl IClassDecl m tc tvs k clss (methods fs) : ds
@@ -95,9 +95,9 @@ declarations which cannot be used in another module because
 
 > iTypeDecl :: (Position -> [ClassAssert] -> QualIdent -> Maybe KindExpr
 >               -> [Ident] -> a -> IDecl)
->           -> ModuleIdent -> QualIdent -> [Ident] -> Int -> Kind
->           -> ([ClassAssert],a) -> IDecl
-> iTypeDecl f m tc tvs n k (cx,x) =
+>           -> ModuleIdent -> [ClassAssert] -> QualIdent -> [Ident] -> Int
+>           -> Kind -> a -> IDecl
+> iTypeDecl f m cx tc tvs n k x =
 >   f noPos cx (qualUnqualify m tc) k' (take n tvs) x
 >   where k' = if k == simpleKind n then Nothing else Just (fromKind k)
 
@@ -232,9 +232,9 @@ loading the imported modules.
 > hiddenTypeDecl m tcEnv tvs tc =
 >   case qualLookupTopEnv (qualQualify m tc) tcEnv of
 >     [DataType _ k _] ->
->       iTypeDecl hidingDataDecl m tc tvs (kindArity k) k undefined
+>       iTypeDecl hidingDataDecl m [] tc tvs (kindArity k) k undefined
 >     [RenamingType _ k _] ->
->       iTypeDecl hidingDataDecl m tc tvs (kindArity k) k undefined
+>       iTypeDecl hidingDataDecl m [] tc tvs (kindArity k) k undefined
 >     [TypeClass _ k clss _] -> iClassDecl HidingClassDecl m tc tvs k clss
 >     _ -> internalError "hiddenTypeDecl"
 >   where hidingDataDecl p _ tc k tvs _ = HidingDataDecl p tc k tvs

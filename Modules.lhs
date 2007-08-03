@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2428 2007-07-30 16:52:33Z wlux $
+% $Id: Modules.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -632,7 +632,7 @@ from the type environment.
 
 > ppTypes :: TCEnv -> [(Ident,ValueInfo)] -> Doc
 > ppTypes tcEnv = vcat . map ppInfo
->   where ppInfo (c,DataConstructor _ _ ty) =
+>   where ppInfo (c,DataConstructor _ _ _ ty) =
 >           ppIDecl (mkDecl c ty) <+> text "-- data constructor"
 >         ppInfo (c,NewtypeConstructor _ ty) =
 >           ppIDecl (mkDecl c ty) <+> text "-- newtype constructor"

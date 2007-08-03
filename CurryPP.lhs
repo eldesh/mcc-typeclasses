@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2418 2007-07-26 17:44:48Z wlux $
+% $Id: CurryPP.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -83,10 +83,12 @@ Declarations
 >   text kw <+> sep [ppContext cx, ppIdent tc <+> hsep (map ppIdent tvs)]
 
 > ppConstr :: ConstrDecl -> Doc
-> ppConstr (ConstrDecl _ tvs c tys) =
->   sep [ppExistVars tvs,ppIdent c <+> fsep (map (ppTypeExpr 2) tys)]
-> ppConstr (ConOpDecl _ tvs ty1 op ty2) =
->   sep [ppExistVars tvs,ppTypeExpr 1 ty1,ppInfixOp op <+> ppTypeExpr 1 ty2]
+> ppConstr (ConstrDecl _ tvs cx c tys) =
+>   sep [ppExistVars tvs <+> ppContext cx,
+>        ppIdent c <+> fsep (map (ppTypeExpr 2) tys)]
+> ppConstr (ConOpDecl _ tvs cx ty1 op ty2) =
+>   sep [ppExistVars tvs <+> ppContext cx,
+>        ppTypeExpr 1 ty1,ppInfixOp op <+> ppTypeExpr 1 ty2]
 
 > ppExistVars :: [Ident] -> Doc
 > ppExistVars tvs

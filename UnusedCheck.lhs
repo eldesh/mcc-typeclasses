@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 2399 2007-07-16 08:49:24Z wlux $
+% $Id: UnusedCheck.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 2005-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -102,8 +102,8 @@ implemented by a traversal of the syntax tree.
 
 > instance SyntaxTree ConstrDecl where
 >   used _ _ = id
->   unused used _ (ConstrDecl p _ c _) = unusedVars Data used p [c]
->   unused used _ (ConOpDecl p _ _ op _) = unusedVars Data used p [op]
+>   unused used _ (ConstrDecl p _ _ c _) = unusedVars Data used p [c]
+>   unused used _ (ConOpDecl p _ _ _ op _) = unusedVars Data used p [op]
 
 > instance SyntaxTree NewConstrDecl where
 >   used _ _ = id

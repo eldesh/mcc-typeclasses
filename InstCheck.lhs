@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2380 2007-06-29 12:25:43Z wlux $
+% $Id: InstCheck.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -58,8 +58,8 @@ existentially quantified data types.
 > checkDeriving (DataDecl p _ _ _ cs _)
 >   | null cs = errorAt p noAbstractDerive
 >   | any (not . null . existVars) cs = errorAt p noExistentialDerive
->   where existVars (ConstrDecl _ evs _ _) = evs
->         existVars (ConOpDecl _ evs _ _ _) = evs
+>   where existVars (ConstrDecl _ evs _ _ _) = evs
+>         existVars (ConOpDecl _ evs _ _ _ _) = evs
 > checkDeriving d = return ()
 
 \end{verbatim}
@@ -89,7 +89,16 @@ the context of the instance declaration derived for a class $C \in
 \emph{cx}')$ such that $\emph{cx'} \Rightarrow C\,t_{ij}$ holds for
 each constituent type $t_{ij}$ of the data type declaration and that
 \emph{cx'} is the minimal context for which this property holds
-(cf.\ Chap.~10 of~\cite{PeytonJones03:Haskell}). In the case of
+(cf.\ Chap.~10 of~\cite{PeytonJones03:Haskell}). The context \emph{cx}
+must include all class assertions appearing on the right hand side of
+a data type declaration so that the correct instance context is
+inferred for a declaration like
+\begin{verbatim}
+  data T a = Eq a => T a deriving (Bounded)
+\end{verbatim}
+namely \verb|(Eq a, Bounded a)|. Since no instances are derived for
+existentially quantified data types, only constraints for universally
+quantified type variables are considered here. In the case of
 (mutually) recursive data types, inference of the appropriate contexts
 may require a fixpoint calculation.
 
@@ -108,9 +117,10 @@ their super classes.
 
 > declDeriving :: ModuleIdent -> TCEnv -> TopDecl a -> Deriving
 > declDeriving m tcEnv (DataDecl p cx tc tvs cs clss) =
->   mkDeriving m tcEnv p cx tc tvs (concatMap constrTypes cs) clss
->   where constrTypes (ConstrDecl _ _ _ tys) = tys
->         constrTypes (ConOpDecl _ _ ty1 _ ty2) = [ty1,ty2]
+>   mkDeriving m tcEnv p (cx ++ concat cxs) tc tvs (concat tyss) clss
+>   where (cxs,tyss) = unzip (map constrTypes cs)
+>         constrTypes (ConstrDecl _ _ cx _ tys) = (cx,tys)
+>         constrTypes (ConOpDecl _ _ cx ty1 _ ty2) = (cx,[ty1,ty2])
 > declDeriving m tcEnv (NewtypeDecl p cx tc tvs nc clss) =
 >   mkDeriving m tcEnv p cx tc tvs [nconstrType nc] clss
 >   where nconstrType (NewConstrDecl _ _ ty) = ty
@@ -121,7 +131,7 @@ their super classes.
 >   Deriving p tc' (QualType cx' ty'') tys' (sortClasses tcEnv clss)
 >   where tc' = qualifyWith m tc
 >         (tys',ty'') = arrowUnapply ty'
->         QualType cx' ty' = expandConstrType tcEnv cx tc' tvs tys
+>         QualType cx' ty' = snd (expandConstrType tcEnv cx tc' tvs [] tys)
 
 > sortClasses :: TCEnv -> [QualIdent] -> [QualIdent]
 > sortClasses tcEnv clss =

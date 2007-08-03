@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2399 2007-07-16 08:49:24Z wlux $
+% $Id: Qual.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -63,10 +63,11 @@ order to compile this module with hbc.
 >   qual phase tEnv vEnv (BlockDecl d) = BlockDecl (qual phase tEnv vEnv d)
 
 > instance Qual ConstrDecl where
->   qual phase tEnv vEnv (ConstrDecl p evs c tys) =
->     ConstrDecl p evs c (qual phase tEnv vEnv tys)
->   qual phase tEnv vEnv (ConOpDecl p evs ty1 op ty2) =
->     ConOpDecl p evs (qual phase tEnv vEnv ty1) op (qual phase tEnv vEnv ty2)
+>   qual phase tEnv vEnv (ConstrDecl p evs cx c tys) =
+>     ConstrDecl p evs (qual phase tEnv vEnv cx) c (qual phase tEnv vEnv tys)
+>   qual phase tEnv vEnv (ConOpDecl p evs cx ty1 op ty2) =
+>     ConOpDecl p evs (qual phase tEnv vEnv cx)
+>               (qual phase tEnv vEnv ty1) op (qual phase tEnv vEnv ty2)
 
 > instance Qual NewConstrDecl where
 >   qual phase tEnv vEnv (NewConstrDecl p c ty) =

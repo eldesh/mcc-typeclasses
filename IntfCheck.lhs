@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2276 2007-06-18 12:18:09Z wlux $
+% $Id: IntfCheck.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -130,19 +130,19 @@ interface module only. However, this has not been implemented yet.
 
 > checkConstrImport :: ModuleIdent -> ValueEnv -> [ClassAssert] -> QualIdent
 >                   -> [Ident] -> ConstrDecl -> Error ()
-> checkConstrImport m tyEnv cx tc tvs (ConstrDecl p evs c tys) =
+> checkConstrImport m tyEnv cxL tc tvs (ConstrDecl p evs cxR c tys) =
 >   checkValueInfo "data constructor" checkConstr tyEnv p qc
 >   where qc = qualifyLike tc c
->         checkConstr (DataConstructor c' _ (ForAll n' ty')) =
+>         checkConstr (DataConstructor c' _ ci' (ForAll n' ty')) =
 >           qc == c' && length (tvs ++ evs) == n' &&
->           toConstrType m cx tc tvs tys == ty'
+>           toConstrType m cxL tc tvs cxR tys == (ci',ty')
 >         checkConstr _ = False
-> checkConstrImport m tyEnv cx tc tvs (ConOpDecl p evs ty1 op ty2) =
+> checkConstrImport m tyEnv cxL tc tvs (ConOpDecl p evs cxR ty1 op ty2) =
 >   checkValueInfo "data constructor" checkConstr tyEnv p qc
 >   where qc = qualifyLike tc op
->         checkConstr (DataConstructor c' _ (ForAll n' ty')) =
+>         checkConstr (DataConstructor c' _ ci' (ForAll n' ty')) =
 >           qc == c' && length (tvs ++ evs) == n' &&
->           toConstrType m cx tc tvs [ty1,ty2] == ty'
+>           toConstrType m cxL tc tvs cxR [ty1,ty2] == (ci',ty')
 >         checkConstr _ = False
 
 > checkNewConstrImport :: ModuleIdent -> ValueEnv -> [ClassAssert] -> QualIdent
@@ -151,7 +151,8 @@ interface module only. However, this has not been implemented yet.
 >   checkValueInfo "newtype constructor" checkNewConstr tyEnv p qc
 >   where qc = qualifyLike tc c
 >         checkNewConstr (NewtypeConstructor c' (ForAll n' ty')) =
->           qc == c' && length tvs == n' && toConstrType m cx tc tvs [ty] == ty'
+>           qc == c' && length tvs == n' &&
+>           snd (toConstrType m cx tc tvs [] [ty]) == ty'
 >         checkNewConstr _ = False
 
 > checkMethodImport :: ModuleIdent -> ValueEnv -> QualIdent -> Ident

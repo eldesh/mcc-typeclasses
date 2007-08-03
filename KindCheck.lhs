@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2399 2007-07-16 08:49:24Z wlux $
+% $Id: KindCheck.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -102,8 +102,8 @@ declarations.
 >   fts m (BlockDecl d) = fts m d
 
 > instance HasType ConstrDecl where
->   fts m (ConstrDecl _ _ _ tys) = fts m tys
->   fts m (ConOpDecl _ _ ty1 _ ty2) = fts m ty1 . fts m ty2
+>   fts m (ConstrDecl _ _ cx _ tys) = fts m cx . fts m tys
+>   fts m (ConOpDecl _ _ cx ty1 _ ty2) = fts m cx . fts m ty1 . fts m ty2
 
 > instance HasType NewConstrDecl where
 >   fts m (NewConstrDecl _ _ ty) = fts m ty
@@ -395,15 +395,17 @@ latter.
 > kcDecl _ (TrustAnnot _ _ _) = return ()
 
 > kcConstrDecl :: TCEnv -> ConstrDecl -> KcState ()
-> kcConstrDecl tcEnv d@(ConstrDecl p evs _ tys) =
+> kcConstrDecl tcEnv d@(ConstrDecl p evs cx _ tys) =
 >   do
 >     tcEnv' <- foldM bindFreshKind tcEnv evs
+>     kcContext tcEnv' p cx
 >     mapM_ (kcValueType tcEnv' p what doc) tys
 >   where what = "data constructor declaration"
 >         doc = ppConstr d
-> kcConstrDecl tcEnv d@(ConOpDecl p evs ty1 _ ty2) =
+> kcConstrDecl tcEnv d@(ConOpDecl p evs cx ty1 _ ty2) =
 >   do
 >     tcEnv' <- foldM bindFreshKind tcEnv evs
+>     kcContext tcEnv' p cx
 >     kcValueType tcEnv' p what doc ty1
 >     kcValueType tcEnv' p what doc ty2
 >   where what = "data constructor declaration"

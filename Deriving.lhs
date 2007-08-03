@@ -1,10 +1,10 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2386 2007-07-04 16:41:13Z wlux $
+% $Id: Deriving.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
-\nwfilename{Derive.lhs}
+\nwfilename{Deriving.lhs}
 \section{Derived Instances}
 This module implements the code generating derived instance declarations.
 \begin{verbatim}
@@ -28,7 +28,7 @@ This module implements the code generating derived instance declarations.
 >   mapE (deriveInstance m pEnv tcEnv iEnv p tc tvs cs) clss
 > deriveInstances m pEnv tcEnv iEnv (NewtypeDecl p _ tc tvs nc clss) =
 >   mapE (deriveInstance m pEnv tcEnv iEnv p tc tvs [constrDecl nc]) clss
->   where constrDecl (NewConstrDecl p c ty) = ConstrDecl p [] c [ty]
+>   where constrDecl (NewConstrDecl p c ty) = ConstrDecl p [] [] c [ty]
 > deriveInstances _ _ _ _ _ = return []
 
 \end{verbatim}
@@ -49,8 +49,8 @@ derived.
 >         ty = foldl ApplyType (ConstructorType tc') (map VariableType tvs)
 >         tc' = qualifyWith m tc
 >         cls' = origName (head (qualLookupTopEnv cls tcEnv))
->         constr (ConstrDecl _ _ c tys) = (qualifyWith m c,length tys)
->         constr (ConOpDecl _ _ _ op _) = (qualifyWith m op,2)
+>         constr (ConstrDecl _ _ _ c tys) = (qualifyWith m c,length tys)
+>         constr (ConOpDecl _ _ _ _ op _) = (qualifyWith m op,2)
 >         toClassAssert tvs (TypePred cls (TypeVariable n)) =
 >           ClassAssert cls (tvs !! n) []
 >         trustAll p ds = TrustMethod p Trust [] : ds

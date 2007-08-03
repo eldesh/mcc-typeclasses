@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2418 2007-07-26 17:44:48Z wlux $
+% $Id: CurrySyntax.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -63,8 +63,8 @@ associating types with patterns and expressions after type inference.
 >   deriving (Eq,Show)
 
 > data ConstrDecl =
->     ConstrDecl Position [Ident] Ident [TypeExpr]
->   | ConOpDecl Position [Ident] TypeExpr Ident TypeExpr
+>     ConstrDecl Position [Ident] [ClassAssert] Ident [TypeExpr]
+>   | ConOpDecl Position [Ident] [ClassAssert] TypeExpr Ident TypeExpr
 >   deriving (Eq,Show)
 > data NewConstrDecl = NewConstrDecl Position Ident TypeExpr deriving (Eq,Show)
 
@@ -74,6 +74,7 @@ associating types with patterns and expressions after type inference.
 >   | MethodDecl Position Ident [Equation a]
 >   | TrustMethod Position Trust [Ident]
 >   deriving (Eq,Show)
+
 > data Decl a =
 >     InfixDecl Position Infix (Maybe Int) [Ident]
 >   | TypeSig Position [Ident] QualTypeExpr
@@ -92,8 +93,8 @@ associating types with patterns and expressions after type inference.
 > data Trust = Suspect | Trust deriving (Eq,Show)
 
 > constr :: ConstrDecl -> Ident
-> constr (ConstrDecl _ _ c _) = c
-> constr (ConOpDecl _ _ _ op _) = op
+> constr (ConstrDecl _ _ _ c _) = c
+> constr (ConOpDecl _ _ _ _ op _) = op
 
 > nconstr :: NewConstrDecl -> Ident
 > nconstr (NewConstrDecl _ c _) = c

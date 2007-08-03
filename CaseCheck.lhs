@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 2399 2007-07-16 08:49:24Z wlux $
+% $Id: CaseCheck.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -148,8 +148,8 @@ collect all defined identifiers.
 >   D p TypeConstrId tc : map (D p TypeVarId) (filter (not . isAnonId) tvs)
 
 > instance SyntaxTree ConstrDecl where
->   names _ (ConstrDecl p evs c _) xs = constrNames p evs c ++ xs
->   names _ (ConOpDecl p evs _ c _) xs = constrNames p evs c ++ xs
+>   names _ (ConstrDecl p evs _ c _) xs = constrNames p evs c ++ xs
+>   names _ (ConOpDecl p evs _ _ c _) xs = constrNames p evs c ++ xs
 
 > instance SyntaxTree NewConstrDecl where
 >   names _ (NewConstrDecl p c _) xs = constrNames p [] c ++ xs

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2418 2007-07-26 17:44:48Z wlux $
+% $Id: CurryParser.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -171,7 +171,7 @@ directory path to the module is ignored.
 >   where typeVar = tyvar <|> anonId <$-> token Underscore
 
 > constrDecl :: Parser Token ConstrDecl a
-> constrDecl = position <**> (existVars <**> constr)
+> constrDecl = position <**> (existVars <**> withContext (flip ($)) constr)
 >   where existVars = token Id_forall <-*> many1 tyvar <*-> dot `opt` []
 >         constr = conId <**> identDecl
 >              <|> leftParen <-*> parenDecl
@@ -183,8 +183,8 @@ directory path to the module is ignored.
 >         parenType = tupleType <|> ConstructorType <$> gtyconId
 >         opDecl = conOpDecl <$> conop <*> type1
 >         conType f tys c = f (applyType (ConstructorType (qualify c)) tys)
->         conDecl tys c tvs p = ConstrDecl p tvs c tys
->         conOpDecl op ty2 ty1 tvs p = ConOpDecl p tvs ty1 op ty2
+>         conDecl tys c cx tvs p = ConstrDecl p tvs cx c tys
+>         conOpDecl op ty2 ty1 cx tvs p = ConOpDecl p tvs cx ty1 op ty2
 >         applyType = foldl ApplyType
 
 > newConstrDecl :: Parser Token NewConstrDecl a

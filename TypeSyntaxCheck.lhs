@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2399 2007-07-16 08:49:24Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -76,6 +76,7 @@ signatures.
 > checkTopDecl env (DataDecl p cx tc tvs cs clss) =
 >   do
 >     cx' <- checkTypeLhs env p cx tvs
+>     checkClosedContext p cx' tvs
 >     cs' <-
 >       liftE const (mapE (checkConstrDecl env tvs) cs) &&&
 >       mapE_ (checkClass env p) clss
@@ -83,6 +84,7 @@ signatures.
 > checkTopDecl env (NewtypeDecl p cx tc tvs nc clss) =
 >   do
 >     cx' <- checkTypeLhs env p cx tvs
+>     checkClosedContext p cx' tvs
 >     nc' <-
 >       liftE const (checkNewConstrDecl env tvs nc) &&&
 >       mapE_ (checkClass env p) clss
@@ -95,6 +97,7 @@ signatures.
 > checkTopDecl env (ClassDecl p cx cls tv ds) =
 >   do
 >     cx' <- checkTypeLhs env p cx [tv]
+>     checkClosedContext p cx' [tv]
 >     ds' <-
 >       mapE_ (checkSimpleConstraint "class" doc p) cx' &&>
 >       mapE (checkMethodDecl env tv) ds
@@ -152,15 +155,11 @@ not contain any additional constraints for that type variable
 > checkTypeLhs :: TypeEnv -> Position -> [ClassAssert] -> [Ident]
 >              -> Error [ClassAssert]
 > checkTypeLhs env p cx tvs =
->   do
->     cx' <-
->       mapE_ (errorAt p . noVariable "left hand side of type declaration")
->             (nub tcs) &&>
->       mapE_ (errorAt p . nonLinear "left hand side of type declaration". fst)
->             (duplicates (filter (anonId /=) tvs')) &&>
->       mapE (checkClassAssert env p) cx
->     checkClosedContext p cx' tvs
->     return cx'
+>   mapE_ (errorAt p . noVariable "left hand side of type declaration")
+>         (nub tcs) &&>
+>   mapE_ (errorAt p . nonLinear "left hand side of type declaration" . fst)
+>         (duplicates (filter (anonId /=) tvs')) &&>
+>   mapE (checkClassAssert env p) cx
 >   where (tcs,tvs') = partition isTypeConstr tvs
 >         isTypeConstr tv = not (null (lookupTopEnv tv env))
 
@@ -170,15 +169,21 @@ not contain any additional constraints for that type variable
 >          (errorAt p (invalidConstraint what doc (ClassAssert cls tv tys)))
 
 > checkConstrDecl :: TypeEnv -> [Ident] -> ConstrDecl -> Error ConstrDecl
-> checkConstrDecl env tvs (ConstrDecl p evs c tys) =
->   checkTypeLhs env p [] evs &&>
->   liftE (ConstrDecl p evs c) (mapE (checkClosedType env p tvs') tys)
+> checkConstrDecl env tvs (ConstrDecl p evs cx c tys) =
+>   do
+>     cx' <- checkTypeLhs env p cx evs
+>     checkClosedContext p cx' tvs'
+>     tys' <- mapE (checkClosedType env p tvs') tys
+>     return (ConstrDecl p evs cx' c tys')
 >   where tvs' = evs ++ tvs
-> checkConstrDecl env tvs (ConOpDecl p evs ty1 op ty2) =
->   checkTypeLhs env p [] evs &&>
->   liftE2 (flip (ConOpDecl p evs) op)
->          (checkClosedType env p tvs' ty1)
->          (checkClosedType env p tvs' ty2)
+> checkConstrDecl env tvs (ConOpDecl p evs cx ty1 op ty2) =
+>   do
+>     cx' <- checkTypeLhs env p cx evs
+>     checkClosedContext p cx' tvs'
+>     (ty1',ty2') <-
+>       liftE (,) (checkClosedType env p tvs' ty1) &&&
+>       checkClosedType env p tvs' ty2
+>     return (ConOpDecl p evs cx' ty1' op ty2')
 >   where tvs' = evs ++ tvs
 
 > checkNewConstrDecl :: TypeEnv -> [Ident] -> NewConstrDecl

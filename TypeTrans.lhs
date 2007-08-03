@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2428 2007-07-30 16:52:33Z wlux $
+% $Id: TypeTrans.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -28,14 +28,11 @@ The functions \texttt{toType} and \texttt{toTypes} convert Curry type
 expressions into types. The function \texttt{toQualType} similarly
 converts a qualified type expression into a qualified type.
 
-The function \texttt{toConstrType} returns the type of a data or
-newtype constructor. It computes the constructor's type from the
-context, type name, and type variables from the left hand side of the
-type declaration and the constructor's argument types. A special
-feature of this function is that it restricts the context to those
-type variables which are free in the argument types as specified in
-Sect.~4.2.1 of the revised Haskell'98
-report~\cite{PeytonJones03:Haskell}.
+The function \texttt{toConstrType} returns the type and additional
+information for a data or newtype constructor. A special feature of
+this function is that it restricts the context to those type variables
+which are free in the argument types as specified in Sect.~4.2.1 of
+the revised Haskell'98 report~\cite{PeytonJones03:Haskell}.
 
 The function \texttt{toMethodType} returns the type of a type class
 method. It adds the implicit type class constraint to the method's
@@ -69,8 +66,10 @@ indices independently in each type expression.
 > toQualType m ty = qualifyQualType m (toQualType' ty)
 
 > toConstrType :: ModuleIdent -> [ClassAssert] -> QualIdent -> [Ident]
->              -> [TypeExpr] -> QualType
-> toConstrType m cx tc tvs tys = qualifyQualType m (toConstrType' cx tc tvs tys)
+>              -> [ClassAssert] -> [TypeExpr] -> (ConstrInfo,QualType)
+> toConstrType m cxL tc tvs cxR tys =
+>   (qualifyConstrInfo m ci,qualifyQualType m ty)
+>   where (ci,ty) = toConstrType' cxL tc tvs cxR tys
 
 > toMethodType :: ModuleIdent -> QualIdent -> Ident -> QualTypeExpr -> QualType
 > toMethodType m cls tv ty = qualifyQualType m (toMethodType' cls tv ty)
@@ -81,11 +80,15 @@ indices independently in each type expression.
 > toQualType' :: QualTypeExpr -> QualType
 > toQualType' ty = toQualType'' (enumTypeVars [] ty) ty
 
-> toConstrType' :: [ClassAssert] -> QualIdent -> [Ident] -> [TypeExpr]
->               -> QualType
-> toConstrType' cx tc tvs tys = toQualType'' tvs' (QualTypeExpr cx' ty')
+> toConstrType' :: [ClassAssert] -> QualIdent -> [Ident] -> [ClassAssert]
+>               -> [TypeExpr] -> (ConstrInfo,QualType)
+> toConstrType' cxL tc tvs cxR tys =
+>   (ConstrInfo (length tvs) (toContext'' tvs' cxL') (toContext'' tvs' cxR'),
+>    canonType (toQualType'' tvs' (QualTypeExpr (cxL' ++ cxR') ty')))
 >   where tvs' = enumTypeVars tvs tys
->         cx' = restrictContext (nub (fv tys)) cx
+>         tvs'' = nub (fv tys)
+>         cxL' = restrictContext tvs'' cxL
+>         cxR' = restrictContext tvs'' cxR
 >         ty' = foldr ArrowType ty0 tys
 >         ty0 = foldl ApplyType (ConstructorType tc) (map VariableType tvs)
 
@@ -104,7 +107,10 @@ indices independently in each type expression.
 
 > toQualType'' :: FM Ident Int -> QualTypeExpr -> QualType
 > toQualType'' tvs (QualTypeExpr cx ty) =
->   QualType (nub (map (toTypePred'' tvs) cx)) (toType'' tvs ty)
+>   QualType (toContext'' tvs cx) (toType'' tvs ty)
+
+> toContext'' :: FM Ident Int -> [ClassAssert] -> Context
+> toContext'' tvs cx = nub (map (toTypePred'' tvs) cx)
 
 > toTypePred'' :: FM Ident Int -> ClassAssert -> TypePred
 > toTypePred'' tvs (ClassAssert cls tv tys) =
@@ -133,9 +139,16 @@ indices independently in each type expression.
 > toTypeApp tvs (ApplyType ty1 ty2) tys =
 >   toTypeApp tvs ty1 (toType'' tvs ty2 : tys)
 
+> qualifyConstrInfo :: ModuleIdent -> ConstrInfo -> ConstrInfo
+> qualifyConstrInfo m (ConstrInfo n cxL cxR) =
+>   ConstrInfo n (qualifyContext m cxL) (qualifyContext m cxR)
+
 > qualifyQualType :: ModuleIdent -> QualType -> QualType
 > qualifyQualType m (QualType cx ty) =
->   QualType (map (qualifyTypePred m) cx) (qualifyType m ty)
+>   QualType (qualifyContext m cx) (qualifyType m ty)
+
+> qualifyContext :: ModuleIdent -> Context -> Context
+> qualifyContext m cx = map (qualifyTypePred m) cx
 
 > qualifyTypePred :: ModuleIdent -> TypePred -> TypePred
 > qualifyTypePred m (TypePred cls ty) =
@@ -237,14 +250,12 @@ to all unqualified type constructor and type class identifiers,
 \texttt{expandMonoType} and \texttt{expandPolyType} look up the
 correct module qualifiers in the type constructor environment.
 
-The function \texttt{expandConstrType} computes the type of a data or
-newtype constructor from the context, type name, and type variables
-from the left hand side of the type declaration and the constructor's
-argument types. Similar to \texttt{toConstrType}, the type's context
-is restricted to those type variables which are free in the argument
-types. However, type synonyms are expanded and type constructors and
-type classes are qualified with the name of the module containing their
-definition.
+The function \texttt{expandConstrType} computes the type and
+additional information for a data or newtype constructor. Similar to
+\texttt{toConstrType}, the type's context is restricted to those type
+variables which are free in the argument types. However, type synonyms
+are expanded and type constructors and type classes are qualified with
+the name of the module containing their definition.
 
 The function \texttt{expandMethodType} converts the type of a type
 class method. Similar to function \texttt{toMethodType}, the implicit
@@ -258,9 +269,14 @@ the module containing their definition.
 > expandMonoType tcEnv tvs ty = expandType tcEnv (toType' tvs ty)
 
 > expandConstrType :: TCEnv -> [ClassAssert] -> QualIdent -> [Ident]
->                  -> [TypeExpr] -> QualType
-> expandConstrType tcEnv cx tc tvs tys =
->   normalize (length tvs) (expandQualType tcEnv (toConstrType' cx tc tvs tys))
+>                  -> [ClassAssert] -> [TypeExpr] -> (ConstrInfo,QualType)
+> expandConstrType tcEnv cxL tc tvs cxR tys =
+>   (ConstrInfo n cxL'' cxR'',normalize n (expandQualType tcEnv ty'))
+>   where (ConstrInfo n cxL' cxR',ty') =
+>           toConstrType' cxL tc tvs cxR tys
+>         QualType cxL'' _ = expandQualType tcEnv (contextMap (const cxL') ty')
+>         QualType cxR'' _ =
+>           normalize n (expandQualType tcEnv (contextMap (const cxR') ty'))
 
 > expandMethodType :: TCEnv -> QualIdent -> Ident -> QualTypeExpr -> QualType
 > expandMethodType tcEnv cls tv ty =
@@ -278,8 +294,9 @@ the module containing their definition.
 
 > expandTypePred :: TCEnv -> TypePred -> TypePred
 > expandTypePred tcEnv (TypePred cls ty) =
->   TypePred (origName (head (qualLookupTopEnv cls tcEnv)))
->            (expandType tcEnv ty)
+>   case qualLookupTopEnv cls tcEnv of
+>     [TypeClass cls' _ _ _] -> TypePred cls' (expandType tcEnv ty)
+>     _ -> internalError ("expandTypePred " ++ show cls)
 
 > expandType :: TCEnv -> Type -> Type
 > expandType tcEnv ty = expandTypeApp tcEnv ty []

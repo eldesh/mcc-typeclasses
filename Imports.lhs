@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2429 2007-07-31 08:09:07Z wlux $
+% $Id: Imports.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -182,15 +182,15 @@ following functions.
 
 > dataConstr :: ModuleIdent -> [ClassAssert] -> QualIdent -> [Ident]
 >            -> ConstrDecl -> I ValueInfo
-> dataConstr m cx tc tvs (ConstrDecl _ _ c tys) =
->   (c,con DataConstructor m cx tc tvs c tys)
-> dataConstr m cx tc tvs (ConOpDecl _ _ ty1 op ty2) =
->   (op,con DataConstructor m cx tc tvs op [ty1,ty2])
+> dataConstr m cxL tc tvs (ConstrDecl _ _ cxR c tys) =
+>   (c,con DataConstructor m cxL tc tvs cxR c tys)
+> dataConstr m cxL tc tvs (ConOpDecl _ _ cxR ty1 op ty2) =
+>   (op,con DataConstructor m cxL tc tvs cxR op [ty1,ty2])
 
 > newConstr :: ModuleIdent -> [ClassAssert] -> QualIdent -> [Ident]
 >           -> NewConstrDecl -> I ValueInfo
 > newConstr m cx tc tvs (NewConstrDecl _ c ty) =
->   (c,con (const . NewtypeConstructor) m cx tc tvs c [ty])
+>   (c,con (const . const . NewtypeConstructor) m cx tc tvs [] c [ty])
 
 > classMethod :: ModuleIdent -> QualIdent -> Ident -> IMethodDecl -> I ValueInfo
 > classMethod m cls tv (IMethodDecl _ f ty) =
@@ -238,9 +238,11 @@ Auxiliary functions:
 >             [cls | TypePred cls _ <- cx']
 >   where QualType cx' _ = toQualType m (QualTypeExpr cx (VariableType tv))
 
-> con :: (QualIdent -> Int -> TypeScheme -> a) -> ModuleIdent -> [ClassAssert]
->     -> QualIdent -> [Ident] -> Ident -> [TypeExpr] -> a
-> con f m cx tc tvs c tys =
->   f (qualifyLike tc c) (length tys) (typeScheme (toConstrType m cx tc tvs tys))
+> con :: (QualIdent -> Int -> ConstrInfo -> TypeScheme -> a) -> ModuleIdent
+>     -> [ClassAssert] -> QualIdent -> [Ident] -> [ClassAssert] -> Ident
+>     -> [TypeExpr] -> a
+> con f m cxL tc tvs cxR c tys =
+>   f (qualifyLike tc c) (length tys) ci (typeScheme ty)
+>   where (ci,ty) = toConstrType m cxL tc tvs cxR tys
 
 \end{verbatim}

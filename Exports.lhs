@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2430 2007-08-01 06:14:02Z wlux $
+% $Id: Exports.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -74,7 +74,7 @@ declarations which cannot be used in another module because
 >             cx' = orderContext (take n tvs) (nub cx'')
 >             (cx'',cs') =
 >               mapAccumR mergeContext [] $
->               map (hideDecl (constrDecl tcEnv tyEnv tc tvs n) xs) cs
+>               map (hideDecl (constrDecl tcEnv tyEnv tc tvs) xs) cs
 >             mergeContext cx c = (maybe [] fst c ++ cx,fmap snd c)
 >     [RenamingType _ k c]
 >       | null xs -> iTypeDecl IDataDecl m [] tc tvs n k [] : ds
@@ -109,18 +109,20 @@ declarations which cannot be used in another module because
 >         tv = head tvs
 >         cx = [ClassAssert (qualUnqualify m cls) tv [] | cls <- clss]
 
-> constrDecl :: TCEnv -> ValueEnv -> QualIdent -> [Ident] -> Int -> Ident
+> constrDecl :: TCEnv -> ValueEnv -> QualIdent -> [Ident] -> Ident
 >            -> ([ClassAssert],ConstrDecl)
-> constrDecl tcEnv tyEnv tc tvs n c =
->   (cx',ConstrDecl noPos (drop n (take n' tvs)) c (argTypes ty'))
->   where ForAll n' ty = conType (qualifyLike tc c) tyEnv
->         QualTypeExpr cx' ty' = fromQualType tcEnv tvs ty
+> constrDecl tcEnv tyEnv tc tvs c =
+>   (cxL',ConstrDecl noPos (drop n (take n' tvs)) cxR' c (argTypes ty'))
+>   where (ConstrInfo n cxL cxR,ForAll n' (QualType _ ty)) =
+>           conType (qualifyLike tc c) tyEnv
+>         QualTypeExpr cxL' _ = fromQualType tcEnv tvs (QualType cxL ty)
+>         QualTypeExpr cxR' ty' = fromQualType tcEnv tvs (QualType cxR ty)
 
 > newConstrDecl :: TCEnv -> ValueEnv -> QualIdent -> [Ident] -> Ident
 >               -> ([ClassAssert],NewConstrDecl)
 > newConstrDecl tcEnv tyEnv tc tvs c =
 >   (cx',NewConstrDecl noPos c (head (argTypes ty')))
->   where ForAll _ ty = conType (qualifyLike tc c) tyEnv
+>   where ForAll _ ty = snd (conType (qualifyLike tc c) tyEnv)
 >         QualTypeExpr cx' ty' = fromQualType tcEnv tvs ty
 
 > methodDecl :: TCEnv -> ValueEnv -> QualIdent -> [Ident] -> Ident
@@ -192,8 +194,9 @@ not module \texttt{B}.
 >   modules (IFunctionDecl _ f _ ty) = modules f . modules ty
 
 > instance HasModule ConstrDecl where
->   modules (ConstrDecl _ _ _ tys) = modules tys
->   modules (ConOpDecl _ _ ty1 _ ty2) = modules ty1 . modules ty2
+>   modules (ConstrDecl _ _ cx _ tys) = modules cx . modules tys
+>   modules (ConOpDecl _ _ cx ty1 _ ty2) =
+>     modules cx . modules ty1 . modules ty2
 
 > instance HasModule NewConstrDecl where
 >   modules (NewConstrDecl _ _ ty) = modules ty
@@ -272,8 +275,9 @@ loading the imported modules.
 >   usedTypes (IFunctionDecl _ _ _ ty) = usedTypes ty
 
 > instance HasType ConstrDecl where
->   usedTypes (ConstrDecl _ _ _ tys) = usedTypes tys
->   usedTypes (ConOpDecl _ _ ty1 _ ty2) = usedTypes ty1 . usedTypes ty2
+>   usedTypes (ConstrDecl _ _ cx _ tys) = usedTypes cx . usedTypes tys
+>   usedTypes (ConOpDecl _ _ cx ty1 _ ty2) =
+>     usedTypes cx . usedTypes ty1 . usedTypes ty2
 
 > instance HasType NewConstrDecl where
 >   usedTypes (NewConstrDecl _ _ ty) = usedTypes ty

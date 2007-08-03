@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2418 2007-07-26 17:44:48Z wlux $
+% $Id: Renaming.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -154,19 +154,21 @@ syntax tree and renames all type and expression variables.
 > renameTopDecl (BlockDecl d) = liftM BlockDecl (renameDecl emptyEnv d)
 
 > renameConstrDecl :: RenameEnv -> ConstrDecl -> RenameState ConstrDecl
-> renameConstrDecl env (ConstrDecl p evs c tys) =
+> renameConstrDecl env (ConstrDecl p evs cx c tys) =
 >   do
 >     env' <- bindVars env evs
 >     evs' <- mapM (renameVar env') evs
+>     cx' <- mapM (renameClassAssert env') cx
 >     tys' <- mapM (renameType env') tys
->     return (ConstrDecl p evs' c tys')
-> renameConstrDecl env (ConOpDecl p evs ty1 op ty2) =
+>     return (ConstrDecl p evs' cx' c tys')
+> renameConstrDecl env (ConOpDecl p evs cx ty1 op ty2) =
 >   do
 >     env' <- bindVars env evs
 >     evs' <- mapM (renameVar env') evs
+>     cx' <- mapM (renameClassAssert env') cx
 >     ty1' <- renameType env' ty1
 >     ty2' <- renameType env' ty2
->     return (ConOpDecl p evs' ty1' op ty2')
+>     return (ConOpDecl p evs' cx' ty1' op ty2')
 
 > renameNewConstrDecl :: RenameEnv -> NewConstrDecl -> RenameState NewConstrDecl
 > renameNewConstrDecl env (NewConstrDecl p c ty) =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2418 2007-07-26 17:44:48Z wlux $
+% $Id: TypeCheck.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -103,16 +103,26 @@ non-empty context for the goal's type or not.
 
 \end{verbatim}
 The type checker makes use of nested state monads in order to maintain
-the type environment, the current substitution, and a counter, which
-is used for generating fresh type variables. In addition, the instance
-environment is passed around using a reader monad.
+the type environment, the current substitution, the instance
+environment and a counter, which is used for generating fresh type
+variables.
+
+In order to handle the introduction of local instances when matching a
+data constructor with a non-empty right hand side context, the type
+checker uses an extended instance environment that is composed of the
+static top-level instance environment and a dynamic environment that
+maps each class on the instances which are in scope for it. The
+rationale behind using this representation is that it makes it easy to
+apply the current substitution to the dynamic part of the environment.
 \begin{verbatim}
 
 > type TcState a =
->   StateT ValueEnv (StateT TypeSubst (ReaderT InstEnv (StateT Int Error))) a
+>   StateT ValueEnv (StateT TypeSubst (StateT InstEnv' (StateT Int Error))) a
+> type InstEnv' = (Env QualIdent [Type],InstEnv)
 
 > run :: TcState a -> InstEnv -> ValueEnv -> Error a
-> run m iEnv tyEnv = callSt (callRt (callSt (callSt m tyEnv) idSubst) iEnv) 1
+> run m iEnv tyEnv =
+>   callSt (callSt (callSt (callSt m tyEnv) idSubst) (emptyEnv,iEnv)) 1
 
 \end{verbatim}
 \paragraph{Defining Data Constructors and Methods}
@@ -122,14 +132,16 @@ type synonyms occurring in their types are expanded.
 \begin{verbatim}
 
 > bindTypeValues :: ModuleIdent -> TCEnv -> TopDecl a -> ValueEnv -> ValueEnv
-> bindTypeValues m tcEnv (DataDecl _ cx tc tvs cs _) tyEnv = foldr bind tyEnv cs
->   where bind (ConstrDecl _ _ c tys) =
->           bindConstr DataConstructor m tcEnv cx tc tvs c tys
->         bind (ConOpDecl _ _ ty1 op ty2) =
->           bindConstr DataConstructor m tcEnv cx tc tvs op [ty1,ty2]
+> bindTypeValues m tcEnv (DataDecl _ cxL tc tvs cs _) tyEnv =
+>   foldr bind tyEnv cs
+>   where bind (ConstrDecl _ _ cxR c tys) =
+>           bindConstr DataConstructor m tcEnv cxL tc tvs cxR c tys
+>         bind (ConOpDecl _ _ cxR ty1 op ty2) =
+>           bindConstr DataConstructor m tcEnv cxL tc tvs cxR op [ty1,ty2]
 > bindTypeValues m tcEnv (NewtypeDecl _ cx tc tvs nc _) tyEnv = bind nc tyEnv
 >   where bind (NewConstrDecl _ c ty) =
->           bindConstr (const . NewtypeConstructor) m tcEnv cx tc tvs c [ty]
+>           bindConstr (const . const . NewtypeConstructor)
+>                      m tcEnv cx tc tvs [] c [ty]
 > bindTypeValues _ _ (TypeDecl _ _ _ _) tyEnv = tyEnv
 > bindTypeValues m tcEnv (ClassDecl _ _ cls tv ds) tyEnv = foldr bind tyEnv ds
 >   where cls' = qualifyWith m cls
@@ -140,12 +152,12 @@ type synonyms occurring in their types are expanded.
 > bindTypeValues _ _ (InstanceDecl _ _ _ _ _) tyEnv = tyEnv
 > bindTypeValues _ _ (BlockDecl _) tyEnv = tyEnv
 
-> bindConstr :: (QualIdent -> Int -> TypeScheme -> ValueInfo) -> ModuleIdent
->            -> TCEnv -> [ClassAssert] -> Ident -> [Ident] -> Ident
->            -> [TypeExpr] -> ValueEnv -> ValueEnv
-> bindConstr f m tcEnv cx tc tvs c tys =
->   globalBindTopEnv m c (f (qualifyWith m c) (length tys) (typeScheme ty))
->   where ty = expandConstrType tcEnv cx (qualifyWith m tc) tvs tys
+> bindConstr :: (QualIdent -> Int -> ConstrInfo -> TypeScheme -> ValueInfo)
+>            -> ModuleIdent -> TCEnv -> [ClassAssert] -> Ident -> [Ident]
+>            -> [ClassAssert] -> Ident -> [TypeExpr] -> ValueEnv -> ValueEnv
+> bindConstr f m tcEnv cxL tc tvs cxR c tys =
+>   globalBindTopEnv m c (f (qualifyWith m c) (length tys) ci (typeScheme ty))
+>   where (ci,ty) = expandConstrType tcEnv cxL (qualifyWith m tc) tvs cxR tys
 
 > bindMethods :: ModuleIdent -> TCEnv -> QualIdent -> Ident -> [Ident]
 >             -> QualTypeExpr -> ValueEnv -> ValueEnv
@@ -763,9 +775,9 @@ equivalent to $\emph{World}\rightarrow(t,\emph{World})$.
 >                -> Maybe String -> Ident -> TypeExpr -> TcState ()
 > tcForeignFunct m tcEnv p cc ie f ty =
 >   do
->     checkForeignType cc (rawType ty')
->     updateSt_ (bindFun m f (foreignArity (rawType ty')) ty')
->   where ty' = typeScheme (expandPolyType tcEnv (QualTypeExpr [] ty))
+>     checkForeignType cc (unqualType ty')
+>     updateSt_ (bindFun m f (foreignArity (unqualType ty')) (typeScheme ty'))
+>   where ty' = expandPolyType tcEnv (QualTypeExpr [] ty)
 >         checkForeignType cc ty
 >           | cc == CallConvPrimitive = return ()
 >           | ie == Just "dynamic" = checkCDynCallType tcEnv p cc ty
@@ -908,7 +920,7 @@ supported in patterns.
 > tcConstrApp tcEnv p doc c ts =
 >   do
 >     tyEnv <- fetchSt
->     (cx,(tys,ty)) <- liftM (apSnd arrowUnapply) (skol (conType c tyEnv))
+>     (cx,(tys,ty)) <- liftM (apSnd arrowUnapply) (skol tcEnv (conType c tyEnv))
 >     unless (length tys == n) (errorAt p (wrongArity c (length tys) n))
 >     (cxs,ts') <- liftM unzip $ zipWithM (tcConstrArg tcEnv p doc) ts tys
 >     return (cx ++ concat cxs,ty,ts')
@@ -959,7 +971,7 @@ supported in patterns.
 >     return (cx,ty,Variable ty v)
 > tcExpr m tcEnv p (Constructor _ c) =
 >   do
->     (cx,ty) <- fetchSt >>= inst . conType c
+>     (cx,ty) <- fetchSt >>= inst . snd . conType c
 >     return (cx,ty,Constructor ty c)
 > tcExpr m tcEnv p (Typed e sig) =
 >   do
@@ -1340,8 +1352,8 @@ may cause a further extension of the current substitution.
 >               -> TcState Context
 > reduceContext p what doc tcEnv cx =
 >   do
->     iEnv <- liftSt (liftSt envRt)
 >     theta <- liftSt fetchSt
+>     iEnv <- liftM (apFst (fmap (subst theta))) (liftSt (liftSt fetchSt))
 >     let cx' = subst theta cx
 >         (cx1,cx2) =
 >           partitionContext (minContext tcEnv (reduceTypePreds iEnv cx'))
@@ -1349,19 +1361,22 @@ may cause a further extension of the current substitution.
 >     liftSt (updateSt_ (compose theta'))
 >     return cx1
 
-> reduceTypePreds :: InstEnv -> Context -> Context
+> reduceTypePreds :: InstEnv' -> Context -> Context
 > reduceTypePreds iEnv = concatMap (reduceTypePred iEnv)
 
-> reduceTypePred :: InstEnv -> TypePred -> Context
+> reduceTypePred :: InstEnv' -> TypePred -> Context
 > reduceTypePred iEnv (TypePred cls ty) =
 >   maybe [TypePred cls ty] (reduceTypePreds iEnv) (instContext iEnv cls ty)
 
-> instContext :: InstEnv -> QualIdent -> Type -> Maybe Context
-> instContext iEnv cls ty =
->   case unapplyType False ty of
->     (TypeConstructor tc,tys) ->
->       fmap (map (expandAliasType tys) . snd) (lookupEnv (CT cls tc) iEnv)
->     _ -> Nothing
+> instContext :: InstEnv' -> QualIdent -> Type -> Maybe Context
+> instContext (dEnv,iEnv) cls ty =
+>   case lookupEnv cls dEnv of
+>     Just tys | ty `elem` tys -> Just []
+>     _ ->
+>       case unapplyType False ty of
+>         (TypeConstructor tc,tys) ->
+>           fmap (map (expandAliasType tys) . snd) (lookupEnv (CT cls tc) iEnv)
+>         _ -> Nothing
 
 > partitionContext :: Context -> (Context,Context)
 > partitionContext cx = partition (\(TypePred _ ty) -> isTypeVar ty) cx
@@ -1372,7 +1387,7 @@ may cause a further extension of the current substitution.
 >         isTypeVar (TypeApply ty _) = isTypeVar ty
 >         isTypeVar (TypeArrow _ _) = False
 
-> reportMissingInstance :: Position -> String -> Doc -> TCEnv -> InstEnv
+> reportMissingInstance :: Position -> String -> Doc -> TCEnv -> InstEnv'
 >                       -> TypeSubst -> TypePred -> TcState TypeSubst
 > reportMissingInstance p what doc tcEnv iEnv theta (TypePred cls ty) =
 >   case subst theta ty of
@@ -1386,7 +1401,7 @@ may cause a further extension of the current substitution.
 >       | hasInstance iEnv cls ty' -> return theta
 >       | otherwise -> errorAt p (noInstance what doc tcEnv cls ty')
 
-> hasInstance :: InstEnv -> QualIdent -> Type -> Bool
+> hasInstance :: InstEnv' -> QualIdent -> Type -> Bool
 > hasInstance iEnv cls ty = isJust (instContext iEnv cls ty)
 
 \end{verbatim}
@@ -1428,7 +1443,7 @@ Haskell'98 report~\cite{PeytonJones03:Haskell}).
 >               -> Type -> TcState Context
 > applyDefaults p what doc tcEnv fvs cx ty =
 >   do
->     iEnv <- liftSt (liftSt envRt)
+>     iEnv <- liftSt (liftSt fetchSt)
 >     let theta =
 >           foldr (bindDefault tcEnv iEnv cx) idSubst
 >                 (nub [tv | TypePred cls (TypeVariable tv) <- cx,
@@ -1440,13 +1455,14 @@ Haskell'98 report~\cite{PeytonJones03:Haskell}).
 >     liftSt (updateSt_ (compose theta))
 >     return cx'
 
-> bindDefault :: TCEnv -> InstEnv -> [TypePred] -> Int -> TypeSubst -> TypeSubst
+> bindDefault :: TCEnv -> InstEnv' -> [TypePred] -> Int -> TypeSubst
+>                      -> TypeSubst
 > bindDefault tcEnv iEnv cx tv =
 >   case foldr (defaultType tcEnv iEnv tv) numTypes cx of
 >     [] -> id
 >     ty:_ -> bindSubst tv ty
 
-> defaultType :: TCEnv -> InstEnv -> Int -> TypePred -> [Type] -> [Type]
+> defaultType :: TCEnv -> InstEnv' -> Int -> TypePred -> [Type] -> [Type]
 > defaultType tcEnv iEnv tv (TypePred cls (TypeVariable tv'))
 >   | tv == tv' = filter (hasInstance iEnv cls)
 >   | otherwise = id
@@ -1487,7 +1503,7 @@ We use negative offsets for fresh type variables.
 \begin{verbatim}
 
 > fresh :: (Int -> a) -> TcState a
-> fresh f = liftM f (liftSt (liftSt (liftRt (updateSt (1 +)))))
+> fresh f = liftM f (liftSt (liftSt (liftSt (updateSt (1 +)))))
 
 > freshVar :: (Int -> a) -> TcState a
 > freshVar f = fresh (\n -> f (- n))
@@ -1524,17 +1540,24 @@ The function \texttt{skol} instantiates the type of data and newtype
 constructors in patterns. All universally quantified type variables
 are instantiated with fresh type variables and all existentially
 quantified type variables are instantiated with fresh skolem types.
-Note that the context of a constructor's type can only constrain the
-universally quantified type variables.
+All constraints that appear on the right hand side of the
+constructor's declaration are added to the dynamic instance
+environment.
 \begin{verbatim}
 
-> skol :: TypeScheme -> TcState (Context,Type)
-> skol (ForAll n (QualType cx ty)) =
+> skol :: TCEnv -> (ConstrInfo,TypeScheme) -> TcState (Context,Type)
+> skol tcEnv (ConstrInfo m cxL cxR,ForAll n (QualType _ ty)) =
 >   do
 >     tys <- replicateM m freshTypeVar
 >     tys' <- replicateM (n - m) freshSkolem
->     return (map (expandAliasType tys) cx,expandAliasType (tys ++ tys') ty)
->   where m = length (snd (unapplyType True (arrowBase ty)))
+>     let tys'' = tys ++ tys'
+>     liftSt (liftSt (updateSt_ (apFst (bindSkolemInsts tys''))))
+>     return (map (expandAliasType tys) cxL,expandAliasType tys'' ty)
+>   where bindSkolemInsts tys dEnv =
+>           foldr bindSkolemInst dEnv
+>                 (map (expandAliasType tys) (maxContext tcEnv cxR))
+>         bindSkolemInst (TypePred cls ty) dEnv =
+>           bindEnv cls (ty : fromMaybe [] (lookupEnv cls dEnv)) dEnv
 
 \end{verbatim}
 The function \texttt{gen} generalizes a context \emph{cx} and a type

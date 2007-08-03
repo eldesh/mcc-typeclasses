@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2399 2007-07-16 08:49:24Z wlux $
+% $Id: Base.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -216,16 +216,14 @@ synonym types on the other side.
 
 \end{verbatim}
 \paragraph{Function and constructor types}
-In order to test type correctness of a module, the compiler needs to
-determine the type of every data constructor, function, and variable
-in the module. For the purpose of type checking, there is no need to
-distinguish variables and functions. For all objects, their original
-names and their types are saved. In addition, the compiler also saves
-the arity of functions and data constructors. For constructors, the
-arity could be computed from the constructor's type. However, this is
-not possible in general for functions. Note that the arity of a
-newtype constructor is always one, so there is no need to save it
-explicitly.
+The compiler maintains information about the types of all data
+constructors, functions, and variables in the module. For the purpose
+of type checking, there is no need to distinguish variables and
+functions. For all entities, their original names and their types are
+saved. In addition, the compiler also saves the arity of functions and
+data constructors. Since the arity of a newtype constructor is always
+one there is no need to save it explicitly. Additional information is
+recorded for data constructors, which is explained below.
 
 Even though value declarations may be nested, the compiler uses a flat
 environment for saving type information. This is possible because all
@@ -235,13 +233,13 @@ information.
 
 > type ValueEnv = TopEnv ValueInfo
 
-> data ValueInfo = DataConstructor QualIdent Int TypeScheme
+> data ValueInfo = DataConstructor QualIdent Int ConstrInfo TypeScheme
 >                | NewtypeConstructor QualIdent TypeScheme
 >                | Value QualIdent Int TypeScheme
 >                deriving Show
 
 > instance Entity ValueInfo where
->   origName (DataConstructor origName _ _) = origName
+>   origName (DataConstructor origName _ _ _) = origName
 >   origName (NewtypeConstructor origName _) = origName
 >   origName (Value origName _ _) = origName
 
@@ -252,11 +250,51 @@ information.
 > rebindFun m f n ty = rebindTopEnv m f (Value (qualifyWith m f) n ty)
 
 \end{verbatim}
+For a data constructor declaration
+\begin{quote}\tt
+  data $\emph{cx}_l$ => $T\,u_1 \dots u_n$ =
+    \dots{} | forall $v_1 \dots v_m$ $\emph{cx}_r$ =>
+    $C\,t_1 \dots t_k$ | \dots
+\end{quote}
+it is important to distinguish the left and right hand side contexts
+$\emph{cx}_l$ and $\emph{cx}_r$. While instances for the constrained
+types of the left hand side context $\emph{cx}_l$ must be available in
+every context where $C$ is used, the right hand side context
+$\emph{cx}_r$ introduces additional instances that are available
+inside a context where $C$ is matched. Operationally, this means that
+a dictionary argument is added to $C$ for each element of the context
+$\emph{cx}_r$ (and therefore must be provided when $C$ is applied).
+Note that $C$'s type recorded in the type environment is
+\begin{displaymath}
+\forall u_1 \dots u_n \, v_1 \dots v_m.\;\emph{cx} \Rightarrow
+t_1 \rightarrow \dots \rightarrow t_k \rightarrow T\,u_1 \dots u_n
+\end{displaymath}
+where $cx$ is the concatenation of $\emph{cx}_l$ and $\emph{cx}_r$
+restricted to the type variables that appear in $t_1,\dots,t_k$. We
+also record the number of left hand side type variables $n$ in the
+additional data constructor information because it simplifies
+distinguishing universally and existentially quantified type variables
+in $C$'s type.
+
+The function \texttt{constrInfo} computes the data constructor
+information from a qualified type assuming that there are no
+existentially quantified type variables and the right hand side
+context is empty.
+\begin{verbatim}
+
+> data ConstrInfo = ConstrInfo Int Context Context deriving (Eq,Show)
+
+> constrInfo :: TypeScheme -> ConstrInfo
+> constrInfo (ForAll n (QualType cx _)) = ConstrInfo n cx []
+
+\end{verbatim}
 The functions \texttt{conType}, \texttt{varType}, and \texttt{funType}
 return the type of constructors, pattern variables, and variables in
-expressions, respectively, from the type environment. They are
-supposed to be used only after checking for duplicate and ambiguous
-identifiers and therefore should not fail.
+expressions, respectively, from the type environment. In addition,
+\texttt{conType} also returns the additional information associated
+with a (data) constructor. These functions are supposed to be used
+only after checking for duplicate and ambiguous identifiers and
+therefore should not fail.
 
 The function \texttt{varType} can handle ambiguous identifiers and
 returns the first available type. This makes it possible to use
@@ -268,11 +306,11 @@ function and the function \texttt{changeArity} changes the arity of a
 (local) function.
 \begin{verbatim}
 
-> conType :: QualIdent -> ValueEnv -> TypeScheme
+> conType :: QualIdent -> ValueEnv -> (ConstrInfo,TypeScheme)
 > conType c tyEnv =
 >   case qualLookupTopEnv c tyEnv of
->     [DataConstructor _ _ ty] -> ty
->     [NewtypeConstructor _ ty] -> ty
+>     [DataConstructor _ _ ci ty] -> (ci,ty)
+>     [NewtypeConstructor _ ty] -> (constrInfo ty,ty)
 >     _ -> internalError ("conType " ++ show c)
 
 > varType :: Ident -> ValueEnv -> TypeScheme
@@ -290,7 +328,7 @@ function and the function \texttt{changeArity} changes the arity of a
 > arity :: QualIdent -> ValueEnv -> Int
 > arity x tyEnv =
 >   case qualLookupTopEnv x tyEnv of
->     [DataConstructor _ n _] -> n
+>     [DataConstructor _ n _ _] -> n
 >     [NewtypeConstructor _ _] -> 1
 >     [Value _ n _] -> n
 >     _ -> internalError ("arity " ++ show x)
@@ -309,7 +347,7 @@ in order to distinguish data and newtype constructors.
 > isNewtypeConstr :: ValueEnv -> QualIdent -> Bool
 > isNewtypeConstr tyEnv c =
 >   case qualLookupTopEnv c tyEnv of
->     [DataConstructor _ _ _] -> False
+>     [DataConstructor _ _ _ _] -> False
 >     [NewtypeConstructor _ _] -> True
 >     _ -> internalError ("isNewtypeConstr: " ++ show c)
 
@@ -327,7 +365,7 @@ used in order to check the export list of a module.
 > data ValueKind = Constr QualIdent | Var QualIdent deriving (Eq,Show)
 
 > valueKind :: ValueInfo -> ValueKind
-> valueKind (DataConstructor c _ _) = Constr c
+> valueKind (DataConstructor c _ _ _) = Constr c
 > valueKind (NewtypeConstructor c _) = Constr c
 > valueKind (Value v _ _) = Var v
 
@@ -452,9 +490,10 @@ for the type \verb|a -> b|.
 > initDCEnv :: ValueEnv
 > initDCEnv = foldr (uncurry predefDC) emptyDCEnv (concatMap snd predefTypes)
 >   where emptyDCEnv = emptyTopEnv (Just (map snd tuples))
->         predefDC c ty =
->           predefTopEnv c' (DataConstructor c' (arrowArity ty) (polyType ty))
+>         predefDC c ty = predefTopEnv c' $
+>           DataConstructor c' (arrowArity ty) (constrInfo ty') ty'
 >           where c' = qualify c
+>                 ty' = polyType ty
 
 > predefTypes :: [(Type,[(Ident,Type)])]
 > predefTypes =
@@ -472,8 +511,9 @@ for the type \verb|a -> b|.
 >   where tvs = map typeVar [0..]
 >         tupleInfo n =
 >           (DataType c (simpleKind n) [Just (unqualify c)],
->            DataConstructor c n (ForAll n (tupleConstrType (take n tvs))))
+>            DataConstructor c n (constrInfo ty) ty)
 >           where c = qTupleId n
+>                 ty = ForAll n (tupleConstrType (take n tvs))
 >         tupleConstrType tys = qualType (foldr TypeArrow (tupleType tys) tys)
 
 \end{verbatim}

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 2429 2007-07-31 08:09:07Z wlux $
+% $Id: Types.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -245,6 +245,9 @@ m-1$ are existentially quantified.
 \begin{verbatim}
 
 > data TypeScheme = ForAll Int QualType deriving (Eq,Show)
+
+> tmap :: (QualType -> QualType) -> TypeScheme -> TypeScheme
+> tmap f (ForAll n ty) = ForAll n (f ty)
 
 > instance IsType TypeScheme where
 >   typeVars (ForAll _ ty) = [tv | tv <- typeVars ty, tv < 0]

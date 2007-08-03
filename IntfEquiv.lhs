@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfEquiv.lhs 2275 2007-06-18 09:30:41Z wlux $
+% $Id: IntfEquiv.lhs 2431 2007-08-03 07:27:06Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -72,10 +72,10 @@ inadvertently mix up these cases.
 >   _ =~= _ = False
 
 > instance IntfEquiv ConstrDecl where
->   ConstrDecl _ evs1 c1 tys1 =~= ConstrDecl _ evs2 c2 tys2 =
->     c1 == c2 && evs1 == evs2 && tys1 == tys2
->   ConOpDecl _ evs1 ty11 op1 ty12 =~= ConOpDecl _ evs2 ty21 op2 ty22 =
->     op1 == op2 && evs1 == evs2 && ty11 == ty21 && ty12 == ty22
+>   ConstrDecl _ evs1 cx1 c1 tys1 =~= ConstrDecl _ evs2 cx2 c2 tys2 =
+>     c1 == c2 && evs1 == evs2 && cx1 == cx2 && tys1 == tys2
+>   ConOpDecl _ evs1 cx1 ty11 op1 ty12 =~= ConOpDecl _ evs2 cx2 ty21 op2 ty22 =
+>     op1 == op2 && evs1 == evs2 && cx1 == cx2 && ty11 == ty21 && ty12 == ty22
 >   _ =~= _ = False
 
 > instance IntfEquiv NewConstrDecl where
@@ -106,8 +106,8 @@ by function \texttt{fixInterface} and the associated type class
 >   fix tcs = map (fix tcs)
 
 > instance FixInterface IDecl where
->   fix tcs (IInfixDecl p fix pr op) = IInfixDecl p fix pr op
->   fix tcs (HidingDataDecl p tc k tvs) = HidingDataDecl p tc k tvs
+>   fix _ (IInfixDecl p fix pr op) = IInfixDecl p fix pr op
+>   fix _ (HidingDataDecl p tc k tvs) = HidingDataDecl p tc k tvs
 >   fix tcs (IDataDecl p cx tc k tvs cs) =
 >     IDataDecl p (fix tcs cx) tc k tvs (fix tcs cs)
 >   fix tcs (INewtypeDecl p cx tc k tvs nc) =
@@ -122,9 +122,9 @@ by function \texttt{fixInterface} and the associated type class
 >   fix tcs (IFunctionDecl p f n ty) = IFunctionDecl p f n (fix tcs ty)
 
 > instance FixInterface ConstrDecl where
->   fix tcs (ConstrDecl p evs c tys) = ConstrDecl p evs c (fix tcs tys)
->   fix tcs (ConOpDecl p evs ty1 op ty2) =
->     ConOpDecl p evs (fix tcs ty1) op (fix tcs ty2)
+>   fix tcs (ConstrDecl p evs cx c tys) = ConstrDecl p evs cx c (fix tcs tys)
+>   fix tcs (ConOpDecl p evs cx ty1 op ty2) =
+>     ConOpDecl p evs cx (fix tcs ty1) op (fix tcs ty2)
 
 > instance FixInterface NewConstrDecl where
 >   fix tcs (NewConstrDecl p c ty) = NewConstrDecl p c (fix tcs ty)

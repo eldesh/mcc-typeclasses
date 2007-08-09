@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2432 2007-08-09 15:05:49Z wlux $
+% $Id: DictTrans.lhs 2433 2007-08-09 15:25:24Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -245,14 +245,13 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 > classDecls :: TCEnv -> ValueEnv -> Position -> Ident -> Ident
 >            -> [MethodDecl Type] -> [TopDecl Type]
 > classDecls tcEnv tyEnv p cls tv ds =
->   dictDataDecl p cls tv [dictConstrDecl tcEnv p cls tvs tys'] :
+>   dictDataDecl p cls tv [dictConstrDecl tcEnv p cls tv tys'] :
 >   zipWith4 funDecl
 >            ps
 >            (defaultMethodIds cls)
 >            (repeat [])
 >            (zipWith (defaultMethodExpr tyEnv) fs vds')
->   where tvs = filter (tv /=) nameSupply
->         (vds,ods) = partition isMethodDecl ds
+>   where (vds,ods) = partition isMethodDecl ds
 >         (ps,fs,tys) = unzip3 [(p,f,ty) | MethodSig p fs ty <- ods, f <- fs]
 >         tys' = map (expandMethodType tcEnv (qualify cls) tv) tys
 >         vds' = orderMethodDecls (map Just fs) vds
@@ -261,13 +260,12 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 >             -> Ident -> Maybe [Maybe IMethodDecl] -> [IDecl]
 > classIDecls m tcEnv p cls k tv (Just ds) =
 >   dictIDataDecl IDataDecl p cls k tv
->                 [Just (dictConstrDecl tcEnv p (unqualify cls) tvs tys')] :
+>                 [Just (dictConstrDecl tcEnv p (unqualify cls) tv tys')] :
 >   zipWith3 (intfMethodDecl cls tv)
 >            (map (maybe p pos) ds)
 >            (qDefaultMethodIds cls)
 >            tys
->   where tvs = filter (tv /=) nameSupply
->         tys = map (maybe (QualTypeExpr [] (VariableType tv)) methodType) ds
+>   where tys = map (maybe (QualTypeExpr [] (VariableType tv)) methodType) ds
 >         tys' = map (toMethodType m cls tv) tys
 >         pos (IMethodDecl p _ _) = p
 >         methodType (IMethodDecl _ _ ty) = ty
@@ -294,11 +292,12 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 > dictIDataDecl f p cls k tv =
 >   f p [] (qDictTypeId cls) (fmap (`ArrowKind` Star) k) [tv]
 
-> dictConstrDecl :: TCEnv -> Position -> Ident -> [Ident] -> [QualType]
+> dictConstrDecl :: TCEnv -> Position -> Ident -> Ident -> [QualType]
 >                -> ConstrDecl
-> dictConstrDecl tcEnv p cls tvs tys =
->   ConstrDecl p [] [] (dictConstrId cls)
->              (map (fromType tcEnv tvs . transformMethodType tcEnv) tys)
+> dictConstrDecl tcEnv p cls tv tys =
+>   ConstrDecl p (filter (tv /=) (nub (fv tys'))) [] (dictConstrId cls) tys'
+>   where tvs = tv : filter (unRenameIdent tv /=) nameSupply
+>         tys' = map (fromType tcEnv tvs . transformMethodType tcEnv) tys
 
 > defaultMethodExpr :: ValueEnv -> Ident -> Maybe (MethodDecl Type)
 >                   -> Expression Type

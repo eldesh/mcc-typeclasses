@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: TypeTrans.lhs 2432 2007-08-09 15:05:49Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -83,7 +83,7 @@ indices independently in each type expression.
 > toConstrType' :: [ClassAssert] -> QualIdent -> [Ident] -> [ClassAssert]
 >               -> [TypeExpr] -> (ConstrInfo,QualType)
 > toConstrType' cxL tc tvs cxR tys =
->   (ConstrInfo (length tvs) (toContext'' tvs' cxL') (toContext'' tvs' cxR'),
+>   (ConstrInfo (length (filter (`notElem` tvs) tvs'')) (toContext'' tvs' cxR'),
 >    canonType (toQualType'' tvs' (QualTypeExpr (cxL' ++ cxR') ty')))
 >   where tvs' = enumTypeVars tvs tys
 >         tvs'' = nub (fv tys)
@@ -140,8 +140,7 @@ indices independently in each type expression.
 >   toTypeApp tvs ty1 (toType'' tvs ty2 : tys)
 
 > qualifyConstrInfo :: ModuleIdent -> ConstrInfo -> ConstrInfo
-> qualifyConstrInfo m (ConstrInfo n cxL cxR) =
->   ConstrInfo n (qualifyContext m cxL) (qualifyContext m cxR)
+> qualifyConstrInfo m (ConstrInfo n cxR) = ConstrInfo n (qualifyContext m cxR)
 
 > qualifyQualType :: ModuleIdent -> QualType -> QualType
 > qualifyQualType m (QualType cx ty) =
@@ -271,10 +270,9 @@ the module containing their definition.
 > expandConstrType :: TCEnv -> [ClassAssert] -> QualIdent -> [Ident]
 >                  -> [ClassAssert] -> [TypeExpr] -> (ConstrInfo,QualType)
 > expandConstrType tcEnv cxL tc tvs cxR tys =
->   (ConstrInfo n cxL'' cxR'',normalize n (expandQualType tcEnv ty'))
->   where (ConstrInfo n cxL' cxR',ty') =
->           toConstrType' cxL tc tvs cxR tys
->         QualType cxL'' _ = expandQualType tcEnv (contextMap (const cxL') ty')
+>   (ConstrInfo n' cxR'',normalize n (expandQualType tcEnv ty'))
+>   where n = length tvs
+>         (ConstrInfo n' cxR',ty') = toConstrType' cxL tc tvs cxR tys
 >         QualType cxR'' _ =
 >           normalize n (expandQualType tcEnv (contextMap (const cxR') ty'))
 

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: TypeCheck.lhs 2432 2007-08-09 15:05:49Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -433,7 +433,7 @@ general than the type signature.
 >     theta <- liftSt fetchSt
 >     let ty = subst theta alpha
 >         tvs = if forEval then zeroSet else fromListSet (typeVars ty)
->     checkSkolems p tcEnv (text "Goal:" <+> ppExpr 0 e) tvs cx ty
+>     checkSkolems p tcEnv (text "Goal:" <+> ppExpr 0 e) zeroSet cx ty
 >     cx' <- applyDefaults p "goal" (ppExpr 0 e) tcEnv tvs cx ty
 >     return (cx',Goal p e' ds')
 
@@ -1546,14 +1546,15 @@ environment.
 \begin{verbatim}
 
 > skol :: TCEnv -> (ConstrInfo,TypeScheme) -> TcState (Context,Type)
-> skol tcEnv (ConstrInfo m cxL cxR,ForAll n (QualType _ ty)) =
+> skol tcEnv (ConstrInfo m cxR,ForAll n (QualType cx ty)) =
 >   do
->     tys <- replicateM m freshTypeVar
->     tys' <- replicateM (n - m) freshSkolem
+>     tys <- replicateM (n - m) freshTypeVar
+>     tys' <- replicateM m freshSkolem
 >     let tys'' = tys ++ tys'
 >     liftSt (liftSt (updateSt_ (apFst (bindSkolemInsts tys''))))
 >     return (map (expandAliasType tys) cxL,expandAliasType tys'' ty)
->   where bindSkolemInsts tys dEnv =
+>   where cxL = filter (`notElem` cxR) cx
+>         bindSkolemInsts tys dEnv =
 >           foldr bindSkolemInst dEnv
 >                 (map (expandAliasType tys) (maxContext tcEnv cxR))
 >         bindSkolemInst (TypePred cls ty) dEnv =

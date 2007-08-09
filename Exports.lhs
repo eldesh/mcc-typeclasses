@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: Exports.lhs 2432 2007-08-09 15:05:49Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -112,9 +112,10 @@ declarations which cannot be used in another module because
 > constrDecl :: TCEnv -> ValueEnv -> QualIdent -> [Ident] -> Ident
 >            -> ([ClassAssert],ConstrDecl)
 > constrDecl tcEnv tyEnv tc tvs c =
->   (cxL',ConstrDecl noPos (drop n (take n' tvs)) cxR' c (argTypes ty'))
->   where (ConstrInfo n cxL cxR,ForAll n' (QualType _ ty)) =
+>   (cxL',ConstrDecl noPos (drop (n - n') (take n tvs)) cxR' c (argTypes ty'))
+>   where (ConstrInfo n' cxR,ForAll n (QualType cx ty)) =
 >           conType (qualifyLike tc c) tyEnv
+>         cxL = filter (`notElem` cxR) cx
 >         QualTypeExpr cxL' _ = fromQualType tcEnv tvs (QualType cxL ty)
 >         QualTypeExpr cxR' ty' = fromQualType tcEnv tvs (QualType cxR ty)
 

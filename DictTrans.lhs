@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: DictTrans.lhs 2432 2007-08-09 15:05:49Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -91,7 +91,7 @@ p.~\pageref{dict-specialize}.
 >          dss <- mapM (methodStubs m tcEnv' tyEnv') ds
 >          tyEnv'' <- fetchSt
 >          return (tcEnv',tyEnv'',Module m es is (ds' ++ concat dss)))
->       (rebindFuns tcEnv' tyEnv')
+>       (dictTransValues tcEnv' tyEnv')
 >   where tcEnv' = bindDictTypes m tcEnv
 >         tyEnv' = bindClassDecls m tcEnv' (bindInstDecls m tcEnv' iEnv tyEnv)
 >         nEnv = newtypeEnv tyEnv
@@ -237,8 +237,7 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 
 > bindClassDict :: ModuleIdent -> QualIdent -> Int -> TypeScheme -> ValueEnv
 >               -> ValueEnv
-> bindClassDict m c n ty =
->   bindEntity m c (DataConstructor c n (constrInfo ty) ty)
+> bindClassDict m c n ty = bindEntity m c (DataConstructor c n stdConstrInfo ty)
 
 > bindClassFun :: ModuleIdent -> QualIdent -> TypeScheme -> ValueEnv -> ValueEnv
 > bindClassFun m f ty = bindEntity m f (Value f 0 ty)
@@ -590,13 +589,13 @@ are added to all occurrences of $C$ in patterns.
 
 > type DictEnv = Env TypePred (Expression Type)
 
-> rebindFuns :: TCEnv -> ValueEnv -> ValueEnv
-> rebindFuns tcEnv = fmap transInfo
+> dictTransValues :: TCEnv -> ValueEnv -> ValueEnv
+> dictTransValues tcEnv = fmap transInfo
 >   where transInfo (DataConstructor c _ ci (ForAll n ty)) =
 >           DataConstructor c (arrowArity ty') (constrInfo ci)
 >                           (ForAll n (qualType ty'))
 >           where ty' = transformConstrType tcEnv ci ty
->                 constrInfo (ConstrInfo n _ _) = ConstrInfo n [] []
+>                 constrInfo (ConstrInfo n _) = ConstrInfo n []
 >         transInfo (NewtypeConstructor c ty) =
 >           NewtypeConstructor c (tmap (qualType . unqualType) ty)
 >         transInfo (Value f n ty) = Value f n' ty'
@@ -1109,7 +1108,7 @@ declaration.
 \begin{verbatim}
 
 > constrTypeRhs :: ConstrInfo -> QualType -> QualType
-> constrTypeRhs (ConstrInfo _ _ cxR) (QualType _ ty) = QualType cxR ty
+> constrTypeRhs (ConstrInfo _ cxR) (QualType _ ty) = QualType cxR ty
 
 > conTypeRhs :: QualIdent -> ValueEnv -> TypeScheme
 > conTypeRhs c tyEnv = uncurry (tmap . constrTypeRhs) (conType c tyEnv)

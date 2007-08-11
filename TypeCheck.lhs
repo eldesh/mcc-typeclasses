@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2434 2007-08-11 12:39:47Z wlux $
+% $Id: TypeCheck.lhs 2435 2007-08-11 13:49:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -425,17 +425,15 @@ general than the type signature.
 >        -> TcState (Context,Goal Type)
 > tcGoal forEval m tcEnv (Goal p e ds) =
 >   do
->     tyEnv0 <- fetchSt
->     alpha <- freshTypeVar
->     (cx,SimpleRhs _ e' ds') <-
->       tcRhs m tcEnv (SimpleRhs p e ds) >>-
->       unifyDecl p "goal" (ppExpr 0 e) tcEnv tyEnv0 [] alpha
+>     (cx,ds') <- tcDecls m tcEnv ds
+>     (cx',ty,e') <- tcExpr m tcEnv p e
+>     cx'' <- reduceContext p "goal" (ppExpr 0 e) tcEnv (cx ++ cx')
+>     checkSkolems p tcEnv (text "Goal:" <+> ppExpr 0 e) zeroSet cx'' ty
 >     theta <- liftSt fetchSt
->     let ty = subst theta alpha
->         tvs = if forEval then zeroSet else fromListSet (typeVars ty)
->     checkSkolems p tcEnv (text "Goal:" <+> ppExpr 0 e) zeroSet cx ty
->     cx' <- applyDefaults p "goal" (ppExpr 0 e) tcEnv tvs cx ty
->     return (cx',Goal p e' ds')
+>     let ty' = subst theta ty
+>         tvs = if forEval then zeroSet else fromListSet (typeVars ty')
+>     cx''' <- applyDefaults p "goal" (ppExpr 0 e) tcEnv tvs cx'' ty'
+>     return (cx''',Goal p e' ds')
 
 > unifyDecl :: Position -> String -> Doc -> TCEnv -> ValueEnv -> Context -> Type
 >           -> Context -> Type -> TcState Context

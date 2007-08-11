@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: Types.lhs 2434 2007-08-11 12:39:47Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -62,7 +62,7 @@ list of argument types such that the root type is either a type
 constructor, a type variable, or a skolem type. If the \texttt{dflt}
 argument of \texttt{unapplyType} is \texttt{True}, constrained type
 variables are fixed to their first alternative, otherwise they are
-regarded as type variables. The function \texttt{rootOfType} returns
+handled like type variables. The function \texttt{rootOfType} returns
 the name of the type constructor at the root of a type. This function
 must not be applied to a type whose root is a type variable or a
 skolem type.
@@ -134,6 +134,10 @@ generalized.
 >   typeVars :: t -> [Int]
 >   typeSkolems :: t -> [Int]
 
+> instance IsType a => IsType [a] where
+>   typeVars = concatMap typeVars
+>   typeSkolems = concatMap typeSkolems
+
 > instance IsType Type where
 >   typeVars ty = vars ty []
 >     where vars (TypeConstructor _) tvs = tvs
@@ -155,13 +159,14 @@ Qualified types represent types with class membership constraints. A
 qualified type $\emph{cx}\Rightarrow\tau$ consists of a plain type
 $\tau$ and a context \emph{cx}, which is a list of type predicates
 $C_i\,\tau_i$ that must be satisfied. A type predicate $C_i\,\tau_i$
-is satisfied if the type $\tau_i$ is an instance of class $C_i$. In
-general, the types $\tau_i$ are simple type variables, which are free
-in $\tau$. Type predicates where $\tau_i$ is not a simple type
-variable may occur in intermediate contexts computed during type
-inference. However, such predicates can be proved to be either
-satisfied or not, or they can be transformed into simpler predicates
-where all types are just type variables.
+is satisfied if the type $\tau_i$ is an instance of class $C_i$.
+Normally, each type $\tau_i$ has the form $\alpha\,\tau_1,\dots\tau_k$
+($k\geq0$), where $\alpha$ is a type variable and $\tau_1,\dots\tau_k$
+are types. Type predicates where $\tau_i$ has a different form may
+occur in intermediate contexts computed during type inference.
+However, such predicates can be proved to be either satisfied or not,
+or they can be transformed into simpler predicates where all types are
+of the form $\alpha\,\tau_1,\dots\tau_k$.
 
 The order of predicates in a qualified type does not matter. In order
 to define a canonical representation for qualified types, the compiler
@@ -197,14 +202,14 @@ apply to the same type variable are grouped together.
 > contextMap f (QualType cx ty) = QualType (f cx) ty
 
 \end{verbatim}
-The free and skolem variables of a qualified type are computed from
-the plain type because the context of a qualified type must constrain
-only variables that are free in the type itself.
+Usually, the free and skolem variables of the context of a qualified
+type are free in the plain type itself, but this is not necessarily
+the case.
 \begin{verbatim}
 
 > instance IsType QualType where
->   typeVars (QualType _ ty) = typeVars ty
->   typeSkolems (QualType _ ty) = typeSkolems ty
+>   typeVars (QualType cx ty) = typeVars ty ++ typeVars cx
+>   typeSkolems (QualType cx ty) = typeSkolems ty ++ typeSkolems cx
 
 > instance IsType TypePred where
 >   typeVars (TypePred _ ty) = typeVars ty
@@ -216,9 +221,12 @@ introduce (universal) quantification of type variables in qualified
 types. The universally quantified type variables in a type are
 assigned increasing indices starting at 0. Therefore, it is sufficient
 to record only the number of quantified type variables in the
-\texttt{ForAll} constructor. The context \emph{cx} in a type scheme
-must contain only predicates of the form $C_i\,\alpha_i$ where each
-$\alpha_i$ is one of the universally quantified type variables.
+\texttt{ForAll} constructor. The context \emph{cx} of a type scheme
+must contain only predicates of the form
+$C\,(\alpha\,\tau_1\dots\tau_k)$ ($k\geq0$) where the type variable
+$\alpha$ and the free variables of the types $\tau_1,\dots,\tau_k$ are
+either free in the plain type $\tau$ or are monomorphic type variables
+that are bound in the type environment.
 
 In general, type variables are assigned indices from left to right in
 the order of their occurrence in a type. However, a slightly different

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSubst.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: TypeSubst.lhs 2434 2007-08-11 12:39:47Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -56,8 +56,8 @@ This module implements substitutions on types.
 >     canonType (QualType (subst sigma cx) (subst sigma ty))
 
 > instance SubstType TypeScheme where
->   subst sigma (ForAll n (QualType cx ty)) =
->     ForAll n (QualType cx (subst (foldr unbindSubst sigma [0..n-1]) ty))
+>   subst sigma (ForAll n ty) = ForAll n (subst sigma' ty)
+>     where sigma' = foldr unbindSubst sigma [0..n-1]
 
 > instance SubstType ValueInfo where
 >   subst _ (DataConstructor c n ci ty) = DataConstructor c n ci ty

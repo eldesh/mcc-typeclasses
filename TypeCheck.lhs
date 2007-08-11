@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2432 2007-08-09 15:05:49Z wlux $
+% $Id: TypeCheck.lhs 2434 2007-08-11 12:39:47Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -318,17 +318,17 @@ general than the type signature.
 >     (cx',ds') <- mapAccumM (tcDecl m tcEnv) cx ds
 >     tyEnv <- fetchSt
 >     theta <- liftSt fetchSt
->     let vs = [v | PatternDecl _ t rhs <- map thd3 ds',
+>     let vs = [v | (_,_,PatternDecl _ t rhs) <- ds',
 >                   not (isVariablePattern t && isNonExpansive tcEnv tyEnv rhs),
 >                   v <- bv t]
->         vs' = [v | PatternDecl _ (VariablePattern _ v) rhs <- ds,
+>         vs' = [v | (_,_,PatternDecl _ (VariablePattern _ v) rhs) <- ds',
 >                    isNonExpansive tcEnv tyEnv rhs]
 >         tvs = concatMap (typeVars . subst theta . flip varType tyEnv) vs
 >         tvs' = concatMap (typeVars . subst theta . flip varType tyEnv) vs'
 >         fvs = foldr addToSet (fvEnv (subst theta tyEnv0))
->                     (tvs ++ filter (`elem` concatMap typeVars cx') tvs')
+>                     (tvs ++ filter (`elem` typeVars cx') tvs')
 >         (gcx,lcx) = splitContext fvs cx'
->     ds'' <- mapM (uncurry3 (dfltDecl tcEnv) . mergeContext lcx theta) ds'
+>     ds'' <- mapM (uncurry3 (dfltDecl tcEnv fvs) . mergeContext lcx theta) ds'
 >     ds''' <- mapM (uncurry3 (genDecl m tcEnv tyEnv sigs fvs)) ds''
 >     return (gcx,ds''')
 >   where mergeContext cx1 theta (cx2,ty,d) = (cx1 ++ cx2,subst theta ty,d)
@@ -506,16 +506,17 @@ declaration.  These two parts are merged again before applying
 \texttt{dfltDecl} to the types.
 \begin{verbatim}
 
-> dfltDecl :: TCEnv -> Context -> Type -> Decl Type
+> dfltDecl :: TCEnv -> Set Int -> Context -> Type -> Decl Type
 >          -> TcState (Context,Type,Decl Type)
-> dfltDecl tcEnv cx ty (FunctionDecl p f eqs) =
+> dfltDecl tcEnv fvs cx ty (FunctionDecl p f eqs) =
 >   do
 >     theta <- liftSt fetchSt
->     cx' <- applyDefaults p what empty tcEnv (fromListSet (typeVars ty)) cx ty
+>     cx' <- applyDefaults p what empty tcEnv fvs' cx ty
 >     theta' <- liftSt (changeSt theta)
 >     return (cx',ty,fmap (subst theta') (FunctionDecl p f eqs))
 >   where what = "function " ++ name f
-> dfltDecl _ cx ty (PatternDecl p t rhs) = return (cx,ty,PatternDecl p t rhs)
+>         fvs' = foldr addToSet fvs (typeVars ty)
+> dfltDecl _ _ cx ty (PatternDecl p t rhs) = return (cx,ty,PatternDecl p t rhs)
 
 \end{verbatim}
 The code in \texttt{genDecl} below verifies that the inferred type of
@@ -1450,7 +1451,7 @@ Haskell'98 report~\cite{PeytonJones03:Haskell}).
 >                            tv `notElemSet` fvs, isNumClass tcEnv cls])
 >         cx' = fst (partitionContext (subst theta cx))
 >         ty' = subst theta ty
->         tvs' = nub (filter (`notElemSet` fvs) (concatMap typeVars cx'))
+>         tvs' = nub (filter (`notElemSet` fvs) (typeVars cx'))
 >     unless (null tvs') (errorAt p (ambiguousType what doc tcEnv tvs' cx' ty'))
 >     liftSt (updateSt_ (compose theta))
 >     return cx'
@@ -1493,9 +1494,9 @@ escaping skolems at every let binding, but is still sound.
 >              -> TcState ()
 > checkSkolems p tcEnv what fs cx ty =
 >   do
->     ty' <- liftM (flip subst ty) (liftSt fetchSt)
->     unless (all (`elemSet` fs) (typeSkolems ty' ++ concatMap typeSkolems cx))
->            (errorAt p (skolemEscapingScope tcEnv what (QualType cx ty')))
+>     ty' <- liftM (QualType cx . flip subst ty) (liftSt fetchSt)
+>     unless (all (`elemSet` fs) (typeSkolems ty'))
+>            (errorAt p (skolemEscapingScope tcEnv what ty'))
 
 \end{verbatim}
 \paragraph{Instantiation and Generalization}
@@ -1592,10 +1593,10 @@ here because we know that they are closed.
 \begin{verbatim}
 
 > fvEnv :: ValueEnv -> Set Int
-> fvEnv tyEnv = fromListSet (concatMap typeVars (localTypes tyEnv))
+> fvEnv tyEnv = fromListSet (typeVars (localTypes tyEnv))
 
 > fsEnv :: ValueEnv -> Set Int
-> fsEnv tyEnv = fromListSet (concatMap typeSkolems (localTypes tyEnv))
+> fsEnv tyEnv = fromListSet (typeSkolems (localTypes tyEnv))
 
 > localTypes :: ValueEnv -> [TypeScheme]
 > localTypes tyEnv = [ty | (_,Value _ _ ty) <- localBindings tyEnv]

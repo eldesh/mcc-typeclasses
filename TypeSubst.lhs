@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSubst.lhs 2434 2007-08-11 12:39:47Z wlux $
+% $Id: TypeSubst.lhs 2436 2007-08-11 14:18:50Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -52,8 +52,7 @@ This module implements substitutions on types.
 >   subst sigma (TypePred cls ty) = TypePred cls (subst sigma ty)
 
 > instance SubstType QualType where
->   subst sigma (QualType cx ty) =
->     canonType (QualType (subst sigma cx) (subst sigma ty))
+>   subst sigma (QualType cx ty) = QualType (subst sigma cx) (subst sigma ty)
 
 > instance SubstType TypeScheme where
 >   subst sigma (ForAll n ty) = ForAll n (subst sigma' ty)
@@ -106,11 +105,11 @@ respectively.
 
 > instance ExpandAliasType QualType where
 >   expandAliasType tys (QualType cx ty) =
->     canonType (QualType (map (expandAliasType tys) cx)
->                         (expandAliasType tys ty))
+>     QualType (map (expandAliasType tys) cx) (expandAliasType tys ty)
 
 > normalize :: Int -> QualType -> QualType
-> normalize n ty = expandAliasType [TypeVariable (occur tv) | tv <- [0..]] ty
+> normalize n ty =
+>   canonType (expandAliasType [TypeVariable (occur tv) | tv <- [0..]] ty)
 >   where tvs' = zip (nub (filter (>= n) (typeVars ty))) [n..]
 >         occur tv = fromMaybe tv (lookup tv tvs')
 

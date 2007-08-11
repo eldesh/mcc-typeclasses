@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2435 2007-08-11 13:49:08Z wlux $
+% $Id: TypeCheck.lhs 2436 2007-08-11 14:18:50Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1568,7 +1568,7 @@ latter is given by \texttt{gen}'s first argument.
 \begin{verbatim}
 
 > gen :: Set Int -> Context -> Type -> TypeScheme
-> gen fvs cx ty = ForAll (length tvs) (subst theta (QualType cx ty))
+> gen fvs cx ty = ForAll (length tvs) (canonType (subst theta (QualType cx ty)))
 >   where tvs = [tv | tv <- nub (typeVars ty), tv `notElemSet` fvs]
 >         theta = foldr2 bindSubst idSubst tvs (map TypeVariable [0..])
 

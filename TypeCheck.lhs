@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2436 2007-08-11 14:18:50Z wlux $
+% $Id: TypeCheck.lhs 2437 2007-08-11 22:57:57Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -265,9 +265,10 @@ right hand side of a pattern declaration. As in Haskell, this
 restriction can be overridden with an explicit type signature.
 
 Within a group of mutually recursive declarations, all type variables
-that appear in the types of the variables defined in the group must
-not be generalized. Without this restriction, the compiler would
-accept the function
+that appear in the types of the variables defined in the group and
+whose type cannot be generalized must not be generalized in the other
+declarations of that group as well. Without this restriction, the
+compiler would accept the function
 \begin{verbatim}
   illTyped = x=:=1 &> f True "Hello"
     where (x:xs) = f True (repeat unknown)
@@ -277,6 +278,26 @@ accept the function
 whose result is the ill-typed list \verb|['H',1,'l',1,'o']|,
 because \verb|f|'s type would incorrectly be generalized to
 $\forall\alpha.\texttt{Bool}\rightarrow[\alpha]\rightarrow[\alpha]$.
+
+A rather delicate issue is the handling of contexts in mutually
+recursive declaration groups. Since the types of the functions and
+variables are monomorphic within a mutually recursive declaration
+group (unless polymorphic recursion is used with the help of a type
+signature), all declarations of a declaration group must use the same
+context. However, this does not hold when there are explicitly typed
+declarations in a declaration group. Since the compiler uses fresh
+type variables for each use of an explicitly typed polymorphic
+function or variable, the type variables occurring in the inferred
+type of an explicitly typed declaration are completely unrelated to
+the type variables occurring in the other declarations of that group.
+In particular, this means that the contexts inferred for the
+explicitly typed declarations must not be visible in the other
+declarations of that group. Therefore, the context inferred for each
+declaration is split in \texttt{tcDecl} below into an accumulated
+``global'' context and a ``local'' context, which is visible only for
+the respective declaration. The ``local'' part, in particular,
+includes all constraints that were inferred for an explicitly typed
+declaration and is empty for an implicitly typed declaration.
 
 Note that \texttt{tcFunctionDecl} ignores the context of a function's
 type signature. This prevents spurious missing instance errors when
@@ -315,8 +336,8 @@ general than the type signature.
 >   do
 >     tyEnv0 <- fetchSt
 >     mapM_ (bindDecl m tcEnv sigs) ds
->     (cx',ds') <- mapAccumM (tcDecl m tcEnv) cx ds
 >     tyEnv <- fetchSt
+>     (cx',ds') <- mapAccumM (tcDecl m tcEnv tyEnv) cx ds
 >     theta <- liftSt fetchSt
 >     let vs = [v | (_,_,PatternDecl _ t rhs) <- ds',
 >                   not (isVariablePattern t && isNonExpansive tcEnv tyEnv rhs),
@@ -361,28 +382,28 @@ general than the type signature.
 >       | otherwise -> errorAt p (polymorphicVar v)
 >     Nothing -> bindLambdaVar m v
 
-> tcDecl :: ModuleIdent -> TCEnv -> Context -> Decl a
+> tcDecl :: ModuleIdent -> TCEnv -> ValueEnv -> Context -> Decl a
 >        -> TcState (Context,(Context,Type,Decl Type))
-> tcDecl m tcEnv cx (FunctionDecl p f eqs) =
+> tcDecl m tcEnv tyEnv0 cx (FunctionDecl p f eqs) =
 >   do
->     tyEnv0 <- fetchSt
->     (cx',(ty',d')) <-
+>     (cx',ty',d') <-
 >       tcFunctionDecl "function" m tcEnv cx (varType f tyEnv0) p f eqs
 >     theta <- liftSt fetchSt
 >     let (gcx,lcx) = splitContext (fvEnv (subst theta tyEnv0)) cx'
 >     return (gcx,(lcx,ty',d'))
-> tcDecl m tcEnv cx d@(PatternDecl p t rhs) =
+> tcDecl m tcEnv tyEnv0 cx d@(PatternDecl p t rhs) =
 >   do
->     tyEnv0 <- fetchSt
 >     (cx',ty',t') <- tcConstrTerm tcEnv p t
 >     (cx'',rhs') <-
 >       tcRhs m tcEnv rhs >>-
 >       unifyDecl p "pattern declaration" (ppDecl d) tcEnv tyEnv0 (cx++cx') ty'
->     return (cx'',([],ty',PatternDecl p t' rhs'))
+>     theta <- liftSt fetchSt
+>     let (gcx,lcx) = splitContext (fvEnv (subst theta tyEnv0)) cx''
+>     return (gcx,(lcx,ty',PatternDecl p t' rhs'))
 
 > tcFunctionDecl :: String -> ModuleIdent -> TCEnv -> Context -> TypeScheme
 >                -> Position -> Ident -> [Equation a]
->                -> TcState (Context,(Type,Decl Type))
+>                -> TcState (Context,Type,Decl Type)
 > tcFunctionDecl what m tcEnv cx ty p f eqs =
 >   do
 >     tyEnv0 <- fetchSt
@@ -392,7 +413,7 @@ general than the type signature.
 >       mapM (tcEquation m tcEnv (fsEnv (subst theta tyEnv0)) ty' f) eqs
 >     cx' <- reduceContext p what' (ppDecl (FunctionDecl p f eqs)) tcEnv
 >                          (cx ++ concat cxs)
->     return (cx',(ty',FunctionDecl p f eqs'))
+>     return (cx',ty',FunctionDecl p f eqs')
 >   where what' = what ++ " declaration"
 
 > tcEquation :: ModuleIdent -> TCEnv -> Set Int -> Type -> Ident -> Equation a
@@ -487,21 +508,6 @@ function \texttt{dfltDecl} below. After resolving ambiguous type
 variables in the type of a function declaration, this function
 restores the old substitution and applies the substitution that fixes
 the ambiguous type variables to the function's type annotations only.
-
-A minor complication arises from explicitly typed declarations in a
-binding group. The compiler creates a fresh instance of its type
-signature at every place where an explicitly typed function is used,
-including the left hand side of its own declaration. The constraints
-that apply to these fresh type variables must not be considered in
-other declarations when checking for ambiguous types. Nevertheless,
-they must be taken into account when checking that the inferred type
-is not less general than the type signature in \texttt{genDecl} below.
-For that reason the inferred context of a function is split in the
-\texttt{FunctionDecl} case of \texttt{tcDecl} above into a global
-part, which applies to other declarations in the same binding group as
-well, and a local part, which applies only to the particular
-declaration.  These two parts are merged again before applying
-\texttt{dfltDecl} to the types.
 \begin{verbatim}
 
 > dfltDecl :: TCEnv -> Set Int -> Context -> Type -> Decl Type
@@ -567,7 +573,7 @@ matter whether it its evaluation is shared or not.
 >     VariablePattern _ v ->
 >       case lookupEnv v sigs of
 >         Just sigTy
->           | sigma == typeScheme (expandPolyType tcEnv sigTy) ->
+>           | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma ->
 >               return (if null cx then d else funDecl p v rhs)
 >           | otherwise -> errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
 >           where funDecl p f rhs =
@@ -725,7 +731,7 @@ case of \texttt{tcTopDecl}.
 > tcMethodDecl m tcEnv methTy (MethodDecl p f eqs) =
 >   do
 >     updateSt_ (bindFun m f (eqnArity (head eqs)) methTy)
->     (cx,(ty,d')) <- tcFunctionDecl "method" m tcEnv [] methTy p f eqs
+>     (cx,ty,d') <- tcFunctionDecl "method" m tcEnv [] methTy p f eqs
 >     theta <- liftSt fetchSt
 >     return (gen zeroSet cx (subst theta ty),d')
 
@@ -835,6 +841,11 @@ Note that the type attribute associated with a constructor or infix
 pattern is the type of the whole pattern and not the type of the
 constructor itself. Also note that overloaded literals are not
 supported in patterns.
+
+When computing the type of a variable in a pattern, we ignore the
+context of the variable's type (which can only be due to a type
+signature in the same declaration group) for just the same reason as
+in \texttt{tcFunctionDecl} above.
 \begin{verbatim}
 
 > tcLiteral :: Bool -> Literal -> TcState (Context,Type)
@@ -875,8 +886,8 @@ supported in patterns.
 >     return (cx,ty,NegativePattern ty l)
 > tcConstrTerm _ _ (VariablePattern _ v) =
 >   do
->     (cx,ty) <- fetchSt >>= inst . varType v
->     return (cx,ty,VariablePattern ty v)
+>     (_,ty) <- fetchSt >>= inst . varType v
+>     return ([],ty,VariablePattern ty v)
 > tcConstrTerm tcEnv p t@(ConstructorPattern _ c ts) =
 >   do
 >     (cx,ty,ts') <- tcConstrApp tcEnv p (ppConstrTerm 0 t) c ts
@@ -904,11 +915,11 @@ supported in patterns.
 >                 tcEnv ty
 > tcConstrTerm tcEnv p t@(AsPattern v t') =
 >   do
->     (cx,ty) <- fetchSt >>= inst . varType v
->     (cx',t'') <-
+>     (_,ty) <- fetchSt >>= inst . varType v
+>     (cx,t'') <-
 >       tcConstrTerm tcEnv p t' >>-
 >       unify p "pattern" (ppConstrTerm 0 t) tcEnv ty
->     return (cx ++ cx',ty,AsPattern v t'')
+>     return (cx,ty,AsPattern v t'')
 > tcConstrTerm tcEnv p (LazyPattern t) =
 >   do
 >     (cx,ty,t') <- tcConstrTerm tcEnv p t

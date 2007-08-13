@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2443 2007-08-13 17:21:45Z wlux $
+% $Id: TypeCheck.lhs 2444 2007-08-13 18:27:20Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -278,14 +278,15 @@ Obviously, this generalization does not hold for Curry with
   \texttt{fromInt} and \texttt{fromFloat} instance method
   implementations are deterministic.}
 
-While generalizing the types of variables bound to a non-expansive
-expression, we must be careful not to quantify any type variables
-with type class constraints. The technical reason for this
-restriction, which is just Haskell's monomorphism restriction
-(cf.\ Sect.~4.5.5 of~\cite{PeytonJones03:Haskell}), is that only a
-single dictionary can be used for each overloaded type variable on the
-right hand side of a pattern declaration. As in Haskell, this
-restriction can be overridden with an explicit type signature.
+Note that we do not implement Haskell's monomorphism restriction
+(cf.\ Sect.~4.5.5 in~\cite{PeytonJones03:Haskell}), which prevents
+generalization of constrained type variables in the types of simple
+pattern bindings of the form $x=e$ without an explicit type signature.
+The motivation for this restriction is that sharing is lost for an
+overloaded declaration, which might cause an expensive computation to
+be repeated. However, this argument does not apply to Curry since
+generalization is allowed only when $e$ is a non-expansive expression,
+i.e., essentially a normal form.
 
 Within a group of mutually recursive declarations, all type variables
 that appear in the types of the variables defined in the group and
@@ -345,11 +346,7 @@ general than the type signature.
 >     let tvs = [tv | (ty,PatternDecl _ t rhs) <- impDs',
 >                     not (isVariablePattern t && isNonExpansive tyEnv rhs),
 >                     tv <- typeVars (subst theta ty)]
->         tvs' = [tv | (ty,PatternDecl _ (VariablePattern _ v) rhs) <- impDs',
->                      isNonExpansive tyEnv rhs,
->                      tv <- typeVars (subst theta ty)]
->         fvs = foldr addToSet (fvEnv (subst theta tyEnv0))
->                     (tvs ++ filter (`elem` typeVars cx') tvs')
+>         fvs = foldr addToSet (fvEnv (subst theta tyEnv0)) tvs
 >         (gcx,lcx) = splitContext fvs cx'
 >     lcx' <- foldM (uncurry . dfltDecl tcEnv fvs) lcx impDs'
 >     theta <- liftSt fetchSt
@@ -525,24 +522,26 @@ to make use of this fact.
   typed declarations of a declaration group use exactly the same
   context, i.e., contexts must not be sorted during generalization in
   function \texttt{gen} below.}
-
-Note that \texttt{dftlDecl} does not check for ambiguous type
-variables in pattern declarations. This is not necessary because all
-constrained type variables in the types of (non-expansive) pattern
-declarations are monomorphic as the compiler implements Haskell's
-monomorphism restriction.
 \begin{verbatim}
 
 > dfltDecl :: TCEnv -> Set Int -> Context -> Type -> Decl Type
 >          -> TcState Context
 > dfltDecl tcEnv fvs cx ty (FunctionDecl p f _) =
+>   applyDefaultsDecl p ("function " ++ name f) tcEnv fvs cx ty
+> dfltDecl tcEnv fvs cx ty (PatternDecl p t _) =
+>   case t of
+>     VariablePattern _ v ->
+>       applyDefaultsDecl p ("variable " ++ name v) tcEnv fvs cx ty
+>     _ -> return cx
+
+> applyDefaultsDecl :: Position -> String -> TCEnv -> Set Int -> Context -> Type
+>                   -> TcState Context
+> applyDefaultsDecl p what tcEnv fvs cx ty =
 >   do
 >     theta <- liftSt fetchSt
 >     let ty' = subst theta ty
 >         fvs' = foldr addToSet fvs (typeVars ty')
 >     applyDefaults p what empty tcEnv fvs' cx ty'
->   where what = "function " ++ name f
-> dfltDecl _ _ cx _ (PatternDecl _ _ _) = return cx
 
 \end{verbatim}
 The function \texttt{genDecl} saves the generalized type of a function

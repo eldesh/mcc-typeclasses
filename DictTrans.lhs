@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2443 2007-08-13 17:21:45Z wlux $
+% $Id: DictTrans.lhs 2444 2007-08-13 18:27:20Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -588,10 +588,7 @@ are added to all occurrences of $C$ in patterns.
 The pattern declaration case of the \texttt{DictTrans} \texttt{Decl}
 instance converts variable declarations with an overloaded type into
 function declarations. This is necessary so that the compiler can add
-the implicit dictionary arguments to the declaration when Haskell's
-monomorphism restriction, which prevents generalization of constrained
-type variables in variable declarations, is overridden using an
-explicit type signature.
+the implicit dictionary arguments to the declaration.
 \begin{verbatim}
 
 > type DictEnv = Env TypePred (Expression Type)

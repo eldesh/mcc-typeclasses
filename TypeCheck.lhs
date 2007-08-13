@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2440 2007-08-12 23:02:28Z wlux $
+% $Id: TypeCheck.lhs 2441 2007-08-13 13:48:46Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -188,14 +188,27 @@ the signature.
 \end{verbatim}
 \paragraph{Declaration Groups}
 Before type checking a group of declarations, a dependency analysis is
-performed and the declaration group is split into minimal, nested
+performed and the declaration group is split into minimal nested
 binding groups which are checked separately. Within each binding
 group, first the type environment is extended with new bindings for
-all variables and functions defined in the group. Next, each
-declaration is checked in the extended type environment. Finally, the
-types of all defined functions are generalized. The generalization
-step will also check that the type signatures given by the user match
-the inferred types.
+all variables and functions defined in the group. Next, types are
+inferred for all declarations without an explicit type signature and
+the inferred types are then generalized. Finally, the types of all
+explicitly typed declarations are checked.
+
+The idea of checking the explicitly typed declarations after the
+implicitly typed declarations is due to Mark P.\ Jones' ``Typing
+Haskell in Haskell'' paper~\cite{Jones99:THiH}. It has the advantage
+of inferring more general types. For instance, given the declarations
+\begin{verbatim}
+  f :: Eq a => a -> Bool
+  f x = (x==x) || g True
+  g y = (y<=y) || f True
+\end{verbatim}
+the compiler will infer type \texttt{Ord a => a -> Bool} for
+\texttt{g} if \texttt{f} is checked after inferring a type for
+\texttt{g}, but only type \texttt{Bool -> Bool} if both declarations
+are checked together.
 
 The presence of unbound logical variables necessitates a monomorphism
 restriction that prohibits unsound functions like
@@ -279,26 +292,6 @@ whose result is the ill-typed list \verb|['H',1,'l',1,'o']|,
 because \verb|f|'s type would incorrectly be generalized to
 $\forall\alpha.\texttt{Bool}\rightarrow[\alpha]\rightarrow[\alpha]$.
 
-A rather delicate issue is the handling of contexts in mutually
-recursive declaration groups. Since the types of the functions and
-variables are monomorphic within a mutually recursive declaration
-group (unless polymorphic recursion is used with the help of a type
-signature), all declarations of a declaration group must use the same
-context. However, this does not hold when there are explicitly typed
-declarations in a declaration group. Since the compiler uses fresh
-type variables for each use of an explicitly typed polymorphic
-function or variable, the type variables occurring in the inferred
-type of an explicitly typed declaration are completely unrelated to
-the type variables occurring in the other declarations of that group.
-In particular, this means that the contexts inferred for the
-explicitly typed declarations must not be visible in the other
-declarations of that group. Therefore, the context inferred for each
-declaration is split in \texttt{tcDecl} below into an accumulated
-``global'' context and a ``local'' context, which is visible only for
-the respective declaration. The ``local'' part, in particular,
-includes all constraints that were inferred for an explicitly typed
-declaration and is empty for an implicitly typed declaration.
-
 Note that \texttt{tcFunctionDecl} ignores the context of a function's
 type signature. This prevents spurious missing instance errors when
 the inferred type of a function is less general than the declared
@@ -337,21 +330,35 @@ general than the type signature.
 >     tyEnv0 <- fetchSt
 >     mapM_ (bindDecl m tcEnv sigs) ds
 >     tyEnv <- fetchSt
->     (cx',ds') <- mapAccumM (tcDecl m tcEnv tyEnv) cx ds
+>     (cx',impDs') <- mapAccumM (tcDecl m tcEnv tyEnv) cx impDs
 >     theta <- liftSt fetchSt
->     let tvs = [tv | (_,ty,PatternDecl _ t rhs) <- ds',
+>     let tvs = [tv | (ty,PatternDecl _ t rhs) <- impDs',
 >                     not (isVariablePattern t && isNonExpansive tyEnv rhs),
 >                     tv <- typeVars (subst theta ty)]
->         tvs' = [tv | (_,ty,PatternDecl _ (VariablePattern _ v) rhs) <- ds',
+>         tvs' = [tv | (ty,PatternDecl _ (VariablePattern _ v) rhs) <- impDs',
 >                      isNonExpansive tyEnv rhs,
 >                      tv <- typeVars (subst theta ty)]
 >         fvs = foldr addToSet (fvEnv (subst theta tyEnv0))
 >                     (tvs ++ filter (`elem` typeVars cx') tvs')
 >         (gcx,lcx) = splitContext fvs cx'
->     ds'' <- mapM (uncurry3 (dfltDecl tcEnv fvs) . mergeContext lcx theta) ds'
->     ds''' <- mapM (\(cx,ty,d) -> genDecl m tcEnv sigs (gen fvs cx ty) d) ds''
->     return (gcx,ds''')
->   where mergeContext cx1 theta (cx2,ty,d) = (cx1 ++ cx2,subst theta ty,d)
+>     impDs'' <- mapM (uncurry (dfltDecl tcEnv fvs lcx . subst theta)) impDs'
+>     mapM_ (uncurry3 (\cx -> genDecl m . gen fvs cx)) impDs''
+>     (cx'',expDs') <- mapAccumM (uncurry . tcCheckDecl m tcEnv tyEnv) gcx expDs
+>     return (cx'',map thd3 impDs'' ++ expDs')
+>   where (impDs,expDs) = partDecls sigs ds
+
+> partDecls :: SigEnv -> [Decl a] -> ([Decl a],[(QualTypeExpr,Decl a)])
+> partDecls sigs =
+>   foldr (\d -> maybe (implicit d) (explicit d) (declTypeSig sigs d)) ([],[])
+>   where implicit d ~(impDs,expDs) = (d:impDs,expDs)
+>         explicit d ty ~(impDs,expDs) = (impDs,(ty,d):expDs)
+
+> declTypeSig :: SigEnv -> Decl a -> Maybe QualTypeExpr
+> declTypeSig sigs (FunctionDecl _ f _) = lookupEnv f sigs
+> declTypeSig sigs (PatternDecl _ t _) =
+>   case t of
+>     VariablePattern _ v -> lookupEnv v sigs
+>     _ -> Nothing
 
 > bindDecl :: ModuleIdent -> TCEnv -> SigEnv -> Decl a -> TcState ()
 > bindDecl m tcEnv sigs (FunctionDecl p f eqs) =
@@ -382,27 +389,20 @@ general than the type signature.
 >     Nothing -> bindLambdaVar m v
 
 > tcDecl :: ModuleIdent -> TCEnv -> ValueEnv -> Context -> Decl a
->        -> TcState (Context,(Context,Type,Decl Type))
+>        -> TcState (Context,(Type,Decl Type))
 > tcDecl m tcEnv tyEnv0 cx (FunctionDecl p f eqs) =
->   do
->     (cx',ty',d') <-
->       tcFunctionDecl "function" m tcEnv cx (varType f tyEnv0) p f eqs
->     theta <- liftSt fetchSt
->     let (gcx,lcx) = splitContext (fvEnv (subst theta tyEnv0)) cx'
->     return (gcx,(lcx,ty',d'))
+>   tcFunctionDecl "function" m tcEnv cx (varType f tyEnv0) p f eqs
 > tcDecl m tcEnv tyEnv0 cx d@(PatternDecl p t rhs) =
 >   do
 >     (cx',ty',t') <- tcConstrTerm tcEnv p t
 >     (cx'',rhs') <-
 >       tcRhs m tcEnv rhs >>-
 >       unifyDecl p "pattern declaration" (ppDecl d) tcEnv tyEnv0 (cx++cx') ty'
->     theta <- liftSt fetchSt
->     let (gcx,lcx) = splitContext (fvEnv (subst theta tyEnv0)) cx''
->     return (gcx,(lcx,ty',PatternDecl p t' rhs'))
+>     return (cx'',(ty',PatternDecl p t' rhs'))
 
 > tcFunctionDecl :: String -> ModuleIdent -> TCEnv -> Context -> TypeScheme
 >                -> Position -> Ident -> [Equation a]
->                -> TcState (Context,Type,Decl Type)
+>                -> TcState (Context,(Type,Decl Type))
 > tcFunctionDecl what m tcEnv cx ty p f eqs =
 >   do
 >     tyEnv0 <- fetchSt
@@ -412,7 +412,7 @@ general than the type signature.
 >       mapM (tcEquation m tcEnv (fsEnv (subst theta tyEnv0)) ty' f) eqs
 >     cx' <- reduceContext p what' (ppDecl (FunctionDecl p f eqs)) tcEnv
 >                          (cx ++ concat cxs)
->     return (cx',ty',FunctionDecl p f eqs')
+>     return (cx',(ty',FunctionDecl p f eqs'))
 >   where what' = what ++ " declaration"
 
 > tcEquation :: ModuleIdent -> TCEnv -> Set Int -> Type -> Ident -> Equation a
@@ -507,6 +507,9 @@ function \texttt{dfltDecl} below. After resolving ambiguous type
 variables in the type of a function declaration, this function
 restores the old substitution and applies the substitution that fixes
 the ambiguous type variables to the function's type annotations only.
+
+\ToDo{Must apply the substitution also to the types of all local
+  functions and variables declared inside the function.}
 \begin{verbatim}
 
 > dfltDecl :: TCEnv -> Set Int -> Context -> Type -> Decl Type
@@ -522,24 +525,40 @@ the ambiguous type variables to the function's type annotations only.
 > dfltDecl _ _ cx ty (PatternDecl p t rhs) = return (cx,ty,PatternDecl p t rhs)
 
 \end{verbatim}
-The code in \texttt{genDecl} below verifies that the inferred type of
-a function matches its declared type. Since the type inferred for the
-left hand side of a function or variable declaration is an instance of
-its declared type -- provided a type signature is given -- it can only
-be more specific. Therefore, if the inferred type does not match the
-type signature, the declared type must be too general. Note that it is
-possible that the inferred context is only a subset of the declared
+The function \texttt{genDecl} saves the generalized type of a function
+or variable declaration without a type signature in the type
+environment. The type has been generalized already by
+\texttt{tcDeclGroup}.
+\begin{verbatim}
+
+> genDecl :: ModuleIdent -> TypeScheme -> Decl a -> TcState ()
+> genDecl m ty (FunctionDecl _ f eqs) =
+>   updateSt_ (rebindFun m f (eqnArity (head eqs)) ty)
+> genDecl m ty (PatternDecl _ t _) =
+>   case t of
+>     VariablePattern _ v -> updateSt_ (rebindFun m v 0 ty)
+>     _ -> return ()
+
+\end{verbatim}
+The function \texttt{tcCheckDecl} checks the type of an explicitly
+typed function or variable declaration. After inferring a type for the
+declaration, the inferred type is compared with the type signature.
+Since the inferred type of an explicitly typed function or variable
+declaration is automatically an instance of its type signature (cf.\ 
+\texttt{tcDecl} above), the type signature is correct only if the
+inferred type matches the type signature exactly except for the
+inferred context, which may contain only a subset of the declared
 context because the context of a function's type signature is
 (deliberately) ignored in \texttt{tcFunctionDecl} above.
 
-As in Haskell, the restriction that the of constrained type variables
-in the type of a variable declaration \texttt{$x$=$e$} cannot be
+As in Haskell, the restriction that the constrained type variables in
+the type of a variable declaration \texttt{$x$=$e$} cannot be
 generalized, can be overridden with an explicit type signature.
 However, this also means that the result of expression $e$ can no
 longer be shared among the different occurrences of variable $x$,
 i.e., the declaration \texttt{$x$=$e$} must be interpreted as a
-(nullary) function definition. The variable declaration case of
-\texttt{genDecl} takes care of this.
+(nullary) function definition. The pattern declaration case of
+\texttt{checkDeclSig} takes care of this.
 
 Note that the transformation of a variable declaration into a nullary
 function declaration breaks the invariant that nullary functions can
@@ -556,30 +575,35 @@ matter whether it its evaluation is shared or not.
   definitions are deterministic.}
 \begin{verbatim}
 
-> genDecl :: ModuleIdent -> TCEnv -> SigEnv -> TypeScheme -> Decl a
->         -> TcState (Decl a)
-> genDecl m tcEnv sigs sigma d@(FunctionDecl p f eqs) =
->   case lookupEnv f sigs of
->     Just sigTy
->       | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma -> return d
->       | otherwise -> errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
->     Nothing ->
->       updateSt_ (rebindFun m f (eqnArity (head eqs)) sigma) >> return d
+> tcCheckDecl :: ModuleIdent -> TCEnv -> ValueEnv -> Context -> QualTypeExpr
+>             -> Decl a -> TcState (Context,Decl Type)
+> tcCheckDecl m tcEnv tyEnv cx sigTy d =
+>   do
+>     (cx',(ty,d')) <- tcDecl m tcEnv tyEnv cx d
+>     theta <- liftSt fetchSt
+>     let fvs = fvEnv (subst theta tyEnv)
+>         (gcx,lcx) = splitContext fvs cx'
+>         ty' = subst theta ty
+>         sigma = if poly then gen fvs lcx ty' else monoType ty'
+>     d'' <- checkDeclSig tcEnv sigTy sigma d'
+>     return (gcx,d'')
+>   where poly = isNonExpansive tyEnv d
+
+> checkDeclSig :: TCEnv -> QualTypeExpr -> TypeScheme -> Decl a
+>              -> TcState (Decl a)
+> checkDeclSig tcEnv sigTy sigma (FunctionDecl p f eqs)
+>   | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma =
+>       return (FunctionDecl p f eqs)
+>   | otherwise = errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
 >   where what = text "Function:" <+> ppIdent f
-> genDecl m tcEnv sigs sigma d@(PatternDecl p t rhs) =
->   case t of
->     VariablePattern _ v ->
->       case lookupEnv v sigs of
->         Just sigTy
->           | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma ->
->               return (if null (context sigma) then d else funDecl p v rhs)
->           | otherwise -> errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
->           where context (ForAll _ (QualType cx _)) = cx
->                 funDecl p f rhs =
->                   FunctionDecl p f [Equation p (FunLhs f []) rhs]
->         Nothing -> updateSt_ (rebindFun m v 0 sigma) >> return d
->       where what = text "Variable: " <+> ppIdent v
->     _ -> return d
+> checkDeclSig tcEnv sigTy sigma (PatternDecl p t rhs)
+>   | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma =
+>       return ((if null (context sigma) then PatternDecl else funDecl) p t rhs)
+>   | otherwise = errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
+>   where what = text "Variable:" <+> ppConstrTerm 0 t
+>         context (ForAll _ (QualType cx _)) = cx
+>         funDecl p (VariablePattern _ v) rhs =
+>           FunctionDecl p v [Equation p (FunLhs v []) rhs]
 
 > checkTypeSig :: TCEnv -> QualType -> TypeScheme -> Bool
 > checkTypeSig tcEnv (QualType sigCx sigTy) (ForAll _ (QualType cx ty)) =
@@ -721,7 +745,7 @@ case of \texttt{tcTopDecl}.
 > tcMethodDecl m tcEnv methTy (MethodDecl p f eqs) =
 >   do
 >     updateSt_ (bindFun m f (eqnArity (head eqs)) methTy)
->     (cx,ty,d') <- tcFunctionDecl "method" m tcEnv [] methTy p f eqs
+>     (cx,(ty,d')) <- tcFunctionDecl "method" m tcEnv [] methTy p f eqs
 >     theta <- liftSt fetchSt
 >     return (gen zeroSet cx (subst theta ty),d')
 

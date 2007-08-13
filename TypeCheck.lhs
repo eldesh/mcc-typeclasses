@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2442 2007-08-13 16:10:37Z wlux $
+% $Id: TypeCheck.lhs 2443 2007-08-13 17:21:45Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -267,6 +267,16 @@ a bit and that generalizing type variables that appear only in
 covariant positions is sound~\cite{Garrigue04:ValueRestriction}.
 Obviously, this generalization does not hold for Curry with
 \texttt{let x = unknown in x} being the canonical counter-example.
+
+\ToDo{Strictly speaking, numeric literals are not non-expansive since
+  they are just abbreviations for the saturated (in fact, over
+  applied) applications \texttt{Prelude.fromInt}~$i$ and
+  \texttt{Prelude.fromFloat}~$f$, respectively. Therefore, the
+  compiler should either consider all numeric literals expansive,
+  consider only numeric literals of some predefined types like
+  \texttt{Int}, \texttt{Float}, etc. non-expansive, or ensure that all
+  \texttt{fromInt} and \texttt{fromFloat} instance method
+  implementations are deterministic.}
 
 While generalizing the types of variables bound to a non-expansive
 expression, we must be careful not to quantify any type variables
@@ -560,29 +570,6 @@ inferred type matches the type signature exactly except for the
 inferred context, which may contain only a subset of the declared
 context because the context of a function's type signature is
 (deliberately) ignored in \texttt{tcFunctionDecl} above.
-
-As in Haskell, the restriction that the constrained type variables in
-the type of a variable declaration \texttt{$x$=$e$} cannot be
-generalized, can be overridden with an explicit type signature.
-However, this also means that the result of expression $e$ can no
-longer be shared among the different occurrences of variable $x$,
-i.e., the declaration \texttt{$x$=$e$} must be interpreted as a
-(nullary) function definition. The pattern declaration case of
-\texttt{checkDeclSig} takes care of this.
-
-Note that the transformation of a variable declaration into a nullary
-function declaration breaks the invariant that nullary functions can
-be defined only at the top-level. However, keep in mind that this can
-happen only if the variable declaration's right hand side is
-non-expansive and that for a non-expansive expression is does not
-matter whether it its evaluation is shared or not.
-
-\ToDo{Strictly speaking this is not true for numeric literals, which
-  are just abbreviations for \texttt{Prelude.fromInt}~$i$ and
-  \texttt{Prelude.fromFloat}~$f$, respectively. Therefore, the
-  compiler should either consider numeric literals expansive or ensure
-  that the \texttt{fromInt} and \texttt{fromFloat} instance method
-  definitions are deterministic.}
 \begin{verbatim}
 
 > tcCheckDecl :: ModuleIdent -> TCEnv -> ValueEnv -> Context -> QualTypeExpr
@@ -595,25 +582,19 @@ matter whether it its evaluation is shared or not.
 >         (gcx,lcx) = splitContext fvs cx'
 >         ty' = subst theta ty
 >         sigma = if poly then gen fvs lcx ty' else monoType ty'
->     d'' <- checkDeclSig tcEnv sigTy sigma d'
->     return (gcx,d'')
+>     checkDeclSig tcEnv sigTy sigma d'
+>     return (gcx,d')
 >   where poly = isNonExpansive tyEnv d
 
-> checkDeclSig :: TCEnv -> QualTypeExpr -> TypeScheme -> Decl a
->              -> TcState (Decl a)
+> checkDeclSig :: TCEnv -> QualTypeExpr -> TypeScheme -> Decl a -> TcState ()
 > checkDeclSig tcEnv sigTy sigma (FunctionDecl p f eqs)
->   | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma =
->       return (FunctionDecl p f eqs)
+>   | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma = return ()
 >   | otherwise = errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
 >   where what = text "Function:" <+> ppIdent f
 > checkDeclSig tcEnv sigTy sigma (PatternDecl p t rhs)
->   | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma =
->       return ((if null (context sigma) then PatternDecl else funDecl) p t rhs)
+>   | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma = return ()
 >   | otherwise = errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
 >   where what = text "Variable:" <+> ppConstrTerm 0 t
->         context (ForAll _ (QualType cx _)) = cx
->         funDecl p (VariablePattern _ v) rhs =
->           FunctionDecl p v [Equation p (FunLhs v []) rhs]
 
 > checkTypeSig :: TCEnv -> QualType -> TypeScheme -> Bool
 > checkTypeSig tcEnv (QualType sigCx sigTy) (ForAll _ (QualType cx ty)) =

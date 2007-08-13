@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2433 2007-08-09 15:25:24Z wlux $
+% $Id: DictTrans.lhs 2443 2007-08-13 17:21:45Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -584,6 +584,14 @@ is changed into
 \end{displaymath}
 where $T_j = \emph{dictTypeId}(C_j)$, and implicit dictionary arguments
 are added to all occurrences of $C$ in patterns.
+
+The pattern declaration case of the \texttt{DictTrans} \texttt{Decl}
+instance converts variable declarations with an overloaded type into
+function declarations. This is necessary so that the compiler can add
+the implicit dictionary arguments to the declaration when Haskell's
+monomorphism restriction, which prevents generalization of constrained
+type variables in variable declarations, is overridden using an
+explicit type signature.
 \begin{verbatim}
 
 > type DictEnv = Env TypePred (Expression Type)
@@ -627,10 +635,18 @@ are added to all occurrences of $C$ in patterns.
 >     liftM (FunctionDecl p f)
 >           (mapM (dictTrans m tcEnv nEnv iEnv tyEnv dictEnv) eqs)
 >   dictTrans m tcEnv nEnv iEnv tyEnv dictEnv (PatternDecl p t rhs) =
->     do
->       (dictEnv',t') <- dictTransTerm m tcEnv nEnv tyEnv dictEnv t
->       rhs' <- dictTrans m tcEnv nEnv iEnv tyEnv dictEnv' rhs
->       return (PatternDecl p t' rhs')
+>     case t of
+>       VariablePattern _ v
+>         | not (null (context (varType v tyEnv))) ->
+>             dictTrans m tcEnv nEnv iEnv tyEnv dictEnv (funDecl p v rhs)
+>         where context (ForAll _ (QualType cx _)) = cx
+>               funDecl p v rhs =
+>                 FunctionDecl p v [Equation p (FunLhs v []) rhs]
+>       _ ->
+>         do
+>           (dictEnv',t') <- dictTransTerm m tcEnv nEnv tyEnv dictEnv t
+>           rhs' <- dictTrans m tcEnv nEnv iEnv tyEnv dictEnv' rhs
+>           return (PatternDecl p t' rhs')
 >   dictTrans _ _ _ _ _ _ d = return d
 
 > instance DictTrans Equation where

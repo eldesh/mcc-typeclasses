@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2441 2007-08-13 13:48:46Z wlux $
+% $Id: TypeCheck.lhs 2442 2007-08-13 16:10:37Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -341,10 +341,12 @@ general than the type signature.
 >         fvs = foldr addToSet (fvEnv (subst theta tyEnv0))
 >                     (tvs ++ filter (`elem` typeVars cx') tvs')
 >         (gcx,lcx) = splitContext fvs cx'
->     impDs'' <- mapM (uncurry (dfltDecl tcEnv fvs lcx . subst theta)) impDs'
->     mapM_ (uncurry3 (\cx -> genDecl m . gen fvs cx)) impDs''
->     (cx'',expDs') <- mapAccumM (uncurry . tcCheckDecl m tcEnv tyEnv) gcx expDs
->     return (cx'',map thd3 impDs'' ++ expDs')
+>     lcx' <- foldM (uncurry . dfltDecl tcEnv fvs) lcx impDs'
+>     theta <- liftSt fetchSt
+>     mapM_ (uncurry (genDecl m . gen fvs lcx' . subst theta)) impDs'
+>     (cx''',expDs') <-
+>       mapAccumM (uncurry . tcCheckDecl m tcEnv tyEnv) gcx expDs
+>     return (cx''',map snd impDs' ++ expDs')
 >   where (impDs,expDs) = partDecls sigs ds
 
 > partDecls :: SigEnv -> [Decl a] -> ([Decl a],[(QualTypeExpr,Decl a)])
@@ -486,43 +488,51 @@ and \texttt{f2}, respectively. In addition, the constraints
 $\texttt{Num}\,\alpha_1, \texttt{Ord}\,\alpha_1,
 \texttt{Num}\,\beta_1$ are inferred, which means that \texttt{f1}'s
 type is ambiguous because $\beta_1$ does not appear in its
-type.
+type. This is detected in function \texttt{dfltDecl} below, which
+fixes the type $\beta_1$ to the default numeric type (\texttt{Int} at
+present). Thus, the compiler finally infers types $\forall\alpha .
+(\texttt{Num}\,\alpha, \texttt{Ord}\,\alpha) \Rightarrow \alpha
+\rightarrow \alpha$ and $\forall\alpha . (\texttt{Num}\,\alpha,
+\texttt{Ord}\,\alpha) \Rightarrow \texttt{Int} \rightarrow \alpha
+\rightarrow \alpha$ for \texttt{f1} and \texttt{f2}, respectively.
 
-In~\cite{Jones99:THiH}, constrained type variables that do not appear
-in the types of all (implicitly typed) equations of a binding group
-are not generalized. Instead Haskell's default rules are employed in
-order to resolve these ambiguous types. However, this means that the
-compiler may fix $\beta_1$ prematurely to the default numeric type,
-which would prevent using \texttt{f2} (consistently) at another
-numeric type in the rest of the program. On the other hand, if we
-delay type resolution like for the types of bound variables, we may
-end up with some unresolved constraints after typing the whole module
-and with no good place for reporting the error.
+It would be possible to infer more general types for \texttt{f1} and
+\texttt{f2} by keeping the (generalized) $\texttt{Num}\,\beta_1$
+constraint in \texttt{f1}'s type despite the fact that it is
+ambiguous. In fact, this is what ghc, hbc, and nhc98, but not Hugs,
+implement. Note that the $\texttt{Num}\,\beta_1$ constraint is not
+really ambiguous for the application of \texttt{f1} in \texttt{f2} due
+to the fact that recursion is monomorphic without an explicit type
+signature and therefore \texttt{f1} and \texttt{f2} must be using the
+same instance dictionary for the $\texttt{Num}\,\beta_1$ constraint.
+Unfortunately, our dictionary transformation algorithm implemented in
+module \texttt{DictTrans} (see Sect.~\ref{sec:dict-trans}) is unable
+to make use of this fact.
 
-Fortunately there is a better solution, which is also implemented by
-ghc, hbc, and nhc98. We can simply generalize the type variable
-$\beta_1$ in \texttt{f2}'s type and apply default resolution to
-$\beta_1$ locally in function \texttt{f1}. This is implemented in
-function \texttt{dfltDecl} below. After resolving ambiguous type
-variables in the type of a function declaration, this function
-restores the old substitution and applies the substitution that fixes
-the ambiguous type variables to the function's type annotations only.
+\ToDo{Change the dictionary transformation algorithm to handle
+  ambiguous constraints like $\texttt{Num}\,\beta_1$ above. On the
+  side of the type checker, this probably requires that all implicitly
+  typed declarations of a declaration group use exactly the same
+  context, i.e., contexts must not be sorted during generalization in
+  function \texttt{gen} below.}
 
-\ToDo{Must apply the substitution also to the types of all local
-  functions and variables declared inside the function.}
+Note that \texttt{dftlDecl} does not check for ambiguous type
+variables in pattern declarations. This is not necessary because all
+constrained type variables in the types of (non-expansive) pattern
+declarations are monomorphic as the compiler implements Haskell's
+monomorphism restriction.
 \begin{verbatim}
 
 > dfltDecl :: TCEnv -> Set Int -> Context -> Type -> Decl Type
->          -> TcState (Context,Type,Decl Type)
-> dfltDecl tcEnv fvs cx ty (FunctionDecl p f eqs) =
+>          -> TcState Context
+> dfltDecl tcEnv fvs cx ty (FunctionDecl p f _) =
 >   do
 >     theta <- liftSt fetchSt
->     cx' <- applyDefaults p what empty tcEnv fvs' cx ty
->     theta' <- liftSt (changeSt theta)
->     return (cx',ty,fmap (subst theta') (FunctionDecl p f eqs))
+>     let ty' = subst theta ty
+>         fvs' = foldr addToSet fvs (typeVars ty')
+>     applyDefaults p what empty tcEnv fvs' cx ty'
 >   where what = "function " ++ name f
->         fvs' = foldr addToSet fvs (typeVars ty)
-> dfltDecl _ _ cx ty (PatternDecl p t rhs) = return (cx,ty,PatternDecl p t rhs)
+> dfltDecl _ _ cx _ (PatternDecl _ _ _) = return cx
 
 \end{verbatim}
 The function \texttt{genDecl} saves the generalized type of a function

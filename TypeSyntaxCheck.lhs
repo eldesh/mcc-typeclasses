@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -100,7 +100,8 @@ signatures.
 >     checkClosedContext p cx' [tv]
 >     ds' <-
 >       mapE_ (checkSimpleConstraint "class" doc p) cx' &&>
->       mapE (checkMethodDecl env tv) ds
+>       mapE (checkDecl env) ds
+>     sequenceE_ [checkMethodType tv p ty | TypeSig p _ ty <- ds']
 >     return (ClassDecl p cx' cls tv ds')
 >   where doc = ppIdent cls <+> ppIdent tv
 > checkTopDecl env (InstanceDecl p cx cls ty ds) =
@@ -108,7 +109,7 @@ signatures.
 >     (cx',ty') <- checkClass env p cls &&> checkInstType env p cx ty
 >     ds' <-
 >       mapE_ (checkSimpleConstraint "instance" doc p) cx' &&>
->       mapE (checkMethodDecl env anonId) ds
+>       mapE (checkDecl env) ds
 >     return (InstanceDecl p cx' cls ty' ds')
 >   where doc = ppQIdent cls <+> ppTypeExpr 2 ty
 > checkTopDecl env (BlockDecl d) = liftE BlockDecl (checkDecl env d)
@@ -125,19 +126,12 @@ not contain any additional constraints for that type variable
 (cf.\ Sect.~4.3.1 of the Haskell report).
 \begin{verbatim}
 
-> checkMethodDecl :: TypeEnv -> Ident -> MethodDecl a -> Error (MethodDecl a)
-> checkMethodDecl _ _ (MethodFixity p fix pr ops) =
->   return (MethodFixity p fix pr ops)
-> checkMethodDecl env tv (MethodSig p fs ty) =
+> checkMethodType :: Ident -> Position -> QualTypeExpr -> Error ()
+> checkMethodType tv p ty =
 >   do
->     ty' <- checkQualType env p ty
->     unless (tv `elem` fv ty') (errorAt p (ambiguousType tv))
->     when (tv `elem` constrainedVars ty') (errorAt p (constrainedClassType tv))
->     return (MethodSig p fs ty')
+>     unless (tv `elem` fv ty) (errorAt p (ambiguousType tv))
+>     when (tv `elem` constrainedVars ty) (errorAt p (constrainedClassType tv))
 >   where constrainedVars (QualTypeExpr cx _) = [tv | ClassAssert _ tv _ <- cx]
-> checkMethodDecl env _ (MethodDecl p f eqs) =
->   liftE (MethodDecl p f) (mapE (checkEquation env) eqs)
-> checkMethodDecl _ _ (TrustMethod p tr fs) = return (TrustMethod p tr fs)
 
 > checkDecl :: TypeEnv -> Decl a -> Error (Decl a)
 > checkDecl _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: Qual.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -91,14 +91,6 @@ order to compile this module with hbc.
 >     ArrowType (qual phase tEnv vEnv ty1) (qual phase tEnv vEnv ty2)
 >   qual phase tEnv vEnv (ApplyType ty1 ty2) =
 >     ApplyType (qual phase tEnv vEnv ty1) (qual phase tEnv vEnv ty2)
-
-> instance Qual (MethodDecl a) where
->   qual _ _ _ (MethodFixity p fix pr ops) = MethodFixity p fix pr ops
->   qual phase tEnv vEnv (MethodSig p fs ty) =
->     MethodSig p fs (qual phase tEnv vEnv ty)
->   qual phase tEnv vEnv (MethodDecl p f eqs) =
->     MethodDecl p f (qual phase tEnv vEnv eqs)
->   qual _ _ _ (TrustMethod p tr fs) = TrustMethod p tr fs
 
 > instance Qual (Decl a) where
 >   qual _ _ _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops

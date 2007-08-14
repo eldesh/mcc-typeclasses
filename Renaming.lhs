@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: Renaming.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -138,7 +138,7 @@ syntax tree and renames all type and expression variables.
 > renameTopDecl (ClassDecl p cx cls tv ds) =
 >   do
 >     env <- bindVars emptyEnv [tv]
->     env' <- bindVars emptyEnv [f | MethodDecl _ f _ <- ds]
+>     env' <- bindVars emptyEnv [f | FunctionDecl _ f _ <- ds]
 >     liftM3 (flip (ClassDecl p) cls)
 >            (mapM (renameClassAssert env) cx)
 >            (renameVar env tv)
@@ -146,7 +146,7 @@ syntax tree and renames all type and expression variables.
 > renameTopDecl (InstanceDecl p cx cls ty ds) =
 >   do
 >     env <- bindVars emptyEnv (fv ty)
->     env' <- bindVars emptyEnv [f | MethodDecl _ f _ <- ds]
+>     env' <- bindVars emptyEnv [f | FunctionDecl _ f _ <- ds]
 >     liftM3 (flip (InstanceDecl p) cls)
 >            (mapM (renameClassAssert env) cx)
 >            (renameType env ty)
@@ -185,18 +185,17 @@ a method identifier in the right hand side denotes the overloaded type
 class method.
 \begin{verbatim}
 
-> renameMethodDecl :: RenameEnv -> RenameEnv -> MethodDecl a
->                  -> RenameState (MethodDecl a)
-> renameMethodDecl _ _ (MethodFixity p fix pr ops) =
->   return (MethodFixity p fix pr ops)
-> renameMethodDecl env _ (MethodSig p fs ty) =
->   liftM (MethodSig p fs) (renameTypeSig env ty)
-> renameMethodDecl _ env' (MethodDecl p f eqs) =
+> renameMethodDecl :: RenameEnv -> RenameEnv -> Decl a -> RenameState (Decl a)
+> renameMethodDecl _ _ (InfixDecl p fix pr ops) =
+>   return (InfixDecl p fix pr ops)
+> renameMethodDecl env _ (TypeSig p fs ty) =
+>   liftM (TypeSig p fs) (renameTypeSig env ty)
+> renameMethodDecl _ env' (FunctionDecl p f eqs) =
 >   do
 >     f' <- renameVar env' f
->     liftM (MethodDecl p f') (mapM (renameEqn f' emptyEnv) eqs)
-> renameMethodDecl _ env' (TrustMethod p tr fs) =
->   liftM (TrustMethod p tr) (mapM (renameVar env') fs)
+>     liftM (FunctionDecl p f') (mapM (renameEqn f' emptyEnv) eqs)
+> renameMethodDecl _ env' (TrustAnnot p tr fs) =
+>   liftM (TrustAnnot p tr) (mapM (renameVar env') fs)
 
 > renameTypeSig :: RenameEnv -> QualTypeExpr -> RenameState QualTypeExpr
 > renameTypeSig env ty =

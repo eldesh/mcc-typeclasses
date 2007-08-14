@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: Deriving.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -53,10 +53,10 @@ derived.
 >         constr (ConOpDecl _ _ _ _ op _) = (qualifyWith m op,2)
 >         toClassAssert tvs (TypePred cls (TypeVariable n)) =
 >           ClassAssert cls (tvs !! n) []
->         trustAll p ds = TrustMethod p Trust [] : ds
+>         trustAll p ds = TrustAnnot p Trust [] : ds
 
 > deriveMethods :: PEnv -> TCEnv -> Position -> [Constr] -> QualIdent
->               -> Error [MethodDecl ()]
+>               -> Error [Decl ()]
 > deriveMethods pEnv tcEnv p cs cls
 >   | cls' == qEqId = return (eqMethods p cs)
 >   | cls' == qOrdId = return (ordMethods p cs)
@@ -78,12 +78,12 @@ is rigid like the polymorphic equality operator in the current Curry
 report.
 \begin{verbatim}
 
-> eqMethods :: Position -> [Constr] -> [MethodDecl ()]
+> eqMethods :: Position -> [Constr] -> [Decl ()]
 > eqMethods p cs = [deriveEq nameSupply p cs]
 
-> deriveEq :: [Ident] -> Position -> [Constr] -> MethodDecl ()
+> deriveEq :: [Ident] -> Position -> [Constr] -> Decl ()
 > deriveEq (x:y:vs) p cs =
->   methodDecl p eqOpId [x,y] (Case (mkVar x) (map (eqCase vs p y) cs))
+>   funDecl p eqOpId [x,y] (Case (mkVar x) (map (eqCase vs p y) cs))
 
 > eqCase :: [Ident] -> Position -> Ident -> Constr -> Alt ()
 > eqCase vs p y (c,n) =
@@ -120,13 +120,13 @@ default implementations.
   enumeration types.}
 \begin{verbatim}
 
-> ordMethods :: Position -> [Constr] -> [MethodDecl ()]
+> ordMethods :: Position -> [Constr] -> [Decl ()]
 > ordMethods p cs = [deriveCompare nameSupply p cs]
 
-> deriveCompare :: [Ident] -> Position -> [Constr] -> MethodDecl ()
+> deriveCompare :: [Ident] -> Position -> [Constr] -> Decl ()
 > deriveCompare (x:y:vs) p cs =
->   methodDecl p compareId [x,y]
->              (Case (mkVar x) (map (cmpCase vs p y) (splits cs)))
+>   funDecl p compareId [x,y]
+>           (Case (mkVar x) (map (cmpCase vs p y) (splits cs)))
 >   where splits [] = []
 >         splits (x:xs) =
 >           ([],x,xs) : map (\(ys,z,zs) -> (x:ys,z,zs)) (splits xs)
@@ -177,7 +177,7 @@ like \verb|[False ..]| well defined.
 > isEnum [] = False
 > isEnum (c:cs) = all ((0 ==) . snd) (c:cs)
 
-> enumMethods :: Position -> [Constr] -> Error [MethodDecl ()]
+> enumMethods :: Position -> [Constr] -> Error [Decl ()]
 > enumMethods p cs
 >   | isEnum cs = return [succ,pred,toEnum,fromEnum,enumFrom,enumFromThen]
 >   | otherwise = errorAt p notEnum
@@ -188,30 +188,30 @@ like \verb|[False ..]| well defined.
 >         enumFrom = deriveEnumFrom nameSupply p (last cs) 
 >         enumFromThen = deriveEnumFromThen nameSupply p (head cs) (last cs)
 
-> deriveSucc :: Position -> [Constr] -> MethodDecl ()
-> deriveSucc p cs = MethodDecl p f (zipWith (succEqn p f) cs (tail cs))
+> deriveSucc :: Position -> [Constr] -> Decl ()
+> deriveSucc p cs = FunctionDecl p f (zipWith (succEqn p f) cs (tail cs))
 >   where f = succId
 
-> derivePred :: Position -> [Constr] -> MethodDecl ()
-> derivePred p cs = MethodDecl p f (zipWith (predEqn p f) (tail cs) cs)
+> derivePred :: Position -> [Constr] -> Decl ()
+> derivePred p cs = FunctionDecl p f (zipWith (predEqn p f) (tail cs) cs)
 >   where f = predId
 
-> deriveFromEnum :: Position -> [Constr] -> MethodDecl ()
-> deriveFromEnum p cs = MethodDecl p f (zipWith (fromEnumEqn p f) cs [0..])
+> deriveFromEnum :: Position -> [Constr] -> Decl ()
+> deriveFromEnum p cs = FunctionDecl p f (zipWith (fromEnumEqn p f) cs [0..])
 >   where f = fromEnumId
 
-> deriveToEnum :: Position -> [Constr] -> MethodDecl ()
-> deriveToEnum p cs = MethodDecl p f (zipWith (toEnumEqn p f) [0..] cs)
+> deriveToEnum :: Position -> [Constr] -> Decl ()
+> deriveToEnum p cs = FunctionDecl p f (zipWith (toEnumEqn p f) [0..] cs)
 >   where f = toEnumId
 
-> deriveEnumFrom :: [Ident] -> Position -> Constr -> MethodDecl ()
+> deriveEnumFrom :: [Ident] -> Position -> Constr -> Decl ()
 > deriveEnumFrom (x:_) p (c,n) =
->   methodDecl p enumFromId [x] (prelEnumFromTo (mkVar x) (Constructor () c))
+>   funDecl p enumFromId [x] (prelEnumFromTo (mkVar x) (Constructor () c))
 
-> deriveEnumFromThen :: [Ident] -> Position -> Constr -> Constr -> MethodDecl ()
+> deriveEnumFromThen :: [Ident] -> Position -> Constr -> Constr -> Decl ()
 > deriveEnumFromThen (x:y:_) p c1 c2 =
->   methodDecl p enumFromThenId [x,y]
->              (prelEnumFromThenTo (mkVar x) (mkVar y) (enumBound x y c1 c2))
+>   funDecl p enumFromThenId [x,y]
+>           (prelEnumFromThenTo (mkVar x) (mkVar y) (enumBound x y c1 c2))
 
 > enumBound :: Ident -> Ident -> Constr -> Constr -> Expression ()
 > enumBound x y (c1,_) (c2,_) =
@@ -248,21 +248,21 @@ all arguments.
 > isBounded :: [Constr] -> Bool
 > isBounded cs = length cs == 1 || isEnum cs
 
-> boundedMethods :: Position -> [Constr] -> Error [MethodDecl ()]
+> boundedMethods :: Position -> [Constr] -> Error [Decl ()]
 > boundedMethods p cs
 >   | isBounded cs = return [minBound,maxBound]
 >   | otherwise = errorAt p notBounded
 >   where minBound = deriveMinBound p (head cs)
 >         maxBound = deriveMaxBound p (last cs)
 
-> deriveMinBound :: Position -> Constr -> MethodDecl ()
+> deriveMinBound :: Position -> Constr -> Decl ()
 > deriveMinBound p (c,n) =
->   methodDecl p minBoundId [] $
+>   funDecl p minBoundId [] $
 >   apply (Constructor () c) (replicate n prelMinBound)
 
-> deriveMaxBound :: Position -> Constr -> MethodDecl ()
+> deriveMaxBound :: Position -> Constr -> Decl ()
 > deriveMaxBound p (c,n) =
->   methodDecl p maxBoundId [] $
+>   funDecl p maxBoundId [] $
 >   apply (Constructor () c) (replicate n prelMaxBound)
 
 \end{verbatim}
@@ -281,12 +281,12 @@ returns its string representation \verb|"False"| and \verb|"True"|,
 respectively.
 \begin{verbatim}
 
-> showMethods :: PEnv -> Position -> [Constr] -> [MethodDecl ()]
+> showMethods :: PEnv -> Position -> [Constr] -> [Decl ()]
 > showMethods pEnv p cs = [deriveShowsPrec pEnv nameSupply p cs]
 
-> deriveShowsPrec :: PEnv -> [Ident] -> Position -> [Constr] -> MethodDecl ()
+> deriveShowsPrec :: PEnv -> [Ident] -> Position -> [Constr] -> Decl ()
 > deriveShowsPrec pEnv vs p cs =
->   MethodDecl p showsPrecId (map (showsPrecEqn pEnv vs p showsPrecId) cs)
+>   FunctionDecl p showsPrecId (map (showsPrecEqn pEnv vs p showsPrecId) cs)
 
 > showsPrecEqn :: PEnv -> [Ident] -> Position -> Ident -> Constr -> Equation ()
 > showsPrecEqn pEnv (l:vs) p f (c,n) =
@@ -346,9 +346,9 @@ respectively.
 > conPattern :: QualIdent -> [Ident] -> ConstrTerm ()
 > conPattern c vs = ConstructorPattern () c (map (VariablePattern ()) vs)
 
-> methodDecl :: Position -> Ident -> [Ident] -> Expression () -> MethodDecl ()
-> methodDecl p f vs e =
->   MethodDecl p f [equation p f (map (VariablePattern ()) vs) e]
+> funDecl :: Position -> Ident -> [Ident] -> Expression () -> Decl ()
+> funDecl p f vs e =
+>   FunctionDecl p f [equation p f (map (VariablePattern ()) vs) e]
 
 > equation :: Position -> Ident -> [ConstrTerm a] -> Expression a -> Equation a
 > equation p f ts e = Equation p (FunLhs f ts) (SimpleRhs p e [])

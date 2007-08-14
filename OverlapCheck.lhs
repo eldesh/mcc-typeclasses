@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: OverlapCheck.lhs 2419 2007-07-26 17:54:22Z wlux $
+% $Id: OverlapCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -45,22 +45,22 @@ are collected with a simple traversal of the syntax tree.
 >   overlap p xs ys = foldr (overlap p) ys xs
 
 > instance Syntax (TopDecl a) where
+>   overlap _ (DataDecl _ _ _ _ _ _) = id
+>   overlap _ (NewtypeDecl _ _ _ _ _ _) = id
+>   overlap _ (TypeDecl _ _ _ _) = id
 >   overlap _ (ClassDecl p _ _ _ ds) = overlap p ds 
 >   overlap _ (InstanceDecl p _ _ _ ds) = overlap p ds 
 >   overlap p (BlockDecl d) = overlap p d
->   overlap _ _ = id
-
-> instance Syntax (MethodDecl a) where
->   overlap _ (MethodFixity _ _ _ _) = id
->   overlap _ (MethodSig _ _ _) = id
->   overlap _ (MethodDecl p f eqs) = ([P p f | isNonDet eqs] ++) . overlap p eqs
->   overlap _ (TrustMethod _ _ _) = id
 
 > instance Syntax (Decl a) where
+>   overlap _ (InfixDecl _ _ _ _) = id
+>   overlap _ (TypeSig _ _ _) = id
 >   overlap _ (FunctionDecl p f eqs) =
 >     ([P p f | isNonDet eqs] ++) . overlap p eqs
+>   overlap _ (ForeignDecl _ _ _ _ _ _) = id
 >   overlap _ (PatternDecl p _ rhs) = overlap p rhs
->   overlap _ _ = id
+>   overlap _ (FreeDecl _ _) = id
+>   overlap _ (TrustAnnot _ _ _) = id
 
 > instance Syntax (Equation a) where
 >   overlap _ (Equation p _ rhs) = overlap p rhs

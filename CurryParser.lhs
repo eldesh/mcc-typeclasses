@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: CurryParser.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -198,12 +198,11 @@ directory path to the module is ignored.
 
 > classDecl :: Parser Token (TopDecl ()) a
 > classDecl = classInstDecl ClassDecl KW_class tycls tyvar classMethod
->   where classMethod = methodFixity <|> methodSig <|?> methodDecl
->                   <|> trustMethod
+>   where classMethod = infixDecl <|> functionDecl <|> trustAnnotation
 
 > instanceDecl :: Parser Token (TopDecl ()) a
 > instanceDecl = classInstDecl InstanceDecl KW_instance qtycls type2 instMethod
->   where instMethod = methodDecl <|> trustMethod
+>   where instMethod = methodDecl <|> trustAnnotation
 
 > classInstDecl :: (Position -> [ClassAssert] -> a -> b -> [c] -> TopDecl ())
 >               -> Category -> Parser Token a d -> Parser Token b d
@@ -220,30 +219,6 @@ directory path to the module is ignored.
 >   -- NB Don't try to ``optimize'' this into withContext (,,) cls <*> ty
 >   --    as this will yield a parse error if the context is omitted
 
-> methodFixity :: Parser Token (MethodDecl ()) a
-> methodFixity =
->   infixDeclLhs MethodFixity <*> option int <*> funop `sepBy1` comma
-
-> methodSig :: Parser Token (MethodDecl ()) a
-> methodSig =
->   MethodSig <$> position <*> var `sepBy1` comma
->             <*-> token DoubleColon <*> qualType
-
-> methodDecl :: Parser Token (MethodDecl ()) a
-> methodDecl = methodDecl <$> position <*> lhs <*> declRhs
->   where lhs = (\f -> (f,FunLhs f [])) <$> fun
->          <|?> funLhs
->         methodDecl p (f,lhs) rhs = MethodDecl p f [Equation p lhs rhs]
-
-> trustMethod :: Parser Token (MethodDecl ()) a
-> trustMethod =
->   TrustMethod <$> position <*> tokenOps pragmaKW <*> funList
->               <*-> token PragmaEnd
->   where pragmaKW = [(PragmaBegin SuspectPragma,Suspect),
->                     (PragmaBegin TrustPragma,Trust)]
->         funList = fun `sepBy` comma
->               <|> [] <$-> token Underscore            -- backward compability
-
 > infixDecl :: Parser Token (Decl ()) a
 > infixDecl = infixDeclLhs InfixDecl <*> option int <*> funop `sepBy1` comma
 
@@ -256,6 +231,11 @@ directory path to the module is ignored.
 >   where decl = fun `sepBy1` comma <**> funListDecl
 >           <|?> funDecl <$> lhs <*> declRhs
 >         lhs = (\f -> (f,FunLhs f [])) <$> fun
+>          <|?> funLhs
+
+> methodDecl :: Parser Token (Decl ()) a
+> methodDecl = position <**> (funDecl <$> lhs <*> declRhs)
+>   where lhs = (\f -> (f,FunLhs f [])) <$> fun
 >          <|?> funLhs
 
 > valueDecl :: Parser Token (Decl ()) a

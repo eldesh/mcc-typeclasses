@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2432 2007-08-09 15:05:49Z wlux $
+% $Id: Desugar.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -195,24 +195,17 @@ by desugaring.
 >   return (NewtypeDecl p cx tc tvs nc clss)
 > desugarTopDecl _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
 > desugarTopDecl m (ClassDecl p cx cls tv ds) =
->   liftM (ClassDecl p cx cls tv) (mapM (desugarMethodDecl m) ds)
+>   liftM (ClassDecl p cx cls tv . (filter isTypeSig ds ++))
+>         (desugarDeclGroup m ds)
 > desugarTopDecl m (InstanceDecl p cx cls ty ds) =
->   liftM (InstanceDecl p cx cls ty) (mapM (desugarMethodDecl m) ds)
-
-> desugarMethodDecl :: ModuleIdent -> MethodDecl Type
->                   -> DesugarState (MethodDecl Type)
-> desugarMethodDecl _ (MethodFixity p fix pr ops) =
->   return (MethodFixity p fix pr ops)
-> desugarMethodDecl _ (MethodSig p fs ty) = return (MethodSig p fs ty)
-> desugarMethodDecl m (MethodDecl p f eqs) =
->   liftM (MethodDecl p f) (mapM (desugarEquation m) eqs)
-> desugarMethodDecl _ (TrustMethod p tr fs) = return (TrustMethod p tr fs)
+>   liftM (InstanceDecl p cx cls ty) (desugarDeclGroup m ds)
 
 \end{verbatim}
-Within a declaration group, all fixity declarations, type signatures
-and trust annotations are discarded. First, the patterns occurring in
-the left hand sides are desugared. Due to lazy patterns this may add
-further declarations to the group that must be desugared as well.
+Within a local declaration group, all fixity declarations, type
+signatures and trust annotations are discarded. First, the patterns
+occurring in the left hand sides are desugared. Due to lazy patterns
+this may add further declarations to the group that must be desugared
+as well.
 \begin{verbatim}
 
 > desugarDeclGroup :: ModuleIdent -> [Decl Type] -> DesugarState [Decl Type]

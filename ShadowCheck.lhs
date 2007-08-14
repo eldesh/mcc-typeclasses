@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 2399 2007-07-16 08:49:24Z wlux $
+% $Id: ShadowCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 2005-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -76,24 +76,24 @@ traversal of the syntax tree.
 >   shadow p = shadowGroup p
 
 > instance SyntaxTree (TopDecl a) where
+>   shadow _ (DataDecl _ _ _ _ _ _) = id
+>   shadow _ (NewtypeDecl _ _ _ _ _ _) = id
+>   shadow _ (TypeDecl _ _ _ _) = id
 >   shadow _ (ClassDecl p _ _ _ ds) = shadow p ds
 >   shadow _ (InstanceDecl p _ _ _ ds) = shadow p ds
 >   shadow p (BlockDecl d) = shadow p d
->   shadow _ _ = id
 
 >   shadowGroup p ds =
 >     bindVars (concatMap funs ds) >>> foldr ((&&&) . shadow p) id ds
 
-> instance SyntaxTree (MethodDecl a) where
->   shadow _ (MethodFixity _ _ _ _) = id
->   shadow _ (MethodSig _ _ _) = id
->   shadow _ (MethodDecl p _ eqs) = shadow p eqs
->   shadow _ (TrustMethod _ _ _) = id
-
 > instance SyntaxTree (Decl a) where
+>   shadow _ (InfixDecl _ _ _ _) = id
+>   shadow _ (TypeSig _ _ _) = id
 >   shadow _ (FunctionDecl p _ eqs) = shadow p eqs
+>   shadow _ (ForeignDecl _ _ _ _ _ _) = id
 >   shadow _ (PatternDecl p _ rhs) = shadow p rhs
->   shadow _ _ = id
+>   shadow _ (FreeDecl _ _) = id
+>   shadow _ (TrustAnnot _ _ _) = id
 >
 >   shadowGroup p ds =
 >     bindVars (concatMap vars ds) >>> foldr ((&&&) . shadow p) id ds
@@ -158,16 +158,21 @@ with their positions.
 \begin{verbatim}
 
 > funs :: TopDecl a -> [P Ident]
-> funs (ClassDecl _ _ _ _ ds) = [P p f | MethodSig p fs _ <- ds, f <- fs]
+> funs (DataDecl _ _ _ _ _ _) = []
+> funs (NewtypeDecl _ _ _ _ _ _) = []
+> funs (TypeDecl _ _ _ _) = []
+> funs (ClassDecl _ _ _ _ ds) = [P p f | TypeSig p fs _ <- ds, f <- fs]
+> funs (InstanceDecl _ _ _ _ _) = []
 > funs (BlockDecl d) = vars d
-> funs _ = []
 
 > vars :: Decl a -> [P Ident]
+> vars (InfixDecl _ _ _ _) = []
+> vars (TypeSig _ _ _) = []
 > vars (FunctionDecl p f _) = [P p f]
-> vars (PatternDecl p t _) = map (P p) (filter (not . isAnonId) (bv t))
 > vars (ForeignDecl p _ _ _ f _) = [P p f]
+> vars (PatternDecl p t _) = map (P p) (filter (not . isAnonId) (bv t))
 > vars (FreeDecl p vs) = map (P p) vs
-> vars _ = []
+> vars (TrustAnnot _ _ _) = []
 
 \end{verbatim}
 Anonymous identifiers in patterns are always ignored.

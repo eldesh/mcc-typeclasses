@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: CaseCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -137,10 +137,10 @@ collect all defined identifiers.
 >   names _ (TypeDecl p tc tvs _) xs = typeNames p tc tvs ++ xs
 >   names _ (ClassDecl p _ cls tv ds) xs =
 >     D p TypeClassId cls : D p TypeVarId tv :
->     filter (not . isTypeVar tv) (names p ds []) ++ xs
+>     filter (not . isTypeVar tv) (foldr methodNames [] ds) ++ xs
 >     where isTypeVar tv (D _ TypeVarId tv') = tv == tv'
 >           isTypeVar _ _ = False
->   names _ (InstanceDecl p _ _ ty ds) xs = names p ty (names p ds xs)
+>   names _ (InstanceDecl p _ _ ty ds) xs = names p ty (foldr methodNames xs ds)
 >   names p (BlockDecl d) xs = names p d xs
 
 > typeNames :: Position -> Ident -> [Ident] -> [Definition]
@@ -165,11 +165,11 @@ collect all defined identifiers.
 >   names p ty xs =
 >     map (D p TypeVarId) (nub (filter (not . isAnonId) (fv ty))) ++ xs
 
-> instance SyntaxTree (MethodDecl a) where
->   names _ (MethodFixity _ _ _ _) xs = xs
->   names _ (MethodSig p fs ty) xs = map (D p MethodId) fs ++ names p ty xs
->   names _ (MethodDecl p _ eqs) xs = names p eqs xs
->   names _ (TrustMethod _ _ _) xs = xs
+> methodNames :: Decl a -> [Definition] -> [Definition]
+> methodNames (InfixDecl _ _ _ _) xs = xs
+> methodNames (TypeSig p fs ty) xs = map (D p MethodId) fs ++ names p ty xs
+> methodNames (FunctionDecl p _ eqs) xs = names p eqs xs
+> methodNames (TrustAnnot _ _ _) xs = xs
 
 > instance SyntaxTree (Decl a) where
 >   names _ (InfixDecl _ _ _ _) xs = xs

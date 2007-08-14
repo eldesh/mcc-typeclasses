@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: UnusedCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 2005-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -96,8 +96,10 @@ implemented by a traversal of the syntax tree.
 >   unused used p (DataDecl _ _ _ _ cs _) = unused used p cs
 >   unused used p (NewtypeDecl _ _ _ _ nc _) = unused used p nc
 >   unused _ _ (TypeDecl _ _ _ _) = id
->   unused used _ (ClassDecl p _ _ _ ds) = unused used p ds
->   unused used _ (InstanceDecl p _ _ _ ds) = unused used p ds
+>   unused used _ (ClassDecl p _ _ _ ds) =
+>     flip (foldr (unusedMethods used p)) ds
+>   unused used _ (InstanceDecl p _ _ _ ds) =
+>     flip (foldr (unusedMethods used p)) ds
 >   unused used p (BlockDecl d) = unused used p d
 
 > instance SyntaxTree ConstrDecl where
@@ -109,36 +111,41 @@ implemented by a traversal of the syntax tree.
 >   used _ _ = id
 >   unused used _ (NewConstrDecl p c _) = unusedVars Data used p [c]
 
-> instance SyntaxTree (MethodDecl a) where
->   used _ (MethodFixity _ _ _ _) = id
->   used _ (MethodSig _ _ _) = id
->   used m (MethodDecl _ _ eqs) = used m eqs
->   used _ (TrustMethod _ _ _) = id
->   unused _ _ (MethodFixity _ _ _ _) = id
->   unused used _ (MethodSig p fs _) = unusedVars Meth used p fs
->   unused used _ (MethodDecl p _ eqs) = unused used p eqs
->   unused _ _ (TrustMethod _ _ _) = id
+> unusedMethods :: Set Ident -> Position -> Decl a -> [Undef] -> [Undef]
+> unusedMethods _ _ (InfixDecl _ _ _ _) = id
+> unusedMethods used _ (TypeSig p fs _) = unusedVars Meth used p fs
+> unusedMethods used _ (FunctionDecl p _ eqs) = unused used p eqs
+> unusedMethods _ _ (TrustAnnot _ _ _) = id
 
 > instance SyntaxTree (Decl a) where
+>   used _ (InfixDecl _ _ _ _) = id
+>   used _ (TypeSig _ _ _) = id
 >   used m (FunctionDecl _ f eqs) =
 >     unionSet (deleteFromSet f (used m eqs zeroSet))
->   used m (PatternDecl _ (VariablePattern _ v) rhs) =
->     unionSet (deleteFromSet v (used m rhs zeroSet))
->   used m (PatternDecl _ t rhs) = used m t . used m rhs
->   used _ _ = id
+>   used _ (ForeignDecl _ _ _ _ _ _) = id
+>   used m (PatternDecl _ t rhs) =
+>     case t of
+>       VariablePattern _ v -> unionSet (deleteFromSet v (used m rhs zeroSet))
+>       _ -> used m t . used m rhs
+>   used _ (FreeDecl _ _) = id
+>   used _ (TrustAnnot _ _ _) = id
 >
+>   unused _ _ (InfixDecl _ _ _ _) = id
+>   unused _ _ (TypeSig _ _ _) = id
 >   unused used _ (FunctionDecl p f eqs) =
 >     unusedVars Decl used p [f] . unused used p eqs
 >   unused used _ (ForeignDecl p _ _ _ f _) = unusedVars Decl used p [f]
->   unused used _ (PatternDecl p (VariablePattern _ v) rhs)
->     | isAnonId v = ([Pattern p] ++)
->     | otherwise = unusedVars Decl used p [v]
 >   unused used _ (PatternDecl p t rhs) =
->      ([Pattern p | not (any (`elemSet` used) bvs)] ++) .
->      unusedVars Var used p bvs . unused used p rhs
+>     case t of
+>       VariablePattern _ v
+>         | isAnonId v -> ([Pattern p] ++)
+>         | otherwise -> unusedVars Decl used p [v]
+>       _ ->
+>         ([Pattern p | not (any (`elemSet` used) bvs)] ++) .
+>         unusedVars Var used p bvs . unused used p rhs
 >     where bvs = filter (not . isAnonId) (bv t)
 >   unused used _ (FreeDecl p xs) = unusedVars Decl used p xs
->   unused _ _ _ = id
+>   unused _ _ (TrustAnnot _ _ _) = id
 
 > instance SyntaxTree (Equation a) where
 >   used m (Equation _ lhs rhs) = used m lhs . used m rhs

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: SyntaxCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -97,12 +97,18 @@ declarations are passed to \texttt{checkMethodDecls}.
 >   where ops = [P p op | BlockDecl (InfixDecl p _ _ ops) <- ds, op <- ops]
 
 > checkTopDeclLhs :: VarEnv -> TopDecl a -> Error (TopDecl a)
+> checkTopDeclLhs _ (DataDecl p cx tc tvs cs clss) =
+>   return (DataDecl p cx tc tvs cs clss)
+> checkTopDeclLhs _ (NewtypeDecl p cx tc tvs nc clss) =
+>   return (NewtypeDecl p cx tc tvs nc clss)
+> checkTopDeclLhs _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
 > checkTopDeclLhs env (ClassDecl p cx cls tv ds) =
 >   do
 >     mapE_ (checkMethodSig env) ds
 >     return (ClassDecl p cx cls tv ds)
+> checkTopDeclLhs _ (InstanceDecl p cx cls ty ds) =
+>   return (InstanceDecl p cx cls ty ds)
 > checkTopDeclLhs env (BlockDecl d) = liftE BlockDecl (checkDeclLhs True env d)
-> checkTopDeclLhs _ d = return d
 
 > joinTopEquations :: [TopDecl a] -> [TopDecl a]
 > joinTopEquations [] = []
@@ -115,6 +121,11 @@ declarations are passed to \texttt{checkMethodDecls}.
 
 > checkTopDeclRhs :: TypeEnv -> VarEnv -> [P Ident] -> TopDecl a
 >                 -> Error (TopDecl a)
+> checkTopDeclRhs _ _ _ (DataDecl p cx tc tvs cs clss) =
+>   return (DataDecl p cx tc tvs cs clss)
+> checkTopDeclRhs _ _ _ (NewtypeDecl p cx tc tvs nc clss) =
+>   return (NewtypeDecl p cx tc tvs nc clss)
+> checkTopDeclRhs _ _ _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
 > checkTopDeclRhs _ env ops (ClassDecl p cx cls tv ds) =
 >   liftE (ClassDecl p cx cls tv)
 >         (checkMethodDecls env (qualify cls) (filter (`elem` fs) ops) fs ds)
@@ -123,7 +134,6 @@ declarations are passed to \texttt{checkMethodDecls}.
 >   liftE (InstanceDecl p cx cls ty) (checkMethodDecls env cls [] fs ds)
 >   where fs = map (P p) (classMthds cls tEnv)
 > checkTopDeclRhs _ env _ (BlockDecl d) = liftE BlockDecl (checkDeclRhs env d)
-> checkTopDeclRhs _ _ _ d = return d
 
 \end{verbatim}
 A goal is checked like the right hand side of a pattern declaration.
@@ -164,11 +174,11 @@ top-level.
 >     return (env'',ds'')
 >   where env' = nestEnv env
 
-> checkMethodSig :: VarEnv -> MethodDecl a -> Error ()
-> checkMethodSig _ (MethodFixity _ _ _ _) = return ()
-> checkMethodSig env (MethodSig p fs _) = checkVars "type signature" p env fs
-> checkMethodSig _ (MethodDecl _ _ _) = return ()
-> checkMethodSig _ (TrustMethod _ _ _) = return ()
+> checkMethodSig :: VarEnv -> Decl a -> Error ()
+> checkMethodSig _ (InfixDecl _ _ _ _) = return ()
+> checkMethodSig env (TypeSig p fs _) = checkVars "type signature" p env fs
+> checkMethodSig _ (FunctionDecl _ _ _) = return ()
+> checkMethodSig _ (TrustAnnot _ _ _) = return ()
 
 > checkDeclLhs :: Bool -> VarEnv -> Decl a -> Error (Decl a)
 > checkDeclLhs _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
@@ -261,16 +271,19 @@ top-level.
 \begin{verbatim}
 
 > checkDeclRhs :: VarEnv -> Decl a -> Error (Decl a)
+> checkDeclRhs _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
+> checkDeclRhs _ (TypeSig p fs ty) = return (TypeSig p fs ty)
 > checkDeclRhs env (FunctionDecl p f eqs) =
 >   checkArity p f eqs &&>
 >   liftE (FunctionDecl p f) (mapE (checkEquation env) eqs)
-> checkDeclRhs env (PatternDecl p t rhs) =
->   liftE (PatternDecl p t) (checkRhs env rhs)
 > checkDeclRhs _ (ForeignDecl p cc s ie f ty) =
 >   do
 >     ie' <- checkForeign p f cc ie
 >     return (ForeignDecl p cc s ie' f ty)
-> checkDeclRhs _ d = return d
+> checkDeclRhs env (PatternDecl p t rhs) =
+>   liftE (PatternDecl p t) (checkRhs env rhs)
+> checkDeclRhs _ (FreeDecl p vs) = return (FreeDecl p vs)
+> checkDeclRhs _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
 
 > checkArity :: Position -> Ident -> [Equation a] -> Error ()
 > checkArity p f eqs = unless (sameArity eqs) (errorAt p (differentArity f))
@@ -301,20 +314,13 @@ scope, but the name under which a method is in scope is immaterial
 report~\cite{PeytonJones03:Haskell}).
 \begin{verbatim}
 
-> checkMethodDecls :: VarEnv -> QualIdent -> [P Ident] -> [P Ident]
->                  -> [MethodDecl a] -> Error [MethodDecl a]
+> checkMethodDecls :: VarEnv -> QualIdent -> [P Ident] -> [P Ident] -> [Decl a]
+>                  -> Error [Decl a]
 > checkMethodDecls env cls ops fs ds =
 >   do
->     ds' <- liftE joinEquations (mapE (checkMethodDeclLhs env) ds)
+>     ds' <- liftE joinEquations (mapE (checkDeclLhs True env) ds)
 >     checkMethods cls ops fs ds'
->     mapE (checkMethodDeclRhs env) ds'
-
-> checkMethodDeclLhs :: VarEnv -> MethodDecl a -> Error (Decl a)
-> checkMethodDeclLhs _ (MethodFixity p fix pr ops) =
->   return (InfixDecl p fix pr ops)
-> checkMethodDeclLhs _ (MethodSig p fs ty) = return (TypeSig p fs ty)
-> checkMethodDeclLhs env (MethodDecl p f eqs) = checkEquationLhs True env p eqs
-> checkMethodDeclLhs _ (TrustMethod p tr fs) = return (TrustAnnot p tr fs)
+>     mapE (checkDeclRhs env) ds'
 
 > checkMethods :: QualIdent -> [P Ident] -> [P Ident] -> [Decl a] -> Error ()
 > checkMethods cls ops fs ds =
@@ -330,16 +336,6 @@ report~\cite{PeytonJones03:Haskell}).
 >   where fs' = [P p f | FunctionDecl p f _ <- ds]
 >         ops' = concatMap vars (filter isInfixDecl ds)
 >         trs = concatMap vars (filter isTrustAnnot ds)
-
-> checkMethodDeclRhs :: VarEnv -> Decl a -> Error (MethodDecl a)
-> checkMethodDeclRhs _ (InfixDecl p fix pr ops) =
->   return (MethodFixity p fix pr ops)
-> checkMethodDeclRhs _ (TypeSig p fs ty) = return (MethodSig p fs ty)
-> checkMethodDeclRhs env (FunctionDecl p f eqs) =
->   checkArity p f eqs &&>
->   liftE (MethodDecl p f) (mapE (checkEquation env) eqs)
-> checkMethodDeclRhs _ (TrustAnnot p tr fs) = return (TrustMethod p tr fs)
-> checkMethodDeclRhs _ _ = internalError "checkMethodDeclRhs"
 
 \end{verbatim}
 The syntax checker examines the optional import specification of
@@ -597,7 +593,7 @@ Auxiliary definitions.
 > mthds (DataDecl _ _ _ _ _ _) = []
 > mthds (NewtypeDecl _ _ _ _ _ _) = []
 > mthds (TypeDecl _ _ _ _) = []
-> mthds (ClassDecl _ _ _ _ ds) = [P p f | MethodSig p fs _ <- ds, f <- fs]
+> mthds (ClassDecl _ _ _ _ ds) = [P p f | TypeSig p fs _ <- ds, f <- fs]
 > mthds (InstanceDecl _ _ _ _ _) = []
 > mthds (BlockDecl _) = []
 

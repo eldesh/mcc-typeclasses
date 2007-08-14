@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Trust.lhs 2400 2007-07-16 08:56:51Z wlux $
+% $Id: Trust.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -58,19 +58,6 @@ the local functions \texttt{h} and \texttt{i} are trusted, but
 >   trust _ _ = id
 
 >   trustList tr ds = trustDeclGroup tr [d | BlockDecl d <- ds] ds
-
-> instance SyntaxTree (MethodDecl a) where
->   trust tr (MethodDecl _ f eqs) env =
->     case lookupEnv f env of
->       Just tr' -> trust tr' eqs env
->       Nothing -> trust tr eqs (bindEnv f tr env)
->   trust _ _ env = env
-
->   trustList tr ds = trustDeclGroup tr (map decl ds) ds
->     where decl (MethodFixity p fix tr ops) = InfixDecl p fix tr ops
->           decl (MethodSig p fs ty) = TypeSig p fs ty
->           decl (MethodDecl p f eqs) = FunctionDecl p f eqs
->           decl (TrustMethod p tr fs) = TrustAnnot p tr fs
 
 > instance SyntaxTree (Decl a) where
 >   trust tr (FunctionDecl _ f eqs) env =

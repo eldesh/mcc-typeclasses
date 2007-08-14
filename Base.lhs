@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2432 2007-08-09 15:05:49Z wlux $
+% $Id: Base.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -706,12 +706,6 @@ name space.
 > isValueDecl (PatternDecl _ _ _) = True
 > isValueDecl (FreeDecl _ _) = True
 > isValueDecl _ = False
-
-> isMethodDecl :: MethodDecl a -> Bool
-> isMethodDecl (MethodFixity _ _ _ _) = False
-> isMethodDecl (MethodSig _ _ _) = False
-> isMethodDecl (MethodDecl _ _ _) = True
-> isMethodDecl (TrustMethod _ _ _) = False
 
 \end{verbatim}
 The function \texttt{infixOp} converts an infix operator into an

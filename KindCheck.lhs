@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: KindCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -107,12 +107,6 @@ declarations.
 
 > instance HasType NewConstrDecl where
 >   fts m (NewConstrDecl _ _ ty) = fts m ty
-
-> instance HasType (MethodDecl a) where
->   fts _ (MethodFixity _ _ _ _) = id
->   fts m (MethodSig _ _ ty) = fts m ty
->   fts m (MethodDecl _ _ eqs) = fts m eqs
->   fts _ (TrustMethod _ _ _) = id
 
 > instance HasType (Decl a) where
 >   fts _ (InfixDecl _ _ _ _) = id
@@ -349,16 +343,16 @@ latter.
 >   kcType tcEnv' p "type declaration" (ppTopDecl (TypeDecl p tc tvs ty)) k ty
 >   where (k,tcEnv') = bindTypeVars m tc tvs tcEnv
 > kcTopDecl m tcEnv (ClassDecl p cx cls tv ds) =
->   kcContext tcEnv' p cx >> mapM_ (kcMethodDecl tcEnv' (Just tv)) ds
+>   kcContext tcEnv' p cx >> mapM_ (kcDecl tcEnv' [tv]) ds
 >   where tcEnv' = bindTypeVar tv (classKind (qualifyWith m cls) tcEnv) tcEnv
 > kcTopDecl _ tcEnv (InstanceDecl p cx cls ty ds) =
 >   do
 >     tcEnv' <- foldM bindFreshKind tcEnv (fv ty)
 >     kcContext tcEnv' p cx
 >     kcType tcEnv' p "instance declaration" doc (classKind cls tcEnv) ty
->     mapM_ (kcMethodDecl tcEnv Nothing) ds
+>     mapM_ (kcDecl tcEnv []) ds
 >   where doc = ppTopDecl (InstanceDecl p cx cls ty [])
-> kcTopDecl _ tcEnv (BlockDecl d) = kcDecl tcEnv d
+> kcTopDecl _ tcEnv (BlockDecl d) = kcDecl tcEnv [] d
 
 > bindTypeVars :: ModuleIdent -> Ident -> [Ident] -> TCEnv -> (Kind,TCEnv)
 > bindTypeVars m tc tvs tcEnv =
@@ -375,24 +369,18 @@ latter.
 >     k <- freshKindVar
 >     return (bindTypeVar tv k tcEnv)
 
-> kcMethodDecl :: TCEnv -> Maybe Ident -> MethodDecl a -> KcState ()
-> kcMethodDecl _ _ (MethodFixity _ _ _ _) = return ()
-> kcMethodDecl tcEnv tv (MethodSig p _ ty) = kcTypeSig tcEnv tv p ty
-> kcMethodDecl tcEnv _ (MethodDecl _ _ eqs) = mapM_ (kcEquation tcEnv) eqs
-> kcMethodDecl _ _ (TrustMethod _ _ _) = return ()
-
 > kcGoal :: TCEnv -> Goal a -> KcState ()
-> kcGoal tcEnv (Goal p e ds) = kcExpr tcEnv p e >> mapM_ (kcDecl tcEnv) ds
+> kcGoal tcEnv (Goal p e ds) = kcExpr tcEnv p e >> mapM_ (kcDecl tcEnv []) ds
 
-> kcDecl :: TCEnv -> Decl a -> KcState ()
-> kcDecl _ (InfixDecl _ _ _ _) = return ()
-> kcDecl tcEnv (TypeSig p _ ty) = kcTypeSig tcEnv Nothing p ty
-> kcDecl tcEnv (FunctionDecl _ _ eqs) = mapM_ (kcEquation tcEnv) eqs
-> kcDecl tcEnv (ForeignDecl p _ _ _ _ ty) =
->   kcTypeSig tcEnv Nothing p (QualTypeExpr [] ty)
-> kcDecl tcEnv (PatternDecl _ _ rhs) = kcRhs tcEnv rhs
-> kcDecl _ (FreeDecl _ _) = return ()
-> kcDecl _ (TrustAnnot _ _ _) = return ()
+> kcDecl :: TCEnv -> [Ident] -> Decl a -> KcState ()
+> kcDecl _ _ (InfixDecl _ _ _ _) = return ()
+> kcDecl tcEnv tvs (TypeSig p _ ty) = kcTypeSig tcEnv tvs p ty
+> kcDecl tcEnv _ (FunctionDecl _ _ eqs) = mapM_ (kcEquation tcEnv) eqs
+> kcDecl tcEnv tvs (ForeignDecl p _ _ _ _ ty) =
+>   kcTypeSig tcEnv tvs p (QualTypeExpr [] ty)
+> kcDecl tcEnv _ (PatternDecl _ _ rhs) = kcRhs tcEnv rhs
+> kcDecl _ _ (FreeDecl _ _) = return ()
+> kcDecl _ _ (TrustAnnot _ _ _) = return ()
 
 > kcConstrDecl :: TCEnv -> ConstrDecl -> KcState ()
 > kcConstrDecl tcEnv d@(ConstrDecl p evs cx _ tys) =
@@ -419,9 +407,10 @@ latter.
 > kcEquation tcEnv (Equation _ _ rhs) = kcRhs tcEnv rhs
 
 > kcRhs :: TCEnv -> Rhs a -> KcState ()
-> kcRhs tcEnv (SimpleRhs p e ds) = kcExpr tcEnv p e >> mapM_ (kcDecl tcEnv) ds
+> kcRhs tcEnv (SimpleRhs p e ds) =
+>   kcExpr tcEnv p e >> mapM_ (kcDecl tcEnv []) ds
 > kcRhs tcEnv (GuardedRhs es ds) =
->   mapM_ (kcCondExpr tcEnv) es >> mapM_ (kcDecl tcEnv) ds
+>   mapM_ (kcCondExpr tcEnv) es >> mapM_ (kcDecl tcEnv []) ds
 
 > kcCondExpr :: TCEnv -> CondExpr a -> KcState ()
 > kcCondExpr tcEnv (CondExpr p g e) = kcExpr tcEnv p g >> kcExpr tcEnv p e
@@ -431,7 +420,7 @@ latter.
 > kcExpr _ _ (Variable _ _) = return ()
 > kcExpr _ _ (Constructor _ _) = return ()
 > kcExpr tcEnv p (Paren e) = kcExpr tcEnv p e
-> kcExpr tcEnv p (Typed e ty) = kcExpr tcEnv p e >> kcTypeSig tcEnv Nothing p ty
+> kcExpr tcEnv p (Typed e ty) = kcExpr tcEnv p e >> kcTypeSig tcEnv [] p ty
 > kcExpr tcEnv p (Tuple es) = mapM_ (kcExpr tcEnv p) es
 > kcExpr tcEnv p (List _ es) = mapM_ (kcExpr tcEnv p) es
 > kcExpr tcEnv p (ListCompr e qs) =
@@ -447,7 +436,7 @@ latter.
 > kcExpr tcEnv p (LeftSection e _) = kcExpr tcEnv p e
 > kcExpr tcEnv p (RightSection _ e) = kcExpr tcEnv p e
 > kcExpr tcEnv _ (Lambda p _ e) = kcExpr tcEnv p e
-> kcExpr tcEnv p (Let ds e) = mapM_ (kcDecl tcEnv) ds >> kcExpr tcEnv p e
+> kcExpr tcEnv p (Let ds e) = mapM_ (kcDecl tcEnv []) ds >> kcExpr tcEnv p e
 > kcExpr tcEnv p (Do sts e) = mapM_ (kcStmt tcEnv p) sts >> kcExpr tcEnv p e
 > kcExpr tcEnv p (IfThenElse e1 e2 e3) =
 >   kcExpr tcEnv p e1 >> kcExpr tcEnv p e2 >> kcExpr tcEnv p e3
@@ -456,19 +445,18 @@ latter.
 > kcStmt :: TCEnv -> Position -> Statement a -> KcState ()
 > kcStmt tcEnv p (StmtExpr e) = kcExpr tcEnv p e
 > kcStmt tcEnv _ (StmtBind p _ e) = kcExpr tcEnv p e
-> kcStmt tcEnv _ (StmtDecl ds) = mapM_ (kcDecl tcEnv) ds
+> kcStmt tcEnv _ (StmtDecl ds) = mapM_ (kcDecl tcEnv []) ds
 
 > kcAlt :: TCEnv -> Alt a -> KcState ()
 > kcAlt tcEnv (Alt _ _ rhs) = kcRhs tcEnv rhs
 
-> kcTypeSig :: TCEnv -> Maybe Ident -> Position -> QualTypeExpr -> KcState ()
-> kcTypeSig tcEnv tv p (QualTypeExpr cx ty) =
+> kcTypeSig :: TCEnv -> [Ident] -> Position -> QualTypeExpr -> KcState ()
+> kcTypeSig tcEnv tvs p (QualTypeExpr cx ty) =
 >   do
->     tcEnv' <- foldM bindFreshKind tcEnv tvs
+>     tcEnv' <- foldM bindFreshKind tcEnv (filter (`notElem` tvs) (nub (fv ty)))
 >     kcContext tcEnv' p cx
 >     kcValueType tcEnv' p "type signature" doc ty
->   where tvs = maybe id (filter . (/=)) tv (nub (fv ty))
->         doc = ppQualTypeExpr (QualTypeExpr cx ty)
+>   where doc = ppQualTypeExpr (QualTypeExpr cx ty)
 
 > kcContext :: TCEnv -> Position -> [ClassAssert] -> KcState ()
 > kcContext tcEnv p = mapM_ (kcClassAssert tcEnv p)

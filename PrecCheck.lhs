@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 2399 2007-07-16 08:49:24Z wlux $
+% $Id: PrecCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -76,10 +76,10 @@ appropriate qualification (see the \texttt{ClassDecl} and
 \texttt{InstanceDecl} equations of \texttt{checkTopDecl} below).
 \begin{verbatim}
 
-> bindMethodPrecs :: ModuleIdent -> (Ident -> QualIdent) -> [MethodDecl a]
->                 -> PEnv -> PEnv
+> bindMethodPrecs :: ModuleIdent -> (Ident -> QualIdent) -> [Decl a] -> PEnv
+>                 -> PEnv
 > bindMethodPrecs m qual ds pEnv =
->   foldr bindPrec pEnv [f | MethodDecl _ f _ <- ds]
+>   foldr bindPrec pEnv [f | FunctionDecl _ f _ <- ds]
 >   where bindPrec f pEnv =
 >           maybe id (bindTopEnv m f)
 >                 (listToMaybe (qualLookupTopEnv (qual (unRenameIdent f)) pEnv))
@@ -103,13 +103,9 @@ because it is used for constructing the module's interface.
 >     return (pEnv',ds'')
 >   where ds' = concatMap decls ds
 >         pEnv' = bindPrecs m ds' (foldr cleanPrecs pEnv ds')
->         decls (ClassDecl _ _ _ _ ds) = map decl ds
+>         decls (ClassDecl _ _ _ _ ds) = ds
 >         decls (BlockDecl d) = [d]
 >         decls _ = []
->         decl (MethodFixity p fix pr ops) = InfixDecl p fix pr ops
->         decl (MethodSig p fs ty) = TypeSig p fs ty
->         decl (MethodDecl p f eqs) = FunctionDecl p f eqs
->         decl (TrustMethod p tr fs) = TrustAnnot p tr fs
 
 > precCheckGoal :: ModuleIdent -> PEnv -> Goal a -> Error (Goal a)
 > precCheckGoal m pEnv (Goal p e ds) =
@@ -117,32 +113,33 @@ because it is used for constructing the module's interface.
 >   where pEnv' = bindPrecs m ds pEnv
 
 > checkTopDecl :: ModuleIdent -> TCEnv -> PEnv -> TopDecl a -> Error (TopDecl a)
+> checkTopDecl _ _ _ (DataDecl p cx tc tvs cs clss) =
+>   return (DataDecl p cx tc tvs cs clss)
+> checkTopDecl _ _ _ (NewtypeDecl p cx tc tvs nc clss) =
+>   return (NewtypeDecl p cx tc tvs nc clss)
+> checkTopDecl _ _ _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
 > checkTopDecl m _ pEnv (ClassDecl p cx cls tv ds) =
->   liftE (ClassDecl p cx cls tv) (mapE (checkMethodDecl m pEnv') ds)
+>   liftE (ClassDecl p cx cls tv) (mapE (checkDecl m pEnv') ds)
 >   where pEnv' = bindMethodPrecs m qualify ds pEnv
 > checkTopDecl m tcEnv pEnv (InstanceDecl p cx cls ty ds) =
->   liftE (InstanceDecl p cx cls ty) (mapE (checkMethodDecl m pEnv') ds)
+>   liftE (InstanceDecl p cx cls ty) (mapE (checkDecl m pEnv') ds)
 >   where pEnv' = bindMethodPrecs m qual ds pEnv
 >         qual =
 >           maybe qualify (qualifyLike . origName)
 >                 (listToMaybe (qualLookupTopEnv cls tcEnv))
 > checkTopDecl m _ pEnv (BlockDecl d) = liftE BlockDecl (checkDecl m pEnv d)
-> checkTopDecl _ _ _ d = return d
-
-> checkMethodDecl :: ModuleIdent -> PEnv -> MethodDecl a -> Error (MethodDecl a)
-> checkMethodDecl _ _ (MethodFixity p fix pr ops) =
->   return (MethodFixity p fix pr ops)
-> checkMethodDecl _ _ (MethodSig p fs ty) = return (MethodSig p fs ty)
-> checkMethodDecl m pEnv (MethodDecl p f eqs) =
->   liftE (MethodDecl p f) (mapE (checkEqn m pEnv) eqs)
-> checkMethodDecl _ _ (TrustMethod p tr fs) = return (TrustMethod p tr fs)
 
 > checkDecl :: ModuleIdent -> PEnv -> Decl a -> Error (Decl a)
+> checkDecl _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
+> checkDecl _ _ (TypeSig p fs ty) = return (TypeSig p fs ty)
 > checkDecl m pEnv (FunctionDecl p f eqs) =
 >   liftE (FunctionDecl p f) (mapE (checkEqn m pEnv) eqs)
+> checkDecl _ _ (ForeignDecl p cc s ie f ty) =
+>   return (ForeignDecl p cc s ie f ty)
 > checkDecl m pEnv (PatternDecl p t rhs) =
 >   liftE2 (PatternDecl p) (checkConstrTerm p pEnv t) (checkRhs m pEnv rhs)
-> checkDecl _ _ d = return d
+> checkDecl _ _ (FreeDecl p vs) = return (FreeDecl p vs)
+> checkDecl _ _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
 
 > checkEqn :: ModuleIdent -> PEnv -> Equation a -> Error (Equation a)
 > checkEqn m pEnv (Equation p lhs rhs) =

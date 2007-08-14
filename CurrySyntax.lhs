@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: CurrySyntax.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -57,8 +57,8 @@ associating types with patterns and expressions after type inference.
 >     DataDecl Position [ClassAssert] Ident [Ident] [ConstrDecl] [QualIdent]
 >   | NewtypeDecl Position [ClassAssert] Ident [Ident] NewConstrDecl [QualIdent]
 >   | TypeDecl Position Ident [Ident] TypeExpr
->   | ClassDecl Position [ClassAssert] Ident Ident [MethodDecl a]
->   | InstanceDecl Position [ClassAssert] QualIdent TypeExpr [MethodDecl a]
+>   | ClassDecl Position [ClassAssert] Ident Ident [Decl a]
+>   | InstanceDecl Position [ClassAssert] QualIdent TypeExpr [Decl a]
 >   | BlockDecl (Decl a)
 >   deriving (Eq,Show)
 
@@ -67,13 +67,6 @@ associating types with patterns and expressions after type inference.
 >   | ConOpDecl Position [Ident] [ClassAssert] TypeExpr Ident TypeExpr
 >   deriving (Eq,Show)
 > data NewConstrDecl = NewConstrDecl Position Ident TypeExpr deriving (Eq,Show)
-
-> data MethodDecl a =
->     MethodFixity Position Infix (Maybe Int) [Ident]
->   | MethodSig Position [Ident] QualTypeExpr
->   | MethodDecl Position Ident [Equation a]
->   | TrustMethod Position Trust [Ident]
->   deriving (Eq,Show)
 
 > data Decl a =
 >     InfixDecl Position Infix (Maybe Int) [Ident]
@@ -99,11 +92,11 @@ associating types with patterns and expressions after type inference.
 > nconstr :: NewConstrDecl -> Ident
 > nconstr (NewConstrDecl _ c _) = c
 
-> methods :: MethodDecl a -> [Ident]
-> methods (MethodFixity _ _ _ _) = []
-> methods (MethodSig _ fs _) = fs
-> methods (MethodDecl _ _ _) = []
-> methods (TrustMethod _ _ _) = []
+> methods :: Decl a -> [Ident]
+> methods (InfixDecl _ _ _ _) = []
+> methods (TypeSig _ fs _) = fs
+> methods (FunctionDecl _ _ _) = []
+> methods (TrustAnnot _ _ _) = []
 
 \end{verbatim}
 \paragraph{Module interfaces}
@@ -294,12 +287,6 @@ The abstract syntax tree is a functor with respect to its attributes.
 >   fmap f (InstanceDecl p cx cls ty ds) =
 >     InstanceDecl p cx cls ty (map (fmap f) ds)
 >   fmap f (BlockDecl d) = BlockDecl (fmap f d)
-
-> instance Functor MethodDecl where
->   fmap _ (MethodFixity p fix pr ops) = MethodFixity p fix pr ops
->   fmap _ (MethodSig p fs ty) = MethodSig p fs ty
->   fmap f (MethodDecl p f' eqs) = MethodDecl p f' (map (fmap f) eqs)
->   fmap _ (TrustMethod p tr fs) = TrustMethod p tr fs
 
 > instance Functor Decl where
 >   fmap _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops

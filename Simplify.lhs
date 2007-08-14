@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2418 2007-07-26 17:44:48Z wlux $
+% $Id: Simplify.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -48,23 +48,25 @@ Currently, the following optimizations are implemented:
 >     return (Module m es is ds',tyEnv)
 
 > simplifyTopDecl :: ModuleIdent -> TopDecl Type -> SimplifyState (TopDecl Type)
+> simplifyTopDecl _ (DataDecl p cx tc tvs cs clss) =
+>   return (DataDecl p cx tc tvs cs clss)
+> simplifyTopDecl _ (NewtypeDecl p cx tc tvs nc clss) =
+>   return (NewtypeDecl p cx tc tvs nc clss)
+> simplifyTopDecl _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
 > simplifyTopDecl m (ClassDecl p cx cls tv ds) =
->   liftM (ClassDecl p cx cls tv) (mapM (simplifyMethodDecl m) ds)
+>   liftM (ClassDecl p cx cls tv) (mapM (simplifyDecl m emptyEnv) ds)
 > simplifyTopDecl m (InstanceDecl p cx cls ty ds) =
->   liftM (InstanceDecl p cx cls ty) (mapM (simplifyMethodDecl m) ds)
-> simplifyTopDecl m (BlockDecl d) = liftM BlockDecl (simplifyDecl m emptyEnv d)
-> simplifyTopDecl _ d = return d
-
-> simplifyMethodDecl :: ModuleIdent -> MethodDecl Type
->                    -> SimplifyState (MethodDecl Type)
-> simplifyMethodDecl m (MethodDecl p f eqs) =
->   liftM (MethodDecl p f) (mapM (simplifyEquation m emptyEnv) eqs)
-> simplifyMethodDecl _ d = return d
+>   liftM (InstanceDecl p cx cls ty) (mapM (simplifyDecl m emptyEnv) ds)
+> simplifyTopDecl m (BlockDecl d) =
+>   liftM BlockDecl (simplifyDecl m emptyEnv d)
 
 > simplifyDecl :: ModuleIdent -> InlineEnv -> Decl Type
 >              -> SimplifyState (Decl Type)
+> simplifyDecl _ _ (TypeSig p fs ty) = return (TypeSig p fs ty)
 > simplifyDecl m env (FunctionDecl p f eqs) =
 >   liftM (FunctionDecl p f) (mapM (simplifyEquation m env) eqs >>= etaExpand m)
+> simplifyDecl _ _ (ForeignDecl p cc s ie f ty) =
+>   return (ForeignDecl p cc s ie f ty)
 > simplifyDecl m env (PatternDecl p t rhs) =
 >   do
 >     rhs' <- simplifyRhs m env rhs
@@ -75,7 +77,7 @@ Currently, the following optimizations are implemented:
 >           return (funDecl p f ts e)
 >         where VariablePattern _ f = t
 >       _ -> return (PatternDecl p t rhs')
-> simplifyDecl _ _ d = return d
+> simplifyDecl _ _ (FreeDecl p vs) = return (FreeDecl p vs)
 
 > simplifyEquation :: ModuleIdent -> InlineEnv -> Equation Type
 >                  -> SimplifyState (Equation Type)

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2444 2007-08-13 18:27:20Z wlux $
+% $Id: DictTrans.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -242,8 +242,8 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 > bindClassFun :: ModuleIdent -> QualIdent -> TypeScheme -> ValueEnv -> ValueEnv
 > bindClassFun m f ty = bindEntity m f (Value f 0 ty)
 
-> classDecls :: TCEnv -> ValueEnv -> Position -> Ident -> Ident
->            -> [MethodDecl Type] -> [TopDecl Type]
+> classDecls :: TCEnv -> ValueEnv -> Position -> Ident -> Ident -> [Decl Type]
+>            -> [TopDecl Type]
 > classDecls tcEnv tyEnv p cls tv ds =
 >   dictDataDecl p cls tv [dictConstrDecl tcEnv p cls tv tys'] :
 >   zipWith4 funDecl
@@ -251,8 +251,8 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 >            (defaultMethodIds cls)
 >            (repeat [])
 >            (zipWith (defaultMethodExpr tyEnv) fs vds')
->   where (vds,ods) = partition isMethodDecl ds
->         (ps,fs,tys) = unzip3 [(p,f,ty) | MethodSig p fs ty <- ods, f <- fs]
+>   where (vds,ods) = partition isValueDecl ds
+>         (ps,fs,tys) = unzip3 [(p,f,ty) | TypeSig p fs ty <- ods, f <- fs]
 >         tys' = map (expandMethodType tcEnv (qualify cls) tv) tys
 >         vds' = orderMethodDecls (map Just fs) vds
 
@@ -299,12 +299,10 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 >   where tvs = tv : filter (unRenameIdent tv /=) nameSupply
 >         tys' = map (fromType tcEnv tvs . transformMethodType tcEnv) tys
 
-> defaultMethodExpr :: ValueEnv -> Ident -> Maybe (MethodDecl Type)
->                   -> Expression Type
-> defaultMethodExpr tyEnv _ (Just (MethodDecl p f eqs)) =
+> defaultMethodExpr :: ValueEnv -> Ident -> Maybe (Decl Type) -> Expression Type
+> defaultMethodExpr tyEnv _ (Just (FunctionDecl p f eqs)) =
 >   Let [FunctionDecl p f eqs] (mkVar (rawType (varType f tyEnv)) f)
-> defaultMethodExpr tyEnv f Nothing =
->   prelUndefined (rawType (varType f tyEnv))
+> defaultMethodExpr tyEnv f Nothing = prelUndefined (rawType (varType f tyEnv))
 
 > transformMethodType :: TCEnv -> QualType -> Type
 > transformMethodType tcEnv =
@@ -394,7 +392,7 @@ method's class can be shared among all method stubs of that class.
 >         tyss = zipWith (methodDictTypes tyEnv) fs tys
 >         cls' = qualifyWith m cls
 >         (i,cx) = methodStubContext tcEnv cls'
->         (ps,fs) = unzip [(p,f) | MethodSig p fs _ <- ds, f <- fs]
+>         (ps,fs) = unzip [(p,f) | TypeSig p fs _ <- ds, f <- fs]
 > methodStubs _ _ _ _ = return []
 
 > intfMethodStubs :: QualIdent -> Ident -> [Maybe IMethodDecl] -> [IDecl]
@@ -486,7 +484,7 @@ of method $f_i$ in class $C$.
 > bindInstFun m f ty = bindEntity m f (Value f 0 (typeScheme ty))
 
 > instDecls :: ModuleIdent -> TCEnv -> ValueEnv -> Position -> QualIdent
->           -> QualType -> [MethodDecl Type] -> [TopDecl Type] 
+>           -> QualType -> [Decl Type] -> [TopDecl Type] 
 > instDecls m tcEnv tyEnv p cls (QualType cx ty) ds =
 >   zipWith4 funDecl
 >            (p : map (maybe p pos) ds')
@@ -499,11 +497,10 @@ of method $f_i$ in class $C$.
 >         ty' = instDictType tcEnv tyEnv tp fs
 >         tys' = [ty | QualType _ ty <- map (instMethodType tyEnv cx tp) fs]
 >         ds' = orderMethodDecls fs ds
->         pos (MethodDecl p _ _) = p
+>         pos (FunctionDecl p _ _) = p
 
-> instMethodExpr :: QualIdent -> Type -> Maybe (MethodDecl Type)
->                -> Expression Type
-> instMethodExpr _ ty (Just (MethodDecl p f eqs)) =
+> instMethodExpr :: QualIdent -> Type -> Maybe (Decl Type) -> Expression Type
+> instMethodExpr _ ty (Just (FunctionDecl p f eqs)) =
 >   Let [FunctionDecl p f eqs] (mkVar ty f)
 > instMethodExpr f ty Nothing = Variable ty f
 
@@ -537,9 +534,10 @@ of method $f_i$ in class $C$.
 >   apply (Constructor ty (qDictConstrId cls))
 >         (zipWith Variable (arrowArgs ty) fs)
 
-> orderMethodDecls :: [Maybe Ident] -> [MethodDecl a] -> [Maybe (MethodDecl a)]
+> orderMethodDecls :: [Maybe Ident] -> [Decl a] -> [Maybe (Decl a)]
 > orderMethodDecls fs ds =
->   map (>>= flip lookup [(unRenameIdent f,d) | d@(MethodDecl _ f _) <- ds]) fs
+>   map (>>= flip lookup [(unRenameIdent f,d) | d@(FunctionDecl _ f _) <- ds])
+>       fs
 
 > instMethodIds :: TypePred -> [Ident]
 > instMethodIds (TypePred cls ty) =

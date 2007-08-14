@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2444 2007-08-13 18:27:20Z wlux $
+% $Id: TypeCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -145,10 +145,10 @@ type synonyms occurring in their types are expanded.
 > bindTypeValues _ _ (TypeDecl _ _ _ _) tyEnv = tyEnv
 > bindTypeValues m tcEnv (ClassDecl _ _ cls tv ds) tyEnv = foldr bind tyEnv ds
 >   where cls' = qualifyWith m cls
->         bind (MethodFixity _ _ _ _) = id
->         bind (MethodSig _ fs ty) = bindMethods m tcEnv cls' tv fs ty
->         bind (MethodDecl _ _ _) = id
->         bind (TrustMethod _ _ _) = id
+>         bind (InfixDecl _ _ _ _) = id
+>         bind (TypeSig _ fs ty) = bindMethods m tcEnv cls' tv fs ty
+>         bind (FunctionDecl _ _ _) = id
+>         bind (TrustAnnot _ _ _) = id
 > bindTypeValues _ _ (InstanceDecl _ _ _ _ _) tyEnv = tyEnv
 > bindTypeValues _ _ (BlockDecl _) tyEnv = tyEnv
 
@@ -682,73 +682,71 @@ case of \texttt{tcTopDecl}.
 > tcTopDecl _ _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
 > tcTopDecl m tcEnv (ClassDecl p cx cls tv ds) =
 >   do
->     vds' <- mapM (tcClassMethodDecl m tcEnv sigs) vds
+>     vds' <- mapM (tcClassMethodDecl m tcEnv (qualify cls) tv sigs) vds
 >     return (ClassDecl p cx cls tv (map untyped ods ++ vds'))
->   where sigs = foldr (bindTypeSigs . typeSig (qualify cls) tv) noSigs ods
->         (vds,ods) = partition isMethodDecl ds
->         typeSig _ _ (MethodFixity p fix pr ops) = InfixDecl p fix pr ops
->         typeSig cls tv (MethodSig p fs (QualTypeExpr cx ty)) =
->           TypeSig p fs (QualTypeExpr (ClassAssert cls tv [] : cx) ty)
->         typeSig _ _ (TrustMethod p tr fs) = TrustAnnot p tr fs
+>   where sigs = foldr bindTypeSigs noSigs ods
+>         (vds,ods) = partition isValueDecl ds
 > tcTopDecl m tcEnv (InstanceDecl p cx cls ty ds) =
 >   do
 >     vds' <- mapM (tcInstMethodDecl m tcEnv cls' ty') vds
 >     return (InstanceDecl p cx cls ty (map untyped ods ++ vds'))
 >   where cls' = origName (head (qualLookupTopEnv cls tcEnv))
 >         ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
->         (vds,ods) = partition isMethodDecl ds
+>         (vds,ods) = partition isValueDecl ds
 > tcTopDecl _ _ (BlockDecl _) = internalError "tcTopDecl"
 
-> tcClassMethodDecl :: ModuleIdent -> TCEnv -> SigEnv -> MethodDecl a
->                   -> TcState (MethodDecl Type)
-> tcClassMethodDecl m tcEnv sigs d =
+> tcClassMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> Ident -> SigEnv
+>                   -> Decl a -> TcState (Decl Type)
+> tcClassMethodDecl m tcEnv cls tv sigs d =
 >   do
 >     methTy <- liftM (classMethodType (qualifyWith m) d) fetchSt
 >     (ty',d') <- tcMethodDecl m tcEnv methTy d
->     checkClassMethodType tcEnv (classMethodSig sigs d) ty' d'
+>     checkClassMethodType tcEnv (clsType cls tv (classMethodSig sigs d)) ty' d'
+>     return d'
+>   where clsType cls tv (QualTypeExpr cx ty) =
+>           QualTypeExpr (ClassAssert cls tv [] : cx) ty
 
 > checkClassMethodType :: TCEnv -> QualTypeExpr -> TypeScheme -> Decl Type
->                      -> TcState (MethodDecl Type)
-> checkClassMethodType tcEnv sigTy sigma (FunctionDecl p f eqs)
->   | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma =
->       return (MethodDecl p f eqs)
+>                      -> TcState ()
+> checkClassMethodType tcEnv sigTy sigma (FunctionDecl p f _)
+>   | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma = return ()
 >   | otherwise = errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
 >   where what = text "Method:" <+> ppIdent f
 
-> tcInstMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> QualType
->                  -> MethodDecl a -> TcState (MethodDecl Type)
+> tcInstMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> QualType -> Decl a
+>                  -> TcState (Decl Type)
 > tcInstMethodDecl m tcEnv cls instTy d =
 >   do
 >     methTy <- liftM (instMethodType (qualifyLike cls) instTy d) fetchSt
 >     (ty',d') <- tcMethodDecl m tcEnv (typeScheme methTy) d
 >     checkInstMethodType tcEnv (normalize 0 methTy) ty' d'
+>     return d'
 
 > checkInstMethodType :: TCEnv -> QualType -> TypeScheme -> Decl Type
->                     -> TcState (MethodDecl Type)
-> checkInstMethodType tcEnv methTy sigma (FunctionDecl p f eqs)
->   | checkTypeSig tcEnv methTy sigma = return (MethodDecl p f eqs)
+>                     -> TcState ()
+> checkInstMethodType tcEnv methTy sigma (FunctionDecl p f _)
+>   | checkTypeSig tcEnv methTy sigma = return ()
 >   | otherwise = errorAt p (methodSigTooGeneral tcEnv what methTy sigma)
 >   where what = text "Method:" <+> ppIdent f
 
-> tcMethodDecl :: ModuleIdent -> TCEnv -> TypeScheme -> MethodDecl a
+> tcMethodDecl :: ModuleIdent -> TCEnv -> TypeScheme -> Decl a
 >              -> TcState (TypeScheme,Decl Type)
-> tcMethodDecl m tcEnv methTy (MethodDecl p f eqs) =
+> tcMethodDecl m tcEnv methTy (FunctionDecl p f eqs) =
 >   do
 >     updateSt_ (bindFun m f (eqnArity (head eqs)) methTy)
 >     (cx,(ty,d')) <- tcFunctionDecl "method" m tcEnv [] methTy p f eqs
 >     theta <- liftSt fetchSt
 >     return (gen zeroSet cx (subst theta ty),d')
 
-> classMethodSig :: SigEnv -> MethodDecl a -> QualTypeExpr
-> classMethodSig sigs (MethodDecl _ f _) =
+> classMethodSig :: SigEnv -> Decl a -> QualTypeExpr
+> classMethodSig sigs (FunctionDecl _ f _) =
 >   fromJust (lookupEnv (unRenameIdent f) sigs)
 
-> classMethodType :: (Ident -> QualIdent) -> MethodDecl a -> ValueEnv
->                 -> TypeScheme
-> classMethodType qualify (MethodDecl _ f _) tyEnv =
+> classMethodType :: (Ident -> QualIdent) -> Decl a -> ValueEnv -> TypeScheme
+> classMethodType qualify (FunctionDecl _ f _) tyEnv =
 >   funType (qualify (unRenameIdent f)) tyEnv
 
-> instMethodType :: (Ident -> QualIdent) -> QualType -> MethodDecl a -> ValueEnv
+> instMethodType :: (Ident -> QualIdent) -> QualType -> Decl a -> ValueEnv
 >                -> QualType
 > instMethodType qualify (QualType cx ty) d tyEnv =
 >   contextMap (cx ++) (instanceType ty (contextMap tail ty'))

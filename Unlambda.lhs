@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Unlambda.lhs 2408 2007-07-22 21:51:27Z wlux $
+% $Id: Unlambda.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -47,20 +47,15 @@ lambda abstraction is recorded in the type environment.
 >     liftM (InstanceDecl p cx cls ty) (mapM (nameLambdas m) ds)
 >   nameLambdas m (BlockDecl d) = liftM BlockDecl (nameLambdas m d)
 
-> instance SyntaxTree MethodDecl where
->   nameLambdas _ (MethodFixity p fix pr ops) =
->     return (MethodFixity p fix pr ops)
->   nameLambdas _ (MethodSig p fs ty) = return (MethodSig p fs ty)
->   nameLambdas m (MethodDecl p f eqs) =
->     liftM (MethodDecl p f) (mapM (nameLambdas m) eqs)
->   nameLambdas _ (TrustMethod p tr fs) = return (TrustMethod p tr fs)
-
 > instance SyntaxTree Decl where
+>   nameLambdas _ (TypeSig p fs ty) = return (TypeSig p fs ty)
 >   nameLambdas m (FunctionDecl p f eqs) =
 >     liftM (FunctionDecl p f) (mapM (nameLambdas m) eqs)
+>   nameLambdas _ (ForeignDecl p cc s ie f ty) =
+>     return (ForeignDecl p cc s ie f ty)
 >   nameLambdas m (PatternDecl p t rhs) =
 >     liftM (PatternDecl p t) (nameLambdas m rhs)
->   nameLambdas _ d = return d
+>   nameLambdas _ (FreeDecl p vs) = return (FreeDecl p vs)
 
 > instance SyntaxTree Equation where
 >   nameLambdas m (Equation p lhs rhs) =

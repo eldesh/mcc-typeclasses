@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: CurryPP.lhs 2445 2007-08-14 13:48:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -73,9 +73,9 @@ Declarations
 > ppTopDecl (TypeDecl _ tc tvs ty) =
 >   sep [ppTypeDeclLhs "type" [] tc tvs <+> equals,indent (ppTypeExpr 0 ty)]
 > ppTopDecl (ClassDecl _ cx cls tv ds) =
->   ppClassInstDecl (ppClassHead cx (ppIdent cls) tv) (map ppMethodDecl ds)
+>   ppClassInstDecl (ppClassHead cx (ppIdent cls) tv) (map ppDecl ds)
 > ppTopDecl (InstanceDecl _ cx cls ty ds) =
->   ppClassInstDecl (ppInstanceHead cx cls ty) (map ppMethodDecl ds)
+>   ppClassInstDecl (ppInstanceHead cx cls ty) (map ppDecl ds)
 > ppTopDecl (BlockDecl d) = ppDecl d
 
 > ppTypeDeclLhs :: String -> [ClassAssert] -> Ident -> [Ident] -> Doc
@@ -114,12 +114,6 @@ Declarations
 > ppClassInstDecl head ds
 >   | null ds = head
 >   | otherwise = head <+> text "where" $$ indent (vcat ds)
-
-> ppMethodDecl :: MethodDecl a -> Doc
-> ppMethodDecl (MethodFixity p fix pr ops) = ppDecl (InfixDecl p fix pr ops)
-> ppMethodDecl (MethodSig p fs ty) = ppDecl (TypeSig p fs ty)
-> ppMethodDecl (MethodDecl p f eqs) = ppDecl (FunctionDecl p f eqs)
-> ppMethodDecl (TrustMethod p tr fs) = ppDecl (TrustAnnot p tr fs)
 
 > ppBlock :: [Decl a] -> Doc
 > ppBlock = vcat . map ppDecl

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -26,24 +26,26 @@ of a capitalization convention.
 
 \end{verbatim}
 In order to check type constructor applications, the compiler
-maintains an environment, which records all known type constructors.
+maintains an environment which records all known type constructors.
 The function \texttt{typeSyntaxCheck} first initializes this
-environment from the imported type constructor environment. Next, the
-all locally defined type constructors are inserted into the
-environment, and, finally, the declarations are checked within this
-environment. The final environment is returned in order to be used
-later for checking the optional export list of the current module.
+environment from the imported type constructor environment. Next, all
+locally defined type constructors are inserted into the environment,
+and, finally, the declarations are checked within this environment.
+The final environment is returned in order to be used later for
+checking the optional export list of the current module.
 \begin{verbatim}
 
 > typeSyntaxCheck :: ModuleIdent -> TCEnv -> InstEnv -> [TopDecl a]
 >                 -> Error (TypeEnv,[TopDecl a])
 > typeSyntaxCheck m tcEnv iEnv ds =
 >   do
->     reportDuplicates duplicateType repeatedType (map tident tds)
+>     reportDuplicates (const duplicateDefault) (const repeatedDefault)
+>                      [P p () | DefaultDecl p _ <- ods] &&>
+>       reportDuplicates duplicateType repeatedType (map tident tds)
 >     ds' <- mapE (checkTopDecl env) ds
 >     checkInstances env (instSet iEnv) ds'
 >     return (env,ds')
->   where tds = filter isTypeDecl ds
+>   where (tds,ods) = partition isTypeDecl ds
 >         env = foldr (bindType m) (fmap typeKind tcEnv) tds
 
 > typeSyntaxCheckGoal :: TCEnv -> Goal a -> Error (TypeEnv,Goal a)
@@ -63,6 +65,7 @@ later for checking the optional export list of the current module.
 > bindType m (ClassDecl _ _ cls _ ds) =
 >   globalBindTopEnv m cls (Class (qualifyWith m cls) (concatMap methods ds))
 > bindType m (InstanceDecl _ _ _ _ _) = id
+> bindType _ (DefaultDecl _ _) = id
 > bindType _ (BlockDecl _) = id
 
 \end{verbatim}
@@ -112,6 +115,8 @@ signatures.
 >       mapE (checkDecl env) ds
 >     return (InstanceDecl p cx' cls ty' ds')
 >   where doc = ppQIdent cls <+> ppTypeExpr 2 ty
+> checkTopDecl env (DefaultDecl p tys) =
+>   liftE (DefaultDecl p) (mapE (checkType env p) tys)
 > checkTopDecl env (BlockDecl d) = liftE BlockDecl (checkDecl env d)
 
 > checkGoal :: TypeEnv -> Goal a -> Error (Goal a)
@@ -376,6 +381,7 @@ Auxiliary definitions.
 > tident (TypeDecl p tc _ _) = P p tc
 > tident (ClassDecl p _ cls _ _) = P p cls
 > tident (InstanceDecl _ _ _ _ _) = internalError "tident"
+> tident (DefaultDecl _ _) = internalError "tident"
 > tident (BlockDecl _) = internalError "tident"
 
 > instances :: TopDecl a -> [P CT]
@@ -386,6 +392,7 @@ Auxiliary definitions.
 > instances (TypeDecl _ _ _ _) = []
 > instances (ClassDecl _ _ _ _ _) = []
 > instances (InstanceDecl p _ cls ty _) = [P p (CT cls (root ty))]
+> instances (DefaultDecl _ _) = []
 > instances (BlockDecl _) = []
 
 > isSimpleType :: TypeExpr -> Bool
@@ -455,6 +462,12 @@ Error messages.
 > repeatedInstance :: CT -> String
 > repeatedInstance (CT cls tc) =
 >   "Repeated " ++ qualName cls ++ " " ++ qualName tc ++ " instance declaration"
+
+> duplicateDefault :: String
+> duplicateDefault = "More than one default declaration"
+
+> repeatedDefault :: String
+> repeatedDefault = "Repeated default declaration"
 
 > nonLinear :: String -> Ident -> String
 > nonLinear what tv =

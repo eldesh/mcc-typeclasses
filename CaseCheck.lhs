@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: CaseCheck.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -141,6 +141,7 @@ collect all defined identifiers.
 >     where isTypeVar tv (D _ TypeVarId tv') = tv == tv'
 >           isTypeVar _ _ = False
 >   names _ (InstanceDecl p _ _ ty ds) xs = names p ty (foldr methodNames xs ds)
+>   names _ (DefaultDecl p tys) xs = names p tys xs
 >   names p (BlockDecl d) xs = names p d xs
 
 > typeNames :: Position -> Ident -> [Ident] -> [Definition]

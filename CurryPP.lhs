@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: CurryPP.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -76,6 +76,8 @@ Declarations
 >   ppClassInstDecl (ppClassHead cx (ppIdent cls) tv) (map ppDecl ds)
 > ppTopDecl (InstanceDecl _ cx cls ty ds) =
 >   ppClassInstDecl (ppInstanceHead cx cls ty) (map ppDecl ds)
+> ppTopDecl (DefaultDecl _ tys) =
+>   text "default" <+> parenList (map (ppTypeExpr 0) tys)
 > ppTopDecl (BlockDecl d) = ppDecl d
 
 > ppTypeDeclLhs :: String -> [ClassAssert] -> Ident -> [Ident] -> Doc

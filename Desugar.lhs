@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: Desugar.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -199,6 +199,7 @@ by desugaring.
 >         (desugarDeclGroup m ds)
 > desugarTopDecl m (InstanceDecl p cx cls ty ds) =
 >   liftM (InstanceDecl p cx cls ty) (desugarDeclGroup m ds)
+> desugarTopDecl _ (DefaultDecl p tys) = return (DefaultDecl p tys)
 
 \end{verbatim}
 Within a local declaration group, all fixity declarations, type

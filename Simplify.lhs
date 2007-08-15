@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: Simplify.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -57,6 +57,7 @@ Currently, the following optimizations are implemented:
 >   liftM (ClassDecl p cx cls tv) (mapM (simplifyDecl m emptyEnv) ds)
 > simplifyTopDecl m (InstanceDecl p cx cls ty ds) =
 >   liftM (InstanceDecl p cx cls ty) (mapM (simplifyDecl m emptyEnv) ds)
+> simplifyTopDecl _ (DefaultDecl p tys) = return (DefaultDecl p tys)
 > simplifyTopDecl m (BlockDecl d) =
 >   liftM BlockDecl (simplifyDecl m emptyEnv d)
 

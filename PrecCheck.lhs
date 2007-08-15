@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: PrecCheck.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -127,6 +127,7 @@ because it is used for constructing the module's interface.
 >         qual =
 >           maybe qualify (qualifyLike . origName)
 >                 (listToMaybe (qualLookupTopEnv cls tcEnv))
+> checkTopDecl _ _ _ (DefaultDecl p tys) = return (DefaultDecl p tys)
 > checkTopDecl m _ pEnv (BlockDecl d) = liftE BlockDecl (checkDecl m pEnv d)
 
 > checkDecl :: ModuleIdent -> PEnv -> Decl a -> Error (Decl a)

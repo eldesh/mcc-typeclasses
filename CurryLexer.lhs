@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryLexer.lhs 2305 2007-06-20 11:32:33Z wlux $
+% $Id: CurryLexer.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -40,9 +40,9 @@ In this section a lexer for Curry is implemented.
 >   -- virtual punctation (inserted by layout)
 >   | VSemicolon | VRightBrace
 >   -- reserved identifiers
->   | KW_case | KW_class | KW_data | KW_deriving | KW_do | KW_else
->   | KW_foreign | KW_free | KW_if | KW_import | KW_in | KW_infix
->   | KW_infixl | KW_infixr | KW_instance | KW_let | KW_module
+>   | KW_case | KW_class | KW_data | KW_default | KW_deriving | KW_do
+>   | KW_else | KW_foreign | KW_free | KW_if | KW_import | KW_in
+>   | KW_infix | KW_infixl | KW_infixr | KW_instance | KW_let | KW_module
 >   | KW_newtype | KW_of | KW_then | KW_type | KW_where
 >   -- reserved operators
 >   | At | Colon | DotDot | DoubleColon | Equals | Backslash | Bar
@@ -156,6 +156,7 @@ all tokens in their source representation.
 >   showsPrec _ (Token KW_case _) = showString "`case'"
 >   showsPrec _ (Token KW_class _) = showString "`class'"
 >   showsPrec _ (Token KW_data _) = showString "`data'"
+>   showsPrec _ (Token KW_default _) = showString "`default'"
 >   showsPrec _ (Token KW_deriving _) = showString "`deriving'"
 >   showsPrec _ (Token KW_do _) = showString "`do'"
 >   showsPrec _ (Token KW_else _) = showString "`else'"
@@ -225,6 +226,7 @@ pragmas.
 >     ("case",     KW_case),
 >     ("class",    KW_class),
 >     ("data",     KW_data),
+>     ("default",  KW_default),
 >     ("deriving", KW_deriving),
 >     ("do",       KW_do),
 >     ("else",     KW_else),

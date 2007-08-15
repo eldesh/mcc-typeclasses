@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: TypeCheck.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -79,6 +79,7 @@ current module to the type environment.
 >          theta <- liftSt fetchSt
 >          return (subst theta tyEnv',
 >                  map (fmap (subst theta)) (tds' ++ map BlockDecl vds')))
+>       (defaultTypes tcEnv (filter isDefaultDecl tds))
 >       iEnv
 >       (foldr (bindTypeValues m tcEnv) tyEnv tds)
 >   where (vds,tds) = partition isBlockDecl ds
@@ -98,6 +99,7 @@ non-empty context for the goal's type or not.
 >          tyEnv' <- fetchSt
 >          theta <- liftSt fetchSt
 >          return (subst theta tyEnv',cx,fmap (subst theta) g'))
+>       (defaultTypes tcEnv [])
 >       iEnv
 >       tyEnv
 
@@ -114,15 +116,34 @@ static top-level instance environment and a dynamic environment that
 maps each class on the instances which are in scope for it. The
 rationale behind using this representation is that it makes it easy to
 apply the current substitution to the dynamic part of the environment.
+
+For lack of a better place, we also include the list of default types
+in the extended instance environment.
 \begin{verbatim}
 
 > type TcState a =
 >   StateT ValueEnv (StateT TypeSubst (StateT InstEnv' (StateT Int Error))) a
-> type InstEnv' = (Env QualIdent [Type],InstEnv)
+> type InstEnv' = ([Type],Env QualIdent [Type],InstEnv)
 
-> run :: TcState a -> InstEnv -> ValueEnv -> Error a
-> run m iEnv tyEnv =
->   callSt (callSt (callSt (callSt m tyEnv) idSubst) (emptyEnv,iEnv)) 1
+> run :: TcState a -> [Type] -> InstEnv -> ValueEnv -> Error a
+> run m tys iEnv tyEnv =
+>   callSt (callSt (callSt (callSt m tyEnv) idSubst) (tys,emptyEnv,iEnv)) 1
+
+\end{verbatim}
+The list of default types is given either by a default declaration in
+the source code or defaults to the predefined list of numeric data
+types, which at present includes the types \texttt{Int} and
+\texttt{Float}. This list is always used when type checking goal
+expressions because a goal has no top-level declarations.
+
+\ToDo{Provide a way to set the default types for a goal, e.g. via
+  a command line switch.}
+\begin{verbatim}
+
+> defaultTypes :: TCEnv -> [TopDecl a] -> [Type]
+> defaultTypes _ [] = numTypes
+> defaultTypes tcEnv (DefaultDecl _ tys : _) =
+>   map (unqualType . expandPolyType tcEnv . QualTypeExpr []) tys
 
 \end{verbatim}
 \paragraph{Defining Data Constructors and Methods}
@@ -150,6 +171,7 @@ type synonyms occurring in their types are expanded.
 >         bind (FunctionDecl _ _ _) = id
 >         bind (TrustAnnot _ _ _) = id
 > bindTypeValues _ _ (InstanceDecl _ _ _ _ _) tyEnv = tyEnv
+> bindTypeValues _ _ (DefaultDecl _ _) tyEnv = tyEnv
 > bindTypeValues _ _ (BlockDecl _) tyEnv = tyEnv
 
 > bindConstr :: (QualIdent -> Int -> ConstrInfo -> TypeScheme -> ValueInfo)
@@ -693,6 +715,7 @@ case of \texttt{tcTopDecl}.
 >   where cls' = origName (head (qualLookupTopEnv cls tcEnv))
 >         ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
 >         (vds,ods) = partition isValueDecl ds
+> tcTopDecl _ _ (DefaultDecl p tys) = return (DefaultDecl p tys)
 > tcTopDecl _ _ (BlockDecl _) = internalError "tcTopDecl"
 
 > tcClassMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> Ident -> SigEnv
@@ -843,6 +866,10 @@ Note that the type attribute associated with a constructor or infix
 pattern is the type of the whole pattern and not the type of the
 constructor itself. Also note that overloaded literals are not
 supported in patterns.
+
+\ToDo{The types admissible for numeric literals in patterns should
+  in some way acknowledge the set of types specified in a default
+  declaration if one is present.}
 
 When computing the type of a variable in a pattern, we ignore the
 context of the variable's type (which can only be due to a type
@@ -1365,7 +1392,7 @@ may cause a further extension of the current substitution.
 > reduceContext p what doc tcEnv cx =
 >   do
 >     theta <- liftSt fetchSt
->     iEnv <- liftM (apFst (fmap (subst theta))) (liftSt (liftSt fetchSt))
+>     iEnv <- liftM (apSnd3 (fmap (subst theta))) (liftSt (liftSt fetchSt))
 >     let cx' = subst theta cx
 >         (cx1,cx2) =
 >           partitionContext (minContext tcEnv (reduceTypePreds iEnv cx'))
@@ -1381,7 +1408,7 @@ may cause a further extension of the current substitution.
 >   maybe [TypePred cls ty] (reduceTypePreds iEnv) (instContext iEnv cls ty)
 
 > instContext :: InstEnv' -> QualIdent -> Type -> Maybe Context
-> instContext (dEnv,iEnv) cls ty =
+> instContext (_,dEnv,iEnv) cls ty =
 >   case lookupEnv cls dEnv of
 >     Just tys | ty `elem` tys -> Just []
 >     _ ->
@@ -1434,19 +1461,16 @@ because the compiler cannot determine which \texttt{Read} and
 In the case of expressions with an ambiguous numeric type, i.e., a
 type that must be an instance of \texttt{Num} or one of its
 subclasses, the compiler tries to resolve the ambiguity by choosing
-the first type from the set $\left\{ \texttt{Int}, \texttt{Float}
-\right\}$ that satisfies all constraints for the ambiguous type
-variable. An error is reported if no such type exists.
+the first type from the list of default types that satisfies all
+constraints for the ambiguous type variable. An error is reported if
+no such type exists.
 
-This is similar to Haskell's default rules, except that the user can
-specify the set of types used for resolving ambiguous numeric types
-with a default declaration in Haskell. Furthermore, in Haskell an
-ambiguous type variable $v$ is resolved only if it appears solely in
-constraints of the form $C\,v$ and all of these classes are defined in
-the Prelude or a standard library (cf.\ Sect.~4.3.4 of the revised
-Haskell'98 report~\cite{PeytonJones03:Haskell}).
-
-\ToDo{Support default declarations.}
+At present, we do not implement two restrictions mandated by the
+revised Haskell'98 report~\cite{PeytonJones03:Haskell} (cf.\ 
+Sect.~4.3.4). In particular, in Haskell an ambiguous type variable $v$
+is resolved only if it appears only in constraints of the form $C\,v$
+and all of these classes are defined in the Prelude or a standard
+library.
 
 \ToDo{Adopt Haskell's restrictions?}
 \begin{verbatim}
@@ -1470,7 +1494,7 @@ Haskell'98 report~\cite{PeytonJones03:Haskell}).
 > bindDefault :: TCEnv -> InstEnv' -> [TypePred] -> Int -> TypeSubst
 >                      -> TypeSubst
 > bindDefault tcEnv iEnv cx tv =
->   case foldr (defaultType tcEnv iEnv tv) numTypes cx of
+>   case foldr (defaultType tcEnv iEnv tv) (fst3 iEnv) cx of
 >     [] -> id
 >     ty:_ -> bindSubst tv ty
 
@@ -1563,7 +1587,7 @@ environment.
 >     tys <- replicateM (n - m) freshTypeVar
 >     tys' <- replicateM m freshSkolem
 >     let tys'' = tys ++ tys'
->     liftSt (liftSt (updateSt_ (apFst (bindSkolemInsts tys''))))
+>     liftSt (liftSt (updateSt_ (apSnd3 (bindSkolemInsts tys''))))
 >     return (map (expandAliasType tys) cxL,expandAliasType tys'' ty)
 >   where cxL = filter (`notElem` cxR) cx
 >         bindSkolemInsts tys dEnv =

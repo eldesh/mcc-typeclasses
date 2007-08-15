@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: ShadowCheck.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 2005-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -81,6 +81,7 @@ traversal of the syntax tree.
 >   shadow _ (TypeDecl _ _ _ _) = id
 >   shadow _ (ClassDecl p _ _ _ ds) = shadow p ds
 >   shadow _ (InstanceDecl p _ _ _ ds) = shadow p ds
+>   shadow _ (DefaultDecl _ _) = id
 >   shadow p (BlockDecl d) = shadow p d
 
 >   shadowGroup p ds =
@@ -163,6 +164,7 @@ with their positions.
 > funs (TypeDecl _ _ _ _) = []
 > funs (ClassDecl _ _ _ _ ds) = [P p f | TypeSig p fs _ <- ds, f <- fs]
 > funs (InstanceDecl _ _ _ _ _) = []
+> funs (DefaultDecl _ _) = []
 > funs (BlockDecl d) = vars d
 
 > vars :: Decl a -> [P Ident]

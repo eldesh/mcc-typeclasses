@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: Base.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -676,17 +676,21 @@ declarations because type constructors and type classes share a common
 name space.
 \begin{verbatim}
 
-> isTypeDecl, isClassDecl, isInstanceDecl, isBlockDecl :: TopDecl a -> Bool
+> isTypeDecl, isClassDecl, isInstanceDecl :: TopDecl a -> Bool
+> isDefaultDecl, isBlockDecl :: TopDecl a -> Bool
 > isTypeDecl (DataDecl _ _ _ _ _ _) = True
 > isTypeDecl (NewtypeDecl _ _ _ _ _ _) = True
 > isTypeDecl (TypeDecl _ _ _ _) = True
 > isTypeDecl (ClassDecl _ _ _ _ _) = True {-sic!-}
 > isTypeDecl (InstanceDecl _ _ _ _ _) = False
+> isTypeDecl (DefaultDecl _ _) = False
 > isTypeDecl (BlockDecl _) = False
 > isClassDecl (ClassDecl _ _ _ _ _) = True
 > isClassDecl _ = False
 > isInstanceDecl (InstanceDecl _ _ _ _ _) = True
 > isInstanceDecl _ = False
+> isDefaultDecl (DefaultDecl _ _) = True
+> isDefaultDecl _ = False
 > isBlockDecl (BlockDecl _) = True
 > isBlockDecl _ = False
 

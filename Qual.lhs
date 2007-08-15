@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: Qual.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -60,6 +60,8 @@ order to compile this module with hbc.
 >                  (qualIdent phase tEnv cls)
 >                  (qual phase tEnv vEnv ty)
 >                  (qual phase tEnv vEnv ds)
+>   qual phase tEnv vEnv (DefaultDecl p tys) =
+>     DefaultDecl p (qual phase tEnv vEnv tys)
 >   qual phase tEnv vEnv (BlockDecl d) = BlockDecl (qual phase tEnv vEnv d)
 
 > instance Qual ConstrDecl where

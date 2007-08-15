@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: Renaming.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -151,6 +151,10 @@ syntax tree and renames all type and expression variables.
 >            (mapM (renameClassAssert env) cx)
 >            (renameType env ty)
 >            (mapM (renameMethodDecl emptyEnv env') ds)
+> renameTopDecl (DefaultDecl p tys) =
+>   do
+>     tys' <- mapM (renameTypeSig emptyEnv . QualTypeExpr []) tys
+>     return (DefaultDecl p [ty | QualTypeExpr _ ty <- tys'])
 > renameTopDecl (BlockDecl d) = liftM BlockDecl (renameDecl emptyEnv d)
 
 > renameConstrDecl :: RenameEnv -> ConstrDecl -> RenameState ConstrDecl

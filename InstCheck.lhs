@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: InstCheck.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -12,7 +12,9 @@ ensures that all necessary super class instances exist. Furthermore,
 the compiler infers the contexts of the implicit instance declarations
 introduced by deriving clauses in data and newtype declarations. The
 instances declared explicitly and automatically derived by the
-compiler are added to the instance environment.
+compiler are added to the instance environment. Finally, the compiler
+also checks that all types specified in a default declaration are
+instances of class \texttt{Prelude.Num}.
 \begin{verbatim}
 
 > module InstCheck(instCheck) where
@@ -34,11 +36,13 @@ compiler are added to the instance environment.
 >     iEnv'' <-
 >       foldM (bindDerivedInstances m tcEnv) iEnv'
 >             (sortDeriving (map (declDeriving m tcEnv) tds'))
->     mapE_ (checkInstance tcEnv iEnv'') ids
+>     mapE_ (checkInstance tcEnv iEnv'') ids  &&>
+>       mapE_ (checkDefault tcEnv iEnv'') dds
 >     return iEnv''
 >   where (tds,ods) = partition isTypeDecl ds
 >         tds' = filter hasDerivedInstance tds
 >         ids = filter isInstanceDecl ods
+>         dds = filter isDefaultDecl ods
 >         iEnv' = foldr (bindInstance m tcEnv) iEnv ids
 
 > hasDerivedInstance :: TopDecl a -> Bool
@@ -47,6 +51,7 @@ compiler are added to the instance environment.
 > hasDerivedInstance (TypeDecl _ _ _ _) = False
 > hasDerivedInstance (ClassDecl _ _ _ _ _) = False
 > hasDerivedInstance (InstanceDecl _ _ _ _ _) = False
+> hasDerivedInstance (DefaultDecl _ _) = False
 > hasDerivedInstance (BlockDecl _) = False
 
 \end{verbatim}
@@ -234,7 +239,25 @@ satisfied by \emph{cx}.
 >         doc = ppInstance tcEnv (TypePred cls ty')
 >         QualType cx' ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
 >         cx'' = [TypePred cls ty' | cls <- superClasses cls tcEnv]
-> checkInstance _ _ _ = return ()
+
+\end{verbatim}
+All types specified in the optional default declaration of a module
+must be instances of the \texttt{Num} class. Since these types are
+used to resolve ambiguous type variables, the contexts of the
+respective instances must be empty.
+\begin{verbatim}
+
+> checkDefault :: TCEnv -> InstEnv -> TopDecl a -> Error ()
+> checkDefault tcEnv iEnv (DefaultDecl p tys) =
+>   mapE_ (checkDefaultType tcEnv iEnv p) tys
+
+> checkDefaultType :: TCEnv -> InstEnv -> Position -> TypeExpr -> Error ()
+> checkDefaultType tcEnv iEnv p ty =
+>   do
+>     cx' <- reduceContext p what empty tcEnv iEnv [TypePred qNumId ty']
+>     unless (null cx') (mapE_ (errorAt p . noInstance what empty tcEnv) cx')
+>   where what = "default declaration"
+>         QualType _ ty' = expandPolyType tcEnv (QualTypeExpr [] ty)
 
 \end{verbatim}
 The function \texttt{reduceContext} simplifies a context

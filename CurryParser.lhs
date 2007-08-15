@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: CurryParser.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -133,7 +133,8 @@ directory path to the module is ignored.
 
 > topDecl :: Parser Token (TopDecl ()) a
 > topDecl = dataDecl <|> newtypeDecl <|> typeDecl
->       <|> classDecl <|> instanceDecl <|> BlockDecl <$> blockDecl
+>       <|> classDecl <|> instanceDecl <|> defaultDecl
+>       <|> BlockDecl <$> blockDecl
 >   where blockDecl = infixDecl <|> functionDecl <|> foreignDecl
 >                 <|> trustAnnotation
 
@@ -218,6 +219,11 @@ directory path to the module is ignored.
 > classInstHead kw cls ty = token kw <-*> withContext (,) ((,) <$> cls <*> ty)
 >   -- NB Don't try to ``optimize'' this into withContext (,,) cls <*> ty
 >   --    as this will yield a parse error if the context is omitted
+
+> defaultDecl :: Parser Token (TopDecl ()) a
+> defaultDecl =
+>   DefaultDecl <$> position <*-> token KW_default
+>               <*> parens (type0 `sepBy` comma)
 
 > infixDecl :: Parser Token (Decl ()) a
 > infixDecl = infixDeclLhs InfixDecl <*> option int <*> funop `sepBy1` comma

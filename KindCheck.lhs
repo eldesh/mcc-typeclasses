@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: KindCheck.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -81,6 +81,7 @@ declarations.
 > bt (TypeDecl _ tc _ _) = [tc]
 > bt (ClassDecl _ _ cls _ _) = [cls]
 > bt (InstanceDecl _ _ _ _ _) = []
+> bt (DefaultDecl _ tys) = []
 > bt (BlockDecl _) = []
 
 > ft :: ModuleIdent -> TopDecl a -> [Ident]
@@ -99,6 +100,7 @@ declarations.
 >   fts m (ClassDecl _ cx _ _ ds) = fts m cx . fts m ds
 >   fts m (InstanceDecl _ cx cls ty ds) =
 >     fts m cx . fts m cls . fts m ty . fts m ds
+>   fts m (DefaultDecl _ tys) = fts m tys
 >   fts m (BlockDecl d) = fts m d
 
 > instance HasType ConstrDecl where
@@ -277,6 +279,7 @@ have to do it while instantiating the remaining kind variables in
 >           expandPolyType tcEnv (QualTypeExpr cx (VariableType tv))
 >         clss = [cls | TypePred cls _ <- cx']
 > bindKind _ tcEnv (InstanceDecl _ _ _ _ _) = return tcEnv
+> bindKind _ tcEnv (DefaultDecl _ _) = return tcEnv
 > bindKind _ tcEnv (BlockDecl _) = return tcEnv
 
 > bindTypeCon :: (QualIdent -> Kind -> a -> TypeInfo) -> ModuleIdent -> Ident
@@ -319,6 +322,7 @@ have to do it while instantiating the remaining kind variables in
 >       globalRebindTopEnv m cls (TypeClass cls' (defaultKind k) clss fs) tcEnv
 >     _ -> internalError "bindDefaultKind (ClassDecl)"
 > bindDefaultKind _ _ (InstanceDecl _ _ _ _ _) tcEnv = tcEnv
+> bindDefaultKind _ _ (DefaultDecl _ _) tcEnv = tcEnv
 > bindDefaultKind _ _ (BlockDecl _) tcEnv = tcEnv
 
 \end{verbatim}
@@ -329,7 +333,8 @@ hand side of type declarations and the free type variables of type
 signatures. While the kinds of the former are determined already by
 the kinds of their type constructors and type classes, respectively
 (see \texttt{bindKind} above), fresh kind variables are added for the
-latter.
+latter. Obviously, all types specified in a default declaration must
+have kind $\star$.
 \begin{verbatim}
 
 > kcTopDecl :: ModuleIdent -> TCEnv -> TopDecl a -> KcState ()
@@ -352,6 +357,10 @@ latter.
 >     kcType tcEnv' p "instance declaration" doc (classKind cls tcEnv) ty
 >     mapM_ (kcDecl tcEnv []) ds
 >   where doc = ppTopDecl (InstanceDecl p cx cls ty [])
+> kcTopDecl _ tcEnv (DefaultDecl p tys) =
+>   do
+>     tcEnv' <- foldM bindFreshKind tcEnv (nub (fv tys))
+>     mapM_ (kcValueType tcEnv' p "default declaration" empty) tys
 > kcTopDecl _ tcEnv (BlockDecl d) = kcDecl tcEnv [] d
 
 > bindTypeVars :: ModuleIdent -> Ident -> [Ident] -> TCEnv -> (Kind,TCEnv)

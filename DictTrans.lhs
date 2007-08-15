@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: DictTrans.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -106,6 +106,7 @@ p.~\pageref{dict-specialize}.
 >   classDecls tcEnv tyEnv p cls tv ds
 > liftDecls m tcEnv tyEnv (InstanceDecl p cx cls ty ds) =
 >   instDecls m tcEnv tyEnv p cls (expandPolyType tcEnv (QualTypeExpr cx ty)) ds
+> liftDecls _ _ _ (DefaultDecl p tys) = [DefaultDecl p tys]
 > liftDecls _ _ _ (BlockDecl d) = [BlockDecl d]
 
 \end{verbatim}
@@ -675,11 +676,11 @@ the implicit dictionary arguments to the declaration.
 An application of an overloaded function $f$ with type $(C_1\,u_1,
 \dots, C_n\,u_n) \Rightarrow \tau$ is changed into an application of
 $f$ to the dictionaries for $C_1\,\tau_1, \dots, C_n\,\tau_n$ where
-the types $\tau_i$ are given by $\tau_i = \vartheta u_i$ where
-$\vartheta$ is the most general unifier between $f$'s type $\tau$ and
-the concrete type at which $f$ is used in the application. An
-application of a data constructor with a non-empty right hand side
-context is changed similarly.
+the types $\tau_i$ are given by $\tau_i = \theta u_i$ where $\theta$
+is the most general unifier between $f$'s type $\tau$ and the concrete
+type at which $f$ is used in the application. An application of a data
+constructor with a non-empty right hand side context is changed
+similarly.
 \begin{verbatim}
 
 > instance DictTrans Expression where
@@ -834,6 +835,7 @@ for $f$ at a particular type.
 >   dictSpecialize _ (NewtypeDecl p cx tc tvs nc clss) =
 >     NewtypeDecl p cx tc tvs nc clss
 >   dictSpecialize _ (TypeDecl p tc tvs ty) = TypeDecl p tc tvs ty
+>   dictSpecialize _ (DefaultDecl p tys) = DefaultDecl p tys
 >   dictSpecialize mEnv (BlockDecl d) = BlockDecl (dictSpecialize mEnv d)
 
 > instance DictSpecialize Decl where
@@ -942,14 +944,7 @@ function's type with the concrete instance at which that type is used
 in order to determine the correct context. This problem does not
 require a general unification because only the polymorphic type
 variables of the function's type can be instantiated to a particular
-monomorphic type. Furthermore, as long as no newtype constructors have
-been removed all occurrences of a particular type variable must be
-instantiated to exactly the same type.\footnote{If newtype
-  constructors are removed, different occurrences may be instantiated
-  to different but equivalent types. E.g., given a declaration
-  \texttt{newtype CInt = CInt Int}, a type variable can be
-  instantiated to \texttt{Int} at one place and to \texttt{CInt} at
-  another place.}
+monomorphic type.
 
 Polymorphic methods make things a little bit more complicated. When an
 instance dictionary constructor is applied to an instance method, the

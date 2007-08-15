@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: Modules.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -234,6 +234,7 @@ declaration to the module.
 >         isCodeDecl (TypeDecl _ _ _ _) = False
 >         isCodeDecl (ClassDecl _ _ _ _ _) = True
 >         isCodeDecl (InstanceDecl _ _ _ _ _) = True
+>         isCodeDecl (DefaultDecl _ _) = False
 >         isCodeDecl (BlockDecl d) = isValueDecl d
 
 > mergeILModules :: [IL.Module] -> IL.Module

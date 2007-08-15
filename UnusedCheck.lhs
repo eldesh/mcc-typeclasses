@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: UnusedCheck.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 2005-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -91,6 +91,7 @@ implemented by a traversal of the syntax tree.
 >   used _ (TypeDecl _ _ _ _) = id
 >   used m (ClassDecl _ _ _ _ ds) = used m ds
 >   used m (InstanceDecl _ _ _ _ ds) = used m ds
+>   used m (DefaultDecl _ _) = id
 >   used m (BlockDecl d) = used m d
 
 >   unused used p (DataDecl _ _ _ _ cs _) = unused used p cs
@@ -100,6 +101,7 @@ implemented by a traversal of the syntax tree.
 >     flip (foldr (unusedMethods used p)) ds
 >   unused used _ (InstanceDecl p _ _ _ ds) =
 >     flip (foldr (unusedMethods used p)) ds
+>   unused _ _ (DefaultDecl _ _) = id
 >   unused used p (BlockDecl d) = unused used p d
 
 > instance SyntaxTree ConstrDecl where

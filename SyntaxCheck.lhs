@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: SyntaxCheck.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -108,6 +108,7 @@ declarations are passed to \texttt{checkMethodDecls}.
 >     return (ClassDecl p cx cls tv ds)
 > checkTopDeclLhs _ (InstanceDecl p cx cls ty ds) =
 >   return (InstanceDecl p cx cls ty ds)
+> checkTopDeclLhs _ (DefaultDecl p tys) = return (DefaultDecl p tys)
 > checkTopDeclLhs env (BlockDecl d) = liftE BlockDecl (checkDeclLhs True env d)
 
 > joinTopEquations :: [TopDecl a] -> [TopDecl a]
@@ -133,6 +134,7 @@ declarations are passed to \texttt{checkMethodDecls}.
 > checkTopDeclRhs tEnv env _ (InstanceDecl p cx cls ty ds) =
 >   liftE (InstanceDecl p cx cls ty) (checkMethodDecls env cls [] fs ds)
 >   where fs = map (P p) (classMthds cls tEnv)
+> checkTopDeclRhs _ _ _ (DefaultDecl p tys) = return (DefaultDecl p tys)
 > checkTopDeclRhs _ env _ (BlockDecl d) = liftE BlockDecl (checkDeclRhs env d)
 
 \end{verbatim}
@@ -587,6 +589,7 @@ Auxiliary definitions.
 > constrs (TypeDecl _ _ _ _) = []
 > constrs (ClassDecl _ _ _ _ _) = []
 > constrs (InstanceDecl _ _ _ _ _) = []
+> constrs (DefaultDecl _ _) = []
 > constrs (BlockDecl _) = []
 
 > mthds :: TopDecl a -> [P Ident]
@@ -595,6 +598,7 @@ Auxiliary definitions.
 > mthds (TypeDecl _ _ _ _) = []
 > mthds (ClassDecl _ _ _ _ ds) = [P p f | TypeSig p fs _ <- ds, f <- fs]
 > mthds (InstanceDecl _ _ _ _ _) = []
+> mthds (DefaultDecl _ _) = []
 > mthds (BlockDecl _) = []
 
 > vars :: Decl a -> [P Ident]

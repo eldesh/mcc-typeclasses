@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: OverlapCheck.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: OverlapCheck.lhs 2446 2007-08-15 09:35:19Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -50,6 +50,7 @@ are collected with a simple traversal of the syntax tree.
 >   overlap _ (TypeDecl _ _ _ _) = id
 >   overlap _ (ClassDecl p _ _ _ ds) = overlap p ds 
 >   overlap _ (InstanceDecl p _ _ _ ds) = overlap p ds 
+>   overlap _ (DefaultDecl _ _) = id
 >   overlap p (BlockDecl d) = overlap p d
 
 > instance Syntax (Decl a) where

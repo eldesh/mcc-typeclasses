@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Set.lhs 1744 2005-08-23 16:17:12Z wlux $
+% $Id: Set.lhs 2454 2007-08-23 23:06:53Z wlux $
 %
-% Copyright (c) 2002, Wolfgang Lux
+% Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Set.lhs}
@@ -10,7 +10,10 @@ The module \texttt{Set} implements sets as a special case of finite
 maps.
 \begin{verbatim}
 
-> module Set where
+> module Set(Set, nullSet, zeroSet, unitSet, addToSet, deleteFromSet,
+>            elemSet, notElemSet, subsetSet, fromListSet, toListSet,
+>            unionSet, unionSets, intersectionSet, diffSet, symDiffSet,
+>            mapSet, domainFM) where
 > import List
 > import Map
 > import Maybe

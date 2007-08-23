@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Env.lhs 1744 2005-08-23 16:17:12Z wlux $
+% $Id: Env.lhs 2454 2007-08-23 23:06:53Z wlux $
 %
-% Copyright (c) 2002, Wolfgang Lux
+% Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Env.lhs}
@@ -20,12 +20,10 @@ following definitions:
     \mathop{{\mathcal C}odom}(\rho) = \left\{t_1,\dots,t_n\right\}
   \end{array}
 \end{displaymath}
-
-Unfortunately we cannot define \texttt{Env} as a \texttt{newtype}
-because of a bug in the nhc compiler.
 \begin{verbatim}
 
-> module Env where
+> module Env(Env, emptyEnv, bindEnv, unbindEnv, lookupEnv,
+>            environment, envToList, envSize) where
 > import Map
 
 > newtype Env a b = Env (FM a b) deriving Show

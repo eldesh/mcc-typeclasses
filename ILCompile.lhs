@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 2334 2007-06-23 09:33:35Z wlux $
+% $Id: ILCompile.lhs 2454 2007-08-23 23:06:53Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,7 +10,7 @@ This section describes the transformation from the intermediate
 language into abstract machine code.
 \begin{verbatim}
 
-> module ILCompile where
+> module ILCompile(camCompile, camCompileData, var, fun, apFun, con) where
 > import Ident
 > import IL
 > import qualified Cam
@@ -133,7 +133,7 @@ world.
 >           Cam.Seq (w1 Cam.:<- Cam.Enter v1) (Cam.Enter v2)
 >         ensureNotFree (v1:_) (w1:_) = rigidArg v1 w1 (Cam.Return (Cam.Var w1))
 >         return (v1:_) _ = Cam.Return (Cam.Var v1)
->         (>>) (v1:v2:v3:_) (w1:_) = 
+>         (>>) (v1:v2:v3:_) (w1:_) =
 >           Cam.Seq (w1 Cam.:<- Cam.Exec (apFun 1) [v1,v3])
 >                   (Cam.Exec (apFun 1) [v2,v3])
 >         (>>=) (v1:v2:v3:_) (w1:_) =
@@ -477,7 +477,7 @@ equivalences.
 > unaliasStmt aliases (Cam.Seq (v Cam.:<- Cam.Seq st1 st2) st3) =
 >   unaliasStmt aliases (Cam.Seq st1 (Cam.Seq (v Cam.:<- st2) st3))
 > unaliasStmt aliases (Cam.Seq (Cam.Let [Cam.Bind v e]) st)
->   | v `notElem` vars e = 
+>   | v `notElem` vars e =
 >       unaliasStmt aliases (Cam.Seq (v Cam.:<- Cam.Return e) st)
 > unaliasStmt aliases (Cam.Seq st1 st2) =
 >   case f (unaliasStmt aliases' st2) of

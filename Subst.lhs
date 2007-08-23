@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Subst.lhs 1744 2005-08-23 16:17:12Z wlux $
+% $Id: Subst.lhs 2454 2007-08-23 23:06:53Z wlux $
 %
-% Copyright (c) 2002, Wolfgang Lux
+% Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Subst.lhs}
@@ -15,7 +15,8 @@ In order to implement substitutions efficiently composed
 substitutions are marked with a boolean flag (see below).
 \begin{verbatim}
 
-> module Subst where
+> module Subst(Subst, idSubst, bindSubst, unbindSubst, compose, substToList,
+>              substVar', IntSubst(..), isubstVar, restrictSubstTo) where
 > import Map
 > import Utils
 

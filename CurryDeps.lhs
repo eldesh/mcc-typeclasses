@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryDeps.lhs 2364 2007-06-23 13:42:09Z wlux $
+% $Id: CurryDeps.lhs 2454 2007-08-23 23:06:53Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -11,7 +11,7 @@ information between Curry modules. This is used to create Makefile
 dependencies and to update programs composed of multiple modules.
 \begin{verbatim}
 
-> module CurryDeps where
+> module CurryDeps(buildScript, makeDepend, findModules) where
 > import Ident
 > import Unlit
 > import CurrySyntax hiding(Interface(..))

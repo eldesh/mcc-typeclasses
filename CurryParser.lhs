@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2452 2007-08-23 22:51:27Z wlux $
+% $Id: CurryParser.lhs 2454 2007-08-23 23:06:53Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,7 +10,7 @@ The Curry parser is implemented using the (mostly) LL(1) parsing
 combinators described in appendix~\ref{sec:ll-parsecomb}.
 \begin{verbatim}
 
-> module CurryParser where
+> module CurryParser(parseSource, parseHeader, parseInterface, parseGoal) where
 > import Ident
 > import Position
 > import Error

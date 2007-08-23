@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CCode.lhs 2452 2007-08-23 22:51:27Z wlux $
+% $Id: CCode.lhs 2453 2007-08-23 22:58:14Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -98,7 +98,9 @@ are not used by the compiler.
 >   deriving Eq
 
 > data LVar = LVar String | LElem LVar CExpr | LField LVar String deriving Eq
-> data CCase = CCase String [CStmt] | CDefault [CStmt] deriving Eq
+> data CCase = CCase CCaseLabel [CStmt] deriving Eq
+> data CCaseLabel =
+>   CCaseLabel String | CCaseInt Integer | CCaseDefault deriving Eq
 
 > data CExpr =
 >     CNull

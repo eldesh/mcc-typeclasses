@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CPretty.lhs 2452 2007-08-23 22:51:27Z wlux $
+% $Id: CPretty.lhs 2453 2007-08-23 22:58:14Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -173,8 +173,12 @@ nested block.
 \begin{verbatim}
 
 > ppCase :: CCase -> Doc
-> ppCase (CCase c sts) = text "case" <+> text c <> colon $+$ ppCaseStmts sts
-> ppCase (CDefault sts) = text "default" <> colon $+$ ppCaseStmts sts
+> ppCase (CCase l sts) = ppCaseLabel l <> colon $+$ ppCaseStmts sts
+
+> ppCaseLabel :: CCaseLabel -> Doc
+> ppCaseLabel (CCaseLabel c) = text "case" <+> text c
+> ppCaseLabel (CCaseInt i) = text "case" <+> integer i
+> ppCaseLabel CCaseDefault = text "default"
 
 > ppCaseStmts :: [CStmt] -> Doc
 > ppCaseStmts sts = if null ds then ppStmts sts else ppStmt (CBlock sts)

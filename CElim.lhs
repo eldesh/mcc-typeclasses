@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CElim.lhs 1822 2005-11-07 22:50:22Z wlux $
+% $Id: CElim.lhs 2453 2007-08-23 22:58:14Z wlux $
 %
-% Copyright (c) 2003-2005, Wolfgang Lux
+% Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CElim.lhs}
@@ -54,8 +54,6 @@ code and the C compiler does not have to parse it.
 >   (usedVars e (foldr unionSet vs vss),CSwitch e cases' : sts)
 >   where (vss,cases') = unzip (map elimUnusedCaseVars cases)
 >         elimUnusedCaseVars (CCase c sts) = (vs,CCase c sts')
->           where (vs,sts') = foldr elimUnusedVars (zeroSet,[]) sts
->         elimUnusedCaseVars (CDefault sts) = (vs,CDefault sts')
 >           where (vs,sts') = foldr elimUnusedVars (zeroSet,[]) sts
 > elimUnusedVars (CLoop sts) ~(vs,sts') =
 >   (vs' `unionSet` vs,CLoop sts'' : sts')

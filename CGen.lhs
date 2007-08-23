@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2452 2007-08-23 22:51:27Z wlux $
+% $Id: CGen.lhs 2453 2007-08-23 22:58:14Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -951,7 +951,7 @@ translation function.
 > enter vs0 v ks =
 >   saveCont vs0 [v] [] ks ++
 >   [kindSwitch v [updVar (null ks,[v],[]) v] taggedSwitch
->               [CCase "LAZY_KIND"
+>               [cCase "LAZY_KIND"
 >                      (saveRet vs0 ks ++ [goto vs0 (field v "info->eval")])],
 >    gotoRet vs0 ks]
 >   where goto vs0 = if fst3 vs0 then gotoIndirExpr else gotoExpr
@@ -1085,17 +1085,17 @@ literals when set to a non-zero value.
 >           map varCase vars ++ [charCase | not (null chars)] ++
 >           [intCase | not (null ints)] ++ [floatCase | not (null floats)] ++
 >           [constrCase | not (null constrs)]
->         varCase = CCase "LVAR_KIND"
+>         varCase = cCase "LVAR_KIND"
 >         charCase =
->           CCase "CHAR_KIND"
->             [CppCondStmts "NO_POINTER_TAGS"
->                [charSwitch (field v "ch.ch") chars,CBreak]
->                [CProcCall "curry_panic"
->                           [CString "impossible: kind(%p) == CHAR_KIND\n",
->                            var v]]]
->         intCase = CCase "INT_KIND" [intSwitch (field v "i.i") ints,CBreak]
->         floatCase = CCase "FLOAT_KIND" (floatSwitch v floats ++ [CBreak])
->         constrCase = CCase "CAPP_KIND" [tagSwitch v constrs,CBreak]
+>           cCase "CHAR_KIND"
+>                 [CppCondStmts "NO_POINTER_TAGS"
+>                    [charSwitch (field v "ch.ch") chars,CBreak]
+>                    [CProcCall "curry_panic"
+>                               [CString "impossible: kind(%p) == CHAR_KIND\n",
+>                                var v]]]
+>         intCase = cCase "INT_KIND" [intSwitch (field v "i.i") ints,CBreak]
+>         floatCase = cCase "FLOAT_KIND" (floatSwitch v floats ++ [CBreak])
+>         constrCase = cCase "CAPP_KIND" [tagSwitch v constrs,CBreak]
 >         partition (t,stmts) ~(lits,constrs,vars,dflts) =
 >           case t of
 >              CPSLitCase l -> ((l,stmts) : lits,constrs,vars,dflts)
@@ -1135,16 +1135,15 @@ literals when set to a non-zero value.
 > kindSwitch v upd taggedSwitch cases =
 >   CLoop [taggedSwitch (CSwitch (nodeKind v) allCases),CBreak]
 >   where allCases =
->           CCase "INDIR_KIND"
->             (setVar v (field v "n.node") : upd ++ [CContinue]) :
+>           cCase "INDIR_KIND"
+>                 (setVar v (field v "n.node") : upd ++ [CContinue]) :
 >           cases
 
 > charSwitch :: CExpr -> [(Char,[CStmt])] -> CStmt
-> charSwitch e cases =
->   CSwitch e [CCase (show (ord c)) stmts | (c,stmts) <- cases]
+> charSwitch e cases = CSwitch e [cCaseInt (ord c) stmts | (c,stmts) <- cases]
 
 > intSwitch :: CExpr -> [(Integer,[CStmt])] -> CStmt
-> intSwitch e cases = CSwitch e [CCase (show i) stmts | (i,stmts) <- cases]
+> intSwitch e cases = CSwitch e [CCase (CCaseInt i) stmts | (i,stmts) <- cases]
 
 > floatSwitch :: Name -> [(Double,[CStmt])] -> [CStmt]
 > floatSwitch v cases =
@@ -1153,7 +1152,7 @@ literals when set to a non-zero value.
 
 > tagSwitch :: Name -> [(Name,[CStmt])] -> CStmt
 > tagSwitch v cases =
->   CSwitch (nodeTag v) [CCase (dataTag c) stmts | (c,stmts) <- cases]
+>   CSwitch (nodeTag v) [cCase (dataTag c) stmts | (c,stmts) <- cases]
 
 \end{verbatim}
 The code for \texttt{CPSApply} statements has to check to how many
@@ -1172,9 +1171,9 @@ itself is passed in a register.
 > apply :: (Bool,[Name],[Name]) -> Name -> [Name] -> [CPSCont] -> [CStmt]
 > apply vs0 v vs ks =
 >   CSwitch (nodeTag v)
->           [CCase (show i)
->                  (applyExec vs0 v (splitAt i vs) ks) | i <- [1..length vs]] :
+>           [cCaseInt i (applyExec vs0 v (splitAt i vs) ks) | i <- [1..n]] :
 >   applyPartial vs0 v vs ks
+>   where n = length vs
 
 > applyExec :: (Bool,[Name],[Name]) -> Name -> ([Name],[Name]) -> [CPSCont]
 >           -> [CStmt]
@@ -1583,6 +1582,12 @@ of the abstract syntax tree.
 
 > asNode :: CExpr -> CExpr
 > asNode = CCast nodePtrType
+
+> cCase :: String -> [CStmt] -> CCase
+> cCase l = CCase (CCaseLabel l)
+
+> cCaseInt :: Int -> [CStmt] -> CCase
+> cCaseInt i = CCase (CCaseInt (toInteger i))
 
 > goto :: String -> CStmt
 > goto l = gotoExpr (CExpr l)

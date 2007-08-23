@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2446 2007-08-15 09:35:19Z wlux $
+% $Id: CurryParser.lhs 2452 2007-08-23 22:51:27Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -346,7 +346,8 @@ directory path to the module is ignored.
 >         classDecl =
 >           hidingClass <$> classInstHead KW_class (withKind qtycls) tyvar
 >         funcDecl =
->           hidingFunc <$-> token DoubleColon <*> iFunctionArity <*> qualType
+>           hidingFunc <$-> token DoubleColon <*> option iFunctionArity
+>                      <*> qualType
 >         hidingData (tc,k) tvs p = HidingDataDecl p tc k tvs
 >         hidingClass (cx,((cls,k),tv)) p = HidingClassDecl p cx cls k tv
 >         hidingFunc n ty p = IFunctionDecl p hidingId n ty
@@ -402,16 +403,14 @@ directory path to the module is ignored.
 
 > iFunctionDecl :: Parser Token IDecl a
 > iFunctionDecl = IFunctionDecl <$> position <*> qfun <*-> token DoubleColon
->                               <*> iFunctionArity <*> qualType
+>                               <*> option iFunctionArity <*> qualType
 
 > iMethodDecl :: Parser Token IMethodDecl a
 > iMethodDecl = IMethodDecl <$> position <*> fun <*-> token DoubleColon
 >                           <*> qualType
 
-> iFunctionArity :: Parser Token (Maybe Int) a
-> iFunctionArity = Just <$-> token (PragmaBegin ArityPragma) <*> int
->                       <*-> token PragmaEnd
->            `opt` Nothing
+> iFunctionArity :: Parser Token Integer a
+> iFunctionArity = token (PragmaBegin ArityPragma) <-*> int <*-> token PragmaEnd
 
 \end{verbatim}
 \paragraph{Kinds}
@@ -735,7 +734,7 @@ prefix of a let expression.
 > char :: Parser Token Char a
 > char = cval <$> token CharTok
 
-> int :: Parser Token Int a
+> int :: Parser Token Integer a
 > int = ival <$> token IntTok
 
 > float :: Parser Token Double a

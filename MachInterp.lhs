@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: MachInterp.lhs 1893 2006-04-12 17:51:56Z wlux $
+% $Id: MachInterp.lhs 2452 2007-08-23 22:51:27Z wlux $
 %
-% Copyright (c) 1998-2006, Wolfgang Lux
+% Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{MachInterp.lhs}
@@ -66,7 +66,7 @@ initialization of nodes have to be separated.
 > initChar :: Char -> NodePtr -> MachStateT ()
 > initChar c ptr = updateNode ptr (CharNode c)
 
-> initInt :: Int -> NodePtr -> MachStateT ()
+> initInt :: Integer -> NodePtr -> MachStateT ()
 > initInt i ptr = updateNode ptr (IntNode i)
 
 > initFloat :: Double -> NodePtr -> MachStateT ()
@@ -117,7 +117,7 @@ which initialize fresh nodes directly.
 > allocChar :: Char -> MachStateT NodePtr
 > allocChar c = read'updateState (allocNode (CharNode c))
 
-> allocInt :: Int -> MachStateT NodePtr
+> allocInt :: Integer -> MachStateT NodePtr
 > allocInt i = read'updateState (allocNode (IntNode i))
 
 > allocFloat :: Double -> MachStateT NodePtr
@@ -691,8 +691,8 @@ which returns a new constructor node from the supplied arguments.
 > chrPrimitive = ("primChr",prim1 primChr)
 
 > primOrd, primChr :: NodePtr -> MachStateT NodePtr
-> primOrd = withChar "ord" (allocInt . ord)
-> primChr = withInt "chr" (allocChar . chr)
+> primOrd = withChar "ord" (allocInt . toInteger . ord)
+> primChr = withInt "chr" (allocChar . chr . fromInteger)
 
 > addIntFunction, subIntFunction, multIntFunction :: Function
 > quotIntFunction, remIntFunction, divIntFunction, modIntFunction :: Function
@@ -704,7 +704,7 @@ which returns a new constructor node from the supplied arguments.
 > divIntFunction = ("div", intCode "div" div, 2)
 > modIntFunction = ("mod", intCode "mod" mod, 2)
 
-> intCode :: String -> (Int -> Int -> Int) -> Instruction
+> intCode :: String -> (Integer -> Integer -> Integer) -> Instruction
 > intCode what op =
 >   entry ["x","y"] $ evalRigid "x"
 >                   $ \x -> evalRigid "y"
@@ -721,7 +721,7 @@ which returns a new constructor node from the supplied arguments.
 > divIntPrimitive = ("primDivInt", prim2 $ primIntOp "div" div)
 > modIntPrimitive = ("primModInt", prim2 $ primIntOp "mod" mod)
 
-> primIntOp :: String -> (Int -> Int -> Int) -> NodePtr -> NodePtr
+> primIntOp :: String -> (Integer -> Integer -> Integer) -> NodePtr -> NodePtr
 >           -> MachStateT NodePtr
 > primIntOp what op x y =
 >   withInt what (\i -> withInt what (\j -> allocInt (i `op` j)) y) x
@@ -769,7 +769,7 @@ which returns a new constructor node from the supplied arguments.
 >   ("truncateFloat",intFromFloatCode "truncateFloat" truncate,1)
 > roundFloatFunction = ("roundFloat",intFromFloatCode "roundFloat" round,1)
 
-> intFromFloatCode :: String -> (Double -> Int) -> Instruction
+> intFromFloatCode :: String -> (Double -> Integer) -> Instruction
 > intFromFloatCode what fromDouble =
 >   entry ["x"] $ evalRigid "x"
 >               $ \f -> primFromFloat what fromDouble f >>= retNode
@@ -778,7 +778,8 @@ which returns a new constructor node from the supplied arguments.
 > truncPrimitive = ("primTrunc", prim1 $ primFromFloat "truncateFloat" truncate)
 > roundPrimitive = ("primRound", prim1 $ primFromFloat "roundFloat" round)
 
-> primFromFloat :: String -> (Double -> Int) -> NodePtr -> MachStateT NodePtr
+> primFromFloat :: String -> (Double -> Integer) -> NodePtr
+>               -> MachStateT NodePtr
 > primFromFloat what fromDouble = withFloat what (allocInt . fromDouble)
 
 > withChar :: String -> (Char -> MachStateT a) -> NodePtr -> MachStateT a
@@ -786,7 +787,7 @@ which returns a new constructor node from the supplied arguments.
 >   where withCharNode code (CharNode c) = code c
 >         withCharNode _ _ = fail (what ++ ": invalid argument")
 
-> withInt :: String -> (Int -> MachStateT a) -> NodePtr -> MachStateT a
+> withInt :: String -> (Integer -> MachStateT a) -> NodePtr -> MachStateT a
 > withInt what code ptr = deref ptr >>= withIntNode code
 >   where withIntNode code (IntNode i) = code i
 >         withIntNode _ _ = fail (what ++ ": invalid argument")
@@ -1130,7 +1131,7 @@ concurrently.
 >         vars <- allocVariables (length ptrs)
 >         ptr' <- allocClosure (f,code,n) vars
 >         return (ptr',zip vars ptrs)
->   | otherwise = fail (f ++ "applied to too many arguments")
+>   | otherwise = fail (f ++ " applied to too many arguments")
 > freshTerm ptr _ = return (ptr,[])
 
 \end{verbatim}
@@ -1650,7 +1651,7 @@ already maintained implicitly by the abstract machine, we simply pass
 the nullary tuple as input argument and expect the monadic function to
 return just the result. Actually, this result is discarded.
 
-To handle both modes of operation, we provide two entry-points for the
+To handle both modes of operation, we provide two entry points for the
 abstract machine: The function \texttt{start} reduces a goal
 expression and displays the resulting disjunctive expressions, whereas
 \texttt{startIO} reduces a monadic expression. We make use of the

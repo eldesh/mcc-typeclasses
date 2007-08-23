@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: MachTypes.lhs 1893 2006-04-12 17:51:56Z wlux $
+% $Id: MachTypes.lhs 2452 2007-08-23 22:51:27Z wlux $
 %
-% Copyright (c) 1998-2006, Wolfgang Lux
+% Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \subsection{Basic Types}
@@ -46,7 +46,7 @@ provided by most Haskell implementations. Every node allocated in the
 heap is also assigned an ``address''. We use a simple counter for that
 purpose.
 \subsubsection{Functions}
-A function is described by its name, entry-point, and arity.
+A function is described by its name, entry point, and arity.
 \begin{verbatim}
 
 > type Function = (String,Instruction,Int)
@@ -103,7 +103,7 @@ corresponding search space are saved in this node.
 \begin{verbatim}
 
 > data NodeTag =
->     CharTag Char | IntTag Int | FloatTag Double
+>     CharTag Char | IntTag Integer | FloatTag Double
 >   | ConstructorTag Int String Int | VariableTag
 >   | ClosureTag | LazyTag | QueueMeTag
 >   | IndirTag | SearchTag
@@ -122,7 +122,7 @@ corresponding search space are saved in this node.
 >   _ == _ = False
 
 > data Node =
->     CharNode Char | IntNode Int | FloatNode Double
+>     CharNode Char | IntNode Integer | FloatNode Double
 >   | ConstructorNode Int String [NodePtr]
 >   | VarNode [Constraint] ThreadQueue SearchSpace
 >   | ClosureNode String Int Instruction [NodePtr]

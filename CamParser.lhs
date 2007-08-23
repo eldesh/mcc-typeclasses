@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CamParser.lhs 2290 2007-06-19 21:48:25Z wlux $
+% $Id: CamParser.lhs 2452 2007-08-23 22:51:27Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -50,7 +50,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 > data Attributes =
 >     NoAttributes
 >   | NameAttributes{ sval :: String }
->   | IntAttributes{ ival :: Int }
+>   | IntAttributes{ ival :: Integer }
 >   | FloatAttributes{ fval :: Double }
 
 > tok :: Category -> Token
@@ -365,7 +365,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 >   where switchCase tag = Case <$> tag <*-> checkColon <*> block
 
 > literal :: Parser Token Literal a
-> literal = Char . toEnum <$-> keyword KW_char <*> checkInt
+> literal = Char . toEnum . fromInteger <$-> keyword KW_char <*> checkInt
 >       <|> Int <$-> keyword KW_int <*> checkInt
 >       <|> Float <$-> keyword KW_float <*> checkFloat
 
@@ -402,7 +402,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 > keyword :: Keyword -> Parser Token Attributes a
 > keyword k = token (Keyword k)
 
-> int,checkInt :: Parser Token Int a
+> int,checkInt :: Parser Token Integer a
 > int = ival <$> token IntNum
 > checkInt = int <?> "integer number expected"
 

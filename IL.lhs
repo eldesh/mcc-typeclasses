@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IL.lhs 2305 2007-06-20 11:32:33Z wlux $
+% $Id: IL.lhs 2452 2007-08-23 22:51:27Z wlux $
 %
 % Copyright (c) 1999-2007 Wolfgang Lux
 % See LICENSE for the full license.
@@ -60,7 +60,7 @@ distinguishes (local) variables and (global) functions in expressions.
 >   | TypeArrow Type Type
 >   deriving (Eq,Show)
 
-> data Literal = Char Char | Int Int | Float Double deriving (Eq,Show)
+> data Literal = Char Char | Int Integer | Float Double deriving (Eq,Show)
 
 > data ConstrTerm =
 >   -- literal patterns

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2446 2007-08-15 09:35:19Z wlux $
+% $Id: DictTrans.lhs 2452 2007-08-23 22:51:27Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -154,7 +154,7 @@ generator.
 > dictTransIntfDecl m tcEnv (INewtypeDecl p _ tc k tvs nc) =
 >   INewtypeDecl p [] tc k tvs nc
 > dictTransIntfDecl m tcEnv (IFunctionDecl p f n ty) =
->   IFunctionDecl p f (fmap (+ d) n)
+>   IFunctionDecl p f (fmap (+ toInteger d) n)
 >                 (fromQualType tcEnv (nub (fv ty)) (qualType ty''))
 >   where ty' = toQualType m ty
 >         ty'' = transformQualType tcEnv ty'

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILPP.lhs 2305 2007-06-20 11:32:33Z wlux $
+% $Id: ILPP.lhs 2452 2007-08-23 22:51:27Z wlux $
 %
 % Copyright (c) 1999-2007 Wolfgang Lux
 % See LICENSE for the full license.
@@ -87,7 +87,7 @@ Marlow's pretty printer for Haskell.
 
 > ppLiteral :: Literal -> Doc
 > ppLiteral (Char c) = text (show c)
-> ppLiteral (Int i) = int i
+> ppLiteral (Int i) = integer i
 > ppLiteral (Float f) = double f
 
 > ppConstrTerm :: ConstrTerm -> Doc

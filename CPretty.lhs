@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CPretty.lhs 2252 2007-06-15 17:45:09Z wlux $
+% $Id: CPretty.lhs 2452 2007-08-23 22:51:27Z wlux $
 %
-% Copyright (c) 2002-2005, Wolfgang Lux
+% Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CPretty.lhs}
@@ -75,7 +75,7 @@ program formatter.\footnote{For instance, on Unix systems
 > ppLinkage _ CPrivate = text "static"
 
 > ppConst :: CConst -> Doc
-> ppConst (CConst c x) = text c <> maybe empty (\i -> equals <> int i) x
+> ppConst (CConst c x) = text c <> maybe empty (\i -> equals <> integer i) x
 
 > ppInits :: [CInitializer] -> Doc
 > ppInits xs = block (list ppInit xs)
@@ -89,8 +89,8 @@ When a code block is printed, the compiler filters out its local
 declarations and emits them at the beginning of the block. The
 function \texttt{ppBlock} can insert an arbitrary code sequence
 between the declarations and the statements. This allows inserting the
-entry-label into a function block. For nested blocks no additional
-code is inserted. As all code before the entry-point is skipped when
+entry label into a function block. For nested blocks no additional
+code is inserted. As all code before the entry point is skipped when
 using the direct jump model, \texttt{ppBlock} replaces the
 declarations by assignments to the declared variables at the places
 where they occur in the block.
@@ -197,8 +197,8 @@ when emitting the largest possible negative integer ($-2^{31}$ on a
 > ppExpr :: Int -> CExpr -> Doc
 > ppExpr _ CNull = text "0"
 > ppExpr p (CInt i)
->   | i < 0 = ppParens (p > 3) $ int (i + 1) <> text "-1"
->   | otherwise = int i
+>   | i < 0 = ppParens (p > 3) $ integer (i + 1) <> text "-1"
+>   | otherwise = integer i
 > ppExpr _ (CFloat f) = double f
 > ppExpr _ (CString s) = string s
 > ppExpr _ (CElem x i) = ppExpr 6 x <> brackets (ppExpr 0 i)

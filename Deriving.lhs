@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2445 2007-08-14 13:48:08Z wlux $
+% $Id: Deriving.lhs 2452 2007-08-23 22:51:27Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -227,11 +227,11 @@ like \verb|[False ..]| well defined.
 > predEqn p f (c1,_) (c2,_) =
 >   equation p f [ConstructorPattern () c1 []] (Constructor () c2)
 
-> toEnumEqn :: Position -> Ident -> Int -> Constr -> Equation ()
+> toEnumEqn :: Position -> Ident -> Integer -> Constr -> Equation ()
 > toEnumEqn p f i (c,_) =
 >   equation p f [LiteralPattern () (Int i)] (Constructor () c)
 
-> fromEnumEqn :: Position -> Ident -> Constr -> Int -> Equation ()
+> fromEnumEqn :: Position -> Ident -> Constr -> Integer -> Equation ()
 > fromEnumEqn p f (c,_) i =
 >   equation p f [ConstructorPattern () c []] (Literal () (Int i))
 
@@ -313,24 +313,24 @@ respectively.
 > showsPrecShowString :: String -> Expression ()
 > showsPrecShowString s = prelShowString (Literal () (String s))
 
-> showsPrecShowParen :: Ident -> Int -> Expression () -> Expression ()
+> showsPrecShowParen :: Ident -> Integer -> Expression () -> Expression ()
 > showsPrecShowParen l p =
 >   prelShowParen (prelGt (mkVar l) (Literal () (Int p)))
 
-> showsPrecShowApp :: Int -> Ident -> [Ident] -> Expression ()
+> showsPrecShowApp :: Integer -> Ident -> [Ident] -> Expression ()
 > showsPrecShowApp p c xs =
 >   foldr1 prelDot $
 >   showsPrecShowString (showsCon c " ") :
 >   intersperse (prelShowChar (Literal () (Char ' ')))
 >               (map (showsPrecShowArg p) xs)
 
-> showsPrecShowInfixApp :: Int -> Ident -> [Ident] -> Expression ()
+> showsPrecShowInfixApp :: Integer -> Ident -> [Ident] -> Expression ()
 > showsPrecShowInfixApp p op xs =
 >   foldr1 prelDot $
 >   intersperse (showsPrecShowString (' ' : name op ++ " "))
 >               (map (showsPrecShowArg p) xs)
 
-> showsPrecShowArg :: Int -> Ident -> Expression ()
+> showsPrecShowArg :: Integer -> Ident -> Expression ()
 > showsPrecShowArg p = prelShowsPrec (Literal () (Int (p + 1))) . mkVar
 
 > prec :: QualIdent -> PEnv -> OpPrec

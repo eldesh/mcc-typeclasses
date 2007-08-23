@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: Imports.lhs 2452 2007-08-23 22:51:27Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -172,12 +172,12 @@ following functions.
 >   (map (dataConstr m cx (qualQualify m tc) tvs) (catMaybes cs) ++)
 > values m (INewtypeDecl _ cx tc _ tvs nc) =
 >   (newConstr m cx (qualQualify m tc) tvs nc :)
-> values m (IFunctionDecl _ f n ty) =
->   qual f (Value (qualQualify m f) n' (typeScheme ty'))
->   where n' = fromMaybe (arrowArity (unqualType ty')) n
->         ty' = toQualType m ty
 > values m (IClassDecl _ _ cls _ tv ds) =
 >   (map (classMethod m (qualQualify m cls) tv) (catMaybes ds) ++)
+> values m (IFunctionDecl _ f n ty) =
+>   qual f (Value (qualQualify m f) n' (typeScheme ty'))
+>   where n' = maybe (arrowArity (unqualType ty')) fromInteger n
+>         ty' = toQualType m ty
 > values _ _ = id
 
 > dataConstr :: ModuleIdent -> [ClassAssert] -> QualIdent -> [Ident]

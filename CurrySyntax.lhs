@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2446 2007-08-15 09:35:19Z wlux $
+% $Id: CurrySyntax.lhs 2452 2007-08-23 22:51:27Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -70,7 +70,7 @@ associating types with patterns and expressions after type inference.
 > data NewConstrDecl = NewConstrDecl Position Ident TypeExpr deriving (Eq,Show)
 
 > data Decl a =
->     InfixDecl Position Infix (Maybe Int) [Ident]
+>     InfixDecl Position Infix (Maybe Integer) [Ident]
 >   | TypeSig Position [Ident] QualTypeExpr
 >   | FunctionDecl Position Ident [Equation a]
 >   | ForeignDecl Position CallConv (Maybe Safety) (Maybe String) Ident TypeExpr
@@ -111,7 +111,7 @@ Interface declarations are restricted to type declarations and signatures.
 > data IImportDecl = IImportDecl Position ModuleIdent deriving (Eq,Show)
 
 > data IDecl =
->     IInfixDecl Position Infix Int QualIdent
+>     IInfixDecl Position Infix Integer QualIdent
 >   | HidingDataDecl Position QualIdent (Maybe KindExpr) [Ident]
 >   | IDataDecl Position [ClassAssert] QualIdent (Maybe KindExpr) [Ident]
 >               [Maybe ConstrDecl]
@@ -123,7 +123,7 @@ Interface declarations are restricted to type declarations and signatures.
 >                [Maybe IMethodDecl]
 >   | IInstanceDecl Position [ClassAssert] QualIdent TypeExpr
 >                   (Maybe ModuleIdent)
->   | IFunctionDecl Position QualIdent (Maybe Int) QualTypeExpr
+>   | IFunctionDecl Position QualIdent (Maybe Integer) QualTypeExpr
 >   deriving (Eq,Show)
 
 > data IMethodDecl = IMethodDecl Position Ident QualTypeExpr deriving (Eq,Show)
@@ -185,7 +185,7 @@ Interface declarations are restricted to type declarations and signatures.
 
 > data Literal =
 >     Char Char                         -- should be Int to handle Unicode
->   | Int Int
+>   | Int Integer
 >   | Float Double
 >   | String String                     -- should be [Int] to handle Unicode
 >   deriving (Eq,Show)

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CCode.lhs 1822 2005-11-07 22:50:22Z wlux $
+% $Id: CCode.lhs 2452 2007-08-23 22:51:27Z wlux $
 %
-% Copyright (c) 2002-2005, Wolfgang Lux
+% Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CCode.lhs}
@@ -62,7 +62,7 @@ declaration and its corresponding \verb|CMainFunc| definition.
 >   deriving Eq
 
 > data CVisibility = CPublic | CPrivate deriving Eq
-> data CConst = CConst String (Maybe Int) deriving Eq
+> data CConst = CConst String (Maybe Integer) deriving Eq
 > data CInitializer = CInit CExpr | CStruct [CInitializer] deriving Eq
 
 \end{verbatim}
@@ -102,7 +102,7 @@ are not used by the compiler.
 
 > data CExpr =
 >     CNull
->   | CInt Int
+>   | CInt Integer
 >   | CFloat Double
 >   | CString String
 >   | CElem CExpr CExpr

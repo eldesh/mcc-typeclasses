@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2346 2007-06-23 10:23:59Z wlux $
+% $Id: CGen.lhs 2452 2007-08-23 22:51:27Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -246,15 +246,16 @@ generated code.
 >   where charNode c
 >           | ord c < 0x100 =
 >               [CppDefine (constChar c)
->                          (asNode (CAdd (CExpr "char_table") (CInt (ord c))))]
+>                          (asNode (CAdd (CExpr "char_table") (charCode c)))]
 >           | otherwise =
 >               [CVarDef CPrivate (CConstType "struct char_node") (constChar c)
->                        (CStruct $ map CInit [addr "char_info",CInt (ord c)]),
+>                        (CStruct $ map CInit [addr "char_info",charCode c]),
 >                CppDefine (constChar c) (constRef (constChar c))]
 >         taggedChar c =
->           [CppDefine (constChar c) (CFunCall "tag_char" [CInt (ord c)])]
+>           [CppDefine (constChar c) (CFunCall "tag_char" [charCode c])]
+>         charCode c = int (ord c)
 
-> intConstant :: Int -> CTopDecl
+> intConstant :: Integer -> CTopDecl
 > intConstant i =
 >   CppCondDecls (CFunCall "is_large_int" [CInt i])
 >     [CVarDef CPrivate (CConstType "struct int_node") (constInt i)
@@ -441,7 +442,7 @@ is generated.
 > pappInfo :: Name -> Int -> Int -> CInitializer
 > pappInfo f i n = CStruct (map CInit funinfo)
 >   where funinfo =
->           [CExpr "PAPP_KIND",CInt (n - i),closureNodeSize i,gcPointerTable,
+>           [CExpr "PAPP_KIND",int (n - i),closureNodeSize i,gcPointerTable,
 >            CString (undecorate (demangle f)),CExpr "eval_whnf",
 >            CExpr (applyFunc i n),CExpr (cName f),notFinalized]
 
@@ -510,7 +511,7 @@ the suspend node associated with the abstract machine code function.
 
 > entryCode :: Name -> Int -> CStmt
 > entryCode f n =
->   CProcCall "TRACE_FUN" [CString (undecorate (demangle f)),CInt n]
+>   CProcCall "TRACE_FUN" [CString (undecorate (demangle f)),int n]
 
 \end{verbatim}
 The compiler generates a C function from every CPS function. At the
@@ -644,7 +645,7 @@ to the stack and keeping it on the stack as appropriate.
 > fetchArgs :: Name -> CPSTag -> [CStmt]
 > fetchArgs _ (CPSLitCase _) = []
 > fetchArgs v (CPSConstrCase _ vs) =
->   assertRel (CFunCall "closure_argc" [var v]) "==" (CInt (length vs)) :
+>   assertRel (CFunCall "closure_argc" [var v]) "==" (int (length vs)) :
 >   zipWith fetchArg vs [0..]
 >   where arg = element (field v "c.args")
 >         fetchArg v i = localVar v (Just (arg i))
@@ -685,7 +686,7 @@ because constants are allocated per block, not per CPS function.
 
 > heapCheck :: (Bool,[Name],[Name]) -> CExpr -> [CStmt]
 > heapCheck (_,vs,_) n =
->   [CProcCall "CHECK_HEAP" [CInt (length vs),n] | n /= CInt 0]
+>   [CProcCall "CHECK_HEAP" [int (length vs),n] | n /= CInt 0]
 
 > allocSize :: FM Name CExpr -> [Bind] -> [CArgType] -> CExpr
 > allocSize consts ds tys =
@@ -727,8 +728,8 @@ because constants are allocated per block, not per CPS function.
 > ctypeSize TypeNodePtr = CInt 0
 
 > closureNodeSize, suspendNodeSize :: Int -> CExpr
-> closureNodeSize n = CFunCall "closure_node_size" [CInt n]
-> suspendNodeSize n = CFunCall "suspend_node_size" [CInt n]
+> closureNodeSize n = CFunCall "closure_node_size" [int n]
+> suspendNodeSize n = CFunCall "suspend_node_size" [int n]
 
 \end{verbatim}
 The maximum stack depth of a function is simply the difference between
@@ -742,7 +743,7 @@ performing a stack check.
 \begin{verbatim}
 
 > stackCheck :: (Bool,[Name],[Name]) -> CPSStmt -> [CStmt]
-> stackCheck (ent,_,ws) st = [CProcCall "CHECK_STACK" [CInt depth] | depth > 0]
+> stackCheck (ent,_,ws) st = [CProcCall "CHECK_STACK" [int depth] | depth > 0]
 >   where depth = stackDepth st - length (ws ++ [retIpName | not ent])
 
 > stackDepth :: CPSStmt -> Int
@@ -797,7 +798,7 @@ split into minimal binding groups.
 >           | otherwise = (o + length vs + 1,(v,constant o))
 >         init o (v,Var v') = (o,(v,var v'))
 >         init _ (v,n) = error ("internal error: constants.init" ++ show n)
->         constant = asNode . add (CExpr constArray) . CInt
+>         constant = asNode . add (CExpr constArray) . int
 
 > constVars :: [[Bind]] -> Set Name
 > constVars = foldl_strict addConst zeroSet
@@ -829,7 +830,7 @@ split into minimal binding groups.
 >               addr (nodeInfo c) : map arg vs ++ is
 >         constInit (Bind v (Papp f vs)) is
 >           | not (null vs) && isConstant consts v =
->               CExpr (pappInfoTable f) `add` CInt (length vs) :
+>               CExpr (pappInfoTable f) `add` int (length vs) :
 >               map arg vs ++ is
 >         constInit (Bind v (Closure f vs)) is
 >           | not (null vs) && isConstant consts v =
@@ -872,7 +873,7 @@ split into minimal binding groups.
 
 > initPapp :: Name -> Name -> [Name] -> [CStmt]
 > initPapp v f vs =
->   setField v "info" (CExpr (pappInfoTable f) `add` CInt (length vs)) :
+>   setField v "info" (CExpr (pappInfoTable f) `add` int (length vs)) :
 >   initArgs v "c.args" vs
 
 > initClosure :: Name -> Name -> [Name] -> [CStmt]
@@ -1119,7 +1120,7 @@ literals when set to a non-zero value.
 >              [charSwitch (CFunCall "untag_char" [var v]) chars]]
 >           [stmt]
 
-> taggedIntSwitch :: Name -> [(Int,[CStmt])] -> CStmt -> CStmt
+> taggedIntSwitch :: Name -> [(Integer,[CStmt])] -> CStmt -> CStmt
 > taggedIntSwitch v ints stmt
 >   | null ints = stmt
 >   | otherwise =
@@ -1142,7 +1143,7 @@ literals when set to a non-zero value.
 > charSwitch e cases =
 >   CSwitch e [CCase (show (ord c)) stmts | (c,stmts) <- cases]
 
-> intSwitch :: CExpr -> [(Int,[CStmt])] -> CStmt
+> intSwitch :: CExpr -> [(Integer,[CStmt])] -> CStmt
 > intSwitch e cases = CSwitch e [CCase (show i) stmts | (i,stmts) <- cases]
 
 > floatSwitch :: Name -> [(Double,[CStmt])] -> [CStmt]
@@ -1198,10 +1199,10 @@ itself is passed in a register.
 >            CIncrBy (lfield resName "info") (CInt n) :
 >            zipWith (setArg (lfield resName "c.args")) [0..] vs ++
 >            ret vs0 resName ks)]
->   where n = length vs
+>   where n = toInteger (length vs)
 >         size = CExpr "sz" `CAdd` CInt n
 >         setArg base i v =
->           CAssign (LElem base (CExpr "argc" `add` CInt i)) (var v)
+>           CAssign (LElem base (CExpr "argc" `add` int i)) (var v)
 
 \end{verbatim}
 For a foreign function call, the generated code first unboxes all
@@ -1502,7 +1503,7 @@ special case for \texttt{@}, which is used instead of \texttt{@}$_1$.
 > constChar :: Char -> String
 > constChar c = "char_" ++ show (ord c)
 
-> constInt :: Int -> String
+> constInt :: Integer -> String
 > constInt i = "int_" ++ mangle (show i)
 >   where mangle ('-':cs) = 'M':cs
 >         mangle cs = cs
@@ -1523,6 +1524,9 @@ Here are some convenience functions, which simplify the construction
 of the abstract syntax tree.
 \begin{verbatim}
 
+> int :: Int -> CExpr
+> int i = CInt (toInteger i)
+
 > var :: Name -> CExpr
 > var v = CExpr (show v)
 
@@ -1542,10 +1546,10 @@ of the abstract syntax tree.
 > setField v f = CAssign (LField (LVar (show v)) f)
 
 > element :: CExpr -> Int -> CExpr
-> element base n = CElem base (CInt n)
+> element base n = CElem base (int n)
 
 > setElem :: LVar -> Int -> CExpr -> CStmt
-> setElem base n = CAssign (LElem base (CInt n))
+> setElem base n = CAssign (LElem base (int n))
 
 > regRet :: CExpr
 > regRet = CExpr "regs.ret"
@@ -1563,8 +1567,9 @@ of the abstract syntax tree.
 
 > incrSp, decrSp :: Int -> CStmt
 > incrSp n
->   | n >= 0 = CIncrBy (LVar "regs.sp") (CInt n)
->   | otherwise = CDecrBy (LVar "regs.sp") (CInt (-n))
+>   | n >= 0 = CIncrBy (LVar "regs.sp") (CInt n')
+>   | otherwise = CDecrBy (LVar "regs.sp") (CInt (-n'))
+>   where n' = toInteger n
 > decrSp n = incrSp (-n)
 
 > alloc :: CExpr
@@ -1635,12 +1640,10 @@ of the abstract syntax tree.
 Frequently used types.
 \begin{verbatim}
 
-> boolType, intType, longType, uintType, ulongType, doubleType :: CType
-> boolType = CType "boolean"
+> intType, longType, uintType, doubleType :: CType
 > intType = CType "int"
 > longType = CType "long"
 > uintType = CType "unsigned int"
-> ulongType = CType "unsigned long"
 > doubleType = CType "double"
 
 > voidType, voidPtrType :: CType

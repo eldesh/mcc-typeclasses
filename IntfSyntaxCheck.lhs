@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2452 2007-08-23 22:51:27Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -102,7 +102,10 @@ during syntax checking of type expressions.
 >     return (IInstanceDecl p cx' cls ty' m)
 >   where doc = ppQIdent cls <+> ppTypeExpr 2 ty
 > checkIDecl env (IFunctionDecl p f n ty) =
+>   maybe (return ()) (checkArity p) n &&>
 >   liftE (IFunctionDecl p f n) (checkQualType env p ty)
+>   where checkArity p n =
+>           unless (n < toInteger (maxBound::Int)) (errorAt p (arityTooBig n))
 
 > checkTypeLhs :: TypeEnv -> Position -> [ClassAssert] -> [Ident]
 >              -> Error [ClassAssert]
@@ -304,5 +307,8 @@ Error messages.
 >   vcat [text "Illegal instance type" <+> ppTypeExpr 0 ty,
 >         text "The instance type must be of the form (T a b c), where T is",
 >         text "not a type synonym and a, b, c are distinct type variables."]
+
+> arityTooBig :: Integer -> String
+> arityTooBig n = "Function arity out of range: " ++ show n
 
 \end{verbatim}

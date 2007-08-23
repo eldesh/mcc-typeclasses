@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Cam.lhs 2290 2007-06-19 21:48:25Z wlux $
+% $Id: Cam.lhs 2452 2007-08-23 22:51:27Z wlux $
 %
 % Copyright (c) 1998-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -159,7 +159,7 @@ expression \texttt{Var}~$x$ does not denote a fresh node, but a
 reference to the node bound to $x$.
 \begin{verbatim}
 
-> data Literal = Char Char | Int Int | Float Double deriving (Eq,Show)
+> data Literal = Char Char | Int Integer | Float Double deriving (Eq,Show)
 
 > data Expr =
 >     Lit Literal

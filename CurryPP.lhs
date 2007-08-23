@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2446 2007-08-15 09:35:19Z wlux $
+% $Id: CurryPP.lhs 2452 2007-08-23 22:51:27Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -142,8 +142,8 @@ Declarations
 > ppPragma :: Doc -> Doc
 > ppPragma p = text "{-#" <+> p <+> text "#-}"
 
-> ppPrec :: Infix -> Maybe Int -> Doc
-> ppPrec fix p = ppAssoc fix <+> maybe empty int p
+> ppPrec :: Infix -> Maybe Integer -> Doc
+> ppPrec fix p = ppAssoc fix <+> maybe empty integer p
 >   where ppAssoc InfixL = text "infixl"
 >         ppAssoc InfixR = text "infixr"
 >         ppAssoc Infix = text "infix"
@@ -210,7 +210,7 @@ Interfaces
 >   where instModule m = text "of" <+> ppMIdent m
 > ppIDecl (IFunctionDecl _ f n ty) =
 >   ppQIdent f <+> text "::" <+> maybePP ppArity n <+> ppQualTypeExpr ty
->   where ppArity n = ppPragma (text "ARITY" <+> int n)
+>   where ppArity n = ppPragma (text "ARITY" <+> integer n)
 
 > ppITypeDeclLhs :: String -> [ClassAssert] -> QualIdent -> Maybe KindExpr
 >                -> [Ident] -> Doc
@@ -288,7 +288,7 @@ Literals
 
 > ppLiteral :: Literal -> Doc
 > ppLiteral (Char c) = text (show c)
-> ppLiteral (Int i) = int i
+> ppLiteral (Int i) = integer i
 > ppLiteral (Float f) = double f
 > ppLiteral (String s) = text (show s)
 

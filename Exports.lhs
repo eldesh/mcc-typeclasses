@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2452 2007-08-23 22:51:27Z wlux $
+% $Id: Exports.lhs 2455 2007-08-26 22:36:51Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -9,19 +9,9 @@
 After checking a module, the compiler generates the interface's
 declarations from the list of exported types and values. If an entity
 is imported from another module, its name is qualified with the name
-of the module containing its definition. Furthermore, newtypes whose
-constructor is not exported are transformed into (abstract) data
-types. In principle, all instance declarations visible in the current
-module (whether defined locally or imported from another module) must
-be exported. However, there is no point in exporting local instance
-declarations which cannot be used in another module because
-\begin{enumerate}
-\item the instance is defined for a private class of the current
-  module, or
-\item the instance is defined for a private type of the current
-  module that furthermore does not occur in any of the interface's
-  type signatures.
-\end{enumerate}
+of the module containing its definition. Newtypes whose constructor is
+not exported are transformed into (abstract) data types. Instances are
+exported together with their classes and types as explained below.
 \begin{verbatim}
 
 > module Exports(exportInterface) where
@@ -37,17 +27,15 @@ declarations which cannot be used in another module because
 > exportInterface :: Module a -> PEnv -> TCEnv -> InstEnv -> ValueEnv
 >                 -> Interface
 > exportInterface (Module m (Just (Exporting _ es)) _ _) pEnv tcEnv iEnv tyEnv =
->   Interface m imports (precs ++ hidden ++ ds)
+>   Interface m imports (precs ++ ds)
 >   where tvs = nameSupply
 >         imports = map (IImportDecl noPos) (usedModules ds)
 >         precs = foldr (infixDecl m pEnv) [] es
->         hidden = map (hiddenTypeDecl m tcEnv tvs) (hiddenTypes ds)
->         ds = types ++ values ++ insts
+>         ds =
+>           closeInterface m tcEnv iEnv tvs zeroSet (types ++ values ++ insts)
 >         types = foldr (typeDecl m tcEnv tyEnv tvs) [] es
 >         values = foldr (funDecl m tcEnv tyEnv tvs) [] es
->         insts = foldr (uncurry (instDecl m tcEnv tvs ts)) [] (envToList iEnv)
->         ts = [tc | ExportTypeWith tc _ <- es] ++
->              map (qualQualify m) (hiddenTypes values)
+>         insts = foldr (uncurry (instDecl m tcEnv tvs)) [] (envToList iEnv)
 
 > infixDecl :: ModuleIdent -> PEnv -> Export -> [IDecl] -> [IDecl]
 > infixDecl m pEnv (Export f) ds = iInfixDecl m pEnv f ds
@@ -143,17 +131,23 @@ declarations which cannot be used in another module because
 >         ForAll _ ty = funType f tyEnv
 > funDecl _ _ _ _ (ExportTypeWith _ _) ds = ds
 
-> instDecl :: ModuleIdent -> TCEnv -> [Ident] -> [QualIdent] -> CT
->          -> (ModuleIdent,Context) -> [IDecl] -> [IDecl]
-> instDecl m tcEnv tvs ts (CT cls tc) (m',cx) ds
->   | isJust (localIdent m cls) && cls `notElem` ts = ds
->   | isJust (localIdent m tc) && not (isPrimTypeId tc) && tc `notElem` ts = ds
->   | otherwise = IInstanceDecl noPos cx' (qualUnqualify m cls) ty' m'' : ds
+> instDecl :: ModuleIdent -> TCEnv -> [Ident] -> CT -> (ModuleIdent,Context)
+>          -> [IDecl] -> [IDecl]
+> instDecl m tcEnv tvs (CT cls tc) (m',cx) ds
+>   | mIdent m cls /= m' && (isPrimTypeId tc || mIdent m tc /= m') =
+>       iInstDecl m tcEnv tvs (CT cls tc) (m',cx) : ds
+>   | otherwise = ds
+>   where mIdent m = fromMaybe m . fst . splitQualIdent 
+
+> iInstDecl :: ModuleIdent -> TCEnv -> [Ident] -> CT -> (ModuleIdent,Context)
+>           -> IDecl
+> iInstDecl m tcEnv tvs (CT cls tc) (m',cx) =
+>   IInstanceDecl noPos cx' (qualUnqualify m cls) ty' m''
 >   where m'' = if m == m' then Nothing else Just m'
->         n = kindArity (constrKind tc tcEnv) - kindArity (classKind cls tcEnv)
->         tvs' = take n (map TypeVariable [0..])
 >         QualTypeExpr cx' ty' = fromQualType tcEnv tvs $
 >           QualType cx (applyType (TypeConstructor tc) tvs')
+>         n = kindArity (constrKind tc tcEnv) - kindArity (classKind cls tcEnv)
+>         tvs' = take n (map TypeVariable [0..])
 
 \end{verbatim}
 The compiler determines the list of imported modules from the set of
@@ -166,9 +160,9 @@ were imported into the current module. This will happen when an
 imported module re-exports entities from another module. E.g., given
 the three modules
 \begin{verbatim}
-module A where { data A = A; }
-module B(A(..)) where { import A; }
-module C where { import B; x = A; }
+module A where { data T = T; }
+module B(T(..)) where { import A; }
+module C where { import B; x = T; }
 \end{verbatim}
 the interface for module \texttt{C} will import module \texttt{A} but
 not module \texttt{B}.
@@ -188,9 +182,12 @@ not module \texttt{B}.
 >   modules xs ms = foldr modules ms xs
 
 > instance HasModule IDecl where
+>   modules (IInfixDecl _ _ _ op) = modules op
+>   modules (HidingDataDecl _ tc _ _) = modules tc
 >   modules (IDataDecl _ cx tc _ _ cs) = modules cx . modules tc . modules cs
 >   modules (INewtypeDecl _ cx tc _ _ nc) = modules cx . modules tc . modules nc
 >   modules (ITypeDecl _ tc _ _ ty) = modules tc . modules ty
+>   modules (HidingClassDecl _ cx cls _ _) = modules cx . modules cls
 >   modules (IClassDecl _ cx cls _ _ ds) = modules cx . modules cls . modules ds
 >   modules (IInstanceDecl _ cx cls ty m) =
 >      modules cx . modules cls . modules ty . maybe id (:) m
@@ -225,14 +222,134 @@ not module \texttt{B}.
 >   modules = maybe id (:) . fst . splitQualIdent
 
 \end{verbatim}
-After the interface declarations have been computed, the compiler adds
-hidden (data) type and class declarations to the interface for all
-types and classes which were used in the interface but are not
-exported from it. This is necessary in order to distinguish type
-constructors and type variables. Furthermore, by including hidden
-types and classes in interfaces the compiler can check them without
-loading the imported modules.
+After an initial interface has been computed from the list of exported
+types and classes, the compiler adds hidden (data) type and class
+declarations to the interface for all types and classes which are used
+in the interface but not exported from it. For types declared in the
+current module, hidden type declarations are necessary in order to
+distinguish type constructors and type variables in the interface.
+Furthermore, by including hidden types and classes in interfaces the
+compiler can check them without loading the imported modules. Besides
+hidden type and class declarations, the compiler also adds the
+necessary instance declarations to the interface. Since class and
+instance declarations added to an interface can require the inclusion
+of further classes by their respective contexts, closing an interface
+is implemented as a fix-point computation which starts from the
+initial interface.
+
+The Haskell report requires that ``all instances in scope within a
+module are \emph{always} exported'' (\cite{PeytonJones03:Haskell},
+Sect.~5.4). Thus, it seems the compiler should dump the whole instance
+environment to the module's interface. Fortunately, it is not really
+necessary to include all instance declarations that are in scope in a
+module in its interface. Since in order to use an instance both the
+instance's class and type must be in scope (eventually implicitly due
+to declarations using the class and type, respectively), an instance
+that is defined in the same module as its class or its type is
+exported only if the class or type occurs in the interface as well.
+Only instances that are defined in a module that is different from
+both the modules defining its class and its type are always exported
+when they are in scope. This leads to smaller interfaces which can be
+loaded more quickly by the compiler and are easier to understand for
+the user.
+
+More formally, an instance $M_1.C\;(M_2.T\,u_1 \dots u_n)$ defined in
+module $M_3$ is exported from module $M_4$ if either
+\begin{enumerate}
+  \item $M_1=M_3 \land M_1.C \in \emph{intf}(M_4)$, or
+  \item $M_1\not=M_3 \land M_2=M_3 \land M_2.T \in \emph{intf}(M_4)$, or
+  \item $M_1\not=M_3 \land M_2\not=M_3$.
+\end{enumerate}
+The condition $M_1\not=M_3$ in the second alternative takes care to
+always export an instance of a class and a type which are defined in
+the same module together with the class only. As a special case, if
+the class and the type are both defined in the current module, the
+instance is exported only if both appear in the interface, i.e., we
+impose the additional restriction
+\begin{displaymath}
+  M_1\not=M_4 \lor M_2\not=M_4 \lor M_3\not=M_4 \lor (M_1.C \in
+  \emph{intf}(M_4) \land M_2.T \in \emph{intf}(M_4)) .
+\end{displaymath}
+Obviously, this restriction affects only the first alternative, since
+if $M_1\not=M_3$ at least one of the conditions $M_1\not=M_4$ and
+$M_3\not=M_4$ is true. Taking the additional restriction into account,
+the first alternative becomes
+\begin{enumerate}
+  \item[1'.] $M_1=M_3 \land M_1.C \in \emph{intf}(M_4) \land
+    (M_1\not=M_4 \lor M_2\not=M_4 \lor M_2.T \in \emph{intf}(M_4))$.
+\end{enumerate}
+
+While computing the closure of an interface, the first condition is
+considered for all classes that are part of the interface, and the
+first and the second condition are considered for all types that are
+part of the interface. Instances for which the third condition holds
+are already included in the initial interface by \texttt{instDecls}
+above. If $T$ is one of the primitive type constructors \texttt{()},
+\texttt{[]}, \texttt{(->)}, or a tuple type constructor, we stipulate
+$M_2\not=M_3$.
+
+Note that we do not categorize type synonym declarations as type
+declarations in \texttt{declIs} below because instances can be
+declared only for data and renaming types and therefore there is no
+point looking for any instances of the type in the instance
+environment.
 \begin{verbatim}
+
+> data DeclIs =
+>   IsOther | IsType QualIdent | IsClass QualIdent | IsInst CT deriving (Eq,Ord)
+
+> closeInterface :: ModuleIdent -> TCEnv -> InstEnv -> [Ident] -> Set DeclIs
+>                -> [IDecl] -> [IDecl]
+> closeInterface _ _ _ _ _ [] = []
+> closeInterface m tcEnv iEnv tvs ds' (d:ds)
+>   | d' == IsOther = d : closeInterface m tcEnv iEnv tvs ds' (ds ++ ds'')
+>   | d' `elemSet` ds' = closeInterface m tcEnv iEnv tvs ds' ds
+>   | otherwise =
+>       d : closeInterface m tcEnv iEnv tvs (d' `addToSet` ds') (ds ++ ds'')
+>   where d' = declIs m d
+>         ds'' =
+>           map (hiddenTypeDecl m tcEnv tvs)
+>               (filter (not . isPrimTypeId) (usedTypes d [])) ++
+>           instances m tcEnv iEnv tvs ds' d'
+
+> declIs :: ModuleIdent -> IDecl -> DeclIs
+> declIs _ (IInfixDecl _ _ _ _) = IsOther
+> declIs m (HidingDataDecl _ tc _ _) = IsType (qualQualify m tc)
+> declIs m (IDataDecl _ _ tc _ _ _) = IsType (qualQualify m tc)
+> declIs m (INewtypeDecl _ _ tc _ _ _) = IsType (qualQualify m tc)
+> declIs _ (ITypeDecl _ _ _ _ _) = IsOther {-sic!-}
+> declIs m (HidingClassDecl _ _ cls _ _) = IsClass (qualQualify m cls)
+> declIs m (IClassDecl _ _ cls _ _ _) = IsClass (qualQualify m cls)
+> declIs m (IInstanceDecl _ _ cls ty _) = IsInst (CT cls' tc')
+>   where cls' = qualQualify m cls 
+>         tc' = if isPrimTypeId tc then tc else qualQualify m tc
+>         tc = root ty
+>         root (ConstructorType tc) = tc
+>         root (TupleType tys) = qTupleId (length tys)
+>         root (ListType _) = qListId
+>         root (ArrowType _ _) = qArrowId
+>         root (ApplyType ty _) = root ty
+> declIs _ (IFunctionDecl _ _ _ _) = IsOther
+
+> instances :: ModuleIdent -> TCEnv -> InstEnv -> [Ident] -> Set DeclIs
+>           -> DeclIs -> [IDecl]
+> instances _ _ _ _ _ IsOther = []
+> instances m tcEnv iEnv tvs ds' (IsType tc) =
+>   [iInstDecl m tcEnv tvs (CT cls tc) (m',cx)
+>   | (CT cls tc',(m',cx)) <- envToList iEnv,
+>     tc == tc',
+>     if mIdent m cls == m'
+>       then IsClass cls `elemSet` ds'
+>       else mIdent m tc == m']
+>   where mIdent m = fromMaybe m . fst . splitQualIdent
+> instances m tcEnv iEnv tvs ds' (IsClass cls) =
+>   [iInstDecl m tcEnv tvs (CT cls tc) (m',cx)
+>   | (CT cls' tc,(m',cx)) <- envToList iEnv,
+>     cls == cls',
+>     mIdent m cls == m',
+>     m /= m' || isPrimTypeId tc || mIdent m tc /= m || IsType tc `elemSet` ds']
+>   where mIdent m = fromMaybe m . fst . splitQualIdent
+> instances _ _ _ _ _ (IsInst _) = []
 
 > hiddenTypeDecl :: ModuleIdent -> TCEnv -> [Ident] -> QualIdent -> IDecl
 > hiddenTypeDecl m tcEnv tvs tc =
@@ -245,20 +362,6 @@ loading the imported modules.
 >     _ -> internalError "hiddenTypeDecl"
 >   where hidingDataDecl p _ tc k tvs _ = HidingDataDecl p tc k tvs
 
-> hiddenTypes :: [IDecl] -> [QualIdent]
-> hiddenTypes ds =
->   filter (not . isPrimTypeId) (toListSet (foldr deleteFromSet used defd))
->   where used = fromListSet (usedTypes ds [])
->         defd = foldr definedType [] ds
-
-> definedType :: IDecl -> [QualIdent] -> [QualIdent]
-> definedType (IDataDecl _ _ tc _ _ _) tcs = tc : tcs
-> definedType (INewtypeDecl _ _ tc _ _ _) tcs = tc : tcs
-> definedType (ITypeDecl _ tc _ _ _) tcs = tc : tcs
-> definedType (IClassDecl _ _ cls _ _ _) tcs = cls : tcs
-> definedType (IInstanceDecl _ _ _ _ _) tcs = tcs
-> definedType (IFunctionDecl _ _ _ _)  tcs = tcs
-
 > class HasType a where
 >   usedTypes :: a -> [QualIdent] -> [QualIdent]
 
@@ -269,9 +372,12 @@ loading the imported modules.
 >   usedTypes xs tcs = foldr usedTypes tcs xs
 
 > instance HasType IDecl where
+>   usedTypes (IInfixDecl _ _ _ _) = id
+>   usedTypes (HidingDataDecl _ _ _ _) = id
 >   usedTypes (IDataDecl _ cx _ _ _ cs) = usedTypes cx . usedTypes cs
 >   usedTypes (INewtypeDecl _ cx _ _ _ nc) = usedTypes cx . usedTypes nc
 >   usedTypes (ITypeDecl _ _ _ _ ty) = usedTypes ty
+>   usedTypes (HidingClassDecl _ cx _ _ _) = usedTypes cx
 >   usedTypes (IClassDecl _ cx _ _ _ ds) = usedTypes cx . usedTypes ds
 >   usedTypes (IInstanceDecl _ cx cls ty _) =
 >     usedTypes cx . (cls :) . usedTypes ty

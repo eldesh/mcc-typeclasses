@@ -1,5 +1,4 @@
 interface Prelude where {
-import IO;
 infix 4 ==;
 infix 4 /=;
 infixl 7 /;
@@ -33,11 +32,6 @@ infix 4 `elem`;
 infix 4 `notElem`;
 infixr 0 `seq`;
 infixr 2 ||;
-hiding data IO.BufferMode;
-hiding data IO.Handle;
-hiding data IO.HandlePosn;
-hiding data IO.IOMode;
-hiding data IO.SeekMode;
 data Bool = False | True;
 class Bounded a where {
 minBound :: a;
@@ -255,15 +249,11 @@ instance (Bounded a, Bounded b, Bounded c, Bounded d, Bounded e,
 instance (Bounded a, Bounded b, Bounded c, Bounded d, Bounded e,
 	  Bounded f, Bounded g) =>
 	 Bounded (a, b, c, d, e, f, g);
-instance Bounded IO.IOMode of IO;
-instance Bounded IO.SeekMode of IO;
 instance Bounded Bool;
 instance Bounded Char;
 instance Bounded Int;
 instance Bounded Ordering;
 instance Enum ();
-instance Enum IO.IOMode of IO;
-instance Enum IO.SeekMode of IO;
 instance Enum Bool;
 instance Enum Char;
 instance Enum Float;
@@ -279,11 +269,6 @@ instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f) =>
 instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g) =>
 	 Eq (a, b, c, d, e, f, g);
 instance Eq a => Eq [a];
-instance Eq IO.BufferMode of IO;
-instance Eq IO.Handle of IO;
-instance Eq IO.HandlePosn of IO;
-instance Eq IO.IOMode of IO;
-instance Eq IO.SeekMode of IO;
 instance Eq Bool;
 instance Eq Char;
 instance (Eq a, Eq b) => Eq (Either a b);
@@ -312,9 +297,6 @@ instance (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f) =>
 instance (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g) =>
 	 Ord (a, b, c, d, e, f, g);
 instance Ord a => Ord [a];
-instance Ord IO.BufferMode of IO;
-instance Ord IO.IOMode of IO;
-instance Ord IO.SeekMode of IO;
 instance Ord Bool;
 instance Ord Char;
 instance (Ord a, Ord b) => Ord (Either a b);
@@ -337,11 +319,6 @@ instance (Show a, Show b, Show c, Show d, Show e, Show f,
 	  Show g) =>
 	 Show (a, b, c, d, e, f, g);
 instance Show a => Show [a];
-instance Show IO.BufferMode of IO;
-instance Show IO.Handle of IO;
-instance Show IO.HandlePosn of IO;
-instance Show IO.IOMode of IO;
-instance Show IO.SeekMode of IO;
 instance Show Bool;
 instance Show Char;
 instance (Show a, Show b) => Show (Either a b);

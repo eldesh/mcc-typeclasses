@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2446 2007-08-15 09:35:19Z wlux $
+% $Id: Qual.lhs 2456 2007-08-28 19:13:17Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -80,8 +80,8 @@ order to compile this module with hbc.
 >     QualTypeExpr (qual phase tEnv vEnv cx) (qual phase tEnv vEnv ty)
 
 > instance Qual ClassAssert where
->   qual phase tEnv vEnv (ClassAssert cls tv tys) =
->     ClassAssert (qualIdent phase tEnv cls) tv (qual phase tEnv vEnv tys)
+>   qual phase tEnv vEnv (ClassAssert cls ty) =
+>     ClassAssert (qualIdent phase tEnv cls) (qual phase tEnv vEnv ty)
 
 > instance Qual TypeExpr where
 >   qual phase tEnv vEnv (ConstructorType c) =

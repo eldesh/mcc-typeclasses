@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2452 2007-08-23 22:51:27Z wlux $
+% $Id: Deriving.lhs 2456 2007-08-28 19:13:17Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -16,6 +16,7 @@ This module implements the code generating derived instance declarations.
 > import List
 > import Maybe
 > import TopEnv
+> import TypeTrans
 
 > derive :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> [TopDecl ()]
 >         -> Error [TopDecl ()]
@@ -43,16 +44,16 @@ derived.
 >                -> Ident -> [Ident] -> [ConstrDecl] -> QualIdent
 >                -> Error (TopDecl ())
 > deriveInstance m pEnv tcEnv iEnv p tc tvs cs cls =
->   liftE (InstanceDecl p (map (toClassAssert tvs) cx) cls ty . trustAll p)
+>   liftE (InstanceDecl p cx' cls ty' . trustAll p)
 >         (deriveMethods pEnv tcEnv p (map constr cs) cls)
 >   where cx = snd (fromJust (lookupEnv (CT cls' tc') iEnv))
->         ty = foldl ApplyType (ConstructorType tc') (map VariableType tvs)
+>         ty = foldl TypeApply (TypeConstructor tc') tvs'
 >         tc' = qualifyWith m tc
+>         tvs' = take (length tvs) (map TypeVariable [0..])
 >         cls' = origName (head (qualLookupTopEnv cls tcEnv))
+>         QualTypeExpr cx' ty' = fromQualType tcEnv tvs (QualType cx ty)
 >         constr (ConstrDecl _ _ _ c tys) = (qualifyWith m c,length tys)
 >         constr (ConOpDecl _ _ _ _ op _) = (qualifyWith m op,2)
->         toClassAssert tvs (TypePred cls (TypeVariable n)) =
->           ClassAssert cls (tvs !! n) []
 >         trustAll p ds = TrustAnnot p Trust [] : ds
 
 > deriveMethods :: PEnv -> TCEnv -> Position -> [Constr] -> QualIdent

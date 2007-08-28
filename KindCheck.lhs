@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2446 2007-08-15 09:35:19Z wlux $
+% $Id: KindCheck.lhs 2456 2007-08-28 19:13:17Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -120,7 +120,7 @@ declarations.
 >   fts _ (TrustAnnot _ _ _) = id
 
 > instance HasType ClassAssert where
->   fts m (ClassAssert cls _ tys) = fts m cls . fts m tys
+>   fts m (ClassAssert cls ty) = fts m cls . fts m ty
 
 > instance HasType QualTypeExpr where
 >   fts m (QualTypeExpr cx ty) = fts m cx . fts m ty
@@ -218,8 +218,7 @@ checks that the super class hierarchy is acyclic (in function
 > classDecl _ [d] = return ()
 
 > fc :: ModuleIdent -> [ClassAssert] -> [Ident]
-> fc m cx =
->   foldr (\(ClassAssert cls _ _) -> maybe id (:) (localIdent m cls)) [] cx
+> fc m = foldr (\(ClassAssert cls _) -> maybe id (:) (localIdent m cls)) []
 
 \end{verbatim}
 For each declaration group, the kind checker first enters new
@@ -471,10 +470,9 @@ have kind $\star$.
 > kcContext tcEnv p = mapM_ (kcClassAssert tcEnv p)
 
 > kcClassAssert :: TCEnv -> Position -> ClassAssert -> KcState ()
-> kcClassAssert tcEnv p (ClassAssert cls tv tys) =
->   kcType tcEnv p "class constraint" (ppClassAssert (ClassAssert cls tv tys))
->          (classKind cls tcEnv)
->          (foldl ApplyType (VariableType tv) tys)
+> kcClassAssert tcEnv p (ClassAssert cls ty) =
+>   kcType tcEnv p "class constraint" doc (classKind cls tcEnv) ty
+>   where doc = ppClassAssert (ClassAssert cls ty)
 
 > kcValueType :: TCEnv -> Position -> String -> Doc -> TypeExpr -> KcState ()
 > kcValueType tcEnv p what doc = kcType tcEnv p what doc KindStar

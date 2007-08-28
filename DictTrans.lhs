@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2452 2007-08-23 22:51:27Z wlux $
+% $Id: DictTrans.lhs 2456 2007-08-28 19:13:17Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -406,7 +406,8 @@ method's class can be shared among all method stubs of that class.
 > intfMethodDecl :: QualIdent -> Ident -> Position -> QualIdent -> QualTypeExpr
 >                -> IDecl
 > intfMethodDecl cls tv p f (QualTypeExpr cx ty) =
->   IFunctionDecl p f Nothing (QualTypeExpr (ClassAssert cls tv [] : cx) ty)
+>   IFunctionDecl p f Nothing (QualTypeExpr (methodContext cls tv cx) ty)
+>   where methodContext cls tv cx = ClassAssert cls (VariableType tv) : cx
 
 > methodStubContext :: TCEnv -> QualIdent -> (Int,Context)
 > methodStubContext tcEnv cls = (i,cx)

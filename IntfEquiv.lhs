@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfEquiv.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: IntfEquiv.lhs 2456 2007-08-28 19:13:17Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -136,7 +136,7 @@ by function \texttt{fixInterface} and the associated type class
 >   fix tcs (QualTypeExpr cx ty) = QualTypeExpr (fix tcs cx) (fix tcs ty)
 
 > instance FixInterface ClassAssert where
->   fix tcs (ClassAssert cls tv tys) = ClassAssert cls tv (fix tcs tys)
+>   fix tcs (ClassAssert cls ty) = ClassAssert cls (fix tcs ty)
 
 > instance FixInterface TypeExpr where
 >   fix tcs (ConstructorType tc)

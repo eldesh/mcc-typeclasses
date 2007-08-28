@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2455 2007-08-26 22:36:51Z wlux $
+% $Id: Exports.lhs 2456 2007-08-28 19:13:17Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -59,7 +59,7 @@ exported together with their classes and types as explained below.
 >       | null xs -> iTypeDecl IDataDecl m [] tc tvs n k [] : ds
 >       | otherwise -> iTypeDecl IDataDecl m cx' tc tvs n k cs' : ds
 >       where n = kindArity k
->             cx' = orderContext (take n tvs) (nub cx'')
+>             cx' = orderContext (map VariableType (take n tvs)) (nub cx'')
 >             (cx'',cs') =
 >               mapAccumR mergeContext [] $
 >               map (hideDecl (constrDecl tcEnv tyEnv tc tvs) xs) cs
@@ -95,7 +95,8 @@ exported together with their classes and types as explained below.
 > iClassDecl f m cls tvs k clss = f noPos cx (qualUnqualify m cls) k' tv
 >   where k' = if k == KindStar then Nothing else Just (fromKind k)
 >         tv = head tvs
->         cx = [ClassAssert (qualUnqualify m cls) tv [] | cls <- clss]
+>         cx =
+>           [ClassAssert (qualUnqualify m cls) (VariableType tv) | cls <- clss]
 
 > constrDecl :: TCEnv -> ValueEnv -> QualIdent -> [Ident] -> Ident
 >            -> ([ClassAssert],ConstrDecl)
@@ -208,7 +209,7 @@ not module \texttt{B}.
 >   modules (QualTypeExpr cx ty) = modules cx . modules ty
 
 > instance HasModule ClassAssert where
->   modules (ClassAssert cls _ tys) = modules cls . modules tys
+>   modules (ClassAssert cls ty) = modules cls . modules ty
 
 > instance HasModule TypeExpr where
 >   modules (ConstructorType tc) = modules tc
@@ -398,7 +399,7 @@ environment.
 >   usedTypes (QualTypeExpr cx ty) = usedTypes cx . usedTypes ty
 
 > instance HasType ClassAssert where
->   usedTypes (ClassAssert cls _ tys) = (cls :) . usedTypes tys
+>   usedTypes (ClassAssert cls ty) = (cls :) . usedTypes ty
 
 > instance HasType TypeExpr where
 >   usedTypes (ConstructorType tc) = (tc :)
@@ -415,10 +416,12 @@ Auxiliary definitions.
 > noPos :: Position
 > noPos = undefined
 
-> orderContext :: [Ident] -> [ClassAssert] -> [ClassAssert]
+> orderContext :: [TypeExpr] -> [ClassAssert] -> [ClassAssert]
 > orderContext [] _ = []
-> orderContext (tv:tvs) cx = cx' ++ orderContext tvs cx''
->   where (cx',cx'') = partition (\(ClassAssert _ tv' _) -> tv == tv') cx
+> orderContext (ty:tys) cx = cx' ++ orderContext tys cx''
+>   where (cx',cx'') = partition (\(ClassAssert _ ty') -> ty == root ty') cx
+>         root (ApplyType ty _) = root ty
+>         root ty = ty
 
 > argTypes :: TypeExpr -> [TypeExpr]
 > argTypes (ArrowType ty1 ty2) = ty1 : argTypes ty2

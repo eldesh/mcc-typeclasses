@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2432 2007-08-09 15:05:49Z wlux $
+% $Id: TypeTrans.lhs 2456 2007-08-28 19:13:17Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -94,7 +94,7 @@ indices independently in each type expression.
 
 > toMethodType' :: QualIdent -> Ident -> QualTypeExpr -> QualType
 > toMethodType' cls tv (QualTypeExpr cx ty) =
->   toQualType'' tvs (QualTypeExpr (ClassAssert cls tv [] : cx) ty)
+>   toQualType'' tvs (QualTypeExpr (ClassAssert cls (VariableType tv) : cx) ty)
 >   where tvs = enumTypeVars [tv] (QualTypeExpr cx ty)
 
 > enumTypeVars :: Expr a => [Ident] -> a -> FM Ident Int
@@ -103,7 +103,9 @@ indices independently in each type expression.
 
 > restrictContext :: [Ident] -> [ClassAssert] -> [ClassAssert]
 > restrictContext tvs cx =
->   [ClassAssert cls tv tys | ClassAssert cls tv tys <- cx, tv `elem` tvs]
+>   [ClassAssert cls ty | ClassAssert cls ty <- cx, cvar ty `elem` tvs]
+>   where cvar (VariableType tv) = tv
+>         cvar (ApplyType ty _) = cvar ty
 
 > toQualType'' :: FM Ident Int -> QualTypeExpr -> QualType
 > toQualType'' tvs (QualTypeExpr cx ty) =
@@ -113,8 +115,7 @@ indices independently in each type expression.
 > toContext'' tvs cx = nub (map (toTypePred'' tvs) cx)
 
 > toTypePred'' :: FM Ident Int -> ClassAssert -> TypePred
-> toTypePred'' tvs (ClassAssert cls tv tys) =
->   TypePred cls (toType'' tvs (foldl ApplyType (VariableType tv) tys))
+> toTypePred'' tvs (ClassAssert cls ty) = TypePred cls (toType'' tvs ty)
 
 > toType'' :: FM Ident Int -> TypeExpr -> Type
 > toType'' tvs ty = toTypeApp tvs ty []
@@ -179,17 +180,15 @@ unqualified names.
 > fromQualType :: TCEnv -> [Ident] -> QualType -> QualTypeExpr
 > fromQualType tcEnv tvs ty = fromQualType' tvs (unqualifyQualType tcEnv ty)
 
+> fromTypePred :: TCEnv -> [Ident] -> TypePred -> ClassAssert
+> fromTypePred tcEnv tvs tp = fromTypePred' tvs (unqualifyTypePred tcEnv tp)
+
 > fromQualType' :: [Ident] -> QualType -> QualTypeExpr
 > fromQualType' tvs (QualType cx ty) =
 >   QualTypeExpr (map (fromTypePred' tvs) cx) (fromType' tvs ty)
 
 > fromTypePred' :: [Ident] -> TypePred -> ClassAssert
-> fromTypePred' tvs (TypePred cls ty) =
->   case unapply (fromType' tvs ty) [] of
->     (VariableType tv,tys) -> ClassAssert cls tv tys
->     _ -> internalError ("fromTypePred " ++ show ty)
->   where unapply (ApplyType ty1 ty2) tys = unapply ty1 (ty2:tys)
->         unapply ty tys = (ty,tys)
+> fromTypePred' tvs (TypePred cls ty) = ClassAssert cls (fromType' tvs ty)
 
 > fromType' :: [Ident] -> Type -> TypeExpr
 > fromType' tvs ty = fromTypeApp tvs ty []
@@ -352,8 +351,6 @@ converting them into type expressions.
 > ppTypeScheme tcEnv (ForAll _ ty) = ppQualType tcEnv ty
 
 > ppInstance :: TCEnv -> TypePred -> Doc
-> ppInstance tcEnv (TypePred cls ty) =
->   ppQIdent (unqualifyTC tcEnv cls) <+>
->   ppTypeExpr 2 (fromType tcEnv nameSupply ty)
+> ppInstance tcEnv = ppClassAssert . fromTypePred tcEnv nameSupply
 
 \end{verbatim}

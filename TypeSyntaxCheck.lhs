@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2446 2007-08-15 09:35:19Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2456 2007-08-28 19:13:17Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -135,8 +135,10 @@ not contain any additional constraints for that type variable
 > checkMethodType tv p ty =
 >   do
 >     unless (tv `elem` fv ty) (errorAt p (ambiguousType tv))
->     when (tv `elem` constrainedVars ty) (errorAt p (constrainedClassType tv))
->   where constrainedVars (QualTypeExpr cx _) = [tv | ClassAssert _ tv _ <- cx]
+>     when (tv `elem` cvars ty) (errorAt p (constrainedClassType tv))
+>   where cvars (QualTypeExpr cx _) = [cvar ty | ClassAssert _ ty <- cx]
+>         cvar (VariableType tv) = tv
+>         cvar (ApplyType ty _) = cvar ty
 
 > checkDecl :: TypeEnv -> Decl a -> Error (Decl a)
 > checkDecl _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
@@ -163,9 +165,9 @@ not contain any additional constraints for that type variable
 >         isTypeConstr tv = not (null (lookupTopEnv tv env))
 
 > checkSimpleConstraint :: String -> Doc -> Position -> ClassAssert -> Error ()
-> checkSimpleConstraint what doc p (ClassAssert cls tv tys) =
->   unless (null tys)
->          (errorAt p (invalidConstraint what doc (ClassAssert cls tv tys)))
+> checkSimpleConstraint what doc p (ClassAssert cls ty) =
+>   unless (isVariableType ty)
+>          (errorAt p (invalidSimpleConstraint what doc (ClassAssert cls ty)))
 
 > checkConstrDecl :: TypeEnv -> [Ident] -> ConstrDecl -> Error ConstrDecl
 > checkConstrDecl env tvs (ConstrDecl p evs cx c tys) =
@@ -296,11 +298,14 @@ interpret the identifier as such.
 >     return (QualTypeExpr cx' ty')
 
 > checkClassAssert :: TypeEnv -> Position -> ClassAssert -> Error ClassAssert
-> checkClassAssert env p (ClassAssert cls tv tys) =
->   checkClass env p cls &&>
->   unless (null (lookupTopEnv tv env))
->          (errorAt p (noVariable "class constraint" tv)) &&>
->   liftE (ClassAssert cls tv) (mapE (checkType env p) tys)
+> checkClassAssert env p (ClassAssert cls ty) =
+>   do
+>     ty' <- checkClass env p cls &&> checkType env p ty
+>     unless (isVariableType (root ty'))
+>            (errorAt p (invalidConstraint (ClassAssert cls ty')))
+>     return (ClassAssert cls ty')
+>   where root (ApplyType ty _) = root ty
+>         root ty = ty
 
 > checkClosedContext :: Position -> [ClassAssert] -> [Ident] -> Error ()
 > checkClosedContext p cx tvs =
@@ -488,17 +493,24 @@ Error messages.
 > constrainedClassType tv =
 >   "Method type context must not constrain type variable " ++ name tv
 
-> invalidConstraint :: String -> Doc -> ClassAssert -> String
-> invalidConstraint what doc ca = show $
+> invalidSimpleConstraint :: String -> Doc -> ClassAssert -> String
+> invalidSimpleConstraint what doc ca = show $
 >   vcat [text "Illegal class constraint" <+> ppClassAssert ca,
 >         text "in" <+> text what <+> text "declaration" <+> doc,
 >         text "Constraints in class and instance declarations must be of the",
 >         text "form C u, where u is a type variable."]
 
+> invalidConstraint :: ClassAssert -> String
+> invalidConstraint ca = show $
+>   vcat [text "Illegal class constraint" <+> ppClassAssert ca,
+>         text "Constraints must be of the form C u or C (u t1 ... tn),",
+>         text "where u is a type variable and t1, ..., tn are types."]
+
 > notSimpleType :: TypeExpr -> String
 > notSimpleType ty = show $
 >   vcat [text "Illegal instance type" <+> ppTypeExpr 0 ty,
->         text "The instance type must be of the form (T a b c), where T is",
->         text "not a type synonym and a, b, c are distinct type variables."]
+>         text "The instance type must be of the form (T u1 ... un),",
+>         text "where T is not a type synonym and u1, ..., un are",
+>         text "mutually distinct type variables."]
 
 \end{verbatim}

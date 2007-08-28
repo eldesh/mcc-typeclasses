@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2452 2007-08-23 22:51:27Z wlux $
+% $Id: CurryPP.lhs 2456 2007-08-28 19:13:17Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -110,7 +110,7 @@ Declarations
 
 > ppInstanceHead :: [ClassAssert] -> QualIdent -> TypeExpr -> Doc
 > ppInstanceHead cx cls ty =
->   text "instance" <+> sep [ppContext cx,ppQIdent cls <+> ppTypeExpr 2 ty]
+>   text "instance" <+> sep [ppContext cx,ppClassAssert (ClassAssert cls ty)]
 
 > ppClassInstDecl :: Doc -> [Doc] -> Doc
 > ppClassInstDecl head ds
@@ -262,9 +262,7 @@ Types
 > ppContext cas = parenList (map ppClassAssert cas) <+> text "=>"
 
 > ppClassAssert :: ClassAssert -> Doc
-> ppClassAssert (ClassAssert cls tv tys) =
->   ppQIdent cls <+>
->   parenExp (not (null tys)) (ppIdent tv <+> fsep (map (ppTypeExpr 2) tys))
+> ppClassAssert (ClassAssert cls ty) = ppQIdent cls <+> ppTypeExpr 2 ty
 
 > ppTypeExpr :: Int -> TypeExpr -> Doc
 > ppTypeExpr _ (ConstructorType tc) = ppQIdent tc

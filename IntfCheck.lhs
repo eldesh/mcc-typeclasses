@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2452 2007-08-23 22:51:27Z wlux $
+% $Id: IntfCheck.lhs 2456 2007-08-28 19:13:17Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -105,14 +105,14 @@ interface module only. However, this has not been implemented yet.
 >   checkTypeInfo "hidden type class" checkClass tcEnv p cls
 >   where checkClass (TypeClass cls' k' clss' _)
 >           | cls == cls' && maybe KindStar toKind k == k' &&
->             [qualQualify m cls | ClassAssert cls _ _ <- cx] == clss' =
+>             [qualQualify m cls | ClassAssert cls _ <- cx] == clss' =
 >               Just (return ())
 >         checkClass _ = Nothing
 > checkImport m _ tcEnv _ tyEnv (IClassDecl p cx cls k tv ds) =
 >   checkTypeInfo "type class" checkClass tcEnv p cls
 >   where checkClass (TypeClass cls' k' clss' fs')
 >           | cls == cls' && maybe KindStar toKind k == k' &&
->             [qualQualify m cls | ClassAssert cls _ _ <- cx] == clss' &&
+>             [qualQualify m cls | ClassAssert cls _ <- cx] == clss' &&
 >             length ds == length fs' &&
 >             and (zipWith (isVisible imethod) ds fs') =
 >               Just (mapM_ (checkMethodImport m tyEnv cls tv) (catMaybes ds))

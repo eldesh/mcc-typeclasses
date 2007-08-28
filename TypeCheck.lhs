@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2446 2007-08-15 09:35:19Z wlux $
+% $Id: TypeCheck.lhs 2456 2007-08-28 19:13:17Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -727,7 +727,7 @@ case of \texttt{tcTopDecl}.
 >     checkClassMethodType tcEnv (clsType cls tv (classMethodSig sigs d)) ty' d'
 >     return d'
 >   where clsType cls tv (QualTypeExpr cx ty) =
->           QualTypeExpr (ClassAssert cls tv [] : cx) ty
+>           QualTypeExpr (ClassAssert cls (VariableType tv) : cx) ty
 
 > checkClassMethodType :: TCEnv -> QualTypeExpr -> TypeScheme -> Decl Type
 >                      -> TcState ()

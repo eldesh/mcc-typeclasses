@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2456 2007-08-28 19:13:17Z wlux $
+% $Id: Deriving.lhs 2457 2007-08-29 15:15:08Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -190,12 +190,14 @@ like \verb|[False ..]| well defined.
 >         enumFromThen = deriveEnumFromThen nameSupply p (head cs) (last cs)
 
 > deriveSucc :: Position -> [Constr] -> Decl ()
-> deriveSucc p cs = FunctionDecl p f (zipWith (succEqn p f) cs (tail cs))
+> deriveSucc p cs = FunctionDecl p f (if null eqs then [failedEqn p f] else eqs)
 >   where f = succId
+>         eqs = zipWith (succEqn p f) cs (tail cs)
 
 > derivePred :: Position -> [Constr] -> Decl ()
-> derivePred p cs = FunctionDecl p f (zipWith (predEqn p f) (tail cs) cs)
+> derivePred p cs = FunctionDecl p f (if null eqs then [failedEqn p f] else eqs)
 >   where f = predId
+>         eqs = zipWith (predEqn p f) (tail cs) cs
 
 > deriveFromEnum :: Position -> [Constr] -> Decl ()
 > deriveFromEnum p cs = FunctionDecl p f (zipWith (fromEnumEqn p f) cs [0..])
@@ -219,6 +221,9 @@ like \verb|[False ..]| well defined.
 >   IfThenElse (prelLeq (prelFromEnum (mkVar x)) (prelFromEnum (mkVar y)))
 >              (Constructor () c2)
 >              (Constructor () c1)
+
+> failedEqn :: Position -> Ident -> Equation ()
+> failedEqn p f = equation p f [VariablePattern () anonId] prelFailed
 
 > succEqn :: Position -> Ident -> Constr -> Constr -> Equation ()
 > succEqn p f (c1,_) (c2,_) =
@@ -377,6 +382,9 @@ respectively.
 > prelEQPattern = ConstructorPattern () qEQId []
 > prelGTPattern = ConstructorPattern () qGTId []
 
+> prelFailed :: Expression ()
+> prelFailed = Variable () qFailed
+
 > prelFromEnum :: Expression () -> Expression ()
 > prelFromEnum = Apply (Variable () qFromEnumId)
 
@@ -422,10 +430,11 @@ respectively.
 Additional prelude identifiers.
 \begin{verbatim}
 
-> dotOpId, eqOpId, leqOpId, gtOpId, andOpId, compareId, succId, predId :: Ident
-> fromEnumId, toEnumId, enumFromId, enumFromThenId :: Ident
+> failedId, dotOpId, eqOpId, leqOpId, gtOpId, andOpId, compareId :: Ident
+> succId, predId, fromEnumId, toEnumId, enumFromId, enumFromThenId :: Ident
 > minBoundId, maxBoundId :: Ident
 > showsPrecId, showParenId, showCharId, showStringId :: Ident
+> failedId = mkIdent "failed"
 > dotOpId = mkIdent "."
 > eqOpId = mkIdent "=="
 > leqOpId = mkIdent "<="
@@ -446,6 +455,9 @@ Additional prelude identifiers.
 > showParenId = mkIdent "showParen"
 > showCharId = mkIdent "showChar"
 > showStringId = mkIdent "showString"
+
+> qFailed :: QualIdent
+> qFailed = qualifyWith preludeMIdent failedId
 
 > qDotOpId, qAndOpId, qEqOpId, qLeqOpId, qGtOpId, qCompareId :: QualIdent
 > qDotOpId = qualifyWith preludeMIdent dotOpId

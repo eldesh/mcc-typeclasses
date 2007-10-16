@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2505 2007-10-16 21:22:00Z wlux $
+% $Id: TypeCheck.lhs 2506 2007-10-16 21:34:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -28,8 +28,8 @@ goal is returned.
 > module TypeCheck(typeCheck,typeCheckGoal) where
 > import Base
 > import Combined
+> import Curry
 > import CurryPP
-> import CurrySyntax
 > import Env
 > import Error
 > import List

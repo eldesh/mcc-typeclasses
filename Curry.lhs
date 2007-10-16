@@ -1,10 +1,10 @@
 % -*- LaTeX -*-
-% $Id: CurrySyntax.lhs 2502 2007-10-16 20:10:53Z wlux $
+% $Id: Curry.lhs 2506 2007-10-16 21:34:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
-\nwfilename{CurrySyntax.lhs}
+\nwfilename{Curry.lhs}
 \section{The Parse Tree}
 This module provides the necessary data structures to maintain the
 parsed representation of a Curry program. The syntax tree carries
@@ -13,7 +13,7 @@ patterns and expressions. At present, these attributes are used for
 associating types with patterns and expressions after type inference.
 \begin{verbatim}
 
-> module CurrySyntax(module CurrySyntax, module Ident, Position) where
+> module Curry(module Curry, module Ident, Position) where
 > import Ident
 > import Position
 

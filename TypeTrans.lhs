@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2505 2007-10-16 21:22:00Z wlux $
+% $Id: TypeTrans.lhs 2506 2007-10-16 21:34:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -16,8 +16,8 @@ external type representations.
 >                  expandPolyType, minContext, maxContext,
 >                  ppType, ppQualType, ppTypeScheme, ppInstance) where
 > import Base
+> import Curry
 > import CurryPP
-> import CurrySyntax
 > import List
 > import Map
 > import PredefTypes

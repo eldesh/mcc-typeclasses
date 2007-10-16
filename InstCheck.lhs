@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2504 2007-10-16 20:51:03Z wlux $
+% $Id: InstCheck.lhs 2506 2007-10-16 21:34:18Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -19,7 +19,7 @@ instances of class \texttt{Prelude.Num}.
 
 > module InstCheck(instCheck) where
 > import Base
-> import CurrySyntax
+> import Curry
 > import Env
 > import Error
 > import List

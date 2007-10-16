@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2502 2007-10-16 20:10:53Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2506 2007-10-16 21:34:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -16,8 +16,8 @@ of a capitalization convention.
 
 > module TypeSyntaxCheck(typeSyntaxCheck,typeSyntaxCheckGoal) where
 > import Base
+> import Curry
 > import CurryPP
-> import CurrySyntax
 > import Error
 > import List
 > import Monad

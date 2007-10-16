@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 2502 2007-10-16 20:10:53Z wlux $
+% $Id: CaseCheck.lhs 2506 2007-10-16 21:34:18Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -36,7 +36,7 @@ though Haskell requires them to start with an upper case letter.
 > module CaseCheck(caseCheck,caseCheckGoal) where
 > import Base
 > import Char
-> import CurrySyntax
+> import Curry
 > import List
 > import Options
 > import Position

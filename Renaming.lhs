@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2502 2007-10-16 20:10:53Z wlux $
+% $Id: Renaming.lhs 2506 2007-10-16 21:34:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -25,7 +25,7 @@ after type checking was performed.
 > module Renaming(Key,k0,rename,renameGoal) where
 > import Base
 > import Combined
-> import CurrySyntax
+> import Curry
 > import Env
 > import Maybe
 > import Monad

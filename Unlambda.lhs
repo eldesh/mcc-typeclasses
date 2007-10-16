@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Unlambda.lhs 2504 2007-10-16 20:51:03Z wlux $
+% $Id: Unlambda.lhs 2506 2007-10-16 21:34:18Z wlux $
 %
 % Copyright (c) 2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -18,7 +18,7 @@ lambda abstraction is recorded in the type environment.
 > module Unlambda(unlambda) where
 > import Base
 > import Combined
-> import CurrySyntax
+> import Curry
 > import Monad
 > import PredefIdent
 > import TopEnv

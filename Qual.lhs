@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2502 2007-10-16 20:10:53Z wlux $
+% $Id: Qual.lhs 2506 2007-10-16 21:34:18Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -25,7 +25,7 @@ order to compile this module with hbc.
 
 > module Qual(Qual, Phase, qual1, qual2) where
 > import Base
-> import CurrySyntax
+> import Curry
 > import TopEnv
 
 > data Phase = One | Two

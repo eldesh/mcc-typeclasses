@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2504 2007-10-16 20:51:03Z wlux $
+% $Id: Simplify.lhs 2506 2007-10-16 21:34:18Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -25,7 +25,7 @@ Currently, the following optimizations are implemented:
 > module Simplify(simplify) where
 > import Base
 > import Combined
-> import CurrySyntax
+> import Curry
 > import Env
 > import Monad
 > import PredefIdent

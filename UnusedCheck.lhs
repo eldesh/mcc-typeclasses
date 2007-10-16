@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 2502 2007-10-16 20:10:53Z wlux $
+% $Id: UnusedCheck.lhs 2506 2007-10-16 21:34:18Z wlux $
 %
 % Copyright (c) 2005-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -14,7 +14,7 @@ variables at present.
 
 > module UnusedCheck(unusedCheck,unusedCheckGoal) where
 > import Base hiding(TypeKind(..), ValueKind(..))
-> import CurrySyntax
+> import Curry
 > import Options
 > import Position
 > import Set

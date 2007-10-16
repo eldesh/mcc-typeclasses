@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2502 2007-10-16 20:10:53Z wlux $
+% $Id: Exports.lhs 2506 2007-10-16 21:34:18Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -16,7 +16,7 @@ exported together with their classes and types as explained below.
 
 > module Exports(exportInterface) where
 > import Base
-> import CurrySyntax
+> import Curry
 > import Env
 > import Kinds
 > import KindTrans

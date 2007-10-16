@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2502 2007-10-16 20:10:53Z wlux $
+% $Id: KindCheck.lhs 2506 2007-10-16 21:34:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -14,8 +14,8 @@ applies kind checking to the module's type signatures.
 > module KindCheck(kindCheck,kindCheckGoal) where
 > import Base
 > import Combined
+> import Curry
 > import CurryPP
-> import CurrySyntax
 > import Error
 > import Kinds
 > import KindSubst

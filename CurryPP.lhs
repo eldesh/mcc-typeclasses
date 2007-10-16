@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2502 2007-10-16 20:10:53Z wlux $
+% $Id: CurryPP.lhs 2504 2007-10-16 20:51:03Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -14,6 +14,7 @@ Haskell parser.
 > module CurryPP(module CurryPP, Doc) where
 > import CurrySyntax
 > import Char
+> import PredefIdent
 > import Pretty
 
 \end{verbatim}

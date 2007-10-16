@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 2502 2007-10-16 20:10:53Z wlux $
+% $Id: Typing.lhs 2504 2007-10-16 20:51:03Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -13,6 +13,7 @@
 > import CurrySyntax
 > import Env
 > import Maybe
+> import PredefIdent
 > import TopEnv
 > import Types
 > import TypeSubst

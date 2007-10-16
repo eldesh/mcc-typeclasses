@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfEquiv.lhs 2502 2007-10-16 20:10:53Z wlux $
+% $Id: IntfEquiv.lhs 2504 2007-10-16 20:51:03Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -24,7 +24,6 @@ inadvertently mix up these cases.
 > import CurrySyntax
 > import List
 > import Set
-> import Types
 
 > infix 4 =~=, `eqvList`, `eqvSet`
 

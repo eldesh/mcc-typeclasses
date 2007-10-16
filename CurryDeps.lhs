@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryDeps.lhs 2502 2007-10-16 20:10:53Z wlux $
+% $Id: CurryDeps.lhs 2504 2007-10-16 20:51:03Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -12,17 +12,18 @@ dependencies and to update programs composed of multiple modules.
 \begin{verbatim}
 
 > module CurryDeps(buildScript, makeDepend, findModules) where
-> import Unlit
+> import CurryParser
 > import CurrySyntax hiding(Interface(..))
-> import CurryParser(parseHeader)
-> import SCC
 > import Env
+> import Error
+> import IO
 > import List
 > import Maybe
 > import Monad
-> import Error
-> import IO
+> import PredefIdent
 > import PathUtils
+> import SCC
+> import Unlit
 
 > data Source = Source FilePath [ModuleIdent]
 >             | Interface FilePath

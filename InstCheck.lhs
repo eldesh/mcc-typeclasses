@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2502 2007-10-16 20:10:53Z wlux $
+% $Id: InstCheck.lhs 2504 2007-10-16 20:51:03Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -24,6 +24,7 @@ instances of class \texttt{Prelude.Num}.
 > import Error
 > import List
 > import Monad
+> import PredefIdent
 > import Pretty
 > import SCC
 > import TopEnv

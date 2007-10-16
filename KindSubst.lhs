@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindSubst.lhs 2090 2007-02-05 18:57:27Z wlux $
+% $Id: KindSubst.lhs 2501 2007-10-16 19:47:39Z wlux $
 %
 % Copyright (c) 2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -11,6 +11,7 @@ This module implements substitutions on kinds.
 
 > module KindSubst(module KindSubst, idSubst,bindSubst,compose) where
 > import Base
+> import Kinds
 > import Subst
 > import TopEnv
 

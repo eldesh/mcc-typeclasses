@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2500 2007-10-16 19:41:32Z wlux $
+% $Id: Imports.lhs 2501 2007-10-16 19:47:39Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -13,6 +13,7 @@ interfaces into the current module.
 > module Imports(importInterface,importInterfaceIntf,importUnifyData) where
 > import Base
 > import Env
+> import Kinds
 > import KindTrans
 > import Maybe
 > import Map

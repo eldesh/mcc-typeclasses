@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2500 2007-10-16 19:41:32Z wlux $
+% $Id: IntfCheck.lhs 2501 2007-10-16 19:47:39Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -49,6 +49,7 @@ interface module only. However, this has not been implemented yet.
 > import Base
 > import Env
 > import Error
+> import Kinds
 > import KindTrans
 > import Maybe
 > import Monad

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2500 2007-10-16 19:41:32Z wlux $
+% $Id: Base.lhs 2501 2007-10-16 19:47:39Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,8 +10,7 @@ The module \texttt{Base} provides definitions that are commonly used
 in various phases of the compiler.
 \begin{verbatim}
 
-> module Base(module Base, module Ident, module Position, module CurrySyntax,
->             module Kinds) where
+> module Base(module Base,module Ident,module Position,module CurrySyntax) where
 > import Ident
 > import Position
 > import CurrySyntax

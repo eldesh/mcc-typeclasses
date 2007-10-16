@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindTrans.lhs 2088 2007-02-05 09:27:49Z wlux $
+% $Id: KindTrans.lhs 2501 2007-10-16 19:47:39Z wlux $
 %
 % Copyright (c) 2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -13,6 +13,7 @@ external kind representations.
 > module KindTrans(toKind, fromKind, ppKind) where
 > import Base
 > import CurryPP
+> import Kinds
 
 \end{verbatim}
 The function \texttt{toKind} converts a kind expression into a kind.

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2500 2007-10-16 19:41:32Z wlux $
+% $Id: DictTrans.lhs 2501 2007-10-16 19:47:39Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -22,6 +22,7 @@ declarations in the module.
 > import Base
 > import Combined
 > import Env
+> import Kinds
 > import List
 > import Maybe
 > import Monad

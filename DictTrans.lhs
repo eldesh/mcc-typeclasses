@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2501 2007-10-16 19:47:39Z wlux $
+% $Id: DictTrans.lhs 2502 2007-10-16 20:10:53Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -21,6 +21,7 @@ declarations in the module.
 >                  dictSpecializeModule) where
 > import Base
 > import Combined
+> import CurrySyntax
 > import Env
 > import Kinds
 > import List

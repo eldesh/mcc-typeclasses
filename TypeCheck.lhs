@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2500 2007-10-16 19:41:32Z wlux $
+% $Id: TypeCheck.lhs 2502 2007-10-16 20:10:53Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -29,6 +29,7 @@ goal is returned.
 > import Base
 > import Combined
 > import CurryPP
+> import CurrySyntax
 > import Env
 > import Error
 > import List

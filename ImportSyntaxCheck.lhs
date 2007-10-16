@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ImportSyntaxCheck.lhs 2431 2007-08-03 07:27:06Z wlux $
+% $Id: ImportSyntaxCheck.lhs 2502 2007-10-16 20:10:53Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -13,6 +13,7 @@ import declarations.
 
 > module ImportSyntaxCheck(checkImports) where
 > import Base
+> import CurrySyntax
 > import Error
 > import Env
 > import List

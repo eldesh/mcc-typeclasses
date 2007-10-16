@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2501 2007-10-16 19:47:39Z wlux $
+% $Id: Imports.lhs 2502 2007-10-16 20:10:53Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -12,6 +12,7 @@ interfaces into the current module.
 
 > module Imports(importInterface,importInterfaceIntf,importUnifyData) where
 > import Base
+> import CurrySyntax
 > import Env
 > import Kinds
 > import KindTrans

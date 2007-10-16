@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2456 2007-08-28 19:13:17Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2502 2007-10-16 20:10:53Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -18,6 +18,7 @@ this check without reference to the global environments.
 
 > module IntfSyntaxCheck(intfSyntaxCheck) where
 > import Base
+> import CurrySyntax
 > import CurryPP
 > import Error
 > import List

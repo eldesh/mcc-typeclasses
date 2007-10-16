@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 2446 2007-08-15 09:35:19Z wlux $
+% $Id: PrecCheck.lhs 2502 2007-10-16 20:10:53Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -15,6 +15,7 @@ according to the relative precedences of the operators involved.
 
 > module PrecCheck(precCheck,precCheckGoal) where
 > import Base
+> import CurrySyntax
 > import Error
 > import Maybe
 > import TopEnv

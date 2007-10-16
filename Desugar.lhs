@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2500 2007-10-16 19:41:32Z wlux $
+% $Id: Desugar.lhs 2502 2007-10-16 20:10:53Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -52,6 +52,7 @@ all names must be properly qualified before calling this module.}
 > module Desugar(desugar,goalModule) where
 > import Base
 > import Combined
+> import CurrySyntax
 > import List
 > import Monad
 > import TopEnv

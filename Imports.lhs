@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2452 2007-08-23 22:51:27Z wlux $
+% $Id: Imports.lhs 2500 2007-10-16 19:41:32Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -18,6 +18,7 @@ interfaces into the current module.
 > import Map
 > import Set
 > import TopEnv
+> import Types
 > import TypeTrans
 
 > type I a = (Ident,a)

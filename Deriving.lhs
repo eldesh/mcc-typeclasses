@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2457 2007-08-29 15:15:08Z wlux $
+% $Id: Deriving.lhs 2500 2007-10-16 19:41:32Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -16,6 +16,7 @@ This module implements the code generating derived instance declarations.
 > import List
 > import Maybe
 > import TopEnv
+> import Types
 > import TypeTrans
 
 > derive :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> [TopDecl ()]

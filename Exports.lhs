@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2456 2007-08-28 19:13:17Z wlux $
+% $Id: Exports.lhs 2500 2007-10-16 19:41:32Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -22,6 +22,7 @@ exported together with their classes and types as explained below.
 > import Maybe
 > import Set
 > import TopEnv
+> import Types
 > import TypeTrans
 
 > exportInterface :: Module a -> PEnv -> TCEnv -> InstEnv -> ValueEnv

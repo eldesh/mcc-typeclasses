@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Lift.lhs 2418 2007-07-26 17:44:48Z wlux $
+% $Id: Lift.lhs 2500 2007-10-16 19:41:32Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -27,6 +27,7 @@ lifted to the top-level.
 > import Set
 > import Subst
 > import TopEnv
+> import Types
 > import TypeSubst
 > import Typing
 > import Utils

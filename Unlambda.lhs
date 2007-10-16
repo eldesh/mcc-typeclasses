@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Unlambda.lhs 2446 2007-08-15 09:35:19Z wlux $
+% $Id: Unlambda.lhs 2500 2007-10-16 19:41:32Z wlux $
 %
 % Copyright (c) 2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -20,6 +20,7 @@ lambda abstraction is recorded in the type environment.
 > import Combined
 > import Monad
 > import TopEnv
+> import Types
 > import Typing
 
 > type UnlambdaState a = StateT ValueEnv Id a

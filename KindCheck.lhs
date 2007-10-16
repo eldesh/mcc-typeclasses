@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2456 2007-08-28 19:13:17Z wlux $
+% $Id: KindCheck.lhs 2500 2007-10-16 19:41:32Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -23,6 +23,7 @@ applies kind checking to the module's type signatures.
 > import Pretty
 > import SCC
 > import TopEnv
+> import Types
 > import TypeTrans
 
 > infixl 5 $-$

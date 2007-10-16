@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2456 2007-08-28 19:13:17Z wlux $
+% $Id: DictTrans.lhs 2500 2007-10-16 19:41:32Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -26,6 +26,7 @@ declarations in the module.
 > import Maybe
 > import Monad
 > import TopEnv
+> import Types
 > import TypeSubst
 > import TypeTrans
 > import Typing

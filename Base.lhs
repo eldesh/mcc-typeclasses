@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2456 2007-08-28 19:13:17Z wlux $
+% $Id: Base.lhs 2500 2007-10-16 19:41:32Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -11,7 +11,7 @@ in various phases of the compiler.
 \begin{verbatim}
 
 > module Base(module Base, module Ident, module Position, module CurrySyntax,
->             module Kinds, module Types) where
+>             module Kinds) where
 > import Ident
 > import Position
 > import CurrySyntax

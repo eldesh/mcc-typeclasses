@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2456 2007-08-28 19:13:17Z wlux $
+% $Id: TypeCheck.lhs 2500 2007-10-16 19:41:32Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -27,19 +27,20 @@ goal is returned.
 
 > module TypeCheck(typeCheck,typeCheckGoal) where
 > import Base
-> import Pretty
+> import Combined
 > import CurryPP
 > import Env
-> import TopEnv
-> import TypeSubst
-> import TypeTrans
-> import Combined
 > import Error
 > import List
 > import Maybe
 > import Monad
+> import Pretty
 > import SCC
 > import Set
+> import TopEnv
+> import Types
+> import TypeSubst
+> import TypeTrans
 > import Utils
 
 > infixl 5 $-$
@@ -1004,11 +1005,11 @@ in \texttt{tcFunctionDecl} above.
 >   do
 >     (cx,ty) <- tcLiteral True l
 >     return (cx,ty,Literal ty l)
-> tcExpr m tcEnv p (Variable _ v) =
+> tcExpr _ _ _ (Variable _ v) =
 >   do
 >     (cx,ty) <- fetchSt >>= inst . funType v
 >     return (cx,ty,Variable ty v)
-> tcExpr m tcEnv p (Constructor _ c) =
+> tcExpr _ _ _ (Constructor _ c) =
 >   do
 >     (cx,ty) <- fetchSt >>= inst . snd . conType c
 >     return (cx,ty,Constructor ty c)

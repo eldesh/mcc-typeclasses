@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Unlambda.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: Unlambda.lhs 2507 2007-10-16 22:24:05Z wlux $
 %
 % Copyright (c) 2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -19,6 +19,7 @@ lambda abstraction is recorded in the type environment.
 > import Base
 > import Combined
 > import Curry
+> import CurryUtils
 > import Monad
 > import PredefIdent
 > import TopEnv
@@ -91,16 +92,5 @@ lambda abstraction is recorded in the type environment.
 
 > instance SyntaxTree Alt where
 >   nameLambdas m (Alt p t rhs) = liftM (Alt p t) (nameLambdas m rhs)
-
-\end{verbatim}
-Auxiliary functions.
-\begin{verbatim}
-
-> funDecl :: Position -> Ident -> [ConstrTerm a] -> Expression a -> Decl a
-> funDecl p f ts e =
->   FunctionDecl p f [Equation p (FunLhs f ts) (SimpleRhs p e [])]
-
-> mkVar :: a -> Ident -> Expression a
-> mkVar ty = Variable ty . qualify
 
 \end{verbatim}

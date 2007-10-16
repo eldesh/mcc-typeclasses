@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: DictTrans.lhs 2507 2007-10-16 22:24:05Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -22,6 +22,7 @@ declarations in the module.
 > import Base
 > import Combined
 > import Curry
+> import CurryUtils
 > import Env
 > import Kinds
 > import List
@@ -251,7 +252,7 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 >            -> [TopDecl Type]
 > classDecls tcEnv tyEnv p cls tv ds =
 >   dictDataDecl p cls tv [dictConstrDecl tcEnv p cls tv tys'] :
->   zipWith4 funDecl
+>   zipWith4 functDecl
 >            ps
 >            (defaultMethodIds cls)
 >            (repeat [])
@@ -392,7 +393,7 @@ method's class can be shared among all method stubs of that class.
 >         ts = map (uncurry VariablePattern) us
 >         tss = map ((ts ++) . map (uncurry VariablePattern)) uss
 >         es = zipWith3 (methodStubExpr (us!!i) t) ps vs uss
->     return (zipWith4 funDecl ps fs tss es)
+>     return (zipWith4 functDecl ps fs tss es)
 >   where (tys,ty) = arrowUnapply (classDictType tcEnv tyEnv cls' (map Just fs))
 >         tyss = zipWith (methodDictTypes tyEnv) fs tys
 >         cls' = qualifyWith m cls
@@ -492,7 +493,7 @@ of method $f_i$ in class $C$.
 > instDecls :: ModuleIdent -> TCEnv -> ValueEnv -> Position -> QualIdent
 >           -> QualType -> [Decl Type] -> [TopDecl Type] 
 > instDecls m tcEnv tyEnv p cls (QualType cx ty) ds =
->   zipWith4 funDecl
+>   zipWith4 functDecl
 >            (p : map (maybe p pos) ds')
 >            (instFunId tp : instMethodIds tp)
 >            (repeat [])
@@ -1127,18 +1128,8 @@ declaration.
 Convenience functions for constructing parts of the syntax tree.
 \begin{verbatim}
 
-> funDecl :: Position -> Ident -> [ConstrTerm a] -> Expression a -> TopDecl a
-> funDecl p f ts e =
->   BlockDecl $ FunctionDecl p f [Equation p (FunLhs f ts) (SimpleRhs p e [])]
-
-> caseAlt :: Position -> ConstrTerm a -> Expression a -> Alt a
-> caseAlt p t e = Alt p t (SimpleRhs p e [])
-
-> mkVar :: a -> Ident -> Expression a
-> mkVar a = Variable a . qualify
-
-> apply :: Expression a -> [Expression a] -> Expression a
-> apply = foldl Apply
+> functDecl :: Position -> Ident -> [ConstrTerm a] -> Expression a -> TopDecl a
+> functDecl p f ts e = BlockDecl $ funDecl p f ts e
 
 \end{verbatim}
 Prelude entities.

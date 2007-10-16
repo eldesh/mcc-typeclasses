@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2507 2007-10-16 22:24:05Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -20,6 +20,7 @@ this check without reference to the global environments.
 > import Base
 > import Curry
 > import CurryPP
+> import CurryUtils
 > import Error
 > import List
 > import Maybe

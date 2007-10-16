@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: Desugar.lhs 2507 2007-10-16 22:24:05Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -53,6 +53,7 @@ all names must be properly qualified before calling this module.}
 > import Base
 > import Combined
 > import Curry
+> import CurryUtils
 > import List
 > import Monad
 > import PredefIdent
@@ -790,40 +791,9 @@ Prelude entities
 Auxiliary definitions
 \begin{verbatim}
 
-> isVarPattern :: ConstrTerm a -> Bool
-> isVarPattern (LiteralPattern _ _) = False
-> isVarPattern (NegativePattern _ _) = False
-> isVarPattern (VariablePattern _ _) = True
-> isVarPattern (ConstructorPattern _ _ _) = False
-> isVarPattern (InfixPattern _ _ _ _) = False
-> isVarPattern (ParenPattern t) = isVarPattern t
-> isVarPattern (TuplePattern _) = False
-> isVarPattern (ListPattern _ _) = False
-> isVarPattern (AsPattern _ t) = isVarPattern t
-> isVarPattern (LazyPattern _) = True
-
-> funDecl :: Position -> Ident -> [ConstrTerm a] -> Expression a -> Decl a
-> funDecl p f ts e =
->   FunctionDecl p f [Equation p (FunLhs f ts) (SimpleRhs p e [])]
-
-> patDecl :: Position -> ConstrTerm a -> Expression a -> Decl a
-> patDecl p t e = PatternDecl p t (SimpleRhs p e [])
-
-> varDecl :: Position -> a -> Ident -> Expression a -> Decl a
-> varDecl p ty = patDecl p . VariablePattern ty
-
 > addDecls :: [Decl a] -> Rhs a -> Rhs a
 > addDecls ds (SimpleRhs p e ds') = SimpleRhs p e (ds ++ ds')
 > addDecls ds (GuardedRhs es ds') = GuardedRhs es (ds ++ ds')
-
-> caseAlt :: Position -> ConstrTerm a -> Expression a -> Alt a
-> caseAlt p t e = Alt p t (SimpleRhs p e [])
-
-> apply :: Expression a -> [Expression a] -> Expression a
-> apply = foldl Apply
-
-> mkVar :: a -> Ident -> Expression a
-> mkVar ty = Variable ty . qualify
 
 > consType :: Type -> Type
 > consType a = TypeArrow a (TypeArrow (listType a) (listType a))

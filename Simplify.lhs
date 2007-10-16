@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: Simplify.lhs 2507 2007-10-16 22:24:05Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -26,6 +26,7 @@ Currently, the following optimizations are implemented:
 > import Base
 > import Combined
 > import Curry
+> import CurryUtils
 > import Env
 > import Monad
 > import PredefIdent
@@ -647,24 +648,5 @@ Auxiliary functions
 > shuffle xs = shuffle id xs
 >   where shuffle _ [] = []
 >         shuffle f (x:xs) = (x : f xs) : shuffle (f . (x:)) xs
-
-> apply :: Expression a -> [Expression a] -> Expression a
-> apply = foldl Apply
-
-> mkVar :: a -> Ident -> Expression a
-> mkVar ty = Variable ty . qualify
-
-> varDecl :: Position -> a -> Ident -> Expression a -> Decl a
-> varDecl p ty v e = PatternDecl p (VariablePattern ty v) (SimpleRhs p e [])
-
-> funDecl :: Position -> Ident -> [ConstrTerm a] -> Expression a -> Decl a
-> funDecl p f ts e =
->   FunctionDecl p f [Equation p (FunLhs f ts) (SimpleRhs p e [])]
-
-> isVarPattern :: ConstrTerm a -> Bool
-> isVarPattern (LiteralPattern _ _) = False
-> isVarPattern (VariablePattern _ _) = True
-> isVarPattern (ConstructorPattern _ _ _) = False
-> isVarPattern (AsPattern _ t) = isVarPattern t
 
 \end{verbatim}

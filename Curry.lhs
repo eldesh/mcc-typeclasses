@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Curry.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: Curry.lhs 2507 2007-10-16 22:24:05Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -86,19 +86,6 @@ associating types with patterns and expressions after type inference.
 > data Safety = Unsafe | Safe deriving (Eq,Show)
 > data Trust = Suspect | Trust deriving (Eq,Show)
 
-> constr :: ConstrDecl -> Ident
-> constr (ConstrDecl _ _ _ c _) = c
-> constr (ConOpDecl _ _ _ _ op _) = op
-
-> nconstr :: NewConstrDecl -> Ident
-> nconstr (NewConstrDecl _ c _) = c
-
-> methods :: Decl a -> [Ident]
-> methods (InfixDecl _ _ _ _) = []
-> methods (TypeSig _ fs _) = fs
-> methods (FunctionDecl _ _ _) = []
-> methods (TrustAnnot _ _ _) = []
-
 \end{verbatim}
 \paragraph{Module interfaces}
 Interface declarations are restricted to type declarations and signatures.
@@ -169,15 +156,6 @@ Interface declarations are restricted to type declarations and signatures.
 > data CondExpr a =
 >   CondExpr Position (Expression a) (Expression a)
 >   deriving (Eq,Show)
-
-> eqnArity :: Equation a -> Int
-> eqnArity (Equation _ lhs _) = length (snd (flatLhs lhs))
-
-> flatLhs :: Lhs a -> (Ident,[ConstrTerm a])
-> flatLhs lhs = flat lhs []
->   where flat (FunLhs f ts) ts' = (f,ts ++ ts')
->         flat (OpLhs t1 op t2) ts = (op,t1:t2:ts)
->         flat (ApLhs lhs ts) ts' = flat lhs (ts ++ ts')
 
 \end{verbatim}
 \paragraph{Literals}
@@ -260,10 +238,6 @@ accommodate the empty list.
 >   deriving (Eq,Show)
 
 > data Alt a = Alt Position (ConstrTerm a) (Rhs a) deriving (Eq,Show)
-
-> opName :: InfixOp a -> QualIdent
-> opName (InfixOp _ op) = op
-> opName (InfixConstr _ c) = c
 
 \end{verbatim}
 \paragraph{Goals}

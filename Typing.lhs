@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: Typing.lhs 2507 2007-10-16 22:24:05Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -11,6 +11,7 @@
 > module Typing(Typeable(..), NewtypeEnv, newtypeEnv, etaType, withType) where
 > import Base
 > import Curry
+> import CurryUtils
 > import Env
 > import Maybe
 > import PredefIdent

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: Base.lhs 2507 2007-10-16 22:24:05Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -12,6 +12,7 @@ in various phases of the compiler.
 
 > module Base where
 > import Curry
+> import CurryUtils
 > import Env
 > import Kinds
 > import List
@@ -669,57 +670,6 @@ Name supply for the generation of (type) variable names.
 \ToDo{The \texttt{nameSupply} should respect the current case mode, 
 i.e., use upper case for variables in Prolog mode.}
 
-Here is a list of predicates identifying various kinds of
-declarations. Note that type class declarations are considered type
-declarations because type constructors and type classes share a common
-name space.
-\begin{verbatim}
-
-> isTypeDecl, isClassDecl, isInstanceDecl :: TopDecl a -> Bool
-> isDefaultDecl, isBlockDecl :: TopDecl a -> Bool
-> isTypeDecl (DataDecl _ _ _ _ _ _) = True
-> isTypeDecl (NewtypeDecl _ _ _ _ _ _) = True
-> isTypeDecl (TypeDecl _ _ _ _) = True
-> isTypeDecl (ClassDecl _ _ _ _ _) = True {-sic!-}
-> isTypeDecl (InstanceDecl _ _ _ _ _) = False
-> isTypeDecl (DefaultDecl _ _) = False
-> isTypeDecl (BlockDecl _) = False
-> isClassDecl (ClassDecl _ _ _ _ _) = True
-> isClassDecl _ = False
-> isInstanceDecl (InstanceDecl _ _ _ _ _) = True
-> isInstanceDecl _ = False
-> isDefaultDecl (DefaultDecl _ _) = True
-> isDefaultDecl _ = False
-> isBlockDecl (BlockDecl _) = True
-> isBlockDecl _ = False
-
-> isInfixDecl, isTypeSig, isFreeDecl :: Decl a -> Bool
-> isTrustAnnot, isValueDecl :: Decl a -> Bool
-> isInfixDecl (InfixDecl _ _ _ _) = True
-> isInfixDecl _ = False
-> isTypeSig (TypeSig _ _ _) = True
-> isTypeSig (ForeignDecl _ _ _ _ _ _) = True
-> isTypeSig _ = False
-> isFreeDecl (FreeDecl _ _) = True
-> isFreeDecl _ = False
-> isTrustAnnot (TrustAnnot _ _ _) = True
-> isTrustAnnot _ = False
-> isValueDecl (FunctionDecl _ _ _) = True
-> isValueDecl (ForeignDecl _ _ _ _ _ _) = True
-> isValueDecl (PatternDecl _ _ _) = True
-> isValueDecl (FreeDecl _ _) = True
-> isValueDecl _ = False
-
-\end{verbatim}
-The function \texttt{infixOp} converts an infix operator into an
-expression.
-\begin{verbatim}
-
-> infixOp :: InfixOp a -> Expression a
-> infixOp (InfixOp a op) = Variable a op
-> infixOp (InfixConstr a op) = Constructor a op
-
-\end{verbatim}
 The function \texttt{duplicates} returns a list containing all
 duplicate items from its input list. The result is a list of pairs
 whose first element contains the first occurrence of a duplicate item

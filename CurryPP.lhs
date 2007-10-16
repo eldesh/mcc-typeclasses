@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: CurryPP.lhs 2507 2007-10-16 22:24:05Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -348,10 +348,9 @@ Expressions
 > ppExpr p (Apply e1 e2) =
 >   parenExp (p > 1) (sep [ppExpr 1 e1,indent (ppExpr 2 e2)])
 > ppExpr p (InfixApply e1 op e2) =
->   parenExp (p > 0) (sep [ppExpr 1 e1 <+> ppQInfixOp (opName op),
->                          indent (ppExpr 1 e2)])
-> ppExpr _ (LeftSection e op) = parens (ppExpr 1 e <+> ppQInfixOp (opName op))
-> ppExpr _ (RightSection op e) = parens (ppQInfixOp (opName op) <+> ppExpr 1 e)
+>   parenExp (p > 0) (sep [ppExpr 1 e1 <+> ppOp op,indent (ppExpr 1 e2)])
+> ppExpr _ (LeftSection e op) = parens (ppExpr 1 e <+> ppOp op)
+> ppExpr _ (RightSection op e) = parens (ppOp op <+> ppExpr 1 e)
 > ppExpr p (Lambda _ t e) =
 >   parenExp (p > 0)
 >            (sep [backsl <> fsep (map (ppConstrTerm 2) t) <+> rarrow,

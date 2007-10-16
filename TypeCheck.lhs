@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2504 2007-10-16 20:51:03Z wlux $
+% $Id: TypeCheck.lhs 2505 2007-10-16 21:22:00Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -36,6 +36,7 @@ goal is returned.
 > import Maybe
 > import Monad
 > import PredefIdent
+> import PredefTypes
 > import Pretty
 > import SCC
 > import Set

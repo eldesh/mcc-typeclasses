@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2504 2007-10-16 20:51:03Z wlux $
+% $Id: Desugar.lhs 2505 2007-10-16 21:22:00Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -56,6 +56,7 @@ all names must be properly qualified before calling this module.}
 > import List
 > import Monad
 > import PredefIdent
+> import PredefTypes
 > import TopEnv
 > import Types
 > import Typing

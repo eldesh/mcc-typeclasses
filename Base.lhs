@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2502 2007-10-16 20:10:53Z wlux $
+% $Id: Base.lhs 2505 2007-10-16 21:22:00Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -19,6 +19,7 @@ in various phases of the compiler.
 > import Monad
 > import NestEnv
 > import Position
+> import PredefTypes
 > import Set
 > import TopEnv
 > import Types
@@ -495,7 +496,7 @@ for the type \verb|a -> b|.
 
 > predefTypes :: [(Type,[(Ident,Type)])]
 > predefTypes =
->   let a = typeVar 0; b = typeVar 1 in [
+>   let a = TypeVariable 0; b = TypeVariable 1 in [
 >     (unitType,   [(unitId,unitType)]),
 >     (listType a, [(nilId,nilType a), (consId,consType a)]),
 >     (arrowType a b, [])
@@ -506,7 +507,7 @@ for the type \verb|a -> b|.
 
 > tuples :: [(TypeInfo,ValueInfo)]
 > tuples = map tupleInfo [2..]
->   where tvs = map typeVar [0..]
+>   where tvs = map TypeVariable [0..]
 >         tupleInfo n =
 >           (DataType c (simpleKind n) [Just (unqualify c)],
 >            DataConstructor c n stdConstrInfo

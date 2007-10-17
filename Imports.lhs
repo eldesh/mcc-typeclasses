@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2509 2007-10-17 16:16:24Z wlux $
+% $Id: Imports.lhs 2510 2007-10-17 16:53:36Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -39,11 +39,11 @@ all instance declarations are always imported into the current module.
 \begin{verbatim}
 
 > importIdents :: ModuleIdent -> Bool -> Maybe ImportSpec
->              -> (TypeEnv,InstEnv,FunEnv) -> Interface
->              -> (TypeEnv,InstEnv,FunEnv)
-> importIdents m q is (tEnv,iEnv,vEnv) (Interface m' _ ds) =
+>              -> (TypeEnv,InstSet,FunEnv) -> Interface
+>              -> (TypeEnv,InstSet,FunEnv)
+> importIdents m q is (tEnv,iSet,vEnv) (Interface m' _ ds) =
 >   (importEntities tidents m q ts (importMembers vs) m' ds' tEnv,
->    importInstances m' ds' iEnv,
+>    importCTs m' ds' iSet,
 >    importEntities vidents m q vs id m' ds' vEnv)
 >   where ds' = filter (not . isHiddenDecl) ds
 >         ts = isVisible addType is
@@ -95,6 +95,14 @@ all instance declarations are always imported into the current module.
 > importMember isVisible c
 >   | isVisible c = Just c
 >   | otherwise = Nothing
+
+> importCTs :: ModuleIdent -> [IDecl] -> InstSet -> InstSet
+> importCTs m ds iEnv = foldr (addCT m) iEnv ds
+
+> addCT :: ModuleIdent -> IDecl -> InstSet -> InstSet
+> addCT m (IInstanceDecl _ _ cls ty _) =
+>   addToSet (CT (qualQualify m cls) (qualQualify m (root ty)))
+> addCT _ _ = id
 
 > importInstances :: ModuleIdent -> [IDecl] -> InstEnv -> InstEnv
 > importInstances m ds iEnv = foldr (bindInstance m) iEnv ds
@@ -287,5 +295,13 @@ Auxiliary functions:
 > con f m cxL tc tvs cxR c tys =
 >   f (qualifyLike tc c) (length tys) ci (typeScheme ty)
 >   where (ci,ty) = toConstrType m cxL tc tvs cxR tys
+
+> root :: TypeExpr -> QualIdent
+> root (ConstructorType tc) = tc
+> root (VariableType _) = internalError "root"
+> root (TupleType tys) = qTupleId (length tys)
+> root (ListType _) = qListId
+> root (ArrowType _ _) = qArrowId
+> root (ApplyType ty _) = root ty
 
 \end{verbatim}

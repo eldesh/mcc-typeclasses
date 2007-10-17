@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2509 2007-10-17 16:16:24Z wlux $
+% $Id: Base.lhs 2510 2007-10-17 16:53:36Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -382,15 +382,9 @@ and type constructor involved.
 When checking for duplicate instance declarations, the compiler simply
 uses a set of $C$-$T$ pairs, which is derived from the instance
 environment by ignoring the instance contexts.
-
-\ToDo{Augment the \texttt{Env} module by a function which returns the
-  domain of an environment as a set.}
 \begin{verbatim}
 
 > type InstSet = Set CT
-
-> instSet :: InstEnv -> InstSet
-> instSet = fromListSet . map fst . envToList
 
 \end{verbatim}
 \paragraph{Operator precedences}
@@ -456,10 +450,11 @@ infinite number of tuple types. The corresponding types are available
 in the environments \texttt{initTEnv}, \texttt{initVEnv},
 \texttt{initTCEnv}, and \texttt{initDCEnv}. In addition, the
 precedence of the infix list constructor is available in the
-environment \texttt{initPEnv}. The initial instance environment
-\texttt{initIEnv} is empty. The initial type constructor environment
-also includes a fake arrow type constructor, whose purpose is to allow
-defining instances for the type \verb|a -> b|.
+environment \texttt{initPEnv}. The initial instance set
+\texttt{instISet} and environment \texttt{initIEnv} are empty. The
+initial type constructor environment also includes a fake arrow type
+constructor, whose purpose is to allow defining instances for the type
+\verb|a -> b|.
 \begin{verbatim}
 
 > initTEnv :: TypeEnv
@@ -468,6 +463,9 @@ defining instances for the type \verb|a -> b|.
 >           emptyTopEnv (Just (map (tupleType . rootOfType) tupleTypes))
 >         predefType tc cs = predefTopEnv tc (Data tc (map fst cs))
 >         tupleType tc = Data tc [unqualify tc]
+
+> initISet :: InstSet
+> initISet = zeroSet
 
 > initVEnv :: FunEnv
 > initVEnv =

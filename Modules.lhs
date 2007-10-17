@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2509 2007-10-17 16:16:24Z wlux $
+% $Id: Modules.lhs 2510 2007-10-17 16:53:36Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -126,8 +126,8 @@ declaration to the module.
 > checkModule mEnv (Module m es is ds) =
 >   do
 >     is' <- importSyntaxCheck mEnv' is
->     let (tEnv,iEnv,vEnv) = importModuleIdents mEnv' is'
->     (tEnv',ds') <- typeSyntaxCheck m tEnv (instSet iEnv) ds
+>     let (tEnv,iSet,vEnv) = importModuleIdents mEnv' is'
+>     (tEnv',ds') <- typeSyntaxCheck m tEnv iSet ds
 >     (vEnv',ds'') <- syntaxCheck m tEnv' vEnv ds'
 >     es' <- checkExports m is' tEnv' vEnv' es
 >     let (k1,ds''') = rename k0 ds''
@@ -405,9 +405,9 @@ current module.
 >           liftE (ImportDecl p m q asM)
 >                 (checkImports (moduleInterface m mEnv) is)
 
-> importModuleIdents :: ModuleEnv -> [ImportDecl] -> (TypeEnv,InstEnv,FunEnv)
-> importModuleIdents mEnv ds = (importUnifyData tEnv,iEnv,vEnv)
->   where (tEnv,iEnv,vEnv) = foldl importModule initIdentEnvs ds
+> importModuleIdents :: ModuleEnv -> [ImportDecl] -> (TypeEnv,InstSet,FunEnv)
+> importModuleIdents mEnv ds = (importUnifyData tEnv,iSet,vEnv)
+>   where (tEnv,iSet,vEnv) = foldl importModule initIdentEnvs ds
 >         importModule envs (ImportDecl _ m q asM is) =
 >           importIdents (fromMaybe m asM) q is envs (moduleInterface m mEnv)
 
@@ -421,8 +421,8 @@ current module.
 > moduleInterface m mEnv =
 >   fromMaybe (internalError "moduleInterface") (lookupEnv m mEnv)
 
-> initIdentEnvs :: (TypeEnv,InstEnv,FunEnv)
-> initIdentEnvs = (initTEnv,initIEnv,initVEnv)
+> initIdentEnvs :: (TypeEnv,InstSet,FunEnv)
+> initIdentEnvs = (initTEnv,initISet,initVEnv)
 
 > initEnvs :: (PEnv,TCEnv,InstEnv,ValueEnv)
 > initEnvs = (initPEnv,initTCEnv,initIEnv,initDCEnv)

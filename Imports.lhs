@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2510 2007-10-17 16:53:36Z wlux $
+% $Id: Imports.lhs 2511 2007-10-17 17:28:54Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -101,7 +101,7 @@ all instance declarations are always imported into the current module.
 
 > addCT :: ModuleIdent -> IDecl -> InstSet -> InstSet
 > addCT m (IInstanceDecl _ _ cls ty _) =
->   addToSet (CT (qualQualify m cls) (qualQualify m (root ty)))
+>   addToSet (CT (qualQualify m cls) (qualQualify m (typeConstr ty)))
 > addCT _ _ = id
 
 > importInstances :: ModuleIdent -> [IDecl] -> InstEnv -> InstEnv
@@ -295,13 +295,5 @@ Auxiliary functions:
 > con f m cxL tc tvs cxR c tys =
 >   f (qualifyLike tc c) (length tys) ci (typeScheme ty)
 >   where (ci,ty) = toConstrType m cxL tc tvs cxR tys
-
-> root :: TypeExpr -> QualIdent
-> root (ConstructorType tc) = tc
-> root (VariableType _) = internalError "root"
-> root (TupleType tys) = qTupleId (length tys)
-> root (ListType _) = qListId
-> root (ArrowType _ _) = qArrowId
-> root (ApplyType ty _) = root ty
 
 \end{verbatim}

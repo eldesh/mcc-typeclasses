@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: Exports.lhs 2511 2007-10-17 17:28:54Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -17,6 +17,7 @@ exported together with their classes and types as explained below.
 > module Exports(exportInterface) where
 > import Base
 > import Curry
+> import CurryUtils
 > import Env
 > import Kinds
 > import KindTrans
@@ -37,7 +38,7 @@ exported together with their classes and types as explained below.
 >         ds =
 >           closeInterface m tcEnv iEnv tvs zeroSet (types ++ values ++ insts)
 >         types = foldr (typeDecl m tcEnv tyEnv tvs) [] es
->         values = foldr (funDecl m tcEnv tyEnv tvs) [] es
+>         values = foldr (valueDecl m tcEnv tyEnv tvs) [] es
 >         insts = foldr (uncurry (instDecl m tcEnv tvs)) [] (envToList iEnv)
 
 > infixDecl :: ModuleIdent -> PEnv -> Export -> [IDecl] -> [IDecl]
@@ -124,16 +125,16 @@ exported together with their classes and types as explained below.
 >   IMethodDecl noPos f (fromQualType tcEnv tvs (contextMap tail ty))
 >   where ForAll _ ty = funType (qualifyLike cls f) tyEnv
 
-> funDecl :: ModuleIdent -> TCEnv -> ValueEnv -> [Ident] -> Export -> [IDecl]
->         -> [IDecl]
-> funDecl m tcEnv tyEnv tvs (Export f) ds =
+> valueDecl :: ModuleIdent -> TCEnv -> ValueEnv -> [Ident] -> Export -> [IDecl]
+>           -> [IDecl]
+> valueDecl m tcEnv tyEnv tvs (Export f) ds =
 >   IFunctionDecl noPos (qualUnqualify m f) n' (fromQualType tcEnv tvs ty) : ds
 >   where n = arity f tyEnv
 >         n'
 >           | arrowArity (unqualType ty) == n = Nothing
 >           | otherwise = Just (toInteger n)
 >         ForAll _ ty = funType f tyEnv
-> funDecl _ _ _ _ (ExportTypeWith _ _) ds = ds
+> valueDecl _ _ _ _ (ExportTypeWith _ _) ds = ds
 
 > instDecl :: ModuleIdent -> TCEnv -> [Ident] -> CT -> (ModuleIdent,Context)
 >          -> [IDecl] -> [IDecl]
@@ -327,12 +328,7 @@ environment.
 > declIs m (IInstanceDecl _ _ cls ty _) = IsInst (CT cls' tc')
 >   where cls' = qualQualify m cls 
 >         tc' = if isPrimTypeId tc then tc else qualQualify m tc
->         tc = root ty
->         root (ConstructorType tc) = tc
->         root (TupleType tys) = qTupleId (length tys)
->         root (ListType _) = qListId
->         root (ArrowType _ _) = qArrowId
->         root (ApplyType ty _) = root ty
+>         tc = typeConstr ty
 > declIs _ (IFunctionDecl _ _ _ _) = IsOther
 
 > instances :: ModuleIdent -> TCEnv -> InstEnv -> [Ident] -> Set DeclIs

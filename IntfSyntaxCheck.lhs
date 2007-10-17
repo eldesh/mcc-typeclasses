@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2509 2007-10-17 16:16:24Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2511 2007-10-17 17:28:54Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -172,7 +172,7 @@ during syntax checking of type expressions.
 > checkInstType env p cx ty =
 >   do
 >     QualTypeExpr cx' ty' <- checkQualType env p (QualTypeExpr cx ty)
->     unless (isSimpleType ty' && not (isTypeSynonym env (root ty')) &&
+>     unless (isSimpleType ty' && not (isTypeSynonym env (typeConstr ty')) &&
 >             null (duplicates (fv ty')))
 >            (errorAt p (notSimpleType ty'))
 >     return (cx',ty')
@@ -238,36 +238,12 @@ Auxiliary functions.
 > liftMaybe f (Just x) = liftM Just (f x)
 > liftMaybe f Nothing = return Nothing
 
-> isSimpleType :: TypeExpr -> Bool
-> isSimpleType (ConstructorType _) = True
-> isSimpleType (VariableType _) = False
-> isSimpleType (TupleType tys) = all isVariableType tys
-> isSimpleType (ListType ty) = isVariableType ty
-> isSimpleType (ArrowType ty1 ty2) = isVariableType ty1 && isVariableType ty2
-> isSimpleType (ApplyType ty1 ty2) = isSimpleType ty1 && isVariableType ty2
-
 > isTypeSynonym :: TypeEnv -> QualIdent -> Bool
 > isTypeSynonym env tc =
 >   case qualLookupTopEnv tc env of
 >     [Data _ _] -> False
 >     [Alias _] -> True
 >     _ -> internalError "isTypeSynonym"
-
-> isVariableType :: TypeExpr -> Bool
-> isVariableType (ConstructorType _) = False
-> isVariableType (VariableType _) = True
-> isVariableType (TupleType _) = False
-> isVariableType (ListType _) = False
-> isVariableType (ArrowType _ _) = False
-> isVariableType (ApplyType _ _) = False
-
-> root :: TypeExpr -> QualIdent
-> root (ConstructorType tc) = tc
-> root (VariableType _) = internalError "root"
-> root (TupleType tys) = qTupleId (length tys)
-> root (ListType _) = qListId
-> root (ArrowType _ _) = qArrowId
-> root (ApplyType ty _) = root ty
 
 \end{verbatim}
 Error messages.

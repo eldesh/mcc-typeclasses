@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryUtils.lhs 2508 2007-10-17 16:06:06Z wlux $
+% $Id: CurryUtils.lhs 2511 2007-10-17 17:28:54Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -58,6 +58,42 @@ name space.
 > isValueDecl (PatternDecl _ _ _) = True
 > isValueDecl (FreeDecl _ _) = True
 > isValueDecl _ = False
+
+\end{verbatim}
+The function \texttt{typeConstr} returns the type constructor at the
+root of a type application.
+\begin{verbatim}
+
+> typeConstr :: TypeExpr -> QualIdent
+> typeConstr (ConstructorType tc) = tc
+> typeConstr (TupleType tys) = qTupleId (length tys)
+> typeConstr (ListType _) = qListId
+> typeConstr (ArrowType _ _) = qArrowId
+> typeConstr (ApplyType ty _) = typeConstr ty
+
+\end{verbatim}
+The function \texttt{isVariableType} checks whether its type
+expression argument is just a type variable and the function
+\texttt{isSimpleType} checks whether its type expression argument has
+the form $T\,u_1 \dots u_n$ where $T$ is a type constructor and
+$u_1,\dots,u_n$ are -- not necessarily distinct -- type variables.
+\begin{verbatim}
+
+> isVariableType :: TypeExpr -> Bool
+> isVariableType (ConstructorType _) = False
+> isVariableType (VariableType _) = True
+> isVariableType (TupleType _) = False
+> isVariableType (ListType _) = False
+> isVariableType (ArrowType _ _) = False
+> isVariableType (ApplyType _ _) = False
+
+> isSimpleType :: TypeExpr -> Bool
+> isSimpleType (ConstructorType _) = True
+> isSimpleType (VariableType _) = False
+> isSimpleType (TupleType tys) = all isVariableType tys
+> isSimpleType (ListType ty) = isVariableType ty
+> isSimpleType (ArrowType ty1 ty2) = isVariableType ty1 && isVariableType ty2
+> isSimpleType (ApplyType ty1 ty2) = isSimpleType ty1 && isVariableType ty2
 
 \end{verbatim}
 The function \texttt{isVarPattern} returns true if its argument is

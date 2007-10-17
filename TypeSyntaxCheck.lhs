@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2509 2007-10-17 16:16:24Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2511 2007-10-17 17:28:54Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -29,14 +29,14 @@ of a capitalization convention.
 
 \end{verbatim}
 In order to check type constructor applications, the compiler
-maintains an environment that records all known type constructors. The
-functions \texttt{typeSyntaxCheck} and \texttt{typeSyntaxCheckGoal}
-expect a type constructor environment that is already initialized with
-the imported type constructors. All locally defined type constructors
-are added to this environment and then the declarations are checked
-within this environment. The environment is returned in order to be
-used later for checking the optional export list of the current
-module.
+maintains an environment that records all known type constructors and
+type classes. The functions \texttt{typeSyntaxCheck} and
+\texttt{typeSyntaxCheckGoal} expect a type identifier environment that
+is already initialized with the imported type constructors and
+classes. All locally defined type constructors and classes are added
+to this environment and then the declarations are checked within this
+environment. The environment is returned in order to be used later for
+checking the optional export list of the current module.
 \begin{verbatim}
 
 > typeSyntaxCheck :: ModuleIdent -> TypeEnv -> InstSet -> [TopDecl a]
@@ -284,7 +284,7 @@ interpret the identifier as such.
 > checkInstType env p cx ty =
 >   do
 >     QualTypeExpr cx' ty' <- checkQualType env p (QualTypeExpr cx ty)
->     unless (isSimpleType ty' && not (isTypeSynonym env (root ty')) &&
+>     unless (isSimpleType ty' && not (isTypeSynonym env (typeConstr ty')) &&
 >             null (duplicates (filter (anonId /=) (fv ty'))))
 >            (errorAt p (notSimpleType ty'))
 >     return (cx',ty')
@@ -396,17 +396,9 @@ Auxiliary definitions.
 >   [P p (CT cls (qualify tc)) | cls <- clss]
 > instances (TypeDecl _ _ _ _) = []
 > instances (ClassDecl _ _ _ _ _) = []
-> instances (InstanceDecl p _ cls ty _) = [P p (CT cls (root ty))]
+> instances (InstanceDecl p _ cls ty _) = [P p (CT cls (typeConstr ty))]
 > instances (DefaultDecl _ _) = []
 > instances (BlockDecl _) = []
-
-> isSimpleType :: TypeExpr -> Bool
-> isSimpleType (ConstructorType _) = True
-> isSimpleType (VariableType _) = False
-> isSimpleType (TupleType tys) = all isVariableType tys
-> isSimpleType (ListType ty) = isVariableType ty
-> isSimpleType (ArrowType ty1 ty2) = isVariableType ty1 && isVariableType ty2
-> isSimpleType (ApplyType ty1 ty2) = isSimpleType ty1 && isVariableType ty2
 
 > isTypeSynonym :: TypeEnv -> QualIdent -> Bool
 > isTypeSynonym env tc =
@@ -414,22 +406,6 @@ Auxiliary definitions.
 >     [Data _ _] -> False
 >     [Alias _] -> True
 >     _ -> internalError "isTypeSynonym"
-
-> isVariableType :: TypeExpr -> Bool
-> isVariableType (ConstructorType _) = False
-> isVariableType (VariableType _) = True
-> isVariableType (TupleType _) = False
-> isVariableType (ListType _) = False
-> isVariableType (ArrowType _ _) = False
-> isVariableType (ApplyType _ _) = False
-
-> root :: TypeExpr -> QualIdent
-> root (ConstructorType tc) = tc
-> root (VariableType _) = internalError "root"
-> root (TupleType tys) = qTupleId (length tys)
-> root (ListType _) = qListId
-> root (ArrowType _ _) = qArrowId
-> root (ApplyType ty _) = root ty
 
 \end{verbatim}
 Error messages.

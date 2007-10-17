@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Curry.lhs 2507 2007-10-16 22:24:05Z wlux $
+% $Id: Curry.lhs 2508 2007-10-17 16:06:06Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -114,9 +114,6 @@ Interface declarations are restricted to type declarations and signatures.
 >   deriving (Eq,Show)
 
 > data IMethodDecl = IMethodDecl Position Ident QualTypeExpr deriving (Eq,Show)
-
-> imethod :: IMethodDecl -> Ident
-> imethod (IMethodDecl _ f _) = f
 
 \end{verbatim}
 \paragraph{Kinds}

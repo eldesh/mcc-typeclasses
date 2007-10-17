@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryUtils.lhs 2507 2007-10-16 22:24:05Z wlux $
+% $Id: CurryUtils.lhs 2508 2007-10-17 16:06:06Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -91,8 +91,9 @@ declaration, respectively.
 > nconstr (NewConstrDecl _ c _) = c
 
 \end{verbatim}
-The function \texttt{methods} returns the declared method identifiers
-of a type class method declaration.
+The functions \texttt{methods} and \texttt{imethod} return the
+declared method identifiers of a type class method declaration in
+source and interface modules, respectively.
 \begin{verbatim}
 
 > methods :: Decl a -> [Ident]
@@ -101,6 +102,8 @@ of a type class method declaration.
 > methods (FunctionDecl _ _ _) = []
 > methods (TrustAnnot _ _ _) = []
 
+> imethod :: IMethodDecl -> Ident
+> imethod (IMethodDecl _ f _) = f
 
 \end{verbatim}
 The function \texttt{eqnArity} returns the (syntactic) arity of a

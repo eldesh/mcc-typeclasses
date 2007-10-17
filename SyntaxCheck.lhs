@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2507 2007-10-16 22:24:05Z wlux $
+% $Id: SyntaxCheck.lhs 2509 2007-10-17 16:16:24Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -33,29 +33,33 @@ single definition.
 > import Utils
 
 \end{verbatim}
-Syntax checking proceeds as follows. First, the compiler extracts
-information about all imported values and data constructors from the
-imported (type) environments. Next, the data constructors defined in
-the current module are entered into this environment. Finally, all
-declarations are checked within the resulting environment.
+In order to check patterns and expressions, the compiler maintains an
+environment that records all known functions, data, and newtype
+constructors. For each nested declaration group in the source code, a
+new scope is opened in this environment. The functions
+\texttt{syntaxCheck} and \texttt{syntaxCheckGoal} expect an
+environment that is already initialized with the imported functions
+and data and newtype constructors. First, the data and newtype
+constructors defined in the current module are added to this
+environment. Then, all declarations are checked within the resulting
+environment and the declared functions and variables are added to
+their respective scopes in the environment. The final top-level
+environment is returned from \texttt{syntaxCheck} in order to be used
+later for checking the optional export list of the current module.
 \begin{verbatim}
 
-> syntaxCheck :: ModuleIdent -> TypeEnv -> ValueEnv -> [TopDecl a]
+> syntaxCheck :: ModuleIdent -> TypeEnv -> FunEnv -> [TopDecl a]
 >             -> Error (FunEnv,[TopDecl a])
-> syntaxCheck m tEnv tyEnv ds =
+> syntaxCheck m tEnv env ds =
 >   do
 >     reportDuplicates duplicateData repeatedData cs
->     (env',ds') <- checkTopDecls m tEnv cs env ds
->     return (toplevelEnv env',ds')
->   where env = foldr (bindConstr m) (globalEnv (fmap valueKind tyEnv)) cs
+>     (env'',ds') <- checkTopDecls m tEnv cs env' ds
+>     return (toplevelEnv env'',ds')
+>   where env' = foldr (bindConstr m) (globalEnv env) cs
 >         cs = concatMap constrs ds
 
-> syntaxCheckGoal :: ValueEnv -> Goal a -> Error (FunEnv,Goal a)
-> syntaxCheckGoal tyEnv g =
->   do
->     g' <- checkGoal (globalEnv env) g
->     return (env,g')
->   where env = fmap valueKind tyEnv
+> syntaxCheckGoal :: FunEnv -> Goal a -> Error (Goal a)
+> syntaxCheckGoal env g = checkGoal (globalEnv env) g
 
 > bindConstr :: ModuleIdent -> P Ident -> VarEnv -> VarEnv
 > bindConstr m (P _ c) = globalBindNestEnv m c (Constr (qualifyWith m c))

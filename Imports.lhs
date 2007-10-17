@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2507 2007-10-16 22:24:05Z wlux $
+% $Id: Imports.lhs 2509 2007-10-17 16:16:24Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,7 +10,8 @@ This module provides a few functions which can be used to import
 interfaces into the current module.
 \begin{verbatim}
 
-> module Imports(importInterface,importInterfaceIntf,importUnifyData) where
+> module Imports(importIdents,importInterface,importInterfaceIntf,
+>                importUnifyData) where
 > import Base
 > import Curry
 > import CurryUtils
@@ -37,12 +38,23 @@ unqualified import are performed. Regardless of the type of import,
 all instance declarations are always imported into the current module.
 \begin{verbatim}
 
+> importIdents :: ModuleIdent -> Bool -> Maybe ImportSpec
+>              -> (TypeEnv,InstEnv,FunEnv) -> Interface
+>              -> (TypeEnv,InstEnv,FunEnv)
+> importIdents m q is (tEnv,iEnv,vEnv) (Interface m' _ ds) =
+>   (importEntities tidents m q ts (importMembers vs) m' ds' tEnv,
+>    importInstances m' ds' iEnv,
+>    importEntities vidents m q vs id m' ds' vEnv)
+>   where ds' = filter (not . isHiddenDecl) ds
+>         ts = isVisible addType is
+>         vs = isVisible addValue is
+
 > importInterface :: ModuleIdent -> Bool -> Maybe ImportSpec
 >                 -> (PEnv,TCEnv,InstEnv,ValueEnv) -> Interface
 >                 -> (PEnv,TCEnv,InstEnv,ValueEnv)
 > importInterface m q is (pEnv,tcEnv,iEnv,tyEnv) (Interface m' _ ds) =
 >   (importEntities precs m q vs id m' ds' pEnv,
->    importEntities types m q ts (importMembers vs) m' ds' tcEnv,
+>    importEntities types m q ts id m' ds' tcEnv,
 >    importInstances m' ds' iEnv,
 >    importEntities values m q vs id m' ds' tyEnv)
 >   where ds' = filter (not . isHiddenDecl) ds
@@ -74,14 +86,10 @@ all instance declarations are always imported into the current module.
 >   foldr (uncurry (importTopEnv q m)) env
 >         [(x,f y) | (x,y) <- foldr (bind m') [] ds, isVisible x]
 
-> importMembers :: (Ident -> Bool) -> TypeInfo -> TypeInfo
-> importMembers isVisible (DataType tc k cs) =
->   DataType tc k (map (>>= importMember isVisible) cs)
-> importMembers isVisible (RenamingType tc k nc) =
->   maybe (DataType tc k []) (RenamingType tc k) (importMember isVisible nc)
-> importMembers isVisible (AliasType tc n k ty) = AliasType tc n k ty
-> importMembers isVisible (TypeClass cls k clss fs) =
->   TypeClass cls k clss (map (>>= importMember isVisible) fs)
+> importMembers :: (Ident -> Bool) -> TypeKind -> TypeKind
+> importMembers isVisible (Data tc cs) = Data tc (filter isVisible cs)
+> importMembers _ (Alias tc) = Alias tc
+> importMembers isVisible (Class cls fs) = Class cls (filter isVisible fs)
 
 > importMember :: (Ident -> Bool) -> Ident -> Maybe Ident
 > importMember isVisible c
@@ -103,8 +111,8 @@ because all entities are imported into the environments. In addition,
 only a qualified import is necessary. Only those entities that are
 actually defined in the module are imported. Since the compiler
 imports all used interfaces into other interfaces, entities defined in
-one module and re-exported by another module are made available by
-their defining modules. Furthermore, ignoring re-exported entities
+one module and reexported by another module are made available by
+their defining modules. Furthermore, ignoring reexported entities
 avoids a problem with the fact that the unqualified names of entities
 defined in an interface may be ambiguous if hidden data type and class
 declarations are taken into account. For instance, in the interface
@@ -153,6 +161,28 @@ The list of entities exported from a module is computed with the
 following functions.
 \begin{verbatim}
 
+> tidents :: ModuleIdent -> IDecl -> [I TypeKind] -> [I TypeKind]
+> tidents m (HidingDataDecl _ tc _ _) = qual tc (tident Data m tc [])
+> tidents m (IDataDecl _ _ tc _ _ cs) =
+>   qual tc (tident Data m tc (map constr (catMaybes cs)))
+> tidents m (INewtypeDecl _ _ tc _ _ nc) =
+>   qual tc (tident Data m tc [nconstr nc])
+> tidents m (ITypeDecl _ tc _ _ _) = qual tc (tident Alias m tc)
+> tidents m (HidingClassDecl _ _ cls _ _) = qual cls (tident Class m cls [])
+> tidents m (IClassDecl _ _ cls _ _ ds) =
+>   qual cls (tident Class m cls (map imethod (catMaybes ds)))
+> tidents _ _ = id
+
+> vidents :: ModuleIdent -> IDecl -> [I ValueKind] -> [I ValueKind]
+> vidents m (IDataDecl _ _ tc _ _ cs) =
+>   (map (cident (qualQualify m tc) . constr) (catMaybes cs) ++)
+> vidents m (INewtypeDecl _ _ tc _ _ nc) =
+>   (cident (qualQualify m tc) (nconstr nc) :)
+> vidents m (IClassDecl _ _ cls _ _ ds) =
+>   (map (mident (qualQualify m cls) . imethod) (catMaybes ds) ++)
+> vidents m (IFunctionDecl _ f _ _) = qual f (Var (qualQualify m f))
+> vidents _ _ = id
+
 > precs :: ModuleIdent -> IDecl -> [I PrecInfo] -> [I PrecInfo]
 > precs m (IInfixDecl _ fix p op) =
 >   qual op (PrecInfo (qualQualify m op) (OpPrec fix p))
@@ -167,8 +197,8 @@ following functions.
 > types m (ITypeDecl _ tc k tvs ty) =
 >   qual tc (typeCon (flip AliasType (length tvs)) m tc k tvs (toType m tvs ty))
 > types m (HidingClassDecl _ cx cls k tv) = qual cls (typeCls m cx cls k tv [])
-> types m (IClassDecl _ cx cls k tv fs) =
->   qual cls (typeCls m cx cls k tv (map (fmap imethod) fs))
+> types m (IClassDecl _ cx cls k tv ds) =
+>   qual cls (typeCls m cx cls k tv (map (fmap imethod) ds))
 > types _ _ = id
 
 > values :: ModuleIdent -> IDecl -> [I ValueInfo] -> [I ValueInfo]
@@ -208,7 +238,7 @@ After all modules have been imported, the compiler has to ensure that
 all references to a data type use the same list of constructors.
 \begin{verbatim}
 
-> importUnifyData :: TCEnv -> TCEnv
+> importUnifyData :: Entity a => TopEnv a -> TopEnv a
 > importUnifyData tcEnv =
 >   fmap (updWith (foldr (mergeData . snd) zeroFM (allImports tcEnv))) tcEnv
 >   where updWith tcs t = fromMaybe t (lookupFM (origName t) tcs)
@@ -229,6 +259,15 @@ Auxiliary functions:
 > addValue (Import f) fs = addToSet f fs
 > addValue (ImportTypeWith _ xs) fs = foldr addToSet fs xs
 > addValue (ImportTypeAll _) _ = internalError "addValue"
+
+> tident :: (QualIdent -> a) -> ModuleIdent -> QualIdent -> a
+> tident f m tc = f (qualQualify m tc)
+
+> cident :: QualIdent -> Ident -> I ValueKind
+> cident tc c = (c,Constr (qualifyLike tc c))
+
+> mident :: QualIdent -> Ident -> I ValueKind
+> mident cls f = (f,Var (qualifyLike cls f))
 
 > typeCon :: (QualIdent -> Kind -> a) -> ModuleIdent -> QualIdent
 >         -> Maybe KindExpr -> [Ident] -> a

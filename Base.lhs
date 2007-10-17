@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2507 2007-10-16 22:24:05Z wlux $
+% $Id: Base.lhs 2509 2007-10-17 16:16:24Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -202,13 +202,6 @@ synonym types on the other side.
 >   | Class QualIdent [Ident]
 >   deriving (Eq,Show)
 
-> typeKind :: TypeInfo -> TypeKind
-> typeKind (DataType tc _ cs) = Data tc (catMaybes cs)
-> typeKind (RenamingType tc _ c) = Data tc [c]
-> typeKind (AliasType tc _ _ _) = Alias tc
-> typeKind (TypeClass cls _ _ fs) = Class cls (catMaybes fs)
-> typeKind (TypeVar _) = internalError "typeKind"
-
 > instance Entity TypeKind where
 >   origName (Data tc _) = tc
 >   origName (Alias tc) = tc
@@ -365,11 +358,6 @@ used in order to check the export list of a module.
 
 > data ValueKind = Constr QualIdent | Var QualIdent deriving (Eq,Show)
 
-> valueKind :: ValueInfo -> ValueKind
-> valueKind (DataConstructor c _ _ _) = Constr c
-> valueKind (NewtypeConstructor c _) = Constr c
-> valueKind (Value v _ _) = Var v
-
 > instance Entity ValueKind where
 >   origName (Constr c) = c
 >   origName (Var x) = x
@@ -465,13 +453,27 @@ data [] a = [] | a : [a]
 \end{verbatim}
 are not valid in Curry. The same is true for the -- potentially --
 infinite number of tuple types. The corresponding types are available
-in the environments \texttt{initTCEnv} and \texttt{initDCEnv}. In
-addition, the precedence of the infix list constructor is available in
-the environment \texttt{initPEnv}. The initial instance environment is
-empty. The initial type constructor environment also includes a fake
-arrow type constructor, whose purpose is to allow defining instances
-for the type \verb|a -> b|.
+in the environments \texttt{initTEnv}, \texttt{initVEnv},
+\texttt{initTCEnv}, and \texttt{initDCEnv}. In addition, the
+precedence of the infix list constructor is available in the
+environment \texttt{initPEnv}. The initial instance environment
+\texttt{initIEnv} is empty. The initial type constructor environment
+also includes a fake arrow type constructor, whose purpose is to allow
+defining instances for the type \verb|a -> b|.
 \begin{verbatim}
+
+> initTEnv :: TypeEnv
+> initTEnv = foldr (uncurry (predefType . rootOfType)) emptyTEnv predefTypes
+>   where emptyTEnv =
+>           emptyTopEnv (Just (map (tupleType . rootOfType) tupleTypes))
+>         predefType tc cs = predefTopEnv tc (Data tc (map fst cs))
+>         tupleType tc = Data tc [unqualify tc]
+
+> initVEnv :: FunEnv
+> initVEnv =
+>   foldr (predefCon . qualify . fst) emptyVEnv (concatMap snd predefTypes)
+>   where emptyVEnv = emptyTopEnv (Just (map (Constr . rootOfType) tupleTypes))
+>         predefCon c = predefTopEnv c (Constr c)
 
 > initPEnv :: PEnv
 > initPEnv = predefTopEnv qConsId (PrecInfo qConsId (OpPrec InfixR 5)) emptyPEnv
@@ -480,9 +482,12 @@ for the type \verb|a -> b|.
 > initTCEnv :: TCEnv
 > initTCEnv =
 >   foldr (uncurry (predefTC . unapplyType True)) emptyTCEnv predefTypes
->   where emptyTCEnv = emptyTopEnv (Just (map fst tuples))
+>   where emptyTCEnv =
+>           emptyTopEnv (Just (map (tupleTC . unapplyType True) tupleTypes))
 >         predefTC (TypeConstructor tc,tys) cs =
 >           predefTopEnv tc (DataType tc k (map (Just . fst) cs))
+>           where k = simpleKind (length tys)
+>         tupleTC (TypeConstructor tc,tys) = DataType tc k [Just (unqualify tc)]
 >           where k = simpleKind (length tys)
 
 > initIEnv :: InstEnv
@@ -490,10 +495,15 @@ for the type \verb|a -> b|.
 
 > initDCEnv :: ValueEnv
 > initDCEnv = foldr (uncurry predefDC) emptyDCEnv (concatMap snd predefTypes)
->   where emptyDCEnv = emptyTopEnv (Just (map snd tuples))
+>   where emptyDCEnv = emptyTopEnv (Just (map tupleDC tupleTypes))
 >         predefDC c ty = predefTopEnv c' $
 >           DataConstructor c' (arrowArity ty) stdConstrInfo (polyType ty)
 >           where c' = qualify c
+>         tupleDC ty =
+>           DataConstructor tc n stdConstrInfo
+>                           (ForAll n (qualType (foldr TypeArrow ty tys)))
+>           where (TypeConstructor tc,tys) = unapplyType True ty
+>                 n = length tys
 
 > predefTypes :: [(Type,[(Ident,Type)])]
 > predefTypes =
@@ -506,15 +516,9 @@ for the type \verb|a -> b|.
 >         consType a = TypeArrow a (TypeArrow (listType a) (listType a))
 >         arrowType a b = TypeArrow a b
 
-> tuples :: [(TypeInfo,ValueInfo)]
-> tuples = map tupleInfo [2..]
+> tupleTypes :: [Type]
+> tupleTypes = [tupleType (take n tvs) | n <- [2..]]
 >   where tvs = map TypeVariable [0..]
->         tupleInfo n =
->           (DataType c (simpleKind n) [Just (unqualify c)],
->            DataConstructor c n stdConstrInfo
->                            (ForAll n (tupleConstrType (take n tvs))))
->           where c = qTupleId n
->         tupleConstrType tys = qualType (foldr TypeArrow (tupleType tys) tys)
 
 \end{verbatim}
 \paragraph{Free and bound variables}

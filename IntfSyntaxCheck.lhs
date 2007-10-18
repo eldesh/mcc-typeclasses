@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2517 2007-10-18 14:23:42Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2518 2007-10-18 15:27:42Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -42,17 +42,21 @@ The latter must not occur in type expressions in interfaces.
 
 > bindType :: IDecl -> TypeEnv -> TypeEnv
 > bindType (IInfixDecl _ _ _ _) = id
-> bindType (HidingDataDecl _ tc _ _) = qualBindTopEnv tc (Data tc [])
-> bindType (IDataDecl _ _ tc _ _ cs cs') =
->   qualBindTopEnv tc (Data tc (filter (`notElem` cs') (map constr cs)))
-> bindType (INewtypeDecl _ _ tc _ _ nc) =
->   qualBindTopEnv tc (Data tc [nconstr nc])
-> bindType (ITypeDecl _ tc _ _ _) = qualBindTopEnv tc (Alias tc)
+> bindType (HidingDataDecl _ tc _ _) = bindData tc [] []
+> bindType (IDataDecl _ _ tc _ _ cs cs') = bindData tc cs' (map constr cs)
+> bindType (INewtypeDecl _ _ tc _ _ nc cs') = bindData tc cs' [nconstr nc]
+> bindType (ITypeDecl _ tc _ _ _) = bindAlias tc
 > bindType (HidingClassDecl _ _ cls _ _) = qualBindTopEnv cls (Class cls [])
 > bindType (IClassDecl _ cx cls _ _ ds) =
 >   qualBindTopEnv cls (Class cls (map imethod (catMaybes ds)))
 > bindType (IInstanceDecl _ _ _ _ _) = id
 > bindType (IFunctionDecl _ _ _ _) = id
+
+> bindData :: QualIdent -> [Ident] -> [Ident] -> TypeEnv -> TypeEnv
+> bindData tc cs' cs = qualBindTopEnv tc (Data tc (filter (`notElem` cs') cs))
+
+> bindAlias :: QualIdent -> TypeEnv -> TypeEnv
+> bindAlias tc = qualBindTopEnv tc (Alias tc)
 
 \end{verbatim}
 The checks applied to the interface are similar to those performed
@@ -72,12 +76,13 @@ during syntax checking of type expressions.
 >     cs'' <- mapE (checkConstrDecl env tvs) cs
 >     checkHiding p tc (map constr cs) cs'
 >     return (IDataDecl p cx' tc k tvs cs'' cs')
-> checkIDecl env (INewtypeDecl p cx tc k tvs nc) =
+> checkIDecl env (INewtypeDecl p cx tc k tvs nc cs') =
 >   do
 >     cx' <- checkTypeLhs env p cx tvs
 >     checkClosedContext p cx' tvs
 >     nc' <- checkNewConstrDecl env tvs nc
->     return (INewtypeDecl p cx' tc k tvs nc')
+>     checkHiding p tc [nconstr nc] cs'
+>     return (INewtypeDecl p cx' tc k tvs nc' cs')
 > checkIDecl env (ITypeDecl p tc k tvs ty) =
 >   do
 >     checkTypeLhs env p [] tvs

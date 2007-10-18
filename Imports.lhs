@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2517 2007-10-18 14:23:42Z wlux $
+% $Id: Imports.lhs 2518 2007-10-18 15:27:42Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -143,7 +143,7 @@ instances imported from another module.
 > entity (IInfixDecl _ _ _ op) = op
 > entity (HidingDataDecl _ tc _ _) = tc
 > entity (IDataDecl _ _ tc _ _ _ _) = tc
-> entity (INewtypeDecl _ _ tc _ _ _) = tc
+> entity (INewtypeDecl _ _ tc _ _ _ _) = tc
 > entity (ITypeDecl _ tc _ _ _) = tc
 > entity (HidingClassDecl _ _ cls _ _) = cls
 > entity (IClassDecl _ _ cls _ _ _) = cls
@@ -154,7 +154,7 @@ instances imported from another module.
 > unhide (IInfixDecl p fix pr op) = IInfixDecl p fix pr op
 > unhide (HidingDataDecl p tc k tvs) = IDataDecl p [] tc k tvs [] []
 > unhide (IDataDecl p cx tc k tvs cs _) = IDataDecl p cx tc k tvs cs []
-> unhide (INewtypeDecl p cx tc k tvs nc) = INewtypeDecl p cx tc k tvs nc
+> unhide (INewtypeDecl p cx tc k tvs nc _) = INewtypeDecl p cx tc k tvs nc []
 > unhide (ITypeDecl p tc k tvs ty) = ITypeDecl p tc k tvs ty
 > unhide (HidingClassDecl p cx cls k tv) = IClassDecl p cx cls k tv []
 > unhide (IClassDecl p cx cls k tv ds) = IClassDecl p cx cls k tv ds
@@ -175,19 +175,16 @@ following functions.
 > tidents :: ModuleIdent -> IDecl -> [I TypeKind] -> [I TypeKind]
 > tidents m (IDataDecl _ _ tc _ _ cs cs') =
 >   qual tc (tident Data m tc (filter (`notElem` cs') (map constr cs)))
-> tidents m (INewtypeDecl _ _ tc _ _ nc) =
->   qual tc (tident Data m tc [nconstr nc])
+> tidents m (INewtypeDecl _ _ tc _ _ nc cs') =
+>   qual tc (tident Data m tc (filter (`notElem` cs') [nconstr nc]))
 > tidents m (ITypeDecl _ tc _ _ _) = qual tc (tident Alias m tc)
 > tidents m (IClassDecl _ _ cls _ _ ds) =
 >   qual cls (tident Class m cls (map imethod (catMaybes ds)))
 > tidents _ _ = id
 
 > vidents :: ModuleIdent -> IDecl -> [I ValueKind] -> [I ValueKind]
-> vidents m (IDataDecl _ _ tc _ _ cs cs') =
->   (map (cident (qualQualify m tc)) cs'' ++)
->   where cs'' = filter (`notElem` cs') (map constr cs)
-> vidents m (INewtypeDecl _ _ tc _ _ nc) =
->   (cident (qualQualify m tc) (nconstr nc) :)
+> vidents m (IDataDecl _ _ tc _ _ cs cs') = cidents m tc cs' (map constr cs)
+> vidents m (INewtypeDecl _ _ tc _ _ nc cs') = cidents m tc cs' [nconstr nc]
 > vidents m (IClassDecl _ _ cls _ _ ds) =
 >   (map (mident (qualQualify m cls) . imethod) (catMaybes ds) ++)
 > vidents m (IFunctionDecl _ f _ _) = qual f (Var (qualQualify m f))
@@ -201,7 +198,7 @@ following functions.
 > types :: ModuleIdent -> IDecl -> [I TypeInfo] -> [I TypeInfo]
 > types m (IDataDecl _ _ tc k tvs cs _) =
 >   qual tc (typeCon DataType m tc k tvs (map constr cs))
-> types m (INewtypeDecl _ _ tc k tvs nc) =
+> types m (INewtypeDecl _ _ tc k tvs nc _) =
 >   qual tc (typeCon RenamingType m tc k tvs (nconstr nc))
 > types m (ITypeDecl _ tc k tvs ty) =
 >   qual tc (typeCon (flip AliasType (length tvs)) m tc k tvs (toType m tvs ty))
@@ -213,8 +210,9 @@ following functions.
 > values m (IDataDecl _ cx tc _ tvs cs cs') =
 >   (map (dataConstr m cx (qualQualify m tc) tvs) cs'' ++)
 >   where cs'' = filter ((`notElem` cs') . constr) cs
-> values m (INewtypeDecl _ cx tc _ tvs nc) =
->   (newConstr m cx (qualQualify m tc) tvs nc :)
+> values m (INewtypeDecl _ cx tc _ tvs nc cs') =
+>   (map (newConstr m cx (qualQualify m tc) tvs) nc' ++)
+>   where nc' = [nc | nconstr nc `notElem` cs']
 > values m (IClassDecl _ _ cls _ tv ds) =
 >   (map (classMethod m (qualQualify m cls) tv) (catMaybes ds) ++)
 > values m (IFunctionDecl _ f n ty) =
@@ -271,6 +269,11 @@ Auxiliary functions:
 
 > tident :: (QualIdent -> a) -> ModuleIdent -> QualIdent -> a
 > tident f m tc = f (qualQualify m tc)
+
+> cidents :: ModuleIdent -> QualIdent -> [Ident] -> [Ident] -> [I ValueKind]
+>         -> [I ValueKind]
+> cidents m tc cs' cs =
+>   (map (cident (qualQualify m tc)) (filter (`notElem` cs') cs) ++)
 
 > cident :: QualIdent -> Ident -> I ValueKind
 > cident tc c = (c,Constr (qualifyLike tc c))

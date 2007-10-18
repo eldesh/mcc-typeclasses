@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2517 2007-10-18 14:23:42Z wlux $
+% $Id: CurryPP.lhs 2518 2007-10-18 15:27:42Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -195,10 +195,11 @@ Interfaces
 > ppIDecl (IDataDecl _ cx tc k tvs cs cs') =
 >   sep (ppITypeDeclLhs "data" cx tc k tvs :
 >        map indent (zipWith (<+>) (equals : repeat vbar) (map ppConstr cs)) ++
->        [indent (ppPragma "HIDING" (ppIdentList cs')) | not (null cs')])
-> ppIDecl (INewtypeDecl _ cx tc k tvs nc) =
+>        [indent (ppHiding cs')])
+> ppIDecl (INewtypeDecl _ cx tc k tvs nc cs') =
 >   sep [ppITypeDeclLhs "newtype" cx tc k tvs <+> equals,
->        indent (ppNewConstr nc)]
+>        indent (ppNewConstr nc),
+>        indent (ppHiding cs')]
 > ppIDecl (ITypeDecl _ tc k tvs ty) =
 >   sep [ppITypeDeclLhs "type" [] tc k tvs <+> equals,indent (ppTypeExpr 0 ty)]
 > ppIDecl (HidingClassDecl p cx cls k tv) =
@@ -221,6 +222,11 @@ Interfaces
 > ppITypeIdent tc (Just k) =
 >   parens (ppQIdent tc <+> text "::" <+> ppKindExpr 0 k)
 > ppITypeIdent tc Nothing = ppQIdent tc
+
+> ppHiding :: [Ident] -> Doc
+> ppHiding cs
+>   | null cs = empty
+>   | otherwise = ppPragma "HIDING" (ppIdentList cs)
 
 > ppIClassDecl :: Doc -> [Maybe IMethodDecl] -> Doc
 > ppIClassDecl head ds

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2517 2007-10-18 14:23:42Z wlux $
+% $Id: CurryParser.lhs 2518 2007-10-18 15:27:42Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -353,15 +353,14 @@ directory path to the module is ignored.
 >         hidingId = qualify (mkIdent "hiding")
 
 > iDataDecl :: Parser Token IDecl a
-> iDataDecl = iDataDeclLhs IDataDecl KW_data <*> constrs <*> hidden
+> iDataDecl = iDataDeclLhs IDataDecl KW_data <*> constrs <*> iHidden
 >   where constrs = equals <-*> constrDecl `sepBy1` bar
 >             `opt` []
->         hidden = pragma HidingPragma (con `sepBy` comma)
->            `opt` []
 
 > iNewtypeDecl :: Parser Token IDecl a
 > iNewtypeDecl =
 >   iDataDeclLhs INewtypeDecl KW_newtype <*-> equals <*> newConstrDecl
+>                                        <*> iHidden
 
 > iTypeDecl :: Parser Token IDecl a
 > iTypeDecl = iTypeDeclLhs typeDecl KW_type id <*-> equals <*> type0
@@ -379,6 +378,10 @@ directory path to the module is ignored.
 >              -> Parser Token b c
 > iTypeDeclLhs f kw g =
 >   f <$> position <*-> token kw <*> g ((,) <$> withKind qtycon <*> many tyvar)
+
+> iHidden :: Parser Token [Ident] a
+> iHidden = pragma HidingPragma (con `sepBy` comma)
+>     `opt` []
 
 > iClassDecl :: Parser Token IDecl a
 > iClassDecl =
@@ -400,8 +403,9 @@ directory path to the module is ignored.
 >   where f' p = uncurry (uncurry . f p)
 
 > iFunctionDecl :: Parser Token IDecl a
-> iFunctionDecl = IFunctionDecl <$> position <*> qfun <*-> token DoubleColon
->                               <*> option iFunctionArity <*> qualType
+> iFunctionDecl =
+>   IFunctionDecl <$> position <*> qfun <*-> token DoubleColon
+>                 <*> option iFunctionArity <*> qualType
 
 > iMethodDecl :: Parser Token IMethodDecl a
 > iMethodDecl = IMethodDecl <$> position <*> fun <*-> token DoubleColon

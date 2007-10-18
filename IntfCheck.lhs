@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2517 2007-10-18 14:23:42Z wlux $
+% $Id: IntfCheck.lhs 2518 2007-10-18 15:27:42Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -89,12 +89,8 @@ interface module only. However, this has not been implemented yet.
 >           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' &&
 >             (null cs || map constr cs == cs') =
 >               Just (mapM_ (checkConstrImport m tyEnv cx tc tvs) cs)
->         checkData (RenamingType tc' k' _)
->           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' &&
->             null cs =
->               Just (return ())
 >         checkData _ = Nothing
-> checkImport m _ tcEnv _ tyEnv (INewtypeDecl p cx tc k tvs nc) =
+> checkImport m _ tcEnv _ tyEnv (INewtypeDecl p cx tc k tvs nc _) =
 >   checkTypeInfo "newtype" checkNewtype tcEnv p tc
 >   where checkNewtype (RenamingType tc' k' nc')
 >           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' &&

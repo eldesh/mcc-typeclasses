@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2517 2007-10-18 14:23:42Z wlux $
+% $Id: Exports.lhs 2518 2007-10-18 15:27:42Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -74,11 +74,11 @@ exported together with their classes and types as explained below.
 >             (cxs,cs') = unzip (map (constrDecl tcEnv tyEnv tc tvs) cs)
 >             cs'' = guard vis >> filter (`notElem` xs) cs
 >             vis = not (null xs)
->     [RenamingType _ k c]
->       | null xs -> iTypeDecl IDataDecl m [] tc tvs n k [] [] : ds
->       | otherwise -> iTypeDecl INewtypeDecl m cx' tc tvs n k nc' : ds
+>     [RenamingType _ k c] ->
+>       iTypeDecl INewtypeDecl m cx' tc tvs n k nc' cs' : ds
 >       where n = kindArity k
 >             (cx',nc') = newConstrDecl tcEnv tyEnv tc tvs c
+>             cs' = [c | c `notElem` xs]
 >     [AliasType _ n k ty] ->
 >       iTypeDecl (const . ITypeDecl) m [] tc tvs n k ty' : ds
 >       where ty' = fromType tcEnv tvs ty
@@ -195,7 +195,8 @@ not module \texttt{B}.
 >   modules (IInfixDecl _ _ _ op) = modules op
 >   modules (HidingDataDecl _ tc _ _) = modules tc
 >   modules (IDataDecl _ cx tc _ _ cs _) = modules cx . modules tc . modules cs
->   modules (INewtypeDecl _ cx tc _ _ nc) = modules cx . modules tc . modules nc
+>   modules (INewtypeDecl _ cx tc _ _ nc _) =
+>     modules cx . modules tc . modules nc
 >   modules (ITypeDecl _ tc _ _ ty) = modules tc . modules ty
 >   modules (HidingClassDecl _ cx cls _ _) = modules cx . modules cls
 >   modules (IClassDecl _ cx cls _ _ ds) = modules cx . modules cls . modules ds
@@ -326,7 +327,7 @@ environment.
 > declIs _ (IInfixDecl _ _ _ _) = IsOther
 > declIs m (HidingDataDecl _ tc _ _) = IsType (qualQualify m tc)
 > declIs m (IDataDecl _ _ tc _ _ _ _) = IsType (qualQualify m tc)
-> declIs m (INewtypeDecl _ _ tc _ _ _) = IsType (qualQualify m tc)
+> declIs m (INewtypeDecl _ _ tc _ _ _ _) = IsType (qualQualify m tc)
 > declIs _ (ITypeDecl _ _ _ _ _) = IsOther {-sic!-}
 > declIs m (HidingClassDecl _ _ cls _ _) = IsClass (qualQualify m cls)
 > declIs m (IClassDecl _ _ cls _ _ _) = IsClass (qualQualify m cls)
@@ -380,7 +381,7 @@ environment.
 >   usedTypes (IInfixDecl _ _ _ _) = id
 >   usedTypes (HidingDataDecl _ _ _ _) = id
 >   usedTypes (IDataDecl _ cx _ _ _ cs _) = usedTypes cx . usedTypes cs
->   usedTypes (INewtypeDecl _ cx _ _ _ nc) = usedTypes cx . usedTypes nc
+>   usedTypes (INewtypeDecl _ cx _ _ _ nc _) = usedTypes cx . usedTypes nc
 >   usedTypes (ITypeDecl _ _ _ _ ty) = usedTypes ty
 >   usedTypes (HidingClassDecl _ cx _ _ _) = usedTypes cx
 >   usedTypes (IClassDecl _ cx _ _ _ ds) = usedTypes cx . usedTypes ds

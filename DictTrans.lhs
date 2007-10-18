@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2517 2007-10-18 14:23:42Z wlux $
+% $Id: DictTrans.lhs 2518 2007-10-18 15:27:42Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -135,8 +135,8 @@ generator.
 > liftIntfDecls _ _ _ (HidingDataDecl p tc k tvs) = [HidingDataDecl p tc k tvs]
 > liftIntfDecls _ _ _ (IDataDecl p cx tc k tvs cs cs') =
 >   [IDataDecl p cx tc k tvs cs cs']
-> liftIntfDecls _ _ _ (INewtypeDecl p cx tc k tvs nc) =
->   [INewtypeDecl p cx tc k tvs nc]
+> liftIntfDecls _ _ _ (INewtypeDecl p cx tc k tvs nc cs') =
+>   [INewtypeDecl p cx tc k tvs nc cs']
 > liftIntfDecls _ _ _ (ITypeDecl p tc k tvs ty) = [ITypeDecl p tc k tvs ty]
 > liftIntfDecls m tcEnv _ (HidingClassDecl p _ cls k tv) =
 >   classIDecls m tcEnv p cls k tv Nothing
@@ -159,8 +159,8 @@ generator.
 >           where tys' = map (fromType tcEnv (tvs ++ evs)) . arrowArgs $
 >                        uncurry (transformConstrType tcEnv) $
 >                        toConstrType m cxL tc tvs cxR tys
-> dictTransIntfDecl m tcEnv (INewtypeDecl p _ tc k tvs nc) =
->   INewtypeDecl p [] tc k tvs nc
+> dictTransIntfDecl m tcEnv (INewtypeDecl p _ tc k tvs nc cs') =
+>   INewtypeDecl p [] tc k tvs nc cs'
 > dictTransIntfDecl m tcEnv (IFunctionDecl p f n ty) =
 >   IFunctionDecl p f (fmap (+ toInteger d) n)
 >                 (fromQualType tcEnv (nub (fv ty)) (qualType ty''))

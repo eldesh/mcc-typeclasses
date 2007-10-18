@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2517 2007-10-18 14:23:42Z wlux $
+% $Id: Modules.lhs 2518 2007-10-18 15:27:42Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -493,7 +493,7 @@ with the actual definitions in the current module.
 >   where entity (IInfixDecl _ _ _ op) = op
 >         entity (HidingDataDecl _ tc _ _) = tc
 >         entity (IDataDecl _ _ tc _ _ _ _) = tc
->         entity (INewtypeDecl _ _ tc _ _ _) = tc
+>         entity (INewtypeDecl _ _ tc _ _ _ _) = tc
 >         entity (ITypeDecl _ tc _ _ _) = tc
 >         entity (HidingClassDecl _ _ cls _ _) = cls
 >         entity (IClassDecl _ _ cls _ _ _) = cls

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2507 2007-10-16 22:24:05Z wlux $
+% $Id: DictTrans.lhs 2513 2007-10-18 09:50:08Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -31,10 +31,12 @@ declarations in the module.
 > import PredefIdent
 > import TopEnv
 > import Types
+> import TypeInfo
 > import TypeSubst
 > import TypeTrans
 > import Typing
 > import Utils
+> import ValueInfo
 
 \end{verbatim}
 In order to generate unique names for the implicit dictionary

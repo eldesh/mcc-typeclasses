@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 2507 2007-10-16 22:24:05Z wlux $
+% $Id: PrecCheck.lhs 2513 2007-10-18 09:50:08Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -19,8 +19,10 @@ according to the relative precedences of the operators involved.
 > import CurryUtils
 > import Error
 > import Maybe
+> import PrecInfo
 > import PredefIdent
 > import TopEnv
+> import TypeInfo
 
 \end{verbatim}
 For each declaration group, the compiler extends the precedence

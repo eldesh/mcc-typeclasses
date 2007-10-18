@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2507 2007-10-16 22:24:05Z wlux $
+% $Id: Simplify.lhs 2513 2007-10-18 09:50:08Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -31,9 +31,11 @@ Currently, the following optimizations are implemented:
 > import Monad
 > import PredefIdent
 > import SCC
+> import TrustInfo
 > import Types
 > import Typing
 > import Utils
+> import ValueInfo
 
 > type SimplifyState a =
 >   StateT ValueEnv (ReaderT NewtypeEnv (ReaderT TrustEnv (StateT Int Id))) a

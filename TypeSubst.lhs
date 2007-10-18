@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSubst.lhs 2500 2007-10-16 19:41:32Z wlux $
+% $Id: TypeSubst.lhs 2513 2007-10-18 09:50:08Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -12,12 +12,12 @@ This module implements substitutions on types.
 > module TypeSubst(TypeSubst, SubstType(..), bindVar, substVar,
 >                  ExpandAliasType(..), normalize, instanceType,
 >                  idSubst, bindSubst, compose) where
-> import Base
 > import List
 > import Maybe
 > import Subst
 > import TopEnv
 > import Types
+> import ValueInfo
 
 > type TypeSubst = Subst Int Type
 

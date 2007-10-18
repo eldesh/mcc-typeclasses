@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2512 2007-10-18 08:09:09Z wlux $
+% $Id: Modules.lhs 2513 2007-10-18 09:50:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,7 +10,6 @@ This module controls the compilation of modules.
 \begin{verbatim}
 
 > module Modules(compileModule,compileGoal,typeGoal) where
-> import Base
 > import Unlit(unlit)
 > import CurryParser(parseSource,parseInterface,parseGoal)
 > import ImportSyntaxCheck(checkImports)
@@ -52,24 +51,31 @@ This module controls the compilation of modules.
 > import CurryPP(ppModule,ppInterface,ppIDecl,ppGoal)
 > import qualified ILPP(ppModule)
 > import Options(Options(..),CaseMode(..),Warn(..),Dump(..))
+> import Base
 > import Curry
 > import CurryUtils
 > import Env
 > import TopEnv
 > import Combined
 > import Error
+> import IdentInfo
+> import Interfaces
 > import IO
 > import List
 > import Maybe
 > import Monad
 > import PathUtils
 > import Position
+> import PrecInfo
 > import PredefIdent
 > import Pretty
+> import TrustInfo
 > import Types
+> import TypeInfo
 > import TypeTrans
 > import Typing
 > import Utils
+> import ValueInfo
 
 \end{verbatim}
 The function \texttt{compileModule} is the main entry point of this

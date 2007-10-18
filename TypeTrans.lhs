@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: TypeTrans.lhs 2513 2007-10-18 09:50:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -24,7 +24,9 @@ external type representations.
 > import Pretty
 > import TopEnv
 > import Types
+> import TypeInfo
 > import TypeSubst
+> import ValueInfo
 
 \end{verbatim}
 The functions \texttt{toType} and \texttt{toTypes} convert Curry type

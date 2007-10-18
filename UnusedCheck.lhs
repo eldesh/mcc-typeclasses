@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 2512 2007-10-18 08:09:09Z wlux $
+% $Id: UnusedCheck.lhs 2513 2007-10-18 09:50:08Z wlux $
 %
 % Copyright (c) 2005-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -13,7 +13,7 @@ and type variables at present.
 \begin{verbatim}
 
 > module UnusedCheck(unusedCheck,unusedCheckGoal) where
-> import Base hiding(TypeKind(..), ValueKind(..))
+> import Base
 > import Curry
 > import CurryUtils
 > import Options

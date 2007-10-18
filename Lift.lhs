@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Lift.lhs 2507 2007-10-16 22:24:05Z wlux $
+% $Id: Lift.lhs 2513 2007-10-18 09:50:08Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -29,10 +29,12 @@ lifted to the top-level.
 > import Set
 > import Subst
 > import TopEnv
+> import TrustInfo
 > import Types
 > import TypeSubst
 > import Typing
 > import Utils
+> import ValueInfo
 
 > lift :: ValueEnv -> TrustEnv -> Module Type -> (Module Type,ValueEnv,TrustEnv)
 > lift tyEnv trEnv (Module m es is ds) =

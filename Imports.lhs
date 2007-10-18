@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2511 2007-10-17 17:28:54Z wlux $
+% $Id: Imports.lhs 2513 2007-10-18 09:50:08Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -16,14 +16,18 @@ interfaces into the current module.
 > import Curry
 > import CurryUtils
 > import Env
+> import IdentInfo
 > import Kinds
 > import KindTrans
 > import Maybe
 > import Map
+> import PrecInfo
 > import Set
 > import TopEnv
 > import Types
+> import TypeInfo
 > import TypeTrans
+> import ValueInfo
 
 > type I a = (Ident,a)
 

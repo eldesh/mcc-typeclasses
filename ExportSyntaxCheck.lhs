@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ExportSyntaxCheck.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: ExportSyntaxCheck.lhs 2513 2007-10-18 09:50:08Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -17,6 +17,7 @@ entities.
 > import Base
 > import Curry
 > import Error
+> import IdentInfo
 > import List
 > import Map
 > import Maybe

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindTrans.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: KindTrans.lhs 2513 2007-10-18 09:50:08Z wlux $
 %
 % Copyright (c) 2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -11,7 +11,6 @@ external kind representations.
 \begin{verbatim}
 
 > module KindTrans(toKind, fromKind, ppKind) where
-> import Base
 > import Curry
 > import CurryPP
 > import Kinds

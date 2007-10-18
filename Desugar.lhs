@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2507 2007-10-16 22:24:05Z wlux $
+% $Id: Desugar.lhs 2513 2007-10-18 09:50:08Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -60,8 +60,10 @@ all names must be properly qualified before calling this module.}
 > import PredefTypes
 > import TopEnv
 > import Types
+> import TypeInfo
 > import Typing
 > import Utils
+> import ValueInfo
 
 \end{verbatim}
 New identifiers may be introduced while desugaring pattern

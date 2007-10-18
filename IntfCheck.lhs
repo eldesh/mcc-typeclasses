@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2507 2007-10-16 22:24:05Z wlux $
+% $Id: IntfCheck.lhs 2513 2007-10-18 09:50:08Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -55,9 +55,12 @@ interface module only. However, this has not been implemented yet.
 > import KindTrans
 > import Maybe
 > import Monad
+> import PrecInfo
 > import TopEnv
 > import Types
+> import TypeInfo
 > import TypeTrans
+> import ValueInfo
 
 > intfCheck :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> ValueEnv -> [IDecl]
 >           -> Error ()

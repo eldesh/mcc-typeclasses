@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindSubst.lhs 2501 2007-10-16 19:47:39Z wlux $
+% $Id: KindSubst.lhs 2513 2007-10-18 09:50:08Z wlux $
 %
 % Copyright (c) 2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,10 +10,10 @@ This module implements substitutions on kinds.
 \begin{verbatim}
 
 > module KindSubst(module KindSubst, idSubst,bindSubst,compose) where
-> import Base
 > import Kinds
 > import Subst
 > import TopEnv
+> import TypeInfo
 
 > type KindSubst = Subst Int Kind
 

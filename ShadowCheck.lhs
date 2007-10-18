@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: ShadowCheck.lhs 2512 2007-10-18 08:09:09Z wlux $
 %
 % Copyright (c) 2005-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -56,9 +56,8 @@ set of defined variables.
 
 > bindVars :: [P Ident] -> S -> S
 > bindVars bvs k vs =
->   filter (\(P _ x) -> x `elemSet` vs) bvs' ++
->   k (foldr addToSet vs [x | P _ x <- bvs'])
->   where bvs' = map (fmap unRenameIdent) bvs
+>   filter (\(P _ x) -> x `elemSet` vs) bvs ++
+>   k (foldr addToSet vs [x | P _ x <- bvs])
 
 > (>>>), (&&&) :: (S -> S) -> (S -> S) -> S -> S
 > f1 >>> f2 = \f gvs -> f1 (f2 f) gvs
@@ -105,10 +104,10 @@ traversal of the syntax tree.
 >   shadow _ (Equation p lhs rhs) = shadow p lhs >>> shadow p rhs
 
 > instance SyntaxTree (Lhs a) where
->   shadow p lhs = bindVars (map (P p) (filter (not . isAnonId) (bv lhs)))
+>   shadow p lhs = bindVars (map (P p) (bv lhs))
 
 > instance SyntaxTree (ConstrTerm a) where
->   shadow p t = bindVars (map (P p) (filter (not . isAnonId) (bv t)))
+>   shadow p t = bindVars (map (P p) (bv t))
 
 > instance SyntaxTree (Rhs a) where
 >   shadow _ (SimpleRhs p e ds) = shadow p ds >>> shadow p e
@@ -174,15 +173,8 @@ with their positions.
 > vars (TypeSig _ _ _) = []
 > vars (FunctionDecl p f _) = [P p f]
 > vars (ForeignDecl p _ _ _ f _) = [P p f]
-> vars (PatternDecl p t _) = map (P p) (filter (not . isAnonId) (bv t))
+> vars (PatternDecl p t _) = map (P p) (bv t)
 > vars (FreeDecl p vs) = map (P p) vs
 > vars (TrustAnnot _ _ _) = []
-
-\end{verbatim}
-Anonymous identifiers in patterns are always ignored.
-\begin{verbatim}
-
-> isAnonId :: Ident -> Bool
-> isAnonId x = unRenameIdent x == anonId
 
 \end{verbatim}

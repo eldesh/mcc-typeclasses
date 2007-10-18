@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: CaseCheck.lhs 2512 2007-10-18 08:09:09Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -148,7 +148,7 @@ collect all defined identifiers.
 
 > typeNames :: Position -> Ident -> [Ident] -> [Definition]
 > typeNames p tc tvs =
->   D p TypeConstrId tc : map (D p TypeVarId) (filter (not . isAnonId) tvs)
+>   D p TypeConstrId tc : map (D p TypeVarId) (filter (anonId /=) tvs)
 
 > instance SyntaxTree ConstrDecl where
 >   names _ (ConstrDecl p evs _ c _) xs = constrNames p evs c ++ xs
@@ -159,14 +159,13 @@ collect all defined identifiers.
 
 > constrNames ::  Position -> [Ident] -> Ident -> [Definition]
 > constrNames p evs c =
->   D p DataConstrId c : map (D p TypeVarId) (filter (not . isAnonId) evs)
+>   D p DataConstrId c : map (D p TypeVarId) (filter (anonId /=) evs)
 
 > instance SyntaxTree QualTypeExpr where
 >   names p (QualTypeExpr _ ty) = names p ty
 
 > instance SyntaxTree TypeExpr where
->   names p ty xs =
->     map (D p TypeVarId) (nub (filter (not . isAnonId) (fv ty))) ++ xs
+>   names p ty xs = map (D p TypeVarId) (nub (filter (anonId /=) (fv ty))) ++ xs
 
 > methodNames :: Decl a -> [Definition] -> [Definition]
 > methodNames (InfixDecl _ _ _ _) xs = xs
@@ -196,18 +195,7 @@ collect all defined identifiers.
 >   names p (GuardedRhs es ds) = names p ds . names p es
 
 > instance SyntaxTree (ConstrTerm a) where
->   names _ (LiteralPattern _ _) xs = xs
->   names _ (NegativePattern _ _) xs = xs
->   names p (VariablePattern _ v) xs
->     | isAnonId v = xs
->     | otherwise = D p VariableId v : xs
->   names p (ConstructorPattern _ _ ts) xs = names p ts xs
->   names p (InfixPattern _ t1 _ t2) xs = names p t1 (names p t2 xs)
->   names p (ParenPattern t) xs = names p t xs
->   names p (TuplePattern ts) xs = names p ts xs
->   names p (ListPattern _ ts) xs = names p ts xs
->   names p (AsPattern v t) xs = D p VariableId v : names p t xs
->   names p (LazyPattern t) xs = names p t xs
+>   names p t xs = map (D p VariableId) (bv t) ++ xs
 
 > instance SyntaxTree (CondExpr a) where
 >   names _ (CondExpr p g e) = names p g . names p e
@@ -243,9 +231,6 @@ collect all defined identifiers.
 
 > instance SyntaxTree (Alt a) where
 >   names _ (Alt p t rhs) = names p t . names p rhs
-
-> isAnonId :: Ident -> Bool
-> isAnonId x = unRenameIdent x == anonId
 
 \end{verbatim}
 Warning messages.

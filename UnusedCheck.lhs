@@ -1,15 +1,15 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 2507 2007-10-16 22:24:05Z wlux $
+% $Id: UnusedCheck.lhs 2512 2007-10-18 08:09:09Z wlux $
 %
 % Copyright (c) 2005-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{UnusedCheck.lhs}
 \section{Checking for Unused Variables}
-After syntax checking and renaming, the compiler can optionally report
-unused data constructors, functions, and variables in the source code.
-Note that we do not check for unused type constructors and type
-variables at present.
+After syntax checking and before renaming, the compiler can optionally
+report unused data constructors, functions, and variables in the
+source code. Note that we do not check for unused type constructors
+and type variables at present.
 \begin{verbatim}
 
 > module UnusedCheck(unusedCheck,unusedCheckGoal) where
@@ -19,22 +19,25 @@ variables at present.
 > import Options
 > import Position
 > import Set
+> import Utils
 
 \end{verbatim}
-In order to report unused variables in a module, we first compute the
-set of all used variables in the module. Using the resulting set we
-then check for unused variables in the code and report warnings for
-them according to the compiler options.
+Since local variables have not yet been renamed, we compute the set of
+used variables together with the list of unused variables. In
+particular, whenever a scope is left we collect the unused variables
+of that scope and remove their identifiers from the set of used
+variables. At the end, we report warnings for the unused variables
+according to the compiler options.
 \begin{verbatim}
 
 > unusedCheck :: [Warn] -> Module a -> [String]
 > unusedCheck us (Module m (Just (Exporting _ es)) _ ds) =
->   reportUnused us $ unused (used m es (used m ds zeroSet)) noPosition ds []
->   where noPosition = error "noPosition"
+>   reportUnused us $
+>   snd (checkUnused noPosition ds . used m es . used m ds $ (zeroSet,[]))
 
 > unusedCheckGoal :: [Warn] -> ModuleIdent -> Goal a -> [String]
 > unusedCheckGoal us m (Goal p e ds) =
->   reportUnused us $ unused (used m g' zeroSet) p g' []
+>   reportUnused us $ snd (used m g' $ (zeroSet,[]))
 >   where g' = SimpleRhs p e ds
 
 > reportUnused :: [Warn] -> [Undef] -> [String]
@@ -70,23 +73,22 @@ them according to the compiler options.
 > unusedVars unused used p xs = ([unused p x | x <- xs, x `notElemSet` used] ++)
 
 \end{verbatim}
-Collecting used identifiers and filtering unused ones are each
-implemented by a traversal of the syntax tree.
+Collecting used identifiers and filtering unused ones are implemented
+by a traversal of the syntax tree.
 \begin{verbatim}
 
+> type U = (Set Ident,[Undef])
+
 > class SyntaxTree a where
->   used :: ModuleIdent -> a -> Set Ident -> Set Ident
->   unused :: Set Ident -> Position -> a -> [Undef] -> [Undef]
+>   used :: ModuleIdent -> a -> U -> U
 
 > instance SyntaxTree a => SyntaxTree [a] where
 >   used _ [] = id
 >   used m (x:xs) = used m x . used m xs
->   unused used p xs ys = foldr (unused used p) ys xs
 
 > instance SyntaxTree Export where
 >   used m (Export x) = used m x
 >   used m (ExportTypeWith tc xs) = used m (map (qualifyLike tc) xs)
->   unused _ _ _ = id
 
 > instance SyntaxTree (TopDecl a) where
 >   used _ (DataDecl _ _ _ _ _ _) = id
@@ -97,70 +99,26 @@ implemented by a traversal of the syntax tree.
 >   used m (DefaultDecl _ _) = id
 >   used m (BlockDecl d) = used m d
 
->   unused used p (DataDecl _ _ _ _ cs _) = unused used p cs
->   unused used p (NewtypeDecl _ _ _ _ nc _) = unused used p nc
->   unused _ _ (TypeDecl _ _ _ _) = id
->   unused used _ (ClassDecl p _ _ _ ds) =
->     flip (foldr (unusedMethods used p)) ds
->   unused used _ (InstanceDecl p _ _ _ ds) =
->     flip (foldr (unusedMethods used p)) ds
->   unused _ _ (DefaultDecl _ _) = id
->   unused used p (BlockDecl d) = unused used p d
-
-> instance SyntaxTree ConstrDecl where
->   used _ _ = id
->   unused used _ (ConstrDecl p _ _ c _) = unusedVars Data used p [c]
->   unused used _ (ConOpDecl p _ _ _ op _) = unusedVars Data used p [op]
-
-> instance SyntaxTree NewConstrDecl where
->   used _ _ = id
->   unused used _ (NewConstrDecl p c _) = unusedVars Data used p [c]
-
-> unusedMethods :: Set Ident -> Position -> Decl a -> [Undef] -> [Undef]
-> unusedMethods _ _ (InfixDecl _ _ _ _) = id
-> unusedMethods used _ (TypeSig p fs _) = unusedVars Meth used p fs
-> unusedMethods used _ (FunctionDecl p _ eqs) = unused used p eqs
-> unusedMethods _ _ (TrustAnnot _ _ _) = id
-
 > instance SyntaxTree (Decl a) where
 >   used _ (InfixDecl _ _ _ _) = id
 >   used _ (TypeSig _ _ _) = id
->   used m (FunctionDecl _ f eqs) =
->     unionSet (deleteFromSet f (used m eqs zeroSet))
+>   used m (FunctionDecl _ f eqs) = nest (apFst (deleteFromSet f) . used m eqs)
 >   used _ (ForeignDecl _ _ _ _ _ _) = id
 >   used m (PatternDecl _ t rhs) =
 >     case t of
->       VariablePattern _ v -> unionSet (deleteFromSet v (used m rhs zeroSet))
+>       VariablePattern _ v -> nest (apFst (deleteFromSet v) . used m rhs)
 >       _ -> used m t . used m rhs
 >   used _ (FreeDecl _ _) = id
 >   used _ (TrustAnnot _ _ _) = id
->
->   unused _ _ (InfixDecl _ _ _ _) = id
->   unused _ _ (TypeSig _ _ _) = id
->   unused used _ (FunctionDecl p f eqs) =
->     unusedVars Decl used p [f] . unused used p eqs
->   unused used _ (ForeignDecl p _ _ _ f _) = unusedVars Decl used p [f]
->   unused used _ (PatternDecl p t rhs) =
->     case t of
->       VariablePattern _ v
->         | isAnonId v -> ([Pattern p] ++)
->         | otherwise -> unusedVars Decl used p [v]
->       _ ->
->         ([Pattern p | not (any (`elemSet` used) bvs)] ++) .
->         unusedVars Var used p bvs . unused used p rhs
->     where bvs = filter (not . isAnonId) (bv t)
->   unused used _ (FreeDecl p xs) = unusedVars Decl used p xs
->   unused _ _ (TrustAnnot _ _ _) = id
 
 > instance SyntaxTree (Equation a) where
->   used m (Equation _ lhs rhs) = used m lhs . used m rhs
->   unused used _ (Equation p lhs rhs) = unused used p lhs . unused used p rhs
+>   used m (Equation p lhs rhs) =
+>     nest (checkUnused p lhs . used m lhs . used m rhs)
 
 > instance SyntaxTree (Lhs a) where
 >   used m (FunLhs _ ts) = used m ts
 >   used m (OpLhs t1 _ t2) = used m t1 . used m t2
 >   used m (ApLhs lhs ts) = used m lhs . used m ts
->   unused used p lhs = unusedVars Var used p (filter (not . isAnonId) (bv lhs))
 
 > instance SyntaxTree (ConstrTerm a) where
 >   used _ (LiteralPattern _ _) = id
@@ -173,18 +131,14 @@ implemented by a traversal of the syntax tree.
 >   used m (ListPattern _ ts) = used m ts
 >   used m (AsPattern _ t) = used m t
 >   used m (LazyPattern t) = used m t
->
->   unused used p t = unusedVars Var used p (filter (not . isAnonId) (bv t))
 
 > instance SyntaxTree (Rhs a) where
->   used m (SimpleRhs _ e ds) = used m ds . used m e
->   used m (GuardedRhs es ds) = used m ds . used m es
->   unused used _ (SimpleRhs p e ds) = unused used p ds . unused used p e
->   unused used p (GuardedRhs es ds) = unused used p ds . unused used p es
+>   used m (SimpleRhs p e ds) = nest (checkUnused p ds . used m ds . used m e)
+>   used m (GuardedRhs es ds) =
+>     nest (checkUnused noPosition ds . used m ds . used m es)
 
 > instance SyntaxTree (CondExpr a) where
 >   used m (CondExpr _ g e) = used m g . used m e
->   unused used _ (CondExpr p g e) = unused used p g . unused used p e
 
 > instance SyntaxTree (Expression a) where
 >   used _ (Literal _ _) = id
@@ -194,7 +148,7 @@ implemented by a traversal of the syntax tree.
 >   used m (Typed e _) = used m e
 >   used m (Tuple es) = used m es
 >   used m (List _ es) = used m es
->   used m (ListCompr e qs) = used m qs . used m e
+>   used m (ListCompr e qs) = nest (used m qs . used m e)
 >   used m (EnumFrom e) = used m e
 >   used m (EnumFromThen e1 e2) = used m e1 . used m e2
 >   used m (EnumFromTo e1 e2) = used m e1 . used m e2
@@ -204,61 +158,96 @@ implemented by a traversal of the syntax tree.
 >   used m (InfixApply e1 op e2) = used m e1 . used m (opName op) . used m e2
 >   used m (LeftSection e op) = used m e . used m (opName op)
 >   used m (RightSection op e) = used m (opName op) . used m e
->   used m (Lambda _ ts e) = used m ts . used m e
->   used m (Let ds e) = used m ds . used m e
->   used m (Do sts e) = used m sts . used m e
+>   used m (Lambda p ts e) = nest (checkUnused p ts . used m ts . used m e)
+>   used m (Let ds e) = nest (checkUnused noPosition ds . used m ds . used m e)
+>   used m (Do sts e) = nest (used m sts . used m e)
 >   used m (IfThenElse e1 e2 e3) = used m e1 . used m e2 . used m e3
 >   used m (Case e as) = used m e . used m as
->
->   unused _ _ (Literal _ _) = id
->   unused _ _ (Variable _ _) = id
->   unused _ _ (Constructor _ _) = id
->   unused used p (Paren e) = unused used p e
->   unused used p (Typed e _) = unused used p e
->   unused used p (Tuple es) = unused used p es
->   unused used p (List _ es) = unused used p es
->   unused used p (ListCompr e qs) = unused used p qs . unused used p e
->   unused used p (EnumFrom e) = unused used p e
->   unused used p (EnumFromThen e1 e2) = unused used p e1 . unused used p e2
->   unused used p (EnumFromTo e1 e2) = unused used p e1 . unused used p e2
->   unused used p (EnumFromThenTo e1 e2 e3) =
->     unused used p e1 . unused used p e2 . unused used p e3
->   unused used p (UnaryMinus e) = unused used p e
->   unused used p (Apply e1 e2) = unused used p e1 . unused used p e2
->   unused used p (InfixApply e1 _ e2) = unused used p e1 . unused used p e2
->   unused used p (LeftSection e _) = unused used p e
->   unused used p (RightSection _ e) = unused used p e
->   unused used _ (Lambda p ts e) = unused used p ts . unused used p e
->   unused used p (Let ds e) = unused used p ds . unused used p e
->   unused used p (Do sts e) = unused used p sts . unused used p e
->   unused used p (IfThenElse e1 e2 e3) =
->     unused used p e1 . unused used p e2 . unused used p e3
->   unused used p (Case e as) = unused used p e . unused used p as
 
 > instance SyntaxTree (Statement a) where
 >   used m (StmtExpr e) = used m e
->   used m (StmtBind _ t e) = used m t . used m e
+>   used m (StmtBind p t e) = used m e . checkUnused p t . used m t
 >   used m (StmtDecl ds) = used m ds
->   unused used p (StmtExpr e) = unused used p e
->   unused used _ (StmtBind p t e) = unused used p t . unused used p e
->   unused used p (StmtDecl ds) = unused used p ds
 
 > instance SyntaxTree (Alt a) where
->   used m (Alt _ t rhs) = used m t . used m rhs
->   unused used _ (Alt p t rhs) = unused used p t . unused used p rhs
+>   used m (Alt p t rhs) = nest (checkUnused p t . used m t . used m rhs)
 
 > instance SyntaxTree QualIdent where
 >   used m x =
 >     case splitQualIdent (qualUnqualify m x) of
 >       (Just _,_) -> id
->       (Nothing,x') -> addToSet x'
->   unused _ _ _ = id
+>       (Nothing,x') -> apFst (addToSet x')
 
 \end{verbatim}
-Anonymous identifiers in patterns are always ignored.
+Within each scope, we check for unused variables and then remove the
+set of bound variables from the list of used variables. The functions
+\texttt{nest}, which isolates an expression from its right neighbor,
+and \texttt{checkUnused}, which actually checks for unused variables,
+are kept separate in order to handle qualifiers in list comprehensions
+and statement sequences in do expressions correctly. Recall that for a
+statement sequence $t \leftarrow e; \emph{sts}$, the variables used in
+\emph{sts} (but not those in $e$) are relevant for determining the
+unused variables of pattern $t$.
 \begin{verbatim}
 
-> isAnonId :: Ident -> Bool
-> isAnonId x = unRenameIdent x == anonId
+> nest :: (U -> U) -> U -> U
+> nest used (vs,us) = (vs' `unionSet` vs,us')
+>   where (vs',us') = used (zeroSet,us)
+
+> checkUnused :: (QuantExpr a,Binder a) => Position -> a -> U -> U
+> checkUnused p x (vs,us) = (foldr deleteFromSet vs (bv x),unused vs p x us)
+
+> class Binder a where
+>   unused :: Set Ident -> Position -> a -> [Undef] -> [Undef]
+
+> instance Binder a => Binder [a] where
+>   unused used p xs ys = foldr (unused used p) ys xs
+
+> instance Binder (TopDecl a) where
+>   unused used p (DataDecl _ _ _ _ cs _) = unused used p cs
+>   unused used p (NewtypeDecl _ _ _ _ nc _) = unused used p nc
+>   unused _ _ (TypeDecl _ _ _ _) = id
+>   unused used _ (ClassDecl p _ _ _ ds) =
+>     flip (foldr ($)) [unusedVars Meth used p fs | TypeSig p fs _ <- ds]
+>   unused _ _ (InstanceDecl _ _ _ _ _) = id
+>   unused _ _ (DefaultDecl _ _) = id
+>   unused used p (BlockDecl d) = unused used p d
+
+> instance Binder ConstrDecl where
+>   unused used _ (ConstrDecl p _ _ c _) = unusedVars Data used p [c]
+>   unused used _ (ConOpDecl p _ _ _ op _) = unusedVars Data used p [op]
+
+> instance Binder NewConstrDecl where
+>   unused used _ (NewConstrDecl p c _) = unusedVars Data used p [c]
+
+> instance Binder (Decl a) where
+>   unused _ _ (InfixDecl _ _ _ _) = id
+>   unused _ _ (TypeSig _ _ _) = id
+>   unused used _ (FunctionDecl p f _) = unusedVars Decl used p [f]
+>   unused used _ (ForeignDecl p _ _ _ f _) = unusedVars Decl used p [f]
+>   unused used _ (PatternDecl p t rhs) =
+>     case t of
+>       VariablePattern _ v
+>         | v == anonId -> ([Pattern p] ++)
+>         | otherwise -> unusedVars Decl used p [v]
+>       _ ->
+>         ([Pattern p | not (any (`elemSet` used) bvs)] ++) .
+>         unusedVars Var used p bvs
+>     where bvs = bv t
+>   unused used _ (FreeDecl p xs) = unusedVars Decl used p xs
+>   unused _ _ (TrustAnnot _ _ _) = id
+
+> instance Binder (Lhs a) where
+>   unused used p lhs = unusedVars Var used p (bv lhs)
+
+> instance Binder (ConstrTerm a) where
+>   unused used p t = unusedVars Var used p (bv t)
+
+\end{verbatim}
+Auxiliary functions.
+\begin{verbatim}
+
+> noPosition :: Position
+> noPosition = error "noPosition"
 
 \end{verbatim}

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2510 2007-10-17 16:53:36Z wlux $
+% $Id: Base.lhs 2512 2007-10-18 08:09:09Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -551,6 +551,17 @@ variables cannot be computed independently for each declaration.
 > instance QuantExpr e => QuantExpr [e] where
 >   bv = concat . map bv
 
+> instance QualExpr (TopDecl a) where
+>   qfv m (ClassDecl _ _ _ _ ds) = qfv m ds
+>   qfv m (InstanceDecl _ _ _ _ ds) = qfv m ds
+>   qfv m (BlockDecl d) = qfv m d
+>   qfv _ _ = []
+
+> instance QuantExpr (TopDecl a) where
+>   bv (ClassDecl _ _ _ _ ds) = [f | TypeSig _ fs _ <- ds, f <- fs]
+>   bv (BlockDecl d) = bv d
+>   bv _ = []
+
 > instance QualExpr (Decl a) where
 >   qfv m (FunctionDecl _ _ eqs) = qfv m eqs
 >   qfv m (PatternDecl _ _ rhs) = qfv m rhs
@@ -623,8 +634,8 @@ variables cannot be computed independently for each declaration.
 >   bv (LiteralPattern _ _) = []
 >   bv (NegativePattern _ _) = []
 >   bv (VariablePattern _ v) = [v | v /= anonId]
->   bv (ConstructorPattern _ c ts) = bv ts
->   bv (InfixPattern _ t1 op t2) = bv t1 ++ bv t2
+>   bv (ConstructorPattern _ _ ts) = bv ts
+>   bv (InfixPattern _ t1 _ t2) = bv t1 ++ bv t2
 >   bv (ParenPattern t) = bv t
 >   bv (TuplePattern ts) = bv ts
 >   bv (ListPattern _ ts) = bv ts

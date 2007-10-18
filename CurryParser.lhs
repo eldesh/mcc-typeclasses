@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: CurryParser.lhs 2517 2007-10-18 14:23:42Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -353,13 +353,11 @@ directory path to the module is ignored.
 >         hidingId = qualify (mkIdent "hiding")
 
 > iDataDecl :: Parser Token IDecl a
-> iDataDecl = iDataDeclLhs IDataDecl KW_data <*> constrs
->   where constrs = equals <-*> maybeHidden constrDecl `sepBy1` bar
+> iDataDecl = iDataDeclLhs IDataDecl KW_data <*> constrs <*> hidden
+>   where constrs = equals <-*> constrDecl `sepBy1` bar
 >             `opt` []
-
-> maybeHidden :: Parser Token a b -> Parser Token (Maybe a) b
-> maybeHidden p = Just <$> p <\> token Underscore
->             <|> Nothing <$-> token Underscore
+>         hidden = pragma HidingPragma (con `sepBy` comma)
+>            `opt` []
 
 > iNewtypeDecl :: Parser Token IDecl a
 > iNewtypeDecl =
@@ -388,7 +386,8 @@ directory path to the module is ignored.
 >   where classDecl p = uncurry . IClassDecl p
 >         methodDefs = token KW_where <-*> braces (methodDecl `sepBy` semicolon)
 >                `opt` []
->         methodDecl = maybeHidden iMethodDecl
+>         methodDecl = Just <$> iMethodDecl <\> token Underscore
+>                  <|> Nothing <$-> token Underscore
 
 > iInstanceDecl :: Parser Token IDecl a
 > iInstanceDecl =
@@ -409,7 +408,10 @@ directory path to the module is ignored.
 >                           <*> qualType
 
 > iFunctionArity :: Parser Token Integer a
-> iFunctionArity = token (PragmaBegin ArityPragma) <-*> int <*-> token PragmaEnd
+> iFunctionArity = pragma ArityPragma int
+
+> pragma :: Pragma -> Parser Token a b -> Parser Token a b
+> pragma kw p = token (PragmaBegin kw) <-*> p <*-> token PragmaEnd
 
 \end{verbatim}
 \paragraph{Kinds}

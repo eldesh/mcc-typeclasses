@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfEquiv.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: IntfEquiv.lhs 2517 2007-10-18 14:23:42Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -55,8 +55,9 @@ inadvertently mix up these cases.
 >     fix1 == fix2 && p1 == p2 && op1 == op2
 >   HidingDataDecl _ tc1 k1 tvs1 =~= HidingDataDecl _ tc2 k2 tvs2 =
 >     tc1 == tc2 && k1 == k2 && tvs1 == tvs2
->   IDataDecl _ cx1 tc1 k1 tvs1 cs1 =~= IDataDecl _ cx2 tc2 k2 tvs2 cs2 =
->     cx1 == cx2 && tc1 == tc2 && k1 == k2 && tvs1 == tvs2 && cs1 `eqvList` cs2
+>   IDataDecl _ cx1 tc1 k1 tvs1 cs1 cs1' =~= IDataDecl _ cx2 tc2 k2 tvs2 cs2 cs2' =
+>     cx1 == cx2 && tc1 == tc2 && k1 == k2 && tvs1 == tvs2 &&
+>     cs1 `eqvList` cs2 && cs1' `eqvSet` cs2'
 >   INewtypeDecl _ cx1 tc1 k1 tvs1 nc1 =~= INewtypeDecl _ cx2 tc2 k2 tvs2 nc2 =
 >     cx1 == cx2 && tc1 == tc2 && k1 == k2 && tvs1 == tvs2 && nc1 =~= nc2
 >   ITypeDecl _ tc1 k1 tvs1 ty1 =~= ITypeDecl _ tc2 k2 tvs2 ty2 =
@@ -84,6 +85,9 @@ inadvertently mix up these cases.
 > instance IntfEquiv IMethodDecl where
 >   IMethodDecl _ f1 ty1 =~= IMethodDecl _ f2 ty2 = f1 == f2 && ty1 == ty2
 
+> instance IntfEquiv Ident where
+>   (=~=) = (==)
+
 \end{verbatim}
 If we check for a change in the interface, we do not need to check the
 interface declarations, but still must disambiguate (nullary) type
@@ -108,8 +112,8 @@ by function \texttt{fixInterface} and the associated type class
 > instance FixInterface IDecl where
 >   fix _ (IInfixDecl p fix pr op) = IInfixDecl p fix pr op
 >   fix _ (HidingDataDecl p tc k tvs) = HidingDataDecl p tc k tvs
->   fix tcs (IDataDecl p cx tc k tvs cs) =
->     IDataDecl p (fix tcs cx) tc k tvs (fix tcs cs)
+>   fix tcs (IDataDecl p cx tc k tvs cs cs') =
+>     IDataDecl p (fix tcs cx) tc k tvs (fix tcs cs) cs'
 >   fix tcs (INewtypeDecl p cx tc k tvs nc) =
 >     INewtypeDecl p (fix tcs cx) tc k tvs (fix tcs nc)
 >   fix tcs (ITypeDecl p tc k tvs ty) = ITypeDecl p tc k tvs (fix tcs ty)
@@ -157,7 +161,7 @@ by function \texttt{fixInterface} and the associated type class
 >   [tc | (Nothing,tc) <- map splitQualIdent (foldr tcs [] ds)]
 >   where tcs (IInfixDecl _ _ _ _) tcs = tcs
 >         tcs (HidingDataDecl _ tc _ _) tcs = tc : tcs
->         tcs (IDataDecl _ _ tc _ _ _) tcs = tc : tcs
+>         tcs (IDataDecl _ _ tc _ _ _ _) tcs = tc : tcs
 >         tcs (INewtypeDecl _ _ tc _ _ _) tcs = tc : tcs
 >         tcs (ITypeDecl _ tc _ _ _) tcs = tc : tcs
 >         tcs (HidingClassDecl _ _ _ _ _) tcs = tcs

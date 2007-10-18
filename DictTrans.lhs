@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2514 2007-10-18 10:43:08Z wlux $
+% $Id: DictTrans.lhs 2517 2007-10-18 14:23:42Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -133,8 +133,8 @@ generator.
 > liftIntfDecls :: ModuleIdent -> TCEnv -> ValueEnv -> IDecl -> [IDecl]
 > liftIntfDecls _ _ _ (IInfixDecl p fix pr op) = [IInfixDecl p fix pr op]
 > liftIntfDecls _ _ _ (HidingDataDecl p tc k tvs) = [HidingDataDecl p tc k tvs]
-> liftIntfDecls _ _ _ (IDataDecl p cx tc k tvs cs) =
->   [IDataDecl p cx tc k tvs cs]
+> liftIntfDecls _ _ _ (IDataDecl p cx tc k tvs cs cs') =
+>   [IDataDecl p cx tc k tvs cs cs']
 > liftIntfDecls _ _ _ (INewtypeDecl p cx tc k tvs nc) =
 >   [INewtypeDecl p cx tc k tvs nc]
 > liftIntfDecls _ _ _ (ITypeDecl p tc k tvs ty) = [ITypeDecl p tc k tvs ty]
@@ -149,8 +149,8 @@ generator.
 > liftIntfDecls _ _ _ (IFunctionDecl p f n ty) = [IFunctionDecl p f n ty]
 
 > dictTransIntfDecl :: ModuleIdent -> TCEnv -> IDecl -> IDecl
-> dictTransIntfDecl m tcEnv (IDataDecl p cxL tc k tvs cs) =
->   IDataDecl p [] tc k tvs (map (fmap dictTransConstrDecl) cs)
+> dictTransIntfDecl m tcEnv (IDataDecl p cxL tc k tvs cs cs') =
+>   IDataDecl p [] tc k tvs (map dictTransConstrDecl cs) cs'
 >   where dictTransConstrDecl (ConstrDecl p evs cxR c tys) =
 >           dictTransConstrDecl' p evs cxR c tys
 >         dictTransConstrDecl (ConOpDecl p evs cxR ty1 op ty2) =
@@ -226,7 +226,7 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 
 > bindDictType :: ModuleIdent -> TypeInfo -> TCEnv -> TCEnv
 > bindDictType m (TypeClass cls k _ _) =
->   bindEntity m tc (DataType tc (KindArrow k KindStar) [Just c])
+>   bindEntity m tc (DataType tc (KindArrow k KindStar) [c])
 >   where tc = qDictTypeId cls
 >         c = dictConstrId (unqualify cls)
 > bindDictType _ _ = id
@@ -269,7 +269,7 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 >             -> Ident -> Maybe [Maybe IMethodDecl] -> [IDecl]
 > classIDecls m tcEnv p cls k tv (Just ds) =
 >   dictIDataDecl IDataDecl p cls k tv
->                 [Just (dictConstrDecl tcEnv p (unqualify cls) tv tys')] :
+>                 [dictConstrDecl tcEnv p (unqualify cls) tv tys'] [] :
 >   zipWith3 (intfMethodDecl cls tv)
 >            (map (maybe p pos) ds)
 >            (qDefaultMethodIds cls)

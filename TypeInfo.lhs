@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeInfo.lhs 2516 2007-10-18 11:21:29Z wlux $
+% $Id: TypeInfo.lhs 2517 2007-10-18 14:23:42Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -36,11 +36,9 @@ complicated by the fact that the constructors of the type may be
 (partially) hidden in the interface. This facilitates the definition
 of abstract data types. An abstract type is always represented as a
 data type without constructors in the interface regardless of whether
-it is defined as a data type or as a renaming type. When only some
-constructors of a data type are hidden, those constructors are
-replaced by underscores in the interface. Similarly, it is possible to
-hide some or all methods of a type class. The hidden methods are
-replaced by underscores as well.
+it is defined as a data type or as a renaming type. Similarly, it is
+possible to hide some or all methods of a type class. The hidden
+methods are replaced by underscores in the interface.
 \begin{verbatim}
 
 > module TypeInfo where
@@ -53,7 +51,7 @@ replaced by underscores as well.
 > import Types
 
 > type TCEnv = TopEnv TypeInfo
-> data TypeInfo = DataType QualIdent Kind [Maybe Ident]
+> data TypeInfo = DataType QualIdent Kind [Ident]
 >               | RenamingType QualIdent Kind Ident
 >               | AliasType QualIdent Int Kind Type
 >               | TypeClass QualIdent Kind [QualIdent] [Maybe Ident]
@@ -79,9 +77,9 @@ types.
 >   where emptyTCEnv =
 >           emptyTopEnv (Just (map (tupleTC . unapplyType True) tupleTypes))
 >         predefTC (TypeConstructor tc,tys) cs =
->           predefTopEnv tc (DataType tc k (map (Just . fst) cs))
+>           predefTopEnv tc (DataType tc k (map fst cs))
 >           where k = simpleKind (length tys)
->         tupleTC (TypeConstructor tc,tys) = DataType tc k [Just (unqualify tc)]
+>         tupleTC (TypeConstructor tc,tys) = DataType tc k [unqualify tc]
 >           where k = simpleKind (length tys)
 
 \end{verbatim}
@@ -101,11 +99,11 @@ therefore should not fail.
 >     [AliasType _ _ k _] -> k
 >     _ -> internalError ("constrKind " ++ show tc)
 
-> constructors :: QualIdent -> TCEnv -> [Maybe Ident]
+> constructors :: QualIdent -> TCEnv -> [Ident]
 > constructors tc tcEnv =
 >   case qualLookupTopEnv tc tcEnv of
 >     [DataType _ _ cs] -> cs
->     [RenamingType _ _ c] -> [Just c]
+>     [RenamingType _ _ c] -> [c]
 >     [AliasType _ _ _ _] -> []
 >     _ -> internalError ("constructors " ++ show tc)
 

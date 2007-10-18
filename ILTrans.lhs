@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: ILTrans.lhs 2517 2007-10-18 14:23:42Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -109,17 +109,15 @@ which are imported into the interface from another module.
 > ilTransIntf (Interface m _ ds) = foldr (translIntfDecl m) [] ds
 
 > translIntfDecl :: ModuleIdent -> IDecl -> [IL.Decl] -> [IL.Decl]
-> translIntfDecl m (IDataDecl _ _ tc _ tvs cs) ds
+> translIntfDecl m (IDataDecl _ _ tc _ tvs cs _) ds
 >   | not (isQualified tc) = translIntfData m (unqualify tc) tvs cs : ds
 > translIntfDecl _ _ ds = ds
 
-> translIntfData :: ModuleIdent -> Ident -> [Ident] -> [Maybe ConstrDecl]
+> translIntfData :: ModuleIdent -> Ident -> [Ident] -> [ConstrDecl]
 >                -> IL.Decl
 > translIntfData m tc tvs cs =
 >   IL.DataDecl (qualifyWith m tc) (length tvs)
->               (map (maybe hiddenConstr (translIntfConstrDecl m tvs)) cs)
->   where hiddenConstr = IL.ConstrDecl qAnonId []
->         qAnonId = qualify anonId
+>               (map (translIntfConstrDecl m tvs) cs)
 
 > translIntfConstrDecl :: ModuleIdent -> [Ident] -> ConstrDecl -> IL.ConstrDecl
 > translIntfConstrDecl m tvs (ConstrDecl _ _ _ c tys) =

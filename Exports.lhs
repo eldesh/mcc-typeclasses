@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2514 2007-10-18 10:43:08Z wlux $
+% $Id: Exports.lhs 2517 2007-10-18 14:23:42Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -24,6 +24,7 @@ exported together with their classes and types as explained below.
 > import KindTrans
 > import List
 > import Maybe
+> import Monad
 > import PrecInfo
 > import Set
 > import TopEnv
@@ -63,17 +64,18 @@ exported together with their classes and types as explained below.
 > typeDecl _ _ _ _ (Export _) ds = ds
 > typeDecl m tcEnv tyEnv tvs (ExportTypeWith tc xs) ds =
 >   case qualLookupTopEnv tc tcEnv of
->     [DataType _ k cs]
->       | null xs -> iTypeDecl IDataDecl m [] tc tvs n k [] : ds
->       | otherwise -> iTypeDecl IDataDecl m cx' tc tvs n k cs' : ds
+>     [DataType _ k cs] ->
+>       iTypeDecl IDataDecl m cx' tc tvs n k constrs cs'' : ds
 >       where n = kindArity k
->             cx' = orderContext (map VariableType (take n tvs)) (nub cx'')
->             (cx'',cs') =
->               mapAccumR mergeContext [] $
->               map (hideDecl (constrDecl tcEnv tyEnv tc tvs) xs) cs
->             mergeContext cx c = (maybe [] fst c ++ cx,fmap snd c)
+>             cx' = guard vis >>
+>                   orderContext (map VariableType (take n tvs))
+>                                (nub (concat cxs))
+>             constrs = guard vis >> cs'
+>             (cxs,cs') = unzip (map (constrDecl tcEnv tyEnv tc tvs) cs)
+>             cs'' = guard vis >> filter (`notElem` xs) cs
+>             vis = not (null xs)
 >     [RenamingType _ k c]
->       | null xs -> iTypeDecl IDataDecl m [] tc tvs n k [] : ds
+>       | null xs -> iTypeDecl IDataDecl m [] tc tvs n k [] [] : ds
 >       | otherwise -> iTypeDecl INewtypeDecl m cx' tc tvs n k nc' : ds
 >       where n = kindArity k
 >             (cx',nc') = newConstrDecl tcEnv tyEnv tc tvs c
@@ -90,11 +92,10 @@ exported together with their classes and types as explained below.
 >           | otherwise = Nothing
 
 > iTypeDecl :: (Position -> [ClassAssert] -> QualIdent -> Maybe KindExpr
->               -> [Ident] -> a -> IDecl)
+>               -> [Ident] -> a)
 >           -> ModuleIdent -> [ClassAssert] -> QualIdent -> [Ident] -> Int
->           -> Kind -> a -> IDecl
-> iTypeDecl f m cx tc tvs n k x =
->   f noPos cx (qualUnqualify m tc) k' (take n tvs) x
+>           -> Kind -> a
+> iTypeDecl f m cx tc tvs n k = f noPos cx (qualUnqualify m tc) k' (take n tvs)
 >   where k' = if k == simpleKind n then Nothing else Just (fromKind k)
 
 > iClassDecl :: (Position -> [ClassAssert] -> QualIdent -> Maybe KindExpr
@@ -193,7 +194,7 @@ not module \texttt{B}.
 > instance HasModule IDecl where
 >   modules (IInfixDecl _ _ _ op) = modules op
 >   modules (HidingDataDecl _ tc _ _) = modules tc
->   modules (IDataDecl _ cx tc _ _ cs) = modules cx . modules tc . modules cs
+>   modules (IDataDecl _ cx tc _ _ cs _) = modules cx . modules tc . modules cs
 >   modules (INewtypeDecl _ cx tc _ _ nc) = modules cx . modules tc . modules nc
 >   modules (ITypeDecl _ tc _ _ ty) = modules tc . modules ty
 >   modules (HidingClassDecl _ cx cls _ _) = modules cx . modules cls
@@ -324,7 +325,7 @@ environment.
 > declIs :: ModuleIdent -> IDecl -> DeclIs
 > declIs _ (IInfixDecl _ _ _ _) = IsOther
 > declIs m (HidingDataDecl _ tc _ _) = IsType (qualQualify m tc)
-> declIs m (IDataDecl _ _ tc _ _ _) = IsType (qualQualify m tc)
+> declIs m (IDataDecl _ _ tc _ _ _ _) = IsType (qualQualify m tc)
 > declIs m (INewtypeDecl _ _ tc _ _ _) = IsType (qualQualify m tc)
 > declIs _ (ITypeDecl _ _ _ _ _) = IsOther {-sic!-}
 > declIs m (HidingClassDecl _ _ cls _ _) = IsClass (qualQualify m cls)
@@ -378,7 +379,7 @@ environment.
 > instance HasType IDecl where
 >   usedTypes (IInfixDecl _ _ _ _) = id
 >   usedTypes (HidingDataDecl _ _ _ _) = id
->   usedTypes (IDataDecl _ cx _ _ _ cs) = usedTypes cx . usedTypes cs
+>   usedTypes (IDataDecl _ cx _ _ _ cs _) = usedTypes cx . usedTypes cs
 >   usedTypes (INewtypeDecl _ cx _ _ _ nc) = usedTypes cx . usedTypes nc
 >   usedTypes (ITypeDecl _ _ _ _ ty) = usedTypes ty
 >   usedTypes (HidingClassDecl _ cx _ _ _) = usedTypes cx

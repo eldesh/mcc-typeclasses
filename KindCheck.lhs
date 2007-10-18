@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: KindCheck.lhs 2517 2007-10-18 14:23:42Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -271,7 +271,7 @@ have to do it while instantiating the remaining kind variables in
 
 > bindKind :: ModuleIdent -> TCEnv -> TopDecl a -> KcState TCEnv
 > bindKind m tcEnv (DataDecl _ _ tc tvs cs _) =
->   bindTypeCon DataType m tc tvs (Just KindStar) (map (Just . constr) cs) tcEnv
+>   bindTypeCon DataType m tc tvs (Just KindStar) (map constr cs) tcEnv
 > bindKind m tcEnv (NewtypeDecl _ _ tc tvs nc _) =
 >   bindTypeCon RenamingType m tc tvs (Just KindStar) (nconstr nc) tcEnv
 > bindKind m tcEnv (TypeDecl _ tc tvs ty) =

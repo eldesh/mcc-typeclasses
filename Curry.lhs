@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Curry.lhs 2508 2007-10-17 16:06:06Z wlux $
+% $Id: Curry.lhs 2517 2007-10-18 14:23:42Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -101,7 +101,7 @@ Interface declarations are restricted to type declarations and signatures.
 >     IInfixDecl Position Infix Integer QualIdent
 >   | HidingDataDecl Position QualIdent (Maybe KindExpr) [Ident]
 >   | IDataDecl Position [ClassAssert] QualIdent (Maybe KindExpr) [Ident]
->               [Maybe ConstrDecl]
+>               [ConstrDecl] [Ident]
 >   | INewtypeDecl Position [ClassAssert] QualIdent (Maybe KindExpr) [Ident]
 >                  NewConstrDecl
 >   | ITypeDecl Position QualIdent (Maybe KindExpr) [Ident] TypeExpr

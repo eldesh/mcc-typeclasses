@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2507 2007-10-16 22:24:05Z wlux $
+% $Id: CurryPP.lhs 2517 2007-10-18 14:23:42Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -135,12 +135,12 @@ Declarations
 >         ppSafety Safe = text "safe"
 > ppDecl (PatternDecl _ t rhs) = ppRule (ppConstrTerm 0 t) equals rhs
 > ppDecl (FreeDecl _ vs) = ppIdentList vs <+> text "free"
-> ppDecl (TrustAnnot _ t fs) = ppPragma (ppTrust t <+> ppIdentList fs)
->   where ppTrust Suspect = text "SUSPECT"
->         ppTrust Trust = text "TRUST"
+> ppDecl (TrustAnnot _ t fs) = ppPragma (trust t) (ppIdentList fs)
+>   where trust Suspect = "SUSPECT"
+>         trust Trust = "TRUST"
 
-> ppPragma :: Doc -> Doc
-> ppPragma p = text "{-#" <+> p <+> text "#-}"
+> ppPragma :: String -> Doc -> Doc
+> ppPragma kw p = text "{-#" <+> text kw <+> p <+> text "#-}"
 
 > ppPrec :: Infix -> Maybe Integer -> Doc
 > ppPrec fix p = ppAssoc fix <+> maybe empty integer p
@@ -192,10 +192,10 @@ Interfaces
 > ppIDecl (IInfixDecl _ fix p op) = ppPrec fix (Just p) <+> ppQInfixOp op
 > ppIDecl (HidingDataDecl _ tc k tvs) =
 >   text "hiding" <+> ppITypeDeclLhs "data" [] tc k tvs
-> ppIDecl (IDataDecl _ cx tc k tvs cs) =
+> ppIDecl (IDataDecl _ cx tc k tvs cs cs') =
 >   sep (ppITypeDeclLhs "data" cx tc k tvs :
->        map indent (zipWith (<+>) (equals : repeat vbar) (map ppIConstr cs)))
->   where ppIConstr = maybe (char '_') ppConstr
+>        map indent (zipWith (<+>) (equals : repeat vbar) (map ppConstr cs)) ++
+>        [indent (ppPragma "HIDING" (ppIdentList cs')) | not (null cs')])
 > ppIDecl (INewtypeDecl _ cx tc k tvs nc) =
 >   sep [ppITypeDeclLhs "newtype" cx tc k tvs <+> equals,
 >        indent (ppNewConstr nc)]
@@ -210,7 +210,7 @@ Interfaces
 >   where instModule m = text "of" <+> ppMIdent m
 > ppIDecl (IFunctionDecl _ f n ty) =
 >   ppQIdent f <+> text "::" <+> maybePP ppArity n <+> ppQualTypeExpr ty
->   where ppArity n = ppPragma (text "ARITY" <+> integer n)
+>   where ppArity n = ppPragma "ARITY" (integer n)
 
 > ppITypeDeclLhs :: String -> [ClassAssert] -> QualIdent -> Maybe KindExpr
 >                -> [Ident] -> Doc

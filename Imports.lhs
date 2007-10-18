@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2516 2007-10-18 11:21:29Z wlux $
+% $Id: Imports.lhs 2517 2007-10-18 14:23:42Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -47,35 +47,22 @@ all instance declarations are always imported into the current module.
 >              -> (TypeEnv,InstSet,FunEnv) -> Interface
 >              -> (TypeEnv,InstSet,FunEnv)
 > importIdents m q is (tEnv,iSet,vEnv) (Interface m' _ ds) =
->   (importEntities tidents m q ts (importMembers vs) m' ds' tEnv,
->    importCTs m' ds' iSet,
->    importEntities vidents m q vs id m' ds' vEnv)
->   where ds' = filter (not . isHiddenDecl) ds
->         ts = isVisible addType is
+>   (importEntities tidents m q ts (importMembers vs) m' ds tEnv,
+>    importCTs m' ds iSet,
+>    importEntities vidents m q vs id m' ds vEnv)
+>   where ts = isVisible addType is
 >         vs = isVisible addValue is
 
 > importInterface :: ModuleIdent -> Bool -> Maybe ImportSpec
 >                 -> (PEnv,TCEnv,InstEnv,ValueEnv) -> Interface
 >                 -> (PEnv,TCEnv,InstEnv,ValueEnv)
 > importInterface m q is (pEnv,tcEnv,iEnv,tyEnv) (Interface m' _ ds) =
->   (importEntities precs m q vs id m' ds' pEnv,
->    importEntities types m q ts id m' ds' tcEnv,
->    importInstances m' ds' iEnv,
->    importEntities values m q vs id m' ds' tyEnv)
->   where ds' = filter (not . isHiddenDecl) ds
->         ts = isVisible addType is
+>   (importEntities precs m q vs id m' ds pEnv,
+>    importEntities types m q ts id m' ds tcEnv,
+>    importInstances m' ds iEnv,
+>    importEntities values m q vs id m' ds tyEnv)
+>   where ts = isVisible addType is
 >         vs = isVisible addValue is
-
-> isHiddenDecl :: IDecl -> Bool
-> isHiddenDecl (IInfixDecl _ _ _ _) = False
-> isHiddenDecl (HidingDataDecl _ _ _ _) = True 
-> isHiddenDecl (IDataDecl _ _ _ _ _ _) = False
-> isHiddenDecl (INewtypeDecl _ _ _ _ _ _) = False
-> isHiddenDecl (ITypeDecl _ _ _ _ _) = False
-> isHiddenDecl (HidingClassDecl _ _ _ _ _) = True
-> isHiddenDecl (IClassDecl _ _ _ _ _ _) = False
-> isHiddenDecl (IInstanceDecl _ _ _ _ _) = False
-> isHiddenDecl (IFunctionDecl _ _ _ _) = False
 
 > isVisible :: (Import -> Set Ident -> Set Ident) -> Maybe ImportSpec
 >           -> Ident -> Bool
@@ -150,18 +137,29 @@ instances imported from another module.
 >    importEntitiesIntf types m ds' tcEnv,
 >    importInstances m ds' iEnv,
 >    importEntitiesIntf values m ds' tyEnv)
->   where ds' = filter (isJust . localIdent m . entity) ds
+>   where ds' = map unhide (filter (isJust . localIdent m . entity) ds)
 
 > entity :: IDecl -> QualIdent
 > entity (IInfixDecl _ _ _ op) = op
 > entity (HidingDataDecl _ tc _ _) = tc
-> entity (IDataDecl _ _ tc _ _ _) = tc
+> entity (IDataDecl _ _ tc _ _ _ _) = tc
 > entity (INewtypeDecl _ _ tc _ _ _) = tc
 > entity (ITypeDecl _ tc _ _ _) = tc
 > entity (HidingClassDecl _ _ cls _ _) = cls
 > entity (IClassDecl _ _ cls _ _ _) = cls
 > entity (IInstanceDecl _ _ _ _ _) = qualify anonId
 > entity (IFunctionDecl _ f _ _) = f
+
+> unhide :: IDecl -> IDecl
+> unhide (IInfixDecl p fix pr op) = IInfixDecl p fix pr op
+> unhide (HidingDataDecl p tc k tvs) = IDataDecl p [] tc k tvs [] []
+> unhide (IDataDecl p cx tc k tvs cs _) = IDataDecl p cx tc k tvs cs []
+> unhide (INewtypeDecl p cx tc k tvs nc) = INewtypeDecl p cx tc k tvs nc
+> unhide (ITypeDecl p tc k tvs ty) = ITypeDecl p tc k tvs ty
+> unhide (HidingClassDecl p cx cls k tv) = IClassDecl p cx cls k tv []
+> unhide (IClassDecl p cx cls k tv ds) = IClassDecl p cx cls k tv ds
+> unhide (IInstanceDecl p cx cls ty m) = IInstanceDecl p cx cls ty m
+> unhide (IFunctionDecl p f n ty) = IFunctionDecl p f n ty
 
 > importEntitiesIntf :: Entity a
 >                    => (ModuleIdent -> IDecl -> [I a] -> [I a])
@@ -175,20 +173,19 @@ following functions.
 \begin{verbatim}
 
 > tidents :: ModuleIdent -> IDecl -> [I TypeKind] -> [I TypeKind]
-> tidents m (HidingDataDecl _ tc _ _) = qual tc (tident Data m tc [])
-> tidents m (IDataDecl _ _ tc _ _ cs) =
->   qual tc (tident Data m tc (map constr (catMaybes cs)))
+> tidents m (IDataDecl _ _ tc _ _ cs cs') =
+>   qual tc (tident Data m tc (filter (`notElem` cs') (map constr cs)))
 > tidents m (INewtypeDecl _ _ tc _ _ nc) =
 >   qual tc (tident Data m tc [nconstr nc])
 > tidents m (ITypeDecl _ tc _ _ _) = qual tc (tident Alias m tc)
-> tidents m (HidingClassDecl _ _ cls _ _) = qual cls (tident Class m cls [])
 > tidents m (IClassDecl _ _ cls _ _ ds) =
 >   qual cls (tident Class m cls (map imethod (catMaybes ds)))
 > tidents _ _ = id
 
 > vidents :: ModuleIdent -> IDecl -> [I ValueKind] -> [I ValueKind]
-> vidents m (IDataDecl _ _ tc _ _ cs) =
->   (map (cident (qualQualify m tc) . constr) (catMaybes cs) ++)
+> vidents m (IDataDecl _ _ tc _ _ cs cs') =
+>   (map (cident (qualQualify m tc)) cs'' ++)
+>   where cs'' = filter (`notElem` cs') (map constr cs)
 > vidents m (INewtypeDecl _ _ tc _ _ nc) =
 >   (cident (qualQualify m tc) (nconstr nc) :)
 > vidents m (IClassDecl _ _ cls _ _ ds) =
@@ -202,21 +199,20 @@ following functions.
 > precs _ _ = id
 
 > types :: ModuleIdent -> IDecl -> [I TypeInfo] -> [I TypeInfo]
-> types m (HidingDataDecl _ tc k tvs) = qual tc (typeCon DataType m tc k tvs [])
-> types m (IDataDecl _ _ tc k tvs cs) =
->   qual tc (typeCon DataType m tc k tvs (map (fmap constr) cs))
+> types m (IDataDecl _ _ tc k tvs cs _) =
+>   qual tc (typeCon DataType m tc k tvs (map constr cs))
 > types m (INewtypeDecl _ _ tc k tvs nc) =
 >   qual tc (typeCon RenamingType m tc k tvs (nconstr nc))
 > types m (ITypeDecl _ tc k tvs ty) =
 >   qual tc (typeCon (flip AliasType (length tvs)) m tc k tvs (toType m tvs ty))
-> types m (HidingClassDecl _ cx cls k tv) = qual cls (typeCls m cx cls k tv [])
 > types m (IClassDecl _ cx cls k tv ds) =
 >   qual cls (typeCls m cx cls k tv (map (fmap imethod) ds))
 > types _ _ = id
 
 > values :: ModuleIdent -> IDecl -> [I ValueInfo] -> [I ValueInfo]
-> values m (IDataDecl _ cx tc _ tvs cs) =
->   (map (dataConstr m cx (qualQualify m tc) tvs) (catMaybes cs) ++)
+> values m (IDataDecl _ cx tc _ tvs cs cs') =
+>   (map (dataConstr m cx (qualQualify m tc) tvs) cs'' ++)
+>   where cs'' = filter ((`notElem` cs') . constr) cs
 > values m (INewtypeDecl _ cx tc _ tvs nc) =
 >   (newConstr m cx (qualQualify m tc) tvs nc :)
 > values m (IClassDecl _ _ cls _ tv ds) =

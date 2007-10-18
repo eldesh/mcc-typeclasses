@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2517 2007-10-18 14:23:42Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -43,8 +43,8 @@ The latter must not occur in type expressions in interfaces.
 > bindType :: IDecl -> TypeEnv -> TypeEnv
 > bindType (IInfixDecl _ _ _ _) = id
 > bindType (HidingDataDecl _ tc _ _) = qualBindTopEnv tc (Data tc [])
-> bindType (IDataDecl _ _ tc _ _ cs) =
->   qualBindTopEnv tc (Data tc (map constr (catMaybes cs)))
+> bindType (IDataDecl _ _ tc _ _ cs cs') =
+>   qualBindTopEnv tc (Data tc (filter (`notElem` cs') (map constr cs)))
 > bindType (INewtypeDecl _ _ tc _ _ nc) =
 >   qualBindTopEnv tc (Data tc [nconstr nc])
 > bindType (ITypeDecl _ tc _ _ _) = qualBindTopEnv tc (Alias tc)
@@ -65,12 +65,13 @@ during syntax checking of type expressions.
 >   do
 >     checkTypeLhs env p [] tvs
 >     return (HidingDataDecl p tc k tvs)
-> checkIDecl env (IDataDecl p cx tc k tvs cs) =
+> checkIDecl env (IDataDecl p cx tc k tvs cs cs') =
 >   do
 >     cx' <- checkTypeLhs env p cx tvs
 >     checkClosedContext p cx' tvs
->     cs' <- mapE (liftMaybe (checkConstrDecl env tvs)) cs
->     return (IDataDecl p cx' tc k tvs cs')
+>     cs'' <- mapE (checkConstrDecl env tvs) cs
+>     checkHiding p tc (map constr cs) cs'
+>     return (IDataDecl p cx' tc k tvs cs'' cs')
 > checkIDecl env (INewtypeDecl p cx tc k tvs nc) =
 >   do
 >     cx' <- checkTypeLhs env p cx tvs
@@ -228,6 +229,10 @@ during syntax checking of type expressions.
 >     [Class _ _] -> return ()
 >     _ -> internalError "checkClass"
 
+> checkHiding :: Position -> QualIdent -> [Ident] -> [Ident] -> Error ()
+> checkHiding p tc cs cs' =
+>   mapE_ (errorAt p . noConstructor tc) (nub (filter (`notElem` cs) cs'))
+
 \end{verbatim}
 \ToDo{Much of the above code could be shared with module
   \texttt{TypeSyntaxCheck}.}
@@ -264,6 +269,11 @@ Error messages.
 > noVariable :: String -> Ident -> String
 > noVariable what tv =
 >   "Type constructor or type class " ++ name tv ++ " used in " ++ what
+
+> noConstructor :: QualIdent -> Ident -> String
+> noConstructor tc c =
+>   "Hidden constructor " ++ name c ++ " is not defined for type " ++
+>   qualName tc
 
 > unboundVariable :: Ident -> String
 > unboundVariable tv = "Undefined type variable " ++ name tv

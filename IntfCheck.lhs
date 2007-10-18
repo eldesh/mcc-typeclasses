@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2518 2007-10-18 15:27:42Z wlux $
+% $Id: IntfCheck.lhs 2519 2007-10-18 23:09:52Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -111,14 +111,13 @@ interface module only. However, this has not been implemented yet.
 >             [qualQualify m cls | ClassAssert cls _ <- cx] == clss' =
 >               Just (return ())
 >         checkClass _ = Nothing
-> checkImport m _ tcEnv _ tyEnv (IClassDecl p cx cls k tv ds) =
+> checkImport m _ tcEnv _ tyEnv (IClassDecl p cx cls k tv ds _) =
 >   checkTypeInfo "type class" checkClass tcEnv p cls
 >   where checkClass (TypeClass cls' k' clss' fs')
 >           | cls == cls' && maybe KindStar toKind k == k' &&
 >             [qualQualify m cls | ClassAssert cls _ <- cx] == clss' &&
->             length ds == length fs' &&
->             and (zipWith (isVisible imethod) ds fs') =
->               Just (mapM_ (checkMethodImport m tyEnv cls tv) (catMaybes ds))
+>             map imethod ds == fs' =
+>               Just (mapM_ (checkMethodImport m tyEnv cls tv) ds)
 >         checkClass _ = Nothing
 > checkImport m _ _ iEnv _ (IInstanceDecl p cx cls ty m') =
 >   checkInstInfo checkContext iEnv p (qualQualify m cls) tc m'
@@ -215,11 +214,6 @@ interface module only. However, this has not been implemented yet.
 >   case splitQualIdent x of
 >     (Just m,x') -> f m x'
 >     (Nothing,_) -> return ()
-
-> isVisible :: (a -> Ident) -> Maybe a -> Maybe Ident -> Bool
-> isVisible f (Just d) (Just x) = f d == x
-> isVisible _ (Just _) Nothing = False
-> isVisible _ Nothing _ = True
 
 \end{verbatim}
 Error messages.

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2518 2007-10-18 15:27:42Z wlux $
+% $Id: Modules.lhs 2519 2007-10-18 23:09:52Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -496,7 +496,7 @@ with the actual definitions in the current module.
 >         entity (INewtypeDecl _ _ tc _ _ _ _) = tc
 >         entity (ITypeDecl _ tc _ _ _) = tc
 >         entity (HidingClassDecl _ _ cls _ _) = cls
->         entity (IClassDecl _ _ cls _ _ _) = cls
+>         entity (IClassDecl _ _ cls _ _ _ _) = cls
 >         entity (IInstanceDecl _ _ _ _ m'') =
 >           qualifyWith (fromMaybe m' m'') anonId
 >         entity (IFunctionDecl _ f _ _) = f

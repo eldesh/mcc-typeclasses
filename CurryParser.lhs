@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2518 2007-10-18 15:27:42Z wlux $
+% $Id: CurryParser.lhs 2519 2007-10-18 23:09:52Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -62,7 +62,7 @@ combinators described in appendix~\ref{sec:ll-parsecomb}.
 > moduleDecls = impDecl <$> importDecl
 >                       <*> (semicolon <-*> moduleDecls `opt` ([],[]))
 >           <|> (,) [] <$> topDecl `sepBy` semicolon
->   where impDecl i (is,ds) = (i:is,ds)
+>   where impDecl i ~(is,ds) = (i:is,ds)
 
 > importDecl :: Parser Token ImportDecl a
 > importDecl =
@@ -386,11 +386,16 @@ directory path to the module is ignored.
 > iClassDecl :: Parser Token IDecl a
 > iClassDecl =
 >   iClassInstDecl classDecl KW_class (withKind qtycls) tyvar <*> methodDefs
->   where classDecl p = uncurry . IClassDecl p
->         methodDefs = token KW_where <-*> braces (methodDecl `sepBy` semicolon)
->                `opt` []
->         methodDecl = Just <$> iMethodDecl <\> token Underscore
->                  <|> Nothing <$-> token Underscore
+>   where classDecl p cx (cls,k) = uncurry . IClassDecl p cx cls k
+>         methodDefs = token KW_where <-*> braces methodDecls
+>                `opt` ([],[])
+>         methodDecls = methDecl <$> iMethodDecl <*> methodDecls'
+>                   <|> flip (,) <$> pragma HidingPragma (con `sepBy` comma)
+>                                <*> many (semicolon <-*> iMethodDecl)
+>                 `opt` ([],[])
+>         methodDecls' = semicolon <-*> methodDecls
+>                  `opt` ([],[])
+>         methDecl d ~(ds,fs) = (d:ds,fs)
 
 > iInstanceDecl :: Parser Token IDecl a
 > iInstanceDecl =
@@ -408,8 +413,8 @@ directory path to the module is ignored.
 >                 <*> option iFunctionArity <*> qualType
 
 > iMethodDecl :: Parser Token IMethodDecl a
-> iMethodDecl = IMethodDecl <$> position <*> fun <*-> token DoubleColon
->                           <*> qualType
+> iMethodDecl = 
+>   IMethodDecl <$> position <*> fun <*-> token DoubleColon <*> qualType
 
 > iFunctionArity :: Parser Token Integer a
 > iFunctionArity = pragma ArityPragma int

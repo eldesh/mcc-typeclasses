@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2517 2007-10-18 14:23:42Z wlux $
+% $Id: KindCheck.lhs 2519 2007-10-18 23:09:52Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -278,7 +278,7 @@ have to do it while instantiating the remaining kind variables in
 >   bindTypeCon (flip AliasType (length tvs)) m tc tvs Nothing
 >               (expandMonoType tcEnv tvs ty) tcEnv
 > bindKind m tcEnv (ClassDecl _ cx cls tv ds) =
->   bindTypeClass m cls clss (map Just (concatMap methods ds)) tcEnv
+>   bindTypeClass m cls clss (concatMap methods ds) tcEnv
 >   where QualType cx' _ =
 >           expandPolyType tcEnv (QualTypeExpr cx (VariableType tv))
 >         clss = [cls | TypePred cls _ <- cx']
@@ -295,8 +295,8 @@ have to do it while instantiating the remaining kind variables in
 >     return (globalBindTopEnv m tc (f tc' (foldr KindArrow k' ks) x) tcEnv)
 >   where tc' = qualifyWith m tc
 
-> bindTypeClass :: ModuleIdent -> Ident -> [QualIdent] -> [Maybe Ident]
->               -> TCEnv -> KcState TCEnv
+> bindTypeClass :: ModuleIdent -> Ident -> [QualIdent] -> [Ident] -> TCEnv
+>               -> KcState TCEnv
 > bindTypeClass m cls clss fs tcEnv =
 >   do
 >     k <- freshKindVar

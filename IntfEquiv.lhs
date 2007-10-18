@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfEquiv.lhs 2518 2007-10-18 15:27:42Z wlux $
+% $Id: IntfEquiv.lhs 2519 2007-10-18 23:09:52Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -37,12 +37,6 @@ inadvertently mix up these cases.
 > xs `eqvSet` ys =
 >   null (deleteFirstsBy (=~=) xs ys ++ deleteFirstsBy (=~=) ys xs)
 
-> instance IntfEquiv a => IntfEquiv (Maybe a) where
->   Nothing =~= Nothing = True
->   Nothing =~= Just _  = False
->   Just _  =~= Nothing = False
->   Just x  =~= Just y  = x =~= y
-
 > instance IntfEquiv Interface where
 >   Interface m1 is1 ds1 =~= Interface m2 is2 ds2 =
 >     m1 == m2 && is1 `eqvSet` is2 && ds1 `eqvSet` ds2
@@ -65,8 +59,9 @@ inadvertently mix up these cases.
 >     tc1 == tc2 && k1 == k2 && tvs1 == tvs2 && ty1 == ty2
 >   HidingClassDecl _ cx1 cls1 k1 _ =~= HidingClassDecl _ cx2 cls2 k2 _ =
 >     cx1 == cx2 && cls1 == cls2 && k1 == k2
->   IClassDecl _ cx1 cls1 k1 _ ds1 =~= IClassDecl _ cx2 cls2 k2 _ ds2 =
->     cx1 == cx2 && cls1 == cls2 && k1 == k2 && ds1 `eqvList` ds2
+>   IClassDecl _ cx1 cls1 k1 _ ds1 fs1' =~= IClassDecl _ cx2 cls2 k2 _ ds2 fs2' =
+>     cx1 == cx2 && cls1 == cls2 && k1 == k2 &&
+>     ds1 `eqvList` ds2 && fs1' `eqvSet` fs2'
 >   IInstanceDecl _ cx1 cls1 ty1 m1 =~= IInstanceDecl _ cx2 cls2 ty2 m2 =
 >     cx1 == cx2 && cls1 == cls2 && ty1 == ty2 && m1 == m2
 >   IFunctionDecl _ f1 n1 ty1 =~= IFunctionDecl _ f2 n2 ty2 =
@@ -120,8 +115,8 @@ by function \texttt{fixInterface} and the associated type class
 >   fix tcs (ITypeDecl p tc k tvs ty) = ITypeDecl p tc k tvs (fix tcs ty)
 >   fix tcs (HidingClassDecl p cx cls k tv) =
 >     HidingClassDecl p (fix tcs cx) cls k tv
->   fix tcs (IClassDecl p cx cls k tv ds) =
->     IClassDecl p (fix tcs cx) cls k tv (fix tcs ds)
+>   fix tcs (IClassDecl p cx cls k tv ds fs') =
+>     IClassDecl p (fix tcs cx) cls k tv (fix tcs ds) fs'
 >   fix tcs (IInstanceDecl p cx cls ty m) =
 >     IInstanceDecl p (fix tcs cx) cls (fix tcs ty) m
 >   fix tcs (IFunctionDecl p f n ty) = IFunctionDecl p f n (fix tcs ty)
@@ -166,7 +161,7 @@ by function \texttt{fixInterface} and the associated type class
 >         tcs (INewtypeDecl _ _ tc _ _ _ _) tcs = tc : tcs
 >         tcs (ITypeDecl _ tc _ _ _) tcs = tc : tcs
 >         tcs (HidingClassDecl _ _ _ _ _) tcs = tcs
->         tcs (IClassDecl _ _ _ _ _ _) tcs = tcs
+>         tcs (IClassDecl _ _ _ _ _ _ _) tcs = tcs
 >         tcs (IInstanceDecl _ _ _ _ _) tcs = tcs
 >         tcs (IFunctionDecl _ _ _ _) tcs = tcs
 

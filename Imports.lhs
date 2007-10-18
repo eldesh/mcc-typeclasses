@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2518 2007-10-18 15:27:42Z wlux $
+% $Id: Imports.lhs 2519 2007-10-18 23:09:52Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -146,7 +146,7 @@ instances imported from another module.
 > entity (INewtypeDecl _ _ tc _ _ _ _) = tc
 > entity (ITypeDecl _ tc _ _ _) = tc
 > entity (HidingClassDecl _ _ cls _ _) = cls
-> entity (IClassDecl _ _ cls _ _ _) = cls
+> entity (IClassDecl _ _ cls _ _ _ _) = cls
 > entity (IInstanceDecl _ _ _ _ _) = qualify anonId
 > entity (IFunctionDecl _ f _ _) = f
 
@@ -156,8 +156,8 @@ instances imported from another module.
 > unhide (IDataDecl p cx tc k tvs cs _) = IDataDecl p cx tc k tvs cs []
 > unhide (INewtypeDecl p cx tc k tvs nc _) = INewtypeDecl p cx tc k tvs nc []
 > unhide (ITypeDecl p tc k tvs ty) = ITypeDecl p tc k tvs ty
-> unhide (HidingClassDecl p cx cls k tv) = IClassDecl p cx cls k tv []
-> unhide (IClassDecl p cx cls k tv ds) = IClassDecl p cx cls k tv ds
+> unhide (HidingClassDecl p cx cls k tv) = IClassDecl p cx cls k tv [] []
+> unhide (IClassDecl p cx cls k tv ds _) = IClassDecl p cx cls k tv ds []
 > unhide (IInstanceDecl p cx cls ty m) = IInstanceDecl p cx cls ty m
 > unhide (IFunctionDecl p f n ty) = IFunctionDecl p f n ty
 
@@ -178,15 +178,14 @@ following functions.
 > tidents m (INewtypeDecl _ _ tc _ _ nc cs') =
 >   qual tc (tident Data m tc (filter (`notElem` cs') [nconstr nc]))
 > tidents m (ITypeDecl _ tc _ _ _) = qual tc (tident Alias m tc)
-> tidents m (IClassDecl _ _ cls _ _ ds) =
->   qual cls (tident Class m cls (map imethod (catMaybes ds)))
+> tidents m (IClassDecl _ _ cls _ _ ds fs') =
+>   qual cls (tident Class m cls (filter (`notElem` fs') (map imethod ds)))
 > tidents _ _ = id
 
 > vidents :: ModuleIdent -> IDecl -> [I ValueKind] -> [I ValueKind]
 > vidents m (IDataDecl _ _ tc _ _ cs cs') = cidents m tc cs' (map constr cs)
 > vidents m (INewtypeDecl _ _ tc _ _ nc cs') = cidents m tc cs' [nconstr nc]
-> vidents m (IClassDecl _ _ cls _ _ ds) =
->   (map (mident (qualQualify m cls) . imethod) (catMaybes ds) ++)
+> vidents m (IClassDecl _ _ cls _ _ ds fs') = midents m cls fs' (map imethod ds)
 > vidents m (IFunctionDecl _ f _ _) = qual f (Var (qualQualify m f))
 > vidents _ _ = id
 
@@ -202,8 +201,8 @@ following functions.
 >   qual tc (typeCon RenamingType m tc k tvs (nconstr nc))
 > types m (ITypeDecl _ tc k tvs ty) =
 >   qual tc (typeCon (flip AliasType (length tvs)) m tc k tvs (toType m tvs ty))
-> types m (IClassDecl _ cx cls k tv ds) =
->   qual cls (typeCls m cx cls k tv (map (fmap imethod) ds))
+> types m (IClassDecl _ cx cls k tv ds _) =
+>   qual cls (typeCls m cx cls k tv (map imethod ds))
 > types _ _ = id
 
 > values :: ModuleIdent -> IDecl -> [I ValueInfo] -> [I ValueInfo]
@@ -213,8 +212,9 @@ following functions.
 > values m (INewtypeDecl _ cx tc _ tvs nc cs') =
 >   (map (newConstr m cx (qualQualify m tc) tvs) nc' ++)
 >   where nc' = [nc | nconstr nc `notElem` cs']
-> values m (IClassDecl _ _ cls _ tv ds) =
->   (map (classMethod m (qualQualify m cls) tv) (catMaybes ds) ++)
+> values m (IClassDecl _ _ cls _ tv ds fs') =
+>   (map (classMethod m (qualQualify m cls) tv) ds' ++)
+>   where ds' = filter ((`notElem` fs') . imethod) ds
 > values m (IFunctionDecl _ f n ty) =
 >   qual f (Value (qualQualify m f) n' (typeScheme ty'))
 >   where n' = maybe (arrowArity (unqualType ty')) fromInteger n
@@ -278,6 +278,11 @@ Auxiliary functions:
 > cident :: QualIdent -> Ident -> I ValueKind
 > cident tc c = (c,Constr (qualifyLike tc c))
 
+> midents :: ModuleIdent -> QualIdent -> [Ident] -> [Ident] -> [I ValueKind]
+>         -> [I ValueKind]
+> midents m cls fs' fs =
+>   (map (mident (qualQualify m cls)) (filter (`notElem` fs') fs) ++)
+
 > mident :: QualIdent -> Ident -> I ValueKind
 > mident cls f = (f,Var (qualifyLike cls f))
 
@@ -287,7 +292,7 @@ Auxiliary functions:
 >   f (qualQualify m tc) (maybe (simpleKind (length tvs)) toKind k)
 
 > typeCls :: ModuleIdent -> [ClassAssert] -> QualIdent -> Maybe KindExpr
->         -> Ident -> [Maybe Ident] -> TypeInfo
+>         -> Ident -> [Ident] -> TypeInfo
 > typeCls m cx cls k tv =
 >   TypeClass (qualQualify m cls) (maybe KindStar toKind k)
 >             [cls | TypePred cls _ <- cx']

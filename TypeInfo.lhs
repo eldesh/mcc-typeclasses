@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeInfo.lhs 2518 2007-10-18 15:27:42Z wlux $
+% $Id: TypeInfo.lhs 2519 2007-10-18 23:09:52Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -35,9 +35,7 @@ Importing and exporting algebraic data types is complicated by the
 fact that the constructors of the type may be (partially) hidden in
 the interface. This facilitates the definition of abstract data types.
 An abstract type is always represented as a data type without
-constructors in the interface. Similarly, it is possible to hide some
-or all methods of a type class. The hidden methods are replaced by
-underscores in the interface.
+constructors in the interface.
 \begin{verbatim}
 
 > module TypeInfo where
@@ -53,7 +51,7 @@ underscores in the interface.
 > data TypeInfo = DataType QualIdent Kind [Ident]
 >               | RenamingType QualIdent Kind Ident
 >               | AliasType QualIdent Int Kind Type
->               | TypeClass QualIdent Kind [QualIdent] [Maybe Ident]
+>               | TypeClass QualIdent Kind [QualIdent] [Ident]
 >               | TypeVar Kind
 >               deriving Show
 
@@ -141,7 +139,7 @@ methods defined by a class.
 > allSuperClasses cls clsEnv = nub (classes cls)
 >   where classes cls = cls : concatMap classes (superClasses cls clsEnv)
 
-> classMethods :: QualIdent -> TCEnv -> [Maybe Ident]
+> classMethods :: QualIdent -> TCEnv -> [Ident]
 > classMethods cls clsEnv =
 >   case qualLookupTopEnv cls clsEnv of
 >     [TypeClass _ _ _ fs] -> fs

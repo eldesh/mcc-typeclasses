@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2518 2007-10-18 15:27:42Z wlux $
+% $Id: Exports.lhs 2519 2007-10-18 23:09:52Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -83,13 +83,10 @@ exported together with their classes and types as explained below.
 >       iTypeDecl (const . ITypeDecl) m [] tc tvs n k ty' : ds
 >       where ty' = fromType tcEnv tvs ty
 >     [TypeClass _ k clss fs] ->
->       iClassDecl IClassDecl m tc tvs k clss (methods fs) : ds
->       where methods fs = map (hideDecl (methodDecl tcEnv tyEnv tc tvs) xs) fs
+>       iClassDecl IClassDecl m tc tvs k clss methods fs' : ds
+>       where methods = map (methodDecl tcEnv tyEnv tc tvs) fs
+>             fs' = filter (`notElem` xs) fs
 >     _ -> internalError "typeDecl"
->   where hideDecl f xs x = x >>= fmap f . hide xs
->         hide xs x
->           | x `elem` xs = Just x
->           | otherwise = Nothing
 
 > iTypeDecl :: (Position -> [ClassAssert] -> QualIdent -> Maybe KindExpr
 >               -> [Ident] -> a)
@@ -199,7 +196,8 @@ not module \texttt{B}.
 >     modules cx . modules tc . modules nc
 >   modules (ITypeDecl _ tc _ _ ty) = modules tc . modules ty
 >   modules (HidingClassDecl _ cx cls _ _) = modules cx . modules cls
->   modules (IClassDecl _ cx cls _ _ ds) = modules cx . modules cls . modules ds
+>   modules (IClassDecl _ cx cls _ _ ds _) =
+>     modules cx . modules cls . modules ds
 >   modules (IInstanceDecl _ cx cls ty m) =
 >      modules cx . modules cls . modules ty . maybe id (:) m
 >   modules (IFunctionDecl _ f _ ty) = modules f . modules ty
@@ -330,7 +328,7 @@ environment.
 > declIs m (INewtypeDecl _ _ tc _ _ _ _) = IsType (qualQualify m tc)
 > declIs _ (ITypeDecl _ _ _ _ _) = IsOther {-sic!-}
 > declIs m (HidingClassDecl _ _ cls _ _) = IsClass (qualQualify m cls)
-> declIs m (IClassDecl _ _ cls _ _ _) = IsClass (qualQualify m cls)
+> declIs m (IClassDecl _ _ cls _ _ _ _) = IsClass (qualQualify m cls)
 > declIs m (IInstanceDecl _ _ cls ty _) = IsInst (CT cls' tc')
 >   where cls' = qualQualify m cls 
 >         tc' = if isPrimTypeId tc then tc else qualQualify m tc
@@ -384,7 +382,7 @@ environment.
 >   usedTypes (INewtypeDecl _ cx _ _ _ nc _) = usedTypes cx . usedTypes nc
 >   usedTypes (ITypeDecl _ _ _ _ ty) = usedTypes ty
 >   usedTypes (HidingClassDecl _ cx _ _ _) = usedTypes cx
->   usedTypes (IClassDecl _ cx _ _ _ ds) = usedTypes cx . usedTypes ds
+>   usedTypes (IClassDecl _ cx _ _ _ ds _) = usedTypes cx . usedTypes ds
 >   usedTypes (IInstanceDecl _ cx cls ty _) =
 >     usedTypes cx . (cls :) . usedTypes ty
 >   usedTypes (IFunctionDecl _ _ _ ty) = usedTypes ty

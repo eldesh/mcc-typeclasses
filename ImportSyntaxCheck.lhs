@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ImportSyntaxCheck.lhs 2518 2007-10-18 15:27:42Z wlux $
+% $Id: ImportSyntaxCheck.lhs 2519 2007-10-18 23:09:52Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -41,8 +41,8 @@ declarations.
 > bindType m (IDataDecl _ _ tc _ _ cs cs') = bindData m tc cs' (map constr cs)
 > bindType m (INewtypeDecl _ _ tc _ _ nc cs') = bindData m tc cs' [nconstr nc]
 > bindType m (ITypeDecl _ tc _ _ _) = bindAlias m tc
-> bindType m (IClassDecl _ _ cls _ _ ds) =
->   bindUnqual cls (Class (qualQualify m cls) (map imethod (catMaybes ds)))
+> bindType m (IClassDecl _ _ cls _ _ ds fs') =
+>   bindClass m cls fs' (map imethod ds)
 > bindType _ _ = id
 
 > bindData :: ModuleIdent -> QualIdent -> [Ident] -> [Ident] -> ExpTypeEnv
@@ -53,13 +53,18 @@ declarations.
 > bindAlias :: ModuleIdent -> QualIdent -> ExpTypeEnv -> ExpTypeEnv
 > bindAlias m tc = bindUnqual tc (Alias (qualQualify m tc))
 
+> bindClass :: ModuleIdent -> QualIdent -> [Ident] -> [Ident] -> ExpTypeEnv
+>           -> ExpTypeEnv
+> bindClass m cls fs' fs =
+>   bindUnqual cls (Class (qualQualify m cls) (filter (`notElem` fs') fs))
+
 > bindValue :: ModuleIdent -> IDecl -> ExpFunEnv -> ExpFunEnv
 > bindValue m (IDataDecl _ _ tc _ _ cs cs') =
 >   bindConstrs m tc cs' (map constr cs)
 > bindValue m (INewtypeDecl _ _ tc _ _ nc cs') =
 >   bindConstrs m tc cs' [nconstr nc]
-> bindValue m (IClassDecl _ _ cls _ _ ds) =
->   flip (foldr (bindMethod (qualQualify m cls))) (catMaybes ds)
+> bindValue m (IClassDecl _ _ cls _ _ ds fs') =
+>   bindMethods m cls fs' (map imethod ds)
 > bindValue m (IFunctionDecl _ f _ _) = bindFun m f
 > bindValue _ _ = id
 
@@ -71,8 +76,13 @@ declarations.
 > bindConstr :: QualIdent -> Ident -> ExpFunEnv -> ExpFunEnv
 > bindConstr tc c = bindEnv c (Constr (qualifyLike tc c))
 
-> bindMethod :: QualIdent -> IMethodDecl -> ExpFunEnv -> ExpFunEnv
-> bindMethod cls (IMethodDecl _ f _) = bindEnv f (Var (qualifyLike cls f))
+> bindMethods :: ModuleIdent -> QualIdent -> [Ident] -> [Ident] -> ExpFunEnv
+>             -> ExpFunEnv
+> bindMethods m cls fs' fs env =
+>   foldr (bindMethod (qualQualify m cls)) env (filter (`notElem` fs') fs)
+
+> bindMethod :: QualIdent -> Ident -> ExpFunEnv -> ExpFunEnv
+> bindMethod cls f = bindEnv f (Var (qualifyLike cls f))
 
 > bindFun :: ModuleIdent -> QualIdent -> ExpFunEnv -> ExpFunEnv
 > bindFun m f = bindUnqual f (Var (qualQualify m f))

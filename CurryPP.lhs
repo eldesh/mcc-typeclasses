@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2518 2007-10-18 15:27:42Z wlux $
+% $Id: CurryPP.lhs 2519 2007-10-18 23:09:52Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -203,9 +203,9 @@ Interfaces
 > ppIDecl (ITypeDecl _ tc k tvs ty) =
 >   sep [ppITypeDeclLhs "type" [] tc k tvs <+> equals,indent (ppTypeExpr 0 ty)]
 > ppIDecl (HidingClassDecl p cx cls k tv) =
->   text "hiding" <+> ppIDecl (IClassDecl p cx cls k tv [])
-> ppIDecl (IClassDecl _ cx cls k tv ds) =
->   ppIClassDecl (ppClassHead cx (ppITypeIdent cls k) tv) ds
+>   text "hiding" <+> ppIDecl (IClassDecl p cx cls k tv [] [])
+> ppIDecl (IClassDecl _ cx cls k tv ds fs') =
+>   ppIClassDecl (ppClassHead cx (ppITypeIdent cls k) tv) ds fs'
 > ppIDecl (IInstanceDecl _ cx cls ty m) =
 >   ppInstanceHead cx cls ty <+> maybePP instModule m
 >   where instModule m = text "of" <+> ppMIdent m
@@ -223,15 +223,11 @@ Interfaces
 >   parens (ppQIdent tc <+> text "::" <+> ppKindExpr 0 k)
 > ppITypeIdent tc Nothing = ppQIdent tc
 
-> ppHiding :: [Ident] -> Doc
-> ppHiding cs
->   | null cs = empty
->   | otherwise = ppPragma "HIDING" (ppIdentList cs)
-
-> ppIClassDecl :: Doc -> [Maybe IMethodDecl] -> Doc
-> ppIClassDecl head ds
+> ppIClassDecl :: Doc -> [IMethodDecl] -> [Ident] -> Doc
+> ppIClassDecl head ds fs'
 >   | null ds = head
->   | otherwise = ppIBlock head (map (maybe (text "_") ppIMethodDecl) ds)
+>   | otherwise =
+>       ppIBlock head ([ppHiding fs' | not (null fs')] ++ map ppIMethodDecl ds)
 
 > ppIMethodDecl :: IMethodDecl -> Doc
 > ppIMethodDecl (IMethodDecl p f ty) =
@@ -242,6 +238,11 @@ Interfaces
 >   prefix <+> text "where" <+> lbrace $$
 >   vcat (punctuate semi ds) $$
 >   rbrace
+
+> ppHiding :: [Ident] -> Doc
+> ppHiding xs
+>   | null xs = empty
+>   | otherwise = ppPragma "HIDING" (ppIdentList xs)
 
 \end{verbatim}
 Kinds

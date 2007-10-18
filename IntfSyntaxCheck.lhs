@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2518 2007-10-18 15:27:42Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2519 2007-10-18 23:09:52Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -24,7 +24,6 @@ this check without reference to the global environments.
 > import Error
 > import IdentInfo
 > import List
-> import Maybe
 > import Monad
 > import Pretty
 > import TopEnv
@@ -46,9 +45,8 @@ The latter must not occur in type expressions in interfaces.
 > bindType (IDataDecl _ _ tc _ _ cs cs') = bindData tc cs' (map constr cs)
 > bindType (INewtypeDecl _ _ tc _ _ nc cs') = bindData tc cs' [nconstr nc]
 > bindType (ITypeDecl _ tc _ _ _) = bindAlias tc
-> bindType (HidingClassDecl _ _ cls _ _) = qualBindTopEnv cls (Class cls [])
-> bindType (IClassDecl _ cx cls _ _ ds) =
->   qualBindTopEnv cls (Class cls (map imethod (catMaybes ds)))
+> bindType (HidingClassDecl _ _ cls _ _) = bindClass cls [] []
+> bindType (IClassDecl _ cx cls _ _ ds fs') = bindClass cls fs' (map imethod ds)
 > bindType (IInstanceDecl _ _ _ _ _) = id
 > bindType (IFunctionDecl _ _ _ _) = id
 
@@ -57,6 +55,10 @@ The latter must not occur in type expressions in interfaces.
 
 > bindAlias :: QualIdent -> TypeEnv -> TypeEnv
 > bindAlias tc = qualBindTopEnv tc (Alias tc)
+
+> bindClass :: QualIdent -> [Ident] -> [Ident] -> TypeEnv -> TypeEnv
+> bindClass cls fs' fs =
+>   qualBindTopEnv cls (Class cls (filter (`notElem` fs') fs))
 
 \end{verbatim}
 The checks applied to the interface are similar to those performed
@@ -74,14 +76,14 @@ during syntax checking of type expressions.
 >     cx' <- checkTypeLhs env p cx tvs
 >     checkClosedContext p cx' tvs
 >     cs'' <- mapE (checkConstrDecl env tvs) cs
->     checkHiding p tc (map constr cs) cs'
+>     checkHiding p (noConstructor tc) (map constr cs) cs'
 >     return (IDataDecl p cx' tc k tvs cs'' cs')
 > checkIDecl env (INewtypeDecl p cx tc k tvs nc cs') =
 >   do
 >     cx' <- checkTypeLhs env p cx tvs
 >     checkClosedContext p cx' tvs
 >     nc' <- checkNewConstrDecl env tvs nc
->     checkHiding p tc [nconstr nc] cs'
+>     checkHiding p (noConstructor tc) [nconstr nc] cs'
 >     return (INewtypeDecl p cx' tc k tvs nc' cs')
 > checkIDecl env (ITypeDecl p tc k tvs ty) =
 >   do
@@ -95,14 +97,15 @@ during syntax checking of type expressions.
 >     mapE_ (checkSimpleConstraint "class" doc p) cx'
 >     return (HidingClassDecl p cx' cls k tv)
 >   where doc = ppQIdent cls <+> ppIdent tv
-> checkIDecl env (IClassDecl p cx cls k tv ds) =
+> checkIDecl env (IClassDecl p cx cls k tv ds fs') =
 >   do
 >     cx' <- checkTypeLhs env p cx [tv]
 >     checkClosedContext p cx' [tv]
 >     ds' <-
 >       mapE_ (checkSimpleConstraint "class" doc p) cx' &&>
->       mapE (liftMaybe (checkIMethodDecl env tv)) ds
->     return (IClassDecl p cx' cls k tv ds')
+>       mapE (checkIMethodDecl env tv) ds
+>     checkHiding p (noMethod cls) (map imethod ds) fs'
+>     return (IClassDecl p cx' cls k tv ds' fs')
 >   where doc = ppQIdent cls <+> ppIdent tv
 > checkIDecl env (IInstanceDecl p cx cls ty m) =
 >   do
@@ -234,9 +237,9 @@ during syntax checking of type expressions.
 >     [Class _ _] -> return ()
 >     _ -> internalError "checkClass"
 
-> checkHiding :: Position -> QualIdent -> [Ident] -> [Ident] -> Error ()
-> checkHiding p tc cs cs' =
->   mapE_ (errorAt p . noConstructor tc) (nub (filter (`notElem` cs) cs'))
+> checkHiding :: Position -> (Ident -> String) -> [Ident] -> [Ident] -> Error ()
+> checkHiding p noElement xs xs' =
+>   mapE_ (errorAt p . noElement) (nub (filter (`notElem` xs) xs'))
 
 \end{verbatim}
 \ToDo{Much of the above code could be shared with module
@@ -244,10 +247,6 @@ during syntax checking of type expressions.
 
 Auxiliary functions.
 \begin{verbatim}
-
-> liftMaybe :: Monad m => (a -> m b) -> Maybe a -> m (Maybe b)
-> liftMaybe f (Just x) = liftM Just (f x)
-> liftMaybe f Nothing = return Nothing
 
 > isTypeSynonym :: TypeEnv -> QualIdent -> Bool
 > isTypeSynonym env tc =
@@ -279,6 +278,10 @@ Error messages.
 > noConstructor tc c =
 >   "Hidden constructor " ++ name c ++ " is not defined for type " ++
 >   qualName tc
+
+> noMethod :: QualIdent -> Ident -> String
+> noMethod cls f =
+>   "Hidden method " ++ name f ++ " is not defined for class " ++ qualName cls
 
 > unboundVariable :: Ident -> String
 > unboundVariable tv = "Undefined type variable " ++ name tv

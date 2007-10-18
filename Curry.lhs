@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Curry.lhs 2518 2007-10-18 15:27:42Z wlux $
+% $Id: Curry.lhs 2519 2007-10-18 23:09:52Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -107,7 +107,7 @@ Interface declarations are restricted to type declarations and signatures.
 >   | ITypeDecl Position QualIdent (Maybe KindExpr) [Ident] TypeExpr
 >   | HidingClassDecl Position [ClassAssert] QualIdent (Maybe KindExpr) Ident
 >   | IClassDecl Position [ClassAssert] QualIdent (Maybe KindExpr) Ident
->                [Maybe IMethodDecl]
+>                [IMethodDecl] [Ident]
 >   | IInstanceDecl Position [ClassAssert] QualIdent TypeExpr
 >                   (Maybe ModuleIdent)
 >   | IFunctionDecl Position QualIdent (Maybe Integer) QualTypeExpr

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: Imports.lhs 2514 2007-10-18 10:43:08Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -17,6 +17,7 @@ interfaces into the current module.
 > import CurryUtils
 > import Env
 > import IdentInfo
+> import InstInfo
 > import Kinds
 > import KindTrans
 > import Maybe

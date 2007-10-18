@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IdentInfo.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: IdentInfo.lhs 2514 2007-10-18 10:43:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -14,6 +14,7 @@ map type and value identifiers on their kinds.
 > import Base
 > import Ident
 > import NestEnv
+> import Set
 > import TopEnv
 > import Types
 
@@ -45,6 +46,20 @@ types.
 >           emptyTopEnv (Just (map (tupleType . rootOfType) tupleTypes))
 >         predefType tc cs = predefTopEnv tc (Data tc (map fst cs))
 >         tupleType tc = Data tc [unqualify tc]
+
+\end{verbatim}
+When checking for duplicate instance declarations, the compiler uses a
+set of $C$-$T$ pairs, which contains one element for each defined or
+imported instance. Instances are recorded only for the original names
+of the type class and type constructor involved. The initial instance
+set \texttt{instISet} is empty.
+\begin{verbatim}
+
+> data CT = CT QualIdent QualIdent deriving (Eq,Ord,Show)
+> type InstSet = Set CT
+
+> initISet :: InstSet
+> initISet = zeroSet
 
 \end{verbatim}
 At pattern and expression level, we distinguish constructors on one

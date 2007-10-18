@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: IntfCheck.lhs 2514 2007-10-18 10:43:08Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -51,6 +51,7 @@ interface module only. However, this has not been implemented yet.
 > import CurryUtils
 > import Env
 > import Error
+> import InstInfo
 > import Kinds
 > import KindTrans
 > import Maybe

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: TypeCheck.lhs 2514 2007-10-18 10:43:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -33,6 +33,7 @@ goal is returned.
 > import CurryUtils
 > import Env
 > import Error
+> import InstInfo
 > import List
 > import Maybe
 > import Monad

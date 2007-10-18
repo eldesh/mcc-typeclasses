@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: Modules.lhs 2514 2007-10-18 10:43:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -59,6 +59,7 @@ This module controls the compilation of modules.
 > import Combined
 > import Error
 > import IdentInfo
+> import InstInfo
 > import Interfaces
 > import IO
 > import List

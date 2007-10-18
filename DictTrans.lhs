@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: DictTrans.lhs 2514 2007-10-18 10:43:08Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -24,6 +24,7 @@ declarations in the module.
 > import Curry
 > import CurryUtils
 > import Env
+> import InstInfo
 > import Kinds
 > import List
 > import Maybe

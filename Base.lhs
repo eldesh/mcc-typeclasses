@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: Base.lhs 2514 2007-10-18 10:43:08Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -21,30 +21,6 @@ in various phases of the compiler.
 > import Types
 
 \end{verbatim}
-\paragraph{Instances}
-The compiler maintains information about defined instances in an
-environment that maps $C$-$T$-pairs, which associate a type class
-identifier and a type constructor identifier, onto the context of the
-corresponding instance declaration and the name of the module where
-the instance is declared. A flat environment is sufficient because
-instances are visible globally and cannot be hidden. Instance
-relationships are recorded only with the original names of the class
-and type constructor involved.
-\begin{verbatim}
-
-> data CT = CT QualIdent QualIdent deriving (Eq,Ord,Show)
-
-> type InstEnv = Env CT (ModuleIdent,Context)
-
-\end{verbatim}
-When checking for duplicate instance declarations, the compiler simply
-uses a set of $C$-$T$ pairs, which is derived from the instance
-environment by ignoring the instance contexts.
-\begin{verbatim}
-
-> type InstSet = Set CT
-
-\end{verbatim}
 \paragraph{Predefined types}
 The unit and list data types must be predefined because the
 declarations
@@ -57,18 +33,10 @@ infinite number of tuple types. The corresponding types are available
 in the environments \texttt{initTEnv}, \texttt{initVEnv},
 \texttt{initTCEnv}, and \texttt{initDCEnv}. In addition, the
 precedence of the infix list constructor is available in the
-environment \texttt{initPEnv}. The initial instance set
-\texttt{instISet} and environment \texttt{initIEnv} are empty. The
-initial type constructor environment also includes a fake arrow type
-constructor, whose purpose is to allow defining instances for the type
-\verb|a -> b|.
+environment \texttt{initPEnv}. The initial type constructor
+environment also includes a fake arrow type constructor, whose purpose
+is to allow defining instances for the type \verb|a -> b|.
 \begin{verbatim}
-
-> initISet :: InstSet
-> initISet = zeroSet
-
-> initIEnv :: InstEnv
-> initIEnv = emptyEnv
 
 > predefTypes :: [(Type,[(Ident,Type)])]
 > predefTypes =

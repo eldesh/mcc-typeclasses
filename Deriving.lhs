@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: Deriving.lhs 2514 2007-10-18 10:43:08Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -14,6 +14,7 @@ This module implements the code generating derived instance declarations.
 > import Curry
 > import Env
 > import Error
+> import InstInfo
 > import List
 > import Maybe
 > import PrecInfo

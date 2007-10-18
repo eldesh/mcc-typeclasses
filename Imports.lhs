@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2514 2007-10-18 10:43:08Z wlux $
+% $Id: Imports.lhs 2516 2007-10-18 11:21:29Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -251,7 +251,7 @@ After all modules have been imported, the compiler has to ensure that
 all references to a data type use the same list of constructors.
 \begin{verbatim}
 
-> importUnifyData :: Entity a => TopEnv a -> TopEnv a
+> importUnifyData :: TypeEnv -> TypeEnv
 > importUnifyData tcEnv =
 >   fmap (updWith (foldr (mergeData . snd) zeroFM (allImports tcEnv))) tcEnv
 >   where updWith tcs t = fromMaybe t (lookupFM (origName t) tcs)

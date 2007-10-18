@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeInfo.lhs 2515 2007-10-18 10:54:19Z wlux $
+% $Id: TypeInfo.lhs 2516 2007-10-18 11:21:29Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,10 +10,12 @@ For all defined types and type classes, the compiler maintains kind
 information. For algebraic data types and renaming types, the compiler
 also records all data constructors belonging to that type, and for
 alias types, their arity and expanded right hand side type expressions
-are saved. Recording the type's arity is necessary for alias types
-because the right hand side type expression can have arbitrary kind
-and therefore the type synonym's arity cannot be determined from its
-own kind. For instance,
+are saved. The constructor lists are used only for the purpose of
+creating module interfaces. It is important that the constructors are
+ordered in the same way as in the data type's definition. Recording
+the type's arity is necessary for alias types because the right hand
+side type expression can have arbitrary kind and therefore the type
+synonym's arity cannot be determined from its own kind. For instance,
 \begin{verbatim}
   type List = []
 \end{verbatim}
@@ -46,7 +48,6 @@ replaced by underscores as well.
 > import Ident
 > import Kinds
 > import List
-> import Monad
 > import PredefTypes
 > import TopEnv
 > import Types
@@ -65,23 +66,6 @@ replaced by underscores as well.
 >   origName (AliasType tc _ _ _) = tc
 >   origName (TypeClass cls _ _ _) = cls
 >   origName (TypeVar _) = internalError "origName TypeVar"
->   merge (DataType tc1 k cs1) (DataType tc2 _ cs2)
->     | tc1 == tc2 = Just (DataType tc1 k (mergeData cs1 cs2))
->     where mergeData cs1 cs2
->             | null cs1 = cs2
->             | null cs2 = cs1
->             | otherwise = zipWith mplus cs1 cs2
->   merge (DataType tc1 k _) (RenamingType tc2 _ nc)
->     | tc1 == tc2 = Just (RenamingType tc1 k nc)
->   merge (RenamingType tc1 k nc) (DataType tc2 _ _)
->     | tc1 == tc2 = Just (RenamingType tc1 k nc)
->   merge (RenamingType tc1 k nc) (RenamingType tc2 _ _)
->     | tc1 == tc2 = Just (RenamingType tc1 k nc)
->   merge (AliasType tc1 n k ty) (AliasType tc2 _ _ _)
->     | tc1 == tc2 = Just (AliasType tc1 n k ty)
->   merge (TypeClass cls1 k clss fs1) (TypeClass cls2 _ _ fs2)
->     | cls1 == cls2 = Just (TypeClass cls1 k clss (zipWith mplus fs1 fs2))
->   merge _ _ = Nothing
 
 \end{verbatim}
 The initial type constructor environment \texttt{initTCEnv} is

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2519 2007-10-18 23:09:52Z wlux $
+% $Id: DictTrans.lhs 2520 2007-10-19 09:15:13Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -210,12 +210,10 @@ instance declarations so that they can be used instead of omitted
 instance methods when creating instance dictionaries. To that end, the
 compiler simply lifts default method declarations to the top-level.
 The default method implementations are renamed during lifting in order
-to avoid name conflicts with the method names themselves. In order to
-avoid problems with hidden methods, whose names are not available in
-the interface files, the lifted names are derived from the class' name
-and the methods' indices. If the user does not provide a default
-implementation for a method, the compiler uses a default
-implementation that is equivalent to \texttt{Prelude.undefined}.
+to avoid name conflicts with the method names themselves. If the user
+does not provide a default implementation for a method, the compiler
+uses a default implementation that is equivalent to
+\texttt{Prelude.undefined}.
 
 \ToDo{Use \texttt{Prelude.error} instead of \texttt{Prelude.undefined}
   as default implementation for omitted methods?}
@@ -239,7 +237,7 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 > bindClassEntities m tcEnv (TypeClass cls _ _ fs) tyEnv = foldr ($) tyEnv $
 >   bindClassDict m (qDictConstrId cls) (arrowArity ty) (polyType ty) :
 >   zipWith (bindClassFun m)
->           (qDefaultMethodIds cls)
+>           (qDefaultMethodIds cls fs)
 >           (map (classMethodType tyEnv cls) fs)
 >   where ty = classDictType tcEnv tyEnv cls fs
 > bindClassEntities _ _ _ tyEnv = tyEnv
@@ -257,7 +255,7 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 >   dictDataDecl p cls tv [dictConstrDecl tcEnv p cls tv tys'] :
 >   zipWith4 functDecl
 >            ps
->            (defaultMethodIds cls)
+>            (defaultMethodIds cls fs)
 >            (repeat [])
 >            (zipWith (defaultMethodExpr tyEnv) fs vds')
 >   where (vds,ods) = partition isValueDecl ds
@@ -270,8 +268,9 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 > classIDecls m tcEnv p cls k tv (Just ds) =
 >   dictIDataDecl IDataDecl p cls k tv
 >                 [dictConstrDecl tcEnv p (unqualify cls) tv tys'] [] :
->   zipWith3 (intfMethodDecl cls tv) (map pos ds) (qDefaultMethodIds cls) tys
->   where tys = map methodType ds
+>   zipWith3 (intfMethodDecl cls tv) (map pos ds) (qDefaultMethodIds cls fs) tys
+>   where fs = map imethod ds
+>         tys = map methodType ds
 >         tys' = map (toMethodType m cls tv) tys
 >         pos (IMethodDecl p _ _) = p
 >         methodType (IMethodDecl _ _ ty) = ty
@@ -312,14 +311,14 @@ implementation that is equivalent to \texttt{Prelude.undefined}.
 > transformMethodType tcEnv =
 >   transformType . contextMap (maxContext tcEnv . tail)
 
-> defaultMethodIds :: Ident -> [Ident]
-> defaultMethodIds cls = map (defaultMethodId cls) [1..]
->   where defaultMethodId cls n =
->           mkIdent ("_Method#" ++ name cls ++ "#" ++ show n)
+> defaultMethodIds :: Ident -> [Ident] -> [Ident]
+> defaultMethodIds cls fs = map (defaultMethodId cls) fs
+>   where defaultMethodId cls f =
+>           mkIdent ("_Method#" ++ name cls ++ "#" ++ name f)
 
-> qDefaultMethodIds :: QualIdent -> [QualIdent]
-> qDefaultMethodIds cls =
->   map (qualifyLike cls) (defaultMethodIds (unqualify cls))
+> qDefaultMethodIds :: QualIdent -> [Ident] -> [QualIdent]
+> qDefaultMethodIds cls fs =
+>   map (qualifyLike cls) (defaultMethodIds (unqualify cls) fs)
 
 \end{verbatim}
 \paragraph{Method Stubs}
@@ -477,7 +476,7 @@ of method $f_i$ in class $C$.
 >              -> ValueEnv -> ValueEnv
 > bindInstFuns m tcEnv (CT cls tc,(m',cx)) tyEnv = foldr ($) tyEnv $
 >   zipWith (bindInstFun m)
->           (qInstFunId m' tp : qInstMethodIds m' tp)
+>           (qInstFunId m' tp : qInstMethodIds m' tp fs)
 >           (qualDictType cx' tp : map (instMethodType tyEnv cx tp) fs)
 >   where tp = TypePred cls (applyType (TypeConstructor tc) tvs)
 >         n = kindArity (constrKind tc tcEnv) - kindArity (classKind cls tcEnv)
@@ -493,10 +492,10 @@ of method $f_i$ in class $C$.
 > instDecls m tcEnv tyEnv p cls (QualType cx ty) ds =
 >   zipWith4 functDecl
 >            (p : map (maybe p pos) ds')
->            (instFunId tp : instMethodIds tp)
+>            (instFunId tp : instMethodIds tp fs)
 >            (repeat [])
->            (dictExpr ty' cls (zipWith const (qInstMethodIds m tp) ds') :
->             zipWith3 instMethodExpr (qDefaultMethodIds cls) tys' ds')
+>            (dictExpr ty' cls (zipWith const (qInstMethodIds m tp fs) ds') :
+>             zipWith3 instMethodExpr (qDefaultMethodIds cls fs) tys' ds')
 >   where tp = TypePred cls ty
 >         fs = classMethods cls tcEnv
 >         ty' = instDictType tcEnv tyEnv tp fs
@@ -513,7 +512,7 @@ of method $f_i$ in class $C$.
 >            -> ModuleIdent -> [IDecl]
 > instIDecls tcEnv tyEnv p cls (QualType cx ty) m =
 >   zipWith (instIDecl tcEnv nameSupply p)
->           (qInstFunId m tp : qInstMethodIds m tp)
+>           (qInstFunId m tp : qInstMethodIds m tp fs)
 >           (qualDictType cx' tp : map (instMethodType tyEnv cx tp) fs)
 >   where tp = TypePred cls ty
 >         cx' = maxContext tcEnv cx
@@ -541,15 +540,15 @@ of method $f_i$ in class $C$.
 > orderMethodDecls fs ds =
 >   map (flip lookup [(unRenameIdent f,d) | d@(FunctionDecl _ f _) <- ds]) fs
 
-> instMethodIds :: TypePred -> [Ident]
-> instMethodIds (TypePred cls ty) =
->   map (instMethodId cls (rootOfType ty)) [1..]
->   where instMethodId cls tc n =
+> instMethodIds :: TypePred -> [Ident] -> [Ident]
+> instMethodIds (TypePred cls ty) fs =
+>   map (instMethodId cls (rootOfType ty)) fs
+>   where instMethodId cls tc f =
 >           mkIdent ("_Method#" ++ qualName cls ++ "#"
->                               ++ qualName tc ++ "#" ++ show n)
+>                               ++ qualName tc ++ "#" ++ name f)
 
-> qInstMethodIds :: ModuleIdent -> TypePred -> [QualIdent]
-> qInstMethodIds m = map (qualifyWith m) . instMethodIds
+> qInstMethodIds :: ModuleIdent -> TypePred -> [Ident] -> [QualIdent]
+> qInstMethodIds m tp fs = map (qualifyWith m) (instMethodIds tp fs)
 
 \end{verbatim}
 \paragraph{Adding Dictionary Arguments}
@@ -819,12 +818,12 @@ for $f$ at a particular type.
 >         bindMethods (RenamingType _ _ _) mEnv = mEnv
 >         bindMethods (AliasType _ _ _ _) mEnv = mEnv
 >         bindMethods (TypeClass cls _ _ fs) mEnv =
->           foldr ($) mEnv (zipWith (bindMethod cls i (length cx)) fs [0..])
+>           foldr (bindMethod cls i (length cx)) mEnv fs
 >           where (i,cx) = methodStubContext tcEnv cls
 >         bindMethods (TypeVar _) mEnv = mEnv
->         bindMethod cls i n f j =
->           bindEnv (qualifyLike cls f) (i,n,instMethodId cls j)
->         instMethodId cls j ty = instMethodIds (TypePred cls ty) !! j
+>         bindMethod cls i n f =
+>           bindEnv (qualifyLike cls f) (i,n,instMethodId cls f)
+>         instMethodId cls f ty = head (instMethodIds (TypePred cls ty) [f])
 
 > class DictSpecialize a where
 >   dictSpecialize :: MethodEnv -> a Type -> a Type

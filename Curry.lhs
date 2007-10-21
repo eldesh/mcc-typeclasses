@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Curry.lhs 2519 2007-10-18 23:09:52Z wlux $
+% $Id: Curry.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -66,8 +66,14 @@ associating types with patterns and expressions after type inference.
 > data ConstrDecl =
 >     ConstrDecl Position [Ident] [ClassAssert] Ident [TypeExpr]
 >   | ConOpDecl Position [Ident] [ClassAssert] TypeExpr Ident TypeExpr
+>   | RecordDecl Position [Ident] [ClassAssert] Ident [FieldDecl]
 >   deriving (Eq,Show)
-> data NewConstrDecl = NewConstrDecl Position Ident TypeExpr deriving (Eq,Show)
+> data NewConstrDecl =
+>     NewConstrDecl Position Ident TypeExpr
+>   | NewRecordDecl Position Ident Ident TypeExpr
+>   deriving (Eq,Show)
+
+> data FieldDecl = FieldDecl Position [Ident] TypeExpr deriving (Eq,Show)
 
 > data Decl a =
 >     InfixDecl Position Infix (Maybe Integer) [Ident]
@@ -183,6 +189,7 @@ list.
 >   | ConstructorPattern a QualIdent [ConstrTerm a]
 >   | InfixPattern a (ConstrTerm a) QualIdent (ConstrTerm a)
 >   | ParenPattern (ConstrTerm a)
+>   | RecordPattern a QualIdent [Field (ConstrTerm a)]
 >   | TuplePattern [ConstrTerm a]
 >   | ListPattern a [ConstrTerm a]
 >   | AsPattern Ident (ConstrTerm a)
@@ -204,6 +211,8 @@ accommodate the empty list.
 >   | Constructor a QualIdent
 >   | Paren (Expression a)
 >   | Typed (Expression a) QualTypeExpr
+>   | Record a QualIdent [Field (Expression a)]
+>   | RecordUpdate (Expression a) [Field (Expression a)]
 >   | Tuple [Expression a]
 >   | List a [Expression a]
 >   | ListCompr (Expression a) [Statement a]
@@ -222,6 +231,8 @@ accommodate the empty list.
 >   | IfThenElse (Expression a) (Expression a) (Expression a)
 >   | Case (Expression a) [Alt a]
 >   deriving (Eq,Show)
+
+> data Field a = Field QualIdent a deriving (Eq,Show)
 
 > data InfixOp a =
 >     InfixOp a QualIdent
@@ -294,6 +305,8 @@ The abstract syntax tree is a functor with respect to its attributes.
 >   fmap f (InfixPattern a t1 op t2) =
 >     InfixPattern (f a) (fmap f t1) op (fmap f t2)
 >   fmap f (ParenPattern t) = ParenPattern (fmap f t)
+>   fmap f (RecordPattern a c fs) =
+>     RecordPattern (f a) c (map (fmap (fmap f)) fs)
 >   fmap f (TuplePattern ts) = TuplePattern (map (fmap f) ts)
 >   fmap f (ListPattern a ts) = ListPattern (f a) (map (fmap f) ts)
 >   fmap f (AsPattern v t) = AsPattern v (fmap f t)
@@ -305,6 +318,9 @@ The abstract syntax tree is a functor with respect to its attributes.
 >   fmap f (Constructor a c) = Constructor (f a) c
 >   fmap f (Paren e) = Paren (fmap f e)
 >   fmap f (Typed e ty) = Typed (fmap f e) ty
+>   fmap f (Record a c fs) = Record (f a) c (map (fmap (fmap f)) fs)
+>   fmap f (RecordUpdate e fs) =
+>     RecordUpdate (fmap f e) (map (fmap (fmap f)) fs)
 >   fmap f (Tuple es) = Tuple (map (fmap f) es)
 >   fmap f (List a es) = List (f a) (map (fmap f) es)
 >   fmap f (ListCompr e qs) = ListCompr (fmap f e) (map (fmap f) qs)
@@ -337,6 +353,9 @@ The abstract syntax tree is a functor with respect to its attributes.
 
 > instance Functor Alt where
 >   fmap f (Alt p t rhs) = Alt p (fmap f t) (fmap f rhs)
+
+> instance Functor Field where
+>   fmap f (Field l x) = Field l (f x)
 
 > instance Functor Goal where
 >   fmap f (Goal p e ds) = Goal p (fmap f e) (map (fmap f) ds)

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Trust.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: Trust.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -94,6 +94,8 @@ the local functions \texttt{h} and \texttt{i} are trusted, but
 >   trust _ (Constructor _ _) = id
 >   trust tr (Paren e) = trust tr e
 >   trust tr (Typed e _) = trust tr e
+>   trust tr (Record _ _ fs) = trust tr fs
+>   trust tr (RecordUpdate e fs) = trust tr e . trust tr fs
 >   trust tr (Tuple es) = trust tr es
 >   trust tr (List _ es) = trust tr es
 >   trust tr (ListCompr e qs) = trust tr e . trust tr qs
@@ -119,5 +121,8 @@ the local functions \texttt{h} and \texttt{i} are trusted, but
 
 > instance SyntaxTree (Alt a) where
 >   trust tr (Alt _ _ rhs) = trust tr rhs
+
+> instance SyntaxTree a => SyntaxTree (Field a) where
+>   trust tr (Field _ e) = trust tr e
 
 \end{verbatim}

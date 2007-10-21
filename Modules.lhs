@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2519 2007-10-18 23:09:52Z wlux $
+% $Id: Modules.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -124,7 +124,7 @@ declaration to the module.
 >     (tEnv,vEnv,m') <- okM $ checkModuleSyntax mEnv' (Module m es is' ds)
 >     liftErr $ mapM_ putErrLn $ warnModuleSyntax caseMode warn m'
 >     (pEnv,tcEnv,iEnv,tyEnv,m'') <- okM $ checkModule mEnv' tEnv vEnv m'
->     liftErr $ mapM_ putErrLn $ warnModule warn m''
+>     liftErr $ mapM_ putErrLn $ warnModule warn tyEnv m''
 >     return (mEnv,pEnv,tcEnv,iEnv,tyEnv,m'')
 >   where modules is = [P p m | ImportDecl p m _ _ _ <- is]
 
@@ -162,8 +162,8 @@ declaration to the module.
 > warnModuleSyntax caseMode warn m =
 >   caseCheck caseMode m ++ unusedCheck warn m ++ shadowCheck warn m
 
-> warnModule :: [Warn] -> Module a -> [String]
-> warnModule warn m = overlapCheck warn m
+> warnModule :: [Warn] -> ValueEnv -> Module a -> [String]
+> warnModule warn tyEnv m = overlapCheck warn tyEnv m
 
 > transModule :: Bool -> Trust -> TCEnv -> ValueEnv -> Module Type
 >             -> (ValueEnv,TrustEnv,Module Type,[(Dump,Doc)])
@@ -343,7 +343,7 @@ interfaces are in scope with their qualified names.
 >             checkGoalSyntax mEnv ms
 >     liftErr $ mapM_ putErrLn $ warnGoalSyntax caseMode warn m g'
 >     (tcEnv,iEnv,tyEnv,cx,g'') <- okM $ checkGoal task mEnv m ms tEnv vEnv g'
->     liftErr $ mapM_ putErrLn $ warnGoal warn m g''
+>     liftErr $ mapM_ putErrLn $ warnGoal warn tyEnv m g''
 >     return (mEnv,tcEnv,iEnv,tyEnv,cx,g'')
 >   where mainGoal m = Goal (first "") (Variable () (qualifyWith m mainId)) []
 
@@ -412,8 +412,8 @@ interfaces are in scope with their qualified names.
 >   caseCheckGoal caseMode g ++ unusedCheckGoal warn m g ++
 >   shadowCheckGoal warn g
 
-> warnGoal :: [Warn] -> ModuleIdent -> Goal a -> [String]
-> warnGoal warn m g = overlapCheckGoal warn g
+> warnGoal :: [Warn] -> ValueEnv -> ModuleIdent -> Goal a -> [String]
+> warnGoal warn tyEnv m g = overlapCheckGoal warn tyEnv g
 
 > genCodeGoal :: ModuleEnv -> QualIdent -> Maybe [Ident] -> IL.Module
 >             -> (CFile,[(Dump,Doc)])
@@ -434,7 +434,7 @@ current module.
 >                 (checkImports (moduleInterface m mEnv) is)
 
 > importModuleIdents :: ModuleEnv -> [ImportDecl] -> (TypeEnv,InstSet,FunEnv)
-> importModuleIdents mEnv ds = (importUnifyData tEnv,iSet,vEnv)
+> importModuleIdents mEnv ds = (importUnifyData tEnv,iSet,importUnifyData vEnv)
 >   where (tEnv,iSet,vEnv) = foldl importModule initIdentEnvs ds
 >         importModule envs (ImportDecl _ m q asM is) =
 >           importIdents (fromMaybe m asM) q is envs (moduleInterface m mEnv)
@@ -464,7 +464,7 @@ unqualified names, too.
 \begin{verbatim}
 
 > importInterfaceIdents :: ModuleEnv -> [ModuleIdent] -> (TypeEnv,FunEnv)
-> importInterfaceIdents mEnv ms = (importUnifyData tEnv,vEnv)
+> importInterfaceIdents mEnv ms = (importUnifyData tEnv,importUnifyData vEnv)
 >   where (tEnv,_,vEnv) =
 >           foldl (uncurry . importModule) initIdentEnvs (envToList mEnv)
 >         importModule envs m = importIdents m (m `notElem` ms) Nothing envs
@@ -686,9 +686,9 @@ from the type environment.
 
 > ppTypes :: TCEnv -> [(Ident,ValueInfo)] -> Doc
 > ppTypes tcEnv = vcat . map ppInfo
->   where ppInfo (c,DataConstructor _ _ _ ty) =
+>   where ppInfo (c,DataConstructor _ _ _ _ ty) =
 >           ppIDecl (mkDecl c ty) <+> text "-- data constructor"
->         ppInfo (c,NewtypeConstructor _ ty) =
+>         ppInfo (c,NewtypeConstructor _ _ ty) =
 >           ppIDecl (mkDecl c ty) <+> text "-- newtype constructor"
 >         ppInfo (x,Value _ _ ty) = ppIDecl (mkDecl x ty)
 >         mkDecl f (ForAll _ ty) =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2517 2007-10-18 14:23:42Z wlux $
+% $Id: ILTrans.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -77,13 +77,13 @@ synonyms in place of newtype declarations (see Sect.~\ref{sec:IL}).
 >    IL.FunctionDecl f [v] (translType ty) (IL.Variable v)]
 >   where f = qualifyWith m (nconstr nc)
 >         v = head (argNames (mkIdent ""))
->         ty = rawType (snd (conType f tyEnv))
+>         ty = rawType (thd3 (conType f tyEnv))
 >         argType (TypeArrow ty _) = ty
 
 > translConstrDecl :: ModuleIdent -> ValueEnv -> ConstrDecl -> IL.ConstrDecl
 > translConstrDecl m tyEnv d = IL.ConstrDecl c (map translType (arrowArgs ty))
 >   where c = qualifyWith m (constr d)
->         ty = rawType (snd (conType c tyEnv))
+>         ty = rawType (thd3 (conType c tyEnv))
 
 > translForeign :: ModuleIdent -> ValueEnv -> Ident -> CallConv -> String
 >               -> IL.Decl
@@ -124,6 +124,9 @@ which are imported into the interface from another module.
 >   IL.ConstrDecl (qualifyWith m c) (map translType (toTypes m tvs tys))
 > translIntfConstrDecl m tvs (ConOpDecl _ _ _ ty1 op ty2) =
 >   IL.ConstrDecl (qualifyWith m op) (map translType (toTypes m tvs [ty1,ty2]))
+> translIntfConstrDecl m tvs (RecordDecl _ _ _ c fs) =
+>   IL.ConstrDecl (qualifyWith m c) (map translType (toTypes m tvs tys))
+>   where tys = [ty | FieldDecl _ ls ty <- fs, l <- ls]
 
 \end{verbatim}
 \paragraph{Types}

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryUtils.lhs 2511 2007-10-17 17:28:54Z wlux $
+% $Id: CurryUtils.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -122,9 +122,26 @@ declaration, respectively.
 > constr :: ConstrDecl -> Ident
 > constr (ConstrDecl _ _ _ c _) = c
 > constr (ConOpDecl _ _ _ _ op _) = op
+> constr (RecordDecl _ _ _ c _) = c
 
 > nconstr :: NewConstrDecl -> Ident
 > nconstr (NewConstrDecl _ c _) = c
+> nconstr (NewRecordDecl _ c _ _) = c
+
+\end{verbatim}
+The functions \texttt{labels} and \texttt{nlabel} return the field
+label identifiers of a data constructor and newtype constructor
+declaration, respectively.
+\begin{verbatim}
+
+> labels :: ConstrDecl -> [Ident]
+> labels (ConstrDecl _ _ _ _ _) = []
+> labels (ConOpDecl _ _ _ _ _ _) = []
+> labels (RecordDecl _ _ _ _ fs) = [l | FieldDecl _ ls _ <- fs, l <- ls]
+
+> nlabel :: NewConstrDecl -> [Ident]
+> nlabel (NewConstrDecl _ _ _) = []
+> nlabel (NewRecordDecl _ _ l _) = [l]
 
 \end{verbatim}
 The functions \texttt{methods} and \texttt{imethod} return the
@@ -171,13 +188,24 @@ name.
 > opName (InfixConstr _ c) = c
 
 \end{verbatim}
+The function \texttt{orderFields} sorts the arguments of a record
+pattern or expression into a fixed order, which usually is the order
+in which the labels appear in the record's declaration.
+\begin{verbatim}
+
+> orderFields :: [Field a] -> [Ident] -> [Maybe a]
+> orderFields fs ls = map (flip lookup [(unqualify l,x) | Field l x <- fs]) ls
+
+\end{verbatim}
 Here are a few convenience functions for constructing (elements of)
 abstract syntax trees.
 \begin{verbatim}
 
 > funDecl :: Position -> Ident -> [ConstrTerm a] -> Expression a -> Decl a
-> funDecl p f ts e =
->   FunctionDecl p f [Equation p (FunLhs f ts) (SimpleRhs p e [])]
+> funDecl p f ts e = FunctionDecl p f [funEqn p f ts e]
+
+> funEqn :: Position -> Ident -> [ConstrTerm a] -> Expression a -> Equation a
+> funEqn p f ts e = Equation p (FunLhs f ts) (SimpleRhs p e [])
 
 > patDecl :: Position -> ConstrTerm a -> Expression a -> Decl a
 > patDecl p t e = PatternDecl p t (SimpleRhs p e [])

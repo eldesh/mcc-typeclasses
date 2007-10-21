@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2514 2007-10-18 10:43:08Z wlux $
+% $Id: TypeCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -37,6 +37,7 @@ goal is returned.
 > import List
 > import Maybe
 > import Monad
+> import Position
 > import PredefIdent
 > import PredefTypes
 > import Pretty
@@ -79,6 +80,7 @@ current module to the type environment.
 > typeCheck :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv -> [TopDecl a]
 >           -> Error (ValueEnv,[TopDecl Type])
 > typeCheck m tcEnv iEnv tyEnv ds =
+>   sequenceE [tcDataDecl tcEnv tvs cs | DataDecl _ _ _ tvs cs _ <- tds] >>
 >   run (do
 >          (cx,vds') <- tcDecls m tcEnv [d | BlockDecl d <- vds]
 >          unless (null cx) (internalError ("typeCheck " ++ show cx))
@@ -156,21 +158,31 @@ expressions because a goal has no top-level declarations.
 \end{verbatim}
 \paragraph{Defining Data Constructors and Methods}
 First, the types of all data and newtype constructors as well as those
-of all type class methods are entered into the type environment. All
-type synonyms occurring in their types are expanded.
+of their field labels and the types of all type class methods are
+entered into the type environment. All type synonyms occurring in
+their types are expanded.
 \begin{verbatim}
 
 > bindTypeValues :: ModuleIdent -> TCEnv -> TopDecl a -> ValueEnv -> ValueEnv
 > bindTypeValues m tcEnv (DataDecl _ cxL tc tvs cs _) tyEnv =
->   foldr bind tyEnv cs
->   where bind (ConstrDecl _ _ cxR c tys) =
->           bindConstr DataConstructor m tcEnv cxL tc tvs cxR c tys
->         bind (ConOpDecl _ _ cxR ty1 op ty2) =
->           bindConstr DataConstructor m tcEnv cxL tc tvs cxR op [ty1,ty2]
+>   foldr bindCon (foldr (uncurry bindLab) tyEnv (nubBy sameLabel ls)) cs
+>   where ls = [(l,ty) | RecordDecl _ _ _ _ fs <- cs,
+>                        FieldDecl _ ls ty <- fs, l <- ls]
+>         bindCon (ConstrDecl _ _ cxR c tys) =
+>           bindConstr m tcEnv cxL tc tvs cxR c (zip (repeat anonId) tys)
+>         bindCon (ConOpDecl _ _ cxR ty1 op ty2) =
+>           bindConstr m tcEnv cxL tc tvs cxR op [(anonId,ty1),(anonId,ty2)]
+>         bindCon (RecordDecl _ _ cxR c fs) =
+>           bindConstr m tcEnv cxL tc tvs cxR c tys
+>           where tys = [(l,ty) | FieldDecl _ ls ty <- fs, l <- ls]
+>         bindLab = bindLabel m tcEnv cxL tc tvs
+>         sameLabel (l1,_) (l2,_) = l1 == l2
 > bindTypeValues m tcEnv (NewtypeDecl _ cx tc tvs nc _) tyEnv = bind nc tyEnv
 >   where bind (NewConstrDecl _ c ty) =
->           bindConstr (const . const . NewtypeConstructor)
->                      m tcEnv cx tc tvs [] c [ty]
+>           bindNewConstr m tcEnv cx tc tvs c anonId ty
+>         bind (NewRecordDecl _ c l ty) =
+>           bindNewConstr m tcEnv cx tc tvs c l ty .
+>           bindLabel m tcEnv cx tc tvs l ty
 > bindTypeValues _ _ (TypeDecl _ _ _ _) tyEnv = tyEnv
 > bindTypeValues m tcEnv (ClassDecl _ _ cls tv ds) tyEnv = foldr bind tyEnv ds
 >   where cls' = qualifyWith m cls
@@ -182,12 +194,26 @@ type synonyms occurring in their types are expanded.
 > bindTypeValues _ _ (DefaultDecl _ _) tyEnv = tyEnv
 > bindTypeValues _ _ (BlockDecl _) tyEnv = tyEnv
 
-> bindConstr :: (QualIdent -> Int -> ConstrInfo -> TypeScheme -> ValueInfo)
->            -> ModuleIdent -> TCEnv -> [ClassAssert] -> Ident -> [Ident]
->            -> [ClassAssert] -> Ident -> [TypeExpr] -> ValueEnv -> ValueEnv
-> bindConstr f m tcEnv cxL tc tvs cxR c tys =
->   globalBindTopEnv m c (f (qualifyWith m c) (length tys) ci (typeScheme ty))
->   where (ci,ty) = expandConstrType tcEnv cxL (qualifyWith m tc) tvs cxR tys
+> bindConstr :: ModuleIdent -> TCEnv -> [ClassAssert] -> Ident -> [Ident]
+>            -> [ClassAssert] -> Ident -> [(Ident,TypeExpr)] -> ValueEnv
+>            -> ValueEnv
+> bindConstr m tcEnv cxL tc tvs cxR c tys = globalBindTopEnv m c $
+>   DataConstructor (qualifyWith m c) (length tys) ls ci (typeScheme ty)
+>   where (ci,ty) = expandConstrType tcEnv cxL (qualifyWith m tc) tvs cxR tys'
+>         (ls,tys') = unzip tys
+
+> bindNewConstr :: ModuleIdent -> TCEnv -> [ClassAssert] -> Ident -> [Ident]
+>               -> Ident -> Ident -> TypeExpr -> ValueEnv -> ValueEnv
+> bindNewConstr m tcEnv cx tc tvs c l ty = globalBindTopEnv m c $
+>   NewtypeConstructor (qualifyWith m c) l (typeScheme ty')
+>   where ty' = snd (expandConstrType tcEnv cx (qualifyWith m tc) tvs [] [ty])
+
+> bindLabel :: ModuleIdent -> TCEnv -> [ClassAssert] -> Ident -> [Ident]
+>           -> Ident -> TypeExpr -> ValueEnv -> ValueEnv
+> bindLabel m tcEnv cx tc tvs l ty =
+>   globalBindTopEnv m l (Value (qualifyWith m l) 1 (typeScheme ty'))
+>   where ty' = expandPolyType tcEnv (QualTypeExpr cx (ArrowType ty0 ty))
+>         ty0 = constrType (qualifyWith m tc) tvs
 
 > bindMethods :: ModuleIdent -> TCEnv -> QualIdent -> Ident -> [Ident]
 >             -> QualTypeExpr -> ValueEnv -> ValueEnv
@@ -197,6 +223,10 @@ type synonyms occurring in their types are expanded.
 
 > bindMethod :: ModuleIdent -> TypeScheme -> Ident -> ValueEnv -> ValueEnv
 > bindMethod m ty f = globalBindTopEnv m f (Value (qualifyWith m f) 0 ty)
+
+> constrType :: QualIdent -> [Ident] -> TypeExpr
+> constrType tc tvs =
+>   foldl ApplyType (ConstructorType tc) (map VariableType tvs)
 
 \end{verbatim}
 \paragraph{Type Signatures}
@@ -215,6 +245,39 @@ the signature.
 > bindTypeSigs (TypeSig _ vs ty) env = foldr (flip bindEnv ty) env vs 
 > bindTypeSigs _ env = env
         
+\end{verbatim}
+\paragraph{Top-level Declarations}
+When a field label occurs in more than one constructor declaration of
+a data type, the compiler ensures that the label is defined
+consistently. In addition, the compiler ensures that no existentially
+quantified type variable occurs in the type of a field label because
+such type variables necessarily escape their scope with the type of
+the record selection function associated with the field label.
+\begin{verbatim}
+
+> tcDataDecl :: TCEnv -> [Ident] -> [ConstrDecl] -> Error ()
+> tcDataDecl tcEnv tvs cs =
+>   mapE (uncurry (tcFieldLabel tcEnv tvs)) ls >>=
+>   mapE_ (uncurry tcFieldLabels) . groupLabels
+>   where ls = [(P p l,ty) | RecordDecl _ _ _ _ fs <- cs,
+>                            FieldDecl p ls ty <- fs, l <- ls]
+
+> tcFieldLabel :: TCEnv -> [Ident] -> P Ident -> TypeExpr
+>              -> Error (P Ident,QualType)
+> tcFieldLabel tcEnv tvs (P p l) ty
+>   | n <= length tvs = return (P p l,ty')
+>   | otherwise = errorAt p (skolemFieldLabel l)
+>   where ForAll n ty' = polyType (expandMonoType tcEnv tvs ty)
+
+> tcFieldLabels :: P Ident -> [QualType] -> Error ()
+> tcFieldLabels (P p l) (ty:tys) =
+>   unless (all (ty ==) tys) (errorAt p (inconsistentFieldLabel l))
+
+> groupLabels :: Eq a => [(a,b)] -> [(a,[b])]
+> groupLabels [] = []
+> groupLabels ((x,y):xys) = (x,y:map snd xys') : groupLabels xys''
+>   where (xys',xys'') = partition ((x ==) . fst) xys
+
 \end{verbatim}
 \paragraph{Declaration Groups}
 Before type checking a group of declarations, a dependency analysis is
@@ -653,6 +716,9 @@ context because the context of a function's type signature is
 > instance Binding (Expression a) where
 >   isNonExpansive tyEnv = isNonExpansiveApp tyEnv 0
 
+> instance Binding a => Binding (Field a) where
+>   isNonExpansive tyEnv (Field _ e) = isNonExpansive tyEnv e
+
 > isNonExpansiveApp :: ValueEnv -> Int -> Expression a -> Bool
 > isNonExpansiveApp _ _ (Literal _ _) = True
 > isNonExpansiveApp tyEnv n (Variable _ v)
@@ -661,6 +727,10 @@ context because the context of a function's type signature is
 > isNonExpansiveApp _ _ (Constructor _ _) = True
 > isNonExpansiveApp tyEnv n (Paren e) = isNonExpansiveApp tyEnv n e
 > isNonExpansiveApp tyEnv n (Typed e _) = isNonExpansiveApp tyEnv n e
+> isNonExpansiveApp tyEnv _ (Record _ _ fs) = isNonExpansive tyEnv fs
+>   -- FIXME: stricly speaking a record construction is non-expansive
+>   -- only if *all* field labels are present; for instance, (:){}
+>   -- probably should be considered expansive
 > isNonExpansiveApp tyEnv _ (Tuple es) = isNonExpansive tyEnv es
 > isNonExpansiveApp tyEnv _ (List _ es) = isNonExpansive tyEnv es
 > isNonExpansiveApp tyEnv n (Apply f e) =
@@ -937,6 +1007,13 @@ in \texttt{tcFunctionDecl} above.
 >   do
 >     (cx,ty,t') <- tcConstrTerm tcEnv p t
 >     return (cx,ty,ParenPattern t')
+> tcConstrTerm tcEnv p t@(RecordPattern _ c fs) =
+>   do
+>     (cx,ty) <- liftM (apSnd arrowBase) (fetchSt >>= skol tcEnv . conType c)
+>     (cxs,fs') <-
+>       liftM unzip $ mapM (tcField tcConstrTerm "pattern" doc tcEnv p ty) fs
+>     return (cx ++ concat cxs,ty,RecordPattern ty c fs')
+>   where doc t1 = ppConstrTerm 0 t $-$ text "Term:" <+> ppConstrTerm 0 t1
 > tcConstrTerm tcEnv p (TuplePattern ts) =
 >   do
 >     (cxs,tys,ts') <- liftM unzip3 $ mapM (tcConstrTerm tcEnv p) ts
@@ -1018,7 +1095,7 @@ in \texttt{tcFunctionDecl} above.
 >     return (cx,ty,Variable ty v)
 > tcExpr _ _ _ (Constructor _ c) =
 >   do
->     (cx,ty) <- fetchSt >>= inst . snd . conType c
+>     (cx,ty) <- fetchSt >>= inst . thd3 . conType c
 >     return (cx,ty,Constructor ty c)
 > tcExpr m tcEnv p (Typed e sig) =
 >   do
@@ -1040,6 +1117,20 @@ in \texttt{tcFunctionDecl} above.
 >   do
 >     (cx,ty,e') <- tcExpr m tcEnv p e
 >     return (cx,ty,Paren e')
+> tcExpr m tcEnv p e@(Record _ c fs) =
+>   do
+>     (cx,ty) <- liftM (apSnd arrowBase) (fetchSt >>= inst . thd3 . conType c)
+>     (cxs,fs') <-
+>       liftM unzip $ mapM (tcField (tcExpr m) "construction" doc tcEnv p ty) fs
+>     return (cx ++ concat cxs,ty,Record ty c fs')
+>   where doc e1 = ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1
+> tcExpr m tcEnv p e@(RecordUpdate e1 fs) =
+>   do
+>     (cx,ty,e1') <- tcExpr m tcEnv p e1
+>     (cxs,fs') <-
+>       liftM unzip $ mapM (tcField (tcExpr m) "update" doc tcEnv p ty) fs
+>     return (cx ++ concat cxs,ty,RecordUpdate e1' fs')
+>   where doc e1 = ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1
 > tcExpr m tcEnv p (Tuple es) =
 >   do
 >     (cxs,tys,es') <- liftM unzip3 $ mapM (tcExpr m tcEnv p) es
@@ -1266,6 +1357,18 @@ in \texttt{tcFunctionDecl} above.
 >   do
 >     (cx,ty,_) <- tcExpr m tcEnv p (Constructor a op)
 >     return (cx,ty,InfixConstr ty op)
+
+> tcField :: (TCEnv -> Position -> a b -> TcState (Context,Type,a Type))
+>         -> String -> (a b -> Doc) -> TCEnv -> Position -> Type -> Field (a b)
+>         -> TcState (Context,Field (a Type))
+> tcField tc what doc tcEnv p ty (Field l x) =
+>   do
+>     (cx,TypeArrow ty1 ty2) <- fetchSt >>= inst . funType l
+>     -- NB the following unification cannot fail; it serves only for
+>     --    instantiating the type variables in the field label's type
+>     unify p "field label" empty tcEnv ty [] ty1
+>     (cx',x') <- tc tcEnv p x >>- unify p ("record " ++ what) (doc x) tcEnv ty2
+>     return (cx ++ cx',Field l x')
 
 \end{verbatim}
 The function \texttt{tcArrow} checks that its argument can be used as
@@ -1589,8 +1692,8 @@ constructor's declaration are added to the dynamic instance
 environment.
 \begin{verbatim}
 
-> skol :: TCEnv -> (ConstrInfo,TypeScheme) -> TcState (Context,Type)
-> skol tcEnv (ConstrInfo m cxR,ForAll n (QualType cx ty)) =
+> skol :: TCEnv -> ([Ident],ConstrInfo,TypeScheme) -> TcState (Context,Type)
+> skol tcEnv (_,ConstrInfo m cxR,ForAll n (QualType cx ty)) =
 >   do
 >     tys <- replicateM (n - m) freshTypeVar
 >     tys' <- replicateM m freshSkolem
@@ -1658,6 +1761,10 @@ themselves, e.g., operator fixity declarations.
 Error functions.
 \begin{verbatim}
 
+> inconsistentFieldLabel :: Ident -> String
+> inconsistentFieldLabel l =
+>   "Types for field label " ++ name l ++ " do not agree"
+
 > polymorphicVar :: Ident -> String
 > polymorphicVar v = "Variable " ++ name v ++ " cannot have polymorphic type"
 
@@ -1698,6 +1805,10 @@ Error functions.
 >         text "Inferred type:" <+> ppType tcEnv ty2,
 >         text "Expected type:" <+> ppType tcEnv ty1,
 >         reason]
+
+> skolemFieldLabel :: Ident -> String
+> skolemFieldLabel l =
+>   "Existential type escapes with type of record selector " ++ name l
 
 > skolemEscapingScope :: TCEnv -> Doc -> QualType -> String
 > skolemEscapingScope tcEnv what ty = show $

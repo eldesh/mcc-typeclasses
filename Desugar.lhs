@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: Desugar.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -101,7 +101,7 @@ incompatible with the Curry report, which deliberately defines
 > bindSuccess :: ValueEnv -> ValueEnv
 > bindSuccess = localBindTopEnv successId successCon
 >   where successCon =
->           DataConstructor (qualify successId) 0 stdConstrInfo
+>           DataConstructor (qualify successId) 0 [] stdConstrInfo
 >                           (polyType successType)
 
 \end{verbatim}
@@ -116,17 +116,18 @@ of a module.
 \begin{verbatim}
 
 > desugar :: TCEnv -> ValueEnv -> Module Type -> (Module Type,ValueEnv)
-> desugar tcEnv tyEnv (Module m es is ds) = (Module m es is ds',tyEnv')
->   where (ds',tyEnv') = run (desugarModule m ds) tcEnv (bindSuccess tyEnv)
+> desugar tcEnv tyEnv (Module m es is ds) = (Module m es is ds',tyEnv'')
+>   where (ds',tyEnv'') = run (desugarModule m tyEnv' ds) tcEnv tyEnv'
+>         tyEnv' = bindSuccess tyEnv
 
-> desugarModule :: ModuleIdent -> [TopDecl Type]
+> desugarModule :: ModuleIdent -> ValueEnv -> [TopDecl Type]
 >               -> DesugarState ([TopDecl Type],ValueEnv)
-> desugarModule m ds =
+> desugarModule m tyEnv ds =
 >   do
->     tds' <- mapM (desugarTopDecl m) tds
+>     dss' <- mapM (desugarTopDecl m tyEnv) tds
 >     vds' <- desugarDeclGroup m [d | BlockDecl d <- vds]
 >     tyEnv' <- fetchSt
->     return (tds' ++ map BlockDecl vds',tyEnv')
+>     return (concat dss' ++ map BlockDecl vds',tyEnv')
 >   where (vds,tds) = partition isBlockDecl ds
 
 \end{verbatim}
@@ -190,23 +191,65 @@ Sect.~\ref{sec:dtrans}).
 > liftGoalVars e = ([],e)
 
 \end{verbatim}
-At the top-level, we have to desugar the method declarations of each
-class and instance declaration. The type declarations are not affected
-by desugaring.
+At the top-level of a module, we introduce the selector function of
+each field label defined in that module. In addition, we have to
+desugar the method declarations of each class and instance
+declaration.
+
+\ToDo{Instantiate quantified type variables in the types of the
+  arguments of the selector functions with fresh type variables.}
 \begin{verbatim}
 
-> desugarTopDecl :: ModuleIdent -> TopDecl Type -> DesugarState (TopDecl Type)
-> desugarTopDecl _ (DataDecl p cx tc tvs cs clss) =
->   return (DataDecl p cx tc tvs cs clss)
-> desugarTopDecl _ (NewtypeDecl p cx tc tvs nc clss) =
->   return (NewtypeDecl p cx tc tvs nc clss)
-> desugarTopDecl _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
-> desugarTopDecl m (ClassDecl p cx cls tv ds) =
->   liftM (ClassDecl p cx cls tv . (filter isTypeSig ds ++))
->         (desugarDeclGroup m ds)
-> desugarTopDecl m (InstanceDecl p cx cls ty ds) =
->   liftM (InstanceDecl p cx cls ty) (desugarDeclGroup m ds)
-> desugarTopDecl _ (DefaultDecl p tys) = return (DefaultDecl p tys)
+> desugarTopDecl :: ModuleIdent -> ValueEnv -> TopDecl Type
+>                -> DesugarState [TopDecl Type]
+> desugarTopDecl m tyEnv (DataDecl p cx tc tvs cs clss) =
+>   do
+>     ds' <-
+>       mapM (selectorDecl m tyEnv p (map (qualifyWith m . constr) cs))
+>            (nub (concatMap labels cs))
+>     return (DataDecl p cx tc tvs cs clss : map BlockDecl ds')
+> desugarTopDecl m tyEnv (NewtypeDecl p cx tc tvs nc clss) =
+>   do
+>     ds' <- newSelectorDecl m tyEnv p (qualifyWith m (nconstr nc))
+>     return (NewtypeDecl p cx tc tvs nc clss : map BlockDecl ds')
+> desugarTopDecl _ _ (TypeDecl p tc tvs ty) = return [TypeDecl p tc tvs ty]
+> desugarTopDecl m _ (ClassDecl p cx cls tv ds) =
+>   do
+>     vds' <- desugarDeclGroup m vds
+>     return [ClassDecl p cx cls tv (tds ++ vds')]
+>   where (tds,vds) = partition isTypeSig ds
+> desugarTopDecl m _ (InstanceDecl p cx cls ty ds) =
+>   do
+>     ds' <- desugarDeclGroup m ds
+>     return [InstanceDecl p cx cls ty ds']
+> desugarTopDecl _ _ (DefaultDecl p tys) = return [DefaultDecl p tys]
+
+> selectorDecl :: ModuleIdent -> ValueEnv -> Position -> [QualIdent] -> Ident
+>              -> DesugarState (Decl Type)
+> selectorDecl m tyEnv p cs l =
+>   liftM (matchDecl p l . concat) (mapM (selectorEqn m tyEnv l) cs)
+
+> selectorEqn :: ModuleIdent -> ValueEnv -> Ident -> QualIdent
+>             -> DesugarState [(ConstrTerm Type,Expression Type)]
+> selectorEqn m tyEnv l c =
+>   case elemIndex l ls of
+>     Just n ->
+>       do
+>         vs <- mapM (freshVar m "_#rec") tys
+>         return [(constrPattern ty0 c vs,uncurry mkVar (vs!!n))]
+>     Nothing -> return []
+>   where (ls,_,ty) = conType c tyEnv
+>         (tys,ty0) = arrowUnapply (rawType ty)
+
+> newSelectorDecl :: ModuleIdent -> ValueEnv -> Position -> QualIdent
+>                 -> DesugarState [Decl Type]
+> newSelectorDecl m tyEnv p c
+>   | l /= anonId =
+>       do
+>         v <- freshVar m "_#rec" (head (arrowArgs (rawType ty)))
+>         return [funDecl p l [uncurry VariablePattern v] (uncurry mkVar v)]
+>   | otherwise = return []
+>   where (l:_,_,ty) = conType c tyEnv
 
 \end{verbatim}
 Within a local declaration group, all fixity declarations, type
@@ -317,6 +360,13 @@ with a local declaration for $v$.
 > desugarTerm m p ds (InfixPattern ty t1 op t2) =
 >   desugarTerm m p ds (ConstructorPattern ty op [t1,t2])
 > desugarTerm m p ds (ParenPattern t) = desugarTerm m p ds t
+> desugarTerm m p ds (RecordPattern ty c fs) =
+>   do
+>     (ls,tys) <- liftM (argumentTypes ty c) fetchSt
+>     ts <- zipWithM argument tys (orderFields fs ls)
+>     desugarTerm m p ds (ConstructorPattern ty c ts)
+>   where argument ty = maybe (fresh ty) return
+>         fresh ty = liftM (uncurry VariablePattern) (freshVar m "_#rec" ty)
 > desugarTerm m p ds (TuplePattern ts) =
 >   desugarTerm m p ds
 >     (ConstructorPattern (tupleType (map typeOf ts)) (qTupleId (length ts)) ts)
@@ -405,6 +455,32 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 > desugarExpr _ _ (Constructor ty c) = return (Constructor ty c)
 > desugarExpr m p (Paren e) = desugarExpr m p e
 > desugarExpr m p (Typed e _) = desugarExpr m p e
+> desugarExpr m p (Record ty c fs) =
+>   do
+>     (ls,tys) <- liftM (argumentTypes ty c) fetchSt
+>     let es = zipWith argument tys (orderFields fs ls)
+>     desugarExpr m p (applyConstr ty c tys es)
+>   where argument ty = maybe (prelUndefined ty) id
+> desugarExpr m p (RecordUpdate e fs) =
+>   do
+>     tyEnv <- fetchSt
+>     f <- freshIdent m "_#upd" 1 (polyType ty')
+>     cs <- liftM (constructors tc) (liftSt envRt)
+>     eqs <- mapM (updateEqn m tyEnv . qualifyLike tc) cs
+>     desugarExpr m p (Let [matchDecl p f (concat eqs)] (Apply (mkVar ty' f) e))
+>   where ty = typeOf e
+>         ty' = TypeArrow ty ty
+>         tc = rootOfType (arrowBase ty)
+>         ls = [unqualify l | Field l _ <- fs]
+>         updateEqn m tyEnv c
+>           | all (`elem` ls') ls =
+>               do
+>                 vs <- mapM (freshVar m "_#rec") tys
+>                 let es = zipWith argument vs (orderFields fs ls')
+>                 return [(constrPattern ty c vs,applyConstr ty c tys es)]
+>           | otherwise = return []
+>           where (ls',tys) = argumentTypes ty c tyEnv
+>         argument v = maybe (uncurry mkVar v) id
 > desugarExpr m p (Tuple es) =
 >   liftM (apply (Constructor (foldr TypeArrow (tupleType tys) tys)
 >                             (qTupleId (length es))))
@@ -761,6 +837,7 @@ Generation of fresh names
 Prelude entities
 \begin{verbatim}
 
+> prelUndefined a = preludeFun [] a "undefined"
 > prelUnif a = preludeFun [a,a] successType "=:="
 > prelFromInt a = preludeFun [intType] a "fromInt"
 > prelFromFloat a = preludeFun [floatType] a "fromFloat"
@@ -807,5 +884,16 @@ Auxiliary definitions
 > ioResType :: Type -> Type
 > ioResType (TypeApply (TypeConstructor tc) ty) | tc == qIOId = ty
 > ioResType ty = internalError ("ioResType " ++ show ty)
+
+> matchDecl :: Position -> Ident -> [(ConstrTerm a,Expression a)] -> Decl a
+> matchDecl p f eqs = FunctionDecl p f [funEqn p f [t] e | (t,e) <- eqs]
+
+> constrPattern :: a -> QualIdent -> [(a,Ident)] -> ConstrTerm a
+> constrPattern ty c vs =
+>   ConstructorPattern ty c (map (uncurry VariablePattern) vs)
+
+> applyConstr :: Type -> QualIdent -> [Type] -> [Expression Type]
+>             -> Expression Type
+> applyConstr ty c tys = apply (Constructor (foldr TypeArrow ty tys) c)
 
 \end{verbatim}

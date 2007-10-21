@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2521 2007-10-19 21:31:02Z wlux $
+% $Id: DictTrans.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -155,6 +155,9 @@ generator.
 >           dictTransConstrDecl' p evs cxR c tys
 >         dictTransConstrDecl (ConOpDecl p evs cxR ty1 op ty2) =
 >           dictTransConstrDecl' p evs cxR op [ty1,ty2]
+>         dictTransConstrDecl (RecordDecl p evs cxR c fs) =
+>           dictTransConstrDecl' p evs cxR c tys
+>           where tys = [ty | FieldDecl _ ls ty <- fs, l <- ls]
 >         dictTransConstrDecl' p evs cxR c tys = ConstrDecl p evs [] c tys'
 >           where tys' = map (fromType tcEnv (tvs ++ evs)) . arrowArgs $
 >                        uncurry (transformConstrType tcEnv) $
@@ -241,7 +244,7 @@ uses a default implementation that is equivalent to
 
 > bindClassDict :: ModuleIdent -> QualIdent -> Type -> ValueEnv -> ValueEnv
 > bindClassDict m c ty = bindEntity m c $
->   DataConstructor c (arrowArity ty) stdConstrInfo (polyType ty)
+>   DataConstructor c (arrowArity ty) [] stdConstrInfo (polyType ty)
 
 > bindDefaultMethod :: ModuleIdent -> ValueEnv -> QualIdent -> Ident
 >                   -> ValueEnv -> ValueEnv
@@ -618,13 +621,13 @@ the implicit dictionary arguments to the declaration.
 
 > dictTransValues :: TCEnv -> ValueEnv -> ValueEnv
 > dictTransValues tcEnv = fmap transInfo
->   where transInfo (DataConstructor c _ ci (ForAll n ty)) =
->           DataConstructor c (arrowArity ty') (constrInfo ci)
+>   where transInfo (DataConstructor c _ ls ci (ForAll n ty)) =
+>           DataConstructor c (arrowArity ty') ls (constrInfo ci)
 >                           (ForAll n (qualType ty'))
 >           where ty' = transformConstrType tcEnv ci ty
 >                 constrInfo (ConstrInfo n _) = ConstrInfo n []
->         transInfo (NewtypeConstructor c ty) =
->           NewtypeConstructor c (tmap (qualType . unqualType) ty)
+>         transInfo (NewtypeConstructor c l ty) =
+>           NewtypeConstructor c l (tmap (qualType . unqualType) ty)
 >         transInfo (Value f n ty) = Value f n' ty'
 >           where n' = n + arrowArity (rawType ty') - arrowArity (rawType ty)
 >                 ty' = tmap (qualType . transformQualType tcEnv) ty
@@ -640,6 +643,9 @@ the implicit dictionary arguments to the declaration.
 >             dictTransConstrDecl' p evs cxR c tys
 >           dictTransConstrDecl (ConOpDecl p evs cxR ty1 op ty2) =
 >             dictTransConstrDecl' p evs cxR op [ty1,ty2]
+>           dictTransConstrDecl (RecordDecl p evs cxR c fs) =
+>             dictTransConstrDecl' p evs cxR c tys
+>             where tys = [ty | FieldDecl _ ls ty <- fs, l <- ls]
 >           dictTransConstrDecl' p evs cxR c tys = ConstrDecl p evs [] c tys'
 >             where tys' = map (fromType tcEnv (tvs ++ evs)) . arrowArgs $
 >                          uncurry (transformConstrType tcEnv) $
@@ -1137,7 +1143,8 @@ declaration.
 > constrTypeRhs (ConstrInfo _ cxR) (QualType _ ty) = QualType cxR ty
 
 > conTypeRhs :: QualIdent -> ValueEnv -> TypeScheme
-> conTypeRhs c tyEnv = uncurry (tmap . constrTypeRhs) (conType c tyEnv)
+> conTypeRhs c tyEnv = tmap (constrTypeRhs ci) ty
+>   where (_,ci,ty) = conType c tyEnv
 
 \end{verbatim}
 Convenience functions for constructing parts of the syntax tree.

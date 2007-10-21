@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ImportSyntaxCheck.lhs 2519 2007-10-18 23:09:52Z wlux $
+% $Id: ImportSyntaxCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -38,8 +38,10 @@ declarations.
 > type ExpFunEnv = Env Ident ValueKind
 
 > bindType :: ModuleIdent -> IDecl -> ExpTypeEnv -> ExpTypeEnv
-> bindType m (IDataDecl _ _ tc _ _ cs cs') = bindData m tc cs' (map constr cs)
-> bindType m (INewtypeDecl _ _ tc _ _ nc cs') = bindData m tc cs' [nconstr nc]
+> bindType m (IDataDecl _ _ tc _ _ cs xs') = bindData m tc xs' xs
+>   where xs = map constr cs ++ nub (concatMap labels cs)
+> bindType m (INewtypeDecl _ _ tc _ _ nc xs') = bindData m tc xs' xs
+>   where xs = nconstr nc : nlabel nc
 > bindType m (ITypeDecl _ tc _ _ _) = bindAlias m tc
 > bindType m (IClassDecl _ _ cls _ _ ds fs') =
 >   bindClass m cls fs' (map imethod ds)
@@ -47,8 +49,8 @@ declarations.
 
 > bindData :: ModuleIdent -> QualIdent -> [Ident] -> [Ident] -> ExpTypeEnv
 >          -> ExpTypeEnv
-> bindData m tc cs' cs =
->   bindUnqual tc (Data (qualQualify m tc) (filter (`notElem` cs') cs))
+> bindData m tc xs' xs =
+>   bindUnqual tc (Data (qualQualify m tc) (filter (`notElem` xs') xs))
 
 > bindAlias :: ModuleIdent -> QualIdent -> ExpTypeEnv -> ExpTypeEnv
 > bindAlias m tc = bindUnqual tc (Alias (qualQualify m tc))
@@ -59,10 +61,15 @@ declarations.
 >   bindUnqual cls (Class (qualQualify m cls) (filter (`notElem` fs') fs))
 
 > bindValue :: ModuleIdent -> IDecl -> ExpFunEnv -> ExpFunEnv
-> bindValue m (IDataDecl _ _ tc _ _ cs cs') =
->   bindConstrs m tc cs' (map constr cs)
-> bindValue m (INewtypeDecl _ _ tc _ _ nc cs') =
->   bindConstrs m tc cs' [nconstr nc]
+> bindValue m (IDataDecl _ _ tc _ _ cs xs) =
+>   bindConstrs m tc xs (map constr cs) .
+>   bindLabels m tc xs [(l,constrs cs l) | l <- nub (concatMap labels cs)]
+>   where constrs cs l = [constr c | c <- cs, l `elem` labels c]
+> bindValue m (INewtypeDecl _ _ tc _ _ nc xs) =
+>   bindConstrs m tc xs [nconstr nc] .
+>   case nc of
+>     NewConstrDecl _ _ _ -> id
+>     NewRecordDecl _ c l _ -> bindLabels m tc xs [(l,[c])]
 > bindValue m (IClassDecl _ _ cls _ _ ds fs') =
 >   bindMethods m cls fs' (map imethod ds)
 > bindValue m (IFunctionDecl _ f _ _) = bindFun m f
@@ -70,11 +77,21 @@ declarations.
 
 > bindConstrs :: ModuleIdent -> QualIdent -> [Ident] -> [Ident] -> ExpFunEnv
 >             -> ExpFunEnv
-> bindConstrs m tc cs' cs env =
->   foldr (bindConstr (qualQualify m tc)) env (filter (`notElem` cs') cs)
+> bindConstrs m tc xs cs env =
+>   foldr (bindConstr (qualQualify m tc)) env (filter (`notElem` xs) cs)
 
 > bindConstr :: QualIdent -> Ident -> ExpFunEnv -> ExpFunEnv
 > bindConstr tc c = bindEnv c (Constr (qualifyLike tc c))
+
+> bindLabels :: ModuleIdent -> QualIdent -> [Ident] -> [(Ident,[Ident])]
+>            -> ExpFunEnv -> ExpFunEnv
+> bindLabels m tc xs ls env =
+>   foldr (uncurry (bindLabel (qualQualify m tc))) env
+>         (filter ((`notElem` xs) . fst) ls)
+
+> bindLabel :: QualIdent -> Ident -> [Ident] -> ExpFunEnv -> ExpFunEnv
+> bindLabel tc l cs =
+>   bindEnv l (Var (qualifyLike tc l) (map (qualifyLike tc) cs))
 
 > bindMethods :: ModuleIdent -> QualIdent -> [Ident] -> [Ident] -> ExpFunEnv
 >             -> ExpFunEnv
@@ -82,10 +99,10 @@ declarations.
 >   foldr (bindMethod (qualQualify m cls)) env (filter (`notElem` fs') fs)
 
 > bindMethod :: QualIdent -> Ident -> ExpFunEnv -> ExpFunEnv
-> bindMethod cls f = bindEnv f (Var (qualifyLike cls f))
+> bindMethod cls f = bindEnv f (Var (qualifyLike cls f) [])
 
 > bindFun :: ModuleIdent -> QualIdent -> ExpFunEnv -> ExpFunEnv
-> bindFun m f = bindUnqual f (Var (qualQualify m f))
+> bindFun m f = bindUnqual f (Var (qualQualify m f) [])
 
 > bindUnqual :: QualIdent -> a -> Env Ident a -> Env Ident a
 > bindUnqual x = bindEnv (unqualify x)
@@ -155,7 +172,7 @@ data constructors are added.
 >   case lookupEnv f vEnv of
 >     Just (Constr _) ->
 >       maybe (errorAt p (importDataConstr m f)) return tcImport
->     Just (Var _) -> return (Import f : fromMaybe [] tcImport)
+>     Just (Var _ _) -> return (Import f : fromMaybe [] tcImport)
 >     Nothing -> maybe (errorAt p (undefinedEntity m f)) return tcImport
 
 > expandHide :: Position -> ModuleIdent -> ExpTypeEnv -> ExpFunEnv -> Ident
@@ -176,7 +193,7 @@ data constructors are added.
 >                -> Error [Import]
 > expandTypeWith p m tEnv tc xs =
 >   do
->     (isType,xs'') <- members p m tEnv tc
+>     (isType,xs'') <- elements p m tEnv tc
 >     mapE_ (errorAt p . undefinedElement isType m tc)
 >           (filter (`notElem` xs'') xs')
 >     return [ImportTypeWith tc xs']
@@ -186,14 +203,14 @@ data constructors are added.
 >               -> Error [Import]
 > expandTypeAll p m tEnv tc =
 >   do
->     (_,xs) <- members p m tEnv tc
+>     (_,xs) <- elements p m tEnv tc
 >     return [ImportTypeWith tc xs]
 
-> members :: Position -> ModuleIdent -> ExpTypeEnv -> Ident
+> elements :: Position -> ModuleIdent -> ExpTypeEnv -> Ident
 >          -> Error (Bool,[Ident])
-> members p m tEnv tc =
+> elements p m tEnv tc =
 >   case lookupEnv tc tEnv of
->     Just (Data _ cs) -> return (True,cs)
+>     Just (Data _ xs) -> return (True,xs)
 >     Just (Alias _) -> return (True,[])
 >     Just (Class _ fs) -> return (False,fs)
 >     Nothing -> errorAt p (undefinedEntity m tc)
@@ -208,7 +225,7 @@ Error messages.
 
 > undefinedElement :: Bool -> ModuleIdent -> Ident -> Ident -> String
 > undefinedElement True m tc c =
->   name c ++ " is not a data constructor of type " ++ name tc
+>   name c ++ " is not a constructor or label of type " ++ name tc
 > undefinedElement False m cls f =
 >   name f ++ " is not a method of type class " ++ name cls
 

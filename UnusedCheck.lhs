@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: UnusedCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 2005-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -45,6 +45,7 @@ according to the compiler options.
 
 > data Undef =
 >     Data Position Ident
+>   | Label Position Ident
 >   | Decl Position Ident
 >   | Meth Position Ident
 >   | Var Position Ident
@@ -56,6 +57,7 @@ according to the compiler options.
 >   | null (filter (`elem` [minUnused..maxUnused]) us) = []
 >   | otherwise = filter warn vs
 >   where warn (Data _ _) = WarnUnusedData `elem` us
+>         warn (Label _ _) = WarnUnusedData `elem` us
 >         warn (Decl _ _) = WarnUnusedDecl `elem` us
 >         warn (Meth _ _) = WarnUnusedDecl `elem` us
 >         warn (Var _ _) = WarnUnusedVar `elem` us
@@ -63,6 +65,7 @@ according to the compiler options.
 
 > format :: Undef -> String
 > format (Data p c) = atP p ("Warning: unused data constructor " ++ name c)
+> format (Label p l) = atP p ("Warning: unused field label " ++ name l)
 > format (Decl p x) = atP p ("Warning: unused variable " ++ name x)
 > format (Meth p f) = atP p ("Warning: unused method " ++ name f)
 > format (Var p x) = atP p ("Warning: unused variable " ++ name x)
@@ -127,6 +130,7 @@ by a traversal of the syntax tree.
 >   used m (ConstructorPattern _ c ts) = used m c . used m ts
 >   used m (InfixPattern _ t1 op t2) = used m t1 . used m op . used m t2
 >   used m (ParenPattern t) = used m t
+>   used m (RecordPattern _ c fs) = used m c . used m fs
 >   used m (TuplePattern ts) = used m ts
 >   used m (ListPattern _ ts) = used m ts
 >   used m (AsPattern _ t) = used m t
@@ -146,6 +150,8 @@ by a traversal of the syntax tree.
 >   used m (Constructor _ c) = used m c
 >   used m (Paren e) = used m e
 >   used m (Typed e _) = used m e
+>   used m (Record _ c fs) = used m c . used m fs
+>   used m (RecordUpdate e fs) = used m e . used m fs
 >   used m (Tuple es) = used m es
 >   used m (List _ es) = used m es
 >   used m (ListCompr e qs) = nest (used m qs . used m e)
@@ -171,6 +177,9 @@ by a traversal of the syntax tree.
 
 > instance SyntaxTree (Alt a) where
 >   used m (Alt p t rhs) = nest (checkUnused p t . used m t . used m rhs)
+
+> instance SyntaxTree a => SyntaxTree (Field a) where
+>   used m (Field l x) = used m l . used m x
 
 > instance SyntaxTree QualIdent where
 >   used m x =
@@ -216,9 +225,16 @@ unused variables of pattern $t$.
 > instance Binder ConstrDecl where
 >   unused used _ (ConstrDecl p _ _ c _) = unusedVars Data used p [c]
 >   unused used _ (ConOpDecl p _ _ _ op _) = unusedVars Data used p [op]
+>   unused used _ (RecordDecl p _ _ c fs) =
+>     unusedVars Data used p [c] . unused used p fs
+
+> instance Binder FieldDecl where
+>   unused used _ (FieldDecl p ls _) = unusedVars Label used p ls
 
 > instance Binder NewConstrDecl where
 >   unused used _ (NewConstrDecl p c _) = unusedVars Data used p [c]
+>   unused used _ (NewRecordDecl p c l _) =
+>     unusedVars Data used p [c] . unusedVars Label used p [l]
 
 > instance Binder (Decl a) where
 >   unused _ _ (InfixDecl _ _ _ _) = id

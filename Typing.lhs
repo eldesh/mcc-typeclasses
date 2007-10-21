@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: Typing.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -8,7 +8,8 @@
 \section{Computing the Type of Curry Expressions}
 \begin{verbatim}
 
-> module Typing(Typeable(..), NewtypeEnv, newtypeEnv, etaType, withType) where
+> module Typing(Typeable(..), NewtypeEnv, newtypeEnv, etaType,
+>               withType, argumentTypes) where
 > import Base
 > import Curry
 > import CurryUtils
@@ -42,6 +43,7 @@ perform any (non-trivial) unifications.
 >   typeOf (ConstructorPattern a _ _) = typeOf a
 >   typeOf (InfixPattern a _ _ _) = typeOf a
 >   typeOf (ParenPattern t) = typeOf t
+>   typeOf (RecordPattern a _ _) = typeOf a
 >   typeOf (TuplePattern ts) = tupleType (map typeOf ts)
 >   typeOf (ListPattern a _) = typeOf a
 >   typeOf (AsPattern _ t) = typeOf t
@@ -51,8 +53,10 @@ perform any (non-trivial) unifications.
 >   typeOf (Literal a _) = typeOf a
 >   typeOf (Variable a _) = typeOf a
 >   typeOf (Constructor a _) = typeOf a
->   typeOf (Typed e _) = typeOf e
 >   typeOf (Paren e) = typeOf e
+>   typeOf (Typed e _) = typeOf e
+>   typeOf (Record a _ _) = typeOf a
+>   typeOf (RecordUpdate e _) = typeOf e
 >   typeOf (Tuple es) = tupleType (map typeOf es)
 >   typeOf (List a _) = typeOf a
 >   typeOf (ListCompr e _) = listType (typeOf e)
@@ -113,8 +117,8 @@ external world.
 >   where initNewtypeEnv = bindEnv qIOId ioType' emptyEnv
 >         ioType' = TypeArrow worldType (tupleType [TypeVariable 0,worldType])
 >         worldType = TypeConstructor (qualify (mkIdent "World"))
->         bindNewtype (DataConstructor _ _ _ _) = id
->         bindNewtype (NewtypeConstructor _ ty) = bindEnv (rootOfType ty2) ty1
+>         bindNewtype (DataConstructor _ _ _ _ _) = id
+>         bindNewtype (NewtypeConstructor _ _ ty) = bindEnv (rootOfType ty2) ty1
 >           where TypeArrow ty1 ty2 = rawType ty
 >         bindNewtype (Value _ _ _) = id
 
@@ -184,5 +188,27 @@ type.
 
 > matchTypes :: NewtypeEnv -> [(Type,Type)] -> TypeSubst -> TypeSubst
 > matchTypes nEnv tys theta = foldr (uncurry (matchType nEnv)) theta tys
+
+\end{verbatim}
+The function \texttt{argumentTypes} returns the labels and the
+argument types of a data constructor instantiated at a particular
+type. This function is useful for desugaring record patterns and
+expressions, where the compiler must compute the types of the omitted
+arguments. Since the type annotation of record patterns and
+expressions applies to the pattern or expression as a whole, the
+instance type is unified with the constructor's result type and the
+resulting substitution is applied to all argument types. Note that
+this is sound because record fields cannot have existentially
+quantified types and therefore all type variables appearing in their
+types occur in the constructor's result type as well. We assume that
+newtype constructors have not yet been replaced when this function is
+used.
+\begin{verbatim}
+
+> argumentTypes :: Type -> QualIdent -> ValueEnv -> ([Ident],[Type])
+> argumentTypes ty c tyEnv =
+>   (ls,map (subst (matchType (newtypeEnv tyEnv) ty0 ty idSubst)) tys)
+>   where (ls,_,ty') = conType c tyEnv
+>         (tys,ty0) = arrowUnapply (rawType ty')
 
 \end{verbatim}

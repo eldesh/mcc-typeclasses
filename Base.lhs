@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2515 2007-10-18 10:54:19Z wlux $
+% $Id: Base.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -93,6 +93,8 @@ variables cannot be computed independently for each declaration.
 >   qfv _ (Constructor _ _) = []
 >   qfv m (Paren e) = qfv m e
 >   qfv m (Typed e _) = qfv m e
+>   qfv m (Record _ _ fs) = qfv m fs
+>   qfv m (RecordUpdate e fs) = qfv m e ++ qfv m fs
 >   qfv m (Tuple es) = qfv m es
 >   qfv m (List _ es) = qfv m es
 >   qfv m (ListCompr e qs) = foldr (qfvStmt m) (qfv m e) qs
@@ -130,6 +132,9 @@ variables cannot be computed independently for each declaration.
 > instance QualExpr (InfixOp a) where
 >   qfv m op = qfv m (infixOp op)
 
+> instance QualExpr a => QualExpr (Field a) where
+>   qfv m (Field _ e) = qfv m e
+
 > instance QuantExpr (ConstrTerm a) where
 >   bv (LiteralPattern _ _) = []
 >   bv (NegativePattern _ _) = []
@@ -137,10 +142,14 @@ variables cannot be computed independently for each declaration.
 >   bv (ConstructorPattern _ _ ts) = bv ts
 >   bv (InfixPattern _ t1 _ t2) = bv t1 ++ bv t2
 >   bv (ParenPattern t) = bv t
+>   bv (RecordPattern _ _ fs) = bv fs
 >   bv (TuplePattern ts) = bv ts
 >   bv (ListPattern _ ts) = bv ts
 >   bv (AsPattern v t) = v : bv t
 >   bv (LazyPattern t) = bv t
+
+> instance QuantExpr a => QuantExpr (Field a) where
+>   bv (Field _ t) = bv t
 
 > instance Expr QualTypeExpr where
 >   fv (QualTypeExpr _ ty) = fv ty

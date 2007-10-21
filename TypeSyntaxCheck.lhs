@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -58,9 +58,10 @@ checking the optional export list of the current module.
 
 > bindType :: ModuleIdent -> TopDecl a -> TypeEnv -> TypeEnv
 > bindType m (DataDecl _ _ tc _ cs _) =
->   globalBindTopEnv m tc (Data (qualifyWith m tc) (map constr cs))
+>   globalBindTopEnv m tc (Data (qualifyWith m tc) xs)
+>   where xs = map constr cs ++ nub (concatMap labels cs)
 > bindType m (NewtypeDecl _ _ tc _ nc _) =
->   globalBindTopEnv m tc (Data (qualifyWith m tc) [nconstr nc])
+>   globalBindTopEnv m tc (Data (qualifyWith m tc) (nconstr nc : nlabel nc))
 > bindType m (TypeDecl _ tc _ _) =
 >   globalBindTopEnv m tc (Alias (qualifyWith m tc))
 > bindType m (ClassDecl _ _ cls _ ds) =
@@ -187,11 +188,24 @@ not contain any additional constraints for that type variable
 >       checkClosedType env p tvs' ty2
 >     return (ConOpDecl p evs cx' ty1' op ty2')
 >   where tvs' = evs ++ tvs
+> checkConstrDecl env tvs (RecordDecl p evs cx c fs) =
+>   do
+>     cx' <- checkTypeLhs env p cx evs
+>     checkClosedContext p cx' tvs'
+>     fs' <- mapE (checkFieldDecl env tvs') fs
+>     return (RecordDecl p evs cx' c fs')
+>   where tvs' = evs ++ tvs
+
+> checkFieldDecl :: TypeEnv -> [Ident] -> FieldDecl -> Error FieldDecl
+> checkFieldDecl env tvs (FieldDecl p ls ty) =
+>   liftE (FieldDecl p ls) (checkClosedType env p tvs ty)
 
 > checkNewConstrDecl :: TypeEnv -> [Ident] -> NewConstrDecl
 >                    -> Error NewConstrDecl
 > checkNewConstrDecl env tvs (NewConstrDecl p c ty) =
 >   liftE (NewConstrDecl p c) (checkClosedType env p tvs ty)
+> checkNewConstrDecl env tvs (NewRecordDecl p c l ty) =
+>   liftE (NewRecordDecl p c l) (checkClosedType env p tvs ty)
 
 \end{verbatim}
 Checking expressions is rather straight forward. The compiler must
@@ -220,6 +234,10 @@ declaration groups.
 > checkExpr env p (Paren e) = liftE Paren (checkExpr env p e)
 > checkExpr env p (Typed e ty) =
 >   liftE2 Typed (checkExpr env p e) (checkQualType env p ty)
+> checkExpr env p (Record a c fs) =
+>   liftE (Record a c) (mapE (checkField env p) fs)
+> checkExpr env p (RecordUpdate e fs) =
+>   liftE2 RecordUpdate (checkExpr env p e) (mapE (checkField env p) fs)
 > checkExpr env p (Tuple es) = liftE Tuple (mapE (checkExpr env p) es)
 > checkExpr env p (List a es) = liftE (List a) (mapE (checkExpr env p) es)
 > checkExpr env p (ListCompr e qs) =
@@ -263,6 +281,10 @@ declaration groups.
 
 > checkAlt :: TypeEnv -> Alt a -> Error (Alt a)
 > checkAlt env (Alt p t rhs) = liftE (Alt p t) (checkRhs env rhs)
+
+> checkField :: TypeEnv -> Position -> Field (Expression a)
+>            -> Error (Field (Expression a))
+> checkField env p (Field l e) = liftE (Field l) (checkExpr env p e)
 
 \end{verbatim}
 The parser cannot distinguish unqualified nullary type constructors

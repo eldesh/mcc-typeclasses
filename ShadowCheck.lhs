@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 2512 2007-10-18 08:09:09Z wlux $
+% $Id: ShadowCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 2005-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -15,6 +15,7 @@ definitions which shadow a declaration from an outer scope.
 > module ShadowCheck(shadowCheck, shadowCheckGoal) where
 > import Base
 > import Curry
+> import List
 > import Options
 > import Position
 > import Set
@@ -122,6 +123,8 @@ traversal of the syntax tree.
 >   shadow _ (Constructor _ _) = id
 >   shadow p (Paren e) = shadow p e
 >   shadow p (Typed e _) = shadow p e
+>   shadow p (Record _ _ fs) = shadow p fs
+>   shadow p (RecordUpdate e fs) = shadow p e . shadow p fs
 >   shadow p (Tuple es) = shadow p es
 >   shadow p (List _ es) = shadow p es
 >   shadow p (ListCompr e qs) = shadow p qs >>> shadow p e
@@ -152,16 +155,22 @@ traversal of the syntax tree.
 > instance SyntaxTree (Alt a) where
 >   shadow _ (Alt p t rhs) = shadow p t >>> shadow p rhs
 
+> instance SyntaxTree a => SyntaxTree (Field a) where
+>   shadow p (Field _ x) = shadow p x
+
 \end{verbatim}
-The function \texttt{funs} returns the bound function or methods of a
-top-level declaration together with their positions and the function
-\texttt{vars} returns the bound variables of a declaration together
-with their positions.
+The function \texttt{funs} returns the bound functions, methods, and
+labels of a top-level declaration together with their positions and
+the function \texttt{vars} returns the bound variables of a
+declaration together with their positions.
 \begin{verbatim}
 
 > funs :: TopDecl a -> [P Ident]
-> funs (DataDecl _ _ _ _ _ _) = []
-> funs (NewtypeDecl _ _ _ _ _ _) = []
+> funs (DataDecl _ _ _ _ cs _) =
+>   nub [P p l | RecordDecl _ _ _ _ fs <- cs, FieldDecl p ls _ <- fs, l <- ls]
+> funs (NewtypeDecl _ _ _ _ nc _) = nlabel nc
+>   where nlabel (NewConstrDecl _ _ _) = []
+>         nlabel (NewRecordDecl p _ l _) = [P p l]
 > funs (TypeDecl _ _ _ _) = []
 > funs (ClassDecl _ _ _ _ ds) = [P p f | TypeSig p fs _ <- ds, f <- fs]
 > funs (InstanceDecl _ _ _ _ _) = []

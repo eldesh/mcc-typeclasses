@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2514 2007-10-18 10:43:08Z wlux $
+% $Id: Deriving.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -36,6 +36,8 @@ This module implements the code generating derived instance declarations.
 > deriveInstances m pEnv tcEnv iEnv (NewtypeDecl p _ tc tvs nc clss) =
 >   mapE (deriveInstance m pEnv tcEnv iEnv p tc tvs [constrDecl nc]) clss
 >   where constrDecl (NewConstrDecl p c ty) = ConstrDecl p [] [] c [ty]
+>         constrDecl (NewRecordDecl p c l ty) =
+>           RecordDecl p [] [] c [FieldDecl p [l] ty]
 > deriveInstances _ _ _ _ _ = return []
 
 \end{verbatim}
@@ -60,6 +62,8 @@ derived.
 >         QualTypeExpr cx' ty' = fromQualType tcEnv tvs (QualType cx ty)
 >         constr (ConstrDecl _ _ _ c tys) = (qualifyWith m c,length tys)
 >         constr (ConOpDecl _ _ _ _ op _) = (qualifyWith m op,2)
+>         constr (RecordDecl _ _ _ c fs) = (qualifyWith m c,length ls)
+>           where ls = [l | FieldDecl _ ls _ <- fs, l <- ls]
 >         trustAll p ds = TrustAnnot p Trust [] : ds
 
 > deriveMethods :: PEnv -> TCEnv -> Position -> [Constr] -> QualIdent

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2519 2007-10-18 23:09:52Z wlux $
+% $Id: KindCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -111,9 +111,14 @@ declarations.
 > instance HasType ConstrDecl where
 >   fts m (ConstrDecl _ _ cx _ tys) = fts m cx . fts m tys
 >   fts m (ConOpDecl _ _ cx ty1 _ ty2) = fts m cx . fts m ty1 . fts m ty2
+>   fts m (RecordDecl _ _ cx _ fs) = fts m cx . fts m fs
+
+> instance HasType FieldDecl where
+>   fts m (FieldDecl _ _ ty) = fts m ty
 
 > instance HasType NewConstrDecl where
 >   fts m (NewConstrDecl _ _ ty) = fts m ty
+>   fts m (NewRecordDecl _ _ _ ty) = fts m ty
 
 > instance HasType (Decl a) where
 >   fts _ (InfixDecl _ _ _ _) = id
@@ -154,6 +159,8 @@ declarations.
 >   fts _ (Constructor _ _) = id
 >   fts m (Paren e) = fts m e
 >   fts m (Typed e ty) = fts m e . fts m ty
+>   fts m (Record _ _ fs) = fts m fs
+>   fts m (RecordUpdate e fs) = fts m e . fts m fs
 >   fts m (Tuple es) = fts m es
 >   fts m (List _ es) = fts m es
 >   fts m (ListCompr e qs) = fts m e . fts m qs
@@ -179,6 +186,9 @@ declarations.
 
 > instance HasType (Alt a) where
 >   fts m (Alt _ _ rhs) = fts m rhs
+
+> instance HasType a => HasType (Field a) where
+>   fts m (Field _ x) = fts m x
 
 > instance HasType QualIdent where
 >   fts m x = maybe id (:) (localIdent m x)
@@ -411,10 +421,21 @@ have kind $\star$.
 >     kcValueType tcEnv' p what doc ty2
 >   where what = "data constructor declaration"
 >         doc = ppConstr d
+> kcConstrDecl tcEnv (RecordDecl p evs cx _ fs) =
+>   do
+>     tcEnv' <- foldM bindFreshKind tcEnv evs
+>     kcContext tcEnv' p cx
+>     mapM_ (kcFieldDecl tcEnv') fs
+
+> kcFieldDecl :: TCEnv -> FieldDecl -> KcState ()
+> kcFieldDecl tcEnv d@(FieldDecl p _ ty) =
+>   kcValueType tcEnv p "labeled declaration" (ppFieldDecl d) ty
 
 > kcNewConstrDecl :: TCEnv -> NewConstrDecl -> KcState ()
 > kcNewConstrDecl tcEnv d@(NewConstrDecl p _ ty) =
 >   kcValueType tcEnv p "newtype constructor declaration" (ppNewConstr d) ty
+> kcNewConstrDecl tcEnv (NewRecordDecl p _ l ty) =
+>   kcFieldDecl tcEnv (FieldDecl p [l] ty)
 
 > kcEquation :: TCEnv -> Equation a -> KcState ()
 > kcEquation tcEnv (Equation _ _ rhs) = kcRhs tcEnv rhs
@@ -434,6 +455,9 @@ have kind $\star$.
 > kcExpr _ _ (Constructor _ _) = return ()
 > kcExpr tcEnv p (Paren e) = kcExpr tcEnv p e
 > kcExpr tcEnv p (Typed e ty) = kcExpr tcEnv p e >> kcTypeSig tcEnv [] p ty
+> kcExpr tcEnv p (Record _ _ fs) = mapM_ (kcField tcEnv p) fs
+> kcExpr tcEnv p (RecordUpdate e fs) =
+>   kcExpr tcEnv p e >> mapM_ (kcField tcEnv p) fs
 > kcExpr tcEnv p (Tuple es) = mapM_ (kcExpr tcEnv p) es
 > kcExpr tcEnv p (List _ es) = mapM_ (kcExpr tcEnv p) es
 > kcExpr tcEnv p (ListCompr e qs) =
@@ -462,6 +486,9 @@ have kind $\star$.
 
 > kcAlt :: TCEnv -> Alt a -> KcState ()
 > kcAlt tcEnv (Alt _ _ rhs) = kcRhs tcEnv rhs
+
+> kcField :: TCEnv -> Position -> Field (Expression a) -> KcState ()
+> kcField tcEnv p (Field _ e) = kcExpr tcEnv p e
 
 > kcTypeSig :: TCEnv -> [Ident] -> Position -> QualTypeExpr -> KcState ()
 > kcTypeSig tcEnv tvs p (QualTypeExpr cx ty) =

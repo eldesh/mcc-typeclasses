@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2519 2007-10-18 23:09:52Z wlux $
+% $Id: Exports.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -65,20 +65,21 @@ exported together with their classes and types as explained below.
 > typeDecl m tcEnv tyEnv tvs (ExportTypeWith tc xs) ds =
 >   case qualLookupTopEnv tc tcEnv of
 >     [DataType _ k cs] ->
->       iTypeDecl IDataDecl m cx' tc tvs n k constrs cs'' : ds
+>       iTypeDecl IDataDecl m cx' tc tvs n k constrs xs' : ds
 >       where n = kindArity k
 >             cx' = guard vis >>
 >                   orderContext (map VariableType (take n tvs))
 >                                (nub (concat cxs))
 >             constrs = guard vis >> cs'
->             (cxs,cs') = unzip (map (constrDecl tcEnv tyEnv tc tvs) cs)
->             cs'' = guard vis >> filter (`notElem` xs) cs
+>             xs' = guard vis >> filter (`notElem` xs) (cs ++ ls)
+>             (cxs,cs') = unzip (map (constrDecl tcEnv tyEnv xs tc tvs) cs)
+>             ls = nub (concatMap labels cs')
 >             vis = not (null xs)
 >     [RenamingType _ k c] ->
->       iTypeDecl INewtypeDecl m cx' tc tvs n k nc' cs' : ds
+>       iTypeDecl INewtypeDecl m cx' tc tvs n k nc' xs' : ds
 >       where n = kindArity k
->             (cx',nc') = newConstrDecl tcEnv tyEnv tc tvs c
->             cs' = [c | c `notElem` xs]
+>             (cx',nc') = newConstrDecl tcEnv tyEnv xs tc tvs c
+>             xs' = [c | c `notElem` xs]
 >     [AliasType _ n k ty] ->
 >       iTypeDecl (const . ITypeDecl) m [] tc tvs n k ty' : ds
 >       where ty' = fromType tcEnv tvs ty
@@ -104,22 +105,28 @@ exported together with their classes and types as explained below.
 >         cx =
 >           [ClassAssert (qualUnqualify m cls) (VariableType tv) | cls <- clss]
 
-> constrDecl :: TCEnv -> ValueEnv -> QualIdent -> [Ident] -> Ident
+> constrDecl :: TCEnv -> ValueEnv -> [Ident] -> QualIdent -> [Ident] -> Ident
 >            -> ([ClassAssert],ConstrDecl)
-> constrDecl tcEnv tyEnv tc tvs c =
->   (cxL',ConstrDecl noPos (drop (n - n') (take n tvs)) cxR' c (argTypes ty'))
->   where (ConstrInfo n' cxR,ForAll n (QualType cx ty)) =
+> constrDecl tcEnv tyEnv xs tc tvs c
+>   | any (`elem` xs) ls = (cxL',RecordDecl noPos evs cxR' c fs)
+>   | otherwise = (cxL',ConstrDecl noPos evs cxR' c tys)
+>   where evs = drop (n - n') (take n tvs)
+>         (ls,ConstrInfo n' cxR,ForAll n (QualType cx ty)) =
 >           conType (qualifyLike tc c) tyEnv
 >         cxL = filter (`notElem` cxR) cx
 >         QualTypeExpr cxL' _ = fromQualType tcEnv tvs (QualType cxL ty)
 >         QualTypeExpr cxR' ty' = fromQualType tcEnv tvs (QualType cxR ty)
+>         tys = argTypes ty'
+>         fs = zipWith (FieldDecl noPos . return) ls tys
 
-> newConstrDecl :: TCEnv -> ValueEnv -> QualIdent -> [Ident] -> Ident
+> newConstrDecl :: TCEnv -> ValueEnv -> [Ident] -> QualIdent -> [Ident] -> Ident
 >               -> ([ClassAssert],NewConstrDecl)
-> newConstrDecl tcEnv tyEnv tc tvs c =
->   (cx',NewConstrDecl noPos c (head (argTypes ty')))
->   where ForAll _ ty = snd (conType (qualifyLike tc c) tyEnv)
+> newConstrDecl tcEnv tyEnv xs tc tvs c
+>   | l `elem` xs = (cx',NewRecordDecl noPos c l ty'')
+>   | otherwise = (cx',NewConstrDecl noPos c ty'')
+>   where (l:_,_,ForAll _ ty) = conType (qualifyLike tc c) tyEnv
 >         QualTypeExpr cx' ty' = fromQualType tcEnv tvs ty
+>         ty'' = head (argTypes ty')
 
 > methodDecl :: TCEnv -> ValueEnv -> QualIdent -> [Ident] -> Ident
 >            -> IMethodDecl
@@ -206,9 +213,14 @@ not module \texttt{B}.
 >   modules (ConstrDecl _ _ cx _ tys) = modules cx . modules tys
 >   modules (ConOpDecl _ _ cx ty1 _ ty2) =
 >     modules cx . modules ty1 . modules ty2
+>   modules (RecordDecl _ _ cx _ fs) = modules cx . modules fs
+
+> instance HasModule FieldDecl where
+>   modules (FieldDecl _ _ ty) = modules ty
 
 > instance HasModule NewConstrDecl where
 >   modules (NewConstrDecl _ _ ty) = modules ty
+>   modules (NewRecordDecl _ _ _ ty) = modules ty
 
 > instance HasModule IMethodDecl where
 >   modules (IMethodDecl _ _ ty) = modules ty
@@ -391,9 +403,14 @@ environment.
 >   usedTypes (ConstrDecl _ _ cx _ tys) = usedTypes cx . usedTypes tys
 >   usedTypes (ConOpDecl _ _ cx ty1 _ ty2) =
 >     usedTypes cx . usedTypes ty1 . usedTypes ty2
+>   usedTypes (RecordDecl _ _ cx _ fs) = usedTypes cx . usedTypes fs
+
+> instance HasType FieldDecl where
+>   usedTypes (FieldDecl _ _ ty) = usedTypes ty
 
 > instance HasType NewConstrDecl where
 >   usedTypes (NewConstrDecl _ _ ty) = usedTypes ty
+>   usedTypes (NewRecordDecl _ _ _ ty) = usedTypes ty
 
 > instance HasType IMethodDecl where
 >   usedTypes (IMethodDecl _ _ ty) = usedTypes ty

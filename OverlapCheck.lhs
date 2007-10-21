@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: OverlapCheck.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: OverlapCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -18,13 +18,16 @@ corresponding functions.
 > import Options
 > import Position
 > import Utils
+> import ValueInfo
 
-> overlapCheck :: [Warn] -> Module a -> [String]
-> overlapCheck v (Module m _ _ ds) = report v $ overlap noPosition ds []
+> overlapCheck :: [Warn] -> ValueEnv -> Module a -> [String]
+> overlapCheck v tyEnv (Module m _ _ ds) =
+>   report v $ overlap tyEnv noPosition ds []
 >   where noPosition = error "noPosition"
 
-> overlapCheckGoal :: [Warn] -> Goal a -> [String]
-> overlapCheckGoal v (Goal p e ds) = report v $ overlap p (SimpleRhs p e ds) []
+> overlapCheckGoal :: [Warn] -> ValueEnv -> Goal a -> [String]
+> overlapCheckGoal v tyEnv (Goal p e ds) =
+>   report v $ overlap tyEnv p (SimpleRhs p e ds) []
 
 > report :: [Warn] -> [P Ident] -> [String]
 > report ws
@@ -41,73 +44,80 @@ are collected with a simple traversal of the syntax tree.
 \begin{verbatim}
 
 > class Syntax a where
->   overlap :: Position -> a -> [P Ident] -> [P Ident]
+>   overlap :: ValueEnv -> Position -> a -> [P Ident] -> [P Ident]
 
 > instance Syntax a => Syntax [a] where
->   overlap p xs ys = foldr (overlap p) ys xs
+>   overlap tyEnv p xs ys = foldr (overlap tyEnv p) ys xs
 
 > instance Syntax (TopDecl a) where
->   overlap _ (DataDecl _ _ _ _ _ _) = id
->   overlap _ (NewtypeDecl _ _ _ _ _ _) = id
->   overlap _ (TypeDecl _ _ _ _) = id
->   overlap _ (ClassDecl p _ _ _ ds) = overlap p ds 
->   overlap _ (InstanceDecl p _ _ _ ds) = overlap p ds 
->   overlap _ (DefaultDecl _ _) = id
->   overlap p (BlockDecl d) = overlap p d
+>   overlap _ _ (DataDecl _ _ _ _ _ _) = id
+>   overlap _ _ (NewtypeDecl _ _ _ _ _ _) = id
+>   overlap _ _ (TypeDecl _ _ _ _) = id
+>   overlap tyEnv _ (ClassDecl p _ _ _ ds) = overlap tyEnv p ds 
+>   overlap tyEnv _ (InstanceDecl p _ _ _ ds) = overlap tyEnv p ds 
+>   overlap _ _ (DefaultDecl _ _) = id
+>   overlap tyEnv p (BlockDecl d) = overlap tyEnv p d
 
 > instance Syntax (Decl a) where
->   overlap _ (InfixDecl _ _ _ _) = id
->   overlap _ (TypeSig _ _ _) = id
->   overlap _ (FunctionDecl p f eqs) =
->     ([P p f | isNonDet eqs] ++) . overlap p eqs
->   overlap _ (ForeignDecl _ _ _ _ _ _) = id
->   overlap _ (PatternDecl p _ rhs) = overlap p rhs
->   overlap _ (FreeDecl _ _) = id
->   overlap _ (TrustAnnot _ _ _) = id
+>   overlap _ _ (InfixDecl _ _ _ _) = id
+>   overlap _ _ (TypeSig _ _ _) = id
+>   overlap tyEnv _ (FunctionDecl p f eqs) =
+>     ([P p f | isNonDet tyEnv eqs] ++) . overlap tyEnv p eqs
+>   overlap _ _ (ForeignDecl _ _ _ _ _ _) = id
+>   overlap tyEnv _ (PatternDecl p _ rhs) = overlap tyEnv p rhs
+>   overlap _ _ (FreeDecl _ _) = id
+>   overlap _ _ (TrustAnnot _ _ _) = id
 
 > instance Syntax (Equation a) where
->   overlap _ (Equation p _ rhs) = overlap p rhs
+>   overlap tyEnv _ (Equation p _ rhs) = overlap tyEnv p rhs
 
 > instance Syntax (Rhs a) where
->   overlap _ (SimpleRhs p e ds) = overlap p ds . overlap p e
->   overlap p (GuardedRhs es ds) = overlap p ds . overlap p es
+>   overlap tyEnv _ (SimpleRhs p e ds) = overlap tyEnv p ds . overlap tyEnv p e
+>   overlap tyEnv p (GuardedRhs es ds) = overlap tyEnv p ds . overlap tyEnv p es
 
 > instance Syntax (CondExpr a) where
->   overlap _ (CondExpr p g e) = overlap p g . overlap p e
+>   overlap tyEnv _ (CondExpr p g e) = overlap tyEnv p g . overlap tyEnv p e
 
 > instance Syntax (Expression a) where
->   overlap _ (Literal _ _) = id
->   overlap _ (Variable _ _) = id
->   overlap _ (Constructor _ _) = id
->   overlap p (Paren e) = overlap p e
->   overlap p (Typed e _) = overlap p e
->   overlap p (Tuple es) = overlap p es
->   overlap p (List _ es) = overlap p es
->   overlap p (ListCompr e qs) = overlap p qs . overlap p e
->   overlap p (EnumFrom e) = overlap p e
->   overlap p (EnumFromThen e1 e2) = overlap p e1 . overlap p e2
->   overlap p (EnumFromTo e1 e2) = overlap p e1 . overlap p e2
->   overlap p (EnumFromThenTo e1 e2 e3) =
->     overlap p e1 . overlap p e2 . overlap p e3
->   overlap p (UnaryMinus e) = overlap p e
->   overlap p (Apply e1 e2) = overlap p e1 . overlap p e2
->   overlap p (InfixApply e1 _ e2) = overlap p e1 . overlap p e2
->   overlap p (LeftSection e _) = overlap p e
->   overlap p (RightSection _ e) = overlap p e
->   overlap _ (Lambda p _ e) = overlap p e
->   overlap p (Let ds e) = overlap p ds . overlap p e
->   overlap p (Do sts e) = overlap p sts . overlap p e
->   overlap p (IfThenElse e1 e2 e3) =
->     overlap p e1 . overlap p e2 . overlap p e3
->   overlap p (Case e as) = overlap p e . overlap p as
+>   overlap _ _ (Literal _ _) = id
+>   overlap _ _ (Variable _ _) = id
+>   overlap _ _ (Constructor _ _) = id
+>   overlap tyEnv p (Paren e) = overlap tyEnv p e
+>   overlap tyEnv p (Typed e _) = overlap tyEnv p e
+>   overlap tyEnv p (Record _ _ fs) = overlap tyEnv p fs
+>   overlap tyEnv p (RecordUpdate e fs) = overlap tyEnv p e . overlap tyEnv p fs
+>   overlap tyEnv p (Tuple es) = overlap tyEnv p es
+>   overlap tyEnv p (List _ es) = overlap tyEnv p es
+>   overlap tyEnv p (ListCompr e qs) = overlap tyEnv p qs . overlap tyEnv p e
+>   overlap tyEnv p (EnumFrom e) = overlap tyEnv p e
+>   overlap tyEnv p (EnumFromThen e1 e2) =
+>     overlap tyEnv p e1 . overlap tyEnv p e2
+>   overlap tyEnv p (EnumFromTo e1 e2) = overlap tyEnv p e1 . overlap tyEnv p e2
+>   overlap tyEnv p (EnumFromThenTo e1 e2 e3) =
+>     overlap tyEnv p e1 . overlap tyEnv p e2 . overlap tyEnv p e3
+>   overlap tyEnv p (UnaryMinus e) = overlap tyEnv p e
+>   overlap tyEnv p (Apply e1 e2) = overlap tyEnv p e1 . overlap tyEnv p e2
+>   overlap tyEnv p (InfixApply e1 _ e2) =
+>     overlap tyEnv p e1 . overlap tyEnv p e2
+>   overlap tyEnv p (LeftSection e _) = overlap tyEnv p e
+>   overlap tyEnv p (RightSection _ e) = overlap tyEnv p e
+>   overlap tyEnv _ (Lambda p _ e) = overlap tyEnv p e
+>   overlap tyEnv p (Let ds e) = overlap tyEnv p ds . overlap tyEnv p e
+>   overlap tyEnv p (Do sts e) = overlap tyEnv p sts . overlap tyEnv p e
+>   overlap tyEnv p (IfThenElse e1 e2 e3) =
+>     overlap tyEnv p e1 . overlap tyEnv p e2 . overlap tyEnv p e3
+>   overlap tyEnv p (Case e as) = overlap tyEnv p e . overlap tyEnv p as
 
 > instance Syntax (Statement a) where
->   overlap p (StmtExpr e) = overlap p e
->   overlap _ (StmtBind p _ e) = overlap p e
->   overlap p (StmtDecl ds) = overlap p ds
+>   overlap tyEnv p (StmtExpr e) = overlap tyEnv p e
+>   overlap tyEnv _ (StmtBind p _ e) = overlap tyEnv p e
+>   overlap tyEnv p (StmtDecl ds) = overlap tyEnv p ds
 
 > instance Syntax (Alt a) where
->   overlap _ (Alt p _ rhs) = overlap p rhs
+>   overlap tyEnv _ (Alt p _ rhs) = overlap tyEnv p rhs
+
+> instance Syntax a => Syntax (Field a) where
+>   overlap tyEnv p (Field l x) = overlap tyEnv p x
 
 \end{verbatim}
 The code checking whether a function has rules with overlapping
@@ -118,9 +128,9 @@ correct and accordingly promotes integer constants to floating-point
 when necessary.
 \begin{verbatim}
 
-> isNonDet :: [Equation a] -> Bool
-> isNonDet eqs =
->   isOverlap [map desugar (snd (flatLhs lhs)) | Equation _ lhs _ <- eqs]
+> isNonDet :: ValueEnv -> [Equation a] -> Bool
+> isNonDet tyEnv eqs = isOverlap $
+>   [map (desugar tyEnv) (snd (flatLhs lhs)) | Equation _ lhs _ <- eqs]
 
 > isOverlap :: [[ConstrTerm ()]] -> Bool
 > isOverlap (ts:tss) =
@@ -164,24 +174,33 @@ when necessary.
 Unfortunately, the code has not been desugared yet.
 \begin{verbatim}
 
-> desugar :: ConstrTerm a -> ConstrTerm ()
-> desugar (LiteralPattern a l) =
+> desugar :: ValueEnv -> ConstrTerm a -> ConstrTerm ()
+> desugar tyEnv (LiteralPattern a l) =
 >   case l of
->     String cs -> desugar (ListPattern a (map (LiteralPattern a . Char) cs))
+>     String cs ->
+>       desugar tyEnv (ListPattern a (map (LiteralPattern a . Char) cs))
 >     _ -> LiteralPattern () l
-> desugar (NegativePattern a l) = desugar (LiteralPattern a (negateLit l))
+> desugar tyEnv (NegativePattern a l) =
+>   desugar tyEnv (LiteralPattern a (negateLit l))
 >   where negateLit (Int i) = Int (-i)
 >         negateLit (Float f) = Float (-f)
-> desugar (VariablePattern _ v) = VariablePattern () anonId
-> desugar (ConstructorPattern _ c ts) = ConstructorPattern () c (map desugar ts)
-> desugar (InfixPattern a t1 op t2) = desugar (ConstructorPattern a op [t1,t2])
-> desugar (ParenPattern t) = desugar t
-> desugar (TuplePattern ts) = ConstructorPattern () c (map desugar ts)
+> desugar _ (VariablePattern _ v) = VariablePattern () anonId
+> desugar tyEnv (ConstructorPattern _ c ts) =
+>   ConstructorPattern () c (map (desugar tyEnv) ts)
+> desugar tyEnv (InfixPattern a t1 op t2) =
+>   desugar tyEnv (ConstructorPattern a op [t1,t2])
+> desugar tyEnv (ParenPattern t) = desugar tyEnv t
+> desugar tyEnv (RecordPattern a c fs) =
+>   ConstructorPattern () c (map (argument tyEnv) (orderFields fs ls))
+>   where ls = fst3 (conType c tyEnv)
+>         argument tyEnv = maybe (VariablePattern () anonId) (desugar tyEnv)
+> desugar tyEnv (TuplePattern ts) =
+>   ConstructorPattern () c (map (desugar tyEnv) ts)
 >   where c = qTupleId (length ts)
-> desugar (ListPattern a ts) = desugar (foldr cons nil ts)
+> desugar tyEnv (ListPattern a ts) = desugar tyEnv (foldr cons nil ts)
 >   where nil = ConstructorPattern a qNilId []
 >         cons t1 t2 = ConstructorPattern a qConsId [t1,t2]
-> desugar (AsPattern _ t) = desugar t
-> desugar (LazyPattern t) = VariablePattern () anonId
+> desugar tyEnv (AsPattern _ t) = desugar tyEnv t
+> desugar _ (LazyPattern _) = VariablePattern () anonId
 
 \end{verbatim}

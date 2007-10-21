@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2519 2007-10-18 23:09:52Z wlux $
+% $Id: CurryParser.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -177,18 +177,34 @@ directory path to the module is ignored.
 >              <|> leftParen <-*> parenDecl
 >              <|> type1 <\> conId <\> leftParen <**> opDecl
 >         identDecl = many type2 <**> (conType <$> opDecl `opt` conDecl)
->         parenDecl = flip conDecl <$> conSym <*-> rightParen <*> many type2
+>                 <|> recDecl <$> fields
+>         parenDecl = conSym <*-> rightParen <**> opSymDecl
 >                 <|> applyType <$> parenType <*-> rightParen <*> many type2
 >                               <**> opDecl
+>         opSymDecl = conDecl <$> many type2
+>                 <|> recDecl <$> fields
 >         parenType = tupleType <|> ConstructorType <$> gtyconId
 >         opDecl = conOpDecl <$> conop <*> type1
+>         fields = braces (fieldDecl `sepBy` comma)
 >         conType f tys c = f (applyType (ConstructorType (qualify c)) tys)
 >         conDecl tys c cx tvs p = ConstrDecl p tvs cx c tys
 >         conOpDecl op ty2 ty1 cx tvs p = ConOpDecl p tvs cx ty1 op ty2
+>         recDecl fs c cx tvs p = RecordDecl p tvs cx c fs
 >         applyType = foldl ApplyType
 
+> fieldDecl :: Parser Token FieldDecl a
+> fieldDecl = FieldDecl <$> position <*> labels <*-> token DoubleColon <*> type0
+>   where labels = fun `sepBy1` comma
+
 > newConstrDecl :: Parser Token NewConstrDecl a
-> newConstrDecl = NewConstrDecl <$> position <*> con <*> type2
+> newConstrDecl = position <**> (con <**> newConstr)
+>   where newConstr = newConDecl <$> type2
+>                 <|> newRecDecl <$> braces newFieldDecl
+>         newConDecl ty c p = NewConstrDecl p c ty
+>         newRecDecl (l,ty) c p = NewRecordDecl p c l ty
+
+> newFieldDecl :: Parser Token (Ident,TypeExpr) a
+> newFieldDecl = (,) <$> fun <*-> token DoubleColon <*> type0
 
 > deriv :: Parser Token [QualIdent] a
 > deriv = token KW_deriving <-*> classes
@@ -511,20 +527,21 @@ directory path to the module is ignored.
 
 > constrTerm1 :: Parser Token (ConstrTerm ()) a
 > constrTerm1 = varId <**> identPattern
->           <|> constrPattern (qConId <\> varId)
+>           <|> qConId <\> varId <**> constrPattern
 >           <|> minus <-*> negLit
 >           <|> leftParen <-*> parenPattern
 >           <|> constrTerm2 <\> qConId <\> leftParen
 >   where identPattern = optAsPattern
->                    <|> conPattern <$> many1 constrTerm2
->         constrPattern p = ConstructorPattern () <$> p <*> many constrTerm2
+>                    <|> conPattern qualify <$> many1 constrTerm2
+>         constrPattern = conPattern id <$> many1 constrTerm2
+>                     <|> optRecPattern
 >         parenPattern = minus <**> minusPattern
 >                    <|> funSym <\> minus <*-> rightParen <**> identPattern
->                    <|> constrPattern (gconSym <\> funSym <*-> rightParen)
+>                    <|> gconSym <\> funSym <*-> rightParen <**> constrPattern
 >                    <|> parenTuplePattern <\> minus <*-> rightParen
 >         minusPattern = rightParen <-*> identPattern
 >                    <|> parenMinusPattern <*-> rightParen
->         conPattern ts = flip (ConstructorPattern ()) ts . qualify
+>         conPattern f ts c = ConstructorPattern () (f c) ts
 
 > constrTerm2 :: Parser Token (ConstrTerm ()) a
 > constrTerm2 = literalPattern <|> anonPattern <|> identPattern
@@ -538,18 +555,16 @@ directory path to the module is ignored.
 
 > identPattern :: Parser Token (ConstrTerm ()) a
 > identPattern = varId <**> optAsPattern
->            <|> conPattern <$> qConId <\> varId
->   where conPattern c = ConstructorPattern () c []
+>            <|> qConId <\> varId <**> optRecPattern
 
 > parenPattern :: Parser Token (ConstrTerm ()) a
 > parenPattern = leftParen <-*> parenPattern
 >   where parenPattern = minus <**> minusPattern
 >                    <|> funSym <\> minus <*-> rightParen <**> optAsPattern
->                    <|> conPattern <$> (gconSym <\> funSym) <*-> rightParen
+>                    <|> (gconSym <\> funSym) <*-> rightParen <**> optRecPattern
 >                    <|> parenTuplePattern <\> minus <*-> rightParen
 >         minusPattern = rightParen <-*> optAsPattern
 >                    <|> parenMinusPattern <*-> rightParen
->         conPattern c = ConstructorPattern () c []
 
 > listPattern :: Parser Token (ConstrTerm ()) a
 > listPattern = ListPattern () <$> brackets (constrTerm0 `sepBy` comma)
@@ -570,7 +585,14 @@ the left-hand side of a declaration.
 
 > optAsPattern :: Parser Token (Ident -> ConstrTerm ()) a
 > optAsPattern = flip AsPattern <$-> token At <*> constrTerm2
+>            <|> flip (RecordPattern () . qualify) <$> fields constrTerm0
 >          `opt` VariablePattern ()
+
+> optRecPattern :: Parser Token (QualIdent -> ConstrTerm ()) a
+> optRecPattern = recPattern <$> fields constrTerm0
+>           `opt` conPattern
+>   where conPattern c = ConstructorPattern () c []
+>         recPattern fs c = RecordPattern () c fs
 
 > optInfixPattern :: Parser Token (ConstrTerm () -> ConstrTerm ()) a
 > optInfixPattern = infixPat <$> gconop <*> constrTerm0
@@ -611,23 +633,30 @@ the left-hand side of a declaration.
 >     <|> foldl1 Apply <$> many1 expr3
 
 > expr3 :: Parser Token (Expression ()) a
-> expr3 = constant <|> variable <|> parenExpr <|> listExpr
+> expr3 = foldl RecordUpdate <$> expr4 <*> many recUpdate
+>   where recUpdate = braces (field expr0 `sepBy1` comma)
+
+> expr4 :: Parser Token (Expression ()) a
+> expr4 = constant <|> variable <|> parenExpr <|> listExpr
 
 > constant :: Parser Token (Expression ()) a
 > constant = Literal () <$> literal
 
 > variable :: Parser Token (Expression ()) a
-> variable = Variable () <$> qFunId
+> variable = qFunId <**> optRecord
+>   where optRecord = flip (Record ()) <$> fields expr0
+>               `opt` Variable ()
 
 > parenExpr :: Parser Token (Expression ()) a
-> parenExpr = parens pExpr
+> parenExpr = leftParen <-*> pExpr
 >   where pExpr = minus <**> minusOrTuple
->             <|> Constructor () <$> tupleCommas
->             <|> leftSectionOrTuple <\> minus
+>             <|> Constructor () <$> tupleCommas <*-> rightParen
+>             <|> leftSectionOrTuple <\> minus <*-> rightParen
 >             <|> opOrRightSection <\> minus
->           `opt` Constructor () qUnitId
+>             <|> Constructor () qUnitId <$-> rightParen
 >         minusOrTuple = const . UnaryMinus <$> expr1 <.> infixOrTuple
->                  `opt` Variable () . qualify
+>                                           <*-> rightParen
+>                    <|> rightParen <-*> optRecord qualify Variable
 >         leftSectionOrTuple = expr1 <**> infixOrTuple
 >         infixOrTuple = ($ id) <$> infixOrTuple'
 >         infixOrTuple' = infixOp <**> leftSectionOrExp
@@ -641,8 +670,12 @@ the left-hand side of a declaration.
 >         opOrRightSection = qFunSym <**> optRightSection InfixOp Variable
 >                        <|> colon <**> optRightSection InfixConstr Constructor
 >                        <|> infixOp <\> colon <\> qFunSym <**> rightSection
->         optRightSection op var = (. op ()) <$> rightSection `opt` var ()
+>                                                          <*-> rightParen
+>         optRightSection op var = (. op ()) <$> rightSection <*-> rightParen
+>                              <|> rightParen <-*> optRecord id var
 >         rightSection = flip RightSection <$> expr0
+>         optRecord f var = flip (Record () . f) <$> fields expr0
+>                     `opt` var () . f
 >         infixApp f e2 op g e1 = f (g . InfixApply e1 op) e2
 >         leftSection op f e = LeftSection (f e) op
 >         tuple es e = Tuple (e:es)
@@ -692,6 +725,12 @@ the left-hand side of a declaration.
 > alt :: Parser Token (Alt ()) a
 > alt = Alt <$> position <*> constrTerm0
 >           <*> rhs (token RightArrow <?> "-> expected")
+
+> fields :: Parser Token a b -> Parser Token [Field a] b
+> fields p = braces (field p `sepBy` comma)
+
+> field :: Parser Token a b -> Parser Token (Field a) b
+> field p = Field <$> qfun <*-> equals <*> p
 
 \end{verbatim}
 \paragraph{Statements in list comprehensions and \texttt{do} expressions}

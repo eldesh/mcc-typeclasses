@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: Qual.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -72,10 +72,18 @@ order to compile this module with hbc.
 >   qual phase tEnv vEnv (ConOpDecl p evs cx ty1 op ty2) =
 >     ConOpDecl p evs (qual phase tEnv vEnv cx)
 >               (qual phase tEnv vEnv ty1) op (qual phase tEnv vEnv ty2)
+>   qual phase tEnv vEnv (RecordDecl p evs cx c fs) =
+>     RecordDecl p evs (qual phase tEnv vEnv cx) c (qual phase tEnv vEnv fs)
+
+> instance Qual FieldDecl where
+>   qual phase tEnv vEnv (FieldDecl p ls ty) =
+>     FieldDecl p ls (qual phase tEnv vEnv ty)
 
 > instance Qual NewConstrDecl where
 >   qual phase tEnv vEnv (NewConstrDecl p c ty) =
 >     NewConstrDecl p c (qual phase tEnv vEnv ty)
+>   qual phase tEnv vEnv (NewRecordDecl p c l ty) =
+>     NewRecordDecl p c l (qual phase tEnv vEnv ty)
 
 > instance Qual QualTypeExpr where
 >   qual phase tEnv vEnv (QualTypeExpr cx ty) =
@@ -132,6 +140,8 @@ order to compile this module with hbc.
 >                  (qual phase tEnv vEnv t2)
 >   qual phase tEnv vEnv (ParenPattern t) =
 >     ParenPattern (qual phase tEnv vEnv t)
+>   qual phase tEnv vEnv (RecordPattern a c fs) =
+>     RecordPattern a (qualIdent phase vEnv c) (qual phase tEnv vEnv fs)
 >   qual phase tEnv vEnv (TuplePattern ts) =
 >     TuplePattern (qual phase tEnv vEnv ts)
 >   qual phase tEnv vEnv (ListPattern a ts) =
@@ -156,6 +166,10 @@ order to compile this module with hbc.
 >   qual phase tEnv vEnv (Paren e) = Paren (qual phase tEnv vEnv e)
 >   qual phase tEnv vEnv (Typed e ty) =
 >     Typed (qual phase tEnv vEnv e) (qual phase tEnv vEnv ty)
+>   qual phase tEnv vEnv (Record a c fs) =
+>     Record a (qualIdent phase vEnv c) (qual phase tEnv vEnv fs)
+>   qual phase tEnv vEnv (RecordUpdate e fs) =
+>     RecordUpdate (qual phase tEnv vEnv e) (qual phase tEnv vEnv fs)
 >   qual phase tEnv vEnv (Tuple es) = Tuple (qual phase tEnv vEnv es)
 >   qual phase tEnv vEnv (List a es) = List a (qual phase tEnv vEnv es)
 >   qual phase tEnv vEnv (ListCompr e qs) =
@@ -207,6 +221,10 @@ order to compile this module with hbc.
 >   qual phase _ vEnv (InfixOp a op) = InfixOp a (qualIdent phase vEnv op)
 >   qual phase _ vEnv (InfixConstr a op) =
 >     InfixConstr a (qualIdent phase vEnv op)
+
+> instance Qual a => Qual (Field a) where
+>   qual phase tEnv vEnv (Field l x) =
+>     Field (qualIdent phase vEnv l) (qual phase tEnv vEnv x)
 
 > qualIdent :: Entity a => Phase -> TopEnv a -> QualIdent -> QualIdent
 > qualIdent One env x

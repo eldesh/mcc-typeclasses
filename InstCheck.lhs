@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2514 2007-10-18 10:43:08Z wlux $
+% $Id: InstCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -71,6 +71,7 @@ existentially quantified data types.
 >   | any (not . null . existVars) cs = errorAt p noExistentialDerive
 >   where existVars (ConstrDecl _ evs _ _ _) = evs
 >         existVars (ConOpDecl _ evs _ _ _ _) = evs
+>         existVars (RecordDecl _ evs _ _ _) = evs
 > checkDeriving d = return ()
 
 \end{verbatim}
@@ -132,9 +133,12 @@ their super classes.
 >   where (cxs,tyss) = unzip (map constrTypes cs)
 >         constrTypes (ConstrDecl _ _ cx _ tys) = (cx,tys)
 >         constrTypes (ConOpDecl _ _ cx ty1 _ ty2) = (cx,[ty1,ty2])
+>         constrTypes (RecordDecl _ _ cx _ fs) = (cx,tys)
+>           where tys = [ty | FieldDecl _ ls ty <- fs, l <- ls]
 > declDeriving m tcEnv (NewtypeDecl p cx tc tvs nc clss) =
 >   mkDeriving m tcEnv p cx tc tvs [nconstrType nc] clss
 >   where nconstrType (NewConstrDecl _ _ ty) = ty
+>         nconstrType (NewRecordDecl _ _ _ ty) = ty
 
 > mkDeriving :: ModuleIdent -> TCEnv -> Position -> [ClassAssert] -> Ident
 >            -> [Ident] -> [TypeExpr] -> [QualIdent] -> Deriving

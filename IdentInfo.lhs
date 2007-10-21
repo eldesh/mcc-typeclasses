@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IdentInfo.lhs 2516 2007-10-18 11:21:29Z wlux $
+% $Id: IdentInfo.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -80,21 +80,39 @@ set \texttt{instISet} is empty.
 \end{verbatim}
 At pattern and expression level, we distinguish constructors on one
 side and functions (including type class methods) and variables on the
-other side. Since scopes can be nested in source code, we use a nested
-environment for checking source modules and goals, whereas a flat
-top-level environment is sufficient for checking import and export
-declarations. The initial value identifier environment
-\texttt{initVEnv} is initialized with the data constructors of the
-predefined unit, list, and tuple types.
+other side. Field labels are represented as variables here, too. Each
+variable has an associated list of identifiers, which contains the
+names of all constructors for which the variable is also a valid field
+label. We use the original names of the constructors because the
+import paths of the constructors and labels are not relevant.
+
+Since scopes can be nested in source code, we use a nested environment
+for checking source modules and goals, whereas a flat top-level
+environment is sufficient for checking import and export declarations.
+The initial value identifier environment \texttt{initVEnv} is
+initialized with the data constructors of the predefined unit, list,
+and tuple types.
 \begin{verbatim}
 
 > type FunEnv = TopEnv ValueKind
 > type VarEnv = NestEnv ValueKind
-> data ValueKind = Constr QualIdent | Var QualIdent deriving (Eq,Show)
+
+> data ValueKind =
+>     Constr QualIdent
+>   | Var QualIdent [QualIdent]
+>   deriving (Eq,Show)
 
 > instance Entity ValueKind where
 >   origName (Constr c) = c
->   origName (Var x) = x
+>   origName (Var x _) = x
+>   merge (Constr c1) (Constr c2)
+>     | c1 == c2 = Just (Constr c1)
+>     | otherwise = Nothing
+>   merge (Constr _) (Var _ _) = Nothing
+>   merge (Var _ _) (Constr _) = Nothing
+>   merge (Var v1 cs1) (Var v2 cs2)
+>     | v1 == v2 = Just (Var v1 (cs1 `union` cs2))
+>     | otherwise = Nothing
 
 > initVEnv :: FunEnv
 > initVEnv =

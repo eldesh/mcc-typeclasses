@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2519 2007-10-18 23:09:52Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -42,8 +42,10 @@ The latter must not occur in type expressions in interfaces.
 > bindType :: IDecl -> TypeEnv -> TypeEnv
 > bindType (IInfixDecl _ _ _ _) = id
 > bindType (HidingDataDecl _ tc _ _) = bindData tc [] []
-> bindType (IDataDecl _ _ tc _ _ cs cs') = bindData tc cs' (map constr cs)
-> bindType (INewtypeDecl _ _ tc _ _ nc cs') = bindData tc cs' [nconstr nc]
+> bindType (IDataDecl _ _ tc _ _ cs xs) =
+>   bindData tc xs (map constr cs ++ nub (concatMap labels cs))
+> bindType (INewtypeDecl _ _ tc _ _ nc xs) =
+>   bindData tc xs (nconstr nc : nlabel nc)
 > bindType (ITypeDecl _ tc _ _ _) = bindAlias tc
 > bindType (HidingClassDecl _ _ cls _ _) = bindClass cls [] []
 > bindType (IClassDecl _ cx cls _ _ ds fs') = bindClass cls fs' (map imethod ds)
@@ -51,7 +53,7 @@ The latter must not occur in type expressions in interfaces.
 > bindType (IFunctionDecl _ _ _ _) = id
 
 > bindData :: QualIdent -> [Ident] -> [Ident] -> TypeEnv -> TypeEnv
-> bindData tc cs' cs = qualBindTopEnv tc (Data tc (filter (`notElem` cs') cs))
+> bindData tc xs' xs = qualBindTopEnv tc (Data tc (filter (`notElem` xs') xs))
 
 > bindAlias :: QualIdent -> TypeEnv -> TypeEnv
 > bindAlias tc = qualBindTopEnv tc (Alias tc)
@@ -71,20 +73,20 @@ during syntax checking of type expressions.
 >   do
 >     checkTypeLhs env p [] tvs
 >     return (HidingDataDecl p tc k tvs)
-> checkIDecl env (IDataDecl p cx tc k tvs cs cs') =
+> checkIDecl env (IDataDecl p cx tc k tvs cs xs) =
 >   do
 >     cx' <- checkTypeLhs env p cx tvs
 >     checkClosedContext p cx' tvs
->     cs'' <- mapE (checkConstrDecl env tvs) cs
->     checkHiding p (noConstructor tc) (map constr cs) cs'
->     return (IDataDecl p cx' tc k tvs cs'' cs')
-> checkIDecl env (INewtypeDecl p cx tc k tvs nc cs') =
+>     cs' <- mapE (checkConstrDecl env tvs) cs
+>     checkHiding True p tc (map constr cs ++ nub (concatMap labels cs)) xs
+>     return (IDataDecl p cx' tc k tvs cs' xs)
+> checkIDecl env (INewtypeDecl p cx tc k tvs nc xs) =
 >   do
 >     cx' <- checkTypeLhs env p cx tvs
 >     checkClosedContext p cx' tvs
 >     nc' <- checkNewConstrDecl env tvs nc
->     checkHiding p (noConstructor tc) [nconstr nc] cs'
->     return (INewtypeDecl p cx' tc k tvs nc' cs')
+>     checkHiding True p tc (nconstr nc : nlabel nc) xs
+>     return (INewtypeDecl p cx' tc k tvs nc' xs)
 > checkIDecl env (ITypeDecl p tc k tvs ty) =
 >   do
 >     checkTypeLhs env p [] tvs
@@ -104,7 +106,7 @@ during syntax checking of type expressions.
 >     ds' <-
 >       mapE_ (checkSimpleConstraint "class" doc p) cx' &&>
 >       mapE (checkIMethodDecl env tv) ds
->     checkHiding p (noMethod cls) (map imethod ds) fs'
+>     checkHiding False p cls (map imethod ds) fs'
 >     return (IClassDecl p cx' cls k tv ds' fs')
 >   where doc = ppQIdent cls <+> ppIdent tv
 > checkIDecl env (IInstanceDecl p cx cls ty m) =
@@ -151,11 +153,24 @@ during syntax checking of type expressions.
 >       checkClosedType env p tvs' ty2
 >     return (ConOpDecl p evs cx' ty1' op ty2')
 >   where tvs' = evs ++ tvs
+> checkConstrDecl env tvs (RecordDecl p evs cx c fs) =
+>   do
+>     cx' <- checkTypeLhs env p cx evs
+>     checkClosedContext p cx' tvs'
+>     fs' <- mapE (checkFieldDecl env tvs') fs
+>     return (RecordDecl p evs cx' c fs')
+>   where tvs' = evs ++ tvs
+
+> checkFieldDecl :: TypeEnv -> [Ident] -> FieldDecl -> Error FieldDecl
+> checkFieldDecl env tvs (FieldDecl p ls ty) =
+>   liftE (FieldDecl p ls) (checkClosedType env p tvs ty)
 
 > checkNewConstrDecl :: TypeEnv -> [Ident] -> NewConstrDecl
 >                    -> Error NewConstrDecl
 > checkNewConstrDecl env tvs (NewConstrDecl p c ty) =
 >   liftE (NewConstrDecl p c) (checkClosedType env p tvs ty)
+> checkNewConstrDecl env tvs (NewRecordDecl p c l ty) =
+>   liftE (NewRecordDecl p c l) (checkClosedType env p tvs ty)
 
 > checkIMethodDecl :: TypeEnv -> Ident -> IMethodDecl -> Error IMethodDecl
 > checkIMethodDecl env tv (IMethodDecl p f ty) =
@@ -237,9 +252,9 @@ during syntax checking of type expressions.
 >     [Class _ _] -> return ()
 >     _ -> internalError "checkClass"
 
-> checkHiding :: Position -> (Ident -> String) -> [Ident] -> [Ident] -> Error ()
-> checkHiding p noElement xs xs' =
->   mapE_ (errorAt p . noElement) (nub (filter (`notElem` xs) xs'))
+> checkHiding :: Bool -> Position -> QualIdent -> [Ident] -> [Ident] -> Error ()
+> checkHiding isType p tc xs xs' =
+>   mapE_ (errorAt p . noElement isType tc) (nub (filter (`notElem` xs) xs'))
 
 \end{verbatim}
 \ToDo{Much of the above code could be shared with module
@@ -274,13 +289,11 @@ Error messages.
 > noVariable what tv =
 >   "Type constructor or type class " ++ name tv ++ " used in " ++ what
 
-> noConstructor :: QualIdent -> Ident -> String
-> noConstructor tc c =
->   "Hidden constructor " ++ name c ++ " is not defined for type " ++
+> noElement :: Bool -> QualIdent -> Ident -> String
+> noElement True tc x =
+>   "Hidden constructor or label " ++ name x ++ " is not defined for type " ++
 >   qualName tc
-
-> noMethod :: QualIdent -> Ident -> String
-> noMethod cls f =
+> noElement False cls f =
 >   "Hidden method " ++ name f ++ " is not defined for class " ++ qualName cls
 
 > unboundVariable :: Ident -> String

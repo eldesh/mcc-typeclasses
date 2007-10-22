@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: Imports.lhs 2527 2007-10-22 13:49:27Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -340,7 +340,7 @@ Auxiliary functions:
 > con :: ModuleIdent -> [ClassAssert] -> QualIdent -> [Ident] -> [ClassAssert]
 >     -> Ident -> [(Ident,TypeExpr)] -> ValueInfo
 > con m cxL tc tvs cxR c tys =
->   DataConstructor (qualifyLike tc c) (length tys) ls ci (typeScheme ty)
+>   DataConstructor (qualifyLike tc c) ls ci (typeScheme ty)
 >   where (ci,ty) = toConstrType m cxL tc tvs cxR tys'
 >         (ls,tys') = unzip tys
 

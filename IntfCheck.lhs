@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: IntfCheck.lhs 2527 2007-10-22 13:49:27Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -135,14 +135,14 @@ interface module only. However, this has not been implemented yet.
 > checkConstrImport m tyEnv cxL tc tvs (ConstrDecl p evs cxR c tys) =
 >   checkValueInfo "data constructor" checkConstr tyEnv p qc
 >   where qc = qualifyLike tc c
->         checkConstr (DataConstructor c' _ _ ci' (ForAll n' ty')) =
+>         checkConstr (DataConstructor c' _ ci' (ForAll n' ty')) =
 >           qc == c' && length (tvs ++ evs) == n' &&
 >           toConstrType m cxL tc tvs cxR tys == (ci',ty')
 >         checkConstr _ = False
 > checkConstrImport m tyEnv cxL tc tvs (ConOpDecl p evs cxR ty1 op ty2) =
 >   checkValueInfo "data constructor" checkConstr tyEnv p qc
 >   where qc = qualifyLike tc op
->         checkConstr (DataConstructor c' _ _ ci' (ForAll n' ty')) =
+>         checkConstr (DataConstructor c' _ ci' (ForAll n' ty')) =
 >           qc == c' && length (tvs ++ evs) == n' &&
 >           toConstrType m cxL tc tvs cxR [ty1,ty2] == (ci',ty')
 >         checkConstr _ = False
@@ -150,7 +150,7 @@ interface module only. However, this has not been implemented yet.
 >   checkValueInfo "data constructor" checkConstr tyEnv p qc
 >   where qc = qualifyLike tc c
 >         (ls,tys) = unzip [(l,ty) | FieldDecl _ ls ty <- fs, l <- ls]
->         checkConstr (DataConstructor c' _ ls' ci' (ForAll n' ty')) =
+>         checkConstr (DataConstructor c' ls' ci' (ForAll n' ty')) =
 >           qc == c' && length (tvs ++ evs) == n' && ls == ls' &&
 >           toConstrType m cxL tc tvs cxR tys == (ci',ty')
 >         checkConstr _ = False

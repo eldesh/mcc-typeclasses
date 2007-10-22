@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2524 2007-10-22 08:07:21Z wlux $
+% $Id: DictTrans.lhs 2527 2007-10-22 13:49:27Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -243,9 +243,9 @@ uses a default implementation that is equivalent to
 > bindClassEntities _ _ _ tyEnv = tyEnv
 
 > bindClassDict :: ModuleIdent -> QualIdent -> Type -> ValueEnv -> ValueEnv
-> bindClassDict m c ty = bindEntity m c $
->   DataConstructor c n (replicate n anonId) stdConstrInfo (polyType ty)
->   where n = arrowArity ty
+> bindClassDict m c ty =
+>   bindEntity m c (DataConstructor c ls stdConstrInfo (polyType ty))
+>   where ls = replicate (arrowArity ty) anonId
 
 > bindDefaultMethod :: ModuleIdent -> ValueEnv -> QualIdent -> Ident
 >                   -> ValueEnv -> ValueEnv
@@ -622,11 +622,10 @@ the implicit dictionary arguments to the declaration.
 
 > dictTransValues :: TCEnv -> ValueEnv -> ValueEnv
 > dictTransValues tcEnv = fmap transInfo
->   where transInfo (DataConstructor c m ls ci (ForAll n ty)) =
->           DataConstructor c m' ls' (constrInfo ci) (ForAll n (qualType ty'))
+>   where transInfo (DataConstructor c ls ci (ForAll n ty)) =
+>           DataConstructor c ls' (constrInfo ci) (ForAll n (qualType ty'))
 >           where ty' = transformConstrType tcEnv ci ty
->                 m' = arrowArity ty'
->                 ls' = replicate (m' - m) anonId ++ ls
+>                 ls' = replicate (arrowArity ty' - length ls) anonId ++ ls
 >                 constrInfo (ConstrInfo n _) = ConstrInfo n []
 >         transInfo (NewtypeConstructor c l ty) =
 >           NewtypeConstructor c l (tmap (qualType . unqualType) ty)

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: Desugar.lhs 2527 2007-10-22 13:49:27Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -101,7 +101,7 @@ incompatible with the Curry report, which deliberately defines
 > bindSuccess :: ValueEnv -> ValueEnv
 > bindSuccess = localBindTopEnv successId successCon
 >   where successCon =
->           DataConstructor (qualify successId) 0 [] stdConstrInfo
+>           DataConstructor (qualify successId) [] stdConstrInfo
 >                           (polyType successType)
 
 \end{verbatim}

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: TypeCheck.lhs 2527 2007-10-22 13:49:27Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -198,7 +198,7 @@ their types are expanded.
 >            -> [ClassAssert] -> Ident -> [(Ident,TypeExpr)] -> ValueEnv
 >            -> ValueEnv
 > bindConstr m tcEnv cxL tc tvs cxR c tys = globalBindTopEnv m c $
->   DataConstructor (qualifyWith m c) (length tys) ls ci (typeScheme ty)
+>   DataConstructor (qualifyWith m c) ls ci (typeScheme ty)
 >   where (ci,ty) = expandConstrType tcEnv cxL (qualifyWith m tc) tvs cxR tys'
 >         (ls,tys') = unzip tys
 

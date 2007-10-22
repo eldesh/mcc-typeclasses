@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSubst.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: TypeSubst.lhs 2527 2007-10-22 13:49:27Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -60,7 +60,7 @@ This module implements substitutions on types.
 >     where sigma' = foldr unbindSubst sigma [0..n-1]
 
 > instance SubstType ValueInfo where
->   subst _ (DataConstructor c n ls ci ty) = DataConstructor c n ls ci ty
+>   subst _ (DataConstructor c ls ci ty) = DataConstructor c ls ci ty
 >   subst _ (NewtypeConstructor c l ty) = NewtypeConstructor c l ty
 >   subst sigma (Value v n ty) = Value v n (subst sigma ty)
 

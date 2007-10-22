@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: CurryParser.lhs 2528 2007-10-22 14:09:40Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -347,26 +347,17 @@ directory path to the module is ignored.
 
 > intfDecl :: Parser Token IDecl a
 > intfDecl = iInfixDecl
->        <|> iHidingDecl <|> iDataDecl <|> iNewtypeDecl <|> iTypeDecl
->        <|> iClassDecl <|> iInstanceDecl <|> iFunctionDecl <\> token Id_hiding
+>        <|> hidingDataDecl <|> iDataDecl <|> iNewtypeDecl <|> iTypeDecl
+>        <|> iHidingDecl <|> iClassDecl <|> iInstanceDecl
+>        <|> iFunctionDecl <\> token Id_hiding
 
 > iInfixDecl :: Parser Token IDecl a
 > iInfixDecl = infixDeclLhs IInfixDecl <*> int <*> qfunop
 
-> iHidingDecl :: Parser Token IDecl a
-> iHidingDecl =
->   position <*-> token Id_hiding <**> (dataDecl <|> classDecl <|> funcDecl)
->   where dataDecl =
->           hidingData <$-> token KW_data <*> withKind qtycon <*> many tyvar
->         classDecl =
->           hidingClass <$> classInstHead KW_class (withKind qtycls) tyvar
->         funcDecl =
->           hidingFunc <$-> token DoubleColon <*> option iFunctionArity
->                      <*> qualType
->         hidingData (tc,k) tvs p = HidingDataDecl p tc k tvs
->         hidingClass (cx,((cls,k),tv)) p = HidingClassDecl p cx cls k tv
->         hidingFunc n ty p = IFunctionDecl p hidingId n ty
->         hidingId = qualify (mkIdent "hiding")
+> hidingDataDecl :: Parser Token IDecl a
+> hidingDataDecl = position <**> pragma DataPragma hidingDecl
+>   where hidingDecl = dataDecl <$> withKind qtycon <*> many tyvar
+>         dataDecl (tc,k) tvs p = HidingDataDecl p tc k tvs
 
 > iDataDecl :: Parser Token IDecl a
 > iDataDecl = iDataDeclLhs IDataDecl KW_data <*> constrs <*> iHidden
@@ -398,6 +389,17 @@ directory path to the module is ignored.
 > iHidden :: Parser Token [Ident] a
 > iHidden = pragma HidingPragma (con `sepBy` comma)
 >     `opt` []
+
+> iHidingDecl :: Parser Token IDecl a
+> iHidingDecl = position <*-> token Id_hiding <**> (classDecl <|> funcDecl)
+>   where classDecl =
+>           hidingClass <$> classInstHead KW_class (withKind qtycls) tyvar
+>         funcDecl =
+>           hidingFunc <$-> token DoubleColon <*> option iFunctionArity
+>                      <*> qualType
+>         hidingClass (cx,((cls,k),tv)) p = HidingClassDecl p cx cls k tv
+>         hidingFunc n ty p = IFunctionDecl p hidingId n ty
+>         hidingId = qualify (mkIdent "hiding")
 
 > iClassDecl :: Parser Token IDecl a
 > iClassDecl =

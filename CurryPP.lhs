@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: CurryPP.lhs 2528 2007-10-22 14:09:40Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -199,7 +199,7 @@ Interfaces
 > ppIDecl :: IDecl -> Doc
 > ppIDecl (IInfixDecl _ fix p op) = ppPrec fix (Just p) <+> ppQInfixOp op
 > ppIDecl (HidingDataDecl _ tc k tvs) =
->   text "hiding" <+> ppITypeDeclLhs "data" [] tc k tvs
+>   ppPragma "DATA" (ppITypeIdent tc k <+> hsep (map ppIdent tvs))
 > ppIDecl (IDataDecl _ cx tc k tvs cs xs) =
 >   sep (ppITypeDeclLhs "data" cx tc k tvs :
 >        map indent (zipWith (<+>) (equals : repeat vbar) (map ppConstr cs)) ++

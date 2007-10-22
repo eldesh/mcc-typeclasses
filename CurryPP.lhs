@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2528 2007-10-22 14:09:40Z wlux $
+% $Id: CurryPP.lhs 2529 2007-10-22 14:37:43Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -210,8 +210,8 @@ Interfaces
 >        indent (ppHiding xs)]
 > ppIDecl (ITypeDecl _ tc k tvs ty) =
 >   sep [ppITypeDeclLhs "type" [] tc k tvs <+> equals,indent (ppTypeExpr 0 ty)]
-> ppIDecl (HidingClassDecl p cx cls k tv) =
->   text "hiding" <+> ppIDecl (IClassDecl p cx cls k tv [] [])
+> ppIDecl (HidingClassDecl _ cx cls k tv) =
+>   ppPragma "CLASS" (sep [ppContext cx,ppITypeIdent cls k <+> ppIdent tv])
 > ppIDecl (IClassDecl _ cx cls k tv ds fs') =
 >   ppIClassDecl (ppClassHead cx (ppITypeIdent cls k) tv) ds fs'
 > ppIDecl (IInstanceDecl _ cx cls ty m) =

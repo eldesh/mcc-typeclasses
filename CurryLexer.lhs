@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryLexer.lhs 2528 2007-10-22 14:09:40Z wlux $
+% $Id: CurryLexer.lhs 2529 2007-10-22 14:37:43Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -59,7 +59,8 @@ In this section a lexer for Curry is implemented.
 >   deriving (Eq,Ord)
 
 > data Pragma =
->   ArityPragma | DataPragma | HidingPragma | SuspectPragma | TrustPragma
+>     ArityPragma | ClassPragma | DataPragma | HidingPragma
+>   | SuspectPragma | TrustPragma
 >   deriving (Eq,Ord)
 
 \end{verbatim}
@@ -195,6 +196,7 @@ all tokens in their source representation.
 
 > instance Show Pragma where
 >   showsPrec _ ArityPragma = showString "ARITY"
+>   showsPrec _ ClassPragma = showString "CLASS"
 >   showsPrec _ DataPragma = showString "DATA"
 >   showsPrec _ HidingPragma = showString "HIDING"
 >   showsPrec _ SuspectPragma = showString "SUSPECT"
@@ -267,6 +269,7 @@ pragmas.
 > pragma_keywords :: FM String Pragma
 > pragma_keywords = fromListFM [
 >     ("ARITY",   ArityPragma),
+>     ("CLASS",   ClassPragma),
 >     ("DATA",    DataPragma),
 >     ("HIDING",  HidingPragma),
 >     ("SUSPECT", SuspectPragma),

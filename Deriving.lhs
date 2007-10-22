@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: Deriving.lhs 2523 2007-10-22 07:36:01Z wlux $
 %
 % Copyright (c) 2006-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -23,6 +23,7 @@ This module implements the code generating derived instance declarations.
 > import Types
 > import TypeInfo
 > import TypeTrans
+> import Utils
 
 > derive :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> [TopDecl ()]
 >         -> Error [TopDecl ()]
@@ -46,7 +47,7 @@ error is reported if the user asks for instances of other classes be
 derived.
 \begin{verbatim}
 
-> type Constr = (QualIdent,Int)
+> type Constr = (QualIdent,Int,Maybe [Ident])
 
 > deriveInstance :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> Position
 >                -> Ident -> [Ident] -> [ConstrDecl] -> QualIdent
@@ -60,9 +61,9 @@ derived.
 >         tvs' = take (length tvs) (map TypeVariable [0..])
 >         cls' = origName (head (qualLookupTopEnv cls tcEnv))
 >         QualTypeExpr cx' ty' = fromQualType tcEnv tvs (QualType cx ty)
->         constr (ConstrDecl _ _ _ c tys) = (qualifyWith m c,length tys)
->         constr (ConOpDecl _ _ _ _ op _) = (qualifyWith m op,2)
->         constr (RecordDecl _ _ _ c fs) = (qualifyWith m c,length ls)
+>         constr (ConstrDecl _ _ _ c tys) = (qualifyWith m c,length tys,Nothing)
+>         constr (ConOpDecl _ _ _ _ op _) = (qualifyWith m op,2,Nothing)
+>         constr (RecordDecl _ _ _ c fs) = (qualifyWith m c,length ls,Just ls)
 >           where ls = [l | FieldDecl _ ls _ <- fs, l <- ls]
 >         trustAll p ds = TrustAnnot p Trust [] : ds
 
@@ -97,13 +98,13 @@ report.
 >   funDecl p eqOpId [x,y] (Case (mkVar x) (map (eqCase vs p y) cs))
 
 > eqCase :: [Ident] -> Position -> Ident -> Constr -> Alt ()
-> eqCase vs p y (c,n) =
+> eqCase vs p y (c,n,ls) =
 >   caseAlt p (conPattern c xs)
->           (Case (mkVar y) [eqEqCase vs' p xs (c,n),eqNeqCase p])
+>           (Case (mkVar y) [eqEqCase vs' p xs (c,n,ls),eqNeqCase p])
 >   where (xs,vs') = splitAt n vs
 
 > eqEqCase :: [Ident] -> Position -> [Ident] -> Constr -> Alt ()
-> eqEqCase vs p xs (c,n) = caseAlt p (conPattern c ys) (eqCaseArgs p xs ys)
+> eqEqCase vs p xs (c,n,_) = caseAlt p (conPattern c ys) (eqCaseArgs p xs ys)
 >   where ys = take n vs
 
 > eqNeqCase :: Position -> Alt ()
@@ -144,19 +145,20 @@ default implementations.
 
 > cmpCase :: [Ident] -> Position -> Ident -> ([Constr],Constr,[Constr])
 >         -> Alt ()
-> cmpCase vs p y (csLT,(c,n),csGT) =
+> cmpCase vs p y (csLT,(c,n,ls),csGT) =
 >   caseAlt p (conPattern c xs)
 >           (Case (mkVar y)
 >                 (map (cmpNeqCase p prelGT) csLT ++
->                  cmpEqCase vs' p xs (c,n) : map (cmpNeqCase p prelLT) csGT))
+>                  cmpEqCase vs' p xs (c,n,ls) :
+>                  map (cmpNeqCase p prelLT) csGT))
 >   where (xs,vs') = splitAt n vs
 
 > cmpEqCase :: [Ident] -> Position -> [Ident] -> Constr -> Alt ()
-> cmpEqCase vs p xs (c,n) = caseAlt p (conPattern c ys) (cmpCaseArgs p xs ys)
+> cmpEqCase vs p xs (c,n,_) = caseAlt p (conPattern c ys) (cmpCaseArgs p xs ys)
 >   where ys = take n vs
 
 > cmpNeqCase :: Position -> Expression () -> Constr -> Alt ()
-> cmpNeqCase p z (c,n) = caseAlt p (conPattern c (replicate n anonId)) z
+> cmpNeqCase p z (c,n,_) = caseAlt p (conPattern c (replicate n anonId)) z
 
 > cmpCaseArgs :: Position -> [Ident] -> [Ident] -> Expression ()
 > cmpCaseArgs p xs ys
@@ -186,7 +188,7 @@ like \verb|[False ..]| well defined.
 
 > isEnum :: [Constr] -> Bool
 > isEnum [] = False
-> isEnum (c:cs) = all ((0 ==) . snd) (c:cs)
+> isEnum (c:cs) = all ((0 ==) . snd3) (c:cs)
 
 > enumMethods :: Position -> [Constr] -> Error [Decl ()]
 > enumMethods p cs
@@ -218,7 +220,7 @@ like \verb|[False ..]| well defined.
 >   where f = toEnumId
 
 > deriveEnumFrom :: [Ident] -> Position -> Constr -> Decl ()
-> deriveEnumFrom (x:_) p (c,n) =
+> deriveEnumFrom (x:_) p (c,n,_) =
 >   funDecl p enumFromId [x] (prelEnumFromTo (mkVar x) (Constructor () c))
 
 > deriveEnumFromThen :: [Ident] -> Position -> Constr -> Constr -> Decl ()
@@ -227,7 +229,7 @@ like \verb|[False ..]| well defined.
 >           (prelEnumFromThenTo (mkVar x) (mkVar y) (enumBound x y c1 c2))
 
 > enumBound :: Ident -> Ident -> Constr -> Constr -> Expression ()
-> enumBound x y (c1,_) (c2,_) =
+> enumBound x y (c1,_,_) (c2,_,_) =
 >   IfThenElse (prelLeq (prelFromEnum (mkVar x)) (prelFromEnum (mkVar y)))
 >              (Constructor () c2)
 >              (Constructor () c1)
@@ -236,19 +238,19 @@ like \verb|[False ..]| well defined.
 > failedEqn p f = equation p f [VariablePattern () anonId] prelFailed
 
 > succEqn :: Position -> Ident -> Constr -> Constr -> Equation ()
-> succEqn p f (c1,_) (c2,_) =
+> succEqn p f (c1,_,_) (c2,_,_) =
 >   equation p f [ConstructorPattern () c1 []] (Constructor () c2)
 
 > predEqn :: Position -> Ident -> Constr -> Constr -> Equation ()
-> predEqn p f (c1,_) (c2,_) =
+> predEqn p f (c1,_,_) (c2,_,_) =
 >   equation p f [ConstructorPattern () c1 []] (Constructor () c2)
 
 > toEnumEqn :: Position -> Ident -> Integer -> Constr -> Equation ()
-> toEnumEqn p f i (c,_) =
+> toEnumEqn p f i (c,_,_) =
 >   equation p f [LiteralPattern () (Int i)] (Constructor () c)
 
 > fromEnumEqn :: Position -> Ident -> Constr -> Integer -> Equation ()
-> fromEnumEqn p f (c,_) i =
+> fromEnumEqn p f (c,_,_) i =
 >   equation p f [ConstructorPattern () c []] (Literal () (Int i))
 
 \end{verbatim}
@@ -272,25 +274,27 @@ all arguments.
 >         maxBound = deriveMaxBound p (last cs)
 
 > deriveMinBound :: Position -> Constr -> Decl ()
-> deriveMinBound p (c,n) =
+> deriveMinBound p (c,n,_) =
 >   funDecl p minBoundId [] $
 >   apply (Constructor () c) (replicate n prelMinBound)
 
 > deriveMaxBound :: Position -> Constr -> Decl ()
-> deriveMaxBound p (c,n) =
+> deriveMaxBound p (c,n,_) =
 >   funDecl p maxBoundId [] $
 >   apply (Constructor () c) (replicate n prelMaxBound)
 
 \end{verbatim}
 \paragraph{String Representation}
-Instances of \texttt{Show} can be derived for all data types. We
-derive only an implementation of \texttt{showsPrec} and rely on the
-default implementations of \texttt{show} and \texttt{showList}. The
-derived \texttt{showsPrec} uses infix notation for infix constructor
-applications adding parentheses only where needed, ignoring
-associativity (cf.\ Chap.~10 of~\cite{PeytonJones03:Haskell}). Note
-that in contrast to the \texttt{show} function in the current Curry
-report, \texttt{showsPrec} is a flexible function. For instance,
+Instances of \texttt{Show} can be derived for all data and renaming
+types. We derive only an implementation of \texttt{showsPrec} and rely
+on the default implementations of \texttt{show} and \texttt{showList}.
+The derived \texttt{showsPrec} uses record notation if the constructor
+was declared with field labels (unless the field list is empty) and
+otherwise uses infix notation for infix constructor applications
+adding parentheses only where needed and ignoring associativity
+ (cf.\ Chap.~10 of~\cite{PeytonJones03:Haskell}). Note that in contrast
+to the \texttt{show} function in the current Curry report,
+\texttt{showsPrec} is a flexible function. For instance,
 \texttt{let x :: Bool; x free in show x} non-deterministically binds
 \texttt{x} to one of the constants \verb|False| and \verb|True| and
 returns its string representation \verb|"False"| and \verb|"True"|,
@@ -305,21 +309,24 @@ respectively.
 >   FunctionDecl p showsPrecId (map (showsPrecEqn pEnv vs p showsPrecId) cs)
 
 > showsPrecEqn :: PEnv -> [Ident] -> Position -> Ident -> Constr -> Equation ()
-> showsPrecEqn pEnv (l:vs) p f (c,n) =
->   equation p f (showsPrecMatch l c xs) (showsPrecExpr pEnv l c xs)
+> showsPrecEqn pEnv (v:vs) p f (c,n,ls) =
+>   equation p f (showsPrecMatch v c ls xs) (showsPrecExpr pEnv v c ls xs)
 >   where xs = take n vs
 
-> showsPrecMatch :: Ident -> QualIdent -> [Ident] -> [ConstrTerm ()]
-> showsPrecMatch l c xs =
->   [VariablePattern () (if null xs then anonId else l),
+> showsPrecMatch :: Ident -> QualIdent -> Maybe [Ident] -> [Ident]
+>                -> [ConstrTerm ()]
+> showsPrecMatch v c ls xs =
+>   [VariablePattern () (if null xs || isJust ls then anonId else v),
 >    ConstructorPattern () c (map (VariablePattern ()) xs)]
 
-> showsPrecExpr :: PEnv -> Ident -> QualIdent -> [Ident] -> Expression ()
-> showsPrecExpr pEnv l c xs
+> showsPrecExpr :: PEnv -> Ident -> QualIdent -> Maybe [Ident] -> [Ident]
+>               -> Expression ()
+> showsPrecExpr pEnv v c ls xs
 >   | null xs = showsPrecShowString (showsCon c' "")
+>   | isJust ls = showsPrecShowFields c' (fromJust ls) xs 
 >   | isInfixOp c' && length xs == 2 =
->       showsPrecShowParen l p (showsPrecShowInfixApp p c' xs)
->   | otherwise = showsPrecShowParen l 10 (showsPrecShowApp 10 c' xs)
+>       showsPrecShowParen v p (showsPrecShowInfixApp p c' xs)
+>   | otherwise = showsPrecShowParen v 10 (showsPrecShowApp 10 c' xs)
 >   where c' = unqualify c
 >         OpPrec _ p = prec c pEnv
 
@@ -330,8 +337,8 @@ respectively.
 > showsPrecShowString s = prelShowString (Literal () (String s))
 
 > showsPrecShowParen :: Ident -> Integer -> Expression () -> Expression ()
-> showsPrecShowParen l p =
->   prelShowParen (prelGt (mkVar l) (Literal () (Int p)))
+> showsPrecShowParen v p =
+>   prelShowParen (prelGt (mkVar v) (Literal () (Int p)))
 
 > showsPrecShowApp :: Integer -> Ident -> [Ident] -> Expression ()
 > showsPrecShowApp p c xs =
@@ -348,6 +355,18 @@ respectively.
 
 > showsPrecShowArg :: Integer -> Ident -> Expression ()
 > showsPrecShowArg p = prelShowsPrec (Literal () (Int (p + 1))) . mkVar
+
+> showsPrecShowFields :: Ident -> [Ident] -> [Ident] -> Expression ()
+> showsPrecShowFields c ls xs =
+>   foldr ($)
+>         (showsPrecShowString "}")
+>         (zipWith3 showsPrecShowField (showsCon c " {" : repeat ", ") ls xs)
+
+> showsPrecShowField :: String -> Ident -> Ident -> Expression ()
+>                    -> Expression ()
+> showsPrecShowField pre l x =
+>   (showsPrecShowString (pre ++ showsCon l " = ") `prelDot`) .
+>   (showsPrecShowArg 0 x `prelDot`)
 
 > prec :: QualIdent -> PEnv -> OpPrec
 > prec op env =

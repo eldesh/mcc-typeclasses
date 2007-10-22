@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2529 2007-10-22 14:37:43Z wlux $
+% $Id: CurryParser.lhs 2530 2007-10-22 14:50:52Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -411,7 +411,7 @@ directory path to the module is ignored.
 > iInstanceDecl :: Parser Token IDecl a
 > iInstanceDecl =
 >   iClassInstDecl IInstanceDecl KW_instance qtycls type2 <*>
->   option (token KW_of <-*> mIdent)
+>   option (pragma ModulePragma mIdent)
 
 > iClassInstDecl :: (Position -> [ClassAssert] -> a -> b -> c) -> Category
 >                -> Parser Token a d -> Parser Token b d -> Parser Token c d

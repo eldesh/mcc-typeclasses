@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2529 2007-10-22 14:37:43Z wlux $
+% $Id: CurryPP.lhs 2530 2007-10-22 14:50:52Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -216,7 +216,7 @@ Interfaces
 >   ppIClassDecl (ppClassHead cx (ppITypeIdent cls k) tv) ds fs'
 > ppIDecl (IInstanceDecl _ cx cls ty m) =
 >   ppInstanceHead cx cls ty <+> maybePP instModule m
->   where instModule m = text "of" <+> ppMIdent m
+>   where instModule m = ppPragma "MODULE" (ppMIdent m)
 > ppIDecl (IFunctionDecl _ f n ty) =
 >   ppQIdent f <+> text "::" <+> maybePP ppArity n <+> ppQualTypeExpr ty
 >   where ppArity n = ppPragma "ARITY" (integer n)

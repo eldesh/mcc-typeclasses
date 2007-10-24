@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2527 2007-10-22 13:49:27Z wlux $
+% $Id: Imports.lhs 2531 2007-10-24 15:55:44Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -93,8 +93,9 @@ all instance declarations are always imported into the current module.
 > importCTs m ds iEnv = foldr (addCT m) iEnv ds
 
 > addCT :: ModuleIdent -> IDecl -> InstSet -> InstSet
-> addCT m (IInstanceDecl _ _ cls ty _) =
->   addToSet (CT (qualQualify m cls) (qualQualify m (typeConstr ty)))
+> addCT m (IInstanceDecl _ _ cls ty _) = addToSet $
+>   CT (qualQualify m cls) (if isPrimTypeId tc then tc else qualQualify m tc)
+>   where tc = typeConstr ty
 > addCT _ _ = id
 
 > importInstances :: ModuleIdent -> [IDecl] -> InstEnv -> InstEnv

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 2527 2007-10-22 13:49:27Z wlux $
+% $Id: Typing.lhs 2534 2007-10-24 17:03:37Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -141,7 +141,8 @@ the inlined expression must be unified. Since the program is type
 correct, this unification is just a simple one way matching where we
 only need to match the type variables in the inlined expression's type
 with the corresponding types in the variable or function's annotated
-type.
+type. However, we may need to expand renaming types since these
+effectively become type synonyms after desugaring.
 
 \ToDo{We would like to use the more general type signature
   \texttt{(Functor f,Typeable (f Type)) => NewtypeEnv -> Type -> f
@@ -154,40 +155,36 @@ type.
 > withType nEnv ty x = fmap (subst (matchType nEnv (typeOf x) ty idSubst)) x
 
 > matchType :: NewtypeEnv -> Type -> Type -> TypeSubst -> TypeSubst
-> matchType nEnv ty1 ty2 = matchTypeApp nEnv ty1 ty2 []
+> matchType nEnv ty1 ty2 =
+>   foldr (flip fromMaybe) (noMatch ty1 ty2)
+>         [matchTypeApp nEnv ty1 ty2 | ty1 <- tys1, ty2 <- tys2]
+>   where tys1 = expand nEnv ty1
+>         tys2 = expand nEnv ty2
+>         noMatch ty1 ty2 = internalError $
+>           "matchType " ++ showsPrec 11 ty1 " " ++ showsPrec 11 ty2 ""
 
-> matchTypeApp :: NewtypeEnv -> Type -> Type -> [(Type,Type)] -> TypeSubst
->              -> TypeSubst
-> matchTypeApp nEnv (TypeVariable tv) ty tys
->   | ty == TypeVariable tv = matchTypes nEnv tys
->   | otherwise = bindSubst tv ty . matchTypes nEnv tys
-> matchTypeApp nEnv (TypeConstructor tc1) (TypeConstructor tc2) tys
->   | tc1 == tc2 = matchTypes nEnv tys
-> matchTypeApp nEnv (TypeConstrained _ tv1) (TypeConstrained _ tv2) tys
->   | tv1 == tv2 = matchTypes nEnv tys
-> matchTypeApp nEnv (TypeSkolem k1) (TypeSkolem k2) tys
->   | k1 == k2 = matchTypes nEnv tys
-> matchTypeApp nEnv (TypeApply ty11 ty12) (TypeApply ty21 ty22) tys =
->   matchTypeApp nEnv ty11 ty21 ((ty12,ty22) : tys)
-> matchTypeApp nEnv (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) tys =
->   matchType nEnv ty11 ty21 . matchType nEnv ty12 ty22 . matchTypes nEnv tys
-> matchTypeApp nEnv (TypeConstructor tc) ty2 tys
->   | isJust n = matchType nEnv ty1' ty2'
->   where n = lookupEnv tc nEnv
->         ty1' = expandAliasType (map fst tys) (fromJust n)
->         ty2' = applyType ty2 (map snd tys)
-> matchTypeApp nEnv ty1 (TypeConstructor tc) tys
->   | isJust n = matchType nEnv ty1' ty2'
->   where n = lookupEnv tc nEnv
->         ty1' = applyType ty1 (map fst tys)
->         ty2' = expandAliasType (map snd tys) (fromJust n)
-> matchTypeApp _ ty1 ty2 tys =
->   internalError ("matchType (" ++ show ty1' ++ ") (" ++ show ty2' ++ ")")
->   where ty1' = applyType ty1 (map fst tys)
->         ty2' = applyType ty2 (map snd tys)
+> matchTypeApp :: NewtypeEnv -> Type -> Type -> Maybe (TypeSubst -> TypeSubst)
+> matchTypeApp nEnv (TypeVariable tv) ty
+>   | ty == TypeVariable tv = Just id
+>   | otherwise = Just (bindSubst tv ty)
+> matchTypeApp nEnv (TypeConstructor tc1) (TypeConstructor tc2)
+>   | tc1 == tc2 = Just id
+> matchTypeApp nEnv (TypeConstrained _ tv1) (TypeConstrained _ tv2)
+>   | tv1 == tv2 = Just id
+> matchTypeApp nEnv (TypeSkolem k1) (TypeSkolem k2)
+>   | k1 == k2 = Just id
+> matchTypeApp nEnv (TypeApply ty11 ty12) (TypeApply ty21 ty22) =
+>   fmap (. matchType nEnv ty12 ty22) (matchTypeApp nEnv ty11 ty21)
+> matchTypeApp nEnv (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) =
+>   Just (matchType nEnv ty11 ty21 . matchType nEnv ty12 ty22)
+> matchTypeApp _ _ _ = Nothing
 
-> matchTypes :: NewtypeEnv -> [(Type,Type)] -> TypeSubst -> TypeSubst
-> matchTypes nEnv tys theta = foldr (uncurry (matchType nEnv)) theta tys
+> expand :: NewtypeEnv -> Type -> [Type]
+> expand nEnv ty = ty : uncurry (expandType nEnv) (unapplyType False ty)
+>   where expandType nEnv (TypeConstructor tc) tys =
+>           maybe [] (expand nEnv . expandAliasType tys) (lookupEnv tc nEnv)
+>           where nEnv' = unbindEnv tc nEnv
+>         expandType _ _ _ = []
 
 \end{verbatim}
 The function \texttt{argumentTypes} returns the labels and the

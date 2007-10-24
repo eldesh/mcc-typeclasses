@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: Simplify.lhs 2533 2007-10-24 16:21:01Z wlux $
 %
 % Copyright (c) 2003-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -159,21 +159,6 @@ either
 \end{itemize}
 A function definition then can be $\eta$-expanded safely if it has
 only a single equation whose body is a non-expansive expression.
-
-We perform $\eta$-expansion even across newtypes, so that, for
-instance, \texttt{doneST} and \texttt{returnST} in the program
-fragment 
-\begin{verbatim}
-  newtype ST s a = ST (s -> (a,s))
-  doneST     = returnST ()
-  returnST x = ST (\s -> (x,s))
-\end{verbatim}
-are expanded into functions with arity one and two, respectively. In
-order to determine the types of the variables added by
-$\eta$-expansion in such cases, the compiler must expand the types as
-well. The compiler does not expand functions across newtypes that
-cannot be expanded themselves, which happens for newtypes that are
-exported abstractly.
 \begin{verbatim}
 
 > etaExpand :: ModuleIdent -> [Equation Type] -> SimplifyState [Equation Type]
@@ -200,20 +185,16 @@ exported abstractly.
 >       do
 >         vs <- mapM (freshVar m etaId) tys
 >         return (map (uncurry VariablePattern) vs,
->                 etaApply ty e (map (uncurry mkVar) vs))
+>                 etaApply e' (map (uncurry mkVar) vs))
 >   | otherwise = return ([],e)
 >   where n = exprArity tyEnv e
->         ty = etaType nEnv n (typeOf e)
->         tys = take n (arrowArgs ty)
+>         (ty',e') = expandTypeAnnot nEnv n e
+>         tys = take n (arrowArgs ty')
 >         etaId n = mkIdent ("_#eta" ++ show n)
->         etaApply ty (Literal _ l) es = apply (Literal ty l) es
->         etaApply ty (Variable _ v) es = apply (Variable ty v) es
->         etaApply ty (Constructor _ c) es = apply (Constructor ty c) es
->         etaApply ty (Apply e1 e2) es =
->           etaApply (TypeArrow (typeOf e2) ty) e1 (e2:es)
->         etaApply _ (Lambda _ _ _) _ = internalError "etaApply"
->         etaApply ty (Let ds e) es = Let ds (etaApply ty e es)
->         etaApply _ (Case _ _) _ = internalError "etaApply"
+>         etaApply e es =
+>           case e of
+>             Let ds e -> Let ds (etaApply e es)
+>             _ -> apply e es
 
 > isNonExpansive :: ValueEnv -> Int -> Expression a -> Bool
 > isNonExpansive _ _ (Literal _ _) = True
@@ -244,6 +225,44 @@ exported abstractly.
 > exprArity tyEnv (Lambda _ ts _) = length ts
 > exprArity tyEnv (Let _ e) = exprArity tyEnv e
 > exprArity _ (Case _ _) = 0
+
+\end{verbatim}
+We perform $\eta$-expansion even across newtypes, so that, for
+instance, \texttt{doneST} and \texttt{returnST} in the program
+fragment 
+\begin{verbatim}
+  newtype ST s a = ST (s -> (a,s))
+  doneST     = returnST ()
+  returnST x = ST (\s -> (x,s))
+\end{verbatim}
+are expanded into functions with arity one and two, respectively. In
+order to determine the types of the variables added by
+$\eta$-expansion in such cases, the compiler must expand the type
+annotations as well. In the example above, the type annotation of
+function \texttt{returnST} in the definition of \texttt{doneST} would
+be changed from $() \rightarrow \texttt{ST}\,\alpha_1\,()$ to $()
+\rightarrow \alpha_1 \rightarrow ((),\alpha_1)$. This is implemented
+in function \texttt{expandTypeAnnot}, which tries to expand the type
+annotations of $e$'s root such that the expression has (at least)
+arity $n$. Note that this may fail when the newtype's definition is
+not visible in the current module.
+\begin{verbatim}
+
+> expandTypeAnnot nEnv n e
+>   | n < arrowArity ty = (ty,e)
+>   | otherwise = (ty',fixType ty' e)
+>   where ty = typeOf e
+>         ty' = etaType nEnv n ty
+
+> fixType :: Type -> Expression Type -> Expression Type
+> fixType ty (Literal _ l) = Literal ty l
+> fixType ty (Variable _ v) = Variable ty v
+> fixType ty (Constructor _ c) = Constructor ty c
+> fixType ty (Apply e1 e2) = Apply (fixType (TypeArrow (typeOf e2) ty) e1) e2
+> fixType ty (Lambda p ts e) = Lambda p ts (fixType (foldr match ty ts) e)
+>   where match _ (TypeArrow _ ty) = ty
+> fixType ty (Let ds e) = Let ds (fixType ty e)
+> fixType _ (Case _ _) = internalError "fixType"
 
 \end{verbatim}
 Before other optimizations are applied to expressions, the simplifier
@@ -297,9 +316,12 @@ recursively to a substituted variable in order to handle chains of
 variable definitions. Note that the compiler carefully updates the
 type annotations of the inlined expression. This is necessary in order
 to preserve soundness of the annotations when inlining a variable with
-a polymorphic type because in that case each occurrence of the
-variable uses fresh type variables, which are independent of the type
-variables used on the right hand side of the variable's definition.
+a polymorphic type because in that case each use of the variable is
+annotated with fresh type variables that are unrelated to the type
+variables used on the right hand side of the variable's definition. In
+addition, newtype constructors in the result of the substituted
+expression's type are expanded as far as necessary to ensure that the
+annotated type has the same arity before and after the substitution.
 
 \ToDo{Apply the type substitution only when necessary, i.e., when the
   inlined variable has a polymorphic type.}
@@ -324,8 +346,10 @@ functions in later phases of the compiler.
 >       do
 >         nEnv <- liftSt envRt
 >         maybe (return (Variable ty v))
->               (simplifyExpr m env . withType nEnv ty)
+>               (simplifyExpr m env . substExpr nEnv ty)
 >               (lookupEnv (unqualify v) env)
+>   where substExpr nEnv ty =
+>           snd . expandTypeAnnot nEnv (arrowArity ty) . withType nEnv ty
 > simplifyExpr _ _ (Constructor ty c) = return (Constructor ty c)
 > simplifyExpr m env (Apply e1 e2) =
 >   do

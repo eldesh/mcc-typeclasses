@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: curry.nw 2353 2007-06-23 11:20:17Z wlux $
+% $Id: curry.nw 2540 2007-10-26 06:56:21Z wlux $
 %
 % Copyright (c) 2002-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -268,7 +268,8 @@ On many systems, the prototypes of these functions are defined in
 
 @
 On Unix systems, the socket functions are declared in
-[[sys/socket.h]]. On Windows systems, we use [[winsock.h]] instead.
+[[sys/socket.h]]. On Windows systems, we use [[winsock.h]] or
+[[winsock2.h]] instead.
 
 <<Portability definitions>>=
 /* Define to empty if the system does not have sys/socket.h */
@@ -276,6 +277,9 @@ On Unix systems, the socket functions are declared in
 
 /* Define to empty if the system does not have winsock.h */
 #undef HAVE_WINSOCK_H
+
+/* Define to empty if the system does not have winsock2.h */
+#undef HAVE_WINSOCK2_H
 
 @ 
 Traditionally, the socket functions [[accept]], [[getsockname]],

@@ -1,4 +1,4 @@
-dnl $Id: configure.in 2539 2007-10-26 06:54:28Z wlux $
+dnl $Id: configure.in 2540 2007-10-26 06:56:21Z wlux $
 dnl
 dnl Copyright (c) 2002-2007, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -221,11 +221,14 @@ AC_SEARCH_LIBS(socket, socket)
 
 dnl Checks for header files.
 AC_CHECK_HEADERS([stdbool.h])
-AC_CHECK_HEADERS([sys/socket.h],[have_sys_sockets_h=yes],[have_sys_sockets_h=no])
+AC_CHECK_HEADERS([sys/socket.h],[have_sockets_h=yes],[have_sockets_h=no])
 AC_CHECK_HEADERS([sys/resource.h])
 AC_CHECK_HEADERS([sys/mman.h],[have_sys_mman_h=yes],[have_sys_mman_h=no])
-if test $have_sys_sockets_h = no; then
-  AC_CHECK_HEADERS([winsock.h],[LIBS="$LIBS -lwsock32"])
+if test $have_sockets_h = no; then
+  AC_CHECK_HEADERS([winsock2.h],[have_sockets_h=yes; LIBS="$LIBS -lws2_32"])
+  if test $have_sockets_h = no; then
+    AC_CHECK_HEADERS([winsock.h],[have_sockets_h=yes; LIBS="$LIBS -lwsock32"])
+  fi
 fi
 AC_CHECK_HEADERS([ieeefp.h])
 AC_HEADER_SYS_WAIT

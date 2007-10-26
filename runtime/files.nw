@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2538 2007-10-26 06:52:55Z wlux $
+% $Id: files.nw 2540 2007-10-26 06:56:21Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -37,6 +37,8 @@ extern void init_files(int, long);
 # include <sys/socket.h>
 # include <netinet/in.h>
 # include <arpa/inet.h>
+#elif HAVE_WINSOCK2_H
+# include <winsock2.h>
 #elif HAVE_WINSOCK_H
 # include <winsock.h>
 #endif
@@ -1442,7 +1444,7 @@ void
 init_files(int bmode, long bsize)
 {
     char    *buffer;
-#if !HAVE_SYS_SOCKET_H && HAVE_WINSOCK_H
+#if !HAVE_SYS_SOCKET_H && (HAVE_WINSOCK_H || HAVE_WINSOCK2_H)
     WSADATA wsaData;
 
     if ( WSAStartup(MAKEWORD(2, 0), &wsaData) )

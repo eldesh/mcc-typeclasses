@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2353 2007-06-23 11:20:17Z wlux $
+% $Id: files.nw 2538 2007-10-26 06:52:55Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -1442,7 +1442,7 @@ void
 init_files(int bmode, long bsize)
 {
     char    *buffer;
-#if HAVE_WINSOCK_H
+#if !HAVE_SYS_SOCKET_H && HAVE_WINSOCK_H
     WSADATA wsaData;
 
     if ( WSAStartup(MAKEWORD(2, 0), &wsaData) )

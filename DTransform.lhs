@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2577 2007-12-16 23:50:01Z wlux $
+% $Id: DTransform.lhs 2578 2007-12-16 23:52:02Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -615,14 +615,12 @@ function and partial constructor applications.
 >     | otherwise = Constructor c n
 >   firstPhase m d (Apply e1 e2) =
 >     Apply (firstPhase m (d+1) e1) (firstPhase m 0 e2)
->   firstPhase m _ (Case eval expr lAlts) =
->     Case eval (firstPhase m 0 expr) (firstPhase m 0 lAlts)
+>   firstPhase m _ (Case rf e as) =
+>     Case rf (firstPhase m 0 e) (firstPhase m 0 as)
 >   firstPhase m _ (Or e1 e2) = Or (firstPhase m 0 e1) (firstPhase m 0 e2)
->   firstPhase m d (Exist ident e) = Exist ident (firstPhase m d e)
->   firstPhase m d (Let binding e) =
->     Let (firstPhase m 0 binding) (firstPhase m d e)
->   firstPhase m d (Letrec lbind e) =
->     Letrec (firstPhase m 0 lbind) (firstPhase m d e)
+>   firstPhase m _ (Exist v e) = Exist v (firstPhase m 0 e)
+>   firstPhase m _ (Let d e) = Let (firstPhase m 0 d) (firstPhase m 0 e)
+>   firstPhase m _ (Letrec ds e) = Letrec (firstPhase m 0 ds) (firstPhase m 0 e)
 
 > instance FirstPhase Alt where
 >   firstPhase m d (Alt term expr) = Alt term (firstPhase m d expr)

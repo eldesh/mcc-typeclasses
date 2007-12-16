@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2563 2007-12-16 20:39:17Z wlux $
+% $Id: DTransform.lhs 2564 2007-12-16 20:44:17Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -923,16 +923,13 @@ to avoid repeating identifiers.
 >        (lTrees2,e',n2) = extractBindings qId e lVars n1 (lTrees++lTrees1) isMainExp voidTree
 >
 > extractBindings qId e@(Apply _ _) lVars n lTrees isMainExp voidTree = 
->       (lTrees1++lTrees2, buildLetExp 
->                            ((concat (map fst letArgs2))++letse) e2,n2)
->       where
->        (f,args) = extractApply e []
->        (lTrees1,args1,n1) = extractBindingsList qId args lVars n lTrees False voidTree
->        letArgs2 = map extractLets args1
->        (lTrees2,e1,n2) = extractBindingsApply f (map snd letArgs2) n1 
->        (letse,e2) = extractLets e1
+>   (lTrees++lTrees1++lTrees2, buildLetExp (concat letsargs++letse) e2,n2)
+>   where (f,args) = extractApply e []
+>         (lTrees1,args1,n1) = extractBindingsList qId args lVars n
+>         (letsargs,args2) = unzip (map extractLets args1)
+>         (lTrees2,e1,n2) = extractBindingsApply f args2 n1 
+>         (letse,e2) = extractLets e1
 >
-
 > extractBindings _ exp _ n lTrees _ _ = (lTrees,exp,n)
 
 
@@ -965,15 +962,12 @@ to avoid repeating identifiers.
 >         (t',e',n2) = extractBindingsApply body es n1 
 
 
-> extractBindingsList::QualIdent -> [Expression] -> [Ident] -> Int -> 
->                      [Expression] -> Bool -> Bool ->
->                      ([Expression],[Expression],Int)
-> extractBindingsList _ [] _ n lTrees _ _ = (lTrees,[],n)
-> extractBindingsList qId (x:xs) lVars n lTrees isMainExp voidTree = 
->       (lTrees2, x':xs',n2)
->       where
->        (lTrees1,x',n1) = newBindings qId x lVars n lTrees isMainExp voidTree
->        (lTrees2,xs',n2) = extractBindingsList qId xs lVars n1 lTrees1 isMainExp voidTree 
+> extractBindingsList :: QualIdent -> [Expression] -> [Ident] -> Int
+>                     -> ([Expression],[Expression],Int)
+> extractBindingsList _ [] _ n = ([],[],n)
+> extractBindingsList qId (x:xs) lVars n = (lTrees1++lTrees2, x':xs',n2)
+>   where (lTrees1,x',n1) = newBindings qId x lVars n [] False False
+>         (lTrees2,xs',n2) = extractBindingsList qId xs lVars n1
 
 
 > extractBindingsBinding:: QualIdent -> Binding ->  Int -> 

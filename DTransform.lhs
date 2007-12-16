@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2562 2007-12-16 20:28:32Z wlux $
+% $Id: DTransform.lhs 2563 2007-12-16 20:39:17Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -65,10 +65,10 @@ groups:
       and deal with computation tress. This is done by adding de degugging
       prelude to the list of import modules, and included a new function 
       {\tt main} in the module main (the older will be renamed).
-\item Foreign declarations: The same as in the source program.
 \item Data types: The same as in the source program.
-\item New auxliary functions: Introduced to represent partial applications of 
+\item New auxiliary functions: Introduced to represent partial applications of 
       constructors and (maybe foreign) functions.
+\item Foreign declarations: The same as in the source program.
 \item Transformed functions: The rules of the source program transformed. 
       In the final program they will return a computation tree, as well as their
       the same result they did in the source program.
@@ -77,23 +77,19 @@ groups:
 \begin{verbatim}
 
 > debugDecls :: ModuleIdent -> (QualIdent -> Bool) -> [Decl] -> [Decl]
-> debugDecls m  trusted lDecls = 
->       foreigns  ++
->       debugTypes types ++
->       debugAuxiliary m lTypes ++ 
->       secondPhase 
->       where
->          (types,functions,foreigns) = debugSplitDecls lDecls
->          lTypes = collectSymbolTypes types functions foreigns []
->          lForeign = map (\(ForeignDecl id cc s t) -> id) foreigns
->          firstPhase = debugFirstPhase  m lForeign functions
->          secondPhase =  map (debugFunction trusted) firstPhase
+> debugDecls m trusted lDecls = 
+>   debugTypes types ++
+>   debugAuxiliary m lTypes ++ 
+>   foreigns ++
+>   map (debugFunction trusted . debugFirstPhase m) functions
+>   where (types,functions,foreigns) = debugSplitDecls lDecls
+>         lTypes = collectSymbolTypes types functions foreigns []
 
 
 \end{verbatim}
 
 
-Some auxiliar functions widely used throughout the module
+Some auxiliary functions widely used throughout the module.
 
 %Function that builds a qualified name from the name of the module and a string 
 %standing for the name we are going to represent.
@@ -367,88 +363,59 @@ We have to introduce an auxiliary function for the lambda in the intermediate co
 
 The first phase of the transformation process performs two diferent tasks:
 \begin{itemize}
-\item Transform the type of the function.
-\item Change the function applications by their new names.
+\item Transform the type of each function declaration.
+\item Change the names of all function and partial constructor applications.
 \end{itemize}
 
 \begin{verbatim}
 
-> debugFirstPhase ::  ModuleIdent -> [QualIdent] -> [Decl] ->[Decl]
-> debugFirstPhase mName lForeigns [] = []
-> debugFirstPhase m l ((FunctionDecl ident lVars fType fExp) :xs)
->   | isQSelectorId ident = (FunctionDecl ident lVars fType fExp:xs'')
->   | otherwise           = (FunctionDecl ident lVars fType' exp':xs'')
->   where 
->     exp'   = firstPhaseExp m 0 l fExp
->     xs''   = debugFirstPhase m l xs
->     fType' = transformType (length lVars) fType
+> debugFirstPhase :: ModuleIdent -> Decl -> Decl
+> debugFirstPhase m (FunctionDecl ident lVars fType fExp)
+>   | isQSelectorId ident = FunctionDecl ident lVars fType fExp
+>   | otherwise           = FunctionDecl ident lVars fType' exp'
+>   where exp'   = firstPhase m 0 fExp
+>         fType' = transformType (length lVars) fType
 
-> -----------------------------------------------------------------------------
-> firstPhaseExp :: ModuleIdent -> Int ->  [QualIdent] -> Expression -> Expression
->
-> firstPhaseExp m d l (Function qIdent n)
->   | isQSelectorId qIdent = Function qIdent n
->   | otherwise            = firstPhaseQual m n d l qIdent True
->
-> firstPhaseExp m d l (Constructor qIdent n) = firstPhaseQual m n d l qIdent False
->
-> firstPhaseExp m d l (Apply e1 e2) = Apply e1' e2'
->    where
->       e1' = firstPhaseExp m (d+1) l e1
->       e2' = firstPhaseExp m 0 l e2 
->
-> firstPhaseExp m d l (Case eval expr lAlts) = Case eval e1' lAlts'
->     where
->       e1'    = firstPhaseExp m 0 l expr
->       lAlts' =  foldr aux [] lAlts
->       aux (Alt term expr) xs = Alt term (firstPhaseExp m d l expr):xs
+> class FirstPhase a where
+>   firstPhase :: ModuleIdent -> Int -> a -> a
 
->
-> firstPhaseExp m d l (Or e1 e2) = (Or e1' e2')
->    where
->       e1' = firstPhaseExp m d l e1
->       e2' = firstPhaseExp m d l e2 
->
-> firstPhaseExp m d l (Exist ident e) = Exist ident e'
->    where
->       e' = firstPhaseExp m d l e
->
-> firstPhaseExp m d l (Let binding e) = Let binding' e'
->    where
->       binding'= firstPhaseBinding m  0 l binding
->       e'      = firstPhaseExp m d l e
->
->
-> firstPhaseExp m d l (Letrec lbind e) = Letrec lbind' e'
->    where
->       lbind'   = map  (firstPhaseBinding m 0 l) lbind
->       e'       = firstPhaseExp m d l e
+> instance FirstPhase a => FirstPhase [a] where
+>   firstPhase m d = map (firstPhase m d)
 
-> firstPhaseExp m d l input = input
+> instance FirstPhase Expression where
+>   firstPhase _ _ (Literal l) = Literal l
+>   firstPhase _ _ (Variable v) = Variable v
+>   firstPhase m d (Function qIdent n)
+>     | isQSelectorId qIdent = Function qIdent n
+>     | otherwise            = firstPhaseQual m n d qIdent True
+>   firstPhase m d (Constructor qIdent n) = firstPhaseQual m n d qIdent False
+>   firstPhase m d (Apply e1 e2) =
+>     Apply (firstPhase m (d+1) e1) (firstPhase m 0 e2)
+>   firstPhase m d (Case eval expr lAlts) =
+>     Case eval (firstPhase m 0 expr) (firstPhase m d lAlts)
+>   firstPhase m d (Or e1 e2) = Or (firstPhase m d e1) (firstPhase m d e2)
+>   firstPhase m d (Exist ident e) = Exist ident (firstPhase m d e)
+>   firstPhase m d (Let binding e) =
+>     Let (firstPhase m 0 binding) (firstPhase m d e)
+>   firstPhase m d (Letrec lbind e) =
+>     Letrec (firstPhase m 0 lbind) (firstPhase m d e)
 
-> firstPhaseBinding:: ModuleIdent -> Int -> [QualIdent] -> Binding -> Binding
-> firstPhaseBinding m d l (Binding ident expr) =(Binding ident expr')
->    where
->       expr' = firstPhaseExp m d l expr
+> instance FirstPhase Alt where
+>   firstPhase m d (Alt term expr) = Alt term (firstPhase m d expr)
 
+> instance FirstPhase Binding where
+>   firstPhase m d (Binding ident expr) = Binding ident (firstPhase m d expr)
 
-> firstPhaseQual ::  ModuleIdent -> Int -> Int -> [QualIdent] -> 
->                   QualIdent -> Bool -> Expression
-> firstPhaseQual m arity nArgs lForeign  qIdent isFunction =
->   if mustBeChanged then reconstructExpr isFunction qIdent' arity'
->   else reconstructExpr isFunction qIdent'' arity
->   where
->       (idModule,ident) = splitQualIdent qIdent
->       mustBeChanged =  if not isFunction  then nArgs < arity
->                             else nArgs < arity-1
->       idModule' = maybe m id idModule
->       arity'    = nArgs+1
->       ident'    = idAuxiliarFunction ident nArgs
->       ident''   = debugRenameId "" ident
->       qIdent'   = qualifyWith idModule' ident'
->       qIdent''  = if not isFunction 
->                   then qIdent 
->                   else qualifyWith idModule' ident''
+> firstPhaseQual :: ModuleIdent -> Int -> Int -> QualIdent -> Bool -> Expression
+> firstPhaseQual m arity nArgs qIdent isFunction
+>   | mustBeChanged = Function qIdent' (nArgs+1)
+>   | isFunction    = Function qIdent'' arity
+>   | otherwise     = Constructor qIdent arity
+>   where mustBeChanged = if isFunction then nArgs < arity-1 else nArgs < arity
+>         (idModule,ident) = splitQualIdent qIdent
+>         idModule' = maybe m id idModule
+>         qIdent'   = qualifyWith idModule' (idAuxiliarFunction ident nArgs)
+>         qIdent''  = qualifyWith idModule' (debugRenameId "" ident)
 
 \end{verbatim}
 
@@ -549,10 +516,6 @@ Next function  gets the current module identifier,
 > createApply :: Expression  -> [Expression] -> Expression 
 > createApply exp lExp  = foldl Apply exp lExp
 
-
-> reconstructExpr :: Bool -> QualIdent -> Int-> Expression
-> reconstructExpr isFunction qId n = if isFunction then (Function qId n)
->                                    else (Constructor qId n)
 
 \end{verbatim}
 

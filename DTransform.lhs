@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2504 2007-10-16 20:51:03Z wlux $
+% $Id: DTransform.lhs 2560 2007-12-16 18:56:55Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -326,7 +326,7 @@ We have to introduce an auxiliary function for the lambda in the intermediate co
 >       fApp  = if n==0
 >               then Function debugOldMainId n
 >               else debugBuildPairExp (Function debugOldMainId n) void
->       fBody = Apply (Function debugIOFunctionqId 1) fApp
+>       fBody = Apply (Function debugIOFunctionqId 2) fApp
 >       debugOldMainId = qualifyWith m (debugRenameId "" f)
 
 > newMain :: ModuleIdent -> Ident -> Int -> [Decl]
@@ -813,13 +813,17 @@ expressions.)
 >         lVars'        = drop ((length lVars)-arity) lVars
 
 > etaExpandIO :: Expression -> Expression -> Expression
-> etaExpandIO (Exist v e)   = Exist v . etaExpandIO e
-> etaExpandIO (Let d e)     = Let d . etaExpandIO e
-> etaExpandIO (Letrec ds e) = Letrec ds . etaExpandIO e
-> etaExpandIO e             = Apply e
+> etaExpandIO (Case rf e as) = Case rf e . zipWith etaExpandIOAlt as . repeat
+>   where etaExpandIOAlt (Alt t e) = Alt t . etaExpandIO e
+> etaExpandIO (Exist v e)    = Exist v . etaExpandIO e
+> etaExpandIO (Let d e)      = Let d . etaExpandIO e
+> etaExpandIO (Letrec ds e)  = Letrec ds . etaExpandIO e
+> etaExpandIO e              = Apply e
 
 > etaReduceIO :: Expression -> (Expression,Expression)
 > etaReduceIO (Apply e1 e2) = (e1, e2)
+> etaReduceIO (Case rf e1 [Alt t e2]) = (Case rf e1 [Alt t e2'], v)
+>                                               where (e2', v) = etaReduceIO e2
 > etaReduceIO (Exist v e)   = (Exist v e', v')  where (e', v') = etaReduceIO e
 > etaReduceIO (Let d e)     = (Let d e', v)     where (e', v) = etaReduceIO e
 > etaReduceIO (Letrec ds e) = (Letrec ds e', v) where (e', v) = etaReduceIO e

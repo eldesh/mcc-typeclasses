@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2571 2007-12-16 21:57:14Z wlux $
+% $Id: DTransform.lhs 2572 2007-12-16 22:01:59Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -144,6 +144,10 @@ Some auxiliary functions widely used throughout the module.
 > debugRenameId suffix ident =
 >   renameIdent (mkIdent (debugPrefix ++ name ident ++ suffix)) (uniqueId ident)
 
+> debugRenameqId :: String -> ModuleIdent -> QualIdent -> QualIdent
+> debugRenameqId suffix mIdent qIdent =
+>   qualifyWith (maybe mIdent id mIdent') (debugRenameId suffix ident')
+>   where (mIdent',ident') = splitQualIdent qIdent
 
 \end{verbatim}
 
@@ -366,7 +370,7 @@ computation tree of the transformed function.
 > generateForeign m qId cc s n fType = 
 >       FunctionDecl qId' varsId fType' body
 >       where
->       qId'             = changeFunctionqId qId
+>       qId'             = changeFunctionqId m qId
 >       isIO             = isIOType (resultType fType)
 >       varsId           = map (mkIdent.("_"++).show) [0..n-1]
 >       vars             = map Variable varsId
@@ -440,26 +444,23 @@ generates the new auxiliary functions.
 > generateAuxFunc :: ModuleIdent -> QualIdent -> Type -> Expression -> Int
 >                 -> Decl
 > generateAuxFunc m f ty e i = FunctionDecl f' vs ty' e'
->   where f' = qualifyWith m (idAuxiliarFunction (snd (splitQualIdent f)) i)
+>   where f' = qidAuxiliaryFunction m f i
 >         vs = map (mkIdent . ("_"++) . show) [0..i]
 >         ty' = transformType (i+1) ty
 >         app = debugFirstPhase m (createApply e (map Variable vs))
 >         e' = debugBuildPairExp app void
 
-> idAuxiliarFunction :: Ident -> Int -> Ident
-> idAuxiliarFunction ident n = debugRenameId ('#':show n) ident
+> qidAuxiliaryFunction :: ModuleIdent -> QualIdent -> Int -> QualIdent
+> qidAuxiliaryFunction m f n = debugRenameqId ('#':show n) m f
 
 > extractApply :: Expression -> [Expression] -> (Expression,[Expression])
 > extractApply (Apply e1 e2) l = extractApply e1 (e2:l)
-> extractApply e1 l =  (e1,l)
+> extractApply e1 l = (e1,l)
 
-                                           
-> createApply :: Expression  -> [Expression] -> Expression 
-> createApply exp lExp  = foldl Apply exp lExp
-
+> createApply :: Expression -> [Expression] -> Expression
+> createApply exp lExp = foldl Apply exp lExp
 
 \end{verbatim}
-
 
 The function \texttt{transformType} transforms the type
 $\tau_1 \rightarrow \dots \rightarrow \tau_n \rightarrow \tau$
@@ -595,9 +596,12 @@ phases.
 > debugFunction :: ModuleIdent -> (QualIdent -> Bool) -> QualIdent -> [Ident]
 >               -> Type -> Expression -> Decl
 > debugFunction m trusted f vs ty e = FunctionDecl f' vs ty' e'
->   where f' = changeFunctionqId f
+>   where f' = changeFunctionqId m f
 >         ty' = transformType (length vs) ty
 >         e' = debugSecondPhase f (trusted f) vs ty' (debugFirstPhase m e)
+
+> changeFunctionqId :: ModuleIdent -> QualIdent -> QualIdent
+> changeFunctionqId m f = debugRenameqId "" m f
 
 \end{verbatim}
 
@@ -620,8 +624,11 @@ function and partial constructor applications.
 >   firstPhase _ _ (Variable v) = Variable v
 >   firstPhase m d (Function f n)
 >     | isQSelectorId f = Function f n
->     | otherwise       = firstPhaseQual m n d f True
->   firstPhase m d (Constructor c n) = firstPhaseQual m n d c False
+>     | d < n-1         = Function (qidAuxiliaryFunction m f d) (d+1)
+>     | otherwise       = Function (changeFunctionqId m f) n
+>   firstPhase m d (Constructor c n)
+>     | d < n     = Function (qidAuxiliaryFunction m c d) (d+1)
+>     | otherwise = Constructor c n
 >   firstPhase m d (Apply e1 e2) =
 >     Apply (firstPhase m (d+1) e1) (firstPhase m 0 e2)
 >   firstPhase m d (Case eval expr lAlts) =
@@ -638,17 +645,6 @@ function and partial constructor applications.
 
 > instance FirstPhase Binding where
 >   firstPhase m d (Binding ident expr) = Binding ident (firstPhase m d expr)
-
-> firstPhaseQual :: ModuleIdent -> Int -> Int -> QualIdent -> Bool -> Expression
-> firstPhaseQual m arity nArgs qIdent isFunction
->   | mustBeChanged = Function qIdent' (nArgs+1)
->   | isFunction    = Function qIdent'' arity
->   | otherwise     = Constructor qIdent arity
->   where mustBeChanged = if isFunction then nArgs < arity-1 else nArgs < arity
->         (idModule,ident) = splitQualIdent qIdent
->         idModule' = maybe m id idModule
->         qIdent'   = qualifyWith idModule' (idAuxiliarFunction ident nArgs)
->         qIdent''  = qualifyWith idModule' (debugRenameId "" ident)
 
 \end{verbatim}
 
@@ -936,17 +932,4 @@ a  new local let, into an element of the list of trees of the form
 >        id1' = dEvalApply (Variable id1 )
 >        id2' = Variable id2
 
-
 \end{verbatim}
-
-\begin{verbatim}
-
-> changeFunctionqId :: QualIdent -> QualIdent
-> changeFunctionqId qId = qId'
->       where
->       (idModule,ident) = splitQualIdent qId
->       ident'    = debugRenameId "" ident
->       qId'      = maybe qId (flip qualifyWith ident') idModule
-
-\end{verbatim}
-

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2568 2007-12-16 21:31:27Z wlux $
+% $Id: DTransform.lhs 2569 2007-12-16 21:37:27Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -52,9 +52,8 @@ children.
 \begin{verbatim}
 
 > dTransform :: (QualIdent -> Bool) -> Module -> Module
-> dTransform trusted (Module m is ds) = Module m (i:is) (debugDecls m trusted ds)
->       where 
->       i   =  debugPreludeModule
+> dTransform trusted (Module m is ds) =
+>   Module m (debugPreludeMIdent:is) (debugDecls m trusted ds)
 
 \end{verbatim}
 
@@ -96,25 +95,16 @@ Some auxiliary functions widely used throughout the module.
 \begin{verbatim}
 
 > newIdName :: Int -> String -> Ident
-> newIdName n name =  mkIdent (debugPrefix++name++(show n))
+> newIdName n name = mkIdent (debugPrefix++name++show n)
 
-> newModuleName :: ModuleIdent -> String -> QualIdent
-> newModuleName m name = qualifyWith m (mkIdent (debugPrefix ++ name))
-
-> debugQualPrelude :: Ident -> QualIdent
-> debugQualPrelude  = qualifyWith debugPreludeModule
-
-> debugQualPreludeName :: String  -> QualIdent
-> debugQualPreludeName  name = debugQualPrelude (mkIdent name)
-
-> debugPreludeModule :: ModuleIdent
-> debugPreludeModule   = debugPreludeMIdent
+> debugQualPreludeName :: String -> QualIdent
+> debugQualPreludeName name = qualifyWith debugPreludeMIdent (mkIdent name)
 
 > debugFunctionqId :: QualIdent
-> debugFunctionqId = debugQualPrelude (mkIdent debugFunctionName)
+> debugFunctionqId = debugQualPreludeName debugFunctionName
 
 > debugIOFunctionqId :: QualIdent
-> debugIOFunctionqId = debugQualPrelude (mkIdent debugIOFunctionName)
+> debugIOFunctionqId = debugQualPreludeName debugIOFunctionName
 
 > debugRenameId :: String -> Ident -> Ident
 > debugRenameId suffix ident =
@@ -143,10 +133,10 @@ constructing expressions of the form (a,b) and the name of function
 > debugTypeList t = TypeConstructor qListId [t]
 
 > debugTypePair :: Type -> Type -> Type
-> debugTypePair a b = TypeConstructor debugIdentPair [a,b]
+> debugTypePair a b = TypeConstructor qPairId [a,b]
 
 > debugTypeTuple :: [Type] -> Type
-> debugTypeTuple ts = TypeConstructor (debugIdentTuple (length ts)) ts
+> debugTypeTuple ts = TypeConstructor (qTupleId (length ts)) ts
 
 > debugTypeChar,debugTypeString:: Type
 > debugTypeChar   = TypeConstructor qCharId []
@@ -165,23 +155,14 @@ constructing expressions of the form (a,b) and the name of function
 
 
 
-> debugIdentPair :: QualIdent
-> debugIdentPair = debugIdentTuple 2
-
-> debugIdentTuple :: Int -> QualIdent
-> debugIdentTuple n = qTupleId n
-
-> debugIdentCons :: QualIdent
-> debugIdentCons = qConsId
-
-> debugIdentNil :: QualIdent
-> debugIdentNil = qNilId
+> qPairId :: QualIdent
+> qPairId = qTupleId 2
 
 > debugNil :: Expression
-> debugNil = Constructor debugIdentNil 0
+> debugNil = Constructor qNilId 0
 
 > debugBuildPairExp :: Expression -> Expression -> Expression
-> debugBuildPairExp e1 e2 = Apply (Apply (Constructor debugIdentPair 2) e1) e2
+> debugBuildPairExp e1 e2 = Apply (Apply (Constructor qPairId 2) e1) e2
 
 
 > debugClean :: QualIdent 
@@ -213,35 +194,28 @@ constructing expressions of the form (a,b) and the name of function
 
 
 > dEvalApply :: Expression -> Expression
-> dEvalApply = Apply (Function dEvalId 1)
-
-> dEvalId :: QualIdent
-> dEvalId =  debugQualPreludeName "dEval"
+> dEvalApply = Apply (Function (debugQualPreludeName "dEval") 1)
 
 
 > void :: Expression
-> void =  Constructor (qualifyWith debugPreludeModule  (mkIdent "CTreeVoid")) 0
+> void = Constructor (debugQualPreludeName "CTreeVoid") 0
 
-> emptyNode :: Expression-> Expression
-> emptyNode  children = 
->          createApply ( 
->               Constructor (qualifyWith debugPreludeModule  
->                                 (mkIdent "EmptyCTreeNode")) 1)
->                        [children]
+> emptyNode :: Expression -> Expression
+> emptyNode children =
+>   createApply (Constructor (debugQualPreludeName "EmptyCTreeNode") 1)
+>               [children]
 
 
 > debugBuildList :: [Expression] -> Expression
-> debugBuildList l = foldr Apply  debugNil (map (Apply cons) l)
->       where
->        cons = Constructor debugIdentCons 2
+> debugBuildList l = foldr Apply debugNil (map (Apply cons) l)
+>   where cons = Constructor qConsId 2
 
 
-> node :: Expression -> Expression -> Expression -> Expression -> Expression ->
->         Expression
+> node :: Expression -> Expression -> Expression -> Expression -> Expression
+>      -> Expression
 > node name args result number children =
->      createApply (Constructor (qualifyWith debugPreludeModule 
->                                                (mkIdent "CTreeNode")) 5)
->                [name, args, result, number, children]
+>   createApply (Constructor (debugQualPreludeName "CTreeNode") 5)
+>               [name, args, result, number, children]
 
 \end{verbatim}
 
@@ -302,7 +276,7 @@ We have to introduce an auxiliary function for the lambda in the intermediate co
 >                 then newMainIO m goalId arity
 >                 else newMain m goalId arity
 >         debugOldMainId = qualifyWith m (debugRenameId "" goalId)
->         debugResultType (TypeConstructor debugIdentPair [ty,_]) = ty
+>         debugResultType (TypeConstructor _ [ty,_]) = ty
 >         isIO =
 >           case arity of
 >             0 -> isIOType (debugResultType ty)
@@ -339,9 +313,9 @@ We have to introduce an auxiliary function for the lambda in the intermediate co
 >       equalFunc = Function (qualifyWith preludeMIdent (mkIdent "=:=")) 2
 >       seqAndFunc = Function (qualifyWith preludeMIdent (mkIdent "&>")) 2
 >       expression =  createApply seqAndFunc [eq1,eq2]
->       alt'     = Alt (ConstructorPattern debugIdentPair [x,ct]) expression
+>       alt'     = Alt (ConstructorPattern qPairId [x,ct]) expression
 >       caseExpr = Case Flex (Variable param) [alt']
->       alt      = Alt (ConstructorPattern debugIdentPair [r,ct']) caseExpr
+>       alt      = Alt (ConstructorPattern qPairId [r,ct']) caseExpr
 >       fApp     = if n == 0
 >                  then Function debugOldMainId n
 >                  else debugBuildPairExp (Function debugOldMainId n) void
@@ -546,54 +520,50 @@ for \texttt{IO}.
 \begin{verbatim}
 
 > ---------------------------------------------------------------------------
-> transformType :: Int ->  Type -> Type
-> transformType 0  fType =  debugTypePair fType' debugTypeCTree
->     where fType' = transformType'  fType
+> transformType :: Int -> Type -> Type
+> transformType 0 fType = debugTypePair (transformType' fType) debugTypeCTree
 > transformType _ fType@(TypeArrow ty1 (TypeConstructor tc [ty2,ty3]))
->   | tc == qTupleId 2 && ty1 == TypeConstructor qWorldId [] && ty1 == ty3 =
+>   | tc == qPairId && ty1 == TypeConstructor qWorldId [] && ty1 == ty3 =
 >       transformType' fType
-> transformType n  (TypeArrow type1 type2) =  TypeArrow type1' type2'
->     where 
->       type1' = transformType' type1
->       type2' = transformType (n-1) type2
-> transformType _  fType = transformType'  fType
+> transformType n (TypeArrow type1 type2) =
+>   TypeArrow (transformType' type1) (transformType (n-1) type2)
+> transformType _ fType = transformType' fType
 
-> transformType' ::  Type -> Type
+> transformType' :: Type -> Type
 > transformType' (TypeArrow ty1 (TypeConstructor tc [ty2,ty3]))
->   | tc == qTupleId 2 && ty1 == TypeConstructor qWorldId [] && ty1 == ty3 =
+>   | tc == qPairId && ty1 == TypeConstructor qWorldId [] && ty1 == ty3 =
 >       TypeArrow ty1 (TypeConstructor tc [transformType 0 ty2,ty3])
-> transformType'  t@(TypeArrow type1 type2) = transformType 1  t
-> transformType'  (TypeConstructor ident lTypes) = 
->    if ident == qIOId
->    then TypeConstructor ident [transformType 0 (head lTypes)]
->    else TypeConstructor ident (map transformType'  lTypes)
-> transformType'  (TypeVariable v) = TypeVariable v
+> transformType' t@(TypeArrow type1 type2) = transformType 1 t
+> transformType' (TypeConstructor tc lTypes)
+>   | tc == qIOId = TypeConstructor tc [transformType 0 (head lTypes)]
+>   | otherwise = TypeConstructor tc (map transformType' lTypes)
+> transformType' (TypeVariable v) = TypeVariable v
 
 > typeArity :: Type -> Int
 > typeArity ty = length (argumentTypes ty)
 
 > argumentTypes :: Type -> [Type]
 > argumentTypes (TypeArrow ty1 (TypeConstructor tc [ty2,ty3]))
->   | tc == qTupleId 2 && ty1 == TypeConstructor qWorldId [] && ty1 == ty3 = []
+>   | tc == qPairId && ty1 == TypeConstructor qWorldId [] && ty1 == ty3 = []
 > argumentTypes (TypeArrow ty1 ty2) = ty1 : argumentTypes ty2
 > argumentTypes _                   = []
 
 > resultType :: Type -> Type
 > resultType (TypeArrow ty1 (TypeConstructor tc [ty2,ty3]))
->   | tc == qTupleId 2 && ty1 == TypeConstructor qWorldId [] && ty1 == ty3 =
+>   | tc == qPairId && ty1 == TypeConstructor qWorldId [] && ty1 == ty3 =
 >       TypeConstructor qIOId [ty2]
 > resultType (TypeArrow _ ty) = resultType ty
 > resultType ty               = ty
 
 > isIOType :: Type -> Bool
 > isIOType (TypeArrow ty1 (TypeConstructor tc [_,ty2])) =
->   tc == qTupleId 2 && ty1 == TypeConstructor qWorldId [] && ty1 == ty2
+>   tc == qPairId && ty1 == TypeConstructor qWorldId [] && ty1 == ty2
 > isIOType (TypeConstructor tc [_]) = tc == qIOId
 > isIOType _                        = False
 
 > isArrowType :: Type -> Bool
 > isArrowType (TypeArrow ty1 (TypeConstructor tc [_,ty2])) =
->   not (tc == qTupleId 2 && ty1 == TypeConstructor qWorldId [] && ty1 == ty2)
+>   not (tc == qPairId && ty1 == TypeConstructor qWorldId [] && ty1 == ty2)
 > isArrowType (TypeArrow _ _) = True
 > isArrowType _               = False
 

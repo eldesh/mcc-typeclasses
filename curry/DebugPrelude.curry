@@ -5,7 +5,7 @@
 
 module DebugPrelude(CTree(..),startDebugging,startIODebugging,clean,dEval,
                     try',return',bind',bind_',catch',fixIO',encapsulate',
-                    performIO) where
+                    unsafePerformIO',performIO,return,(>>=),(>>)) where
 import Prelude hiding(Monad(..))
 import IO
 
@@ -34,13 +34,10 @@ clean ((p,x):xs) = if p=="_"
 			 rest = clean xs
 		
 
--- 08-05-02 Try defined for debugging
-try' :: (a -> (Success,CTree)) -> [a -> (Success,CTree)]
-try' g = map wrap (try (unwrap g))
-
-
-unwrap   g (x,t) | r = t =:= t' where (r,t') = g x 
-wrap     g x | g (x,t) = (success,t) where t free
+try' :: (a -> (Success,CTree)) -> ([a -> (Success,CTree)], CTree)
+try' g = (map wrap (try (unwrap g)), CTreeVoid)
+  where unwrap g (x,t) | r = t =:= t' where (r,t') = g x 
+        wrap   g x | g (x,t) = (success,t) where t free
 
 
 type IOT a = IO (a, CTree)
@@ -83,6 +80,8 @@ fixIO' f = fixIO (wrap f)
 encapsulate' :: a -> IOT (a -> (Success, CTree))
 encapsulate' e = encapsulate e >>= \g -> return' (\x -> (g x, CTreeVoid))
   where foreign import primitive encapsulate :: a -> IO (a -> Success)
+
+foreign import primitive "unsafePerformIO" unsafePerformIO' :: IOT a -> (a, CTree)
 
 
 startDebugging :: ((a, CTree) -> Success) -> IO ()

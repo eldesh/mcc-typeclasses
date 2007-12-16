@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2572 2007-12-16 22:01:59Z wlux $
+% $Id: DTransform.lhs 2573 2007-12-16 23:02:12Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -97,7 +97,7 @@ all.
 >       [debugFunction m trusted f vs ty e]
 > debugDecl m _ (ForeignDecl f cc s ty) =
 >   generateAuxFuncs m (f,IsFunction,n',ty) ++
->   [ForeignDecl f cc s ty,generateForeign m f cc s n' ty]
+>   generateForeign m f cc s n' ty
 >   where n = typeArity ty
 >         n' = if isIOType (resultType ty) then n + 1 else n
 
@@ -205,30 +205,6 @@ constructing expressions of the form (a,b) and the name of function
 
 > debugClean :: QualIdent 
 > debugClean  = debugQualPreludeName "clean"
-
-> debugPerformIO :: QualIdent
-> debugPerformIO = debugQualPreludeName "performIO"
-
-> debugTry :: QualIdent 
-> debugTry  = debugQualPreludeName "try'"
-
-> debugReturn :: QualIdent
-> debugReturn  = debugQualPreludeName "return'"
-
-> debugBind :: QualIdent
-> debugBind  = debugQualPreludeName "bind'"
-
-> debugBind_ :: QualIdent
-> debugBind_  = debugQualPreludeName "bind_'"
-
-> debugCatch :: QualIdent
-> debugCatch  = debugQualPreludeName "catch'"
-
-> debugFixIO :: QualIdent
-> debugFixIO  = debugQualPreludeName "fixIO'"
-
-> debugEncapsulate :: QualIdent
-> debugEncapsulate  = debugQualPreludeName "encapsulate'"
 
 
 > dEvalApply :: Expression -> Expression
@@ -347,69 +323,77 @@ We have to introduce an auxiliary function for the lambda in the intermediate co
 
 
 \end{verbatim}
-Foreign functions cannot be changed by the debugging transformation,
-since their implementation is unknown. In order to integrate foreign
-functions into the transformed program, the debugging transformation
-introduces an auxiliary function for each foreign function that pairs
-the result of the foreign function with a suitable computation tree.
-For first order foreign functions, e.g., the arithmetic primitives,
-that computation tree is simply a void tree.
+The implementation of foreign functions is not known and must be
+trusted. For first order foreign functions this means that the
+transformed function simply should pair the result of the foreign
+function with a void computation tree. Therefore, given a foreign
+function $f :: \tau_1 \rightarrow \dots \rightarrow \tau_n \rightarrow
+\tau$, the debugging transformation just adds an auxiliary function
+$f' \, x_1 \dots x_n = (f \, x_1 \dots x_n, \texttt{Void})$ to the
+program. First order foreign functions in the \texttt{IO} monad are
+handled similarly, except that the computation tree is lifted into the
+\texttt{IO} monad. Thus, given a foreign function $f :: \tau_1
+\rightarrow \dots \rightarrow \tau_n \rightarrow \texttt{IO}\,\tau$,
+the transformation defines an auxiliary function $f' \, x_1 \dots x_n
+= f \, x_1 \dots x_n \;\texttt{>>=} \; \texttt{return'}$ where the
+auxiliary function \texttt{return' x = (x, Void)} is defined in module
+\texttt{DebugPrelude}. As a minor optimization, using the monad law
+$\texttt{return}\,x \; \texttt{>>=} \; k \equiv k\,x$, we transform
+the \texttt{return} primitive directly into \texttt{return'}.
 
-The situation is different for higher order primitives like
-\texttt{try} and foreign functions defined in the \texttt{IO} monad.
-These functions can perform arbitrary computations and may invoke user
-defined functions. Therefore associating a void tree is not
-sufficient. Instead the transformation is using some helper functions
-defined in the \texttt{DebugPrelude}, which collect the computation
-trees of the subcomputations and return them along with the
-computation tree of the transformed function.
+Higher order foreign functions like the encapsulated search primitive
+\texttt{try} or the monadic bind operator \texttt{(>>=)} cannot be
+handled in that way since they can invoke arbitrary computations. In
+order to integrate such functions into the program transformation
+approach, suitable wrapper functions, which collect the computation
+trees of the subcomputations performed by the foreign function and
+return them along with the function's result, must be defined in
+module \texttt{DebugPrelude}. These wrappers are then used in the
+transformed program instead of the original function. Fortunately,
+there is only a small number of such primitives making this approach
+feasible.
+
+\textbf{Note}: The code below assumes that the wrapper functions for
+higher order primitives defined in \texttt{DebugPrelude} indeed have
+the same arity as the original primitives.
 \begin{verbatim}
 
 > generateForeign :: ModuleIdent -> QualIdent -> CallConv -> String -> Int
->                 -> Type -> Decl
-> generateForeign m qId cc s n fType = 
->       FunctionDecl qId' varsId fType' body
->       where
->       qId'             = changeFunctionqId m qId
->       isIO             = isIOType (resultType fType)
->       varsId           = map (mkIdent.("_"++).show) [0..n-1]
->       vars             = map Variable varsId
->       vars'            = init vars
->       fType'           = transformType n  fType
->       bind             = qualifyWith preludeMIdent (mkIdent ">>=")
->       ioDict           = qualifyWith preludeMIdent (mkIdent "_Inst#Prelude.Monad#Prelude.IO")
->       finalApp         = case foreignWrapper cc s of
->                            Just qId'' -> createApply (Function qId'' n) vars
->                            Nothing
->                              | any isFunctType (argumentTypes fType) ->
->                                  error ("generateForeign: unsupported higher order primitive " ++ s)
->                              | otherwise -> createApply (Function qId n) vars
->       finalAppIO       = case foreignWrapper cc s of
->                            Just qId'' -> createApply (Function qId'' n) vars'
->                            Nothing
->                              | any isFunctType (argumentTypes fType) ->
->                                  error ("generateForeign: unsupported higher order primitive " ++ s)
->                              | otherwise ->
->                                  createApply (Function bind 1)
->                                              [Function ioDict 0,
->                                               createApply (Function qId n) vars',
->                                               Function debugReturn 2]
->       body             = if cc==Primitive && s=="unsafePerformIO"
->                          then createApply (Function qId n) vars
->                          else if isIO
->                               then Apply finalAppIO (last vars)
->                               else debugBuildPairExp finalApp void
->       isFunctType ty   = isArrowType ty || isIOType ty
+>                 -> Type -> [Decl]
+> generateForeign m f cc s n ty = FunctionDecl f' vs ty' e : ds
+>   where f' = changeFunctionqId m f
+>         vs = map (mkIdent . ("_"++) . show) [0..n-1]
+>         ty' = transformType n ty
+>         (e,ds) = debugForeign f cc s n (map Variable vs) ty
 
-> foreignWrapper :: CallConv -> String -> Maybe QualIdent
+> debugForeign :: QualIdent -> CallConv -> String -> Int -> [Expression] -> Type
+>              -> (Expression,[Decl])
+> debugForeign f cc s n vs ty =
+>   case foreignWrapper cc s of
+>     Just f' -> (createApply (Function (debugQualPreludeName f') n) vs,[])
+>     Nothing -> (debugForeign1 s ty (Function f n) vs,[ForeignDecl f cc s ty])
+
+> debugForeign1 :: String -> Type -> Expression -> [Expression] -> Expression
+> debugForeign1 s ty f vs
+>   | any isFunctType (argumentTypes ty) =
+>       error ("debugForeign: unknown higher order primitive " ++ s)
+>   | isIOType (resultType ty) =
+>       createApply preludeBind [createApply f (init vs),debugReturn,last vs]
+>   | otherwise = debugBuildPairExp (createApply f vs) void
+>   where preludeBind = Function (debugQualPreludeName ">>=") 3
+>         debugReturn = Function (debugQualPreludeName "return'") 2
+>         isFunctType ty = isArrowType ty || isIOType ty
+
+> foreignWrapper :: CallConv -> String -> Maybe String
 > foreignWrapper Primitive s
->   | s=="try"             = Just debugTry
->   | s=="return"          = Just debugReturn
->   | s==">>="             = Just debugBind
->   | s==">>"              = Just debugBind_
->   | s=="catch"           = Just debugCatch
->   | s=="fixIO"           = Just debugFixIO
->   | s=="encapsulate"     = Just debugEncapsulate
+>   | s=="try"             = Just "try'"
+>   | s=="return"          = Just "return'"
+>   | s==">>="             = Just "bind'"
+>   | s==">>"              = Just "bind_'"
+>   | s=="catch"           = Just "catch'"
+>   | s=="fixIO"           = Just "fixIO'"
+>   | s=="encapsulate"     = Just "encapsulate'"
+>   | s=="unsafePerformIO" = Just "unsafePerformIO'"
 >   | otherwise            = Nothing
 > foreignWrapper CCall   _ = Nothing
 > foreignWrapper RawCall _ = Nothing
@@ -704,7 +688,7 @@ the list of subcomputations of the computation tree \texttt{t1}.
 > etaExpandIO (Exist v e)    = Exist v . etaExpandIO e
 > etaExpandIO (Let d e)      = Let d . etaExpandIO e
 > etaExpandIO (Letrec ds e)  = Letrec ds . etaExpandIO e
-> etaExpandIO e              = Apply (Apply (Function debugPerformIO 2) e)
+> etaExpandIO e              = Apply (Apply debugPerformIO e)
 
 > etaReduceIO :: Expression -> (Expression,Expression)
 > etaReduceIO (Apply e1 e2) = (e1, e2)
@@ -715,6 +699,8 @@ the list of subcomputations of the computation tree \texttt{t1}.
 > etaReduceIO (Letrec ds e) = (Letrec ds e', v) where (e', v) = etaReduceIO e
 > etaReduceIO e = error ("etaReduceIO " ++ showsPrec 11 e "")
 
+> debugPerformIO :: Expression
+> debugPerformIO = Function (debugQualPreludeName "performIO") 2
 
 \end{verbatim}
 

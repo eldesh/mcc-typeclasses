@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2566 2007-12-16 21:21:25Z wlux $
+% $Id: DTransform.lhs 2567 2007-12-16 21:26:47Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -811,59 +811,63 @@ the list of subcomputations of the computation tree \texttt{t1}.
 
 \end{verbatim}
 
-This type represent the result of the next set of functions. The first part is a
-list with the new local definitions (bindings) introduced, 
-the second is a list with  the new computation trees
-introduced, prepared for function {\tt clean}. The last component is the
-expression after the introduction of the new local definitions.
+This type represents the result of the next set of functions. The
+first part is a list with the new computation trees introduced,
+prepared for function \texttt{clean}, the second is a list with the
+new local definitions (bindings) introduced. The third component is
+the transformed expression (without the new local definitions).
 
+In order to cope with the three different kinds of bindings in the
+intermediate language (existentials, non-recursive, and recursive let
+bindings), the list of bindings is composed of partial applications of
+the respective constructors from the intermediate language's
+\texttt{Expression} type.
 \begin{verbatim}
 
-> type SecondPhaseResult = ([Expression],Expression,Int)
+> type SecondPhaseResult = ([Expression],[Expression->Expression],Expression,Int)
 
 \end{verbatim}
 
-Next functions change a expression {\tt e} into {\tt let auxN = e in } 
-{\tt let resultN = fst e in } {\tt let treeN = snd e in} {\tt Variable resultN},
-where $N$ represents a number used to avoid repeated name of variables.
-Actually this infomation is returned in the following, more convinient format:
-{\tt (Trees++[cleanTree], Variable resultId)}, where  {\tt cleanTree} is
-{\tt (dVal resultN, treeN)}. The last value is the new value for $n$ that is used 
-to avoid repeating identifiers.
+The next function changes an expression \texttt{e} into
+\texttt{let aux$N$ = e in } \texttt{let result$N$ = fst e in }
+\texttt{let tree$N$ = snd e in} \texttt{Variable result$N$},
+where $N$ represents a number used to ensure distinct names of
+variables. Actually this infomation is returned in the following,
+more convenient format:
+\texttt{(Trees++[cleanTree], lets, Variable resultId)}, where
+\texttt{cleanTree} is \texttt{(dVal result$N$, tree$N$)}.
 
 \begin{verbatim}
 
-> decomposeExp :: [Expression] -> Int -> Expression ->  SecondPhaseResult
+> decomposeExp :: [Expression] -> Int -> Expression -> SecondPhaseResult
 >
-> decomposeExp lTrees n exp = 
->       (lTrees++[cleanTree], letExp, n+1)
->       where 
->        treeId    = newIdName n "tree"
->        resultId  = newIdName n "result"
->        aux       = newIdName n "Aux"
->        auxResult = Apply (Function fst 1) (Variable aux)
->        auxTree   = Apply (Function snd 1) (Variable aux)
->        fst       = qualifyWith preludeMIdent (mkIdent "fst")
->        snd       = qualifyWith preludeMIdent (mkIdent "snd")
->        letExp    = Let (Binding aux exp) (Let (Binding resultId auxResult) 
->                    (Let (Binding treeId auxTree) (Variable resultId)) )
->        cleanTree = retrieveCleanTree (resultId,treeId)
+> decomposeExp lTrees n exp = (lTrees++[cleanTree],lets,Variable resultId,n+1)
+>   where treeId    = newIdName n "tree"
+>         resultId  = newIdName n "result"
+>         aux       = newIdName n "Aux"
+>         auxResult = Apply (Function fst 1) (Variable aux)
+>         auxTree   = Apply (Function snd 1) (Variable aux)
+>         fst       = qualifyWith preludeMIdent (mkIdent "fst")
+>         snd       = qualifyWith preludeMIdent (mkIdent "snd")
+>         lets      = [Let (Binding aux exp),
+>                      Let (Binding resultId auxResult),
+>                      Let (Binding treeId auxTree)]
+>         cleanTree = retrieveCleanTree (resultId,treeId)
 
 
 
 > newBindings :: (Ident -> [Expression] -> Expression) -> Expression -> Int
 >             -> [Expression] -> (Expression,Int)
 > newBindings createNode exp n lTrees =
->   if isCaseOrExp then (exp2,n2) else (letExp,n2+1)
+>   if isCaseOrExp then (buildLetExp lets exp2,n2) else (letExp,n2+1)
 >   where isCaseOrExp = caseOr exp
->         (lTrees2,exp2,n2) =
+>         (lTrees2,lets,exp2,n2) =
 >           extractBindings isCaseOrExp createNode exp n lTrees
->         (lets,exp3)= extractLets exp2
 >         treeId   = newIdName n2 "tree"
 >         resultId = newIdName n2 "result"
 >         cTree    = createNode resultId lTrees2
 >         rhs      = debugBuildPairExp (Variable resultId) (Variable treeId)
->         bindingR = Binding resultId exp3
+>         bindingR = Binding resultId exp2
 >         bindingT = Binding treeId cTree
 >         letExp   = buildLetExp (lets++[Let bindingR,Let  bindingT]) rhs
 
@@ -872,100 +876,91 @@ to avoid repeating identifiers.
 >                 -> Int -> [Expression] -> SecondPhaseResult
 >
 > extractBindings _ _ e@(Function f a) n lTrees
->   | a > 0 = (lTrees,e,n)
+>   | a > 0 = (lTrees,[],e,n)
 >   | otherwise = decomposeExp lTrees n e
 
 > extractBindings isMainExp createNode (Case eval exp lAlt) n lTrees
->   | isMainExp = ([], buildLetExp lets (Case eval e2 lAlt'),n2)
->   | otherwise = decomposeExp [] n2 (buildLetExp lets (Case eval e2 lAlt'))
->   where (lTrees1,e1,n1) = extractBindings False createEmptyNode exp n lTrees
->         (lets,e2) = extractLets e1
+>   | isMainExp = ([],lets,Case eval e1 lAlt',n2)
+>   | otherwise = decomposeExp [] n2 (buildLetExp lets (Case eval e1 lAlt'))
+>   where (lTrees1,lets,e1,n1) =
+>           extractBindings False createEmptyNode exp n lTrees
 >         (lAlt',n2) = newBindingsAlts createNode lAlt n1 lTrees1
 
 > extractBindings isMainExp createNode (Or e1 e2) n lTrees
->   | isMainExp = ([],Or e1' e2',n2)
+>   | isMainExp = ([],[],Or e1' e2',n2)
 >   | otherwise = decomposeExp [] n2 (Or e1' e2')
 >   where (e1',n1) = newBindings createNode e1 n lTrees
 >         (e2',n2) = newBindings createNode e2 n1 lTrees
 
 > extractBindings isMainExp createNode (Exist id exp) n lTrees =
->   (lTrees', Exist id exp',n')
->   where (lTrees',exp',n') = extractBindings isMainExp createNode exp n lTrees
+>   (lTrees',Exist id:lets',exp',n')
+>   where (lTrees',lets',exp',n') =
+>           extractBindings isMainExp createNode exp n lTrees
 
 > extractBindings isMainExp createNode (Let binding e) n lTrees =
->   (lTrees2, buildLetExp lbinding' e',n2)
+>   (lTrees2,lbinding'++lets2,e',n2)
 >   where (lTrees1,lbinding',n1) = extractBindingsBinding binding n
->         (lTrees2, e',n2) =
+>         (lTrees2,lets2,e',n2) =
 >           extractBindings isMainExp createNode e n1 (lTrees++lTrees1)
 
 > extractBindings isMainExp createNode (Letrec lbinding e) n lTrees =
->   (lTrees2,buildLetrecExp lets lbinding' e',n2)
->   where (lTrees1,lets,lbinding',n1) = extractBindingsLBindings lbinding n
->         (lTrees2,e',n2) =
+>   (lTrees2,letrecBindings lets1 lbinding' ++ lets2,e',n2)
+>   where (lTrees1,lets1,lbinding',n1) = extractBindingsLBindings lbinding n
+>         (lTrees2,lets2,e',n2) =
 >           extractBindings isMainExp createNode e n1 (lTrees++lTrees1)
 >
 > extractBindings isMainExp createNode e@(Apply _ _) n lTrees =
->   (lTrees++lTrees1++lTrees2, buildLetExp (concat letsargs++letse) e2,n2)
+>   (lTrees++lTrees1++lTrees2, letsargs++letse, e1,n2)
 >   where (f,args) = extractApply e []
->         (lTrees1,args1,n1) = extractBindingsList args n
->         (letsargs,args2) = unzip (map extractLets args1)
->         (lTrees2,e1,n2) = extractBindingsApply f args2 n1
->         (letse,e2) = extractLets e1
+>         (lTrees1,letsargs,args1,n1) = extractBindingsList args n
+>         (lTrees2,letse,e1,n2) = extractBindingsApply f args1 n1
 >
-> extractBindings _ _ exp n lTrees = (lTrees,exp,n)
+> extractBindings _ _ exp n lTrees = (lTrees,[],exp,n)
 
 
-> extractBindingsApply ::  Expression -> [Expression] -> 
->                         Int ->  SecondPhaseResult
+> extractBindingsApply :: Expression -> [Expression] -> Int -> SecondPhaseResult
 
-> extractBindingsApply  e@(Constructor qId arity) args  n  =
->       ([],createApply e args,n)
+> extractBindingsApply e@(Constructor _ _) args n = ([],[],createApply e args,n)
 
-> extractBindingsApply f@(Function qId arity) args  n  = 
->       if length args==arity-1  then ([],partialApp,n)
->       else if isQSelectorId qId then extractBindingsApply app extraArgs n
->       else (lTrees1++lTrees2,buildLetExp lets e,n2)
->       where 
->         (nArgs,extraArgs) = splitAt arity args
+> extractBindingsApply f@(Function qId arity) args n
+>   | length args == arity-1 = ([],[],partialApp,n)
+>   | isQSelectorId qId = extractBindingsApply app extraArgs n
+>   | otherwise = (lTrees1++lTrees2,lets1++lets2,e,n2)
+>   where (nArgs,extraArgs) = splitAt arity args
 >         app = createApply f nArgs
 >         partialApp = createApply f args --05-12-2001
->         (lTrees1,v,n1) = decomposeExp [] n app
->         (lets,body) = extractLets v
->         (lTrees2,e,n2) = extractBindingsApply body extraArgs n1
+>         (lTrees1,lets1,v,n1) = decomposeExp [] n app
+>         (lTrees2,lets2,e,n2) = extractBindingsApply v extraArgs n1
 
-> extractBindingsApply f []  n  = ([],f,n)
+> extractBindingsApply f [] n = ([],[],f,n)
 > 
-> extractBindingsApply f (e:es)  n  =
->       (t++t',buildLetExp lets e',n2)
->       where 
->         app = createApply f [e]
->         (t,v,n1) = decomposeExp [] n app
->         (lets,body) = extractLets v
->         (t',e',n2) = extractBindingsApply body es n1 
+> extractBindingsApply f (e:es) n = (t++t',lets++lets',e',n2)
+>   where app = createApply f [e]
+>         (t,lets,v,n1) = decomposeExp [] n app
+>         (t',lets',e',n2) = extractBindingsApply v es n1
 
 
-> extractBindingsList :: [Expression] -> Int -> ([Expression],[Expression],Int)
-> extractBindingsList [] n = ([],[],n)
-> extractBindingsList (x:xs) n = (lTrees1++lTrees2, x':xs',n2)
->   where (lTrees1,x',n1) = extractBindings False createEmptyNode x n []
->         (lTrees2,xs',n2) = extractBindingsList xs n1
+> extractBindingsList :: [Expression] -> Int
+>                     -> ([Expression],[Expression->Expression],[Expression],Int)
+> extractBindingsList [] n = ([],[],[],n)
+> extractBindingsList (x:xs) n = (lTrees1++lTrees2, lets1++lets2, x':xs', n2)
+>   where (lTrees1,lets1,x',n1) = extractBindings False createEmptyNode x n []
+>         (lTrees2,lets2,xs',n2) = extractBindingsList xs n1
 
 
 > extractBindingsBinding :: Binding -> Int
 >                        -> ([Expression],[Expression->Expression],Int)
 > extractBindingsBinding (Binding vId e) n = (lTrees,lBinding,n')
->   where (lTrees,e1,n') = extractBindings False createEmptyNode e n []
->         (lets,e2)      = extractLets e1
->         lBinding       = lets++[Let (Binding vId e2)]
+>   where (lTrees,lets,e1,n') = extractBindings False createEmptyNode e n []
+>         lBinding = lets++[Let (Binding vId e1)]
 
 
 > extractBindingsLBindings :: [Binding] -> Int
 >                       -> ([Expression],[Expression->Expression],[Binding],Int)
 > extractBindingsLBindings [] n = ([],[],[],n)
 > extractBindingsLBindings (Binding vId e:xs) n =
->   (lTrees1++lTrees2,letsX++letsXs,Binding vId e2:xs',n2)
->   where (lTrees1,e1,n1) = extractBindings False createEmptyNode e n []
->         (letsX,e2)      = extractLets e1
+>   (lTrees1++lTrees2,letsX++letsXs,Binding vId e1:xs',n2)
+>   where (lTrees1,letsX,e1,n1) = extractBindings False createEmptyNode e n []
 >         (lTrees2,letsXs,xs',n2) = extractBindingsLBindings xs n1
 
 
@@ -1005,43 +1000,21 @@ to avoid repeating identifiers.
 >   where clean = Apply (Function debugClean 1) (debugBuildList trees)
 
 > buildLetExp :: [Expression->Expression] -> Expression -> Expression
-> buildLetExp bindings exp =  foldr (\x y->x y) exp bindings
+> buildLetExp bindings exp = foldr (\x y->x y) exp bindings
 
-> buildLetrecExp :: [Expression->Expression] -> [Binding] -> Expression -> Expression
-> buildLetrecExp bindings lbindings exp =
->   fixLetrecExp lbindings (buildLetExp bindings (Letrec [] exp))
+> letrecBindings :: [Expression->Expression] -> [Binding]
+>                -> [Expression->Expression]
+> letrecBindings bindings lbindings =
+>   fixLetrecBindings lbindings (buildLetExp bindings (Variable undefined))
 
-> fixLetrecExp :: [Binding] -> Expression -> Expression
-> fixLetrecExp lbindings (Exist var exp) = Exist var (fixLetrecExp lbindings exp)
-> fixLetrecExp lbindings (Let binding exp) = fixLetrecExp (binding:lbindings) exp
-> fixLetrecExp lbindings (Letrec lbindings' exp)
->   | null lbindings' = Letrec lbindings exp
->   | otherwise = fixLetrecExp (lbindings' ++ lbindings) exp
-
-\end{verbatim}
-
-
-Extract lets put all the let, exist and letrec constructions in the outer part
-of the expression. Teh expression is assumed to be free of case and or expressions.
-
-\begin{verbatim}
-
-> outerLets :: Expression ->  Expression
-> outerLets e = foldr (\x y -> x y) e' l
->       where (l,e') = extractLets e
-
-> extractLets :: Expression ->  ([Expression->Expression],Expression)
->
-> extractLets (Apply e1 e2) = (l1++l2,Apply e1'  e2')
->       where (l1,e1') = extractLets e1
->             (l2,e2') = extractLets e2
-> extractLets (Exist ident e) = ((Exist ident):l1,e')
->       where (l1,e') = extractLets e
-> extractLets (Let binding e) = ((Let binding):l1,e')
->       where (l1,e') = extractLets e
-> extractLets (Letrec lbinding e) = ((Letrec lbinding):l1,e')
->       where (l1,e') = extractLets e
-> extractLets e = ([],e)
+> fixLetrecBindings :: [Binding] -> Expression -> [Expression->Expression]
+> fixLetrecBindings lbindings (Variable _) = [Letrec lbindings]
+> fixLetrecBindings lbindings (Exist var exp) =
+>   Exist var : fixLetrecBindings lbindings exp
+> fixLetrecBindings lbindings (Let binding exp) =
+>   fixLetrecBindings (binding:lbindings) exp
+> fixLetrecBindings lbindings (Letrec lbindings' exp) =
+>   fixLetrecBindings (lbindings' ++ lbindings) exp
 
 \end{verbatim}
 

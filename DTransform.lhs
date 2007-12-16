@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2561 2007-12-16 20:24:50Z wlux $
+% $Id: DTransform.lhs 2562 2007-12-16 20:28:32Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -236,7 +236,7 @@ constructing expressions of the form (a,b) and the name of function
 
 > createEmptyNode ::  [Expression] -> Expression
 > createEmptyNode trees = 
->       emptyNode  clean
+>       if null trees then void else emptyNode  clean
 >       where
 >       clean   = Apply (Function debugClean 1) (debugBuildList trees)
 
@@ -1064,7 +1064,8 @@ to avoid repeating identifiers.
 >       fName   = debugBuildList (map (Literal . Char) fNameCh)
 >       fParams = debugBuildList (map (dEvalApply.Variable) lVars)
 >       fResult = (dEvalApply.Variable) resultId
->       clean   = Apply (Function debugClean 1) (debugBuildList trees)
+>       clean   = if null trees then debugNil
+>                 else Apply (Function debugClean 1) (debugBuildList trees)
 
 > buildLetExp :: [Expression->Expression] -> Expression -> Expression
 > buildLetExp bindings exp =  foldr (\x y->x y) exp bindings

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2569 2007-12-16 21:37:27Z wlux $
+% $Id: DTransform.lhs 2570 2007-12-16 21:53:05Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -57,33 +57,67 @@ children.
 
 \end{verbatim}
 
-We can divide the declarations in the transformed program in five different
-groups:
-\begin{itemize}
-\item New data types and functions: Introduced in order to represent 
-      and deal with computation tress. This is done by adding de degugging
-      prelude to the list of import modules, and included a new function 
-      {\tt main} in the module main (the older will be renamed).
-\item Data types: The same as in the source program.
-\item New auxiliary functions: Introduced to represent partial applications of 
-      constructors and (maybe foreign) functions.
-\item Foreign declarations: The same as in the source program.
-\item Transformed functions: The rules of the source program transformed. 
-      In the final program they will return a computation tree, as well as their
-      the same result they did in the source program.
-\end{itemize}
+The debugging transformation is applied independently to each
+declaration in the module. Type declarations are not changed by the
+transformation except for the types of higher order arguments of data
+constructors, which are transformed in order to ensure a type correct
+transformed program. In addition, auxiliary functions are introduced
+to handle partial applications of the data constructors. Function
+declarations are changed by the program transformation and auxiliary
+functions are introduced for their partial applications, too. Finally,
+foreign function declarations cannot be transformed at all, but a
+wrapper function pairing the result of the foreign function with a
+suitable computation tree is introduced for each foreign function.
+Auxiliary functions for partial applications of the foreign functions
+are provided as well.
+
+A special case handles the selector functions introduced by the
+pattern binding update strategy (see p.~\pageref{pattern-binding} in
+Sect.~\ref{pattern-binding}). These functions are not transformed at
+all.
 
 \begin{verbatim}
 
-> debugDecls :: ModuleIdent -> (QualIdent -> Bool) -> [Decl] -> [Decl]
-> debugDecls m trusted lDecls = 
->   debugTypes types ++
->   debugAuxiliary m lTypes ++ 
->   foreigns ++
->   map (debugFunction trusted . debugFirstPhase m) functions
->   where (types,functions,foreigns) = debugSplitDecls lDecls
->         lTypes = collectSymbolTypes types functions foreigns []
+> data SymbolType = IsFunction | IsConstructor deriving (Eq,Show)
 
+> debugDecls :: ModuleIdent -> (QualIdent -> Bool) -> [Decl] -> [Decl]
+> debugDecls m trusted ds = 
+>   concatMap (generateAuxFuncs m) (nub (typesPredefined ds)) ++
+>   concatMap (debugDecl m trusted) ds
+
+> debugDecl :: ModuleIdent -> (QualIdent -> Bool) -> Decl -> [Decl]
+> debugDecl m _ (DataDecl tc n cs) = DataDecl tc n cs' : concat ds'
+>   where (cs',ds') = unzip (map (debugConstrDecl m ty0) cs)
+>         ty0 = TypeConstructor tc (map TypeVariable [0..n-1])
+> debugDecl m _ (TypeDecl tc n ty) = [TypeDecl tc n (transformType' ty)]
+> debugDecl m trusted (FunctionDecl f vs ty e)
+>   | isQSelectorId f = [FunctionDecl f vs ty e]
+>   | otherwise =
+>       generateAuxFuncs m (f,IsFunction,length vs,ty) ++
+>       [debugFunction m trusted f vs ty e]
+> debugDecl m _ (ForeignDecl f cc s ty) =
+>   generateAuxFuncs m (f,IsFunction,n',ty) ++
+>   [ForeignDecl f cc s ty,generateForeign m f cc s n' ty]
+>   where n = typeArity ty
+>         n' = if isIOType (resultType ty) then n + 1 else n
+
+> debugConstrDecl :: ModuleIdent -> Type -> ConstrDecl -> (ConstrDecl,[Decl])
+> debugConstrDecl m ty0 (ConstrDecl c tys) =
+>   (ConstrDecl c (map transformType' tys),
+>    generateAuxFuncs m (c,IsConstructor,length tys,ty))
+>   where ty = normalizeType (foldr TypeArrow ty0 tys)
+
+> normalizeType :: Type -> Type
+> normalizeType ty = rename (nub (tvars ty)) ty
+>   where rename tvs (TypeConstructor c tys) =
+>           TypeConstructor c (map (rename tvs) tys)
+>         rename tvs (TypeVariable tv) =
+>           TypeVariable (fromJust (elemIndex tv tvs))
+>         rename tvs (TypeArrow ty1 ty2) =
+>           TypeArrow (rename tvs ty1) (rename tvs ty2)
+>         tvars (TypeConstructor _ tys) = concatMap tvars tys
+>         tvars (TypeVariable tv) = [tv]
+>         tvars (TypeArrow ty1 ty2) = tvars ty1 ++ tvars ty2
 
 \end{verbatim}
 
@@ -219,23 +253,6 @@ constructing expressions of the form (a,b) and the name of function
 
 \end{verbatim}
 
-We distinguish three classes of declarations: types, functions and foreigns.
-Each class needs an specific treatment, and therefore we split the initial
-list of declarations in three.
-\begin{verbatim}
-
-> debugSplitDecls :: [Decl] -> ([Decl],[Decl],[Decl])
-> debugSplitDecls []     = ([],[],[])
-> debugSplitDecls (x:xs) = case x of
->                      DataDecl     _ _ _   -> (x:types,functions,foreigns)
->                      TypeDecl     _ _ _   -> (x:types,functions,foreigns)
->                      FunctionDecl _ _ _ _ -> (types,x:functions,foreigns)
->                      ForeignDecl  _ _ _ _ -> (types,functions,x:foreigns)
->                   where
->                       (types,functions,foreigns) = debugSplitDecls xs 
-
-\end{verbatim}
-
 The newMain is only added if we are in the module main. 
 It will start the debugging process.
 
@@ -325,84 +342,27 @@ We have to introduce an auxiliary function for the lambda in the intermediate co
 >       debugAuxMainId = qualifyWith m (debugRenameId "#Aux" f)
 
 
-
 \end{verbatim}
+Foreign functions cannot be changed by the debugging transformation,
+since their implementation is unknown. In order to integrate foreign
+functions into the transformed program, the debugging transformation
+introduces an auxiliary function for each foreign function that pairs
+the result of the foreign function with a suitable computation tree.
+For first order foreign functions, e.g., the arithmetic primitives,
+that computation tree is simply a void tree.
 
-The first phase of the transformation process performs two diferent tasks:
-\begin{itemize}
-\item Transform the type of each function declaration.
-\item Change the names of all function and partial constructor applications.
-\end{itemize}
-
+The situation is different for higher order primitives like
+\texttt{try} and foreign functions defined in the \texttt{IO} monad.
+These functions can perform arbitrary computations and may invoke user
+defined functions. Therefore associating a void tree is not
+sufficient. Instead the transformation is using some helper functions
+defined in the \texttt{DebugPrelude}, which collect the computation
+trees of the subcomputations and return them along with the
+computation tree of the transformed function.
 \begin{verbatim}
 
-> debugFirstPhase :: ModuleIdent -> Decl -> Decl
-> debugFirstPhase m (FunctionDecl ident lVars fType fExp)
->   | isQSelectorId ident = FunctionDecl ident lVars fType fExp
->   | otherwise           = FunctionDecl ident lVars fType' exp'
->   where exp'   = firstPhase m 0 fExp
->         fType' = transformType (length lVars) fType
-
-> class FirstPhase a where
->   firstPhase :: ModuleIdent -> Int -> a -> a
-
-> instance FirstPhase a => FirstPhase [a] where
->   firstPhase m d = map (firstPhase m d)
-
-> instance FirstPhase Expression where
->   firstPhase _ _ (Literal l) = Literal l
->   firstPhase _ _ (Variable v) = Variable v
->   firstPhase m d (Function qIdent n)
->     | isQSelectorId qIdent = Function qIdent n
->     | otherwise            = firstPhaseQual m n d qIdent True
->   firstPhase m d (Constructor qIdent n) = firstPhaseQual m n d qIdent False
->   firstPhase m d (Apply e1 e2) =
->     Apply (firstPhase m (d+1) e1) (firstPhase m 0 e2)
->   firstPhase m d (Case eval expr lAlts) =
->     Case eval (firstPhase m 0 expr) (firstPhase m d lAlts)
->   firstPhase m d (Or e1 e2) = Or (firstPhase m d e1) (firstPhase m d e2)
->   firstPhase m d (Exist ident e) = Exist ident (firstPhase m d e)
->   firstPhase m d (Let binding e) =
->     Let (firstPhase m 0 binding) (firstPhase m d e)
->   firstPhase m d (Letrec lbind e) =
->     Letrec (firstPhase m 0 lbind) (firstPhase m d e)
-
-> instance FirstPhase Alt where
->   firstPhase m d (Alt term expr) = Alt term (firstPhase m d expr)
-
-> instance FirstPhase Binding where
->   firstPhase m d (Binding ident expr) = Binding ident (firstPhase m d expr)
-
-> firstPhaseQual :: ModuleIdent -> Int -> Int -> QualIdent -> Bool -> Expression
-> firstPhaseQual m arity nArgs qIdent isFunction
->   | mustBeChanged = Function qIdent' (nArgs+1)
->   | isFunction    = Function qIdent'' arity
->   | otherwise     = Constructor qIdent arity
->   where mustBeChanged = if isFunction then nArgs < arity-1 else nArgs < arity
->         (idModule,ident) = splitQualIdent qIdent
->         idModule' = maybe m id idModule
->         qIdent'   = qualifyWith idModule' (idAuxiliarFunction ident nArgs)
->         qIdent''  = qualifyWith idModule' (debugRenameId "" ident)
-
-\end{verbatim}
-
-Next function  gets the current module identifier, 
- a qualifier, its type, its arity {\tt n}, and a boolean value indicating
- if it is a function definded in the module, and generates 
-{\tt n} new auxiliar functions in the current module.
-
-\begin{verbatim}
-
-> generateAuxFuncs m (qId,(sType,n,fType)) = 
->       if isQSelectorId qId then []
->       else case sType of
->              IsForeign cc s -> generateForeign m qId cc s n fType : auxiliary
->              _              -> auxiliary
->       where
->         k = if  sType==IsConstructor then n-1 else n-2 
->         auxiliary = map (generateAuxFunc m (qId,(sType,k,fType))) [0..k]
-
-> generateForeign :: ModuleIdent -> QualIdent -> CallConv -> String -> Int -> Type -> Decl
+> generateForeign :: ModuleIdent -> QualIdent -> CallConv -> String -> Int
+>                 -> Type -> Decl
 > generateForeign m qId cc s n fType = 
 >       FunctionDecl qId' varsId fType' body
 >       where
@@ -450,9 +410,35 @@ Next function  gets the current module identifier,
 > foreignWrapper CCall   _ = Nothing
 > foreignWrapper RawCall _ = Nothing
 
+\end{verbatim}
 
-> generateAuxFunc :: ModuleIdent ->(QualIdent, (SymbolType,Int,Type)) -> Int -> Decl
-> generateAuxFunc m (qId,(sType,n,fType)) i =
+Auxiliary functions are introduced to deal with higher order parameter
+applications. In particular, the transformation introduces $n-1$
+auxiliary functions $f'_0, \dots, f'_{n-2}$ for a (foreign) function
+$f$ with arity $n$. These functions are necessary in order to make the
+transformed program type correct and are defined by equations $f'_i\,x
+= (f'_{i+1}\,x, \texttt{Void})$, where $f'$ is used instead of
+$f'_{n-1}$. For the same reason, the transformation introduces $n$
+auxiliary functions $c'_0, \dots, c'_{n-1}$ for each data constructor
+$c$ with arity $n$. Their definitions are similar to those of the
+auxiliary functions for transformed functions except for using $c$ in
+place of $c'_n$.
+
+The next function gets the current module identifier, a qualified
+identifier, a value indicating whether the identifier denotes a
+function or a constructor, its arity \texttt{n}, and its type, and
+generates the new auxiliary functions.
+
+\begin{verbatim}
+
+> generateAuxFuncs :: ModuleIdent -> (QualIdent,SymbolType,Int,Type) -> [Decl]
+> generateAuxFuncs m (qId,sType,n,fType) =
+>   map (generateAuxFunc m qId sType k fType) [0..k]
+>   where k = if sType==IsConstructor then n-1 else n-2 
+
+> generateAuxFunc :: ModuleIdent -> QualIdent -> SymbolType -> Int -> Type
+>                 -> Int -> Decl
+> generateAuxFunc m qId sType n fType i =
 >       FunctionDecl qIdent' varsId fType' exp'
 >       where
 >       (idModule,ident) = splitQualIdent qId
@@ -519,7 +505,6 @@ for transforming the type \texttt{IO}, giving rise to the special case
 for \texttt{IO}.
 \begin{verbatim}
 
-> ---------------------------------------------------------------------------
 > transformType :: Int -> Type -> Type
 > transformType 0 fType = debugTypePair (transformType' fType) debugTypeCTree
 > transformType _ fType@(TypeArrow ty1 (TypeConstructor tc [ty2,ty3]))
@@ -569,86 +554,25 @@ for \texttt{IO}.
 
 > qWorldId :: QualIdent
 > qWorldId = qualify (mkIdent "World")
-> ---------------------------------------------------------------------------
-
-
-\end{verbatim}
-
-Here we collect the types  of all the data constructors and functions
-defined in the program. They will be needed in order to generate the 
-corresponding auxiliar functions. Also an integer is paired with the type,
-representing the symbol arity, and a boolean value indicating if the symbol
-is a module function.
-
-
-\begin{verbatim}
-
-> data SymbolType = IsFunction | IsConstructor | IsForeign CallConv String deriving (Eq,Show)
-
-> type DebugTypeList = [(QualIdent,(SymbolType,Int,Type))]
-
-> collectSymbolTypes:: [Decl] -> [Decl] -> [Decl] -> 
->                      DebugTypeList -> DebugTypeList
-> collectSymbolTypes types functions foreigns env =
->  nub (typesPredefined functions) ++
->  ((typesFunctions functions).(typesData types).(typesForeigns foreigns)) env
-
-
-> typesFunctions,typesData,typesForeigns::[Decl]-> DebugTypeList -> DebugTypeList
-> typesFunctions  functions env = foldr typesFunction env functions
-> typesData       types env     = foldr typesDatum env types    
-        
-
-> typesForeigns  foreigns env = foldr typesForeign env foreigns
-
-
-> typesFunction,typesDatum,typesForeign:: Decl ->DebugTypeList -> DebugTypeList
-> typesFunction (FunctionDecl qId l ftype exp)  env  = 
->       (qId,(IsFunction,length l,ftype)):env
->
-> typesDatum (DataDecl qId n l) env  = foldr (typesConst qId n)  env l
-> typesDatum (TypeDecl _ _ _) env = env
->
-> typesForeign (ForeignDecl qId cc s ftype) env  = 
->       (qId,(IsForeign cc s,m,ftype)):env
->       where m = if isIOType (resultType ftype) then n + 1 else n
->             n = typeArity ftype
-
-> typesConst:: QualIdent -> Int -> ConstrDecl -> DebugTypeList -> DebugTypeList
-> typesConst dataId n (ConstrDecl qId lTypes) env  = 
->       (qId,(IsConstructor, length lTypes, normalizeType cType)):env
->       where
->       vars  = map TypeVariable [0..n-1]
->       cType = foldr TypeArrow (TypeConstructor dataId vars)  lTypes
-
-
-> normalizeType :: Type -> Type
-> normalizeType ty = rename (nub (tvars ty)) ty
->   where rename tvs (TypeConstructor c tys) =
->           TypeConstructor c (map (rename tvs) tys)
->         rename tvs (TypeVariable tv) =
->           TypeVariable (fromJust (elemIndex tv tvs))
->         rename tvs (TypeArrow ty1 ty2) =
->           TypeArrow (rename tvs ty1) (rename tvs ty2)
->         tvars (TypeConstructor _ tys) = concatMap tvars tys
->         tvars (TypeVariable tv) = [tv]
->         tvars (TypeArrow ty1 ty2) = tvars ty1 ++ tvars ty2
 
 \end{verbatim}
 
 The transformation must add auxiliary functions for all partial applications
 of the list constructor and tuple constructors which are used in the module.
 These constructors are defined implicitly in every module, therefore we collect
-these definitions here. Generating auxiliary functions for the list
-constructor only if it used helps to avoid a name conflict when the program
-is linked with an explicit goal.
+these definitions here.
 \begin{verbatim}
 
+> type DebugTypeList = [(QualIdent,SymbolType,Int,Type)]
+
 > typesPredefined :: [Decl] -> DebugTypeList
-> typesPredefined functions = nub (foldr typesBody [] functions)
+> typesPredefined ds = nub (foldr typesBody [] ds)
 
 > typesBody :: Decl -> DebugTypeList -> DebugTypeList
+> typesBody (DataDecl _ _ _) = id
+> typesBody (TypeDecl _ _ _) = id
 > typesBody (FunctionDecl _ _ _ e) = typesExpr e
+> typesBody (ForeignDecl _ _ _ _) = id
 
 > typesExpr :: Expression -> DebugTypeList -> DebugTypeList
 > typesExpr (Literal _) env = env
@@ -657,7 +581,7 @@ is linked with an explicit goal.
 > typesExpr (Constructor qId n) env =
 >   if idModule == Nothing && n > 0 then env' else env
 >   where (idModule,ident) = splitQualIdent qId
->         env' = (qId,(IsConstructor,n,debugTypePredef ident n)) : env
+>         env' = (qId,IsConstructor,n,debugTypePredef ident n) : env
 > typesExpr (Apply e1 e2) env = typesExpr e1 (typesExpr e2 env)
 > typesExpr (Case _ e alts) env = typesExpr e (foldr typesAlt env alts)
 >   where typesAlt (Alt _ e) = typesExpr e
@@ -675,56 +599,95 @@ is linked with an explicit goal.
 
 \end{verbatim}
 
+The transformation of user defined functions is performed in two
+phases.
 
-
-Function types appearing in data constructor declarations must be changed.
 \begin{verbatim}
 
-> debugTypes :: [Decl] -> [Decl]
-> debugTypes ds = map debugTypeDecl ds
-
-> debugTypeDecl :: Decl -> Decl
-> debugTypeDecl (DataDecl tc n cs) = DataDecl tc n (map debugConstrDecl cs)
-> debugTypeDecl (TypeDecl tc n ty) = TypeDecl tc n (transformType' ty)
-
-> debugConstrDecl :: ConstrDecl -> ConstrDecl
-> debugConstrDecl (ConstrDecl c tys) = ConstrDecl c (map transformType' tys)
-
-\end{verbatim}
-Auxiliary functions are introduced to deal with HO parameter applications
-\begin{verbatim}
-
-> debugAuxiliary :: ModuleIdent -> [(QualIdent, (SymbolType,Int,Type))] -> [Decl]
-> debugAuxiliary m xs = concat (map (generateAuxFuncs m) xs)
+> debugFunction :: ModuleIdent -> (QualIdent -> Bool) -> QualIdent -> [Ident]
+>               -> Type -> Expression -> Decl
+> debugFunction m trusted f vs ty e = FunctionDecl f' vs ty' e'
+>   where f' = changeFunctionqId f
+>         ty' = transformType (length vs) ty
+>         e' = debugSecondPhase f (trusted f) vs ty' (debugFirstPhase m e)
 
 \end{verbatim}
 
-The transformed rules of the original funcions. At the partial applications
-of functions and constructos have been replaced by auxiliar functions. 
-Also, the type of the function has been transformed.
+The first phase of the transformation process changes the names of all
+function and partial constructor applications.
+
+\begin{verbatim}
+
+> debugFirstPhase :: ModuleIdent -> Expression -> Expression
+> debugFirstPhase m e = firstPhase m 0 e
+
+> class FirstPhase a where
+>   firstPhase :: ModuleIdent -> Int -> a -> a
+
+> instance FirstPhase a => FirstPhase [a] where
+>   firstPhase m d = map (firstPhase m d)
+
+> instance FirstPhase Expression where
+>   firstPhase _ _ (Literal l) = Literal l
+>   firstPhase _ _ (Variable v) = Variable v
+>   firstPhase m d (Function f n)
+>     | isQSelectorId f = Function f n
+>     | otherwise       = firstPhaseQual m n d f True
+>   firstPhase m d (Constructor c n) = firstPhaseQual m n d c False
+>   firstPhase m d (Apply e1 e2) =
+>     Apply (firstPhase m (d+1) e1) (firstPhase m 0 e2)
+>   firstPhase m d (Case eval expr lAlts) =
+>     Case eval (firstPhase m 0 expr) (firstPhase m d lAlts)
+>   firstPhase m d (Or e1 e2) = Or (firstPhase m d e1) (firstPhase m d e2)
+>   firstPhase m d (Exist ident e) = Exist ident (firstPhase m d e)
+>   firstPhase m d (Let binding e) =
+>     Let (firstPhase m 0 binding) (firstPhase m d e)
+>   firstPhase m d (Letrec lbind e) =
+>     Letrec (firstPhase m 0 lbind) (firstPhase m d e)
+
+> instance FirstPhase Alt where
+>   firstPhase m d (Alt term expr) = Alt term (firstPhase m d expr)
+
+> instance FirstPhase Binding where
+>   firstPhase m d (Binding ident expr) = Binding ident (firstPhase m d expr)
+
+> firstPhaseQual :: ModuleIdent -> Int -> Int -> QualIdent -> Bool -> Expression
+> firstPhaseQual m arity nArgs qIdent isFunction
+>   | mustBeChanged = Function qIdent' (nArgs+1)
+>   | isFunction    = Function qIdent'' arity
+>   | otherwise     = Constructor qIdent arity
+>   where mustBeChanged = if isFunction then nArgs < arity-1 else nArgs < arity
+>         (idModule,ident) = splitQualIdent qIdent
+>         idModule' = maybe m id idModule
+>         qIdent'   = qualifyWith idModule' (idAuxiliarFunction ident nArgs)
+>         qIdent''  = qualifyWith idModule' (debugRenameId "" ident)
+
+\end{verbatim}
+
+The second phase transforms the rules of the original functions. All
+partial applications of functions and constructors have been replaced
+by auxiliary functions. Also, the type of the function has been
+transformed.
 We only need:
 \begin{itemize}
-\item Introduce local definition replacing function calls.
+\item Introduce local definitions replacing function calls.
 \item Guess if the function is a lifted function, in order to build an 
-      appropiate name and include only the function variables in the node.
+      appropriate name and include only the function variables in the node.
 \end{itemize}
 
-Two special cases handle the selector functions introduced by the
-pattern binding update strategy (see p.~\pageref{pattern-binding} in
-Sect.~\ref{pattern-binding}), which are not transformed at all, and
-$\eta$-expanded functions with result type \texttt{IO}~$t$. According
-to the special transformation rule that applies to the \texttt{IO}
-type (see notes on \texttt{transformType}), we must not add a
-computation tree to the result of the transformed function, but rather
-make the transformed function return the computation tree together
-with its result in the \texttt{IO} monad. Thus, an $\eta$-expanded
-\texttt{IO} function $f \, x_1 \dots x_{n-1} \, x_n = e \, x_{n}$ is
-transformed into $f' \, x_1 \dots x_{n-1} \, x_n = \texttt{performIO}
-\, e' \, x_n$ where $e'$ is the transformed expression derived for $e$
-and the auxiliary function \texttt{performIO}, which is defined in
-\texttt{DebugPrelude}, takes care of evaluating the transformed
-monadic action and returning a suitable computation tree. Its
-definition is
+A special cases handles $\eta$-expanded functions with result type
+\texttt{IO}~$t$. According to the special transformation rule that
+applies to the \texttt{IO} type (see notes on \texttt{transformType}),
+we must not add a computation tree to the result of the transformed
+function, but rather make the transformed function return the
+computation tree together with its result in the \texttt{IO} monad.
+Thus, an $\eta$-expanded \texttt{IO} function $f \, x_1 \dots x_{n-1}
+\, x_n = e \, x_{n}$ is transformed into $f' \, x_1 \dots x_{n-1} \,
+x_n = \texttt{performIO} \, e' \, x_n$ where $e'$ is the transformed
+expression derived for $e$ and the auxiliary function
+\texttt{performIO}, which is defined in \texttt{DebugPrelude}, takes
+care of evaluating the transformed monadic action and returning a
+suitable computation tree. Its definition is
 \begin{verbatim}
   performIO (m,t1) = m >>= \(r,t2) -> return (r, ioCTree t1 (r,t2))
 \end{verbatim}
@@ -733,33 +696,23 @@ The auxiliary function \texttt{ioCTree}, which is also defined in
 the list of subcomputations of the computation tree \texttt{t1}.
 \begin{verbatim}
 
-> ---------------------------------------------------------------------------
+> debugSecondPhase :: QualIdent -> Bool -> [Ident] -> Type -> Expression
+>                  -> Expression
+> debugSecondPhase f trust vs ty e
+>   | isIOType (resultType ty) && length vs > typeArity ty =
+>       newLocalDeclarationsEtaIO f trust vs e
+>   | otherwise = newLocalDeclarations f trust vs e
 
-> debugFunction ::   (QualIdent -> Bool) -> Decl -> Decl
-> debugFunction trusted (FunctionDecl qId lVars fType expr)
->   | isQSelectorId qId = FunctionDecl qId lVars fType expr
->   | otherwise         = FunctionDecl qId' lVars fType expr'
->   where
->     isIO  = isIOType (resultType fType)
->     n     = typeArity fType
->     expr' = if isIO && length lVars > n
->             then newLocalDeclarationsEtaIO qId trust expr lVars
->             else newLocalDeclarations      qId trust expr lVars
->     qId' = changeFunctionqId qId
->     trust = trusted qId
-        
-
-> newLocalDeclarations :: QualIdent -> Bool -> Expression -> [Ident]
+> newLocalDeclarations :: QualIdent -> Bool -> [Ident] -> Expression
 >                      -> Expression
-> newLocalDeclarations qId trust exp lVars =
->   fst (newBindings createNode exp 0 [])
->   where createNode = if trust then createEmptyNode else createTree qId lVars
+> newLocalDeclarations f trust vs e = fst (newBindings createNode e 0 [])
+>   where createNode = if trust then createEmptyNode else createTree f vs
 
-> newLocalDeclarationsEtaIO :: QualIdent -> Bool -> Expression -> [Ident]
+> newLocalDeclarationsEtaIO :: QualIdent -> Bool -> [Ident] -> Expression
 >                           -> Expression
-> newLocalDeclarationsEtaIO qId trust exp lVars =
->   etaExpandIO (newLocalDeclarations qId trust exp' (init lVars)) v
->   where (exp', v) = etaReduceIO exp
+> newLocalDeclarationsEtaIO f trust vs e =
+>   etaExpandIO (newLocalDeclarations f trust (init vs) e') v
+>   where (e',v) = etaReduceIO e
 
 > etaExpandIO :: Expression -> Expression -> Expression
 > etaExpandIO (Case rf e as) = Case rf e . zipWith etaExpandIOAlt as . repeat
@@ -799,7 +752,7 @@ The next function changes an expression \texttt{e} into
 \texttt{let aux$N$ = e in } \texttt{let result$N$ = fst e in }
 \texttt{let tree$N$ = snd e in} \texttt{Variable result$N$},
 where $N$ represents a number used to ensure distinct names of
-variables. Actually this infomation is returned in the following,
+variables. Actually this information is returned in the following,
 more convenient format:
 \texttt{(Trees++[cleanTree], lets, Variable resultId)}, where
 \texttt{cleanTree} is \texttt{(dVal result$N$, tree$N$)} and

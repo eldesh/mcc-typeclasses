@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2570 2007-12-16 21:53:05Z wlux $
+% $Id: DTransform.lhs 2571 2007-12-16 21:57:14Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -432,31 +432,19 @@ generates the new auxiliary functions.
 \begin{verbatim}
 
 > generateAuxFuncs :: ModuleIdent -> (QualIdent,SymbolType,Int,Type) -> [Decl]
-> generateAuxFuncs m (qId,sType,n,fType) =
->   map (generateAuxFunc m qId sType k fType) [0..k]
->   where k = if sType==IsConstructor then n-1 else n-2 
+> generateAuxFuncs m (f,IsFunction,n,ty) =
+>   map (generateAuxFunc m f ty (Function f n)) [0..n-2]
+> generateAuxFuncs m (c,IsConstructor,n,ty) =
+>   map (generateAuxFunc m c ty (Constructor c n)) [0..n-1]
 
-> generateAuxFunc :: ModuleIdent -> QualIdent -> SymbolType -> Int -> Type
->                 -> Int -> Decl
-> generateAuxFunc m qId sType n fType i =
->       FunctionDecl qIdent' varsId fType' exp'
->       where
->       (idModule,ident) = splitQualIdent qId
->       qId'             = changeFunctionqId qId
->       ident'           = idAuxiliarFunction ident i
->       ident''          = idAuxiliarFunction ident (i+1)
->       qIdent'          = qualifyWith m ident'
->       qIdent''         = qualifyWith m ident''
->       varsId           = map (mkIdent.("_"++).show) [0..i]
->       vars             = map Variable varsId
->       fType'           = transformType (i+1)  fType
->       finalApp         = if sType==IsConstructor
->                          then createApply (Constructor qId (i+1)) vars
->                          else createApply (Function qId' (i+2)) vars
->       nextApp          = createApply (Function qIdent'' (i+2)) vars
->       exp'             = if (i==n)
->                          then  debugBuildPairExp finalApp void
->                          else  debugBuildPairExp nextApp void
+> generateAuxFunc :: ModuleIdent -> QualIdent -> Type -> Expression -> Int
+>                 -> Decl
+> generateAuxFunc m f ty e i = FunctionDecl f' vs ty' e'
+>   where f' = qualifyWith m (idAuxiliarFunction (snd (splitQualIdent f)) i)
+>         vs = map (mkIdent . ("_"++) . show) [0..i]
+>         ty' = transformType (i+1) ty
+>         app = debugFirstPhase m (createApply e (map Variable vs))
+>         e' = debugBuildPairExp app void
 
 > idAuxiliarFunction :: Ident -> Int -> Ident
 > idAuxiliarFunction ident n = debugRenameId ('#':show n) ident

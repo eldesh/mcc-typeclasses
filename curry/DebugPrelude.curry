@@ -4,7 +4,8 @@
 -- Rafa 03-07-2001
 
 module DebugPrelude(CTree(..),startDebugging,startIODebugging,clean,dEval,
-                    try',return',bind',bind_',catch',fixIO',encapsulate') where
+                    try',return',bind',bind_',catch',fixIO',encapsulate',
+                    performIO) where
 import Prelude hiding(Monad(..))
 import IO
 
@@ -63,11 +64,7 @@ m1 `bind_'` m2 =
 
 catch' :: IOT a -> (IOError -> (IOT a, CTree)) -> IOT a
 catch' m f = catch m (wrap f)
-  where wrap f ioe =
-          case f ioe of
-            (m,t1) ->
-              m >>= \(x,t2) ->
-              return (x, EmptyCTreeNode (clean [(dEval m,t1),(dEval x,t2)]))
+  where wrap f ioe = performIO (f ioe)
 
 -- NB It is important that wrap uses a lazy pattern; otherwise, the result
 --    of the (transformed) recursive IO action would be requested before it
@@ -75,11 +72,7 @@ catch' m f = catch m (wrap f)
 fixIO' :: (a -> (IOT a, CTree)) -> IOT a
 fixIO' f = fixIO (wrap f)
   where foreign import primitive fixIO :: (a -> IO a) -> IO a
-        wrap f ~(x,_) =
-          case f x of
-            (m,t1) ->
-              m >>= \(y,t2) ->
-              return (y, EmptyCTreeNode (clean [(dEval m,t1),(dEval y,t2)]))
+        wrap f xt = performIO (f (fst xt))
 
 -- NB The computation tree CTreeVoid associated with the application f x
 --    means one cannot detect any bugs in expression e (at least as far
@@ -96,10 +89,17 @@ startDebugging :: ((a, CTree) -> Success) -> IO ()
 startDebugging = navigate . map snd . findall
 
 startIODebugging :: (IOT a, CTree) -> IO ()
-startIODebugging (m,t1) =
-  do
-    (x,t2) <- m
-    navigate [EmptyCTreeNode (clean [(dEval m,t1),(dEval x,t2)])]
+startIODebugging goal = performIO goal >>= \(_,t) -> navigate [t]
+
+performIO :: (IOT a, CTree) -> IOT a
+performIO (m,t1) = m >>= \(r,t2) -> return (r, ioCTree t1 (r,t2))
+
+ioCTree :: CTree -> (a,CTree) -> CTree
+ioCTree CTreeVoid (r,t) = EmptyCTreeNode (clean [(dEval r,t)])
+ioCTree (EmptyCTreeNode trees) (r,t) =
+  EmptyCTreeNode (trees ++ clean [(dEval r,t)])
+ioCTree (CTreeNode name args _ rule trees) (r,t) =
+  CTreeNode name args ("return " ++ dEval r) rule (trees ++ clean [(dEval r,t)])
 
 
 -- rhs=debugging for navigating, rhs=prettyTree for pretty printing

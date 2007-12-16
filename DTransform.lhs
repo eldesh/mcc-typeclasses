@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2560 2007-12-16 18:56:55Z wlux $
+% $Id: DTransform.lhs 2561 2007-12-16 20:24:50Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -190,6 +190,9 @@ constructing expressions of the form (a,b) and the name of function
 
 > debugClean :: QualIdent 
 > debugClean  = debugQualPreludeName "clean"
+
+> debugPerformIO :: QualIdent
+> debugPerformIO = debugQualPreludeName "performIO"
 
 > debugTry :: QualIdent 
 > debugTry  = debugQualPreludeName "try'"
@@ -590,13 +593,19 @@ for \texttt{IO}.
 > transformType :: Int ->  Type -> Type
 > transformType 0  fType =  debugTypePair fType' debugTypeCTree
 >     where fType' = transformType'  fType
+> transformType _ fType@(TypeArrow ty1 (TypeConstructor tc [ty2,ty3]))
+>   | tc == qTupleId 2 && ty1 == TypeConstructor qWorldId [] && ty1 == ty3 =
+>       transformType' fType
 > transformType n  (TypeArrow type1 type2) =  TypeArrow type1' type2'
 >     where 
 >       type1' = transformType' type1
 >       type2' = transformType (n-1) type2
-> transformType n  fType = transformType'  fType
+> transformType _  fType = transformType'  fType
 
 > transformType' ::  Type -> Type
+> transformType' (TypeArrow ty1 (TypeConstructor tc [ty2,ty3]))
+>   | tc == qTupleId 2 && ty1 == TypeConstructor qWorldId [] && ty1 == ty3 =
+>       TypeArrow ty1 (TypeConstructor tc [transformType 0 ty2,ty3])
 > transformType'  t@(TypeArrow type1 type2) = transformType 1  t
 > transformType'  (TypeConstructor ident lTypes) = 
 >    if ident == qIOId
@@ -608,20 +617,32 @@ for \texttt{IO}.
 > typeArity ty = length (argumentTypes ty)
 
 > argumentTypes :: Type -> [Type]
+> argumentTypes (TypeArrow ty1 (TypeConstructor tc [ty2,ty3]))
+>   | tc == qTupleId 2 && ty1 == TypeConstructor qWorldId [] && ty1 == ty3 = []
 > argumentTypes (TypeArrow ty1 ty2) = ty1 : argumentTypes ty2
 > argumentTypes _                   = []
 
 > resultType :: Type -> Type
+> resultType (TypeArrow ty1 (TypeConstructor tc [ty2,ty3]))
+>   | tc == qTupleId 2 && ty1 == TypeConstructor qWorldId [] && ty1 == ty3 =
+>       TypeConstructor qIOId [ty2]
 > resultType (TypeArrow _ ty) = resultType ty
 > resultType ty               = ty
 
 > isIOType :: Type -> Bool
+> isIOType (TypeArrow ty1 (TypeConstructor tc [_,ty2])) =
+>   tc == qTupleId 2 && ty1 == TypeConstructor qWorldId [] && ty1 == ty2
 > isIOType (TypeConstructor tc [_]) = tc == qIOId
 > isIOType _                        = False
 
 > isArrowType :: Type -> Bool
+> isArrowType (TypeArrow ty1 (TypeConstructor tc [_,ty2])) =
+>   not (tc == qTupleId 2 && ty1 == TypeConstructor qWorldId [] && ty1 == ty2)
 > isArrowType (TypeArrow _ _) = True
 > isArrowType _               = False
+
+> qWorldId :: QualIdent
+> qWorldId = qualify (mkIdent "World")
 > ---------------------------------------------------------------------------
 
 
@@ -764,18 +785,26 @@ We only need:
 
 Two special cases handle the selector functions introduced by the
 pattern binding update strategy (see p.~\pageref{pattern-binding} in
-Sect.~\ref{pattern-binding}) and $\eta$-expanded functions with result
-type \texttt{IO}~$t$. The former are not transformed at all and the
-latter do not return a pair composed of a result and a computation
-tree, but simply the result of the monadic action called in the body
-of the function. This is a consequence of the special rule that
-applies to the \texttt{IO} type (see notes on \texttt{transformType}
-above). Ignoring the local computation trees in this case is safe
-since $\eta$ expansion across \texttt{IO} is valid only if the body of
-the function is a non-expansive expression, which means that all local
-computation trees are void (cf.\ p.~\pageref{eta-expansion} in
-Sect.~\ref{eta-expansion} for the definition of non-expansive
-expressions.)
+Sect.~\ref{pattern-binding}), which are not transformed at all, and
+$\eta$-expanded functions with result type \texttt{IO}~$t$. According
+to the special transformation rule that applies to the \texttt{IO}
+type (see notes on \texttt{transformType}), we must not add a
+computation tree to the result of the transformed function, but rather
+make the transformed function return the computation tree together
+with its result in the \texttt{IO} monad. Thus, an $\eta$-expanded
+\texttt{IO} function $f \, x_1 \dots x_{n-1} \, x_n = e \, x_{n}$ is
+transformed into $f' \, x_1 \dots x_{n-1} \, x_n = \texttt{performIO}
+\, e' \, x_n$ where $e'$ is the transformed expression derived for $e$
+and the auxiliary function \texttt{performIO}, which is defined in
+\texttt{DebugPrelude}, takes care of evaluating the transformed
+monadic action and returning a suitable computation tree. Its
+definition is
+\begin{verbatim}
+  performIO (m,t1) = m >>= \(r,t2) -> return (r, ioCTree t1 (r,t2))
+\end{verbatim}
+The auxiliary function \texttt{ioCTree}, which is also defined in
+\texttt{DebugPrelude}, simply adds the pair \texttt{(dEval r,t2)} to
+the list of subcomputations of the computation tree \texttt{t1}.
 \begin{verbatim}
 
 > ---------------------------------------------------------------------------
@@ -786,31 +815,24 @@ expressions.)
 >   | otherwise         = FunctionDecl qId' lVars fType expr'
 >   where
 >     isIO  = isIOType (resultType fType)
->     arity = length lVars
 >     n     = typeArity fType
->     expr' = if isIO && arity > n
->             then newLocalDeclarationsEtaIO qId trust expr lVars arity
->             else newLocalDeclarations      qId trust expr lVars arity
+>     expr' = if isIO && length lVars > n
+>             then newLocalDeclarationsEtaIO qId trust expr lVars
+>             else newLocalDeclarations      qId trust expr lVars
 >     qId' = changeFunctionqId qId
 >     trust = trusted qId
         
 
-> newLocalDeclarations :: QualIdent -> Bool -> Expression -> [Ident] ->
->                         Int -> Expression
-> newLocalDeclarations qId trust exp lVars arity  = 
->       exp' 
->       where   
->         (_,exp',_) = newBindings qId exp lVars' 0 [] True trust
->         lVars'        = drop ((length lVars)-arity) lVars
+> newLocalDeclarations :: QualIdent -> Bool -> Expression -> [Ident]
+>                      -> Expression
+> newLocalDeclarations qId trust exp lVars = exp'
+>   where (_,exp',_) = newBindings qId exp lVars 0 [] True trust
 
-> newLocalDeclarationsEtaIO :: QualIdent -> Bool -> Expression -> [Ident] ->
->                          Int -> Expression
-> newLocalDeclarationsEtaIO qId trust exp lVars arity  = 
->       etaExpandIO exp'' v
->       where   
->         (exp', v)   = etaReduceIO exp
->         (_,exp'',_) = newBindings qId exp' lVars' 0 [] False trust
->         lVars'        = drop ((length lVars)-arity) lVars
+> newLocalDeclarationsEtaIO :: QualIdent -> Bool -> Expression -> [Ident]
+>                           -> Expression
+> newLocalDeclarationsEtaIO qId trust exp lVars =
+>   etaExpandIO (newLocalDeclarations qId trust exp' (init lVars)) v
+>   where (exp', v) = etaReduceIO exp
 
 > etaExpandIO :: Expression -> Expression -> Expression
 > etaExpandIO (Case rf e as) = Case rf e . zipWith etaExpandIOAlt as . repeat
@@ -818,7 +840,7 @@ expressions.)
 > etaExpandIO (Exist v e)    = Exist v . etaExpandIO e
 > etaExpandIO (Let d e)      = Let d . etaExpandIO e
 > etaExpandIO (Letrec ds e)  = Letrec ds . etaExpandIO e
-> etaExpandIO e              = Apply e
+> etaExpandIO e              = Apply (Apply (Function debugPerformIO 2) e)
 
 > etaReduceIO :: Expression -> (Expression,Expression)
 > etaReduceIO (Apply e1 e2) = (e1, e2)

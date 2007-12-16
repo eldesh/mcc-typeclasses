@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2564 2007-12-16 20:44:17Z wlux $
+% $Id: DTransform.lhs 2565 2007-12-16 21:13:52Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -788,8 +788,8 @@ the list of subcomputations of the computation tree \texttt{t1}.
 
 > newLocalDeclarations :: QualIdent -> Bool -> Expression -> [Ident]
 >                      -> Expression
-> newLocalDeclarations qId trust exp lVars = exp'
->   where (_,exp',_) = newBindings qId exp lVars 0 [] True trust
+> newLocalDeclarations qId trust exp lVars =
+>   fst (newBindings qId exp lVars 0 [] trust)
 
 > newLocalDeclarationsEtaIO :: QualIdent -> Bool -> Expression -> [Ident]
 >                           -> Expression
@@ -857,28 +857,22 @@ to avoid repeating identifiers.
 
 
 
-> newBindings :: QualIdent -> Expression -> [Ident] -> Int -> 
->                 [Expression] -> Bool -> Bool -> SecondPhaseResult
-> newBindings qId exp lVars n lTrees isMainExp trust = 
->       if  placeForCT then ([cleanTree], letExp,n2+1)
->       else extractBindings qId exp lVars n lTrees isMainExp trust
->       where 
->          freeCaseOr = noCaseOr exp
->          (lTrees2,exp2,n2) =  extractBindings qId exp lVars n 
->                                               lTrees False trust
->          placeForCT = isMainExp   && freeCaseOr
->          (lets,exp3)= extractLets exp2
->          treeId   = newIdName n2 "tree"
->          resultId = newIdName n2 "result"
->          vResult  = Variable resultId
->          vTree    = Variable treeId
->          cTree    = if trust then  createEmptyNode lTrees2
->                     else createTree qId lVars resultId lTrees2
->          cleanTree= retrieveCleanTree (resultId,treeId)
->          rhs      = debugBuildPairExp vResult vTree
->          bindingR = Binding resultId exp3
->          bindingT = Binding treeId cTree
->          letExp   = buildLetExp (lets++[Let bindingR,Let  bindingT]) rhs
+> newBindings :: QualIdent -> Expression -> [Ident] -> Int -> [Expression]
+>             -> Bool -> (Expression,Int)
+> newBindings qId exp lVars n lTrees trust =
+>   if isCaseOrExp then (exp2,n2) else (letExp,n2+1)
+>   where isCaseOrExp = caseOr exp
+>         (lTrees2,exp2,n2) =
+>           extractBindings qId exp lVars n lTrees isCaseOrExp trust
+>         (lets,exp3)= extractLets exp2
+>         treeId   = newIdName n2 "tree"
+>         resultId = newIdName n2 "result"
+>         cTree    = if trust then createEmptyNode lTrees2
+>                    else createTree qId lVars resultId lTrees2
+>         rhs      = debugBuildPairExp (Variable resultId) (Variable treeId)
+>         bindingR = Binding resultId exp3
+>         bindingT = Binding treeId cTree
+>         letExp   = buildLetExp (lets++[Let bindingR,Let  bindingT]) rhs
 
 
 > extractBindings :: QualIdent -> Expression -> [Ident] -> Int -> 
@@ -888,22 +882,21 @@ to avoid repeating identifiers.
 >       if   a>0 then (lTrees,e,n)
 >       else decomposeExp lTrees n e
 
-> extractBindings qId (Case eval exp lAlt) lVars n lTrees isMainExp voidTree = 
->       if isMainExp then ([], buildLetExp lets (Case eval e2 lAlt'),n2)
->       else decomposeExp [] n2 (buildLetExp lets (Case eval e2 lAlt'))
->       where
->        (lTrees1,e1,n1) = extractBindings qId exp lVars n lTrees False voidTree
->        (lets,e2) = extractLets e1
->        (lTrees2,lAlt',n2) = extractBindingsAlts qId lAlt lVars n1 lTrees1 trust
->        trust = not isMainExp || voidTree
+> extractBindings qId (Case eval exp lAlt) lVars n lTrees isMainExp voidTree
+>   | isMainExp = ([], buildLetExp lets (Case eval e2 lAlt'),n2)
+>   | otherwise = decomposeExp [] n2 (buildLetExp lets (Case eval e2 lAlt'))
+>   where (lTrees1,e1,n1) =
+>           extractBindings qId exp lVars n lTrees False voidTree
+>         (lets,e2) = extractLets e1
+>         (lAlt',n2) = newBindingsAlts qId lAlt lVars n1 lTrees1 trust
+>         trust = not isMainExp || voidTree
 
-> extractBindings qId (Or e1 e2) lVars n lTrees isMainExp voidTree = 
->       if isMainExp then ([],Or e1' e2',n2)
->       else decomposeExp [] n2 (Or e1' e2')
->       where
->        (lTrees1,e1',n1) = newBindings qId e1 lVars n lTrees True trust
->        (lTrees2,e2',n2) = newBindings qId e2 lVars n1 lTrees True trust
->        trust = not isMainExp || voidTree
+> extractBindings qId (Or e1 e2) lVars n lTrees isMainExp voidTree
+>   | isMainExp = ([],Or e1' e2',n2)
+>   | otherwise = decomposeExp [] n2 (Or e1' e2')
+>   where (e1',n1) = newBindings qId e1 lVars n lTrees trust
+>         (e2',n2) = newBindings qId e2 lVars n1 lTrees trust
+>         trust = not isMainExp || voidTree
 
 > extractBindings qId (Exist id exp) lVars n lTrees isMainExp voidTree = 
 >       (lTrees', Exist id exp',n')
@@ -966,7 +959,7 @@ to avoid repeating identifiers.
 >                     -> ([Expression],[Expression],Int)
 > extractBindingsList _ [] _ n = ([],[],n)
 > extractBindingsList qId (x:xs) lVars n = (lTrees1++lTrees2, x':xs',n2)
->   where (lTrees1,x',n1) = newBindings qId x lVars n [] False False
+>   where (lTrees1,x',n1) = extractBindings qId x lVars n [] False False
 >         (lTrees2,xs',n2) = extractBindingsList qId xs lVars n1
 
 
@@ -974,7 +967,7 @@ to avoid repeating identifiers.
 >                          ([Expression],[Expression->Expression],Int)
 > extractBindingsBinding qId (Binding vId e)  n  = (lTrees,lBinding,n')
 >       where
->        (lTrees,e1,n') = newBindings qId e [] n [] False False
+>        (lTrees,e1,n') = extractBindings qId e [] n [] False False
 >        (lets,e2)      = extractLets e1
 >        lBinding       = lets++[Let (Binding vId e2)]
 
@@ -986,32 +979,32 @@ to avoid repeating identifiers.
 >       (lTrees1++lTrees2,letsX++letsXs,(Binding vId e2):xs',n2)
 >       where
 >        (Binding vId e) = x
->        (lTrees1,e1,n1) = newBindings qId e [] n [] False False
+>        (lTrees1,e1,n1) = extractBindings qId e [] n [] False False
 >        (letsX,e2)       = extractLets e1
 >        (lTrees2,letsXs,xs',n2) = extractBindingsLBindings qId xs n1
 
 
-> extractBindingsAlts:: QualIdent -> [Alt] -> [Ident] -> Int -> [Expression] ->
->                       Bool -> ([Expression],[Alt],Int)
+> newBindingsAlts :: QualIdent -> [Alt] -> [Ident] -> Int -> [Expression]
+>                 -> Bool -> ([Alt],Int)
+> newBindingsAlts _ [] _ n _ _ = ([],n)
+> newBindingsAlts qId (Alt const e:xs) lVars n lTrees voidTree =
+>   (Alt const e':xs',n2)
+>   where (e',n1) = newBindings qId e lVars n lTrees voidTree
+>         (xs',n2) = newBindingsAlts qId xs lVars n1 lTrees voidTree
 
-> extractBindingsAlts _ [] _ n  _ _    = ([],[],n)
-> extractBindingsAlts qId (x:xs) lVars n lTrees voidTree = 
->       (lTrees1++lTrees2,(Alt const e'):xs',n2)
->       where
->        (Alt const e) = x
->        (lTrees1,e',n1) = newBindings qId e lVars n lTrees True voidTree
->        (lTrees2,xs',n2) = extractBindingsAlts qId xs lVars n1 lTrees voidTree 
 
-          
-> noCaseOr :: Expression -> Bool
-> noCaseOr (Case _ _ _) = False
-> noCaseOr (Or _ _) = False
-> noCaseOr (Apply e1 _) = noCaseOr e1
-> noCaseOr (Exist _ exp) = noCaseOr exp
-> noCaseOr (Let _ exp) = noCaseOr exp
-> noCaseOr (Letrec _ exp) = noCaseOr exp
-> noCaseOr _ = True
-          
+> caseOr :: Expression -> Bool
+> caseOr (Literal _) = False
+> caseOr (Variable _) = False
+> caseOr (Function _ _) = False
+> caseOr (Constructor _ _) = False
+> caseOr (Apply e1 _) = caseOr e1
+> caseOr (Case _ _ _) = True
+> caseOr (Or _ _) = True
+> caseOr (Exist _ exp) = caseOr exp
+> caseOr (Let _ exp) = caseOr exp
+> caseOr (Letrec _ exp) = caseOr exp
+
 > createTree :: QualIdent ->  [Ident] -> Ident -> [Expression] -> Expression
 > createTree qId lVars resultId trees = 
 >       node fName fParams fResult debugNil clean

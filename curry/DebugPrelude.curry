@@ -36,8 +36,9 @@ clean ((p,x):xs) = if p=="_"
 
 try' :: (a -> (Success,CTree)) -> ([a -> (Success,CTree)], CTree)
 try' g = (map wrap (try (unwrap g)), CTreeVoid)
-  where unwrap g (x,t) | r = t =:= t' where (r,t') = g x 
-        wrap   g x | g (x,t) = (success,t) where t free
+
+unwrap g (x,t) = case g x of (r,t') | r -> t =:= t'
+wrap   g x | g (x,t) = (success,t) where t free
 
 
 type IOT a = IO (a, CTree)
@@ -84,11 +85,11 @@ encapsulate' e = encapsulate e >>= \g -> return' (\x -> (g x, CTreeVoid))
 foreign import primitive "unsafePerformIO" unsafePerformIO' :: IOT a -> (a, CTree)
 
 
-startDebugging :: ((a, CTree) -> Success) -> IO ()
-startDebugging = navigate . map snd . findall
+startDebugging :: (a -> (Success,CTree)) -> IO ()
+startDebugging = navigate . map snd . findall . unwrap
 
-startIODebugging :: (IOT a, CTree) -> IO ()
-startIODebugging goal = performIO goal >>= \(_,t) -> navigate [t]
+startIODebugging :: IOT a -> IO ()
+startIODebugging goal = goal >>= \(_,t) -> navigate [t]
 
 performIO :: (IOT a, CTree) -> IOT a
 performIO (m,t1) = m >>= \(r,t2) -> return (r, ioCTree t1 (r,t2))

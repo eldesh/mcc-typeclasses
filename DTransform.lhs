@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2578 2007-12-16 23:52:02Z wlux $
+% $Id: DTransform.lhs 2586 2007-12-19 23:55:03Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -233,93 +233,42 @@ constructing expressions of the form (a,b) and the name of function
 
 \end{verbatim}
 
-The newMain is only added if we are in the module main. 
-It will start the debugging process.
+When compiling a goal, the debugging transformation must provide a new
+main function that starts the debugging process. Depending on the
+goal's type this is done by applying either
+\texttt{DebugPrelude.startDebugging} or
+\texttt{DebugPrelude.startIODebugging} to the transformed goal.
 
-Its definition depends on the goal's type. If the goal's type is
-\texttt{IO}~$t$, the new main function simply executes the transformed
-goal under control of the debugger.
-
-\begin{verbatim}
-
-
-main.main = DebugPrelude.startIODebugging main._debug#main
-
-\end{verbatim}
-
-Otherwise, the goal must be solved using encapsulated search and
-navigation then allows picking a wrong solution. In order to make this
-work, the transformed goal function must be converted into a form that
-is suitable as argument to the encapsulated search primitive
-\texttt{try}. Therefore, we use the following definition for the new
-main function.
-
-\begin{verbatim}
-
-
-main.main = DebugPrelude.startDebugging 
-                (\(x,ct)-> let (r,ct') = main._debug#main in x=:=r &> ct=:=ct')
-
-\end{verbatim}
-
-We have to introduce an auxiliary function for the lambda in the intermediate code.
+A subtle issue with IO goals is that the simplifier may or may not
+$\eta$-expand them. Without $\eta$-expansion the transformed goal's
+type is \texttt{(IO ($\tau'$,CTree), CTree)}, whereas it lacks the
+outer computation tree with $\eta$-expansion, i.e., the type is just
+\texttt{IO ($\tau'$,CTree)}. In order to accomodate this difference,
+\texttt{debugMain} first applies \texttt{DebugPrelude.performIIO} to
+the transformed goal if it is a nullary function. Note that the
+desugarer transforms all non-IO goals \emph{goal} into unary functions
+equivalent to \texttt{\char`\\z -> z =:= }\emph{goal} when generating
+code for the debugger (cf. Sect.~\ref{sec:desugar}).
 
 \begin{verbatim}
 
 > dAddMain :: Ident -> Module -> Module
-> dAddMain goalId (Module m is ds) = Module m is (fMain ++ ds)
->   where (arity,ty) = head [(length lVars,ty) | FunctionDecl f lVars ty _ <- ds, f == debugOldMainId]
->         fMain = if isIO
->                 then newMainIO m goalId arity
->                 else newMain m goalId arity
->         debugOldMainId = qualifyWith m (debugRenameId "" goalId)
->         debugResultType (TypeConstructor _ [ty,_]) = ty
->         isIO =
->           case arity of
->             0 -> isIOType (debugResultType ty)
->             1 -> isIOType ty
->             _ -> False
+> dAddMain goalId (Module m is ds) =
+>   Module m is (FunctionDecl mainId [] mainType mainExpr : ds)
+>   where (arity,ty) =
+>           head [(length vs,ty) | FunctionDecl f vs ty _ <- ds, f == mainId']
+>         mainId = qualifyWith m goalId
+>         mainId' = qualifyWith m (debugRenameId "" goalId)
+>         mainType = TypeConstructor qIOId [TypeConstructor qUnitId []]
+>         mainExpr = debugMain arity ty (Function mainId' arity)
 
-> newMainIO :: ModuleIdent -> Ident -> Int -> [Decl]
-> newMainIO m f n = [fMain]
->       where 
->       fMain = FunctionDecl fId [] fType fBody
->       fId   = qualifyWith m f
->       fType = TypeConstructor qIOId [TypeConstructor qUnitId []]
->       fApp  = if n==0
->               then Function debugOldMainId n
->               else debugBuildPairExp (Function debugOldMainId n) void
->       fBody = Apply (Function debugIOFunctionqId 2) fApp
->       debugOldMainId = qualifyWith m (debugRenameId "" f)
-
-> newMain :: ModuleIdent -> Ident -> Int -> [Decl]
-> newMain m f n = [fMain,auxMain]
->       where 
->       fMain = FunctionDecl fId [] fType fBody
->       fId   = qualifyWith m f
->       fType = TypeConstructor qIOId [TypeConstructor qUnitId []]
->       fBody = Apply (Function debugFunctionqId 1) (Function debugAuxMainId 1)
->       fType' = debugTypeMainAux
->       r   = mkIdent "r"
->       ct' = mkIdent "ct'"
->       x   = mkIdent "x"
->       ct   = mkIdent "ct"
->       param  = mkIdent "x_ct"
->       eq1 = createApply equalFunc  [Variable x, Variable r]
->       eq2 = createApply equalFunc  [Variable ct, Variable ct']        
->       equalFunc = Function (qualifyWith preludeMIdent (mkIdent "=:=")) 2
->       seqAndFunc = Function (qualifyWith preludeMIdent (mkIdent "&>")) 2
->       expression =  createApply seqAndFunc [eq1,eq2]
->       alt'     = Alt (ConstructorPattern qPairId [x,ct]) expression
->       caseExpr = Case Flex (Variable param) [alt']
->       alt      = Alt (ConstructorPattern qPairId [r,ct']) caseExpr
->       fApp     = if n == 0
->                  then Function debugOldMainId n
->                  else debugBuildPairExp (Function debugOldMainId n) void
->       fBody'   = Case Rigid  fApp [alt]
->       auxMain = FunctionDecl debugAuxMainId [param] fType' fBody'
->       debugOldMainId = qualifyWith m (debugRenameId "" f)
->       debugAuxMainId = qualifyWith m (debugRenameId "#Aux" f)
+> debugMain :: Int -> Type -> Expression -> Expression
+> debugMain arity ty
+>   | arity == 0 = Apply startIODebugging . Apply debugPerformIO
+>   | isIOType ty = Apply startIODebugging
+>   | otherwise = Apply startDebugging
+>   where startDebugging = Function debugFunctionqId 1
+>         startIODebugging = Function debugIOFunctionqId 2
 
 
 \end{verbatim}

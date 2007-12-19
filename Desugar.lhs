@@ -1,11 +1,11 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2585 2007-12-19 22:56:54Z wlux $
+% $Id: Desugar.lhs 2586 2007-12-19 23:55:03Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Desugar.lhs}
-\section{Desugaring Curry Expressions}
+\section{Desugaring Curry Expressions}\label{sec:desugar}
 The desugaring pass removes all syntactic sugar from the module. In
 particular, the output of the desugarer will have the following
 properties.
@@ -152,27 +152,29 @@ translated into the function
     $v_0$ \texttt{=:=} \emph{expr}
     \texttt{where} \emph{decls}
 \end{quote}
-where $v_0$ is a fresh variable. This transformation is not performed
-when generating code for the declarative debugger since the debugging
-transformation will supply its own main function (see
-Sect.~\ref{sec:dtrans}).
+where $v_0$ is a fresh variable. No variables are lifted at present
+when generating code for the declarative debugger, since the debugger
+evaluates the goal within an encapsulated search and we cannot pass
+functions with arbitrary arity to the encapsulated search primitive.
+In addition, the debugger currently lacks support for showing the
+bindings of the goal's free variables.
 \begin{verbatim}
 
 > goalModule :: Bool -> ValueEnv -> ModuleIdent -> Ident -> Goal Type
 >            -> (Maybe [Ident],Module Type,ValueEnv)
 > goalModule debug tyEnv m g (Goal p e ds)
->   | debug || isIO ty =
+>   | isIO ty =
 >       (Nothing,
 >        mkModule m p g [] (mkLet ds e),
 >        bindFun m g 0 (polyType ty) tyEnv)
 >   | otherwise =
->       (Just vs,
+>       (if debug then Nothing else Just vs,
 >        mkModule m p g (zip (ty:tys) (v0:vs))
 >                 (apply (prelUnif ty) [mkVar ty v0,e']),
 >        bindFun m v0 0 (monoType ty) (bindFun m g n (polyType ty') tyEnv))
 >   where ty = typeOf e
 >         v0 = anonId
->         (vs,e') = liftGoalVars (mkLet ds e)
+>         (vs,e') = liftGoalVars debug (mkLet ds e)
 >         tys = [rawType (varType v tyEnv) | v <- vs]
 >         ty' = foldr TypeArrow successType (ty:tys)
 >         n = 1 + length vs
@@ -185,10 +187,11 @@ Sect.~\ref{sec:dtrans}).
 >    Module m Nothing []
 >           [BlockDecl (funDecl p g (map (uncurry VariablePattern) vs) e)]
 
-> liftGoalVars :: Expression a -> ([Ident],Expression a)
-> liftGoalVars (Let ds e) = (concat [vs | FreeDecl _ vs <- vds],mkLet ds' e)
+> liftGoalVars :: Bool -> Expression a -> ([Ident],Expression a)
+> liftGoalVars debug (Let ds e)
+>   | not debug = (concat [vs | FreeDecl _ vs <- vds],mkLet ds' e)
 >   where (vds,ds') = partition isFreeDecl ds
-> liftGoalVars e = ([],e)
+> liftGoalVars _ e = ([],e)
 
 \end{verbatim}
 At the top-level of a module, we introduce the selector function of

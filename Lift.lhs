@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Lift.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: Lift.lhs 2585 2007-12-19 22:56:54Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -301,7 +301,6 @@ to the top-level.
 > liftExpr (Let ds e) = (mkLet ds' e',ds'' ++ ds''')
 >   where (ds',ds'') = liftDeclGroup ds
 >         (e',ds''') = liftExpr e
->         mkLet ds e = if null ds then e else Let ds e
 > liftExpr (Case e alts) = (Case e' alts',concat (ds':dss'))
 >   where (e',ds') = liftExpr e
 >         (alts',dss') = unzip (map liftAlt alts)

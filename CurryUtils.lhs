@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryUtils.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: CurryUtils.lhs 2585 2007-12-19 22:56:54Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -215,6 +215,9 @@ abstract syntax trees.
 
 > caseAlt :: Position -> ConstrTerm a -> Expression a -> Alt a
 > caseAlt p t e = Alt p t (SimpleRhs p e [])
+
+> mkLet :: [Decl a] -> Expression a -> Expression a
+> mkLet ds e = if null ds then e else Let ds e
 
 > apply :: Expression a -> [Expression a] -> Expression a
 > apply = foldl Apply

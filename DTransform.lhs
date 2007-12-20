@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2588 2007-12-20 00:07:10Z wlux $
+% $Id: DTransform.lhs 2589 2007-12-20 00:18:21Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -622,7 +622,7 @@ the list of subcomputations of the computation tree \texttt{t1}.
 
 > newLocalDeclarations :: QualIdent -> Bool -> [Ident] -> Expression
 >                      -> Expression
-> newLocalDeclarations f trust vs e = snd (newBindings createNode [] 0 e)
+> newLocalDeclarations f trust vs e = snd (newBindings createNode "" [] 0 e)
 >   where createNode = if trust then createEmptyNode else createTree f vs
 
 > newLocalDeclarationsEtaIO :: QualIdent -> Bool -> [Ident] -> Expression
@@ -698,38 +698,38 @@ local declarations of \texttt{aux$N$}, \texttt{result$N$}, and
 
 
 > class SecondPhase a where
->   newBindings :: (Ident -> [Expression] -> Expression) -> [Expression]
->               -> Int -> a -> (Int,a)
+>   newBindings :: (String -> Ident -> [Expression] -> Expression)
+>               -> String -> [Expression] -> Int -> a -> (Int,a)
 
 > instance SecondPhase Expression where
->   newBindings createNode cts n (Case rf e as) = (n2,lets1 (Case rf e' as'))
+>   newBindings createNode p cts n (Case rf e as) = (n2,lets1 (Case rf e' as'))
 >     where (n1,cts1,lets1,e') = extractBindings n e
->           (n2,as') = mapAccumL (newBindings createNode (cts++cts1)) n1 as
->   newBindings createNode cts n (Or e1 e2) = (n2,Or e1' e2')
->     where (n1,e1') = newBindings createNode cts n e1
->           (n2,e2') = newBindings createNode cts n1 e2
->   newBindings createNode cts n (Exist v e) = (n',Exist v e')
->     where (n',e') = newBindings createNode cts n e
->   newBindings createNode cts n (Let d e) = (n2,lets1 (Let d' e'))
+>           (n2,as') = mapAccumL (newBindings createNode p (cts++cts1)) n1 as
+>   newBindings createNode p cts n (Or e1 e2) = (n2,Or e1' e2')
+>     where (n1,e1') = newBindings createNode p cts n e1
+>           (n2,e2') = newBindings createNode p cts n1 e2
+>   newBindings createNode p cts n (Exist v e) = (n',Exist v e')
+>     where (n',e') = newBindings createNode p cts n e
+>   newBindings createNode p cts n (Let d e) = (n2,lets1 (Let d' e'))
 >     where (n1,cts1,lets1,d') = extractBindings n d
->           (n2,e') = newBindings createNode (cts++cts1) n1 e
->   newBindings createNode cts n (Letrec ds e) =
+>           (n2,e') = newBindings createNode p (cts++cts1) n1 e
+>   newBindings createNode p cts n (Letrec ds e) =
 >     (n2,letrecBindings lets1 ds' e')
 >     where (n1,cts1,lets1,ds') = extractBindings n ds
->           (n2,e') = newBindings createNode (cts++cts1) n1 e
->   newBindings createNode cts n (SrcLoc p e) = (n',SrcLoc p e')
->     where (n',e') = newBindings createNode cts n e
->   newBindings createNode cts n e = (n1+1,lets2 rhs)
+>           (n2,e') = newBindings createNode p (cts++cts1) n1 e
+>   newBindings createNode _ cts n (SrcLoc p e) = (n',SrcLoc p e')
+>     where (n',e') = newBindings createNode p cts n e
+>   newBindings createNode p cts n e = (n1+1,lets2 rhs)
 >     where (n1,cts1,lets1,e') = extractBindings n e
 >           rid   = newIdName n1 "result"
 >           tid   = newIdName n1 "tree"
->           ct    = createNode rid (cts++cts1)
+>           ct    = createNode p rid (cts++cts1)
 >           lets2 = lets1 . Let (Binding rid e') . Let (Binding tid ct)
 >           rhs   = debugBuildPairExp (Variable rid) (Variable tid)
 
 > instance SecondPhase Alt where
->   newBindings createNode cts n (Alt t e) = (n',Alt t e')
->     where (n',e') = newBindings createNode cts n e
+>   newBindings createNode p cts n (Alt t e) = (n',Alt t e')
+>     where (n',e') = newBindings createNode p cts n e
 
 
 > class SecondPhaseArg a where
@@ -746,9 +746,9 @@ local declarations of \texttt{aux$N$}, \texttt{result$N$}, and
 >     | a > 0     = (n,[],id,e)
 >     | otherwise = decomposeExp n e
 >   extractBindings n e@(Case _ _ _) = decomposeExp n' e'
->     where (n',e') = newBindings createEmptyNode [] n e
+>     where (n',e') = newBindings createEmptyNode "" [] n e
 >   extractBindings n e@(Or _ _) = decomposeExp n' e'
->     where (n',e') = newBindings createEmptyNode [] n e
+>     where (n',e') = newBindings createEmptyNode "" [] n e
 >   extractBindings n (Exist v e) = (n',cts',Exist v . lets',e')
 >     where (n',cts',lets',e') = extractBindings n e
 >   extractBindings n (Let d e) = (n2,cts1++cts2,lets1 . Let d' . lets2,e')
@@ -791,19 +791,21 @@ local declarations of \texttt{aux$N$}, \texttt{result$N$}, and
 >         (n2,cts2,lets2,e') = extractBindingsApply n1 v es
 
 
-> createTree :: QualIdent -> [Ident] -> Ident -> [Expression] -> Expression
-> createTree qId lVars resultId trees =
->   node fName fParams fResult debugNil clean
+> createTree :: QualIdent -> [Ident] -> String -> Ident -> [Expression]
+>            -> Expression
+> createTree qId lVars rule resultId trees =
+>   node fName fParams fResult fRule clean
 >   where (idModule,ident) = splitQualIdent qId
 >         fNameCh = maybe "" moduleName idModule ++ "." ++ name ident
 >         fName   = debugBuildList (map (Literal . Char) fNameCh)
 >         fParams = debugBuildList (map (dEvalApply.Variable) lVars)
 >         fResult = (dEvalApply.Variable) resultId
+>         fRule   = debugBuildList (map (Literal . Char) rule)
 >         clean   = if null trees then debugNil
 >                   else Apply (Function debugClean 1) (debugBuildList trees)
 
-> createEmptyNode :: Ident -> [Expression] -> Expression
-> createEmptyNode resultId trees = if null trees then void else emptyNode clean
+> createEmptyNode :: String -> Ident -> [Expression] -> Expression
+> createEmptyNode _ _ trees = if null trees then void else emptyNode clean
 >   where clean = Apply (Function debugClean 1) (debugBuildList trees)
 
 > letrecBindings :: Context -> [Binding] -> Context

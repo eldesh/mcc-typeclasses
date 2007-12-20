@@ -151,6 +151,7 @@ basicArrow (CTreeNode name args result rule trees) =
 
 isBuggy (CTreeNode name args result rule trees) = 
 	" ** Function "++name++" is incorrect **\n" ++
+	(if null rule then "" else " Error is at " ++ rule ++ "\n") ++
         " Wrong instance: " ++	basicArrow (CTreeNode name args result rule trees)
 
 buggyChildren [] = return No

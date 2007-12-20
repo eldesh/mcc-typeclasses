@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IL.lhs 2503 2007-10-16 20:13:38Z wlux $
+% $Id: IL.lhs 2588 2007-12-20 00:07:10Z wlux $
 %
 % Copyright (c) 1999-2007 Wolfgang Lux
 % See LICENSE for the full license.
@@ -86,6 +86,8 @@ distinguishes (local) variables and (global) functions in expressions.
 >   | Exist Ident Expression
 >   | Let Binding Expression
 >   | Letrec [Binding] Expression
+>   -- source code location annotations
+>   | SrcLoc String Expression
 >   deriving (Eq,Show)
 
 > data Eval = Rigid | Flex deriving (Eq,Show)

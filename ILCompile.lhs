@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 2504 2007-10-16 20:51:03Z wlux $
+% $Id: ILCompile.lhs 2588 2007-12-20 00:07:10Z wlux $
 %
 % Copyright (c) 1999-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -235,6 +235,7 @@ expression whose innermost expression is the matched variable.
 > compileSelectorExpr vs (Variable v) =
 >   return (foldr update (Cam.Enter (var v)) vs)
 >   where update (v,v') = Cam.Seq (Cam.Update v' (var v))
+> compileSelectorExpr vs (SrcLoc _ e) = compileSelectorExpr vs e
 > compileSelectorExpr _ _ = internalError "invalid selector function"
 
 \end{verbatim}
@@ -303,6 +304,7 @@ normal form, is passed as an additional argument to
 >     bdss' <- compileRecBindings bds
 >     st <- compileStrict (addHnfs bds hnfs) e vs
 >     return (foldr (Cam.Seq . Cam.Let) st bdss')
+> compileStrict hnfs (SrcLoc _ e) vs = compileStrict hnfs e vs
 
 > literal :: Literal -> Cam.Literal
 > literal (Char c) = Cam.Char c
@@ -320,6 +322,7 @@ normal form, is passed as an additional argument to
 > noteHnf (Exist _ e) hnfs = noteHnf e hnfs
 > noteHnf (Let _ e) hnfs = noteHnf e hnfs
 > noteHnf (Letrec _ e) hnfs = noteHnf e hnfs
+> noteHnf (SrcLoc _ e) hnfs = noteHnf e hnfs
 
 > addHnfs :: [Binding] -> [Ident] -> [Ident]
 > addHnfs bds hnfs = [v | Binding v e <- bds, isHnf hnfs e] ++ hnfs
@@ -333,6 +336,7 @@ normal form, is passed as an additional argument to
 > isHnf hnfs (Exist v e) = isHnf (v:hnfs) e
 > isHnf hnfs (Let bd e) = isHnf (addHnfs [bd] hnfs) e
 > isHnf hnfs (Letrec bds e) = isHnf (addHnfs bds hnfs) e
+> isHnf hnfs (SrcLoc _ e) = isHnf hnfs e
 > isHnf _ _ = internalError "isHnf"
 
 > isHnfApp :: Expression -> [Expression] -> Bool
@@ -343,6 +347,7 @@ normal form, is passed as an additional argument to
 > isHnfApp (Exist _ e) es = isHnfApp e es
 > isHnfApp (Let _ e) es = isHnfApp e es
 > isHnfApp (Letrec _ e) es = isHnfApp e es
+> isHnfApp (SrcLoc _ e) es = isHnfApp e es
 > isHnfApp _ _ = internalError "isHnfApp"
 
 > rf :: Eval -> Cam.RF
@@ -435,6 +440,7 @@ functions before compiling into abstract machine code.
 >     bdss' <- compileRecBindings bds
 >     st <- compileLazy e vs
 >     return (foldr (Cam.Seq . Cam.Let) st bdss')
+> compileLazy (SrcLoc _ e) vs = compileLazy e vs
 > compileLazy e _ = internalError ("compileLazy: " ++ show e)
 
 \end{verbatim}

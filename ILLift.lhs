@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILLift.lhs 2503 2007-10-16 20:13:38Z wlux $
+% $Id: ILLift.lhs 2588 2007-12-20 00:07:10Z wlux $
 %
 % Copyright (c) 2000-2007, Wolfgang Lux
 % See LICENSE for the full license.
@@ -66,6 +66,10 @@ positions are lifted into global functions.
 >     (bs',ds) <- mapLift liftBinding bs
 >     (e',ds') <- liftExpr e
 >     return (Letrec bs' e',ds ++ ds')
+> liftExpr (SrcLoc p e) =
+>   do
+>     (e',ds) <- liftExpr e
+>     return (SrcLoc p e',ds)
 
 > liftArg :: Expression -> LiftState (Expression,[Decl])
 > liftArg (Literal l) = return (Literal l,[])
@@ -93,6 +97,10 @@ positions are lifted into global functions.
 >     (bs',ds) <- mapLift liftBinding bs
 >     (e',ds') <- liftArg e
 >     return (Letrec bs' e',ds ++ ds')
+> liftArg (SrcLoc p e) =
+>   do
+>     (e',ds) <- liftArg e
+>     return (SrcLoc p e',ds)
 
 > lift :: Expression -> LiftState (Expression,[Decl])
 > lift e =
@@ -145,6 +153,7 @@ positions are lifted into global functions.
 > fv (Letrec bs e) =
 >   filter (`notElem` bvs) ([v | Binding _ e <- bs, v <- fv e] ++ fv e)
 >   where bvs = [v | Binding v _ <- bs]
+> fv (SrcLoc _ e) = fv e
 
 > fvAlt :: Alt -> [Ident]
 > fvAlt (Alt t e) = filter (`notElem` bv t) (fv e)

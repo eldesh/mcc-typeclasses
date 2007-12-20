@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2587 2007-12-20 00:03:26Z wlux $
+% $Id: DTransform.lhs 2588 2007-12-20 00:07:10Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -512,6 +512,7 @@ these definitions here.
 > typesExpr (Let (Binding _ e1) e2) env = typesExpr e1 (typesExpr e2 env)
 > typesExpr (Letrec binds e) env = foldr typesBinding (typesExpr e env) binds
 >   where typesBinding (Binding _ e) = typesExpr e
+> typesExpr (SrcLoc _ e) env = typesExpr e env
 
 > debugTypePredef :: Ident -> Int -> Type
 > debugTypePredef ident n
@@ -570,6 +571,7 @@ function and partial constructor applications.
 >   firstPhase m _ (Exist v e) = Exist v (firstPhase m 0 e)
 >   firstPhase m _ (Let d e) = Let (firstPhase m 0 d) (firstPhase m 0 e)
 >   firstPhase m _ (Letrec ds e) = Letrec (firstPhase m 0 ds) (firstPhase m 0 e)
+>   firstPhase m _ (SrcLoc p e) = SrcLoc p (firstPhase m 0 e)
 
 > instance FirstPhase Alt where
 >   firstPhase m d (Alt t e) = Alt t (firstPhase m d e)
@@ -635,6 +637,7 @@ the list of subcomputations of the computation tree \texttt{t1}.
 > etaExpandIO (Exist v e)    = Exist v . etaExpandIO e
 > etaExpandIO (Let d e)      = Let d . etaExpandIO e
 > etaExpandIO (Letrec ds e)  = Letrec ds . etaExpandIO e
+> etaExpandIO (SrcLoc p e)   = SrcLoc p . etaExpandIO e
 > etaExpandIO e              = Apply (Apply debugPerformIO e)
 
 > etaReduceIO :: Expression -> (Expression,Expression)
@@ -644,6 +647,7 @@ the list of subcomputations of the computation tree \texttt{t1}.
 > etaReduceIO (Exist v e)   = (Exist v e', v')  where (e', v') = etaReduceIO e
 > etaReduceIO (Let d e)     = (Let d e', v)     where (e', v) = etaReduceIO e
 > etaReduceIO (Letrec ds e) = (Letrec ds e', v) where (e', v) = etaReduceIO e
+> etaReduceIO (SrcLoc p e)  = (SrcLoc p e', v)  where (e', v) = etaReduceIO e
 > etaReduceIO e = error ("etaReduceIO " ++ showsPrec 11 e "")
 
 > debugPerformIO :: Expression
@@ -713,6 +717,8 @@ local declarations of \texttt{aux$N$}, \texttt{result$N$}, and
 >     (n2,letrecBindings lets1 ds' e')
 >     where (n1,cts1,lets1,ds') = extractBindings n ds
 >           (n2,e') = newBindings createNode (cts++cts1) n1 e
+>   newBindings createNode cts n (SrcLoc p e) = (n',SrcLoc p e')
+>     where (n',e') = newBindings createNode cts n e
 >   newBindings createNode cts n e = (n1+1,lets2 rhs)
 >     where (n1,cts1,lets1,e') = extractBindings n e
 >           rid   = newIdName n1 "result"
@@ -752,6 +758,8 @@ local declarations of \texttt{aux$N$}, \texttt{result$N$}, and
 >     (n2,cts1++cts2,letrecBindings lets1 ds' . lets2,e')
 >     where (n1,cts1,lets1,ds') = extractBindings n ds
 >           (n2,cts2,lets2,e') = extractBindings n1 e
+>   extractBindings n (SrcLoc p e) = (n',cts',lets',SrcLoc p e')
+>     where (n',cts',lets',e') = extractBindings n e
 >   extractBindings n e@(Apply _ _) = (n2,cts1++cts2,lets1 . lets2,e')
 >     where (f,es) = extractApply e []
 >           (n1,cts1,lets1,f':es') = extractBindings n (f:es)

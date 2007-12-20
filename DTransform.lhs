@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2586 2007-12-19 23:55:03Z wlux $
+% $Id: DTransform.lhs 2587 2007-12-20 00:03:26Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2007, Wolfgang Lux
@@ -28,7 +28,7 @@ the computation.
 \end{verbatim}
 
 All the new and auxiliary names in the transformed module will have 
-{\tt debugPrefix}
+\texttt{debugPrefix}
 prefix to avoid conflicts with user-names. Auxiliary data types and functions
 will be imported from the debug prelude, whose name is defined below, and that
 will be imported by all the transformed modules.
@@ -39,7 +39,6 @@ will be imported by all the transformed modules.
 > debugPrefix         = "_debug#"
 > debugFunctionName   =  "startDebugging"
 > debugIOFunctionName =  "startIODebugging"
-
 
 \end{verbatim}
 
@@ -89,7 +88,7 @@ all.
 > debugDecl m _ (DataDecl tc n cs) = DataDecl tc n cs' : concat ds'
 >   where (cs',ds') = unzip (map (debugConstrDecl m ty0) cs)
 >         ty0 = TypeConstructor tc (map TypeVariable [0..n-1])
-> debugDecl m _ (TypeDecl tc n ty) = [TypeDecl tc n (transformType' ty)]
+> debugDecl m _ (TypeDecl tc n ty) = [TypeDecl tc n (transformType ty)]
 > debugDecl m trusted (FunctionDecl f vs ty e)
 >   | isQSelectorId f = [FunctionDecl f vs ty e]
 >   | otherwise =
@@ -103,7 +102,7 @@ all.
 
 > debugConstrDecl :: ModuleIdent -> Type -> ConstrDecl -> (ConstrDecl,[Decl])
 > debugConstrDecl m ty0 (ConstrDecl c tys) =
->   (ConstrDecl c (map transformType' tys),
+>   (ConstrDecl c (map transformType tys),
 >    generateAuxFuncs m (c,IsConstructor,length tys,ty))
 >   where ty = normalizeType (foldr TypeArrow ty0 tys)
 
@@ -130,6 +129,9 @@ Some auxiliary functions widely used throughout the module.
 
 > newIdName :: Int -> String -> Ident
 > newIdName n name = mkIdent (debugPrefix++name++show n)
+
+> qualPreludeName :: String -> QualIdent
+> qualPreludeName name = qualifyWith preludeMIdent (mkIdent name)
 
 > debugQualPreludeName :: String -> QualIdent
 > debugQualPreludeName name = qualifyWith debugPreludeMIdent (mkIdent name)
@@ -159,9 +161,8 @@ constructing expressions of the form (a,b) and the name of function
 \begin{verbatim}
 
 > typeCons :: Type
-> typeCons = TypeArrow (TypeVariable 0) 
->               (TypeArrow (debugTypeList (TypeVariable 0))  
->                          (debugTypeList (TypeVariable 0)))
+> typeCons = TypeArrow t (TypeArrow (debugTypeList t) (debugTypeList t))
+>   where t = TypeVariable 0
 
 > typeTuple :: Int -> Type
 > typeTuple n = foldr TypeArrow (debugTypeTuple ts) ts
@@ -176,12 +177,12 @@ constructing expressions of the form (a,b) and the name of function
 > debugTypeTuple :: [Type] -> Type
 > debugTypeTuple ts = TypeConstructor (qTupleId (length ts)) ts
 
-> debugTypeChar,debugTypeString:: Type
+> debugTypeChar,debugTypeString :: Type
 > debugTypeChar   = TypeConstructor qCharId []
 > debugTypeString = debugTypeList debugTypeChar
 
 
-> debugTypeCTree,debugTypeLCTree,debugTypeCleanTree,debugTypeLCleanTree:: Type
+> debugTypeCTree,debugTypeLCTree,debugTypeCleanTree,debugTypeLCleanTree :: Type
 > debugTypeCTree   = TypeConstructor (debugQualPreludeName "CTree") []
 > debugTypeLCTree  = debugTypeList debugTypeCTree
 > debugTypeCleanTree = debugTypePair debugTypeString debugTypeCTree
@@ -204,7 +205,7 @@ constructing expressions of the form (a,b) and the name of function
 
 
 > debugClean :: QualIdent 
-> debugClean  = debugQualPreludeName "clean"
+> debugClean = debugQualPreludeName "clean"
 
 
 > dEvalApply :: Expression -> Expression
@@ -216,13 +217,11 @@ constructing expressions of the form (a,b) and the name of function
 
 > emptyNode :: Expression -> Expression
 > emptyNode children =
->   createApply (Constructor (debugQualPreludeName "EmptyCTreeNode") 1)
->               [children]
+>   Apply (Constructor (debugQualPreludeName "EmptyCTreeNode") 1) children
 
 
 > debugBuildList :: [Expression] -> Expression
-> debugBuildList l = foldr Apply debugNil (map (Apply cons) l)
->   where cons = Constructor qConsId 2
+> debugBuildList l = foldr (Apply . Apply (Constructor qConsId 2)) debugNil l
 
 
 > node :: Expression -> Expression -> Expression -> Expression -> Expression
@@ -312,7 +311,7 @@ the same arity as the original primitives.
 > generateForeign m f cc s n ty = FunctionDecl f' vs ty' e : ds
 >   where f' = changeFunctionqId m f
 >         vs = map (mkIdent . ("_"++) . show) [0..n-1]
->         ty' = transformType n ty
+>         ty' = transformFunType n ty
 >         (e,ds) = debugForeign f cc s n (map Variable vs) ty
 
 > debugForeign :: QualIdent -> CallConv -> String -> Int -> [Expression] -> Type
@@ -379,7 +378,7 @@ generates the new auxiliary functions.
 > generateAuxFunc m f ty e i = FunctionDecl f' vs ty' e'
 >   where f' = qidAuxiliaryFunction m f i
 >         vs = map (mkIdent . ("_"++) . show) [0..i]
->         ty' = transformType (i+1) ty
+>         ty' = transformFunType (i+1) ty
 >         app = debugFirstPhase m (createApply e (map Variable vs))
 >         e' = debugBuildPairExp app void
 
@@ -395,13 +394,13 @@ generates the new auxiliary functions.
 
 \end{verbatim}
 
-The function \texttt{transformType} transforms the type
+The function \texttt{transformFunType} transforms the type
 $\tau_1 \rightarrow \dots \rightarrow \tau_n \rightarrow \tau$
 of a function with arity $n$ into
 $\tau'_1 \rightarrow \dots \rightarrow \tau'_n \rightarrow (\tau',\texttt{CTree})$.
-The arity $n$ is passed as first argument to \texttt{transformType}.
+The arity $n$ is passed as first argument to \texttt{transformFunType}.
 
-The function \texttt{transformType'} implements the basic
+The function \texttt{transformType} implements the basic
 transformation of types:
 \begin{displaymath}
   \begin{array}{rcll}
@@ -427,24 +426,25 @@ for transforming the type \texttt{IO}, giving rise to the special case
 for \texttt{IO}.
 \begin{verbatim}
 
-> transformType :: Int -> Type -> Type
-> transformType 0 fType = debugTypePair (transformType' fType) debugTypeCTree
-> transformType _ fType@(TypeArrow ty1 (TypeConstructor tc [ty2,ty3]))
+> transformFunType :: Int -> Type -> Type
+> transformFunType 0 fType = debugTypePair (transformType fType) debugTypeCTree
+> transformFunType _ fType@(TypeArrow ty1 (TypeConstructor tc [ty2,ty3]))
 >   | tc == qPairId && ty1 == TypeConstructor qWorldId [] && ty1 == ty3 =
->       transformType' fType
-> transformType n (TypeArrow type1 type2) =
->   TypeArrow (transformType' type1) (transformType (n-1) type2)
-> transformType _ fType = transformType' fType
+>       transformType fType
+> transformFunType n (TypeArrow type1 type2) =
+>   TypeArrow (transformType type1) (transformFunType (n-1) type2)
+> transformFunType _ fType = transformType fType
 
-> transformType' :: Type -> Type
-> transformType' (TypeArrow ty1 (TypeConstructor tc [ty2,ty3]))
+> transformType :: Type -> Type
+> transformType (TypeArrow ty1 (TypeConstructor tc [ty2,ty3]))
 >   | tc == qPairId && ty1 == TypeConstructor qWorldId [] && ty1 == ty3 =
->       TypeArrow ty1 (TypeConstructor tc [transformType 0 ty2,ty3])
-> transformType' t@(TypeArrow type1 type2) = transformType 1 t
-> transformType' (TypeConstructor tc lTypes)
->   | tc == qIOId = TypeConstructor tc [transformType 0 (head lTypes)]
->   | otherwise = TypeConstructor tc (map transformType' lTypes)
-> transformType' (TypeVariable v) = TypeVariable v
+>       TypeArrow ty1 (TypeConstructor tc [transformFunType 0 ty2,ty3])
+> transformType ty@(TypeArrow _ _) = transformFunType 1 ty
+> transformType (TypeConstructor tc tys)
+>   | tc `elem` [qPtrId,qFunPtrId,qStablePtrId] = TypeConstructor tc tys
+>   | tc == qIOId = TypeConstructor tc [transformFunType 0 (head tys)]
+>   | otherwise = TypeConstructor tc (map transformType tys)
+> transformType (TypeVariable v) = TypeVariable v
 
 > typeArity :: Type -> Int
 > typeArity ty = length (argumentTypes ty)
@@ -530,7 +530,7 @@ phases.
 >               -> Type -> Expression -> Decl
 > debugFunction m trusted f vs ty e = FunctionDecl f' vs ty' e'
 >   where f' = changeFunctionqId m f
->         ty' = transformType (length vs) ty
+>         ty' = transformFunType (length vs) ty
 >         e' = debugSecondPhase f (trusted f) vs ty' (debugFirstPhase m e)
 
 > changeFunctionqId :: ModuleIdent -> QualIdent -> QualIdent
@@ -572,10 +572,10 @@ function and partial constructor applications.
 >   firstPhase m _ (Letrec ds e) = Letrec (firstPhase m 0 ds) (firstPhase m 0 e)
 
 > instance FirstPhase Alt where
->   firstPhase m d (Alt term expr) = Alt term (firstPhase m d expr)
+>   firstPhase m d (Alt t e) = Alt t (firstPhase m d e)
 
 > instance FirstPhase Binding where
->   firstPhase m d (Binding ident expr) = Binding ident (firstPhase m d expr)
+>   firstPhase m d (Binding v e) = Binding v (firstPhase m d e)
 
 \end{verbatim}
 
@@ -592,7 +592,7 @@ We only need:
 
 A special cases handles $\eta$-expanded functions with result type
 \texttt{IO}~$t$. According to the special transformation rule that
-applies to the \texttt{IO} type (see notes on \texttt{transformType}),
+applies to the \texttt{IO} type (see notes on \texttt{transformFunType}),
 we must not add a computation tree to the result of the transformed
 function, but rather make the transformed function return the
 computation tree together with its result in the \texttt{IO} monad.
@@ -685,8 +685,8 @@ local declarations of \texttt{aux$N$}, \texttt{result$N$}, and
 >   where auxId     = newIdName n "Aux"
 >         resultId  = newIdName n "result"
 >         treeId    = newIdName n "tree"
->         fst       = Function (qualifyWith preludeMIdent (mkIdent "fst")) 1
->         snd       = Function (qualifyWith preludeMIdent (mkIdent "snd")) 1
+>         fst       = Function (qualPreludeName "fst") 1
+>         snd       = Function (qualPreludeName "snd") 1
 >         lets      = Let (Binding auxId exp) .
 >                     Let (Binding resultId (Apply fst (Variable auxId))) .
 >                     Let (Binding treeId (Apply snd (Variable auxId)))

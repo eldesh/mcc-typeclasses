@@ -103,7 +103,7 @@ ioCTree (CTreeNode name args _ rule trees) (r,t) =
 
 
 -- rhs=debugging for navigating, rhs=prettyTree for pretty printing
-data Answer = Yes | No | Abort
+data Answer = Yes | No | Abort | GoBack
 
 navigate trees =
 	do
@@ -131,8 +131,12 @@ debugging trees other =
 		      putStrLn "Debugger exiting" 
                 No    -> navigateAux other
                 Abort -> navigateAux []
+		GoBack ->
+		   do
+		      putStrLn "Cannot go back to previous solution"
+		      debugging trees other
 
-             
+
 buggyTree CTreeVoid = return No
 buggyTree (EmptyCTreeNode trees) = buggyChildren trees
 buggyTree n@(CTreeNode name args result rule trees) = 
@@ -142,7 +146,7 @@ buggyTree n@(CTreeNode name args result rule trees) =
                 Yes   -> return Yes  
                 No    -> putStrLn "" >> putStrLn (isBuggy n) >> return Yes
                 Abort -> return Abort
-    	          
+    	        GoBack -> return GoBack
 
 basicArrow (CTreeNode name args result rule trees) =
     name++concatMap (' ':) args++"  -> "++result
@@ -160,30 +164,37 @@ buggyChildren (x:xs) =
 	putStrLn ""
 	putStrLn ("Considering the following basic fact" ++ (if null xs	then "" else "s") ++ ":")
 	mapIO putStrLn listArrows
-	putStr ((if null xs then "Is this" else "Are all of them") ++ " valid? [y(es)/n(o)/a(bort)] ")
+	putStr ((if null xs then "Is this" else "Are all of them") ++ " valid? [y(es)/n(o)/a(bort)/b(ack)] ")
         hFlush stdout
     	yes <- answerYes
         case yes of
            Yes -> return No
-           No
-             | null xs -> putStrLn "" >> buggyTree x
-             | otherwise -> chooseOne l >>= \n -> putStrLn "" >> buggyTree ((x:xs)!!(n-1))
+           No ->
+	      do
+	         n <- chooseOne l
+		 putStrLn ""
+		 b <- buggyTree ((x:xs)!!(n-1))
+		 case b of
+		    GoBack -> buggyChildren (x:xs)
+		    _ -> return b
            Abort -> return Abort
- 	 
+ 	   GoBack -> return GoBack
+
  where 
 	l = length (x:xs)
 	listN = zip [1..l]  (x:xs)
 	listArrows = map (\(x,y) -> shows x (". "++basicArrow y)) listN
 	   
 answerYes = 
-  getLine >>= \l -> if l=="y" || l=="Y" then return Yes
-                     else  if l=="n" || l=="N" then return No
-                           else if l=="a" || l =="A" then return Abort
-                                else putStr "[y(es)/n(o)/a(bort)] " >>
-                                     hFlush stdout >>
-                                     answerYes
+  getLine >>= \l ->
+  if l=="y" || l=="Y" then return Yes
+  else if l=="n" || l=="N" then return No
+  else if l=="a" || l=="A" then return Abort
+  else if l=="b" || l=="B" then return GoBack
+  else putStr "[y(es)/n(o)/a(bort)/b(ack)] " >> hFlush stdout >> answerYes
 
 chooseOne max =
+	if max <= 1 then return max else
  	do
  	 putStrLn "Write the number of an erroneous basic fact in the list "
 	 n <- getLine

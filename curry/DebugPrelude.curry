@@ -111,11 +111,11 @@ navigate trees =
              putStrLn "Entering debugger..." 
 	     navigateAux trees
 
-navigateAux []  =
+navigateAux [] =
 	do
-             putStrLn "" 
+             putStrLn ""
              putStrLn "No error has been found"
-             putStrLn "Debugger exiting" 
+             putStrLn "Debugger exiting"
 navigateAux (CTreeVoid : other) = navigateAux other
 navigateAux (CTreeNode _ _ _ _ trees : other) = debugging trees other
 navigateAux (EmptyCTreeNode trees : other) = debugging trees other
@@ -142,20 +142,18 @@ debugging trees other =
 
 buggyTree CTreeVoid = return No
 buggyTree (EmptyCTreeNode trees) = buggyChildren trees
-buggyTree n@(CTreeNode name args result rule trees) = 
+buggyTree n@(CTreeNode name args result rule trees) =
         do
              putStrLn ""
              b <- buggyChildren trees
              case b of
-                Yes    -> return Yes  
+                Yes    -> return Yes
                 No     ->
 		   do
 		      putStrLn (isBuggy n)
 		      putStrLn ""
 		      putStrLn "Buggy node found"
-		      putStr   "Continue debugging? [y(es)/n(o)/b(ack)/q(uit)] "
-		      hFlush stdout
-		      yes <- answerYes
+		      yes <- answerYes "Continue debugging? "
 		      case yes of
 			 Yes    -> if null trees then return GoBack else buggyTree n
 			 No     -> return Yes
@@ -175,19 +173,17 @@ isBuggy (CTreeNode name args result rule trees) =
         " Wrong instance: " ++	basicArrow (CTreeNode name args result rule trees)
 
 buggyChildren [] = return No
-buggyChildren (x:xs) = 
+buggyChildren (x:xs) =
 	do
 	putStrLn ""
 	putStrLn ("Considering the following basic fact" ++ (if null xs	then "" else "s") ++ ":")
-	mapIO putStrLn listArrows
-	putStr ((if null xs then "Is this" else "Are all of them") ++ " valid? [y(es)/n(o)/b(ack)/q(uit)] ")
-        hFlush stdout
-    	yes <- answerYes
+	mapIO putStrLn (zipWith (\x y -> shows x (". "++basicArrow y)) [1..] (x:xs))
+    	yes <- answerYes ((if null xs then "Is this" else "Are all of them") ++ " valid? ")
         case yes of
            Yes -> putStrLn "" >> return No
            No ->
 	      do
-	         n <- chooseOne l
+	         n <- chooseOne (length (x:xs))
 		 b <- buggyTree ((x:xs)!!(n-1))
 		 case b of
 		    GoBack -> putStrLn "" >> buggyChildren (x:xs)
@@ -195,18 +191,15 @@ buggyChildren (x:xs) =
  	   GoBack -> return GoBack
            Quit   -> return Quit
 
- where 
-	l = length (x:xs)
-	listN = zip [1..l]  (x:xs)
-	listArrows = map (\(x,y) -> shows x (". "++basicArrow y)) listN
-	   
-answerYes = 
-  getLine >>= \l ->
+
+answerYes prompt =
+  putStr (prompt ++ "[y(es)/n(o)/b(ack)/q(uit)] ") >>
+  hFlush stdout >> getLine >>= \l ->
   if l=="y" || l=="Y" then return Yes
   else if l=="n" || l=="N" then return No
   else if l=="b" || l=="B" then return GoBack
   else if l=="q" || l=="Q" then return Quit
-  else putStr "[y(es)/n(o)/b(ack)/q(uit)] " >> hFlush stdout >> answerYes
+  else answerYes ""
 
 chooseOne max =
 	if max <= 1 then return max else
@@ -215,7 +208,7 @@ chooseOne max =
 	 n <- getLine
 	 let valueN  = foldl (\x y->x*10+(ord(y)-ord('0'))) 0 n in
 	  if valueN<1 || valueN>max then chooseOne max
-        	                     else return valueN 
+        	                     else return valueN
 
 ----------------------------------------------------------------------------
 
@@ -231,13 +224,13 @@ ppCTs i CTreeVoid =	putStrLn "DebugPrelude.CTreeVoid"
 	
 ppCTs i (EmptyCTreeNode trees) = 
 	do 
-	   ident i
+	   indent i
 	   ppTChildren i trees
 	   putStrLn ""
 
 ppCTs i (CTreeNode name args result rule trees) = 
 	do 
-	   ident i
+	   indent i
 	   putStr "CTreeNode " 
 	   putStr (name++" ")
 	   putStr ("["++(concat (map (" "++) args))++"] ")
@@ -246,16 +239,16 @@ ppCTs i (CTreeNode name args result rule trees) =
 	   ppTChildren i trees
 	   putStrLn ""
 
-ident n = putStr (take n (repeat ' '))
+indent n = putStr (take n (repeat ' '))
 
 ppTChildren i []  = putStr "[]"
 ppTChildren i (x:xs)  = 
 	do
 	   putStrLn ""
-	   ident (i+2)
+	   indent (i+2)
 	   putStrLn "["
 	   mapIO (ppCTs (i+3)) (x:xs)
-   	   ident (i+2)
+   	   indent (i+2)
    	   putStrLn "]"
 
 dEval:: a -> String

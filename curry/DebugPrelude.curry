@@ -103,7 +103,7 @@ ioCTree (CTreeNode name args _ rule trees) (r,t) =
 
 
 -- rhs=debugging for navigating, rhs=prettyTree for pretty printing
-data Answer = Yes | No | Abort | GoBack
+data Answer = Yes | No | GoBack | Quit
 
 navigate trees =
 	do
@@ -123,30 +123,46 @@ navigateAux (EmptyCTreeNode trees : other) = debugging trees other
 debugging trees other =
 	do
              bugFound <- buggyChildren trees
-             putStrLn "" 
              case bugFound of
-                Yes   ->
+                Yes    ->
 	     	   do
-		      putStrLn "Buggy node found"
+		      putStrLn ""
 		      putStrLn "Debugger exiting" 
-                No    -> navigateAux other
-                Abort -> navigateAux []
+                No     -> navigateAux other
 		GoBack ->
 		   do
+		      putStrLn ""
 		      putStrLn "Cannot go back to previous solution"
 		      debugging trees other
+                Quit   ->
+	     	   do
+		      putStrLn ""
+		      putStrLn "Debugger exiting" 
 
 
 buggyTree CTreeVoid = return No
 buggyTree (EmptyCTreeNode trees) = buggyChildren trees
 buggyTree n@(CTreeNode name args result rule trees) = 
         do
+             putStrLn ""
              b <- buggyChildren trees
              case b of
-                Yes   -> return Yes  
-                No    -> putStrLn "" >> putStrLn (isBuggy n) >> return Yes
-                Abort -> return Abort
+                Yes    -> return Yes  
+                No     ->
+		   do
+		      putStrLn (isBuggy n)
+		      putStrLn ""
+		      putStrLn "Buggy node found"
+		      putStr   "Continue debugging? [y(es)/n(o)/b(ack)/q(uit)] "
+		      hFlush stdout
+		      yes <- answerYes
+		      case yes of
+			 Yes    -> if null trees then return GoBack else buggyTree n
+			 No     -> return Yes
+			 GoBack -> return GoBack
+			 Quit   -> return Quit
     	        GoBack -> return GoBack
+                Quit   -> return Quit
 
 basicArrow (CTreeNode name args result rule trees) =
     name++concatMap (' ':) args++"  -> "++result
@@ -164,21 +180,20 @@ buggyChildren (x:xs) =
 	putStrLn ""
 	putStrLn ("Considering the following basic fact" ++ (if null xs	then "" else "s") ++ ":")
 	mapIO putStrLn listArrows
-	putStr ((if null xs then "Is this" else "Are all of them") ++ " valid? [y(es)/n(o)/a(bort)/b(ack)] ")
+	putStr ((if null xs then "Is this" else "Are all of them") ++ " valid? [y(es)/n(o)/b(ack)/q(uit)] ")
         hFlush stdout
     	yes <- answerYes
         case yes of
-           Yes -> return No
+           Yes -> putStrLn "" >> return No
            No ->
 	      do
 	         n <- chooseOne l
-		 putStrLn ""
 		 b <- buggyTree ((x:xs)!!(n-1))
 		 case b of
-		    GoBack -> buggyChildren (x:xs)
-		    _ -> return b
-           Abort -> return Abort
+		    GoBack -> putStrLn "" >> buggyChildren (x:xs)
+		    _      -> return b
  	   GoBack -> return GoBack
+           Quit   -> return Quit
 
  where 
 	l = length (x:xs)
@@ -189,9 +204,9 @@ answerYes =
   getLine >>= \l ->
   if l=="y" || l=="Y" then return Yes
   else if l=="n" || l=="N" then return No
-  else if l=="a" || l=="A" then return Abort
   else if l=="b" || l=="B" then return GoBack
-  else putStr "[y(es)/n(o)/a(bort)/b(ack)] " >> hFlush stdout >> answerYes
+  else if l=="q" || l=="Q" then return Quit
+  else putStr "[y(es)/n(o)/b(ack)/q(uit)] " >> hFlush stdout >> answerYes
 
 chooseOne max =
 	if max <= 1 then return max else

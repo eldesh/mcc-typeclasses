@@ -1,8 +1,8 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 2427 2007-07-30 15:49:56Z wlux $
+# $Id: Makefile.in 2600 2008-01-11 17:52:38Z wlux $
 #
-# Copyright (c) 2004-2007, Wolfgang Lux
+# Copyright (c) 2004-2008, Wolfgang Lux
 # See ../LICENSE for the full license.
 #
 
@@ -45,6 +45,8 @@ INSTALL_DIR = @INSTALL_DIR@
 # file lists
 curry_prelude_SRCS = \
 	Prelude.curry \
+	Ptr.curry \
+	StablePtr.curry \
 	IO.curry
 curry_stdlib_SRCS  = \
 	AllSolutions.curry \
@@ -76,12 +78,10 @@ curry_stdlib_SRCS  = \
 	Numeric.curry \
 	Parser.curry \
 	Ports.curry \
-	Ptr.curry \
 	Random.curry \
 	Read.curry \
 	Set.curry \
 	Socket.curry \
-	StablePtr.curry \
 	Success.curry \
 	System.curry \
 	Time.curry \

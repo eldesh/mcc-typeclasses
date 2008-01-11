@@ -1,4 +1,4 @@
--- $Id: DebugPrelude.curry 2599 2008-01-11 17:36:22Z wlux $
+-- $Id: DebugPrelude.curry 2600 2008-01-11 17:52:38Z wlux $
 --
 -- Copyright (c) 2007-2008, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -11,6 +11,7 @@ module DebugPrelude(CTree(..),startDebugging,startIODebugging,clean,dEval,
                     try',return',bind',bind_',catch',fixIO',encapsulate',
                     unsafePerformIO',performIO,return,(>>=),(>>)) where
 import Prelude hiding(Monad(..))
+import Ptr
 import IO
 
 infixl 1 >>, >>=
@@ -130,12 +131,18 @@ navigate ((r,t) : other) =
 navigateAux = debugging
 
 debugging tree =
+  do
+    dumpCTree <- getEnv "DUMP_CTREE"
+    if null dumpCTree
+      then
 	do
 	     putStrLn ""
              putStrLn "Entering debugger..."
 	     debuggingAux (children tree)
 	     putStrLn ""
 	     putStrLn "Debugger exiting"
+      else
+        writeFile dumpCTree (xmlTree tree)
 
 debuggingAux trees =
 	do
@@ -224,6 +231,53 @@ chooseOne max =
 ----------------------------------------------------------------------------
 
 --
+-- Create XML representation of the computation tree
+--
+
+xmlTree :: CTree -> String
+xmlTree tree = xmlProlog ++ xmlDoctype ++ xmlCTree tree ""
+
+xmlProlog = "<?xml version='1.0'?>\n"
+
+xmlDoctype =
+  "<!DOCTYPE cTree [\n\
+  \<!ELEMENT cTree (function*)>\n\
+  \<!ATTLIST cTree version CDATA '1.0'>\n\
+  \<!ELEMENT function (argument*,result,function*)>\n\
+  \<!ATTLIST function name CDATA #REQUIRED srcLoc CDATA #IMPLIED>\n\
+  \<!ELEMENT argument (#PCDATA)>\n\
+  \<!ELEMENT result (#PCDATA)>\n\
+  \]>\n"
+
+xmlCTree tree =
+  xmlElement "cTree" [] $ showChar '\n' . xmlFunctions (children tree)
+
+xmlFunctions trees = flip (foldr xmlFunction) (flatten trees)
+
+xmlFunction (CTreeNode name args result rule trees) =
+  xmlElement "function" [("name",name),("srcLoc",rule)] $
+  showChar '\n' .
+  flip (foldr (xmlElement "argument" [] . xmlPCData)) args .
+  xmlElement "result" [] (xmlPCData result) .
+  xmlFunctions trees
+
+xmlElement tag attrs element =
+  showString ('<' : tag) . flip (foldr showAttr) attrs . showChar '>' .
+  element . showString ("</" ++ tag ++ ">\n")
+  where showAttr (key,val) =
+  	  showChar ' ' . showString key . showChar '=' . xmlCData val
+
+xmlCData cs = showChar '\'' . showString (quoteXML entities cs) . showChar '\''
+  where entities = [('<',"&lt;"),('>',"&gt;"),('&',"&amp;"),('\'',"&apos;")]
+
+xmlPCData = showString . quoteXML [('<',"&lt;"),('>',"&gt;"),('&',"&amp;")]
+
+quoteXML entities = foldr quote ""
+  where quote c = maybe (c:) (++) (lookup c entities)
+
+----------------------------------------------------------------------------
+
+--
 -- Pretty (not really) Printing of the computation trees
 --
 
@@ -264,3 +318,24 @@ ppTChildren i (x:xs)  =
 
 dEval:: a -> String
 dEval x = dvals x ""
+
+
+----------------------------------------------------------------------------
+
+-- NB getEnv (re)defined here so that DebugPrelude can be compiled
+--    without the standard library. Also note that this implementation
+--    returns an empty string if the environment variable is not set
+--    whereas System.getEnv raises an IO exception.
+getEnv :: String -> IO String
+getEnv var =
+  do
+    p1 <- primNewCString $## var
+    p2 <- getenv p1
+    mfree p1
+    if p2 == nullPtr then return "" else primPeekCString p2
+  where foreign import rawcall "cstring.h"
+  		       primNewCString :: String -> IO (Ptr Char)
+        foreign import rawcall "cstring.h"
+		       primPeekCString :: Ptr Char -> IO String
+        foreign import ccall "stdlib.h" getenv :: Ptr Char -> IO (Ptr Char)
+        foreign import ccall "stdlib.h free" mfree :: Ptr a -> IO ()

@@ -1,4 +1,8 @@
-
+-- $Id: DebugPrelude.curry 2599 2008-01-11 17:36:22Z wlux $
+--
+-- Copyright (c) 2007-2008, Wolfgang Lux
+-- See ../LICENSE for the full license.
+--
 -- Prelude to be included  (automatically) in all the programs
 -- transformed for debugging purposes
 -- Rafa 03-07-2001
@@ -8,6 +12,8 @@ module DebugPrelude(CTree(..),startDebugging,startIODebugging,clean,dEval,
                     unsafePerformIO',performIO,return,(>>=),(>>)) where
 import Prelude hiding(Monad(..))
 import IO
+
+infixl 1 >>, >>=
 
 foreign import primitive return :: a -> IO a
 foreign import primitive (>>=) :: IO a -> (a -> IO b) -> IO b
@@ -88,10 +94,10 @@ foreign import primitive "unsafePerformIO" unsafePerformIO' :: IOT a -> (a, CTre
 
 
 startDebugging :: (a -> (Success,CTree)) -> IO ()
-startDebugging = navigate . map snd . findall . unwrap
+startDebugging = navigate . findall . unwrap
 
 startIODebugging :: IOT a -> IO ()
-startIODebugging goal = goal >>= \(_,t) -> navigate [t]
+startIODebugging goal = goal >>= navigateAux . snd
 
 performIO :: (IOT a, CTree) -> IOT a
 performIO (m,t1) = m >>= \(r,t2) -> return (r, ioCTree t1 (r,t2))
@@ -104,65 +110,70 @@ ioCTree (CTreeNode name args _ rule trees) (r,t) =
   CTreeNode name args ("return " ++ dEval r) rule (trees ++ flatten [t])
 
 
+data Answer = Yes | No | Back | Quit
+
+navigate [] = putStrLn "No more solutions"
+navigate ((r,t) : other) =
+	do
+	     putStrLn (dEval r)
+	     yes <- answerYes "Debug solution? "
+	     case yes of
+	       Yes  -> navigateAux t
+	       No   -> navigate other
+	       Back ->
+		   do
+		      putStrLn "Cannot go back to previous solution"
+		      navigate ((r,t) : other)
+	       Quit -> return ()
+
 -- rhs=debugging for navigating, rhs=prettyTree for pretty printing
-data Answer = Yes | No | GoBack | Quit
+navigateAux = debugging
 
-navigate trees =
+debugging tree =
 	do
-	     putStrLn "" 
-             putStrLn "Entering debugger..." 
-	     navigateAux trees
+	     putStrLn ""
+             putStrLn "Entering debugger..."
+	     debuggingAux (children tree)
+	     putStrLn ""
+	     putStrLn "Debugger exiting"
 
-navigateAux [] =
-	do
-             putStrLn ""
-             putStrLn "No error has been found"
-             putStrLn "Debugger exiting"
-navigateAux (CTreeVoid : other) = navigateAux other
-navigateAux (CTreeNode _ _ _ _ trees : other) = debugging trees other
-navigateAux (EmptyCTreeNode trees : other) = debugging trees other
-
-debugging trees other =
+debuggingAux trees =
 	do
              bugFound <- buggyChildren trees
              case bugFound of
-                Yes    ->
-	     	   do
-		      putStrLn ""
-		      putStrLn "Debugger exiting" 
-                No     -> navigateAux other
-		GoBack ->
+                Yes  -> return ()
+                No   -> putStrLn "No error has been found"
+		Back ->
 		   do
 		      putStrLn ""
-		      putStrLn "Cannot go back to previous solution"
-		      debugging trees other
-                Quit   ->
-	     	   do
-		      putStrLn ""
-		      putStrLn "Debugger exiting" 
+		      putStrLn "Cannot go back further (root of tree)"
+		      debuggingAux trees
+                Quit -> return ()
+
+children CTreeVoid = []
+children (EmptyCTreeNode trees) = trees
+children (CTreeNode _ _ _ _ trees) = trees
 
 
-buggyTree CTreeVoid = return No
-buggyTree (EmptyCTreeNode trees) = buggyChildren trees
 buggyTree n@(CTreeNode name args result rule trees) =
         do
              putStrLn ""
              b <- buggyChildren trees
              case b of
-                Yes    -> return Yes
-                No     ->
+                Yes  -> return True
+                No   ->
 		   do
 		      putStrLn (isBuggy n)
 		      putStrLn ""
 		      putStrLn "Buggy node found"
 		      yes <- answerYes "Continue debugging? "
 		      case yes of
-			 Yes    -> if null trees then return GoBack else buggyTree n
-			 No     -> return Yes
-			 GoBack -> return GoBack
-			 Quit   -> return Quit
-    	        GoBack -> return GoBack
-                Quit   -> return Quit
+			 Yes  -> if null trees then return False else buggyTree n
+			 No   -> return True
+			 Back -> return False
+			 Quit -> return True
+    	        Back -> return False
+                Quit -> return True
 
 basicArrow (CTreeNode name args result rule trees) =
     name++concatMap (' ':) args++"  -> "++result
@@ -182,16 +193,14 @@ buggyChildren (x:xs) =
 	mapIO putStrLn (zipWith (\x y -> shows x (". "++basicArrow y)) [1..] (x:xs))
     	yes <- answerYes ((if null xs then "Is this" else "Are all of them") ++ " valid? ")
         case yes of
-           Yes -> putStrLn "" >> return No
-           No ->
+           Yes  -> putStrLn "" >> return No
+           No   ->
 	      do
 	         n <- chooseOne (length (x:xs))
 		 b <- buggyTree ((x:xs)!!(n-1))
-		 case b of
-		    GoBack -> putStrLn "" >> buggyChildren (x:xs)
-		    _      -> return b
- 	   GoBack -> return GoBack
-           Quit   -> return Quit
+		 if b then return Yes else putStrLn "" >> buggyChildren (x:xs)
+ 	   Back -> return Back
+           Quit -> return Quit
 
 
 answerYes prompt =
@@ -199,7 +208,7 @@ answerYes prompt =
   hFlush stdout >> getLine >>= \l ->
   if l=="y" || l=="Y" then return Yes
   else if l=="n" || l=="N" then return No
-  else if l=="b" || l=="B" then return GoBack
+  else if l=="b" || l=="B" then return Back
   else if l=="q" || l=="Q" then return Quit
   else answerYes ""
 

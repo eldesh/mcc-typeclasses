@@ -4,7 +4,7 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cyc.1.in 2609 2008-02-03 23:22:17Z wlux $
+.\" $Id: cyc.1.in 2614 2008-02-03 23:42:26Z wlux $
 .\"
 .\" Copyright (c) 2004-2008, Wolfgang Lux
 .\" See LICENSE for the full license.
@@ -297,6 +297,10 @@ disables all optimizations. Note that
 .Fl O3
 and higher levels will fail to produce valid code for Curry modules on
 many architectures.
+.It Fl -cc Ar cmd
+Use
+.Ar cmd
+as the C compiler.
 .It Fl -ccopt Ar opt
 Passes the option
 .Ar opt

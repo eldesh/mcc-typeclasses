@@ -3,7 +3,7 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 2609 2008-02-03 23:22:17Z wlux $
+# $Id: cyc.in 2614 2008-02-03 23:42:26Z wlux $
 #
 # Copyright (c) 2002-2008, Wolfgang Lux
 # See LICENSE for the full license.
@@ -25,7 +25,6 @@ srcdir="@srcdir@"
 : ${CURRY_IMPORT_PATH=$CURRY_PATH}
 : ${CURRY_INCLUDE_PATH=$CURRY_PATH}
 : ${CURRY_LIBRARY_PATH=$CURRY_PATH}
-: ${CC="@CC@ @CURRY_CFLAGS@"}
 export CURRY_IMPORT_PATH
 
 # Local variables
@@ -38,6 +37,7 @@ cycc=$CURRY_PATH/cycc
 cyccopts=
 rtopts=
 debug=
+cc="@CC@"
 ccopts=
 ldopts=
 hsize=
@@ -131,7 +131,7 @@ while test $# -gt 0; do
     -T* ) typeIt=`expr "$1" : '-T\(.*\)'`;;
 
     # C Compiler options
-    -cc ) CC=$2; shift;;
+    -cc ) cc=$2; shift;;
     -ccopt-* | --ccopt-* )
       ccopts=$ccopts\ `expr "$1" : '-*ccopts*\(-.*\)'`;;
     -ccopt | --ccopt ) ccopts="$ccopts $2"; shift;;
@@ -230,6 +230,10 @@ for d in $CURRY_LIBRARY_PATH; do
 done
 IFS=$ifs
 
+# Add configuration options
+ccopts="$ccopts @CPPFLAGS@ @CURRY_CFLAGS@"
+ldopts="$ldopts @LDFLAGS@"
+
 # Cygpath workaround: converts path to Windows-style
 if test -n "@CYGPATH@"; then
   CURRY_IMPORT_PATH=`@CYGPATH@ -w -p $CURRY_IMPORT_PATH`
@@ -307,8 +311,8 @@ for f in $files; do
 	  temps="$temps $target"
 	fi
       fi
-      test -n "$verbose" && echo 1>&2 $CC $debug $curry_ccopts $ccopts $saveTemps $c -o $target $f
-      $exec $CC $debug $curry_ccopts $ccopts $saveTemps $c -o $target $f || exit $?
+      test -n "$verbose" && echo 1>&2 $cc $debug $curry_ccopts $ccopts $saveTemps $c -o $target $f
+      $exec $cc $debug $curry_ccopts $ccopts $saveTemps $c -o $target $f || exit $?
       f=$target
       ;;
   esac
@@ -352,8 +356,8 @@ elif test -z "$toC$toS$toO"; then
   test -n "$stats" && ldopts="$ldopts -DDEFAULT_SHOW_STATS=$stats"
   test -n "$trace" && ldopts="$ldopts -DDEFAULT_DO_TRACE=$trace"
   test -n "$ofile" && ldopts="$ldopts -o $ofile"
-  test -n "$verbose" && echo 1>&2 $CC $debug $ccopts $ldopts /tmp/cyc$$.c $linkfiles $libs $dbglib -lcurry @LDFLAGS@ @LIBS@
-  $exec $CC $debug $ccopts $ldopts /tmp/cyc$$.c $linkfiles $libs $dbglib -lcurry @LDFLAGS@ @LIBS@ || exit $?
+  test -n "$verbose" && echo 1>&2 $cc $debug $ccopts $ldopts /tmp/cyc$$.c $linkfiles $libs $dbglib -lcurry @LIBS@
+  $exec $cc $debug $ccopts $ldopts /tmp/cyc$$.c $linkfiles $libs $dbglib -lcurry @LIBS@ || exit $?
 fi
 
 # done

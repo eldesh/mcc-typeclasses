@@ -4,9 +4,9 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cyc.1.in 2341 2007-06-23 09:47:44Z wlux $
+.\" $Id: cyc.1.in 2609 2008-02-03 23:22:17Z wlux $
 .\"
-.\" Copyright (c) 2004-2007, Wolfgang Lux
+.\" Copyright (c) 2004-2008, Wolfgang Lux
 .\" See LICENSE for the full license.
 .\"
 .Dd 17.11.05               \" DATE 
@@ -381,7 +381,10 @@ modules are in scope with qualified names only.
 .It Fl T Ar goal
 Compute the type of
 .Ar goal .
-The
+The type is written to the standard output or the file specified with
+a
+.Fl o
+option. The
 .Ar goal Ns No 's
 type is computed with respect to the modules specified with
 .Fl M

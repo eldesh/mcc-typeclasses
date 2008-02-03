@@ -3,7 +3,7 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 2608 2008-02-03 23:10:52Z wlux $
+# $Id: cymake.in 2609 2008-02-03 23:22:17Z wlux $
 #
 # Copyright (c) 2002-2008, Wolfgang Lux
 # See LICENSE for the full license.
@@ -90,6 +90,7 @@ link ( ) {
     $echo $cyc $cyopts $ldopts -e "$goal" -o "$target" "$@" $libs
     $exec $cyc $cyopts $ldopts -e "$goal" -o "$target" "$@" $libs
   elif test -n "$typeIt"; then
+    if test -n "$output"; then set dummy -o "$output" "$@"; shift; fi
     $echo $cyc $cyopts -T "$typeIt" "$@"
     $exec $cyc $cyopts -T "$typeIt" "$@"
   elif test -z "$linkAlways" && $newer "$target" "$@"; then :; else
@@ -206,11 +207,11 @@ fi
 
 
 if test $# -eq 0; then
-  test -n "$output" || output=a.out
   if test -n "$clean"; then
+    test -n "$output" || output=a.out
     remove $output
   else
-    link $output
+    link a.out
   fi
   exit $?
 fi

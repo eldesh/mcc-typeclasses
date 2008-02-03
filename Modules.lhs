@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2527 2007-10-22 13:49:27Z wlux $
+% $Id: Modules.lhs 2609 2008-02-03 23:22:17Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Modules.lhs}
@@ -326,7 +326,8 @@ interfaces are in scope with their qualified names.
 >   do
 >     (_,tcEnv,_,_,cx,Goal _ e _) <-
 >       loadGoal Type paths False cm ws (mkMIdent []) (Just g) fns
->     liftErr $ print (ppQualType tcEnv (QualType cx (typeOf e)))
+>     liftErr $ maybe putStr writeFile (output opts)
+>             $ showln (ppQualType tcEnv (QualType cx (typeOf e)))
 >   where paths = importPath opts
 >         cm = caseMode opts
 >         ws = warn opts

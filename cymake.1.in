@@ -4,7 +4,7 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cymake.1.in 2608 2008-02-03 23:10:52Z wlux $
+.\" $Id: cymake.1.in 2609 2008-02-03 23:22:17Z wlux $
 .\"
 .\" Copyright (c) 2004-2008, Wolfgang Lux
 .\" See LICENSE for the full license.
@@ -118,7 +118,11 @@ compiling more than one module.
 .It Fl T Ar goal
 Compute the type of
 .Ar goal .
-This option cannot be used when compiling more than one module.
+The type is written to the standard output or the file specified with
+a
+.Fl o
+option. This option cannot be used when compiling more than one
+module.
 .It Fl -debug
 Compile the program for use with the debugger. As object files
 compiled with

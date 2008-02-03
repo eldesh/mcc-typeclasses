@@ -3,9 +3,9 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 2420 2007-07-26 18:03:23Z wlux $
+# $Id: cyc.in 2609 2008-02-03 23:22:17Z wlux $
 #
-# Copyright (c) 2002-2007, Wolfgang Lux
+# Copyright (c) 2002-2008, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -320,8 +320,19 @@ done
 
 # Eventually link the program or compute the goal's type
 if test -n "$typeIt"; then
-  test -n "$verbose" && echo 1>&2 $cycc $imports $cyccopts -t\""$typeIt"\" $modules
-  $exec $cycc $imports $cyccopts -t"$typeIt" $modules || exit $?
+  if test -n "$ofile"; then
+    # Cygpath workaround: converts path to Windows-style
+    if test -n "@CYGPATH@"; then
+      ofile2=`@CYGPATH@ -w $ofile`
+    else
+      ofile2=$ofile
+    fi
+    target="-o $ofile2"
+  else
+    target=
+  fi
+  test -n "$verbose" && echo 1>&2 $cycc $imports $cyccopts -t\""$typeIt"\" $modules $target
+  $exec $cycc $imports $cyccopts -t"$typeIt" $modules $target || exit $?
 elif test -z "$toC$toS$toO"; then
   temps="$temps /tmp/cyc$$.c"
   target=/tmp/cyc$$.c

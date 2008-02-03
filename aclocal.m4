@@ -1,4 +1,4 @@
-# $Id: aclocal.m4 2612 2008-02-03 23:38:12Z wlux $
+# $Id: aclocal.m4 2613 2008-02-03 23:40:31Z wlux $
 #
 # Copyright (c) 2002-2008, Wolfgang Lux
 #
@@ -172,57 +172,34 @@ case $curry_cv_prog_$1_haskell98 in
 esac])
 
 # CURRY_PROG_GHC, CURRY_PROG_HBC, CURRY_PROG_NHC
-# Check for ghc, hbc, nhc compiler in the path which handles Haskell 98
-# Set the variables GHC, HBC, and NHC, resp. and AC_SUBST the variable
-
-AC_DEFUN([CURRY_GHC_VERSION],
-[AC_CACHE_CHECK([ghc version],[curry_cv_prog_ghc_version],
-[curry_ghc_version=`$GHC --version 2>&1`
-curry_cv_prog_ghc_version=`expr "$curry_ghc_version" : '.*version \([[0-9]]*.[[0-9]]*\)'`
-test -n "$curry_cv_prog_ghc_version" || unset curry_cv_prog_ghc_version])])
-
-AC_DEFUN([CURRY_HBC_VERSION],
-[AC_CACHE_CHECK([hbc version],[curry_cv_prog_hbc_version],
-[# NB: hbc 0.9999.3 and earlier do not support -v. Who cares?
-curry_hbc_version=`$HBC -v 2>&1`
-curry_cv_prog_hbc_version=`expr "$curry_hbc_version" : '.*version \(0.9999.[[0-9]]*\)'`
-test -n "$curry_cv_prog_hbc_version" || unset curry_cv_prog_hbc_version])])
-
-AC_DEFUN([CURRY_NHC_VERSION],
-[AC_CACHE_CHECK([nhc version],[curry_cv_prog_nhc_version],
-[# NB: most versions of nhc 1.3 do not support -v. Who cares?
-curry_nhc_version=`$NHC --version 2>&1`
-curry_cv_prog_nhc_version=`expr "$curry_nhc_version" : '.*: v\([[0-9]]*\.[[0-9]][[0-9]]*\)'`
-test -n "$curry_cv_prog_nhc_version" || unset curry_cv_prog_nhc_version])])
-
+# Check for ghc, hbc, nhc compiler in the path. Set the variable GHC, HBC,
+# and NHC, respectively, to the command and also set the variable HC to the
+# command if the compiler handles Haskell 98.
 AC_DEFUN([CURRY_PROG_GHC],
 [AC_CHECK_PROG(GHC, ghc, ghc)
 if test -n "$GHC"; then
-  CURRY_GHC_VERSION(GHC)
-  CURRY_HC_HASKELL98(GHC,[],[GHC=])
+  CURRY_HC_HASKELL98(GHC,[HC=$GHC curry_cv_prog_HC_haskell98=$curry_cv_prog_GHC_haskell98])
 fi])
 
 AC_DEFUN([CURRY_PROG_HBC],
 [AC_CHECK_PROG(HBC, hbc, hbc)
 if test -n "$HBC"; then
-  CURRY_HBC_VERSION(HBC)
-  CURRY_HC_HASKELL98(HBC,[],[HBC=])
+  CURRY_HC_HASKELL98(HBC,[HC=$HBC curry_cv_prog_HC_haskell98=$curry_cv_prog_HBC_haskell98])
 fi])
 
 AC_DEFUN([CURRY_PROG_NHC],
-[AC_CHECK_PROGS(NHC, [nhc98 nhc])
+[AC_CHECK_PROG(NHC, nhc98, nhc98)
 if test -n "$NHC"; then
-  CURRY_NHC_VERSION(NHC)
-  CURRY_HC_HASKELL98(NHC,[],[NHC=])
+  CURRY_HC_HASKELL98(NHC,[HC=$NHC curry_cv_prog_HC_haskell98=$curry_cv_prog_NHC_haskell98])
 fi])
 
 
-# CURRY_HC_VERSION(HC)
-# Check whether HC is one of the supported compilers and set either
-# GHC, HBC, or NHC to this compiler
+# CURRY_HC_VERSION(HC_VERSION)
+# Determine the type and version number of the Haskell compiler HC
+# and set the argument variable to the version string
 AC_DEFUN([CURRY_HC_VERSION],
-[AC_MSG_CHECKING([Haskell compiler version])
-cat <<EOF >conftest.hs
+[AC_CACHE_CHECK([Haskell compiler type and version],[curry_cv_prog_HC_version],
+[cat <<EOF >conftest.hs
 main = putStr (
 #ifdef __GLASGOW_HASKELL__
   "ghc " ++ show (__GLASGOW_HASKELL__/100)
@@ -243,27 +220,23 @@ main = putStr (
   "nhc13"
 # endif
 # if __HASKELL__==98
+#  if __NHC__ > 1
+  "nhc98 " ++ show (__NHC__/100)
+#  else
   "nhc98"
+#  endif
 # endif
 #endif
   )
 EOF
-rm -f conftest; $$1 $HFLAGS -cpp conftest.hs -o conftest 2>/dev/null; rm -f Main.hi
+rm -f conftest; $HC $HFLAGS -cpp conftest.hs -o conftest 2>/dev/null; rm -f Main.hi
 if curry_hc_version=`./conftest 2>/dev/null`; then
-  AC_MSG_RESULT([$curry_hc_version])
+  curry_cv_prog_HC_version=$curry_hc_version
 else
-  AC_MSG_ERROR([cannot determine version of $$1])
+  AC_MSG_ERROR([cannot determine version of $HC])
 fi
-rm -f conftest* Main.hi
-CURRY_HC_HASKELL98([$1],
-[# do not cache the result for this variable
-unset curry_cv_prog_$1_haskell98
-case $curry_hc_version in
-  ghc* ) GHC=$$1; HBC=; NHC=;;
-  hbc* ) HBC=$$1; GHC=; NHC=;;
-  nhc* ) NHC=$$1; GHC=; HBC=;;
-esac],
-[GHC= HBC= NHC=])])
+rm -f conftest* Main.hi])
+$1=$curry_cv_prog_HC_version])
 
 # CURRY_HC_HLIB(HC,[ACTION-IF-TRUE],[ACTION-IF-FALSE])
 # Checks whether HC supports the standard hierarchical libraries.
@@ -297,7 +270,7 @@ main = newIORef () >>= flip writeIORef ()
 EOF
 curry_ghc_ioexts_lib=
 for lib in exts lang; do
-  if $GHC $HFLAGS -syslib $lib -c conftest.hs 2>/dev/null; then
+  if $HC $HFLAGS -syslib $lib -c conftest.hs 2>/dev/null; then
     curry_ghc_ioexts_lib="-syslib $lib"
     break
   fi

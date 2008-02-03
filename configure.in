@@ -1,4 +1,4 @@
-dnl $Id: configure.in 2611 2008-02-03 23:35:16Z wlux $
+dnl $Id: configure.in 2613 2008-02-03 23:40:31Z wlux $
 dnl
 dnl Copyright (c) 2002-2008, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -124,68 +124,68 @@ CURRY_CYI_SHELL
 
 
 dnl Check for Haskell compilers
-AC_ARG_WITH(hc, [  --with-hc=COMP          use COMP as Haskell'98 compiler],
-	    [WithHc=$withval],[WithHc=])
+dnl recognize deprecated --with-hc option but report a warning if it is used
+AC_ARG_WITH(hc,[],[HC=$withval; AC_MSG_WARN([Deprecated option --with-hc used
+  Use ``configure HC=<haskell compiler>'' instead])])
 
-case $WithHc in
-  no ) AC_MSG_ERROR([Invalid argument to --with-hc: no]);;
-  "" | yes )
-    AC_MSG_CHECKING([for Haskell 98 compiler])
-    AC_MSG_RESULT([])
-    CURRY_PROG_GHC
-    if test -n "$GHC"; then
-      AC_MSG_RESULT([using $GHC for compilation])
-    else
-      CURRY_PROG_HBC
-      if test -n "$HBC"; then
-        AC_MSG_RESULT([using $HBC for compilation])
-      else
-        CURRY_PROG_NHC
-	if test -n "$NHC"; then
-	  AC_MSG_RESULT([using $NHC for compilation])
-        else
-          AC_MSG_ERROR([No Haskell 98 compiler found])
-	fi
-      fi
-    fi
-    ;;
-  * ) CURRY_HC_VERSION(WithHc);;
-esac
+AC_ARG_VAR(HC,[Haskell compiler command])
+AC_ARG_VAR(HFLAGS,[Haskell compiler flags])
 
-if test -n "$GHC"; then
-  hc=ghc HC="$GHC"
-  AC_ARG_ENABLE(ghc_make,
-    [  --disable-ghc-make      ghc only: Do not use ghc --make])
-  case $enable_ghc_make in
-    no ) ;;
-    *  )
-      AC_MSG_CHECKING([whether $GHC --make works])
-      cat <<eof >conftest.hs
-main = return ()
-eof
-      if $GHC --make $HFLAGS -o conftest conftest >/dev/null 2>&1 && test -f conftest; then
-        hc=ghc-make
-        AC_MSG_RESULT([yes])
-      else
-        AC_MSG_RESULT([no])
-      fi
-      rm -f conftest* a.out
-      ;;
-  esac
-  CURRY_HC_HLIB(GHC,
-    [HFLAGS="$HFLAGS -ighc"
-     IOExts_lhs=ghc/IOExts.lhs],
-    [CURRY_GHC_IOEXTS
-     IOExts_lhs=])
-elif test -n "$HBC"; then
-  hc=hbc HC="$HBC"
-  IOExts_lhs=hbc/IOExts.lhs
-elif test -n "$NHC"; then
-  hc=nhc HC="$NHC"
-  IOExts_lhs=nhc/IOExts.lhs
+if test -n "$HC"; then
+  AC_MSG_CHECKING([for $HC])
+  AC_MSG_RESULT([$HC])
+  CURRY_HC_HASKELL98(HC,[],[HC=])
 else
+  CURRY_PROG_GHC
+  if test -z "$HC"; then
+    CURRY_PROG_HBC
+    if test -z "$HC"; then
+      CURRY_PROG_NHC
+    fi
+  fi
+fi
+if test -z "$HC"; then
   AC_MSG_ERROR([No Haskell 98 compiler found])
 fi
+
+CURRY_HC_VERSION(hc)
+case $hc in
+  ghc* )
+    hc=ghc
+    AC_ARG_ENABLE(ghc_make,
+      [  --disable-ghc-make      ghc only: Do not use ghc --make])
+    case $enable_ghc_make in
+      no ) ;;
+      *  )
+        AC_MSG_CHECKING([whether $HC --make works])
+        cat <<eof >conftest.hs
+main = return ()
+eof
+       if $HC --make $HFLAGS -o conftest conftest >/dev/null 2>&1 && test -f conftest; then
+          hc=ghc-make
+          AC_MSG_RESULT([yes])
+        else
+          AC_MSG_RESULT([no])
+        fi
+        rm -f conftest* a.out
+        ;;
+    esac
+    CURRY_HC_HLIB(HC,
+      [HFLAGS="$HFLAGS -ighc"
+       IOExts_lhs=ghc/IOExts.lhs],
+      [CURRY_GHC_IOEXTS
+       IOExts_lhs=])
+    ;;
+  hbc* )
+    hc=hbc
+    IOExts_lhs=hbc/IOExts.lhs
+    ;;
+  nhc* )
+    hc=nhc
+    IOExts_lhs=nhc/IOExts.lhs
+    ;;
+  * ) AC_MSG_ERROR([$HC is not supported]);;
+esac
 
 CURRY_HC_PATH_STYLE
 

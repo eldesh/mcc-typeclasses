@@ -1,8 +1,8 @@
 # Makefile for the Curry compiler
 #
-# $Id: Makefile.in 2514 2007-10-18 10:43:08Z wlux $
+# $Id: Makefile.in 2611 2008-02-03 23:35:16Z wlux $
 #
-# Copyright (c) 2000-2007 Wolfgang Lux
+# Copyright (c) 2000-2008 Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -24,7 +24,7 @@ mandir = @mandir@
 
 # compiler definitions
 HC = @HC@
-HCFLAGS = @HCFLAGS@
+HFLAGS = @HFLAGS@
 HC_PATH_STYLE = @HC_PATH_STYLE@
 
 LATEX = latex

@@ -1,6 +1,6 @@
-dnl $Id: configure.in 2540 2007-10-26 06:56:21Z wlux $
+dnl $Id: configure.in 2611 2008-02-03 23:35:16Z wlux $
 dnl
-dnl Copyright (c) 2002-2007, Wolfgang Lux
+dnl Copyright (c) 2002-2008, Wolfgang Lux
 dnl See LICENSE for the full license.
 dnl
 
@@ -163,7 +163,7 @@ if test -n "$GHC"; then
       cat <<eof >conftest.hs
 main = return ()
 eof
-      if $GHC --make $HCFLAGS -o conftest conftest >/dev/null 2>&1 && test -f conftest; then
+      if $GHC --make $HFLAGS -o conftest conftest >/dev/null 2>&1 && test -f conftest; then
         hc=ghc-make
         AC_MSG_RESULT([yes])
       else
@@ -173,7 +173,7 @@ eof
       ;;
   esac
   CURRY_HC_HLIB(GHC,
-    [HCFLAGS="$HCFLAGS -ighc"
+    [HFLAGS="$HFLAGS -ighc"
      IOExts_lhs=ghc/IOExts.lhs],
     [CURRY_GHC_IOEXTS
      IOExts_lhs=])
@@ -268,7 +268,7 @@ dnl Generate output files
 AC_SUBST(CURRY_CFLAGS)
 AC_SUBST(hc)
 AC_SUBST(HC)
-AC_SUBST(HCFLAGS)
+AC_SUBST(HFLAGS)
 AC_SUBST(IOExts_lhs)
 AC_SUBST(INSTALL_DIR)
 AC_SUBST(STDLIB)

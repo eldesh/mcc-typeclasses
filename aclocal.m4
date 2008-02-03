@@ -1,6 +1,6 @@
-# $Id: aclocal.m4 2371 2007-06-23 14:08:14Z wlux $
+# $Id: aclocal.m4 2611 2008-02-03 23:35:16Z wlux $
 #
-# Copyright (c) 2002-2007, Wolfgang Lux
+# Copyright (c) 2002-2008, Wolfgang Lux
 #
 
 ########################################################################
@@ -285,7 +285,7 @@ esac])
 
 # CURRY_GHC_IOEXTS
 # Check how to import IOExts when compiling with ghc
-# and add the appropriate switches to the variable HCFLAGS
+# and add the appropriate switches to the variable HFLAGS
 # NB this should be used only for ghc version 4.x or earlier;
 #    on later versions of ghc Data.IORef should be used instead
 #    of IOExts
@@ -297,7 +297,7 @@ main = newIORef () >>= flip writeIORef ()
 EOF
 curry_ghc_ioexts_lib=
 for lib in exts lang; do
-  if $GHC $HCFLAGS -syslib $lib -c conftest.hs 2>/dev/null; then
+  if $GHC $HFLAGS -syslib $lib -c conftest.hs 2>/dev/null; then
     curry_ghc_ioexts_lib="-syslib $lib"
     break
   fi
@@ -307,7 +307,7 @@ case $curry_ghc_ioexts_lib in
   "" ) AC_MSG_ERROR([cannot determine how to import IOExts]);;
   * )
     AC_MSG_RESULT([$curry_ghc_ioexts_lib])
-    HCFLAGS="$HCFLAGS $curry_ghc_ioexts_lib"
+    HFLAGS="$HFLAGS $curry_ghc_ioexts_lib"
     ;;
 esac])
 

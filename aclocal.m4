@@ -1,4 +1,4 @@
-# $Id: aclocal.m4 2611 2008-02-03 23:35:16Z wlux $
+# $Id: aclocal.m4 2612 2008-02-03 23:38:12Z wlux $
 #
 # Copyright (c) 2002-2008, Wolfgang Lux
 #
@@ -164,7 +164,7 @@ cat <<EOF >conftest.hs
 import Char
 main = print (isAlphaNum 'a')
 EOF
-$$1 conftest.hs -o conftest 2>/dev/null && curry_cv_prog_$1_haskell98=yes
+$$1 $HFLAGS conftest.hs -o conftest 2>/dev/null && curry_cv_prog_$1_haskell98=yes
 rm -f conftest* Main.hi])
 case $curry_cv_prog_$1_haskell98 in
   yes ) $2;;
@@ -248,7 +248,7 @@ main = putStr (
 #endif
   )
 EOF
-rm -f conftest; $$1 -cpp conftest.hs -o conftest 2>/dev/null; rm -f Main.hi
+rm -f conftest; $$1 $HFLAGS -cpp conftest.hs -o conftest 2>/dev/null; rm -f Main.hi
 if curry_hc_version=`./conftest 2>/dev/null`; then
   AC_MSG_RESULT([$curry_hc_version])
 else
@@ -276,7 +276,7 @@ cat <<EOF >ConfTest.hs
 module ConfTest(module Data.IORef) where
 import Data.IORef
 EOF
-$$1 -c ConfTest.hs 2>/dev/null && curry_cv_prog_$1_hlib=yes
+$$1 $HFLAGS -c ConfTest.hs 2>/dev/null && curry_cv_prog_$1_hlib=yes
 rm -f ConfTest*])
 case $curry_cv_prog_$1_hlib in
   yes ) $2;;
@@ -321,7 +321,7 @@ cat <<EOF >conftest.hs
 main = readFile "`pwd`/conftest.hs"
 EOF
 rm -f conftest$EXEEXT
-$HC conftest.hs -o conftest$EXEEXT 2>/dev/null
+$HC $HFLAGS conftest.hs -o conftest$EXEEXT 2>/dev/null
 if ./conftest$EXEEXT 2>/dev/null; then
    AC_MSG_RESULT([yes])
    HC_PATH_STYLE=unix

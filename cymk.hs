@@ -1,13 +1,13 @@
--- $Id: cymk.hs 2364 2007-06-23 13:42:09Z wlux $
+-- $Id: cymk.hs 2608 2008-02-03 23:10:52Z wlux $
 --
--- Copyright (c) 2002-2007, Wolfgang Lux
+-- Copyright (c) 2002-2008, Wolfgang Lux
 -- See LICENSE for the full license.
 
 import CurryDeps
 import GetOpt
+import IO
 import Maybe
 import Monad
-import IO
 import PathUtils
 import System
 
@@ -16,7 +16,6 @@ data Options =
     importPaths :: [(Bool,FilePath)],
     output :: Maybe FilePath,
     debug :: Bool,
-    linkAlways :: Bool,
     mkDepend :: Bool,
     mkClean :: Bool,
     find :: Bool
@@ -27,7 +26,6 @@ defaultOptions =
     importPaths = [],
     output = Nothing,
     debug = False,
-    linkAlways = False,
     mkDepend = False,
     mkClean = False,
     find = False
@@ -35,12 +33,10 @@ defaultOptions =
 
 data Option =
     Help | ImportPath FilePath | LibPath FilePath | Output FilePath
-  | Debug | LinkAlways | Clean | Depend | Find
+  | Debug | Clean | Depend | Find
   deriving Eq
 
 options = [
-    Option "a" ["link-always"] (NoArg LinkAlways)
-           "always relink the target file",
     Option "g" ["debug"] (NoArg Debug)
            "compile with debugging information",
     Option "i" ["import-dir"] (ReqArg ImportPath "DIR")
@@ -65,7 +61,6 @@ selectOption (LibPath dir) opts =
   opts{ importPaths = (False,dir) : importPaths opts }
 selectOption (Output file) opts = opts{ output = Just file }
 selectOption Debug opts = opts{ debug = True }
-selectOption LinkAlways opts = opts{ linkAlways = True }
 selectOption Depend opts = opts{ mkDepend = True }
 selectOption Clean opts = opts{ mkClean = True }
 selectOption Find opts = opts{ find = True }
@@ -118,8 +113,8 @@ processFiles opts prog files
       do
         es <- fmap concat (mapM script files)
 	unless (null es) (mapM putErrLn es >> exitWith (ExitFailure 2))
-  where script = buildScript (mkClean opts) (debug opts) (linkAlways opts)
-			     (importPaths opts) (output opts)
+  where script = buildScript (mkClean opts) (debug opts) (importPaths opts)
+			     (output opts)
 
 putErr, putErrLn :: String -> IO ()
 putErr = hPutStr stderr

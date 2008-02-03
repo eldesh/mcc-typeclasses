@@ -3,9 +3,9 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 2364 2007-06-23 13:42:09Z wlux $
+# $Id: cymake.in 2608 2008-02-03 23:10:52Z wlux $
 #
-# Copyright (c) 2002-2007, Wolfgang Lux
+# Copyright (c) 2002-2008, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -33,9 +33,11 @@ exec=
 verbose=
 cyc=$CYC
 cymk=$CURRY_PATH/cymk
+newer=$CURRY_PATH/newer
 mkopts=
 cyopts=
 ldopts=
+linkAlways=
 goal=
 typeIt=
 output=
@@ -60,7 +62,12 @@ check_source ( ) {
 }
 
 remove ( ) {
+  case $f in	## Dirty trick to remove the correct executable with -o FILENAME
+    *.curry | *.lcurry | *.o ) target=;;
+    * ) target=$f;;
+  esac
   for f in "$@"; do
+    if test "$target" = "$f" -a -n "$output"; then f=$output; fi
     if test -f "$f"; then
       $echo rm -f "$f"
       $exec rm -f "$f"
@@ -69,20 +76,25 @@ remove ( ) {
 }
 
 compile ( ) {
-  $echo $cyc $cyopts "$@"
-  $exec $cyc $cyopts "$@"
+  source=$1; shift
+  object=$1; shift
+  if $newer "$object" "$source" "$@"; then :; else
+    $echo $cyc $cyopts -c "$source" -o "$object"
+    $exec $cyc $cyopts -c "$source" -o "$object"
+  fi
 }
 
 link ( ) {
+  if test -n "$output"; then target=$output; else target=$1; fi; shift
   if test -n "$goal"; then
-    $echo $cyc $cyopts $ldopts -e "$goal" "$@" $libs
-    $exec $cyc $cyopts $ldopts -e "$goal" "$@" $libs
+    $echo $cyc $cyopts $ldopts -e "$goal" -o "$target" "$@" $libs
+    $exec $cyc $cyopts $ldopts -e "$goal" -o "$target" "$@" $libs
   elif test -n "$typeIt"; then
     $echo $cyc $cyopts -T "$typeIt" "$@"
     $exec $cyc $cyopts -T "$typeIt" "$@"
-  else
-    $echo $cyc $cyopts $ldopts "$@" $libs
-    $exec $cyc $cyopts $ldopts "$@" $libs
+  elif test -z "$linkAlways" && $newer "$target" "$@"; then :; else
+    $echo $cyc $cyopts $ldopts -o "$target" "$@" $libs
+    $exec $cyc $cyopts $ldopts -o "$target" "$@" $libs
   fi
 }
 
@@ -92,7 +104,7 @@ while test $# -gt 0; do
     # Overall options
     -M | --depend ) depend=$1;;
     -[cCS] ) echo 1>&2 "$cymake: unsupported option $1"; exit 1;;
-    -a ) mkopts="$mkopts $1";;
+    -a ) linkAlways="$1";;
     -e ) goal=$2; shift;;
     -e* ) goal=`expr "$1" : '-e\(.*\)'`;;
     -T ) typeIt=$2; shift;;
@@ -100,8 +112,8 @@ while test $# -gt 0; do
     -g | --debug ) mkopts="$mkopts $1"; cyopts="$cyopts $1";;
     --clean ) clean=--clean;;
     --find ) find=--find;;
-    -o ) mkopts="$mkopts -o $2"; output="$2"; shift;;
-    -o* ) mkopts="$mkopts $1"; output=`expr "$1" : '-o\(.*\)'`;;
+    -o ) output="$2"; shift;;
+    -o* ) output=`expr "$1" : '-o\(.*\)'`;;
     -n ) exec=echo;;
     -v ) verbose=-v; echo=echo cyopts="$cyopts -v";;
     -q ) echo=noecho;;
@@ -157,6 +169,7 @@ if test -n "$depend$find"; then
     echo 1>&2 "$cymake: no targets"
     exit 1
   fi
+  test -n "$output" && mkopts="$mkopts -o $output"
   test -n "$verbose" && echo 1>&2 $cymk $depend $find $mkopts $imports $files
   $exec $cymk $depend $find $mkopts $imports $files
   exit $?
@@ -197,7 +210,7 @@ if test $# -eq 0; then
   if test -n "$clean"; then
     remove $output
   else
-    link -o $output
+    link $output
   fi
   exit $?
 fi
@@ -212,7 +225,7 @@ for f in $files; do
   esac
   check_source "$f" "$suffix" "$suffixes" || exit $?
   test -n "$verbose" && echo 1>&2 $cymk $clean $mkopts $imports $f
-  $cymk $clean $mkopts $imports $f > /tmp/cymake$$
+  $cymk $clean $mkopts -o /tmp/cymake$$ $imports $f
 
   . /tmp/cymake$$
   set +e

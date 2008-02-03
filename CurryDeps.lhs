@@ -1,11 +1,11 @@
 % -*- LaTeX -*-
-% $Id: CurryDeps.lhs 2506 2007-10-16 21:34:18Z wlux $
+% $Id: CurryDeps.lhs 2608 2008-02-03 23:10:52Z wlux $
 %
-% Copyright (c) 2002-2007, Wolfgang Lux
+% Copyright (c) 2002-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryDeps.lhs}
-\section{Building Programs}
+\section{Building Programs}\label{sec:dependencies}
 This module implements the functions to compute the dependency
 information between Curry modules. This is used to create Makefile
 dependencies and to update programs composed of multiple modules.
@@ -39,21 +39,22 @@ Makefile, and the function \texttt{findModules} tries to find a source
 or interface file for each module.
 \begin{verbatim}
 
-> buildScript :: Bool -> Bool -> Bool -> [(Bool,FilePath)] -> Maybe FilePath
->             -> FilePath -> IO [String]
-> buildScript clean debug linkAlways paths target fn =
+> buildScript :: Bool -> Bool -> [(Bool,FilePath)] -> Maybe FilePath -> FilePath
+>             -> IO [String]
+> buildScript clean debug paths output fn =
 >   do
 >     (ms,es) <- fmap (flattenDeps . sortDeps) (deps paths emptyEnv fn)
->     when (null es) (putStr (makeScript clean debug linkAlways outputFile ms))
+>     when (null es)
+>          (maybe putStr writeFile output (makeScript clean debug target ms))
 >     return es
->   where outputFile
+>   where target
 >           | extension fn `elem` moduleExts ++ [oExt] = Nothing
->           | otherwise = target `mplus` Just fn
+>           | otherwise = Just fn
 >         makeScript clean = if clean then makeCleanScript else makeBuildScript
 
 > makeDepend :: [(Bool,FilePath)] -> Maybe FilePath -> [FilePath] -> IO ()
-> makeDepend paths target ms =
->   foldM (deps paths) emptyEnv ms >>= maybe putStr writeFile target . makeDeps
+> makeDepend paths output ms =
+>   foldM (deps paths) emptyEnv ms >>= maybe putStr writeFile output . makeDeps
 
 > deps :: [(Bool,FilePath)] -> SourceEnv -> FilePath -> IO SourceEnv
 > deps paths mEnv fn
@@ -71,9 +72,9 @@ or interface file for each module.
 >   where m = mkMIdent [fn]
 
 > findModules :: [(Bool,FilePath)] -> Maybe FilePath -> [FilePath] -> IO ()
-> findModules paths target ms =
+> findModules paths output ms =
 >   mapM (\fn -> liftM ((fn ++ ": ") ++) (findModule paths fn)) ms >>=
->   maybe putStr writeFile target . unlines
+>   maybe putStr writeFile output . unlines
 
 > findModule :: [(Bool,FilePath)] -> FilePath -> IO FilePath
 > findModule paths fn
@@ -214,31 +215,45 @@ handle modules which are mutually recursive at present.
 \end{verbatim}
 The function \texttt{makeBuildScript} returns a shell script that
 rebuilds a program given a sorted list of module informations. The
-script uses the commands \verb|compile| and \verb|link| to build the
-program. They should be defined to reasonable values in the
+generated script uses commands of the form
+\begin{quote}
+  \texttt{compile} \emph{source} \emph{object} \emph{interface$_1$}
+  \dots{} \emph{interface$_k$}
+\end{quote}
+and
+\begin{quote}
+  \texttt{link} \emph{target} \texttt{-M}\emph{module$_1$} \dots{}
+  \texttt{-M}\emph{module$_m$} \emph{object$_1$} \dots{}
+  \emph{object$_n$}
+\end{quote}
+where \emph{source} is a source file, \emph{object} is the object file
+to be generated, and \emph{interface$_1$}, \dots, \emph{interface$_k$}
+are the interface files on which \emph{source} depends. \emph{Target}
+is the executable and \emph{object$_1$}, \dots, \emph{object$_n$} are
+the object files to be linked, and \emph{module$_1$}, \dots,
+\emph{module$_m$} are the modules of the program. Of course, the
+commands \verb|compile| and \verb|link| must be defined in the
 environment where the script is executed. The script deliberately uses
 the \verb|-e| shell option so that the script is terminated upon the
 first error.
+
+\ToDo{Provide support for an equivalent of \texttt{make -k}.}
 \begin{verbatim}
 
-> makeBuildScript :: Bool -> Bool -> Maybe FilePath -> [(ModuleIdent,Source)]
->                 -> String
-> makeBuildScript debug linkAlways target mEnv =
+> makeBuildScript :: Bool -> Maybe FilePath -> [(ModuleIdent,Source)] -> String
+> makeBuildScript debug target mEnv =
 >   unlines ("set -e" : concatMap (compCommands . snd) mEnv ++
 >            maybe [] linkCommands target)
 >   where compCommands (Source fn ms) =
->           [newer ofn (fn : catMaybes (map interf ms)) ++ " || \\",compile fn]
->           where ofn = objectName debug fn
+>           [compile fn (objectName debug fn) (catMaybes (map interf ms))]
 >         compCommands (Interface _) = []
 >         compCommands Unknown = []
->         linkCommands fn
->           | linkAlways = [link fn ms os]
->           | otherwise = [newer fn os ++ " || \\", link fn ms os]
->           where ms = catMaybes (map modul mEnv)
->                 os = reverse (catMaybes (map (object . snd) mEnv))
->         newer fn fns = unwords ("$CURRY_PATH/newer" : fn : fns)
->         compile fn = unwords ["compile","-c",fn,"-o",objectName debug fn]
->         link fn ms os = unwords ("link" : "-o" : fn : ms ++ os)
+>         linkCommands fn =
+>          [link fn
+>                (catMaybes (map modul mEnv))
+>                (reverse (catMaybes (map (object . snd) mEnv)))]
+>         compile fn ofn ifns = unwords ("compile" : fn : ofn : ifns)
+>         link fn ms os = unwords ("link" : fn : ms ++ os)
 >         modul (_,Source fn _) = Just ("-M" ++ fn)
 >         modul (m,Interface _) = Just ("-M" ++ moduleName m)
 >         modul (_,Unknown) = Nothing
@@ -254,14 +269,17 @@ first error.
 
 \end{verbatim}
 The function \texttt{makeCleanScript} returns a shell script that
-removes all compiled files for a module. The script uses the command
-\verb|remove| to delete the files. It should be defined to a
-reasonable value in the environment where the script is executed.
+removes all compiled files for a module. The generated script consists
+of commands of the form
+\begin{quote}
+  \texttt{remove} \emph{file$_1$} \dots{} \emph{file$_n$}
+\end{quote}
+where the \verb|remove| command must be defined in the environment
+where the script is executed.
 \begin{verbatim}
 
-> makeCleanScript :: Bool -> Bool -> Maybe FilePath -> [(ModuleIdent,Source)]
->                 -> String
-> makeCleanScript debug _ target mEnv =
+> makeCleanScript :: Bool -> Maybe FilePath -> [(ModuleIdent,Source)] -> String
+> makeCleanScript debug target mEnv =
 >   unwords ("remove" : foldr (files . snd) (maybeToList target) mEnv)
 >   where d = if debug then 2 else 0
 >         files (Source fn _) fs =

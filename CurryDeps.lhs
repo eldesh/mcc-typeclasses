@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryDeps.lhs 2608 2008-02-03 23:10:52Z wlux $
+% $Id: CurryDeps.lhs 2610 2008-02-03 23:24:59Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -217,21 +217,27 @@ The function \texttt{makeBuildScript} returns a shell script that
 rebuilds a program given a sorted list of module informations. The
 generated script uses commands of the form
 \begin{quote}
-  \texttt{compile} \emph{source} \emph{object} \emph{interface$_1$}
-  \dots{} \emph{interface$_k$}
+  \texttt{compile} $i$ $n$ \emph{source} \emph{object}
+  \emph{interface$_1$} \dots{} \emph{interface$_k$}
 \end{quote}
 and
 \begin{quote}
-  \texttt{link} \emph{target} \texttt{-M}\emph{module$_1$} \dots{}
-  \texttt{-M}\emph{module$_m$} \emph{object$_1$} \dots{}
-  \emph{object$_n$}
+  \texttt{link} $i$ $n$ \emph{target} \texttt{-M}\emph{module$_1$}
+  \dots{} \texttt{-M}\emph{module$_m$} \emph{object$_1$} \dots{}
+  \emph{object$_l$}
 \end{quote}
 where \emph{source} is a source file, \emph{object} is the object file
 to be generated, and \emph{interface$_1$}, \dots, \emph{interface$_k$}
 are the interface files on which \emph{source} depends. \emph{Target}
-is the executable and \emph{object$_1$}, \dots, \emph{object$_n$} are
+is the executable and \emph{object$_1$}, \dots, \emph{object$_l$} are
 the object files to be linked, and \emph{module$_1$}, \dots,
-\emph{module$_m$} are the modules of the program. Of course, the
+\emph{module$_m$} are the modules of the program. The numbers $i$ and
+$n$ give the index of the current command and the total number of
+commands in the build script, respectively. These numbers can be used
+to provide feedback to the user about the progress of building the
+target. Note that the index of the first command is 1, not 0. The
+number $i$ actually is redundant for a \texttt{link} command since it
+will always be the last command of a build script. Of course, the
 commands \verb|compile| and \verb|link| must be defined in the
 environment where the script is executed. The script deliberately uses
 the \verb|-e| shell option so that the script is terminated upon the
@@ -241,19 +247,17 @@ first error.
 \begin{verbatim}
 
 > makeBuildScript :: Bool -> Maybe FilePath -> [(ModuleIdent,Source)] -> String
-> makeBuildScript debug target mEnv =
->   unlines ("set -e" : concatMap (compCommands . snd) mEnv ++
->            maybe [] linkCommands target)
->   where compCommands (Source fn ms) =
->           [compile fn (objectName debug fn) (catMaybes (map interf ms))]
->         compCommands (Interface _) = []
->         compCommands Unknown = []
->         linkCommands fn =
->          [link fn
->                (catMaybes (map modul mEnv))
->                (reverse (catMaybes (map (object . snd) mEnv)))]
->         compile fn ofn ifns = unwords ("compile" : fn : ofn : ifns)
->         link fn ms os = unwords ("link" : fn : ms ++ os)
+> makeBuildScript debug target mEnv = unlines ("set -e" : cmds)
+>   where n = length cmds
+>         sources = [(fn,ms) | (_,Source fn ms) <- mEnv]
+>         cmds = zipWith compile [1..] sources ++ map link (maybeToList target)
+>         compile i (fn,ms) =
+>           unwords ("compile" : show i : show n : fn : ofn : ifns)
+>           where ofn = objectName debug fn
+>                 ifns = catMaybes (map interf ms)
+>         link fn = unwords ("link" : show n : show n : fn : ms ++ os)
+>           where ms = catMaybes (map modul mEnv)
+>                 os = reverse (map (objectName debug . fst) sources)
 >         modul (_,Source fn _) = Just ("-M" ++ fn)
 >         modul (m,Interface _) = Just ("-M" ++ moduleName m)
 >         modul (_,Unknown) = Nothing
@@ -263,9 +267,6 @@ first error.
 >             Just (Interface fn) -> Just fn
 >             Just Unknown -> Nothing
 >             Nothing -> Nothing
->         object (Source fn _) = Just (objectName debug fn)
->         object (Interface _) = Nothing
->         object Unknown = Nothing
 
 \end{verbatim}
 The function \texttt{makeCleanScript} returns a shell script that

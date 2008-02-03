@@ -3,7 +3,7 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 2609 2008-02-03 23:22:17Z wlux $
+# $Id: cymake.in 2610 2008-02-03 23:24:59Z wlux $
 #
 # Copyright (c) 2002-2008, Wolfgang Lux
 # See LICENSE for the full license.
@@ -34,6 +34,7 @@ verbose=
 cyc=$CYC
 cymk=$CURRY_PATH/cymk
 newer=$CURRY_PATH/newer
+progress=${CURRY_CYMAKE_PROGRESS-:}
 mkopts=
 cyopts=
 ldopts=
@@ -76,24 +77,32 @@ remove ( ) {
 }
 
 compile ( ) {
-  source=$1; shift
-  object=$1; shift
-  if $newer "$object" "$source" "$@"; then :; else
+  i=$1 n=$2 source=$3 object=$4; shift 4
+  if $newer "$object" "$source" "$@"; then
+    $progress $i $n skipping "$source"
+  else
+    $progress $i $n compiling "$source"
     $echo $cyc $cyopts -c "$source" -o "$object"
     $exec $cyc $cyopts -c "$source" -o "$object"
   fi
 }
 
 link ( ) {
-  if test -n "$output"; then target=$output; else target=$1; fi; shift
+  if test -n "$output"; then target=$output; else target=$3; fi;
+  i=$1 n=$2; shift 3
   if test -n "$goal"; then
+    $progress $i $n linking "$target"
     $echo $cyc $cyopts $ldopts -e "$goal" -o "$target" "$@" $libs
     $exec $cyc $cyopts $ldopts -e "$goal" -o "$target" "$@" $libs
   elif test -n "$typeIt"; then
+    $progress $i $n linking ""
     if test -n "$output"; then set dummy -o "$output" "$@"; shift; fi
     $echo $cyc $cyopts -T "$typeIt" "$@"
     $exec $cyc $cyopts -T "$typeIt" "$@"
-  elif test -z "$linkAlways" && $newer "$target" "$@"; then :; else
+  elif test -z "$linkAlways" && $newer "$target" "$@"; then
+    $progress $i $n skipping ""
+  else
+    $progress $i $n linking "$target"
     $echo $cyc $cyopts $ldopts -o "$target" "$@" $libs
     $exec $cyc $cyopts $ldopts -o "$target" "$@" $libs
   fi
@@ -211,7 +220,7 @@ if test $# -eq 0; then
     test -n "$output" || output=a.out
     remove $output
   else
-    link a.out
+    link 1 1 a.out
   fi
   exit $?
 fi

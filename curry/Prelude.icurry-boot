@@ -74,7 +74,8 @@ div :: a -> a -> a;
 mod :: a -> a -> a;
 quotRem :: a -> a -> (a, a);
 divMod :: a -> a -> (a, a);
-toInt :: a -> Int
+toInt :: a -> Int;
+toInteger :: a -> Integer
 };
 data Maybe a = Nothing | Just a;
 class (Monad :: * -> *) a where {
@@ -90,7 +91,8 @@ class (Eq a, Show a) => Num a where {
 negate :: a -> a;
 abs :: a -> a;
 signum :: a -> a;
-fromInt :: Int -> a
+fromInt :: Int -> a;
+fromInteger :: Integer -> a
 };
 class Eq a => Ord a where {
 compare :: a -> a -> Ordering;
@@ -167,6 +169,7 @@ foldl :: (a -> b -> a) -> a -> [b] -> a;
 foldl1 :: (a -> a -> a) -> [a] -> a;
 foldr :: (a -> b -> b) -> b -> [a] -> b;
 foldr1 :: (a -> a -> a) -> [a] -> a;
+fromIntegral :: (Integral a, Num b) => a -> b;
 fst :: (a, b) -> a;
 getChar :: IO Char;
 getContents :: IO [Char];

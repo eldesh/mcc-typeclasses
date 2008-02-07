@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2615 2008-02-07 08:54:11Z wlux $
+-- $Id: Prelude.curry 2616 2008-02-07 10:17:49Z wlux $
 --
 -- Copyright (c) 1999-2008, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -811,19 +811,19 @@ showParen False x = x
 
 --- Standard numeric types and classes
 class (Eq a, Show a) => Num a where
-  -- NB Temporarily defines fromInt instead of fromIntegral because MCC
-  --    does not yet support arbitrary precision integers.
   (+) :: a -> a -> a
   (-) :: a -> a -> a
   (*) :: a -> a -> a
   negate :: a -> a
   abs, signum :: a -> a
-  fromInt :: Int -> a
+  fromInt :: Int -> a           -- NB non-standard addition
+  fromInteger :: Integer -> a
 
   -- Minimal complete definition:
-  -- All except negate or (-)
+  -- All except fromInt and either negate or (-)
   x - y    = x + negate y
   negate x = 0 - x
+  fromInt n = fromIntegral n
 
 class (Ord a, Num a) => Real a where
   -- NB Temporarily defines toFloat instead of toRational because MCC
@@ -836,15 +836,14 @@ class (Enum a, Real a) => Integral a where
   -- N `div`  M + N `mod` M = N
   -- the result of quot is truncated towards zero and the result
   -- of div is truncated towards negative infinity
-  -- NB Temporarily defines toInt instead of toInteger because MCC
-  --    does not yet support arbitrary precision integers.
   quot, rem :: a -> a -> a
   div, mod :: a -> a -> a
   quotRem, divMod :: a -> a -> (a,a)
-  toInt :: a -> Int
+  toInt :: a -> Int                    -- NB non-standard addition
+  toInteger :: a -> Integer
 
   -- Minimal complete definition:
-  -- quotRem, toInt(eger)
+  -- quotRem, toInteger
   n `quot` d = case quotRem n d of (q,r) -> q
   n `rem` d  = case quotRem n d of (q,r) -> r
   n `div` d  = case divMod n d of (q,r) -> q
@@ -852,6 +851,7 @@ class (Enum a, Real a) => Integral a where
   divMod n d =
     case quotRem n d of
       qr@(q,r) -> if signum r == - signum d then (q - 1, r + d) else qr
+  toInt n = fromIntegral n
 
 class Num a => Fractional a where
   -- NB Temporarily defines fromFloat instead of fromRational because
@@ -883,6 +883,8 @@ class (Real a, Fractional a) => RealFrac a where
   ceiling x = case properFraction x of (n,r) -> if r > 0 then n + 1 else n
   floor x   = case properFraction x of (n,r) -> if r < 0 then n - 1 else n
 
+fromIntegral :: (Integral a,Num b) => a -> b
+fromIntegral n = fromInteger (toInteger n)
 
 
 -- Types of primitive arithmetic functions and predicates
@@ -932,9 +934,11 @@ instance Num Int where
   abs n = if n >= 0 then n else - n
   signum n = if n > 0 then 1 else if n < 0 then -1 else 0
   fromInt n = n
+  fromInteger = primFromInteger
+    where foreign import rawcall "integer.h" primFromInteger :: Integer -> Int
 
 instance Real Int where
-  toFloat = fromInt
+  toFloat n = fromInt n
 
 instance Integral Int where
   quot = primQuotInt
@@ -948,6 +952,8 @@ instance Integral Int where
   quotRem n d = (n `quot` d, n `rem` d)
   divMod n d = (n `div` d, n `mod` d)
   toInt n = n
+  toInteger = primToInteger
+    where foreign import rawcall "integer.h" primToInteger :: Int -> Integer
 
 
 data Integer
@@ -967,10 +973,8 @@ instance Enum Integer where
   pred = primPredInteger
     where foreign import rawcall "integer.h"
     	  	  	 primPredInteger :: Integer -> Integer
-  toEnum = primToInteger
-    where foreign import rawcall "integer.h" primToInteger :: Int -> Integer
-  fromEnum = primFromInteger
-    where foreign import rawcall "integer.h" primFromInteger :: Integer -> Int
+  toEnum n = toInteger n
+  fromEnum n = fromInteger n
   enumFrom n = iterate succ n
   enumFromTo n m = takeWhile (m >=) (enumFrom n)
   enumFromThen n1 n2 = iterate ((n1 - n2) +) n1
@@ -1002,11 +1006,10 @@ instance Num Integer where
     where foreign import rawcall "integer.h"
     	  	  	 primSignumInteger :: Integer -> Integer
   fromInt n = toEnum n
+  fromInteger n = n
 
 instance Real Integer where
-  toFloat = primIntegerToFloat
-    where foreign import rawcall "integer.h"
-    	  	  	 primIntegerToFloat :: Integer -> Float
+  toFloat n = fromInteger n
 
 instance Integral Integer where
   quot = primQuotInteger
@@ -1028,6 +1031,7 @@ instance Integral Integer where
     where foreign import rawcall "integer.h"
     	  	  	 primDivModInteger :: Integer -> Integer -> (Integer,Integer)
   toInt n = fromEnum n
+  toInteger n = n
 
 
 data Float
@@ -1087,6 +1091,9 @@ instance Num Float where
       GT -> 1
   fromInt = primFloat
     where foreign import ccall "prims.h" primFloat  :: Int -> Float
+  fromInteger = primIntegerToFloat
+    where foreign import rawcall "integer.h"
+    	  	  	 primIntegerToFloat :: Integer -> Float
 
 instance Real Float where
   toFloat x = x

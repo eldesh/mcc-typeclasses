@@ -1,4 +1,4 @@
-dnl $Id: configure.in 2613 2008-02-03 23:40:31Z wlux $
+dnl $Id: configure.in 2615 2008-02-07 08:54:11Z wlux $
 dnl
 dnl Copyright (c) 2002-2008, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -208,7 +208,7 @@ if test -f $srcdir/config.h.in; then
   if test -z "$TANGLE" || test -z "$CPIF"; then TANGLE=':' CPIF=':'; fi
   if test -z "$WEAVE"; then WEAVE=': \#'; fi
 elif test -z "$TANGLE" || test -z "$CPIF" || test -z "$WEAVE"; then
-  AC_MSG_ERROR([Noweb not found.  If not installed on your machine, you can
+  AC_MSG_ERROR([Noweb not found.  If not installed on your machine you can
 download noweb from http://www.eecs.harvard.edu/~nr/noweb/])
 fi
 
@@ -262,6 +262,19 @@ case $have_sys_mman_h in
       * ) AC_CHECK_FUNCS([mprotect]);;
     esac;;
 esac
+
+
+dnl Check for GNU MP.
+AC_CHECK_LIB(gmp, __gmpz_init,
+    	     [LIBS="-lgmp $LIBS" have_libgmp=yes],
+    	     [have_libgmp=no])
+AC_CHECK_HEADER([gmp.h], [have_gmp_h=yes], [have_gmp_h=no])
+if test $have_gmp_h = no || test $have_libgmp = no; then
+  AC_MSG_ERROR([Gnu MP library not found.  If it is installed in a
+non-standard location be sure to invoke configure with the correct
+settings for CPPFLAGS and LDFLAGS.  If not installed you can download
+the Gnu MP library from http://www.swox.com/gmp/])
+fi
 
 
 dnl Generate output files

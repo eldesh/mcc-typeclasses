@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 2347 2007-06-23 10:34:08Z wlux $
+% $Id: spaces.nw 2615 2008-02-07 08:54:11Z wlux $
 %
-% Copyright (c) 2003-2007, Wolfgang Lux
+% Copyright (c) 2003-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Managing Search Spaces}\label{sec:spaces}
@@ -641,6 +641,7 @@ copy_node(Node *node, SearchSpace *space)
 	    {
 	    case CHAR_KIND:
 	    case INT_KIND:
+	    case BIGINT_KIND:
 	    case FLOAT_KIND:
 	    case PTR_KIND:
 	    case FOREIGN_PTR_KIND:

@@ -1,6 +1,6 @@
-dnl $Id: configure-bin.in 2371 2007-06-23 14:08:14Z wlux $
+dnl $Id: configure-bin.in 2615 2008-02-07 08:54:11Z wlux $
 dnl
-dnl Copyright (c) 2002-2007, Wolfgang Lux
+dnl Copyright (c) 2002-2008, Wolfgang Lux
 dnl
 
 AC_INIT([%PACKAGE_NAME% for %TARGET%],[%VERSION%],[wlux@uni-muenster.de])
@@ -30,6 +30,18 @@ dnl Checks for libraries.
 AC_SEARCH_LIBS(sin, lm)
 AC_SEARCH_LIBS(inet_addr, nsl)
 AC_SEARCH_LIBS(socket, socket)
+
+dnl Check for GNU MP.
+AC_CHECK_LIB(gmp, __gmpz_init,
+    	     [LIBS="-lgmp $LIBS" have_libgmp=yes],
+    	     [have_libgmp=no])
+AC_CHECK_HEADER([gmp.h], [have_gmp_h=yes], [have_gmp_h=no])
+if test $have_gmp_h = no || test $have_libgmp = no; then
+  AC_MSG_ERROR([Gnu MP library not found.  If it is installed in a
+non-standard location be sure to invoke configure with the correct
+settings for CPPFLAGS and LDFLAGS.  If not installed you can download
+the Gnu MP library from http://www.swox.com/gmp/])
+fi
 
 dnl Check for a shell, which is suitable for cyi
 CURRY_CYI_SHELL

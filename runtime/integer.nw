@@ -1,0 +1,475 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: integer.nw 2615 2008-02-07 08:54:11Z wlux $
+%
+% Copyright (c) 2007-2008, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Multi-Precision Integer Primitives}
+This file contains the implementation of the arithmetic operations of
+the multi-precision \texttt{Integer} type. Our implementation is based
+on the Gnu MP library\footnote{\url{http://www.swox.com/gmp/}}. All
+functions employ the \texttt{rawcall} calling convention.
+
+<<integer.c>>=
+#include "config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <limits.h>
+#include "debug.h"
+#include "run.h"
+#include "regs.h"
+#include "heap.h"
+#include "eval.h"
+#include "integer.h"
+
+DECLARE_CONST(__Prelude__LT);
+DECLARE_CONST(__Prelude__EQ);
+DECLARE_CONST(__Prelude__GT);
+
+#define pair_node_size	closure_node_size(2)
+#define pair_info	___40__44__41__info
+static DEFINE_DATA(___40__44__41_, "(,)", 0, 2);
+
+@ 
+The first three primitives implement conversions between standard and
+multi-precision integer numbers and from multi-precision integer
+numbers to floating-point numbers.
+
+<<integer.h>>=
+extern Node *primToInteger(Node *);
+extern Node *primFromInteger(Node *);
+extern Node *primIntegerToFloat(Node *);
+
+@ 
+<<integer.c>>=
+Node *
+primToInteger(Node *x)
+{
+    long l;
+    Node *z;
+
+    l = long_val(x);
+
+    CHECK_HEAP(0, bigint_node_size);
+    z	     = (Node *)regs.hp;
+    z->info  = &bigint_info;
+    mpz_init_set_si(z->bi.mpz, l);
+    regs.hp += bigint_node_size;
+    register_final(z);
+
+    return z;
+}
+
+Node *
+primFromInteger(Node *x)
+{
+    long l;
+    Node *i;
+
+    l = mpz_get_si(x->bi.mpz);
+
+#if !NO_POINTER_TAGS
+    if ( !is_large_int(l) )
+	i = tag_int(l);
+    else
+#endif
+    {
+	CHECK_HEAP(0, int_node_size);
+	i	 = (Node *)regs.hp;
+	i->info	 = &int_info;
+	i->i.i	 = l;
+	regs.hp	+= int_node_size;
+    }
+
+    return i;
+}
+
+Node *
+primIntegerToFloat(Node *x)
+{
+    double d;
+    Node   *f;
+
+    d = mpz_get_d(x->bi.mpz);
+
+    CHECK_HEAP(0, float_node_size);
+    f	     = (Node *)regs.hp;
+    f->info  = &float_info;
+    put_double_val(f, d);
+    regs.hp += float_node_size;
+
+    return f;
+}
+
+@ 
+We provide only a single primitive for comparing integer numbers, the
+generic \texttt{compare} function. All other operations, including
+tests for (in)equality are derived from this primitive by matching the
+result of \texttt{compare}.
+
+<<integer.h>>=
+extern Node *primCompareInteger(Node *, Node *);
+
+@ 
+<<integer.c>>=
+Node *
+primCompareInteger(Node *x, Node *y)
+{
+    int cmp = mpz_cmp(x->bi.mpz, y->bi.mpz);
+    return cmp == 0 ? CONST(__Prelude__EQ)
+		    : cmp > 0 ? CONST(__Prelude__GT) : CONST(__Prelude__LT);
+}
+
+@ 
+The \texttt{succ}essor and \texttt{pred}ecessor methods of the
+\texttt{Enum} class can be implemented trivially as [[pred n = n - 1]]
+and [[succ n = n + 1]]. Nevertheless, we provide primitives for both
+methods here since they can be implemented more efficiently.
+
+<<integer.h>>=
+extern Node *primSuccInteger(Node *);
+extern Node *primPredInteger(Node *);
+
+@ 
+<<integer.c>>=
+Node *
+primSuccInteger(Node *x)
+{
+    Node *z;
+
+    BEGIN_LOCAL_ROOTS1(x)
+    CHECK_HEAP(0, bigint_node_size);
+    END_LOCAL_ROOTS
+
+    z	     = (Node *)regs.hp;
+    z->info  = &bigint_info;
+    mpz_init(z->bi.mpz);
+    regs.hp += bigint_node_size;
+    register_final(z);
+
+    mpz_add_ui(z->bi.mpz, x->bi.mpz, 1);
+    return z;
+}
+
+Node *
+primPredInteger(Node *x)
+{
+    Node *z;
+
+    BEGIN_LOCAL_ROOTS1(x)
+    CHECK_HEAP(0, bigint_node_size);
+    END_LOCAL_ROOTS
+
+    z	     = (Node *)regs.hp;
+    z->info  = &bigint_info;
+    mpz_init(z->bi.mpz);
+    regs.hp += bigint_node_size;
+    register_final(z);
+
+    mpz_sub_ui(z->bi.mpz, x->bi.mpz, 1);
+    return z;
+}
+
+@ 
+The following functions implement addition, subtraction, and
+multiplication for multi-precision integer numbers.
+
+<<integer.h>>=
+extern Node *primAddInteger(Node *, Node *);
+extern Node *primSubInteger(Node *, Node *);
+extern Node *primMulInteger(Node *, Node *);
+
+@ 
+<<integer.c>>=
+Node *
+primAddInteger(Node *x, Node *y)
+{
+    Node *z;
+
+    BEGIN_LOCAL_ROOTS2(x, y)
+    CHECK_HEAP(0, bigint_node_size);
+    END_LOCAL_ROOTS
+
+    z	     = (Node *)regs.hp;
+    z->info  = &bigint_info;
+    mpz_init(z->bi.mpz);
+    regs.hp += bigint_node_size;
+    register_final(z);
+
+    mpz_add(z->bi.mpz, x->bi.mpz, y->bi.mpz);
+    return z;
+}
+
+Node *
+primSubInteger(Node *x, Node *y)
+{
+    Node *z;
+
+    BEGIN_LOCAL_ROOTS2(x, y)
+    CHECK_HEAP(0, bigint_node_size);
+    END_LOCAL_ROOTS
+
+    z	     = (Node *)regs.hp;
+    z->info  = &bigint_info;
+    mpz_init(z->bi.mpz);
+    regs.hp += bigint_node_size;
+    register_final(z);
+
+    mpz_sub(z->bi.mpz, x->bi.mpz, y->bi.mpz);
+    return z;
+}
+
+Node *
+primMulInteger(Node *x, Node *y)
+{
+    Node *z;
+
+    BEGIN_LOCAL_ROOTS2(x, y)
+    CHECK_HEAP(0, bigint_node_size);
+    END_LOCAL_ROOTS
+
+    z	     = (Node *)regs.hp;
+    z->info  = &bigint_info;
+    mpz_init(z->bi.mpz);
+    regs.hp += bigint_node_size;
+    register_final(z);
+
+    mpz_mul(z->bi.mpz, x->bi.mpz, y->bi.mpz);
+    return z;
+}
+
+@ 
+We also provide primitives for the remaining methods of the
+\texttt{Num} class. Once again, these methods have trivial
+implementations in Curry, but we can provide more efficient
+primitives for them.
+
+<<integer.h>>=
+extern Node *primNegateInteger(Node *);
+extern Node *primAbsInteger(Node *);
+extern Node *primSignumInteger(Node *);
+
+@ 
+<<integer.c>>=
+Node *
+primNegateInteger(Node *x)
+{
+    Node *z;
+
+    BEGIN_LOCAL_ROOTS1(x)
+    CHECK_HEAP(0, bigint_node_size);
+    END_LOCAL_ROOTS
+
+    z	     = (Node *)regs.hp;
+    z->info  = &bigint_info;
+    mpz_init(z->bi.mpz);
+    regs.hp += bigint_node_size;
+    register_final(z);
+
+    mpz_neg(z->bi.mpz, x->bi.mpz);
+    return z;
+}
+
+Node *
+primAbsInteger(Node *x)
+{
+    Node *z;
+
+    BEGIN_LOCAL_ROOTS1(x)
+    CHECK_HEAP(0, bigint_node_size);
+    END_LOCAL_ROOTS
+
+    z	     = (Node *)regs.hp;
+    z->info  = &bigint_info;
+    mpz_init(z->bi.mpz);
+    regs.hp += bigint_node_size;
+    register_final(z);
+
+    mpz_abs(z->bi.mpz, x->bi.mpz);
+    return z;
+}
+
+Node *
+primSignumInteger(Node *x)
+{
+    int  sgn;
+    Node *z;
+
+    sgn = mpz_sgn(x->bi.mpz);
+
+    CHECK_HEAP(0, bigint_node_size);
+    z	     = (Node *)regs.hp;
+    z->info  = &bigint_info;
+    mpz_init_set_si(z->bi.mpz, sgn);
+    regs.hp += bigint_node_size;
+    register_final(z);
+
+    return z;
+}
+
+@ 
+With respect to integer division and modulus, the methods of the
+\texttt{Integral} class, we provide both variants of the operations,
+those rounding the quotient towards negative infinity (\texttt{div}
+and \texttt{mod}) and those rounding towards zero (\texttt{quot} and
+\texttt{rem}). Fortunately all these operations, including returning
+the quotient together with the remainder, are provided by the Gnu MP
+library.
+
+Here are the primitives rounding towards negative infinity.
+
+<<integer.h>>=
+extern Node *primDivInteger(Node *, Node *);
+extern Node *primModInteger(Node *, Node *);
+extern Node *primDivModInteger(Node *, Node *);
+
+@ 
+<<integer.c>>=
+Node *
+primDivInteger(Node *x, Node *y)
+{
+    Node *q;
+
+    BEGIN_LOCAL_ROOTS2(x, y)
+    CHECK_HEAP(0, bigint_node_size);
+    END_LOCAL_ROOTS
+
+    q	     = (Node *)regs.hp;
+    q->info  = &bigint_info;
+    mpz_init(q->bi.mpz);
+    regs.hp += bigint_node_size;
+    register_final(q);
+
+    mpz_fdiv_q(q->bi.mpz, x->bi.mpz, y->bi.mpz);
+    return q;
+}
+
+Node *
+primModInteger(Node *x, Node *y)
+{
+    Node *r;
+
+    BEGIN_LOCAL_ROOTS2(x, y)
+    CHECK_HEAP(0, bigint_node_size);
+    END_LOCAL_ROOTS
+
+    r	     = (Node *)regs.hp;
+    r->info  = &bigint_info;
+    mpz_init(r->bi.mpz);
+    regs.hp += bigint_node_size;
+    register_final(r);
+
+    mpz_fdiv_r(r->bi.mpz, x->bi.mpz, y->bi.mpz);
+    return r;
+}
+
+Node *
+primDivModInteger(Node *x, Node *y)
+{
+    Node *p, *q, *r;
+
+    BEGIN_LOCAL_ROOTS2(x, y)
+    CHECK_HEAP(0, pair_node_size + 2 * bigint_node_size);
+    END_LOCAL_ROOTS
+
+    q	     = (Node *)regs.hp;
+    q->info  = &bigint_info;
+    mpz_init(q->bi.mpz);
+    regs.hp += bigint_node_size;
+    register_final(q);
+
+    r	     = (Node *)regs.hp;
+    r->info  = &bigint_info;
+    mpz_init(r->bi.mpz);
+    regs.hp += bigint_node_size;
+    register_final(r);
+
+    p		 = (Node *)regs.hp;
+    p->info	 = &pair_info;
+    p->c.args[0] = q;
+    p->c.args[1] = r;
+    regs.hp	+= pair_node_size;
+
+    mpz_fdiv_qr(q->bi.mpz, r->bi.mpz, x->bi.mpz, y->bi.mpz);
+    return p;
+}
+
+@ 
+And now the ones rounding towards zero.
+
+<<integer.h>>=
+extern Node *primQuotInteger(Node *, Node *);
+extern Node *primRemInteger(Node *, Node *);
+extern Node *primQuotRemInteger(Node *, Node *);
+
+@ 
+<<integer.c>>=
+Node *
+primQuotInteger(Node *x, Node *y)
+{
+    Node *q;
+
+    BEGIN_LOCAL_ROOTS2(x, y)
+    CHECK_HEAP(0, bigint_node_size);
+    END_LOCAL_ROOTS
+
+    q	     = (Node *)regs.hp;
+    q->info  = &bigint_info;
+    mpz_init(q->bi.mpz);
+    regs.hp += bigint_node_size;
+    register_final(q);
+
+    mpz_tdiv_q(q->bi.mpz, x->bi.mpz, y->bi.mpz);
+    return q;
+}
+
+Node *
+primRemInteger(Node *x, Node *y)
+{
+    Node *r;
+
+    BEGIN_LOCAL_ROOTS2(x, y)
+    CHECK_HEAP(0, bigint_node_size);
+    END_LOCAL_ROOTS
+
+    r	     = (Node *)regs.hp;
+    r->info  = &bigint_info;
+    mpz_init(r->bi.mpz);
+    regs.hp += bigint_node_size;
+    register_final(r);
+
+    mpz_tdiv_r(r->bi.mpz, x->bi.mpz, y->bi.mpz);
+    return r;
+}
+
+Node *
+primQuotRemInteger(Node *x, Node *y)
+{
+    Node *p, *q, *r;
+
+    BEGIN_LOCAL_ROOTS2(x, y)
+    CHECK_HEAP(0, pair_node_size + 2 * bigint_node_size);
+    END_LOCAL_ROOTS
+
+    q	     = (Node *)regs.hp;
+    q->info  = &bigint_info;
+    mpz_init(q->bi.mpz);
+    regs.hp += bigint_node_size;
+    register_final(q);
+
+    r	     = (Node *)regs.hp;
+    r->info  = &bigint_info;
+    mpz_init(r->bi.mpz);
+    regs.hp += bigint_node_size;
+    register_final(r);
+
+    p		 = (Node *)regs.hp;
+    p->info	 = &pair_info;
+    p->c.args[0] = q;
+    p->c.args[1] = r;
+    regs.hp	+= pair_node_size;
+
+    mpz_tdiv_qr(q->bi.mpz, r->bi.mpz, x->bi.mpz, y->bi.mpz);
+    return p;
+}

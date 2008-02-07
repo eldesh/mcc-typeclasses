@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 2348 2007-06-23 11:01:02Z wlux $
+% $Id: print.nw 2615 2008-02-07 08:54:11Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Printing the Result}
@@ -188,6 +188,16 @@ print_node(unsigned int prec, Node *node)
 #endif
 	    case INT_KIND:
 		printf(prec > 0 && node->i.i < 0 ? "(%ld)" : "%ld", node->i.i);
+		break;
+	    case BIGINT_KIND:
+		if (prec > 0 && mpz_sgn(node->bi.mpz) < 0)
+		{
+		    printf("(");
+		    mpz_out_str(stdout, 10, node->bi.mpz);
+		    printf(")");
+		}
+		else
+		    mpz_out_str(stdout, 10, node->bi.mpz);
 		break;
 	    case FLOAT_KIND:
 		get_double_val(d, node);

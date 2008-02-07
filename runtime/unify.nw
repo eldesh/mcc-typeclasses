@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2347 2007-06-23 10:34:08Z wlux $
+% $Id: unify.nw 2615 2008-02-07 08:54:11Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Unification}\label{sec:unification}
@@ -207,6 +207,9 @@ eq_root(Node *arg1, Node *arg2, unsigned int *argc)
         case INT_KIND:
 	    eq = arg1->i.i == arg2->i.i;
 	    break;
+	case BIGINT_KIND:
+	    eq = mpz_cmp(arg1->bi.mpz, arg2->bi.mpz) == 0;
+	    break;
         case FLOAT_KIND:
 	    get_double_val(d, arg1);
 	    get_double_val(e, arg2);
@@ -393,6 +396,14 @@ eq_args(unsigned int n_regs, Node *arg1, Node *arg2,
 		if ( is_int_node(y) )
 		{
 		    if ( x->i.i != y->i.i )
+			return false;
+		    continue;
+		}
+		break;
+	    case BIGINT_KIND:
+		if ( is_bigint_node(y) )
+		{
+		    if ( mpz_cmp(x->bi.mpz, y->bi.mpz) != 0 )
 			return false;
 		    continue;
 		}

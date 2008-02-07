@@ -1,6 +1,6 @@
--- $Id: Prelude.curry 2376 2007-06-26 13:32:13Z wlux $
+-- $Id: Prelude.curry 2615 2008-02-07 08:54:11Z wlux $
 --
--- Copyright (c) 1999-2006, Wolfgang Lux
+-- Copyright (c) 1999-2008, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module Prelude where
@@ -116,8 +116,6 @@ foreign import primitive failed :: a
 --- Equality and Ordered classes
 
 class Eq a where
-  -- NB (/=) is temporarily an overloaded function until default method
-  --    implementations are supported.
   (==) :: a -> a -> Bool
   (/=) :: a -> a -> Bool
 
@@ -950,6 +948,86 @@ instance Integral Int where
   quotRem n d = (n `quot` d, n `rem` d)
   divMod n d = (n `div` d, n `mod` d)
   toInt n = n
+
+
+data Integer
+instance Eq Integer where
+  n1 == n2 = case compare n1 n2 of { EQ -> True; _ -> False }
+  n1 /= n2 = case compare n1 n2 of { EQ -> False; _ -> True }
+
+instance Ord Integer where
+  compare = primCompareInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primCompareInteger :: Integer -> Integer -> Ordering
+
+instance Enum Integer where
+  succ = primSuccInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primSuccInteger :: Integer -> Integer
+  pred = primPredInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primPredInteger :: Integer -> Integer
+  toEnum = primToInteger
+    where foreign import rawcall "integer.h" primToInteger :: Int -> Integer
+  fromEnum = primFromInteger
+    where foreign import rawcall "integer.h" primFromInteger :: Integer -> Int
+  enumFrom n = iterate succ n
+  enumFromTo n m = takeWhile (m >=) (enumFrom n)
+  enumFromThen n1 n2 = iterate ((n1 - n2) +) n1
+  enumFromThenTo n1 n2 m
+    | n1 <= n2 = takeWhile (m >=) (enumFromThen n1 n2)
+    | otherwise = takeWhile (m <=) (enumFromThen n1 n2)
+
+instance Show Integer where
+  -- FIXME: use a dedicated primitive for this
+  showsPrec _ = shows where foreign import primitive shows :: a -> ShowS
+
+instance Num Integer where
+  (+) = primAddInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primAddInteger :: Integer -> Integer -> Integer
+  (-) = primSubInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primSubInteger :: Integer -> Integer -> Integer
+  (*) = primMulInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primMulInteger :: Integer -> Integer -> Integer
+  negate = primNegateInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primNegateInteger :: Integer -> Integer
+  abs = primAbsInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primAbsInteger :: Integer -> Integer
+  signum = primSignumInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primSignumInteger :: Integer -> Integer
+  fromInt n = toEnum n
+
+instance Real Integer where
+  toFloat = primIntegerToFloat
+    where foreign import rawcall "integer.h"
+    	  	  	 primIntegerToFloat :: Integer -> Float
+
+instance Integral Integer where
+  quot = primQuotInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primQuotInteger :: Integer -> Integer -> Integer
+  rem = primRemInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primRemInteger :: Integer -> Integer -> Integer
+  div = primDivInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primDivInteger :: Integer -> Integer -> Integer
+  mod = primModInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primModInteger :: Integer -> Integer -> Integer
+  quotRem = primQuotRemInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primQuotRemInteger :: Integer -> Integer -> (Integer,Integer)
+  divMod = primDivModInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primDivModInteger :: Integer -> Integer -> (Integer,Integer)
+  toInt n = fromEnum n
 
 
 data Float

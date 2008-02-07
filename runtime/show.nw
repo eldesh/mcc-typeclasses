@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2347 2007-06-23 10:34:08Z wlux $
+% $Id: show.nw 2615 2008-02-07 08:54:11Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Show Function}
@@ -267,7 +267,7 @@ static
 FUNCTION(showp_1)
 {
     bool	 isop, isneg;
-    char	 buf[32];
+    char	 buf[32], *mpz_str = 0;
     const char   *str;
     unsigned int i, argc;
     double	 d;
@@ -326,6 +326,11 @@ FUNCTION(showp_1)
 	case INT_KIND:
 	    sprintf(buf, "%ld", node->i.i);
 	    isneg = buf[0] == '-';
+	    break;
+
+	case BIGINT_KIND:
+	    isneg = mpz_sgn(node->bi.mpz) < 0;
+	    str   = mpz_str = mpz_get_str(NULL, 10, node->bi.mpz);
 	    break;
 
 	case FLOAT_KIND:
@@ -433,6 +438,13 @@ FUNCTION(showp_1)
     }
 
     regs.r[0] = prefix_string(0, str, tail);
+    if ( mpz_str )
+    {
+	void (*freefunc)(void *, size_t);
+
+	mp_get_memory_functions(NULL, NULL, &freefunc);
+	freefunc(mpz_str, strlen(mpz_str + 1));
+    }
 
     CHECK_HEAP(1, 2*cons_node_size);
     cons = regs.r[0];

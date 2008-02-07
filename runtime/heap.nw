@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2355 2007-06-23 11:24:01Z wlux $
+% $Id: heap.nw 2615 2008-02-07 08:54:11Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{The Heap}\label{sec:heap}
@@ -142,6 +142,7 @@ enum {
     VECTOR_KIND,		/* vector nodes */
     CHAR_KIND,			/* character node */
     INT_KIND,			/* integer number */
+    BIGINT_KIND,		/* big (multi-precision) integer number */
     FLOAT_KIND,			/* floating-point number */
     PTR_KIND,			/* foreign pointer */
     FOREIGN_PTR_KIND,		/* finalized foreign pointer */
@@ -238,6 +239,7 @@ struct node_info
 #define is_vector_node(node)	(node_kind(node) == VECTOR_KIND)
 #define is_char_node(node)	(node_kind(node) == CHAR_KIND)
 #define is_int_node(node)	(node_kind(node) == INT_KIND)
+#define is_bigint_node(node)	(node_kind(node) == BIGINT_KIND)
 #define is_float_node(node)	(node_kind(node) == FLOAT_KIND)
 #define is_ptr_node(node)	(node_kind(node) == PTR_KIND)
 #define is_foreign_ptr_node(node) (node_kind(node) == FOREIGN_PTR_KIND)
@@ -314,6 +316,40 @@ struct int_node {
 NodeInfo int_info = {
     INT_KIND, 0, int_node_size, ot_binary, 0, eval_whnf, 0, 0, 0
 };
+
+@ 
+Multiple precision integer numbers are currently implemented with the
+Gnu MP library\footnote{\url{http://www.swox.com/gmp/}}. Such numbers
+are released automatically when they become garbage by their
+finalizer.
+
+\ToDo{Provide an alternative implementation in case Gnu MP is not
+  available.}
+
+<<heap.h>>=
+#include <gmp.h>
+
+extern NodeInfo bigint_info;
+struct bigint_node {
+    NodeInfo *info;
+    mpz_t    mpz;
+};
+#define bigint_node_size	wordsof(struct bigint_node)
+
+@ 
+<<heap.c>>=
+static void finalize_bigint(Node *);
+
+NodeInfo bigint_info = {
+    BIGINT_KIND, 0, bigint_node_size, ot_binary, 0, eval_whnf, 0, 0,
+    finalize_bigint
+};
+
+static void
+finalize_bigint(Node *node)
+{
+    mpz_clear(node->bi.mpz);
+}
 
 @ 
 Floating point numbers use type [[double]] for the represented number.
@@ -686,6 +722,7 @@ union node {
     struct char_node ch;
 #endif
     struct int_node i;
+    struct bigint_node bi;
 #if UNALIGNED_DOUBLE
     struct float_node f;
 #endif

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2527 2007-10-22 13:49:27Z wlux $
+% $Id: TypeCheck.lhs 2618 2008-02-07 15:19:50Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeCheck.lhs}
@@ -142,7 +142,7 @@ in the extended instance environment.
 \end{verbatim}
 The list of default types is given either by a default declaration in
 the source code or defaults to the predefined list of numeric data
-types, which at present includes the types \texttt{Int} and
+types, which at present includes the types \texttt{Integer} and
 \texttt{Float}. This list is always used when type checking goal
 expressions because a goal has no top-level declarations.
 
@@ -151,7 +151,7 @@ expressions because a goal has no top-level declarations.
 \begin{verbatim}
 
 > defaultTypes :: TCEnv -> [TopDecl a] -> [Type]
-> defaultTypes _ [] = numTypes
+> defaultTypes _ [] = [integerType,floatType]
 > defaultTypes tcEnv (DefaultDecl _ tys : _) =
 >   map (unqualType . expandPolyType tcEnv . QualTypeExpr []) tys
 

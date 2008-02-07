@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: PredefIdent.lhs 2504 2007-10-16 20:51:03Z wlux $
+% $Id: PredefIdent.lhs 2618 2008-02-07 15:19:50Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{PredefIdent.lhs}
@@ -32,10 +32,11 @@ Sect.~\ref{sec:simplify}).
 > lambdaId (Position _ l c) =
 >   mkIdent ("_#lambda_line_" ++ show l ++ '.' : show c)
 
-> boolId, charId, intId, floatId, ioId, successId :: Ident
+> boolId, charId, intId, integerId, floatId, ioId, successId :: Ident
 > boolId    = mkIdent "Bool"
 > charId    = mkIdent "Char"
 > intId     = mkIdent "Int"
+> integerId = mkIdent "Integer"
 > floatId   = mkIdent "Float"
 > ioId      = mkIdent "IO"
 > successId = mkIdent "Success"
@@ -69,10 +70,11 @@ Sect.~\ref{sec:simplify}).
 > mainId = mkIdent "main"
 > minusId = mkIdent "-"
 
-> qBoolId, qCharId, qIntId, qFloatId, qSuccessId, qIOId :: QualIdent
+> qBoolId, qCharId, qIntId, qIntegerId, qFloatId, qSuccessId, qIOId :: QualIdent
 > qBoolId = qualifyWith preludeMIdent boolId
 > qCharId = qualifyWith preludeMIdent charId
 > qIntId = qualifyWith preludeMIdent intId
+> qIntegerId = qualifyWith preludeMIdent integerId
 > qFloatId = qualifyWith preludeMIdent floatId
 > qSuccessId = qualifyWith preludeMIdent successId
 > qIOId = qualifyWith preludeMIdent ioId

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: PredefTypes.lhs 2515 2007-10-18 10:54:19Z wlux $
+% $Id: PredefTypes.lhs 2618 2008-02-07 15:19:50Z wlux $
 %
-% Copyright (c) 2002-2007, Wolfgang Lux
+% Copyright (c) 2002-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{PredefTypes.lhs}
@@ -16,11 +16,13 @@ compiler.
 > import PredefIdent
 > import Types
 
-> unitType,boolType,charType,intType,floatType,stringType,successType :: Type
+> unitType,boolType,charType,intType,integerType,floatType :: Type
+> stringType,successType :: Type
 > unitType = TypeConstructor qUnitId
 > boolType = TypeConstructor qBoolId
 > charType = TypeConstructor qCharId
 > intType = TypeConstructor qIntId
+> integerType = TypeConstructor qIntegerId
 > floatType = TypeConstructor qFloatId
 > stringType = listType charType
 > successType = TypeConstructor qSuccessId

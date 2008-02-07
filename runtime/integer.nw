@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: integer.nw 2615 2008-02-07 08:54:11Z wlux $
+% $Id: integer.nw 2617 2008-02-07 12:06:39Z wlux $
 %
 % Copyright (c) 2007-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -16,6 +16,7 @@ functions employ the \texttt{rawcall} calling convention.
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <math.h>
 #include "debug.h"
 #include "run.h"
 #include "regs.h"
@@ -100,6 +101,46 @@ primIntegerToFloat(Node *x)
     regs.hp += float_node_size;
 
     return f;
+}
+
+@ 
+The primitive for the \texttt{properFraction} method of the
+\texttt{RealFrac} class returns the (truncated) integer part of its
+floating-point argument and the fractional part as a pair.
+
+<<integer.h>>=
+extern Node *primProperFraction(Node *);
+
+@
+<<integer.c>>=
+Node *
+primProperFraction(Node *x)
+{
+    double d, frac;
+    Node   *p, *i, *f;
+
+    get_double_val(d, x);
+    frac = modf(d, &d);
+
+    CHECK_HEAP(0, pair_node_size + bigint_node_size + float_node_size);
+    i	     = (Node *)regs.hp;
+    i->info  = &bigint_info;
+    mpz_init_set_d(i->bi.mpz, d);
+    regs.hp += bigint_node_size;
+    register_final(i);
+
+    f	     = (Node *)regs.hp;
+    f->info  = &float_info;
+    put_double_val(f, frac);
+    regs.hp += float_node_size;
+
+    p	     = (Node *)regs.hp;
+    p->info  = &pair_info;
+    p->c.args[0] = i;
+    p->c.args[1] = f;
+    regs.hp += pair_node_size;
+
+    return p;
 }
 
 @ 

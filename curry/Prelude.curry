@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2616 2008-02-07 10:17:49Z wlux $
+-- $Id: Prelude.curry 2617 2008-02-07 12:06:39Z wlux $
 --
 -- Copyright (c) 1999-2008, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -1105,13 +1105,10 @@ instance Fractional Float where
 
 instance RealFrac Float where
   properFraction x =
-    case primTrunc x of
-      n -> (fromInt n, x - toFloat n)
-    where foreign import ccall "prims.h" primTrunc :: Float -> Int
-  truncate x = fromInt (primTrunc x)
-    where foreign import ccall "prims.h" primTrunc :: Float -> Int
-  round x = fromInt (primRound x)
-    where foreign import ccall "prims.h" primRound :: Float -> Int
+    case primProperFraction x of
+      (n,y) -> (fromInteger n,y)
+    where foreign import rawcall "integer.h"
+    	  	  	 primProperFraction :: Float -> (Integer,Float)
 
 
 -- Constraints

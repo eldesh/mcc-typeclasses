@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CPretty.lhs 2453 2007-08-23 22:58:14Z wlux $
+% $Id: CPretty.lhs 2620 2008-02-08 13:20:26Z wlux $
 %
-% Copyright (c) 2002-2007, Wolfgang Lux
+% Copyright (c) 2002-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CPretty.lhs}
@@ -45,9 +45,11 @@ program formatter.\footnote{For instance, on Unix systems
 >   | otherwise = text "enum" $+$ block (list ppConst cs) <> semi
 > ppTopDecl (CFuncDecl vb f) =
 >   ppFunCall "DECLARE_LABEL" [ppLinkage True vb,text f] <> semi
-> ppTopDecl (CVarDef vb ty v (CInit x)) =
+> ppTopDecl (CVarDef vb ty v Nothing) =
+>   ppLinkage False vb <+> varDecl ty v <> semi
+> ppTopDecl (CVarDef vb ty v (Just (CInit x))) =
 >   ppLinkage False vb <+> varDecl ty v <> equals <> ppExpr 0 x <> semi
-> ppTopDecl (CVarDef vb ty v (CStruct xs)) =
+> ppTopDecl (CVarDef vb ty v (Just (CStruct xs))) =
 >   ppLinkage False vb <+> varDecl ty v <> equals $+$ ppInits xs <> semi
 > ppTopDecl (CArrayDef vb ty v xs) =
 >   ppLinkage False vb <+> arrayDecl ty v <> equals $+$ ppInits xs <> semi

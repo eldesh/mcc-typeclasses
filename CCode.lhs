@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CCode.lhs 2453 2007-08-23 22:58:14Z wlux $
+% $Id: CCode.lhs 2620 2008-02-08 13:20:26Z wlux $
 %
-% Copyright (c) 2002-2007, Wolfgang Lux
+% Copyright (c) 2002-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CCode.lhs}
@@ -54,7 +54,7 @@ declaration and its corresponding \verb|CMainFunc| definition.
 >   | CExternArrayDecl CType String
 >   | CEnumDecl [CConst]
 >   | CFuncDecl CVisibility String
->   | CVarDef CVisibility CType String CInitializer
+>   | CVarDef CVisibility CType String (Maybe CInitializer)
 >   | CArrayDef CVisibility CType String [CInitializer]
 >   | CFuncDef CVisibility String CBlock
 >   | CMainDecl String [String]

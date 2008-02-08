@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2621 2008-02-08 14:42:02Z wlux $
+% $Id: CGen.lhs 2622 2008-02-08 16:02:03Z wlux $
 %
 % Copyright (c) 1998-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -882,10 +882,19 @@ split into minimal binding groups.
 > initInteger :: Name -> Integer -> CStmt
 > initInteger v i =
 >   CIf (CRel (field v "info") "==" CNull)
->       [setField v "info" (addr "bigint_info"),
->        CProcCall "mpz_init_set_str"
->                  [field v "bi.mpz",CString (show i),CInt 10]]
+>       [setField v "info" (addr "bigint_info"),initMpz (field v "bi.mpz") i]
 >       []
+>   where initMpz v i
+>           | fits32bits i = initMpzInt v i
+>           | fits64bits i =
+>               CppCondStmts condLP64 [initMpzInt v i] [initMpzString v i]
+>           | otherwise = initMpzString v i
+>           where condLP64 = "_LP64 || __LP64__"
+>         initMpzInt v i = CProcCall "mpz_init_set_si" [v,CInt i]
+>         initMpzString v i =
+>           CProcCall "mpz_init_set_str" [v,CString (show i),CInt 10]
+>         fits32bits i = -0x80000000 <= i && i <= 0x7fffffff
+>         fits64bits i = -0x8000000000000000 <= i && i <= 0x7fffffffffffffff
 
 > initConstr :: Name -> Name -> [Name] -> [CStmt]
 > initConstr v c vs =

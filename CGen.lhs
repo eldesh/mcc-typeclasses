@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2620 2008-02-08 13:20:26Z wlux $
+% $Id: CGen.lhs 2621 2008-02-08 14:42:02Z wlux $
 %
 % Copyright (c) 1998-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -156,9 +156,9 @@ determine the tag value of a constructor when it is used.
 
 In addition to the tag enumerations, the compiler also defines node
 info structures for every data constructor and preallocates constant
-constructors and literal constants. Integer constants need to be
-allocated only if they cannot be represented in $n-1$ bits where $n$
-is the number of bits per word of the target architecture. The
+constructors and literal constants. Native integer constants need to
+be allocated only if they cannot be represented in $n-1$ bits where
+$n$ is the number of bits per word of the target architecture. The
 generated code uses the preprocessor macro \texttt{is\_large\_int}
 defined in the runtime system (see Sect.~\ref{sec:heap}) in order to
 determine whether allocation is necessary. Note that this macro always
@@ -169,7 +169,10 @@ with the \texttt{--disable-pointer-tags} configuration option. In that
 case, character constants with codes below 256, which are most
 commonly used, are allocated in a table defined by the runtime system
 and only constants with larger codes need to be preallocated in the
-generated code.
+generated code. Multiple precision integer constants are preallocated
+as well but they cannot be initialized statically because their
+underlying representation is opaque. Instead, these constants are
+initialized upon their first use.
 \begin{verbatim}
 
 > genTypes :: [Decl] -> [(Name,[Name],[ConstrDecl])] -> [Stmt] -> [Expr]
@@ -238,6 +241,7 @@ generated code.
 > literals cs =
 >   map charConstant (nub [c | Char c <- cs]) ++
 >   map intConstant (nub [i | Int i <- cs]) ++
+>   map integerConstant (nub [i | Integer i <- cs]) ++
 >   map floatConstant (nub [f | Float f <- cs])
 
 > charConstant :: Char -> CTopDecl
@@ -262,6 +266,10 @@ generated code.
 >              (Just (CStruct (map CInit [addr "int_info",CInt i]))),
 >      CppDefine (constInt i) (constRef (constInt i))]
 >     [CppDefine (constInt i) (CFunCall "tag_int" [CInt i])]
+
+> integerConstant :: Integer -> CTopDecl
+> integerConstant i =
+>   CVarDef CPrivate (CType "struct bigint_node") (constInteger i) Nothing
 
 > floatConstant :: Double -> CTopDecl
 > floatConstant f =
@@ -816,6 +824,7 @@ split into minimal binding groups.
 > literal :: Literal -> CExpr
 > literal (Char c) = CExpr (constChar c)
 > literal (Int i) = CExpr (constInt i)
+> literal (Integer i) = constRef (constInteger i)
 > literal (Float f) = constRef (constFloat f)
 
 > constDefs :: FM Name CExpr -> [Bind] -> [CStmt]
@@ -853,7 +862,10 @@ split into minimal binding groups.
 >         _ -> [localVar v (Just alloc),incrAlloc (nodeSize n)]
 
 > initNode :: FM Name CExpr -> Bind -> [CStmt]
-> initNode _ (Bind v (Lit _)) = []
+> initNode _ (Bind v (Lit l)) =
+>   case l of
+>     Integer i -> [initInteger v i]
+>     _ -> []
 > initNode consts (Bind v (Constr c vs))
 >   | isConstant consts v = []
 >   | otherwise = initConstr v c vs
@@ -866,6 +878,14 @@ split into minimal binding groups.
 > initNode _ (Bind v (Lazy f vs)) = initLazy v f vs
 > initNode _ (Bind v Free) = initFree v
 > initNode _ (Bind v (Var _)) = []
+
+> initInteger :: Name -> Integer -> CStmt
+> initInteger v i =
+>   CIf (CRel (field v "info") "==" CNull)
+>       [setField v "info" (addr "bigint_info"),
+>        CProcCall "mpz_init_set_str"
+>                  [field v "bi.mpz",CString (show i),CInt 10]]
+>       []
 
 > initConstr :: Name -> Name -> [Name] -> [CStmt]
 > initConstr v c vs =
@@ -1427,6 +1447,7 @@ used for constant constructors and functions, respectively.
 > litInstFunc :: Literal -> String
 > litInstFunc (Char c) = constChar c ++ "_unify"
 > litInstFunc (Int i) = constInt i ++ "_unify"
+> litInstFunc (Integer i) = constInteger i ++ "_unify"
 > litInstFunc (Float f) = constFloat f ++ "_unify"
 
 > nodeInfo, pappInfoTable, lazyInfoTable :: Name -> String
@@ -1504,6 +1525,11 @@ special case for \texttt{@}, which is used instead of \texttt{@}$_1$.
 
 > constInt :: Integer -> String
 > constInt i = "int_" ++ mangle (show i)
+>   where mangle ('-':cs) = 'M':cs
+>         mangle cs = cs
+
+> constInteger :: Integer -> String
+> constInteger i = "integer_" ++ mangle (show i)
 >   where mangle ('-':cs) = 'M':cs
 >         mangle cs = cs
 

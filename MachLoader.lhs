@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: MachLoader.lhs 1866 2006-03-02 17:34:02Z wlux $
+% $Id: MachLoader.lhs 2621 2008-02-08 14:42:02Z wlux $
 %
-% Copyright (c) 1998-2005, Wolfgang Lux
+% Copyright (c) 1998-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{MachLoader.lhs}
@@ -107,6 +107,7 @@ in order to allow mutual recursion between functions.
 >         translExpr (Var v) = initIndir (show v)
 >         translLiteral (Char c) = initChar c
 >         translLiteral (Int i) = initInt i
+>         translLiteral (Integer i) = initInt i
 >         translLiteral (Float f) = initFloat f
 >         translPattern (LitCase _) = bindLiteral
 >         translPattern (ConstrCase _ vs) = bindData (map show vs)
@@ -240,6 +241,7 @@ names to node tags and function names to function triples.
 > litTag :: Literal -> NodeTag
 > litTag (Char c) = CharTag c
 > litTag (Int i) = IntTag i
+> litTag (Integer i) = IntTag i
 > litTag (Float f) = FloatTag f
 
 > initFunEnv :: FunEnv

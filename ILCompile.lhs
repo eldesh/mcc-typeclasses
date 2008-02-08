@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 2588 2007-12-20 00:07:10Z wlux $
+% $Id: ILCompile.lhs 2621 2008-02-08 14:42:02Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ILCompile.lhs}
@@ -309,6 +309,7 @@ normal form, is passed as an additional argument to
 > literal :: Literal -> Cam.Literal
 > literal (Char c) = Cam.Char c
 > literal (Int i) = Cam.Int i
+> literal (Integer i) = Cam.Integer i
 > literal (Float f) = Cam.Float f
 
 > noteHnf :: Expression -> [Ident] -> [Ident]

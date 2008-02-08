@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2586 2007-12-19 23:55:03Z wlux $
+% $Id: Desugar.lhs 2621 2008-02-08 14:42:02Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Desugar.lhs}
@@ -440,9 +440,9 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 > desugarLiteral _ _ ty (Int i) = return (fixLiteral ty i)
 >   where fixLiteral (TypeConstrained tys _) = fixLiteral (head tys)
 >         fixLiteral ty'
->           | ty' == intType = Literal ty . Int
+>           | ty' `elem` [intType,integerType] = Literal ty . Int
 >           | ty' == floatType = Literal ty . Float . fromIntegral
->           | otherwise = Apply (prelFromInt ty) . Literal intType . Int
+>           | otherwise = Apply (prelFromInteger ty) . Literal integerType . Int
 > desugarLiteral _ _ ty (Float f) = return (fixLiteral ty (Float f))
 >   where fixLiteral (TypeConstrained tys _) = fixLiteral (head tys)
 >         fixLiteral ty'
@@ -842,7 +842,7 @@ Prelude entities
 
 > prelUndefined a = preludeFun [] a "undefined"
 > prelUnif a = preludeFun [a,a] successType "=:="
-> prelFromInt a = preludeFun [intType] a "fromInt"
+> prelFromInteger a = preludeFun [integerType] a "fromInteger"
 > prelFromFloat a = preludeFun [floatType] a "fromFloat"
 > prelBind ma a mb = preludeFun [ma,a `TypeArrow` mb] mb ">>="
 > prelBind_ ma mb = preludeFun [ma,mb] mb ">>"

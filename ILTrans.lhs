@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2588 2007-12-20 00:07:10Z wlux $
+% $Id: ILTrans.lhs 2621 2008-02-08 14:42:02Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ILTrans.lhs}
@@ -26,7 +26,9 @@ module.
 > import List
 > import Maybe
 > import PredefIdent
+> import PredefTypes
 > import Set
+> import TopEnv
 > import Types
 > import TypeTrans
 > import Utils
@@ -43,11 +45,11 @@ include any alias types. On the other hand, we introduce new type
 synonyms in place of newtype declarations (see Sect.~\ref{sec:IL}).
 \begin{verbatim}
 
-> ilTrans :: ValueEnv -> Module a -> IL.Module
+> ilTrans :: ValueEnv -> Module Type -> IL.Module
 > ilTrans tyEnv (Module m _ _ ds) = IL.Module m (imports m ds') ds'
 >   where ds' = concatMap (translTopDecl m tyEnv) ds
 
-> translTopDecl :: ModuleIdent -> ValueEnv -> TopDecl a -> [IL.Decl]
+> translTopDecl :: ModuleIdent -> ValueEnv -> TopDecl Type -> [IL.Decl]
 > translTopDecl m tyEnv (DataDecl _ _ tc tvs cs _) =
 >   [translData m tyEnv tc tvs cs]
 > translTopDecl m tyEnv (NewtypeDecl _ _ tc tvs nc _) =
@@ -58,7 +60,7 @@ synonyms in place of newtype declarations (see Sect.~\ref{sec:IL}).
 > translTopDecl _ _ (DefaultDecl _ _) = []
 > translTopDecl m tyEnv (BlockDecl d) = translDecl m tyEnv d
 
-> translDecl :: ModuleIdent -> ValueEnv -> Decl a -> [IL.Decl]
+> translDecl :: ModuleIdent -> ValueEnv -> Decl Type -> [IL.Decl]
 > translDecl m tyEnv (FunctionDecl _ f eqs) = [translFunction m tyEnv f eqs]
 > translDecl m tyEnv (ForeignDecl _ cc _ ie f _) =
 >   [translForeign m tyEnv f cc (fromJust ie)]
@@ -178,7 +180,8 @@ computed for its first argument.
 
 > type RenameEnv = Env Ident Ident
 
-> translFunction :: ModuleIdent -> ValueEnv -> Ident -> [Equation a] -> IL.Decl
+> translFunction :: ModuleIdent -> ValueEnv -> Ident -> [Equation Type]
+>                -> IL.Decl
 > translFunction m tyEnv f eqs =
 >   IL.FunctionDecl (qualifyWith m f) vs (translType ty)
 >                   (match IL.Flex vs (map (translEquation tyEnv vs vs'') eqs))
@@ -192,13 +195,13 @@ computed for its first argument.
 >   v : map (translArg (bindRenameEnv v t emptyEnv)) ts
 >   where translArg env (VariablePattern _ v) = fromJust (lookupEnv v env)
 
-> translEquation :: ValueEnv -> [Ident] -> [Ident] -> Equation a
+> translEquation :: ValueEnv -> [Ident] -> [Ident] -> Equation Type
 >                -> ([NestedTerm],IL.Expression)
 > translEquation tyEnv vs vs' (Equation _ (FunLhs _ ts) rhs) =
 >   (zipWith translTerm vs ts,
 >    translRhs tyEnv vs' (foldr2 bindRenameEnv emptyEnv vs ts) rhs)
 
-> translRhs :: ValueEnv -> [Ident] -> RenameEnv -> Rhs a -> IL.Expression
+> translRhs :: ValueEnv -> [Ident] -> RenameEnv -> Rhs Type -> IL.Expression
 > translRhs tyEnv vs env (SimpleRhs p e _) =
 >   IL.SrcLoc (show p) (translExpr tyEnv vs env e)
 
@@ -237,15 +240,18 @@ position in the remaining arguments. If one is found,
 > pattern (NestedTerm t _) = t
 > arguments (NestedTerm _ ts) = ts
 
-> translLiteral :: Literal -> IL.Literal
-> translLiteral (Char c) = IL.Char c
-> translLiteral (Int i) = IL.Int i
-> translLiteral (Float f) = IL.Float f
-> translLiteral _ = internalError "translLiteral"
+> translLiteral :: Type -> Literal -> IL.Literal
+> translLiteral _ (Char c) = IL.Char c
+> translLiteral ty (Int i)
+>   | ty == intType = IL.Int i
+>   | ty == integerType = IL.Integer i
+>   | otherwise = internalError ("translLiteral (Int): " ++ show ty)
+> translLiteral _ (Float f) = IL.Float f
+> translLiteral _ _ = internalError "translLiteral"
 
-> translTerm :: Ident -> ConstrTerm a -> NestedTerm
-> translTerm _ (LiteralPattern _ l) =
->   NestedTerm (IL.LiteralPattern (translLiteral l)) []
+> translTerm :: Ident -> ConstrTerm Type -> NestedTerm
+> translTerm _ (LiteralPattern ty l) =
+>   NestedTerm (IL.LiteralPattern (translLiteral ty l)) []
 > translTerm v (VariablePattern _ _) = NestedTerm (IL.VariablePattern v) []
 > translTerm v (ConstructorPattern _ c ts) =
 >   NestedTerm (IL.ConstructorPattern c (zipWith const vs ts))
@@ -339,9 +345,9 @@ desugaring, but $\eta$-expansion and optimization may introduce
 further possibilities to apply this transformation.
 \begin{verbatim}
 
-> translExpr :: ValueEnv -> [Ident] -> RenameEnv -> Expression a
+> translExpr :: ValueEnv -> [Ident] -> RenameEnv -> Expression Type
 >            -> IL.Expression
-> translExpr _ _ _ (Literal _ l) = IL.Literal (translLiteral l)
+> translExpr _ _ _ (Literal ty l) = IL.Literal (translLiteral ty l)
 > translExpr tyEnv _ env (Variable _ v) =
 >   case lookupVar v env of
 >     Just v' -> IL.Variable v'
@@ -377,7 +383,7 @@ further possibilities to apply this transformation.
 >           | otherwise = IL.Case IL.Rigid e alts
 > translExpr _ _ _ _ = internalError "translExpr"
 
-> translAlt :: ValueEnv -> [Ident] -> RenameEnv -> Ident -> Alt a -> IL.Alt
+> translAlt :: ValueEnv -> [Ident] -> RenameEnv -> Ident -> Alt Type -> IL.Alt
 > translAlt tyEnv vs env v (Alt _ t rhs) =
 >   IL.Alt (pattern (translTerm v t))
 >          (translRhs tyEnv vs (bindRenameEnv v t env) rhs)

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: IL.lhs 2588 2007-12-20 00:07:10Z wlux $
+% $Id: IL.lhs 2621 2008-02-08 14:42:02Z wlux $
 %
-% Copyright (c) 1999-2007 Wolfgang Lux
+% Copyright (c) 1999-2008 Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{IL.lhs}
@@ -60,7 +60,12 @@ distinguishes (local) variables and (global) functions in expressions.
 >   | TypeArrow Type Type
 >   deriving (Eq,Show)
 
-> data Literal = Char Char | Int Integer | Float Double deriving (Eq,Show)
+> data Literal =
+>     Char Char
+>   | Int Integer
+>   | Integer Integer
+>   | Float Double
+>   deriving (Eq,Show)
 
 > data ConstrTerm =
 >   -- literal patterns

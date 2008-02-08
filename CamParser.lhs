@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CamParser.lhs 2452 2007-08-23 22:51:27Z wlux $
+% $Id: CamParser.lhs 2621 2008-02-08 14:42:02Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CamParser.lhs}
@@ -81,6 +81,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 >   | KW_function
 >   | KW_import
 >   | KW_int
+>   | KW_integer
 >   | KW_lazy
 >   | KW_let
 >   | KW_lock
@@ -137,6 +138,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 >   showsPrec _ KW_function = showKeyword "function"
 >   showsPrec _ KW_import = showKeyword "import"
 >   showsPrec _ KW_int = showKeyword "int"
+>   showsPrec _ KW_integer = showKeyword "integer"
 >   showsPrec _ KW_lazy = showKeyword "lazy"
 >   showsPrec _ KW_let = showKeyword "let"
 >   showsPrec _ KW_lock = showKeyword "lock"
@@ -174,6 +176,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 >     ("function", KW_function),
 >     ("import",   KW_import),
 >     ("int",      KW_int),
+>     ("integer",  KW_integer),
 >     ("lazy",     KW_lazy),
 >     ("let",      KW_let),
 >     ("lock",     KW_lock),
@@ -367,6 +370,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 > literal :: Parser Token Literal a
 > literal = Char . toEnum . fromInteger <$-> keyword KW_char <*> checkInt
 >       <|> Int <$-> keyword KW_int <*> checkInt
+>       <|> Integer <$-> keyword KW_integer <*> checkInt
 >       <|> Float <$-> keyword KW_float <*> checkFloat
 
 > cCall :: Parser Token CCall a

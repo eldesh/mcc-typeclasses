@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CamPP.lhs 2452 2007-08-23 22:51:27Z wlux $
+% $Id: CamPP.lhs 2621 2008-02-08 14:42:02Z wlux $
 %
-% Copyright (c) 2002-2007, Wolfgang Lux
+% Copyright (c) 2002-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \subsection{Pretty-printing Abstract Machine Code}
@@ -73,6 +73,7 @@
 > ppLiteral :: Literal -> Doc
 > ppLiteral (Char c) = ppKW "char" <+> int (ord c)
 > ppLiteral (Int i) = ppKW "int" <+> integer i
+> ppLiteral (Integer i) = ppKW "integer" <+> integer i
 > ppLiteral (Float f) = ppKW "float" <+> double f
 
 > ppExpr :: Expr -> Doc

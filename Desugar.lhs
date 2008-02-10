@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2621 2008-02-08 14:42:02Z wlux $
+% $Id: Desugar.lhs 2623 2008-02-10 17:23:09Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -334,7 +334,7 @@ with a local declaration for $v$.
 >   return (ds,LiteralPattern ty (fixLiteral ty i))
 >   where fixLiteral (TypeConstrained tys _) = fixLiteral (head tys)
 >         fixLiteral ty
->           | ty == intType = Int
+>           | ty `elem` [intType,integerType] = Int
 >           | ty == floatType = Float . fromIntegral
 >           | otherwise = internalError "desugarLiteralTerm"
 > desugarLiteralTerm _ _ ds ty (Float f) =

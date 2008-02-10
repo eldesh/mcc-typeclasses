@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2621 2008-02-08 14:42:02Z wlux $
+% $Id: ILTrans.lhs 2623 2008-02-10 17:23:09Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -242,10 +242,12 @@ position in the remaining arguments. If one is found,
 
 > translLiteral :: Type -> Literal -> IL.Literal
 > translLiteral _ (Char c) = IL.Char c
-> translLiteral ty (Int i)
->   | ty == intType = IL.Int i
->   | ty == integerType = IL.Integer i
->   | otherwise = internalError ("translLiteral (Int): " ++ show ty)
+> translLiteral ty (Int i) = translInt ty i
+>   where translInt (TypeConstrained tys _) = translInt (head tys)
+>         translInt ty
+>           | ty == intType = IL.Int
+>           | ty == integerType = IL.Integer
+>           | otherwise = internalError ("translLiteral (Int): " ++ show ty)
 > translLiteral _ (Float f) = IL.Float f
 > translLiteral _ _ = internalError "translLiteral"
 

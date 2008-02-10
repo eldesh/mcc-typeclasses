@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2622 2008-02-08 16:02:03Z wlux $
+% $Id: CGen.lhs 2623 2008-02-10 17:23:09Z wlux $
 %
 % Copyright (c) 1998-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -104,7 +104,8 @@ function because there is not much chance for them to be shared.
 >   genFunctions ds fs sts ns
 >   where (_,ds,fs) = splitCam cam
 >         (sts0,sts) = foldr linStmts ([],[]) (map thd3 fs)
->         ns = nodes sts ++ letNodes sts0 ++ ccallNodes sts ++ flexNodes sts
+>         ns = nodes sts ++ letNodes sts0 ++ ccallNodes sts ++
+>              rigidNodes sts ++ flexNodes sts
 
 > linStmts :: Stmt -> ([Stmt0],[Stmt]) -> ([Stmt0],[Stmt])
 > linStmts st sts = addStmt st (linStmts' st sts)
@@ -137,6 +138,12 @@ function because there is not much chance for them to be shared.
 >   | TypeBool `elem` [ty | CCall _ (Just ty) _ <- sts] =
 >       [Constr prelTrue [],Constr prelFalse []]
 >   | otherwise = []
+
+> rigidNodes :: [Stmt] -> [Expr]
+> rigidNodes sts =
+>   [Lit (Integer i) | Switch Rigid _ cs <- sts,
+>                      Case (LitCase (Integer i)) _ <- cs,
+>                      not (fits32bits i)]
 
 > flexNodes :: [Stmt] -> [Expr]
 > flexNodes sts = [node t | Switch Flex _ cs <- sts, Case t _ <- cs]
@@ -893,8 +900,6 @@ split into minimal binding groups.
 >         initMpzInt v i = CProcCall "mpz_init_set_si" [v,CInt i]
 >         initMpzString v i =
 >           CProcCall "mpz_init_set_str" [v,CString (show i),CInt 10]
->         fits32bits i = -0x80000000 <= i && i <= 0x7fffffff
->         fits64bits i = -0x8000000000000000 <= i && i <= 0x7fffffffffffffff
 
 > initConstr :: Name -> Name -> [Name] -> [CStmt]
 > initConstr v c vs =
@@ -1104,15 +1109,18 @@ literals when set to a non-zero value.
 >   kindSwitch v [updVar vs0 v] taggedSwitch otherCases :
 >   head (dflts ++ [failAndBacktrack (undecorate (demangle f) ++ ": no match")])
 >   where (lits,constrs,vars,dflts) = foldr partition ([],[],[],[]) cases
->         (chars,ints,floats) = foldr litPartition ([],[],[]) lits
+>         (chars,ints,integers,floats) = foldr litPartition ([],[],[],[]) lits
 >         taggedSwitch switch
 >           | tagged && null chars && null ints =
 >               CIf (isTaggedPtr v) [switch] []
 >           | otherwise =
 >               taggedCharSwitch v chars (taggedIntSwitch v ints switch)
 >         otherCases =
->           map varCase vars ++ [charCase | not (null chars)] ++
->           [intCase | not (null ints)] ++ [floatCase | not (null floats)] ++
+>           map varCase vars ++
+>           [charCase | not (null chars)] ++
+>           [intCase | not (null ints)] ++
+>           [integerCase | not (null integers)] ++
+>           [floatCase | not (null floats)] ++
 >           [constrCase | not (null constrs)]
 >         varCase = cCase "LVAR_KIND"
 >         charCase =
@@ -1123,6 +1131,9 @@ literals when set to a non-zero value.
 >                               [CString "impossible: kind(%p) == CHAR_KIND\n",
 >                                var v]]]
 >         intCase = cCase "INT_KIND" [intSwitch (field v "i.i") ints,CBreak]
+>         integerCase =
+>           cCase "BIGINT_KIND"
+>                 (integerSwitch (field v "bi.mpz") integers ++ [CBreak])
 >         floatCase = cCase "FLOAT_KIND" (floatSwitch v floats ++ [CBreak])
 >         constrCase = cCase "CAPP_KIND" [tagSwitch v constrs,CBreak]
 >         partition (t,stmts) ~(lits,constrs,vars,dflts) =
@@ -1131,12 +1142,14 @@ literals when set to a non-zero value.
 >              CPSConstrCase c _ -> (lits,(c,stmts) : constrs,vars,dflts)
 >              CPSFreeCase -> (lits,constrs,stmts : vars,dflts)
 >              CPSDefaultCase -> (lits,constrs,vars,stmts : dflts)
->         litPartition (Char c,stmts) ~(chars,ints,floats) =
->           ((c,stmts):chars,ints,floats)
->         litPartition (Int i,stmts) ~(chars,ints,floats) =
->           (chars,(i,stmts):ints,floats)
->         litPartition (Float f,stmts) ~(chars,ints,floats) =
->           (chars,ints,(f,stmts):floats)
+>         litPartition (Char c,stmts) ~(chars,ints,integers,floats) =
+>           ((c,stmts):chars,ints,integers,floats)
+>         litPartition (Int i,stmts) ~(chars,ints,integers,floats) =
+>           (chars,(i,stmts):ints,integers,floats)
+>         litPartition (Integer i,stmts) ~(chars,ints,integers,floats) =
+>           (chars,ints,(i,stmts):integers,floats)
+>         litPartition (Float f,stmts) ~(chars,ints,integers,floats) =
+>           (chars,ints,integers,(f,stmts):floats)
 
 > taggedCharSwitch :: Name -> [(Char,[CStmt])] -> CStmt -> CStmt
 > taggedCharSwitch v chars stmt
@@ -1173,6 +1186,22 @@ literals when set to a non-zero value.
 
 > intSwitch :: CExpr -> [(Integer,[CStmt])] -> CStmt
 > intSwitch e cases = CSwitch e [CCase (CCaseInt i) stmts | (i,stmts) <- cases]
+
+> integerSwitch :: CExpr -> [(Integer,[CStmt])] -> [CStmt]
+> integerSwitch e cases = localVar k Nothing : foldr (match e) [] cases
+>   where k = Name "k"
+>         match e (i,stmts) rest
+>           | fits32bits i =
+>               [CIf (CRel (CFunCall "mpz_cmp_si" [e,CInt i]) "==" (CInt 0))
+>                    stmts
+>                    rest]
+>           | otherwise =
+>               [setVar k (constRef (constInteger i)),
+>                initInteger k i,
+>                CIf (CRel (CFunCall "mpz_cmp" [e,field k "bi.mpz"]) "=="
+>                          (CInt 0))
+>                    stmts
+>                    rest]
 
 > floatSwitch :: Name -> [(Double,[CStmt])] -> [CStmt]
 > floatSwitch v cases =
@@ -1552,6 +1581,16 @@ special case for \texttt{@}, which is used instead of \texttt{@}$_1$.
 > constNode, constFunc :: Name -> String
 > constNode c = cName c ++ "_node"
 > constFunc f = cName f ++ "_function"
+
+\end{verbatim}
+The functions \texttt{fits32bits} and \texttt{fits64bits} check
+whether a signed integer literal fits into 32 and 64 bits,
+respectively.
+\begin{verbatim}
+
+> fits32bits, fits64bits :: Integer -> Bool
+> fits32bits i = -0x80000000 <= i && i <= 0x7fffffff
+> fits64bits i = -0x8000000000000000 <= i && i <= 0x7fffffffffffffff
 
 \end{verbatim}
 Here are some convenience functions, which simplify the construction

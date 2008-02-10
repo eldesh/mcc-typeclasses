@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PredefTypes.lhs 2618 2008-02-07 15:19:50Z wlux $
+% $Id: PredefTypes.lhs 2623 2008-02-10 17:23:09Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -71,7 +71,7 @@ lists of types admissible for ambiguous types with \texttt{Num} and
 \begin{verbatim}
 
 > numTypes, fracTypes :: [Type]
-> numTypes = [intType,floatType]
-> fracTypes = tail numTypes
+> numTypes = [intType,integerType,floatType]
+> fracTypes = drop 2 numTypes
 
 \end{verbatim}

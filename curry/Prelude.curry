@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2617 2008-02-07 12:06:39Z wlux $
+-- $Id: Prelude.curry 2626 2008-02-16 21:19:15Z wlux $
 --
 -- Copyright (c) 1999-2008, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -958,13 +958,29 @@ instance Integral Int where
 
 data Integer
 instance Eq Integer where
-  n1 == n2 = case compare n1 n2 of { EQ -> True; _ -> False }
-  n1 /= n2 = case compare n1 n2 of { EQ -> False; _ -> True }
+  (==) = primEqInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primEqInteger :: Integer -> Integer -> Bool
+  (/=) = primNeqInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primNeqInteger :: Integer -> Integer -> Bool
 
 instance Ord Integer where
   compare = primCompareInteger
     where foreign import rawcall "integer.h"
     	  	  	 primCompareInteger :: Integer -> Integer -> Ordering
+  (<) = primLtInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primLtInteger :: Integer -> Integer -> Bool
+  (<=) = primLeqInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primLeqInteger :: Integer -> Integer -> Bool
+  (>=) = primGeqInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primGeqInteger :: Integer -> Integer -> Bool
+  (>) = primGtInteger
+    where foreign import rawcall "integer.h"
+    	  	  	 primGtInteger :: Integer -> Integer -> Bool
 
 instance Enum Integer where
   succ = primSuccInteger

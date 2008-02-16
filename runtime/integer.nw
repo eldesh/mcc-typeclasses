@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: integer.nw 2625 2008-02-16 18:59:35Z wlux $
+% $Id: integer.nw 2626 2008-02-16 21:19:15Z wlux $
 %
 % Copyright (c) 2007-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -29,6 +29,9 @@ integers.
 #include "heap.h"
 #include "eval.h"
 #include "integer.h"
+
+DECLARE_CONST(__Prelude__False);
+DECLARE_CONST(__Prelude__True);
 
 DECLARE_CONST(__Prelude__LT);
 DECLARE_CONST(__Prelude__EQ);
@@ -203,16 +206,153 @@ primProperFraction(Node *x)
 }
 
 @ 
-We provide only a single primitive for comparing integer numbers, the
-generic \texttt{compare} function. All other operations, including
-tests for (in)equality are derived from this primitive by matching the
-result of \texttt{compare}.
+In principle all comparison operators could be derived trivially from
+the \texttt{compare} primitive. Nevertheless, we provide primitives
+for all comparisons because this yields more efficient code.
 
 <<integer.h>>=
+extern Node *primEqInteger(Node *, Node *);
+extern Node *primNeqInteger(Node *, Node *);
+extern Node *primLtInteger(Node *, Node *);
+extern Node *primLeqInteger(Node *, Node *);
+extern Node *primGeqInteger(Node *, Node *);
+extern Node *primGtInteger(Node *, Node *);
 extern Node *primCompareInteger(Node *, Node *);
 
 @ 
 <<integer.c>>=
+Node *
+primEqInteger(Node *x, Node *y)
+{
+    int cmp;
+
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	    cmp = x > y ? 1 : x < y ? -1 : 0;
+	else
+	    cmp = -mpz_cmp_si(y->bi.mpz, untag_int(x));
+    }
+    else if ( is_tagged_int(y) )
+	cmp = mpz_cmp_si(x->bi.mpz, untag_int(y));
+    else
+#endif
+	cmp = mpz_cmp(x->bi.mpz, y->bi.mpz);
+
+    return cmp == 0 ? CONST(__Prelude__True) : CONST(__Prelude__False);
+}
+
+Node *
+primNeqInteger(Node *x, Node *y)
+{
+    int cmp;
+
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	    cmp = x > y ? 1 : x < y ? -1 : 0;
+	else
+	    cmp = -mpz_cmp_si(y->bi.mpz, untag_int(x));
+    }
+    else if ( is_tagged_int(y) )
+	cmp = mpz_cmp_si(x->bi.mpz, untag_int(y));
+    else
+#endif
+	cmp = mpz_cmp(x->bi.mpz, y->bi.mpz);
+
+    return cmp != 0 ? CONST(__Prelude__True) : CONST(__Prelude__False);
+}
+
+Node *
+primLtInteger(Node *x, Node *y)
+{
+    int cmp;
+
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	    cmp = x > y ? 1 : x < y ? -1 : 0;
+	else
+	    cmp = -mpz_cmp_si(y->bi.mpz, untag_int(x));
+    }
+    else if ( is_tagged_int(y) )
+	cmp = mpz_cmp_si(x->bi.mpz, untag_int(y));
+    else
+#endif
+	cmp = mpz_cmp(x->bi.mpz, y->bi.mpz);
+
+    return cmp < 0 ? CONST(__Prelude__True) : CONST(__Prelude__False);
+}
+
+Node *
+primLeqInteger(Node *x, Node *y)
+{
+    int cmp;
+
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	    cmp = x > y ? 1 : x < y ? -1 : 0;
+	else
+	    cmp = -mpz_cmp_si(y->bi.mpz, untag_int(x));
+    }
+    else if ( is_tagged_int(y) )
+	cmp = mpz_cmp_si(x->bi.mpz, untag_int(y));
+    else
+#endif
+	cmp = mpz_cmp(x->bi.mpz, y->bi.mpz);
+
+    return cmp <= 0 ? CONST(__Prelude__True) : CONST(__Prelude__False);
+}
+
+Node *
+primGeqInteger(Node *x, Node *y)
+{
+    int cmp;
+
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	    cmp = x > y ? 1 : x < y ? -1 : 0;
+	else
+	    cmp = -mpz_cmp_si(y->bi.mpz, untag_int(x));
+    }
+    else if ( is_tagged_int(y) )
+	cmp = mpz_cmp_si(x->bi.mpz, untag_int(y));
+    else
+#endif
+	cmp = mpz_cmp(x->bi.mpz, y->bi.mpz);
+
+    return cmp >= 0 ? CONST(__Prelude__True) : CONST(__Prelude__False);
+}
+
+Node *
+primGtInteger(Node *x, Node *y)
+{
+    int cmp;
+
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	    cmp = x > y ? 1 : x < y ? -1 : 0;
+	else
+	    cmp = -mpz_cmp_si(y->bi.mpz, untag_int(x));
+    }
+    else if ( is_tagged_int(y) )
+	cmp = mpz_cmp_si(x->bi.mpz, untag_int(y));
+    else
+#endif
+	cmp = mpz_cmp(x->bi.mpz, y->bi.mpz);
+
+    return cmp > 0 ? CONST(__Prelude__True) : CONST(__Prelude__False);
+}
+
 Node *
 primCompareInteger(Node *x, Node *y)
 {

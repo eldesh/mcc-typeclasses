@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CPS.lhs 2623 2008-02-10 17:23:09Z wlux $
+% $Id: CPS.lhs 2624 2008-02-16 17:53:31Z wlux $
 %
 % Copyright (c) 2003-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -221,7 +221,7 @@ when transforming a CPS graph into a linear sequence of CPS functions.
 > taggedSwitch = foldr tagged True
 >   where tagged (LitCase (Char _)) _ = True
 >         tagged (LitCase (Int _)) _ = True
->         tagged (LitCase (Integer _)) _ = False
+>         tagged (LitCase (Integer _)) _ = True
 >         tagged (LitCase (Float _)) _ = False
 >         tagged (ConstrCase _ _) _ = False
 >         tagged DefaultCase t = t

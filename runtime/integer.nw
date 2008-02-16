@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: integer.nw 2617 2008-02-07 12:06:39Z wlux $
+% $Id: integer.nw 2624 2008-02-16 17:53:31Z wlux $
 %
 % Copyright (c) 2007-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -9,6 +9,11 @@ This file contains the implementation of the arithmetic operations of
 the multi-precision \texttt{Integer} type. Our implementation is based
 on the Gnu MP library\footnote{\url{http://www.swox.com/gmp/}}. All
 functions employ the \texttt{rawcall} calling convention.
+
+Note that ``small'' numbers are represented as tagged integers. The
+functions below always return tagged integers when possible but they
+do not rely on ``small'' arguments being represented as tagged
+integers.
 
 <<integer.c>>=
 #include "config.h"
@@ -20,6 +25,7 @@ functions employ the \texttt{rawcall} calling convention.
 #include "debug.h"
 #include "run.h"
 #include "regs.h"
+#include "prims.h"
 #include "heap.h"
 #include "eval.h"
 #include "integer.h"
@@ -47,17 +53,23 @@ extern Node *primIntegerToFloat(Node *);
 Node *
 primToInteger(Node *x)
 {
-    long l;
     Node *z;
 
-    l = long_val(x);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+	z = x;
+    else
+#endif
+    {
+	long l = x->i.i;
 
-    CHECK_HEAP(0, bigint_node_size);
-    z	     = (Node *)regs.hp;
-    z->info  = &bigint_info;
-    mpz_init_set_si(z->bi.mpz, l);
-    regs.hp += bigint_node_size;
-    register_final(z);
+	CHECK_HEAP(0, bigint_node_size);
+	z	 = (Node *)regs.hp;
+	z->info  = &bigint_info;
+	mpz_init_set_si(z->bi.mpz, l);
+	regs.hp += bigint_node_size;
+	register_final(z);
+    }
 
     return z;
 }
@@ -65,22 +77,28 @@ primToInteger(Node *x)
 Node *
 primFromInteger(Node *x)
 {
-    long l;
     Node *i;
 
-    l = mpz_get_si(x->bi.mpz);
-
 #if !NO_POINTER_TAGS
-    if ( !is_large_int(l) )
-	i = tag_int(l);
+    if ( is_tagged_int(x) )
+	i = x;
     else
 #endif
     {
-	CHECK_HEAP(0, int_node_size);
-	i	 = (Node *)regs.hp;
-	i->info	 = &int_info;
-	i->i.i	 = l;
-	regs.hp	+= int_node_size;
+	long l = mpz_get_si(x->bi.mpz);
+
+#if !NO_POINTER_TAGS
+	if ( !is_large_int(l) )
+	    i = tag_int(l);
+	else
+#endif
+	{
+	    CHECK_HEAP(0, int_node_size);
+	    i	     = (Node *)regs.hp;
+	    i->info  = &int_info;
+	    i->i.i   = l;
+	    regs.hp += int_node_size;
+	}
     }
 
     return i;
@@ -92,7 +110,12 @@ primIntegerToFloat(Node *x)
     double d;
     Node   *f;
 
-    d = mpz_get_d(x->bi.mpz);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+	d = (double)untag_int(x);
+    else
+#endif
+	d = mpz_get_d(x->bi.mpz);
 
     CHECK_HEAP(0, float_node_size);
     f	     = (Node *)regs.hp;
@@ -122,12 +145,22 @@ primProperFraction(Node *x)
     get_double_val(d, x);
     frac = modf(d, &d);
 
-    CHECK_HEAP(0, pair_node_size + bigint_node_size + float_node_size);
-    i	     = (Node *)regs.hp;
-    i->info  = &bigint_info;
-    mpz_init_set_d(i->bi.mpz, d);
-    regs.hp += bigint_node_size;
-    register_final(i);
+#if !NO_POINTER_TAGS
+    if ( !is_large_int(d) )
+    {
+	CHECK_HEAP(0, pair_node_size + float_node_size);
+	i = tag_int((long)d);
+    }
+    else
+#endif
+    {
+	CHECK_HEAP(0, pair_node_size + bigint_node_size + float_node_size);
+	i	 = (Node *)regs.hp;
+	i->info  = &bigint_info;
+	mpz_init_set_d(i->bi.mpz, d);
+	regs.hp += bigint_node_size;
+	register_final(i);
+    }
 
     f	     = (Node *)regs.hp;
     f->info  = &float_info;
@@ -157,9 +190,25 @@ extern Node *primCompareInteger(Node *, Node *);
 Node *
 primCompareInteger(Node *x, Node *y)
 {
-    int cmp = mpz_cmp(x->bi.mpz, y->bi.mpz);
-    return cmp == 0 ? CONST(__Prelude__EQ)
-		    : cmp > 0 ? CONST(__Prelude__GT) : CONST(__Prelude__LT);
+    int cmp;
+
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	    cmp = x > y ? 1 : x < y ? -1 : 0;
+	else
+	    cmp = -mpz_cmp_si(y->bi.mpz, untag_int(x));
+    }
+    else if ( is_tagged_int(y) )
+	cmp = mpz_cmp_si(x->bi.mpz, untag_int(y));
+    else
+#endif
+	cmp = mpz_cmp(x->bi.mpz, y->bi.mpz);
+
+    return cmp > 0 ? CONST(__Prelude__GT) :
+	   cmp < 0 ? CONST(__Prelude__LT) :
+	   CONST(__Prelude__EQ);
 }
 
 @ 
@@ -178,18 +227,31 @@ Node *
 primSuccInteger(Node *x)
 {
     Node *z;
+    mpz_t succ;
 
-    BEGIN_LOCAL_ROOTS1(x)
-    CHECK_HEAP(0, bigint_node_size);
-    END_LOCAL_ROOTS
+    mpz_init(succ);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+	mpz_set_si(succ, untag_int(x) + 1);
+    else
+#endif
+	mpz_add_ui(succ, x->bi.mpz, 1);
 
-    z	     = (Node *)regs.hp;
-    z->info  = &bigint_info;
-    mpz_init(z->bi.mpz);
-    regs.hp += bigint_node_size;
-    register_final(z);
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(succ) )
+	z = tag_int(mpz_get_si(succ));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	z	 = (Node *)regs.hp;
+	z->info  = &bigint_info;
+	mpz_init_set(z->bi.mpz, succ);
+	regs.hp += bigint_node_size;
+	register_final(z);
+    }
 
-    mpz_add_ui(z->bi.mpz, x->bi.mpz, 1);
+    mpz_clear(succ);
     return z;
 }
 
@@ -197,18 +259,31 @@ Node *
 primPredInteger(Node *x)
 {
     Node *z;
+    mpz_t pred;
 
-    BEGIN_LOCAL_ROOTS1(x)
-    CHECK_HEAP(0, bigint_node_size);
-    END_LOCAL_ROOTS
+    mpz_init(pred);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+	mpz_set_si(pred, untag_int(x) - 1);
+    else
+#endif
+	mpz_sub_ui(pred, x->bi.mpz, 1);
 
-    z	     = (Node *)regs.hp;
-    z->info  = &bigint_info;
-    mpz_init(z->bi.mpz);
-    regs.hp += bigint_node_size;
-    register_final(z);
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(pred) )
+	z = tag_int(mpz_get_si(pred));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	z	 = (Node *)regs.hp;
+	z->info  = &bigint_info;
+	mpz_init_set(z->bi.mpz, pred);
+	regs.hp += bigint_node_size;
+	register_final(z);
+    }
 
-    mpz_sub_ui(z->bi.mpz, x->bi.mpz, 1);
+    mpz_clear(pred);
     return z;
 }
 
@@ -227,18 +302,44 @@ Node *
 primAddInteger(Node *x, Node *y)
 {
     Node *z;
+    mpz_t sum;
 
-    BEGIN_LOCAL_ROOTS2(x, y)
-    CHECK_HEAP(0, bigint_node_size);
-    END_LOCAL_ROOTS
+    mpz_init(sum);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	    mpz_set_si(sum, untag_int(x) + untag_int(y));
+	else
+	{
+	    mpz_set_si(sum, untag_int(x));
+	    mpz_add(sum, sum, y->bi.mpz);
+	}
+    }
+    else if ( is_tagged_int(y) )
+    {
+	mpz_set_si(sum, untag_int(y));
+	mpz_add(sum, x->bi.mpz, sum);
+    }
+    else
+#endif
+	mpz_add(sum, x->bi.mpz, y->bi.mpz);
 
-    z	     = (Node *)regs.hp;
-    z->info  = &bigint_info;
-    mpz_init(z->bi.mpz);
-    regs.hp += bigint_node_size;
-    register_final(z);
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(sum) )
+	z = tag_int(mpz_get_si(sum));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	z	 = (Node *)regs.hp;
+	z->info  = &bigint_info;
+	mpz_init_set(z->bi.mpz, sum);
+	regs.hp += bigint_node_size;
+	register_final(z);
+    }
 
-    mpz_add(z->bi.mpz, x->bi.mpz, y->bi.mpz);
+    mpz_clear(sum);
     return z;
 }
 
@@ -246,18 +347,44 @@ Node *
 primSubInteger(Node *x, Node *y)
 {
     Node *z;
+    mpz_t diff;
 
-    BEGIN_LOCAL_ROOTS2(x, y)
-    CHECK_HEAP(0, bigint_node_size);
-    END_LOCAL_ROOTS
+    mpz_init(diff);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	    mpz_set_si(diff, untag_int(x) - untag_int(y));
+	else
+	{
+	    mpz_set_si(diff, untag_int(x));
+	    mpz_sub(diff, diff, y->bi.mpz);
+	}
+    }
+    else if ( is_tagged_int(y) )
+    {
+	mpz_set_si(diff, untag_int(y));
+	mpz_sub(diff, x->bi.mpz, diff);
+    }
+    else
+#endif
+	mpz_sub(diff, x->bi.mpz, y->bi.mpz);
 
-    z	     = (Node *)regs.hp;
-    z->info  = &bigint_info;
-    mpz_init(z->bi.mpz);
-    regs.hp += bigint_node_size;
-    register_final(z);
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(diff) )
+	z = tag_int(mpz_get_si(diff));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	z	 = (Node *)regs.hp;
+	z->info  = &bigint_info;
+	mpz_init_set(z->bi.mpz, diff);
+	regs.hp += bigint_node_size;
+	register_final(z);
+    }
 
-    mpz_sub(z->bi.mpz, x->bi.mpz, y->bi.mpz);
+    mpz_clear(diff);
     return z;
 }
 
@@ -265,18 +392,41 @@ Node *
 primMulInteger(Node *x, Node *y)
 {
     Node *z;
+    mpz_t prod;
 
-    BEGIN_LOCAL_ROOTS2(x, y)
-    CHECK_HEAP(0, bigint_node_size);
-    END_LOCAL_ROOTS
+    mpz_init(prod);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	{
+	    mpz_set_si(prod, untag_int(x));
+	    mpz_mul_si(prod, prod, untag_int(y));
+	}
+	else
+	    mpz_mul_si(prod, y->bi.mpz, untag_int(x));
+    }
+    else if ( is_tagged_int(y) )
+	mpz_mul_si(prod, x->bi.mpz, untag_int(y));
+    else
+#endif
+	mpz_mul(prod, x->bi.mpz, y->bi.mpz);
 
-    z	     = (Node *)regs.hp;
-    z->info  = &bigint_info;
-    mpz_init(z->bi.mpz);
-    regs.hp += bigint_node_size;
-    register_final(z);
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(prod) )
+	z = tag_int(mpz_get_si(prod));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	z	 = (Node *)regs.hp;
+	z->info  = &bigint_info;
+	mpz_init_set(z->bi.mpz, prod);
+	regs.hp += bigint_node_size;
+	register_final(z);
+    }
 
-    mpz_mul(z->bi.mpz, x->bi.mpz, y->bi.mpz);
+    mpz_clear(prod);
     return z;
 }
 
@@ -297,18 +447,31 @@ Node *
 primNegateInteger(Node *x)
 {
     Node *z;
+    mpz_t neg;
 
-    BEGIN_LOCAL_ROOTS1(x)
-    CHECK_HEAP(0, bigint_node_size);
-    END_LOCAL_ROOTS
+    mpz_init(neg);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+	mpz_set_si(neg, -untag_int(x));
+    else
+#endif
+	mpz_neg(neg, x->bi.mpz);
 
-    z	     = (Node *)regs.hp;
-    z->info  = &bigint_info;
-    mpz_init(z->bi.mpz);
-    regs.hp += bigint_node_size;
-    register_final(z);
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(neg) )
+	z = tag_int(mpz_get_si(neg));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	z	 = (Node *)regs.hp;
+	z->info  = &bigint_info;
+	mpz_init_set(z->bi.mpz, neg);
+	regs.hp += bigint_node_size;
+	register_final(z);
+    }
 
-    mpz_neg(z->bi.mpz, x->bi.mpz);
+    mpz_clear(neg);
     return z;
 }
 
@@ -316,18 +479,31 @@ Node *
 primAbsInteger(Node *x)
 {
     Node *z;
+    mpz_t abs;
 
-    BEGIN_LOCAL_ROOTS1(x)
-    CHECK_HEAP(0, bigint_node_size);
-    END_LOCAL_ROOTS
+    mpz_init(abs);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+	mpz_set_si(abs, labs(untag_int(x)));
+    else
+#endif
+	mpz_abs(abs, x->bi.mpz);
 
-    z	     = (Node *)regs.hp;
-    z->info  = &bigint_info;
-    mpz_init(z->bi.mpz);
-    regs.hp += bigint_node_size;
-    register_final(z);
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(abs) )
+	z = tag_int(mpz_get_si(abs));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	z	 = (Node *)regs.hp;
+	z->info  = &bigint_info;
+	mpz_init_set(z->bi.mpz, abs);
+	regs.hp += bigint_node_size;
+	register_final(z);
+    }
 
-    mpz_abs(z->bi.mpz, x->bi.mpz);
+    mpz_clear(abs);
     return z;
 }
 
@@ -337,14 +513,27 @@ primSignumInteger(Node *x)
     int  sgn;
     Node *z;
 
-    sgn = mpz_sgn(x->bi.mpz);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	long l = untag_int(x);
 
+	sgn = l > 0 ? 1 : l < 0 ? -1 : 0;
+    }
+    else
+#endif
+	sgn = mpz_sgn(x->bi.mpz);
+
+#if !NO_POINTER_TAGS
+    z = tag_int((long)sgn);
+#else
     CHECK_HEAP(0, bigint_node_size);
     z	     = (Node *)regs.hp;
     z->info  = &bigint_info;
     mpz_init_set_si(z->bi.mpz, sgn);
     regs.hp += bigint_node_size;
     register_final(z);
+#endif
 
     return z;
 }
@@ -371,18 +560,44 @@ Node *
 primDivInteger(Node *x, Node *y)
 {
     Node *q;
+    mpz_t quot;
 
-    BEGIN_LOCAL_ROOTS2(x, y)
-    CHECK_HEAP(0, bigint_node_size);
-    END_LOCAL_ROOTS
+    mpz_init(quot);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	    mpz_set_si(quot, primDivInt(untag_int(x), untag_int(y)));
+	else
+	{
+	    mpz_set_si(quot, untag_int(x));
+	    mpz_fdiv_q(quot, quot, y->bi.mpz);
+	}
+    }
+    else if ( is_tagged_int(y) )
+    {
+	mpz_set_si(quot, untag_int(y));
+	mpz_fdiv_q(quot, x->bi.mpz, quot);
+    }
+    else
+#endif
+	mpz_fdiv_q(quot, x->bi.mpz, y->bi.mpz);
 
-    q	     = (Node *)regs.hp;
-    q->info  = &bigint_info;
-    mpz_init(q->bi.mpz);
-    regs.hp += bigint_node_size;
-    register_final(q);
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(quot) )
+	q = tag_int(mpz_get_si(quot));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	q	 = (Node *)regs.hp;
+	q->info  = &bigint_info;
+	mpz_init_set(q->bi.mpz, quot);
+	regs.hp += bigint_node_size;
+	register_final(q);
+    }
 
-    mpz_fdiv_q(q->bi.mpz, x->bi.mpz, y->bi.mpz);
+    mpz_clear(quot);
     return q;
 }
 
@@ -390,18 +605,44 @@ Node *
 primModInteger(Node *x, Node *y)
 {
     Node *r;
+    mpz_t rem;
 
-    BEGIN_LOCAL_ROOTS2(x, y)
-    CHECK_HEAP(0, bigint_node_size);
-    END_LOCAL_ROOTS
+    mpz_init(rem);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	    mpz_set_si(rem, primModInt(untag_int(x), untag_int(y)));
+	else
+	{
+	    mpz_set_si(rem, untag_int(x));
+	    mpz_fdiv_r(rem, rem, y->bi.mpz);
+	}
+    }
+    else if ( is_tagged_int(y) )
+    {
+	mpz_set_si(rem, untag_int(y));
+	mpz_fdiv_r(rem, x->bi.mpz, rem);
+    }
+    else
+#endif
+	mpz_fdiv_r(rem, x->bi.mpz, y->bi.mpz);
 
-    r	     = (Node *)regs.hp;
-    r->info  = &bigint_info;
-    mpz_init(r->bi.mpz);
-    regs.hp += bigint_node_size;
-    register_final(r);
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(rem) )
+	r = tag_int(mpz_get_si(rem));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	r	 = (Node *)regs.hp;
+	r->info  = &bigint_info;
+	mpz_init_set(r->bi.mpz, rem);
+	regs.hp += bigint_node_size;
+	register_final(r);
+    }
 
-    mpz_fdiv_r(r->bi.mpz, x->bi.mpz, y->bi.mpz);
+    mpz_clear(rem);
     return r;
 }
 
@@ -409,22 +650,59 @@ Node *
 primDivModInteger(Node *x, Node *y)
 {
     Node *p, *q, *r;
+    mpz_t quot, rem;
 
-    BEGIN_LOCAL_ROOTS2(x, y)
+    mpz_init(quot);
+    mpz_init(rem);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	{
+	    mpz_set_si(quot, primDivInt(untag_int(x), untag_int(y)));
+	    mpz_set_si(rem, primModInt(untag_int(x), untag_int(y)));
+	}
+	else
+	{
+	    mpz_set_si(quot, untag_int(x));
+	    mpz_fdiv_qr(quot, rem, quot, y->bi.mpz);
+	}
+    }
+    else if ( is_tagged_int(y) )
+    {
+	mpz_set_si(rem, untag_int(y));
+	mpz_fdiv_qr(quot, rem, x->bi.mpz, rem);
+    }
+    else
+#endif
+	mpz_fdiv_qr(quot, rem, x->bi.mpz, y->bi.mpz);
+
     CHECK_HEAP(0, pair_node_size + 2 * bigint_node_size);
-    END_LOCAL_ROOTS
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(quot) )
+	q = tag_int(mpz_get_si(quot));
+    else
+#endif
+    {
+	q	 = (Node *)regs.hp;
+	q->info  = &bigint_info;
+	mpz_init_set(q->bi.mpz, quot);
+	regs.hp += bigint_node_size;
+	register_final(q);
+    }
 
-    q	     = (Node *)regs.hp;
-    q->info  = &bigint_info;
-    mpz_init(q->bi.mpz);
-    regs.hp += bigint_node_size;
-    register_final(q);
-
-    r	     = (Node *)regs.hp;
-    r->info  = &bigint_info;
-    mpz_init(r->bi.mpz);
-    regs.hp += bigint_node_size;
-    register_final(r);
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(rem) )
+	r = tag_int(mpz_get_si(rem));
+    else
+#endif
+    {
+	r	 = (Node *)regs.hp;
+	r->info  = &bigint_info;
+	mpz_init_set(r->bi.mpz, rem);
+	regs.hp += bigint_node_size;
+	register_final(r);
+    }
 
     p		 = (Node *)regs.hp;
     p->info	 = &pair_info;
@@ -432,7 +710,8 @@ primDivModInteger(Node *x, Node *y)
     p->c.args[1] = r;
     regs.hp	+= pair_node_size;
 
-    mpz_fdiv_qr(q->bi.mpz, r->bi.mpz, x->bi.mpz, y->bi.mpz);
+    mpz_clear(rem);
+    mpz_clear(quot);
     return p;
 }
 
@@ -450,18 +729,44 @@ Node *
 primQuotInteger(Node *x, Node *y)
 {
     Node *q;
+    mpz_t quot;
 
-    BEGIN_LOCAL_ROOTS2(x, y)
-    CHECK_HEAP(0, bigint_node_size);
-    END_LOCAL_ROOTS
+    mpz_init(quot);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	    mpz_set_si(quot, primQuotInt(untag_int(x), untag_int(y)));
+	else
+	{
+	    mpz_set_si(quot, untag_int(x));
+	    mpz_tdiv_q(quot, quot, y->bi.mpz);
+	}
+    }
+    else if ( is_tagged_int(y) )
+    {
+	mpz_set_si(quot, untag_int(y));
+	mpz_tdiv_q(quot, x->bi.mpz, quot);
+    }
+    else
+#endif
+	mpz_tdiv_q(quot, x->bi.mpz, y->bi.mpz);
 
-    q	     = (Node *)regs.hp;
-    q->info  = &bigint_info;
-    mpz_init(q->bi.mpz);
-    regs.hp += bigint_node_size;
-    register_final(q);
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(quot) )
+	q = tag_int(mpz_get_si(quot));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	q	 = (Node *)regs.hp;
+	q->info  = &bigint_info;
+	mpz_init_set(q->bi.mpz, quot);
+	regs.hp += bigint_node_size;
+	register_final(q);
+    }
 
-    mpz_tdiv_q(q->bi.mpz, x->bi.mpz, y->bi.mpz);
+    mpz_clear(quot);
     return q;
 }
 
@@ -469,18 +774,44 @@ Node *
 primRemInteger(Node *x, Node *y)
 {
     Node *r;
+    mpz_t rem;
 
-    BEGIN_LOCAL_ROOTS2(x, y)
-    CHECK_HEAP(0, bigint_node_size);
-    END_LOCAL_ROOTS
+    mpz_init(rem);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	    mpz_set_si(rem, primRemInt(untag_int(x), untag_int(y)));
+	else
+	{
+	    mpz_set_si(rem, untag_int(x));
+	    mpz_tdiv_r(rem, rem, y->bi.mpz);
+	}
+    }
+    else if ( is_tagged_int(y) )
+    {
+	mpz_set_si(rem, untag_int(y));
+	mpz_tdiv_r(rem, x->bi.mpz, rem);
+    }
+    else
+#endif
+	mpz_tdiv_r(rem, x->bi.mpz, y->bi.mpz);
 
-    r	     = (Node *)regs.hp;
-    r->info  = &bigint_info;
-    mpz_init(r->bi.mpz);
-    regs.hp += bigint_node_size;
-    register_final(r);
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(rem) )
+	r = tag_int(mpz_get_si(rem));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	r	 = (Node *)regs.hp;
+	r->info  = &bigint_info;
+	mpz_init_set(r->bi.mpz, rem);
+	regs.hp += bigint_node_size;
+	register_final(r);
+    }
 
-    mpz_tdiv_r(r->bi.mpz, x->bi.mpz, y->bi.mpz);
+    mpz_clear(rem);
     return r;
 }
 
@@ -488,22 +819,59 @@ Node *
 primQuotRemInteger(Node *x, Node *y)
 {
     Node *p, *q, *r;
+    mpz_t quot, rem;
 
-    BEGIN_LOCAL_ROOTS2(x, y)
+    mpz_init(quot);
+    mpz_init(rem);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	{
+	    mpz_set_si(quot, primQuotInt(untag_int(x), untag_int(y)));
+	    mpz_set_si(rem, primRemInt(untag_int(x), untag_int(y)));
+	}
+	else
+	{
+	    mpz_set_si(quot, untag_int(x));
+	    mpz_tdiv_qr(quot, rem, quot, y->bi.mpz);
+	}
+    }
+    else if ( is_tagged_int(y) )
+    {
+	mpz_set_si(rem, untag_int(y));
+	mpz_tdiv_qr(quot, rem, x->bi.mpz, rem);
+    }
+    else
+#endif
+	mpz_tdiv_qr(quot, rem, x->bi.mpz, y->bi.mpz);
+
     CHECK_HEAP(0, pair_node_size + 2 * bigint_node_size);
-    END_LOCAL_ROOTS
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(quot) )
+	q = tag_int(mpz_get_si(quot));
+    else
+#endif
+    {
+	q	 = (Node *)regs.hp;
+	q->info  = &bigint_info;
+	mpz_init_set(q->bi.mpz, quot);
+	regs.hp += bigint_node_size;
+	register_final(q);
+    }
 
-    q	     = (Node *)regs.hp;
-    q->info  = &bigint_info;
-    mpz_init(q->bi.mpz);
-    regs.hp += bigint_node_size;
-    register_final(q);
-
-    r	     = (Node *)regs.hp;
-    r->info  = &bigint_info;
-    mpz_init(r->bi.mpz);
-    regs.hp += bigint_node_size;
-    register_final(r);
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(rem) )
+	r = tag_int(mpz_get_si(rem));
+    else
+#endif
+    {
+	r	 = (Node *)regs.hp;
+	r->info  = &bigint_info;
+	mpz_init_set(r->bi.mpz, rem);
+	regs.hp += bigint_node_size;
+	register_final(r);
+    }
 
     p		 = (Node *)regs.hp;
     p->info	 = &pair_info;
@@ -511,6 +879,7 @@ primQuotRemInteger(Node *x, Node *y)
     p->c.args[1] = r;
     regs.hp	+= pair_node_size;
 
-    mpz_tdiv_qr(q->bi.mpz, r->bi.mpz, x->bi.mpz, y->bi.mpz);
+    mpz_clear(rem);
+    mpz_clear(quot);
     return p;
 }

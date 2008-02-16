@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2623 2008-02-10 17:23:09Z wlux $
+% $Id: CGen.lhs 2624 2008-02-16 17:53:31Z wlux $
 %
 % Copyright (c) 1998-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -163,23 +163,24 @@ determine the tag value of a constructor when it is used.
 
 In addition to the tag enumerations, the compiler also defines node
 info structures for every data constructor and preallocates constant
-constructors and literal constants. Native integer constants need to
-be allocated only if they cannot be represented in $n-1$ bits where
-$n$ is the number of bits per word of the target architecture. The
-generated code uses the preprocessor macro \texttt{is\_large\_int}
-defined in the runtime system (see Sect.~\ref{sec:heap}) in order to
-determine whether allocation is necessary. Note that this macro always
-returns true if the system was configured with the
-\texttt{--disable-pointer-tags} configuration option. Character
-constants are encoded in pointers unless the system was configured
-with the \texttt{--disable-pointer-tags} configuration option. In that
-case, character constants with codes below 256, which are most
-commonly used, are allocated in a table defined by the runtime system
-and only constants with larger codes need to be preallocated in the
-generated code. Multiple precision integer constants are preallocated
-as well but they cannot be initialized statically because their
-underlying representation is opaque. Instead, these constants are
-initialized upon their first use.
+constructors and literal constants. Native integer constants as well
+as multiple precision integer constants need to be allocated only if
+they cannot be represented in $n-1$ bits where $n$ is the number of
+bits per word of the target architecture. The generated code uses the
+preprocessor macro \texttt{is\_large\_int} defined in the runtime
+system (see Sect.~\ref{sec:heap}) in order to determine whether
+allocation is necessary. Note that this macro always returns true if
+the system was configured with the \texttt{--disable-pointer-tags}
+configuration option. Character constants are encoded in pointers
+unless the system was configured with the
+\texttt{--disable-pointer-tags} configuration option. In that case,
+character constants with codes below 256, which are most commonly
+used, are allocated in a table defined by the runtime system and only
+constants with larger codes need to be preallocated in the generated
+code. Multiple precision integer constants are preallocated as well
+but they cannot be initialized statically because their underlying
+representation is opaque. Instead, these constants are initialized
+upon their first use.
 \begin{verbatim}
 
 > genTypes :: [Decl] -> [(Name,[Name],[ConstrDecl])] -> [Stmt] -> [Expr]
@@ -276,7 +277,15 @@ initialized upon their first use.
 
 > integerConstant :: Integer -> CTopDecl
 > integerConstant i =
->   CVarDef CPrivate (CType "struct bigint_node") (constInteger i) Nothing
+>   CppCondDecls (isLargeInt [CInt i])
+>     [CVarDef CPrivate (CType "struct bigint_node") (constInteger i) Nothing,
+>      CppDefine (constInteger i)
+>                (CFunCall iNTEGER [CExpr (constInteger i),CInt i])]
+>     [CppDefine (constInteger i) (CFunCall "tag_int" [CInt i])]
+>   where (isLargeInt,iNTEGER)
+>           | fits32bits i = (CFunCall "is_large_int","INTEGER32")
+>           | fits64bits i = (CFunCall "is_large_int_32_64","INTEGER64")
+>           | otherwise = (const (CInt 1),"INTEGER")
 
 > floatConstant :: Double -> CTopDecl
 > floatConstant f =
@@ -831,7 +840,7 @@ split into minimal binding groups.
 > literal :: Literal -> CExpr
 > literal (Char c) = CExpr (constChar c)
 > literal (Int i) = CExpr (constInt i)
-> literal (Integer i) = constRef (constInteger i)
+> literal (Integer i) = CExpr (constInteger i)
 > literal (Float f) = constRef (constFloat f)
 
 > constDefs :: FM Name CExpr -> [Bind] -> [CStmt]
@@ -869,10 +878,7 @@ split into minimal binding groups.
 >         _ -> [localVar v (Just alloc),incrAlloc (nodeSize n)]
 
 > initNode :: FM Name CExpr -> Bind -> [CStmt]
-> initNode _ (Bind v (Lit l)) =
->   case l of
->     Integer i -> [initInteger v i]
->     _ -> []
+> initNode _ (Bind _ (Lit _)) = []
 > initNode consts (Bind v (Constr c vs))
 >   | isConstant consts v = []
 >   | otherwise = initConstr v c vs
@@ -896,7 +902,6 @@ split into minimal binding groups.
 >           | fits64bits i =
 >               CppCondStmts condLP64 [initMpzInt v i] [initMpzString v i]
 >           | otherwise = initMpzString v i
->           where condLP64 = "_LP64 || __LP64__"
 >         initMpzInt v i = CProcCall "mpz_init_set_si" [v,CInt i]
 >         initMpzString v i =
 >           CProcCall "mpz_init_set_str" [v,CString (show i),CInt 10]
@@ -1111,10 +1116,12 @@ literals when set to a non-zero value.
 >   where (lits,constrs,vars,dflts) = foldr partition ([],[],[],[]) cases
 >         (chars,ints,integers,floats) = foldr litPartition ([],[],[],[]) lits
 >         taggedSwitch switch
->           | tagged && null chars && null ints =
+>           | tagged && null chars && null ints && null integers =
 >               CIf (isTaggedPtr v) [switch] []
 >           | otherwise =
->               taggedCharSwitch v chars (taggedIntSwitch v ints switch)
+>               taggedCharSwitch v chars $
+>               taggedIntSwitch v ints $
+>               taggedIntegerSwitch v integers switch
 >         otherCases =
 >           map varCase vars ++
 >           [charCase | not (null chars)] ++
@@ -1173,6 +1180,25 @@ literals when set to a non-zero value.
 >              [intSwitch (CFunCall "untag_int" [var v]) ints]]
 >           [stmt]
 
+> taggedIntegerSwitch :: Name -> [(Integer,[CStmt])] -> CStmt -> CStmt
+> taggedIntegerSwitch v integers stmt
+>   | null ints64 = stmt
+>   | otherwise =
+>       CIf (isTaggedInt v)
+>           [CppCondStmts "NO_POINTER_TAGS"
+>              [CProcCall "curry_panic"
+>                         [CString "impossible: is_tagged_int(%p)\n",var v]]
+>              [condIntegerSwitch (CFunCall "untag_int" [var v]) ints32 ints64]]
+>           [stmt]
+>   where ints32 = filter (fits32bits . fst) ints64
+>         ints64 = filter (fits64bits . fst) integers
+>         condIntegerSwitch e ints32 ints64
+>           | length ints32 == length ints64 = intSwitch e ints32
+>           | null ints32 =
+>               CppCondStmts condLP64 [intSwitch e ints64] []
+>           | otherwise =
+>               CppCondStmts condLP64 [intSwitch e ints64] [intSwitch e ints32]
+
 > kindSwitch :: Name -> [CStmt] -> (CStmt -> CStmt) -> [CCase] -> CStmt
 > kindSwitch v upd taggedSwitch cases =
 >   CLoop [taggedSwitch (CSwitch (nodeKind v) allCases),CBreak]
@@ -1196,8 +1222,7 @@ literals when set to a non-zero value.
 >                    stmts
 >                    rest]
 >           | otherwise =
->               [setVar k (constRef (constInteger i)),
->                initInteger k i,
+>               [setVar k (CExpr (constInteger i)),
 >                CIf (CRel (CFunCall "mpz_cmp" [e,field k "bi.mpz"]) "=="
 >                          (CInt 0))
 >                    stmts
@@ -1585,13 +1610,17 @@ special case for \texttt{@}, which is used instead of \texttt{@}$_1$.
 \end{verbatim}
 The functions \texttt{fits32bits} and \texttt{fits64bits} check
 whether a signed integer literal fits into 32 and 64 bits,
-respectively.
+respectively, and the string returned by function \texttt{condLP64} is
+used as feature test for conditional compilation on a 64 bit target.
 \begin{verbatim}
 
 > fits32bits, fits64bits :: Integer -> Bool
 > fits32bits i = -0x80000000 <= i && i <= 0x7fffffff
 > fits64bits i = -0x8000000000000000 <= i && i <= 0x7fffffffffffffff
 
+> condLP64 :: String
+> condLP64 = "defined(_LP64) || defined(__LP64__)"
+        
 \end{verbatim}
 Here are some convenience functions, which simplify the construction
 of the abstract syntax tree.

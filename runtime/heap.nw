@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2615 2008-02-07 08:54:11Z wlux $
+% $Id: heap.nw 2624 2008-02-16 17:53:31Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -288,15 +288,24 @@ struct vector_node {
 
 @ 
 Integer numbers that cannot be represented in $n-1$ bits, where $n$ is
-the numbers of bits in a word, are allocated in the heap. An integer
+the number of bits in a word, are allocated in the heap. An integer
 node in the heap consists of an info pointer and an integer value.
 
 The macro [[is_large_int]] can be used to test whether an integer
-number must be allocated in the heap.
+number must be allocated in the heap. The macro [[is_large_int_32_64]]
+is designed for a special case, namely constants that fit into 64 bits
+but not into 32 bits. In particular, this macro is always true on
+targets where neither of the preprocessor macros [[_LP64]] and
+[[__LP64__]] indicating a 64-bit target architecture is defined.
+
+\ToDo{Make this code more portable. Not all compilers define [[_LP64]]
+  or [[__LP64__]] in 64-bit mode.}
 
 <<heap.h>>=
 #define is_large_int(i) \
     (NO_POINTER_TAGS || (i) < LONG_MIN/2 || (i) > LONG_MAX/2)
+#define is_large_int_32_64(i) \
+    ((!defined(_LP64) && !defined(__LP64__)) || is_large_int(i))
 
 extern NodeInfo int_info;
 struct int_node {
@@ -318,10 +327,26 @@ NodeInfo int_info = {
 };
 
 @ 
-Multiple precision integer numbers are currently implemented with the
-Gnu MP library\footnote{\url{http://www.swox.com/gmp/}}. Such numbers
-are released automatically when they become garbage by their
-finalizer.
+Multiple precision integer numbers that cannot be represented in $n-1$
+bits, where $n$ is the number of bits in a word, are currently
+implemented with the Gnu MP
+library\footnote{\url{http://www.swox.com/gmp/}}. Such numbers are
+released automatically by their finalizer when they are garbage
+collected. The macro [[is_large_mpz]] checks whether the value of a
+multiple precision integer number can be encoded in a tagged integer.
+
+As the representation of multiple precision integer numbers is opaque,
+multiple precision integer constants cannot be initialized statically.
+Instead, the compiler just allocates static storage for such nodes and
+initializes them upon their first use. This is hidden transparently in
+the macros [[INTEGER32]], [[INTEGER64]], and [[INTEGER]], which are
+supposed to be used for constants that fit into 32 bits, 64 bits, and
+require more than 64 bits, respectively, using the most efficient
+initialization available.
+
+\ToDo{When using the Gnu C compiler, the Curry compiler could emit an
+  initialization function for each compilation unit that initializes
+  the integer numbers of that compilation unit.}
 
 \ToDo{Provide an alternative implementation in case Gnu MP is not
   available.}
@@ -329,12 +354,30 @@ finalizer.
 <<heap.h>>=
 #include <gmp.h>
 
+#define is_large_mpz(mp)			\
+    (NO_POINTER_TAGS				\
+     || mpz_cmp_si(mp, LONG_MIN/2) < 0		\
+     || mpz_cmp_si(mp, LONG_MAX/2) > 0)
+
 extern NodeInfo bigint_info;
 struct bigint_node {
     NodeInfo *info;
     mpz_t    mpz;
 };
 #define bigint_node_size	wordsof(struct bigint_node)
+
+#define _INIT_INTEGER_SI(v,i) \
+    ((v).info = &bigint_info, mpz_init_set_si((v).mpz, (i)), &(v))
+#define _INIT_INTEGER_STR(v,str,base) \
+    ((v).info = &bigint_info, mpz_init_set_str((v).mpz, str, base), &(v))
+
+#define INTEGER32(v,i)	(Node *)(!(v).info ? _INIT_INTEGER_SI(v,i) : &(v))
+#if _LP64 || __LP64__
+# define INTEGER64(v,i) INTEGER32(v,i)
+#else
+# define INTEGER64(v,i) INTEGER(v,i)
+#endif
+#define INTEGER(v,i)	(Node *)(!(v).info ? _INIT_INTEGER_STR(v,#i,10) : &(v))
 
 @ 
 <<heap.c>>=

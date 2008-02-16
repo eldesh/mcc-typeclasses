@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2615 2008-02-07 08:54:11Z wlux $
+% $Id: unify.nw 2624 2008-02-16 17:53:31Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -185,11 +185,31 @@ eq_root(Node *arg1, Node *arg2, unsigned int *argc)
 	if ( is_tagged_int(arg2) )
 	    eq = arg1 == arg2;
 	else
-	    eq = is_int_node(arg2) && untag_int(arg1) == arg2->i.i;
+	    switch ( node_kind(arg2) )
+	    {
+	    case INT_KIND:
+		eq = untag_int(arg1) == arg2->i.i;
+		break;
+	    case BIGINT_KIND:
+		eq = mpz_cmp_si(arg2->bi.mpz, untag_int(arg1)) == 0;
+		break;
+	    default:
+		eq = false;
+	    }
     }
     else if ( is_tagged_int(arg2) )
     {
-	eq = is_int_node(arg1) && arg1->i.i == untag_int(arg2);
+	switch ( node_kind(arg1) )
+	{
+	case INT_KIND:
+	    eq = arg1->i.i == untag_int(arg2);
+	    break;
+	case BIGINT_KIND:
+	    eq = mpz_cmp_si(arg1->bi.mpz, untag_int(arg2));
+	    break;
+	default:
+	    eq = false;
+	}
     }
     else
 #endif
@@ -321,20 +341,37 @@ eq_args(unsigned int n_regs, Node *arg1, Node *arg2,
 		    return false;
 		continue;
 	    }
-	    else if ( is_int_node(y) )
+	    else
 	    {
-		if ( untag_int(x) != y->i.i )
-		    return false;
-		continue;
+		switch ( node_kind(y) )
+		{
+		case INT_KIND:
+		    if ( untag_int(x) != y->i.i )
+			return false;
+		    continue;
+		case BIGINT_KIND:
+		    if ( mpz_cmp_si(y->bi.mpz, untag_int(x)) != 0 )
+			return false;
+		    continue;
+		default:
+		    break;
+		}
 	    }
 	}
 	else if ( is_tagged_int(y) )
 	{
-	    if ( is_int_node(x) )
+	    switch ( node_kind(x) )
 	    {
+	    case INT_KIND:
 		if ( x->i.i != untag_int(y) )
 		    return false;
 		continue;
+	    case BIGINT_KIND:
+		if ( mpz_cmp_si(x->bi.mpz, untag_int(y)) != 0 )
+		    return false;
+		continue;
+	    default:
+		break;
 	    }
 	}
 	else

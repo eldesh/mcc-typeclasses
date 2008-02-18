@@ -1,6 +1,6 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 2600 2008-01-11 17:52:38Z wlux $
+# $Id: Makefile.in 2627 2008-02-18 07:44:02Z wlux $
 #
 # Copyright (c) 2004-2008, Wolfgang Lux
 # See ../LICENSE for the full license.
@@ -47,6 +47,7 @@ curry_prelude_SRCS = \
 	Prelude.curry \
 	Ptr.curry \
 	StablePtr.curry \
+	Ratio.curry \
 	IO.curry
 curry_stdlib_SRCS  = \
 	AllSolutions.curry \
@@ -105,7 +106,7 @@ debug_CSRC = $(debug_INTF:.icurry=.c) $(curry_DCSRC)
 debug_OBJS = $(debug_INTF:.icurry=.o) $(curry_DOBJS)
 debug_LIBS = libcurry_g.a
 
-DISTFILES = Makefile.in Prelude.icurry-boot \
+DISTFILES = Makefile.in Prelude.icurry-boot Ratio.icurry-boot \
 	    $(curry_prelude_SRCS) $(curry_stdlib_SRCS) \
 	    $(curry_stdlib_HDRS) $(debug_SRCS)
 DISTFILES_PATH = $(DISTFILES:%=@srcdir@/%)
@@ -190,7 +191,15 @@ libcurry_g.a: $(debug_OBJS) $(debug_INTF) $(curry_INTF)
 		xargs $(AR) qc $@
 	$(RANLIB) $@
 
-# special rules handling mutual recursion between Prelude and IO
+# special rules handling mutual recursion between Prelude, Ratio, and IO
+boot_filter = sed -e '/import IO;/d' -e '/IO\./d'
+
+bootstrap:
+	cmp -s Prelude.icurry $(srcdir)/Prelude.icurry-boot || \
+		$(boot_filter) $(srcdir)/Prelude.icurry-boot > Prelude.icurry
+	cmp -s Ratio.icurry $(srcdir)/Ratio.icurry-boot || \
+		$(boot_filter) $(srcdir)/Ratio.icurry-boot > Ratio.icurry
+
 Prelude.c: Prelude.curry
 	rm -rf .Prelude
 	mkdir .Prelude
@@ -198,11 +207,21 @@ Prelude.c: Prelude.curry
 	touch Prelude.c
 	cmp -s Prelude.icurry $(srcdir)/Prelude.icurry-boot || \
 		{ cp -p Prelude.icurry $(srcdir)/Prelude.icurry-boot && \
-		  $(MAKE) $(MFLAGS) IO.icurry; }
+		  $(MAKE) $(MFLAGS) Ratio.icurry IO.icurry; }
+
+Ratio.c: Ratio.curry $(srcdir)/Prelude.icurry-boot
+	$(MAKE) bootstrap
+	rm -rf .Ratio
+	mkdir .Ratio
+	../cycc $(CYCCFLAGS) $(Ratio_CYCCFLAGS) --split-code -o .Ratio/Ratio Ratio.curry
+	touch Ratio.c
+	cmp -s Ratio.icurry $(srcdir)/Ratio.icurry-boot || \
+		cp -p Ratio.icurry $(srcdir)/Ratio.icurry-boot
+Ratio.d.c: Prelude.icurry
+Ratio.o: Prelude.icurry
 
 IO.c: IO.curry $(srcdir)/Prelude.icurry-boot
-	cmp -s Prelude.icurry $(srcdir)/Prelude.icurry-boot || \
-		sed -e'/import IO;/d' -e '/IO\./d' $(srcdir)/Prelude.icurry-boot > Prelude.icurry
+	$(MAKE) bootstrap
 	rm -rf .IO
 	mkdir .IO
 	../cycc $(CYCCFLAGS) $(IO_CYCCFLAGS) --split-code -o .IO/IO IO.curry
@@ -280,7 +299,7 @@ depend: $(curry_prelude_SRCS) $(curry_stdlib_SRCS) $(debug_SRCS)
 		stem=`basename $$f .curry`; o="$$stem.c $$stem.d.c"; \
 		echo $$o : $$f; \
 		case $$f in \
-			Prelude.curry | IO.curry ) ;; \
+			Prelude.curry | Ratio.curry | IO.curry ) ;; \
 			* ) echo $$o : Prelude.icurry ;; \
 		esac; \
 		sed -e '/^import/!d;s/import \([A-Za-z0-9_]*\).*/'"$$o : "'\1.icurry/' $(srcdir)/$$f; \

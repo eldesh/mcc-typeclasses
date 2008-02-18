@@ -1,4 +1,5 @@
 interface Prelude where {
+import Ratio;
 infix 4 ==;
 infix 4 /=;
 infixl 7 /;
@@ -58,6 +59,7 @@ data Float;
 class Num a => Fractional a where {
 (/) :: a -> a -> a;
 recip :: a -> a;
+fromRational :: Ratio.Ratio Integer -> a;
 fromFloat :: Float -> a
 };
 class (Functor :: * -> *) a where {
@@ -105,6 +107,7 @@ max :: a -> a -> a
 };
 data Ordering = LT | EQ | GT;
 class (Num a, Ord a) => Real a where {
+toRational :: a -> Ratio.Ratio Integer;
 toFloat :: a -> Float
 };
 class (Fractional a, Real a) => RealFrac a where {
@@ -122,6 +125,7 @@ showList :: [a] -> [Char] -> [Char]
 type ShowS = [Char] -> [Char];
 type String = [Char];
 data Success;
+type Ratio.Rational = Ratio.Ratio Integer;
 (!!) :: [a] -> Int -> a;
 ($) :: (a -> b) -> a -> b;
 ($!) :: (a -> b) -> a -> b;
@@ -202,6 +206,7 @@ putChar :: {-# ARITY 0 #-} Char -> IO ();
 putStr :: {-# ARITY 0 #-} [Char] -> IO ();
 putStrLn :: {-# ARITY 0 #-} [Char] -> IO ();
 readFile :: [Char] -> IO [Char];
+realToFrac :: (Real a, Fractional b) => a -> b;
 repeat :: a -> [a];
 replicate :: Int -> a -> [a];
 reverse :: [a] -> [a];
@@ -273,6 +278,7 @@ instance Eq Char;
 instance (Eq a, Eq b) => Eq (Either a b);
 instance Enum Float;
 instance Eq Float;
+{-# DATA Ratio.Ratio a #-};
 instance Fractional Float;
 instance Functor [];
 instance Functor IO;
@@ -337,5 +343,15 @@ instance Show Int;
 instance Show Integer;
 instance Show a => Show (Maybe a);
 instance Show Ordering;
-instance Show Success
+instance Show Success;
+instance Integral a => Enum (Ratio.Ratio a) {-# MODULE Ratio #-};
+instance Integral a => Eq (Ratio.Ratio a) {-# MODULE Ratio #-};
+instance Integral a =>
+	 Fractional (Ratio.Ratio a) {-# MODULE Ratio #-};
+instance Integral a => Num (Ratio.Ratio a) {-# MODULE Ratio #-};
+instance Integral a => Ord (Ratio.Ratio a) {-# MODULE Ratio #-};
+instance Integral a => Real (Ratio.Ratio a) {-# MODULE Ratio #-};
+instance Integral a =>
+	 RealFrac (Ratio.Ratio a) {-# MODULE Ratio #-};
+instance Integral a => Show (Ratio.Ratio a) {-# MODULE Ratio #-}
 }

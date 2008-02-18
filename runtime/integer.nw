@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: integer.nw 2626 2008-02-16 21:19:15Z wlux $
+% $Id: integer.nw 2627 2008-02-18 07:44:02Z wlux $
 %
 % Copyright (c) 2007-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -41,31 +41,28 @@ DECLARE_CONST(__Prelude__GT);
 #define pair_info	___40__44__41__info
 static DEFINE_DATA(___40__44__41_, "(,)", 0, 2);
 
-static mpz_t mp_tmp, mp_tmp2;
+DECLARE_DATA(__Ratio___58__37_);
 
-#if defined(__GNUC__) || defined(__SUNPRO_C)
-
-# define INIT_MP_TMP()
+static bool initialized;
 static void initialize(void) __attribute__((constructor));
+
+#ifdef __GNUC__
+# define INIT_MP_TMP()
+#else
+# define INIT_MP_TMP() do { if ( !initialized ) initialize(); } while ( 0 )
+#endif
+
+static mpz_t mp_tmp, mp_tmp2;
+static mpq_t mp_tmpq;
+
 static void
 initialize(void)
 {
     mpz_init(mp_tmp);
     mpz_init(mp_tmp2);
+    mpq_init(mp_tmpq);
+    initialized = true;
 }
-
-#else /*!defined(__GNUC__) && !defined(__SUNPRO_C)*/
-
-static bool initialized;
-# define INIT_MP_TMP() do {	\
-	if ( !initialized ) {	\
-	    mpz_init(mp_tmp);	\
-	    mpz_init(mp_tmp2);	\
-	    initialized = true;	\
-	}			\
-    } while ( 0 )
-
-#endif
 
 @ 
 The first three primitives implement conversions between standard and
@@ -156,12 +153,14 @@ primIntegerToFloat(Node *x)
 }
 
 @ 
-The primitive for the \texttt{properFraction} method of the
-\texttt{RealFrac} class returns the (truncated) integer part of its
-floating-point argument and the fractional part as a pair.
+The primitives [[primProperFraction]] and [[primFloatToRational]]
+convert a floating point number into a pair of a (truncated) integral
+part and a fractional remainder and of an exact numerator and
+denominator, respectively.
 
 <<integer.h>>=
 extern Node *primProperFraction(Node *);
+extern Node *primFloatToRational(Node *);
 
 @
 <<integer.c>>=
@@ -200,6 +199,50 @@ primProperFraction(Node *x)
     p->info  = &pair_info;
     p->c.args[0] = i;
     p->c.args[1] = f;
+    regs.hp += pair_node_size;
+
+    return p;
+}
+
+Node *
+primFloatToRational(Node *x)
+{
+    double d;
+    Node   *p, *num, *den;
+
+    INIT_MP_TMP();
+    get_double_val(d, x);
+    mpq_set_d(mp_tmpq, d);
+
+    CHECK_HEAP(0, pair_node_size + 2*bigint_node_size);
+    if ( !is_large_mpz(mpq_numref(mp_tmpq)) )
+	num = tag_int(mpz_get_si(mpq_numref(mp_tmpq)));
+    else
+    {
+	num	  = (Node *)regs.hp;
+	num->info = &bigint_info;
+	mpz_init(num->bi.mpz);
+	mpq_get_num(num->bi.mpz, mp_tmpq);
+	regs.hp	 += bigint_node_size;
+	register_final(num);
+    }
+
+    if ( !is_large_mpz(mpq_denref(mp_tmpq)) )
+	den = tag_int(mpz_get_si(mpq_denref(mp_tmpq)));
+    else
+    {
+	den	  = (Node *)regs.hp;
+	den->info = &bigint_info;
+	mpz_init(den->bi.mpz);
+	mpq_get_den(den->bi.mpz, mp_tmpq);
+	regs.hp	 += bigint_node_size;
+	register_final(den);
+    }
+
+    p	     = (Node *)regs.hp;
+    p->info  = &__Ratio___58__37__info;
+    p->c.args[0] = num;
+    p->c.args[1] = den;
     regs.hp += pair_node_size;
 
     return p;

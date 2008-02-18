@@ -1,9 +1,10 @@
--- $Id: Prelude.curry 2626 2008-02-16 21:19:15Z wlux $
+-- $Id: Prelude.curry 2627 2008-02-18 07:44:02Z wlux $
 --
 -- Copyright (c) 1999-2008, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
-module Prelude where
+module Prelude(module Prelude, Rational) where
+import Ratio(Rational)
 import IO
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -826,8 +827,9 @@ class (Eq a, Show a) => Num a where
   fromInt n = fromIntegral n
 
 class (Ord a, Num a) => Real a where
-  -- NB Temporarily defines toFloat instead of toRational because MCC
-  --    does not yet support rational numbers
+  -- NB Temporarily defines toFloat in addition to toRational because MCC
+  --    represents fractional numbers as Floats internally
+  toRational :: a -> Rational
   toFloat :: a -> Float
 
 class (Enum a, Real a) => Integral a where
@@ -854,14 +856,15 @@ class (Enum a, Real a) => Integral a where
   toInt n = fromIntegral n
 
 class Num a => Fractional a where
-  -- NB Temporarily defines fromFloat instead of fromRational because
-  --    MCC does not yet support rational numbers.
+  -- NB Temporarily defines fromFloat in addition to fromRational because
+  --    MCC represents fractional numbers as Floats internally
   (/) :: a -> a -> a
   recip :: a -> a
+  fromRational :: Rational -> a
   fromFloat :: Float -> a
 
   -- Minimal complete definition:
-  -- fromFloat (fromRational) and (recip of (/))
+  -- fromRational, fromFloat, and either recip or (/)
   recip x = 1 / x
   x / y   = x * recip y
 
@@ -885,6 +888,9 @@ class (Real a, Fractional a) => RealFrac a where
 
 fromIntegral :: (Integral a,Num b) => a -> b
 fromIntegral n = fromInteger (toInteger n)
+
+realToFrac :: (Real a,Fractional b) => a -> b
+realToFrac x = fromRational (toRational x)
 
 
 -- Types of primitive arithmetic functions and predicates
@@ -938,6 +944,7 @@ instance Num Int where
     where foreign import rawcall "integer.h" primFromInteger :: Integer -> Int
 
 instance Real Int where
+  toRational n = fromInt n
   toFloat n = fromInt n
 
 instance Integral Int where
@@ -1025,6 +1032,7 @@ instance Num Integer where
   fromInteger n = n
 
 instance Real Integer where
+  toRational n = fromInteger n
   toFloat n = fromInteger n
 
 instance Integral Integer where
@@ -1112,11 +1120,15 @@ instance Num Float where
     	  	  	 primIntegerToFloat :: Integer -> Float
 
 instance Real Float where
+  toRational = primFloatToRational
+    where foreign import rawcall "integer.h"
+    	  	  	 primFloatToRational :: Float -> Rational
   toFloat x = x
 
 instance Fractional Float where
   (/) = primDivFloat
     where foreign import ccall "prims.h" primDivFloat :: Float -> Float -> Float
+  fromRational x = toFloat x
   fromFloat x = x
 
 instance RealFrac Float where

@@ -1,4 +1,4 @@
--- $Id: Numeric.curry 2312 2007-06-20 12:00:06Z wlux $
+-- $Id: Numeric.curry 2629 2008-02-20 17:27:00Z wlux $
 --
 -- Copyright (c) 2003-2007, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -66,25 +66,25 @@ readHex :: Integral a => ReadS a
 readHex = readInt 16 isHexDigit digitToInt
 
 
-showEFloat :: RealFrac a => Maybe Int -> a -> ShowS
-showEFloat d f = showString (primShowEFloat (maybe (-1) (max 0) d) (toFloat f))
+showEFloat :: Maybe Int -> Float -> ShowS
+showEFloat d f = showString (primShowEFloat (maybe (-1) (max 0) d) f)
   where foreign import rawcall "show.h" primShowEFloat :: Int -> Float -> String
 
-showFFloat :: RealFrac a => Maybe Int -> a -> ShowS
-showFFloat d f = showString (primShowFFloat (maybe (-1) (max 0) d) (toFloat f))
+showFFloat :: Maybe Int -> Float -> ShowS
+showFFloat d f = showString (primShowFFloat (maybe (-1) (max 0) d) f)
   where foreign import rawcall "show.h" primShowFFloat :: Int -> Float -> String
 
-showGFloat :: RealFrac a => Maybe Int -> a -> ShowS
+showGFloat :: Maybe Int -> Float -> ShowS
 showGFloat d f
   | f' >= 0.1 && f' < 1.0e7 = showFFloat d f
   | otherwise = showEFloat d f
   where f' = if f < 0 then -f else f
         
-showFloat :: RealFrac a => a -> ShowS
+showFloat :: Float -> ShowS
 showFloat = showGFloat Nothing
 
 
-readFloat :: Fractional a => ReadS a
+readFloat :: ReadS Float
 readFloat r = [(convert ds (k - d),t) | (ds,d,s) <- lexFix r,
                                         (k,t) <- readExp s] ++
               [(0/0,t) | t <- match "NaN" r] ++
@@ -110,7 +110,7 @@ readFloat r = [(convert ds (k - d),t) | (ds,d,s) <- lexFix r,
           case splitAt (length prefix) s of
             (cs,cs') ->
               [cs' | cs == prefix && (null cs' || not (isAlphaNum (head cs')))]
-	convert ds e = fromFloat (primConvertToFloat $## (ds ++ 'e' : show e))
+	convert ds e = primConvertToFloat $## (ds ++ 'e' : show e)
 	foreign import rawcall "show.h" primConvertToFloat :: String -> Float
 
 lexDigits :: ReadS String

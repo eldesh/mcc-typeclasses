@@ -1,10 +1,10 @@
--- $Id: Prelude.curry 2627 2008-02-18 07:44:02Z wlux $
+-- $Id: Prelude.curry 2629 2008-02-20 17:27:00Z wlux $
 --
 -- Copyright (c) 1999-2008, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module Prelude(module Prelude, Rational) where
-import Ratio(Rational)
+import Ratio(Rational, numerator, denominator)
 import IO
 
 -- Lines beginning with "--++" are part of the prelude, but are already
@@ -827,10 +827,7 @@ class (Eq a, Show a) => Num a where
   fromInt n = fromIntegral n
 
 class (Ord a, Num a) => Real a where
-  -- NB Temporarily defines toFloat in addition to toRational because MCC
-  --    represents fractional numbers as Floats internally
   toRational :: a -> Rational
-  toFloat :: a -> Float
 
 class (Enum a, Real a) => Integral a where
   -- quot, rem, div, and mod must satisfy the following laws
@@ -856,15 +853,12 @@ class (Enum a, Real a) => Integral a where
   toInt n = fromIntegral n
 
 class Num a => Fractional a where
-  -- NB Temporarily defines fromFloat in addition to fromRational because
-  --    MCC represents fractional numbers as Floats internally
   (/) :: a -> a -> a
   recip :: a -> a
   fromRational :: Rational -> a
-  fromFloat :: Float -> a
 
   -- Minimal complete definition:
-  -- fromRational, fromFloat, and either recip or (/)
+  -- fromRational and either recip or (/)
   recip x = 1 / x
   x / y   = x * recip y
 
@@ -945,7 +939,6 @@ instance Num Int where
 
 instance Real Int where
   toRational n = fromInt n
-  toFloat n = fromInt n
 
 instance Integral Int where
   quot = primQuotInt
@@ -1033,7 +1026,6 @@ instance Num Integer where
 
 instance Real Integer where
   toRational n = fromInteger n
-  toFloat n = fromInteger n
 
 instance Integral Integer where
   quot = primQuotInteger
@@ -1123,13 +1115,11 @@ instance Real Float where
   toRational = primFloatToRational
     where foreign import rawcall "integer.h"
     	  	  	 primFloatToRational :: Float -> Rational
-  toFloat x = x
 
 instance Fractional Float where
   (/) = primDivFloat
     where foreign import ccall "prims.h" primDivFloat :: Float -> Float -> Float
-  fromRational x = toFloat x
-  fromFloat x = x
+  fromRational x = fromInteger (numerator x) / fromInteger (denominator x)
 
 instance RealFrac Float where
   properFraction x =

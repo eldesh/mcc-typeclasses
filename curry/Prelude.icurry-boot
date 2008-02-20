@@ -59,8 +59,7 @@ data Float;
 class Num a => Fractional a where {
 (/) :: a -> a -> a;
 recip :: a -> a;
-fromRational :: Ratio.Ratio Integer -> a;
-fromFloat :: Float -> a
+fromRational :: Ratio.Ratio Integer -> a
 };
 class (Functor :: * -> *) a where {
 fmap :: (b -> c) -> a b -> a c
@@ -107,8 +106,7 @@ max :: a -> a -> a
 };
 data Ordering = LT | EQ | GT;
 class (Num a, Ord a) => Real a where {
-toRational :: a -> Ratio.Ratio Integer;
-toFloat :: a -> Float
+toRational :: a -> Ratio.Ratio Integer
 };
 class (Fractional a, Real a) => RealFrac a where {
 properFraction :: Integral b => a -> (b, a);

@@ -55,13 +55,11 @@ instance Integral a => Num (Ratio a) where
 
 instance Integral a => Real (Ratio a) where
   toRational (x :% y) = toInteger x :% toInteger y
-  toFloat (x :% y) = toFloat x / toFloat y
 
 instance Integral a => Fractional (Ratio a) where
   (x1 :% y1) / (x2 :% y2) = (x1 * y2) % (y1 * x2)
   recip (x :% y) = y :% x
   fromRational (x :% y) = fromInteger x :% fromInteger y
-  fromFloat x = realToFrac x
 
 instance Integral a => RealFrac (Ratio a) where
   properFraction (x :% y) = (fromIntegral q, r :% y)

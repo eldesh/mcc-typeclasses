@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: LexComb.lhs 1912 2006-05-03 14:53:33Z wlux $
+% $Id: LexComb.lhs 2628 2008-02-20 16:27:30Z wlux $
 %
-% Copyright (c) 1999-2005, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{LexComb.lhs}
@@ -88,5 +88,11 @@ Conversions from strings into numbers.
 >   case readFloat (m ++ f ++ 'e' : show (e - length f)) of
 >     [(f,"")] -> f
 >     _ -> error "internal error: invalid string (convertFloating)"
+
+> convertRational :: String -> String -> Int -> Rational
+> convertRational m f e =
+>   case readDec (m ++ f) of
+>     [(n,"")] -> toRational n * 10 ^^ (e - length f)
+>     _ -> error "internal error: invalid string (convertRational)"
 
 \end{verbatim}

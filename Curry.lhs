@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Curry.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: Curry.lhs 2628 2008-02-20 16:27:30Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Curry.lhs}
@@ -166,8 +166,8 @@ Interface declarations are restricted to type declarations and signatures.
 
 > data Literal =
 >     Char Char                         -- should be Int to handle Unicode
->   | Int Integer
->   | Float Double
+>   | Integer Integer
+>   | Rational Rational
 >   | String String                     -- should be [Int] to handle Unicode
 >   deriving (Eq,Show)
 

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2623 2008-02-10 17:23:09Z wlux $
+% $Id: Desugar.lhs 2628 2008-02-20 16:27:30Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -36,7 +36,7 @@ properties.
 \item Applications $N\:x$ in patterns and expressions, where $N$ is a
   newtype constructor, are replaced by a $x$. Note that neither the
   newtype declaration itself nor partial applications of newtype
-  constructors are changed.\footnote{It were possible to replace
+  constructors are changed.\footnote{It would be possible to replace
   partial applications of newtype constructor by \texttt{Prelude.id}.
   However, our solution yields a more accurate output when the result
   of a computation includes partial applications.}
@@ -58,6 +58,7 @@ all names must be properly qualified before calling this module.}
 > import Monad
 > import PredefIdent
 > import PredefTypes
+> import Ratio
 > import TopEnv
 > import Types
 > import TypeInfo
@@ -81,7 +82,7 @@ variables.
 
 \end{verbatim}
 During desugaring, the compiler transforms constraint guards into case
-expressions matching the guards against the constructor
+expressions matching the guard expression against the constructor
 \texttt{Success}, which is defined in the runtime system. Thus, the
 compiler assumes that the type \texttt{Success} is defined by
 \begin{verbatim}
@@ -90,19 +91,24 @@ compiler assumes that the type \texttt{Success} is defined by
 Since the internal constructor \texttt{Success} occurs in the
 desugared code, its type is added to the type environment.
 
-Note that the definition of \texttt{Success} is not included in the
-prelude because the \texttt{Success} constructor would not be
-accessible in any module other than the prelude unless the constructor
-were also exported from the prelude. However, that would be
-incompatible with the Curry report, which deliberately defines
-\texttt{Success} as an abstract type.
+Similarly, rational literals are transformed into applications of the
+constructor \texttt{Ratio.:\%}, which is not exported from module
+\texttt{Ratio}. Therefore its type is added to the type environment,
+too, unless the compiler is compiling module \texttt{Ratio}.
+
+\ToDo{Define \texttt{Success} explicitly in module \texttt{Prelude}
+  without exporting the \texttt{Success} constructor.}
 \begin{verbatim}
 
-> bindSuccess :: ValueEnv -> ValueEnv
-> bindSuccess = localBindTopEnv successId successCon
->   where successCon =
->           DataConstructor (qualify successId) [] stdConstrInfo
->                           (polyType successType)
+> bindPredef :: ModuleIdent -> ValueEnv -> ValueEnv
+> bindPredef m tyEnv =
+>   foldr (bindConstr m) tyEnv [successConstr,ratioConstr (TypeVariable 0)]
+>   where bindConstr m (Constructor ty c) =
+>           if Just m == m' then id else bind m' c' (dataConstr c ty)
+>           where (m',c') = splitQualIdent c
+>         bind (Just m) = qualImportTopEnv m
+>         bind Nothing = localBindTopEnv
+>         dataConstr c ty = DataConstructor c [] stdConstrInfo (polyType ty)
 
 \end{verbatim}
 The desugaring phase keeps only the type, function, and value
@@ -118,7 +124,7 @@ of a module.
 > desugar :: TCEnv -> ValueEnv -> Module Type -> (Module Type,ValueEnv)
 > desugar tcEnv tyEnv (Module m es is ds) = (Module m es is ds',tyEnv'')
 >   where (ds',tyEnv'') = run (desugarModule m tyEnv' ds) tcEnv tyEnv'
->         tyEnv' = bindSuccess tyEnv
+>         tyEnv' = bindPredef m tyEnv
 
 > desugarModule :: ModuleIdent -> ValueEnv -> [TopDecl Type]
 >               -> DesugarState ([TopDecl Type],ValueEnv)
@@ -330,15 +336,15 @@ with a local declaration for $v$.
 > desugarLiteralTerm :: ModuleIdent -> Position -> [Decl Type] -> Type
 >                    -> Literal -> DesugarState ([Decl Type],ConstrTerm Type)
 > desugarLiteralTerm _ _ ds ty (Char c) = return (ds,LiteralPattern ty (Char c))
-> desugarLiteralTerm _ _ ds ty (Int i) =
+> desugarLiteralTerm _ _ ds ty (Integer i) =
 >   return (ds,LiteralPattern ty (fixLiteral ty i))
 >   where fixLiteral (TypeConstrained tys _) = fixLiteral (head tys)
 >         fixLiteral ty
->           | ty `elem` [intType,integerType] = Int
->           | ty == floatType = Float . fromIntegral
+>           | ty `elem` [intType,integerType] = Integer
+>           | ty == floatType = Rational . toRational
 >           | otherwise = internalError "desugarLiteralTerm"
-> desugarLiteralTerm _ _ ds ty (Float f) =
->   return (ds,LiteralPattern ty (Float f))
+> desugarLiteralTerm _ _ ds ty (Rational r) =
+>   return (ds,LiteralPattern ty (Rational r))
 > desugarLiteralTerm m p ds ty (String cs) =
 >   desugarTerm m p ds
 >               (ListPattern ty (map (LiteralPattern (elemType ty) . Char) cs))
@@ -348,8 +354,8 @@ with a local declaration for $v$.
 > desugarTerm m p ds (LiteralPattern ty l) = desugarLiteralTerm m p ds ty l
 > desugarTerm m p ds (NegativePattern ty l) =
 >   desugarTerm m p ds (LiteralPattern ty (negateLiteral l))
->   where negateLiteral (Int i) = Int (-i)
->         negateLiteral (Float f) = Float (-f)
+>   where negateLiteral (Integer i) = Integer (-i)
+>         negateLiteral (Rational r) = Rational (-r)
 >         negateLiteral _ = internalError "negateLiteral"
 > desugarTerm _ _ ds (VariablePattern ty v) = return (ds,VariablePattern ty v)
 > desugarTerm m p ds (ConstructorPattern ty c [t]) =
@@ -437,19 +443,27 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 > desugarLiteral :: ModuleIdent -> Position -> Type -> Literal
 >                -> DesugarState (Expression Type)
 > desugarLiteral _ _ ty (Char c) = return (Literal ty (Char c))
-> desugarLiteral _ _ ty (Int i) = return (fixLiteral ty i)
+> desugarLiteral _ _ ty (Integer i) = return (fixLiteral ty i)
 >   where fixLiteral (TypeConstrained tys _) = fixLiteral (head tys)
 >         fixLiteral ty'
->           | ty' `elem` [intType,integerType] = Literal ty . Int
->           | ty' == floatType = Literal ty . Float . fromIntegral
->           | otherwise = Apply (prelFromInteger ty) . Literal integerType . Int
-> desugarLiteral _ _ ty (Float f) = return (fixLiteral ty (Float f))
+>           | ty' `elem` [intType,integerType] = Literal ty . Integer
+>           | ty' == floatType = Literal ty . Rational . fromInteger
+>           | ty' == rationalType = desugarRatio . fromInteger
+>           | otherwise =
+>               Apply (prelFromInteger ty) . Literal integerType . Integer
+> desugarLiteral _ _ ty (Rational r) = return (fixLiteral ty r)
 >   where fixLiteral (TypeConstrained tys _) = fixLiteral (head tys)
 >         fixLiteral ty'
->           | ty' == floatType = Literal ty
->           | otherwise = Apply (prelFromFloat ty) . Literal floatType
+>           | ty' == floatType = Literal ty . Rational
+>           | ty' == rationalType = desugarRatio
+>           | otherwise = Apply (prelFromRational ty) . desugarRatio
 > desugarLiteral m p ty (String cs) =
 >   desugarExpr m p (List ty (map (Literal (elemType ty) . Char) cs))
+
+> desugarRatio :: Rational -> Expression Type
+> desugarRatio r =
+>   foldl applyToInteger (ratioConstr integerType) [numerator r,denominator r]
+>   where applyToInteger e = Apply e . Literal integerType . Integer
 
 > desugarExpr :: ModuleIdent -> Position -> Expression Type
 >             -> DesugarState (Expression Type)
@@ -843,7 +857,7 @@ Prelude entities
 > prelUndefined a = preludeFun [] a "undefined"
 > prelUnif a = preludeFun [a,a] successType "=:="
 > prelFromInteger a = preludeFun [integerType] a "fromInteger"
-> prelFromFloat a = preludeFun [floatType] a "fromFloat"
+> prelFromRational a = preludeFun [rationalType] a "fromRational"
 > prelBind ma a mb = preludeFun [ma,a `TypeArrow` mb] mb ">>="
 > prelBind_ ma mb = preludeFun [ma,mb] mb ">>"
 > prelFlip a b c = preludeFun [a `TypeArrow` (b `TypeArrow` c),b,a] c "flip"
@@ -864,6 +878,11 @@ Prelude entities
 > preludeFun :: [Type] -> Type -> String -> Expression Type
 > preludeFun tys ty f =
 >   Variable (foldr TypeArrow ty tys) (qualifyWith preludeMIdent (mkIdent f))
+
+> successConstr = Constructor successType (qualify successId)
+> ratioConstr a =
+>   Constructor (TypeArrow a (TypeArrow a (ratioType a)))
+>               (qualifyWith ratioMIdent (mkIdent ":%"))
 
 > truePattern = ConstructorPattern boolType qTrueId []
 > falsePattern = ConstructorPattern boolType qFalseId []

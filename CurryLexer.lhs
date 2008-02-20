@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryLexer.lhs 2530 2007-10-22 14:50:52Z wlux $
+% $Id: CurryLexer.lhs 2628 2008-02-20 16:27:30Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryLexer.lhs}
@@ -31,7 +31,7 @@ In this section a lexer for Curry is implemented.
 
 > data Category =
 >   -- literals
->     CharTok | IntTok | FloatTok | StringTok
+>     CharTok | IntTok | RatTok | StringTok
 >   -- identifiers
 >   | Id | QId | Sym | QSym
 >   -- punctuation symbols
@@ -76,7 +76,7 @@ attribute values we make use of records.
 >     NoAttributes
 >   | CharAttributes{ cval :: Char }
 >   | IntAttributes{ ival :: Integer }
->   | FloatAttributes{ fval :: Double }
+>   | RatAttributes{ rval :: Rational }
 >   | StringAttributes{ sval :: String }
 >   | IdentAttributes{ modul :: [String], sval :: String }
 
@@ -84,7 +84,7 @@ attribute values we make use of records.
 >   showsPrec _ NoAttributes = showChar '_'
 >   showsPrec _ (CharAttributes cval) = shows cval
 >   showsPrec _ (IntAttributes ival) = shows ival
->   showsPrec _ (FloatAttributes fval) = shows fval
+>   showsPrec _ (RatAttributes rval) = shows rval
 >   showsPrec _ (StringAttributes sval) = shows sval
 >   showsPrec _ (IdentAttributes mIdent ident) =
 >     showString ("`" ++ concat (intersperse "." (mIdent ++ [ident])) ++ "'")
@@ -107,9 +107,9 @@ specific attributes.
 > intTok base digits =
 >   Token IntTok IntAttributes{ ival = convertIntegral base digits }
 
-> floatTok :: String -> String -> Int -> Token
-> floatTok mant frac exp =
->   Token FloatTok FloatAttributes{ fval = convertFloating mant frac exp }
+> ratTok :: String -> String -> Int -> Token
+> ratTok mant frac exp =
+>   Token RatTok RatAttributes{ rval = convertRational mant frac exp }
 
 > stringTok :: String -> Token
 > stringTok cs = Token StringTok StringAttributes{ sval = cs }
@@ -125,7 +125,7 @@ all tokens in their source representation.
 >   showsPrec _ (Token Sym a) = showString "operator " . shows a
 >   showsPrec _ (Token QSym a) = showString "qualified operator " . shows a
 >   showsPrec _ (Token IntTok a) = showString "integer " . shows a
->   showsPrec _ (Token FloatTok a) = showString "float " . shows a
+>   showsPrec _ (Token RatTok a) = showString "rational " . shows a
 >   showsPrec _ (Token CharTok a) = showString "character " . shows a
 >   showsPrec _ (Token StringTok a) = showString "string " . shows a
 >   showsPrec _ (Token LeftParen _) = showString "`('"
@@ -452,11 +452,11 @@ backs up to the beginning of the pragma in that case so that
 >   | c `elem` "oO" = lexNonDecimal 8 isOctit cont nullCont (incr p 2) cs
 >   | c `elem` "xX" = lexNonDecimal 16 isHexit cont nullCont (incr p 2) cs
 >   where nullCont _ _ = cont (intTok 10 "0") (next p) (c:cs)
-> lexNumber cont p cs = lexOptFraction float int p' rest
+> lexNumber cont p cs = lexOptFraction rat int p' rest
 >   where p' = incr p (length digits)
 >         (digits,rest) = span isDigit cs
 >         int _ _ = cont (intTok 10 digits) p' rest
->         float frac exp = cont (floatTok digits frac exp)
+>         rat frac exp = cont (ratTok digits frac exp)
 
 > lexNonDecimal :: Integer -> (Char -> Bool) -> (Token -> L a) -> L a -> L a
 > lexNonDecimal base isDigit cont nullCont p cs

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2623 2008-02-10 17:23:09Z wlux $
+% $Id: ILTrans.lhs 2628 2008-02-20 16:27:30Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -242,13 +242,17 @@ position in the remaining arguments. If one is found,
 
 > translLiteral :: Type -> Literal -> IL.Literal
 > translLiteral _ (Char c) = IL.Char c
-> translLiteral ty (Int i) = translInt ty i
+> translLiteral ty (Integer i) = translInt ty i
 >   where translInt (TypeConstrained tys _) = translInt (head tys)
 >         translInt ty
 >           | ty == intType = IL.Int
 >           | ty == integerType = IL.Integer
->           | otherwise = internalError ("translLiteral (Int): " ++ show ty)
-> translLiteral _ (Float f) = IL.Float f
+>           | otherwise = internalError ("translLiteral(Integer): " ++ show ty)
+> translLiteral ty (Rational r) = translRat ty r
+>   where translRat (TypeConstrained tys _) = translRat (head tys)
+>         translRat ty
+>           | ty == floatType = IL.Float . fromRational
+>           | otherwise = internalError ("translLiteral(Rational): " ++ show ty)
 > translLiteral _ _ = internalError "translLiteral"
 
 > translTerm :: Ident -> ConstrTerm Type -> NestedTerm

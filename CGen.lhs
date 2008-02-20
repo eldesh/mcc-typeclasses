@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2624 2008-02-16 17:53:31Z wlux $
+% $Id: CGen.lhs 2628 2008-02-20 16:27:30Z wlux $
 %
 % Copyright (c) 1998-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -186,9 +186,9 @@ upon their first use.
 > genTypes :: [Decl] -> [(Name,[Name],[ConstrDecl])] -> [Stmt] -> [Expr]
 >          -> [CTopDecl]
 > genTypes impDs ds sts ns =
->   -- imported data constructors
+>   -- imported/used data constructors
 >   [tagDecl t vs cs | DataDecl t vs cs <- impDs, any (`conElem` usedTs) cs] ++
->   [dataDecl c | DataDecl _ _ cs <- impDs, c <- cs, c `conElem` usedCs] ++
+>   [dataDecl (ConstrDecl c (replicate n undefined)) | (c,n) <- usedCs] ++
 >   -- (private) tuple constructors
 >   map (tupleTagDecl . fst) (nub (usedTts ++ usedTcs)) ++
 >   concatMap (dataDef CPrivate . uncurry tupleConstr) usedTcs ++

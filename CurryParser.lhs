@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2530 2007-10-22 14:50:52Z wlux $
+% $Id: CurryParser.lhs 2628 2008-02-20 16:27:30Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryParser.lhs}
@@ -241,7 +241,7 @@ directory path to the module is ignored.
 >               <*> parens (type0 `sepBy` comma)
 
 > infixDecl :: Parser Token (Decl ()) a
-> infixDecl = infixDeclLhs InfixDecl <*> option int <*> funop `sepBy1` comma
+> infixDecl = infixDeclLhs InfixDecl <*> option integer <*> funop `sepBy1` comma
 
 > infixDeclLhs :: (Position -> Infix -> a) -> Parser Token a b
 > infixDeclLhs f = f <$> position <*> tokenOps infixKW
@@ -351,7 +351,7 @@ directory path to the module is ignored.
 >        <|> hidingClassDecl <|> iClassDecl <|> iInstanceDecl <|> iFunctionDecl
 
 > iInfixDecl :: Parser Token IDecl a
-> iInfixDecl = infixDeclLhs IInfixDecl <*> int <*> qfunop
+> iInfixDecl = infixDeclLhs IInfixDecl <*> integer <*> qfunop
 
 > hidingDataDecl :: Parser Token IDecl a
 > hidingDataDecl = position <**> pragma DataPragma hidingDecl
@@ -428,7 +428,7 @@ directory path to the module is ignored.
 >   IMethodDecl <$> position <*> fun <*-> token DoubleColon <*> qualType
 
 > iFunctionArity :: Parser Token Integer a
-> iFunctionArity = pragma ArityPragma int
+> iFunctionArity = pragma ArityPragma integer
 
 > pragma :: Pragma -> Parser Token a b -> Parser Token a b
 > pragma kw p = token (PragmaBegin kw) <-*> p <*-> token PragmaEnd
@@ -508,8 +508,8 @@ directory path to the module is ignored.
 
 > literal :: Parser Token Literal a
 > literal = Char <$> char
->       <|> Int <$> int
->       <|> Float <$> float
+>       <|> Integer <$> integer
+>       <|> Rational <$> rational
 >       <|> String <$> string
 
 \end{verbatim}
@@ -576,7 +576,8 @@ the left-hand side of a declaration.
 > gconSym = gConSym <|> tupleCommas
 
 > negLit :: Parser Token (ConstrTerm ()) a
-> negLit = NegativePattern () <$> (Int <$> int <|> Float <$> float)
+> negLit =
+>   NegativePattern () <$> (Integer <$> integer <|> Rational <$> rational)
 
 > optAsPattern :: Parser Token (Ident -> ConstrTerm ()) a
 > optAsPattern = flip AsPattern <$-> token At <*> constrTerm2
@@ -779,11 +780,11 @@ prefix of a let expression.
 > char :: Parser Token Char a
 > char = cval <$> token CharTok
 
-> int :: Parser Token Integer a
-> int = ival <$> token IntTok
+> integer :: Parser Token Integer a
+> integer = ival <$> token IntTok
 
-> float :: Parser Token Double a
-> float = fval <$> token FloatTok
+> rational :: Parser Token Rational a
+> rational = rval <$> token RatTok
 
 > string :: Parser Token String a
 > string = sval <$> token StringTok

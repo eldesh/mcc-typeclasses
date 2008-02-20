@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2618 2008-02-07 15:19:50Z wlux $
+% $Id: TypeCheck.lhs 2628 2008-02-20 16:27:30Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -957,10 +957,10 @@ in \texttt{tcFunctionDecl} above.
 
 > tcLiteral :: Bool -> Literal -> TcState (Context,Type)
 > tcLiteral _ (Char _) = return ([],charType)
-> tcLiteral poly (Int _)
+> tcLiteral poly (Integer _)
 >   | poly = freshNumType
 >   | otherwise = liftM ((,) []) (freshConstrained numTypes)
-> tcLiteral poly (Float _)
+> tcLiteral poly (Rational _)
 >   | poly = freshFracType
 >   | otherwise = liftM ((,) []) (freshConstrained fracTypes)
 > tcLiteral _ (String _) = return ([],stringType)

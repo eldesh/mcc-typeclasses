@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PredefIdent.lhs 2618 2008-02-07 15:19:50Z wlux $
+% $Id: PredefIdent.lhs 2628 2008-02-20 16:27:30Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -22,9 +22,11 @@ Sect.~\ref{sec:simplify}).
 > import List
 > import Position
 
-> preludeMIdent, debugPreludeMIdent, ptrMIdent, stablePtrMIdent :: ModuleIdent
+> preludeMIdent, debugPreludeMIdent, ratioMIdent :: ModuleIdent
+> ptrMIdent, stablePtrMIdent :: ModuleIdent
 > preludeMIdent      = mkMIdent ["Prelude"]
 > debugPreludeMIdent = mkMIdent ["DebugPrelude"]
+> ratioMIdent        = mkMIdent ["Ratio"]
 > ptrMIdent          = mkMIdent ["Ptr"]
 > stablePtrMIdent    = mkMIdent ["StablePtr"]
 
@@ -32,12 +34,13 @@ Sect.~\ref{sec:simplify}).
 > lambdaId (Position _ l c) =
 >   mkIdent ("_#lambda_line_" ++ show l ++ '.' : show c)
 
-> boolId, charId, intId, integerId, floatId, ioId, successId :: Ident
+> boolId, charId, intId, integerId, floatId, ratioId, ioId, successId :: Ident
 > boolId    = mkIdent "Bool"
 > charId    = mkIdent "Char"
 > intId     = mkIdent "Int"
 > integerId = mkIdent "Integer"
 > floatId   = mkIdent "Float"
+> ratioId   = mkIdent "Ratio"
 > ioId      = mkIdent "IO"
 > successId = mkIdent "Success"
 
@@ -70,12 +73,14 @@ Sect.~\ref{sec:simplify}).
 > mainId = mkIdent "main"
 > minusId = mkIdent "-"
 
-> qBoolId, qCharId, qIntId, qIntegerId, qFloatId, qSuccessId, qIOId :: QualIdent
+> qBoolId, qCharId, qIntId, qIntegerId, qFloatId, qRatioId :: QualIdent
+> qSuccessId, qIOId :: QualIdent
 > qBoolId = qualifyWith preludeMIdent boolId
 > qCharId = qualifyWith preludeMIdent charId
 > qIntId = qualifyWith preludeMIdent intId
 > qIntegerId = qualifyWith preludeMIdent integerId
 > qFloatId = qualifyWith preludeMIdent floatId
+> qRatioId = qualifyWith ratioMIdent ratioId
 > qSuccessId = qualifyWith preludeMIdent successId
 > qIOId = qualifyWith preludeMIdent ioId
 

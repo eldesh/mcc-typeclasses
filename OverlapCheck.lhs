@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: OverlapCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: OverlapCheck.lhs 2628 2008-02-20 16:27:30Z wlux $
 %
-% Copyright (c) 2006-2007, Wolfgang Lux
+% Copyright (c) 2006-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{OverlapCheck.lhs}
@@ -151,15 +151,17 @@ when necessary.
 >   where (same,other) = partition ((t ==) . fst) tss
 
 > promote :: [(ConstrTerm (),a)] -> [(ConstrTerm (),a)]
-> promote tss = if any (isFloat . fst) tss then map (apFst toFloat) tss else tss
->   where isFloat (LiteralPattern _ l) =
+> promote tss =
+>   if any (isRational . fst) tss then map (apFst toRational) tss else tss
+>   where isRational (LiteralPattern _ l) =
 >           case l of
->             Float _ -> True
->             _       -> False
->         isFloat (ConstructorPattern _ _ _) = False
->         toFloat (LiteralPattern a (Int i)) =
->           LiteralPattern a (Float (fromIntegral i))
->         toFloat (LiteralPattern a (Float f)) = LiteralPattern a (Float f)
+>             Rational _ -> True
+>             _          -> False
+>         isRational (ConstructorPattern _ _ _) = False
+>         toRational (LiteralPattern a (Integer i)) =
+>           LiteralPattern a (Rational (fromInteger i))
+>         toRational (LiteralPattern a (Rational r)) =
+>           LiteralPattern a (Rational r)
 
 > matches :: ([ConstrTerm a] -> [ConstrTerm a]) -> [ConstrTerm a]
 >         -> [(ConstrTerm a,[ConstrTerm a])]
@@ -172,6 +174,12 @@ when necessary.
 
 \end{verbatim}
 Unfortunately, the code has not been desugared yet.
+
+Note that rational literals are equivalent to applications of
+constructor \texttt{Ratio.:\%} and therefore in principle should be
+desugared into applications of that constructor. However, since
+\texttt{Ratio.:\%} is not exported from module \texttt{Ratio}, this is
+not relevant in practice.
 \begin{verbatim}
 
 > desugar :: ValueEnv -> ConstrTerm a -> ConstrTerm ()
@@ -182,8 +190,8 @@ Unfortunately, the code has not been desugared yet.
 >     _ -> LiteralPattern () l
 > desugar tyEnv (NegativePattern a l) =
 >   desugar tyEnv (LiteralPattern a (negateLit l))
->   where negateLit (Int i) = Int (-i)
->         negateLit (Float f) = Float (-f)
+>   where negateLit (Integer i) = Integer (-i)
+>         negateLit (Rational r) = Rational (-r)
 > desugar _ (VariablePattern _ v) = VariablePattern () anonId
 > desugar tyEnv (ConstructorPattern _ c ts) =
 >   ConstructorPattern () c (map (desugar tyEnv) ts)

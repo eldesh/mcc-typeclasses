@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2530 2007-10-22 14:50:52Z wlux $
+% $Id: CurryPP.lhs 2628 2008-02-20 16:27:30Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryPP.lhs}
@@ -301,8 +301,8 @@ Literals
 
 > ppLiteral :: Literal -> Doc
 > ppLiteral (Char c) = text (show c)
-> ppLiteral (Int i) = integer i
-> ppLiteral (Float f) = double f
+> ppLiteral (Integer i) = integer i
+> ppLiteral (Rational r) = double (fromRational r)
 > ppLiteral (String s) = text (show s)
 
 \end{verbatim}
@@ -313,8 +313,8 @@ Patterns
 > ppConstrTerm p (LiteralPattern _ l) =
 >   parenExp (p > 1 && isNegative l) (ppLiteral l)
 >   where isNegative (Char _) = False
->         isNegative (Int i) = i < 0
->         isNegative (Float f) = f < 0.0
+>         isNegative (Integer i) = i < 0
+>         isNegative (Rational r) = r < 0
 >         isNegative (String _ ) = False
 > ppConstrTerm p (NegativePattern _ l) =
 >   parenExp (p > 1) (ppInfixOp minusId <> ppLiteral l)

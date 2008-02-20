@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PredefTypes.lhs 2623 2008-02-10 17:23:09Z wlux $
+% $Id: PredefTypes.lhs 2628 2008-02-20 16:27:30Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -16,7 +16,7 @@ compiler.
 > import PredefIdent
 > import Types
 
-> unitType,boolType,charType,intType,integerType,floatType :: Type
+> unitType,boolType,charType,intType,integerType,floatType,rationalType :: Type
 > stringType,successType :: Type
 > unitType = TypeConstructor qUnitId
 > boolType = TypeConstructor qBoolId
@@ -24,12 +24,14 @@ compiler.
 > intType = TypeConstructor qIntId
 > integerType = TypeConstructor qIntegerId
 > floatType = TypeConstructor qFloatId
+> rationalType = ratioType integerType
 > stringType = listType charType
 > successType = TypeConstructor qSuccessId
 
-> listType,ioType :: Type -> Type
+> listType,ioType,ratioType :: Type -> Type
 > listType = TypeApply (TypeConstructor qListId)
 > ioType = TypeApply (TypeConstructor qIOId)
+> ratioType = TypeApply (TypeConstructor qRatioId)
 
 > tupleType :: [Type] -> Type
 > tupleType tys = foldl TypeApply (TypeConstructor (qTupleId (length tys))) tys

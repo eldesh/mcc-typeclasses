@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2523 2007-10-22 07:36:01Z wlux $
+% $Id: Deriving.lhs 2628 2008-02-20 16:27:30Z wlux $
 %
-% Copyright (c) 2006-2007, Wolfgang Lux
+% Copyright (c) 2006-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Deriving.lhs}
@@ -247,11 +247,11 @@ like \verb|[False ..]| well defined.
 
 > toEnumEqn :: Position -> Ident -> Integer -> Constr -> Equation ()
 > toEnumEqn p f i (c,_,_) =
->   equation p f [LiteralPattern () (Int i)] (Constructor () c)
+>   equation p f [LiteralPattern () (Integer i)] (Constructor () c)
 
 > fromEnumEqn :: Position -> Ident -> Constr -> Integer -> Equation ()
 > fromEnumEqn p f (c,_,_) i =
->   equation p f [ConstructorPattern () c []] (Literal () (Int i))
+>   equation p f [ConstructorPattern () c []] (Literal () (Integer i))
 
 \end{verbatim}
 \paragraph{Upper and Lower Bounds}
@@ -338,7 +338,7 @@ respectively.
 
 > showsPrecShowParen :: Ident -> Integer -> Expression () -> Expression ()
 > showsPrecShowParen v p =
->   prelShowParen (prelGt (mkVar v) (Literal () (Int p)))
+>   prelShowParen (prelGt (mkVar v) (Literal () (Integer p)))
 
 > showsPrecShowApp :: Integer -> Ident -> [Ident] -> Expression ()
 > showsPrecShowApp p c xs =
@@ -354,7 +354,7 @@ respectively.
 >               (map (showsPrecShowArg p) xs)
 
 > showsPrecShowArg :: Integer -> Ident -> Expression ()
-> showsPrecShowArg p = prelShowsPrec (Literal () (Int (p + 1))) . mkVar
+> showsPrecShowArg p = prelShowsPrec (Literal () (Integer (p + 1))) . mkVar
 
 > showsPrecShowFields :: Ident -> [Ident] -> [Ident] -> Expression ()
 > showsPrecShowFields c ls xs =

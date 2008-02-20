@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2629 2008-02-20 17:27:00Z wlux $
+-- $Id: Prelude.curry 2630 2008-02-20 17:46:10Z wlux $
 --
 -- Copyright (c) 1999-2008, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -922,7 +922,8 @@ instance Bounded Int where
     where foreign import ccall "prims.h" primMaxInt :: Int
 instance Show Int where
   -- FIXME: use a dedicated primitive for this
-  showsPrec _ = shows where foreign import primitive shows :: a -> ShowS
+  showsPrec p x = showParen (p > 6 && x < 0) (shows x)
+    where foreign import primitive shows :: a -> ShowS
 
 instance Num Int where
   (+) = primAddInt
@@ -1000,7 +1001,8 @@ instance Enum Integer where
 
 instance Show Integer where
   -- FIXME: use a dedicated primitive for this
-  showsPrec _ = shows where foreign import primitive shows :: a -> ShowS
+  showsPrec p x = showParen (p > 6 && x < 0) (shows x)
+    where foreign import primitive shows :: a -> ShowS
 
 instance Num Integer where
   (+) = primAddInteger
@@ -1087,7 +1089,9 @@ instance Enum Float where
     | otherwise = takeWhile (>= x3 + (x2 - x1) * 0.5) (enumFromThen x1 x2)
 instance Show Float where
   -- FIXME: use a dedicated primitive for this
-  showsPrec _ = shows where foreign import primitive shows :: a -> ShowS
+  -- FIXME: check for negative zeros, too
+  showsPrec p x = showParen (p > 6 && x < 0) (shows x)
+    where foreign import primitive shows :: a -> ShowS
 
 instance Num Float where
   (+) = primAddFloat

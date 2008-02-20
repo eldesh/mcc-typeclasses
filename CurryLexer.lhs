@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryLexer.lhs 2628 2008-02-20 16:27:30Z wlux $
+% $Id: CurryLexer.lhs 2631 2008-02-20 17:56:34Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -109,7 +109,7 @@ specific attributes.
 
 > ratTok :: String -> String -> Int -> Token
 > ratTok mant frac exp =
->   Token RatTok RatAttributes{ rval = convertRational mant frac exp }
+>   Token RatTok RatAttributes{ rval = convertFloat mant frac exp }
 
 > stringTok :: String -> Token
 > stringTok cs = Token StringTok StringAttributes{ sval = cs }

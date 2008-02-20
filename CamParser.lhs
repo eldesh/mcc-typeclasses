@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CamParser.lhs 2621 2008-02-08 14:42:02Z wlux $
+% $Id: CamParser.lhs 2631 2008-02-20 17:56:34Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -64,7 +64,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 
 > floatTok :: String -> String -> Int -> Token
 > floatTok mant frac exp =
->   Token FloatNum FloatAttributes{ fval = convertSignedFloating mant frac exp }
+>   Token FloatNum FloatAttributes{ fval = convertSignedFloat mant frac exp }
 
 > data Keyword =
 >     KW_bool

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: LexComb.lhs 2628 2008-02-20 16:27:30Z wlux $
+% $Id: LexComb.lhs 2631 2008-02-20 17:56:34Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -78,21 +78,15 @@ Conversions from strings into numbers.
 > convertIntegral b = foldl op 0
 >   where m `op` n = b * m + fromIntegral (digitToInt n)
 
-> convertSignedFloating :: RealFloat a => String -> String -> Int -> a
-> convertSignedFloating ('+':m) f e = convertFloating m f e
-> convertSignedFloating ('-':m) f e = - convertFloating m f e
-> convertSignedFloating m f e = convertFloating m f e
+> convertSignedFloat :: RealFrac a => String -> String -> Int -> a
+> convertSignedFloat ('+':m) f e = convertFloat m f e
+> convertSignedFloat ('-':m) f e = - convertFloat m f e
+> convertSignedFloat m f e = convertFloat m f e
 
-> convertFloating :: RealFloat a => String -> String -> Int -> a
-> convertFloating m f e =
+> convertFloat :: RealFrac a => String -> String -> Int -> a
+> convertFloat m f e =
 >   case readFloat (m ++ f ++ 'e' : show (e - length f)) of
 >     [(f,"")] -> f
->     _ -> error "internal error: invalid string (convertFloating)"
-
-> convertRational :: String -> String -> Int -> Rational
-> convertRational m f e =
->   case readDec (m ++ f) of
->     [(n,"")] -> toRational n * 10 ^^ (e - length f)
->     _ -> error "internal error: invalid string (convertRational)"
+>     _ -> error "internal error: invalid string (convertFloat)"
 
 \end{verbatim}

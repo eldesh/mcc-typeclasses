@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: LexComb.lhs 2631 2008-02-20 17:56:34Z wlux $
+% $Id: LexComb.lhs 2632 2008-03-12 16:42:17Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -21,7 +21,8 @@ nested layout groups.
 > import Position
 > import Error
 > import Char
-> import Numeric
+> import Numeric(lexDigits, readDec)
+> import Ratio
 
 > infixl 1 `thenL`, `thenL_`
 
@@ -88,5 +89,33 @@ Conversions from strings into numbers.
 >   case readFloat (m ++ f ++ 'e' : show (e - length f)) of
 >     [(f,"")] -> f
 >     _ -> error "internal error: invalid string (convertFloat)"
+
+\end{verbatim}
+The following definition has been copied -- almost -- verbatim from
+the revised Haskell'98 report~\cite{PeytonJones03:Haskell} except for
+the two special cases for nan and infinity, which are not needed here.
+We define \texttt{readFloat} here instead of importing it from the
+\texttt{Numeric} module because hbc's implementation incorrectly
+requires a \texttt{RealFloat} argument instead of a \texttt{RealFrac}
+one and \texttt{Ratio.Rational} -- obviously -- does not have a
+\texttt{RealFloat} instance.
+\begin{verbatim}
+
+> readFloat :: (RealFrac a) => ReadS a
+> readFloat r =
+>   [(fromRational ((n%1)*10^^(k-d)),t) | (n,d,s) <- readFix r,
+>                                         (k,t)   <- readExp s]
+>   where readFix r = [(read (ds++ds'), length ds', t) | (ds,d) <- lexDigits r,
+>                                                        (ds',t) <- lexFrac d ]
+>
+>         lexFrac ('.':ds) = lexDigits ds
+>         lexFrac s        = [("",s)]        
+>
+>         readExp (e:s) | e `elem` "eE" = readExp' s
+>         readExp s                     = [(0,s)]
+>
+>         readExp' ('-':s) = [(-k,t) | (k,t) <- readDec s]
+>         readExp' ('+':s) = readDec s
+>         readExp' s       = readDec s
 
 \end{verbatim}

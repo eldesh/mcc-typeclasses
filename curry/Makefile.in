@@ -1,6 +1,6 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 2627 2008-02-18 07:44:02Z wlux $
+# $Id: Makefile.in 2638 2008-03-13 08:07:44Z wlux $
 #
 # Copyright (c) 2004-2008, Wolfgang Lux
 # See ../LICENSE for the full license.
@@ -131,6 +131,17 @@ rts_H_PATH:sh = echo @top_srcdir@/runtime/*.h
 rts_H = ../runtime/config.h $(rts_H_PATH:@top_srcdir@/runtime/config.h=)
 
 # suffix rules
+# NB The seemingly contrived $(MAKEFLAGS:M-k:S/=/=/) substitution is used in
+#    order to check for the presence of -k among the command line flags in
+#    a portable way. GNU make and other POSIX compatible make commands
+#    collect all single letter options -- if any -- in the first word of
+#    $(MAKEFLAGS). BSD make commands, on the other hand, use a separate word
+#    for each single letter option. In order to make the -k option the first
+#    word if present, we use BSD make's :M variable modifier, which filters
+#    $(MAKEFLAGS) keeping only those words which match the pattern following
+#    :M. Since other make commands do not understand this modifier, we also
+#    add the identity substitution :S/=/=/, which yields a System V compatible
+#    variable substitution of the form :SUFFIX=REPL.
 .SUFFIXES: .curry .icurry .c .o .d.c .d.o
 .curry.c:
 	rm -rf .$*
@@ -146,22 +157,24 @@ rts_H = ../runtime/config.h $(rts_H_PATH:@top_srcdir@/runtime/config.h=)
 	@test -f $@ || (echo "$@ does not exist!"; echo "Remove $< and run make again."; exit 1)
 .c.o:
 	fail=; \
+	set dummy $(MAKEFLAGS:M-k:S/=/=/); k=$$2; \
 	set .$*/*.c; test "$$1" = ".$*/*.c" || \
 	for f in $$*; do \
 		$(CC) $(CPPFLAGS) $(CFLAGS) -c $$f \
 			-o .$*/`basename $$f .c`.o || \
-			case "$(MFLAGS)" in -*k* | *' '-k*) fail=yes;; *) exit $$?;; esac; \
+			case $$k in *=*) exit $$?;; *k*) fail=yes;; *) exit $$?;; esac; \
 	done; \
 	test -z "$$fail"
 	touch $@
 # this rule is going to make BSD make happy
 .d.c.d.o:
 	fail=; \
+	set dummy $(MAKEFLAGS:M-k:S/=/=/); k=$$2; \
 	set .$*.d/*.c; test "$$1" = ".$*.d/*.c" || \
 	for f in $$*; do \
 		$(CC) $(CPPFLAGS) $(CFLAGS) -c $$f \
 			-o .$*.d/`basename $$f .c`.o || \
-			case "$(MFLAGS)" in -*k* | *' '-k*) fail=yes;; *) exit $$?;; esac; \
+			case $$k in *=*) exit $$?;; *k*) fail=yes;; *) exit $$?;; esac; \
 	done; \
 	test -z "$$fail"
 	touch $@
@@ -207,7 +220,7 @@ Prelude.c: Prelude.curry
 	touch Prelude.c
 	cmp -s Prelude.icurry $(srcdir)/Prelude.icurry-boot || \
 		{ cp -p Prelude.icurry $(srcdir)/Prelude.icurry-boot && \
-		  $(MAKE) $(MFLAGS) Ratio.icurry IO.icurry; }
+		  $(MAKE) Ratio.icurry IO.icurry; }
 
 Ratio.c: Ratio.curry $(srcdir)/Prelude.icurry-boot
 	$(MAKE) bootstrap
@@ -232,15 +245,28 @@ IO.o: Prelude.icurry
 # link all source files into the current directory
 # NB if $(srcdir) is a relative path we have to modify the paths for target
 #    files which are located in subdirectories
+# NB The seemingly contrived $(MAKEFLAGS:M-s:S/=/=/) substitution is used in
+#    order to check for the presence of -s among the command line flags in
+#    a portable way. GNU make and other POSIX compatible make commands
+#    collect all single letter options -- if any -- in the first word of
+#    $(MAKEFLAGS). BSD make commands, on the other hand, use a separate word
+#    for each single letter option. In order to make the -s option the first
+#    word if present, we use BSD make's :M variable modifier, which filters
+#    $(MAKEFLAGS) keeping only those words which match the pattern following
+#    :M. Since other make commands do not understand this modifier, we also
+#    add the identity substitution :S/=/=/, which yields a System V compatible
+#    variable substitution of the form :SUFFIX=REPL.
 .DEFAULT:
 	@test ! -r $@ -a -f $(srcdir)/$@ && \
 	(test -d $(@D) || mkdir $(@D)) && \
 	if expr $(srcdir) : '/.*' >/dev/null; then \
-		(case "$(MFLAGS)" in -*s* | *' '-s*) ;; *) set -x;; esac; \
+		(set dummy $(MAKEFLAGS:M-s:S/=/=/); \
+		 case $$2 in *=*) set -x;; *s*) ;; *) set -x;; esac; \
 		 ln -s $(srcdir)/$@ $@); \
 	else \
 		srcdir=`echo $@ | sed -e 's:[^/]*$$::' -e 's:[^/]*/:../:g'` && \
-		(case "$(MFLAGS)" in -*s* | *' '-s*) ;; *) set -x;; esac; \
+		(set dummy $(MAKEFLAGS:M-s:S/=/=/); s=$$2; \
+		 case $$2 in *=*) set -x;; *s*) ;; *) set -x;; esac; \
 		 ln -s $${srcdir}$(srcdir)/$@ $@); \
 	fi
 
@@ -270,7 +296,7 @@ $(top_srcdir)/configure: $(top_srcdir)/configure.in $(top_srcdir)/aclocal.m4
 .PRECIOUS: Makefile
 Makefile: $(srcdir)/Makefile.in ../config.status
 	cd .. && ./config.status curry/Makefile
-	$(MAKE) $(MFLAGS) depend
+	$(MAKE) depend
 
 .PRECIOUS: ../config.status
 ../config.status: $(top_srcdir)/configure

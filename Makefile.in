@@ -1,6 +1,6 @@
 # Makefile for the Curry compiler
 #
-# $Id: Makefile.in 2611 2008-02-03 23:35:16Z wlux $
+# $Id: Makefile.in 2638 2008-03-13 08:07:44Z wlux $
 #
 # Copyright (c) 2000-2008 Wolfgang Lux
 # See LICENSE for the full license.
@@ -244,14 +244,14 @@ FORCE:
 # runtime library
 .PHONY: runtime
 runtime: FORCE
-	cd runtime && $(MAKE) $(MFLAGS)
+	cd runtime && $(MAKE)
 
 # Curry library
 .PHONY: curry icurry ccurry
 curry: cycc runtime
-	cd curry && $(MAKE) $(MFLAGS)
+	cd curry && $(MAKE)
 icurry ccurry: cycc
-	cd curry && $(MAKE) $(MFLAGS) $@
+	cd curry && $(MAKE) $@
 
 # manual pages
 mans: $(man_MANS)
@@ -279,7 +279,7 @@ curry.pdf: newer makedoc tex
 	./makedoc pdflatex
 
 tex: FORCE
-	cd runtime; $(MAKE) $(MFLAGS) tex
+	cd runtime; $(MAKE) tex
 
 makedoc: Makefile $(srcdir)/makedoc.in
 	./config.status $@
@@ -297,15 +297,28 @@ TeXShop: tex
 # link all source files into the current directory
 # NB if $(srcdir) is a relative path we have to modify the paths for target
 #    files which are located in subdirectories
+# NB The seemingly contrived $(MAKEFLAGS:M-s:S/=/=/) substitution is used in
+#    order to check for the presence of -s among the command line flags in
+#    a portable way. GNU make and other POSIX compatible make commands
+#    collect all single letter options -- if any -- in the first word of
+#    $(MAKEFLAGS). BSD make commands, on the other hand, use a separate word
+#    for each single letter option. In order to make the -s option the first
+#    word if present, we use BSD make's :M variable modifier, which filters
+#    $(MAKEFLAGS) keeping only those words which match the pattern following
+#    :M. Since other make commands do not understand this modifier, we also
+#    add the identity substitution :S/=/=/, which yields a System V compatible
+#    variable substitution of the form :SUFFIX=REPL.
 .DEFAULT:
 	@test ! -r $@ -a -f $(srcdir)/$@ && \
 	(test -d $(@D) || mkdir $(@D)) && \
 	if expr $(srcdir) : '/.*' >/dev/null; then \
-		(case "$(MFLAGS)" in -*s* | *' '-s*) ;; *) set -x;; esac; \
+		(set dummy $(MAKEFLAGS:M-s:S/=/=/); \
+		 case $$2 in *=*) set -x;; *s*) ;; *) set -x;; esac; \
 		 ln -s $(srcdir)/$@ $@); \
 	else \
 		srcdir=`echo $@ | sed -e 's:[^/]*$$::' -e 's:[^/]*/:../:g'` && \
-		(case "$(MFLAGS)" in -*s* | *' '-s*) ;; *) set -x;; esac; \
+		(set dummy $(MAKEFLAGS:M-s:S/=/=/); \
+		 case $$2 in *=*) set -x;; *s*) ;; *) set -x;; esac; \
 		 ln -s $${srcdir}$(srcdir)/$@ $@); \
 	fi
 
@@ -377,7 +390,7 @@ distdir:
 	for f in $(DISTFILES); do cp $(srcdir)/$$f $(distdir)/$$f; done
 	for d in $(SUBDIRS); do \
 		mkdir $(distdir)/$$d && \
-		(cd $$d && $(MAKE) $(MFLAGS) distdir distdir=../$(distdir)/$$d) || \
+		(cd $$d && $(MAKE) distdir distdir=../$(distdir)/$$d) || \
 		exit $$?; \
 	done
 
@@ -409,7 +422,7 @@ bindistdir: cycc cymk newer runtime curry
 		cp $(srcdir)/$$f.in $(bindistdir)/man || exit $$?; \
 	done
 	for d in $(SUBDIRS); do \
-		(cd $$d && $(MAKE) $(MFLAGS) bindistdir distdir=../$(bindistdir)) || \
+		(cd $$d && $(MAKE) bindistdir distdir=../$(bindistdir)) || \
 		exit $$?; \
 	done
 
@@ -420,7 +433,7 @@ $(srcdir)/configure: $(srcdir)/configure.in $(srcdir)/aclocal.m4
 .PRECIOUS: Makefile
 Makefile: $(srcdir)/Makefile.in config.status
 	./config.status $@
-	$(MAKE) $(MFLAGS) depend
+	$(MAKE) depend
 
 cyc: $(srcdir)/cyc.in $(srcdir)/in-place-config config.status
 	./config.status $@
@@ -464,14 +477,32 @@ maintainerclean-dir:: distclean-dir
 depend: depend-dir depend-subdirs
 
 # recursive invocations
+# NB The seemingly contrived $(MAKEFLAGS:M-s:S/=/=/) and $(MAKEFLAGS:M-k:S/=/=/)
+#    substitutions are used in order to check for the presence of -s and -k,
+#    respectively, among the command line flags in a portable way. GNU make
+#    and other POSIX compatible make commands collect all single letter options
+#    -- if any -- in the first word of $(MAKEFLAGS). BSD make commands, on the
+#    other hand, use a separate word for each single letter option. In order to
+#    make the -s and -k options the first word if present, we use BSD make's
+#    :M variable modifier, which filters $(MAKEFLAGS) keeping only those words
+#    which match the pattern following :M. Since other make commands do not
+#    understand this modifier, we also add the identity substitution :S/=/=/,
+#    which yields a System V compatible variable substitution of the form
+#    :SUFFIX=REPL.
 mostlyclean-subdirs clean-subdirs distclean-subdirs maintainerclean-subdirs \
 depend-subdirs install-subdirs:
 	@fail=; subdirs="$(SUBDIRS)"; \
+	set dummy $(MAKEFLAGS:M-s:S/=/=/); s=$$2; \
+	set dummy $(MAKEFLAGS:M-k:S/=/=/); k=$$2; \
 	for d in $$subdirs; do \
 		target=`echo $@ | sed 's/-subdirs$$//'`; \
-		case "$(MFLAGS)" in -*s* | *' '-s* ) ;; *) echo "Making $$target in $$d"; esac; \
-		(cd $$d && $(MAKE) $(MFLAGS) $$target) || \
-		case "$(MFLAGS)" in -*k* | *' '-k* ) fail=yes;; *) exit $$?;; esac; \
+		case $$s in \
+			*=*) echo "Making $$target in $$d";; \
+			*s*) ;; \
+			*) echo "Making $$target in $$d"; \
+		esac; \
+		(cd $$d && $(MAKE) $$target) || \
+		case $$k in *=*) exit $$?;; *k*) fail=yes;; *) exit $$?;; esac; \
 	done; \
 	test -z "$$fail"
 

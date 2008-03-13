@@ -1,6 +1,6 @@
 # Makefile for the Curry runtime system
 #
-# $Id: Makefile.in 2615 2008-02-07 08:54:11Z wlux $
+# $Id: Makefile.in 2638 2008-03-13 08:07:44Z wlux $
 #
 # Copyright (c) 2001-2008, Wolfgang Lux
 # See ../LICENSE for the full license.
@@ -186,7 +186,7 @@ $(top_srcdir)/configure: $(top_srcdir)/configure.in $(top_srcdir)/aclocal.m4
 .PRECIOUS: Makefile
 Makefile: $(srcdir)/Makefile.in ../config.status
 	cd .. && ./config.status runtime/Makefile
-	$(MAKE) $(MFLAGS) depend
+	$(MAKE) depend
 
 config.h: .config.h.stamp
 .config.h.stamp: $(srcdir)/config.h.in ../config.status

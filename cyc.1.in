@@ -4,7 +4,7 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cyc.1.in 2640 2008-03-13 08:11:47Z wlux $
+.\" $Id: cyc.1.in 2641 2008-03-13 08:13:05Z wlux $
 .\"
 .\" Copyright (c) 2004-2008, Wolfgang Lux
 .\" See LICENSE for the full license.
@@ -331,15 +331,18 @@ option as well.
 .It Fl h Ar size
 Use
 .Ar size
-bytes for the heap of the Curry program. Note that actually twice as
-much memory is allocated for the heap because the runtime system uses
-a two-space copying collector. The abbreviations
+bytes for the heap of the Curry program. Note that the runtime system
+uses a two-space copying collector and
+.Ar size
+denotes the total size of both semi-spaces. Thus only
+.Ar size Li / 2
+bytes are available for allocation. The abbreviations
 .Ar size Ns Li k
 and
 .Ar size Ns Li M
 can be used for specifying the size in kBytes and MBytes,
-respectively. The default is to use a 4 MByte (8 MByte) heap on 32-bit
-(64-bit) targets. 
+respectively. The default is to use a 8 MByte (16 MByte) heap on
+32-bit (64-bit) targets.
 .It Fl k Ar size
 Use
 .Ar size
@@ -526,9 +529,9 @@ allows specifying the buffer size when using fully buffered mode.
 .It Fl h Ar n
 Use
 .Ar n
-bytes for the heap in this run of the program. Note that actually
-twice as much memory is allocated for the heap because the runtime
-system uses a two-space copying collector. The abbreviations
+bytes for the heap in this run of the program. Note that only half of
+the specified size is used for allocation because the runtime system
+uses a two-space copying collector. The abbreviations
 .Ar n Ns Li k
 and
 .Ar n Ns Li M

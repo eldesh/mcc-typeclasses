@@ -1,27 +1,26 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: gc_2space.nw 2347 2007-06-23 10:34:08Z wlux $
+% $Id: gc_2space.nw 2641 2008-03-13 08:13:05Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Garbage Collection}\label{sec:copying-gc}
 The run-time system uses a two-space copying garbage collector. The
-collector operates on two separate heap spaces, from-space and
-to-space. Allocation is always performed in from-space. When the
-allocator runs out of memory, it copies all live nodes from from-space
-to to-space and then flips the roles of both spaces. The big advantage
-of a copying collector is that is has to scan only the live nodes in
-the heap and that it touches every live node only once. A disadvantage
-of the two-space copying collector is that it requires twice as much
-memory because of using two separate copies of the heap.  However,
-this is not much of a problem nowadays.
+collector operates on a heap that is split among two separate
+semi-spaces, from-space and to-space. Allocation is always performed
+in from-space. When the allocator runs out of memory, it copies all
+live nodes from from-space to to-space and then flips the roles of
+both semi-spaces. The big advantage of a copying collector is that is
+has to scan only the live nodes in the heap and that it touches every
+live node only once. A disadvantage of the two-space copying collector
+is that only half of the heap is used for allocation.
 
 A problem of copying collectors in the context of logic and functional
 logic languages is that they do not preserve allocation order.
 Allocation order is used in order to determine the necessity of
-trailing when a node is updated. Therefore, mixing up allocation order
-may lead to updates being redundantly recorded on the trail. This, in
-turn, will increase the size of saved search spaces in our
+trailing when a node is updated. Therefore, messing up allocation
+order may lead to updates being redundantly recorded on the trail.
+This, in turn, will increase the size of saved search spaces in our
 implementation, and also will prevent the trailed nodes and their
 bindings from being garbage collected.
 
@@ -77,14 +76,15 @@ released earlier upon failure, and also may help to avoid trailing for
 those nodes.
 
 In our implementation, the garbage collector allocates one large heap
-array and then splits it into two halves. The pointer [[from_space]]
-points to the base of the active heap, while [[to_space]] points to
-the inactive space. The size of both halves is stored in the variable
-[[heap_size]]. The size of the heap as well as the start of both heap
-spaces is aligned to a page boundary.
+array and then splits it among the two semi-spaces. The pointer
+[[from_space]] points to the base of the active semi-space and
+[[to_space]] points to the inactive semi-space. The size of each
+semi-space is stored in the variable [[heap_size]]. The size of the
+heap as well as the start of both heap spaces is aligned to a page
+boundary.
 
 Note that we must keep the variables [[heap_base]] and [[heap_end]] in
-sync with these variables when the two heaps are flipped after a
+sync with these variables when the semi-spaces are flipped after a
 garbage collection.
 
 <<gc_2space.c>>=
@@ -117,13 +117,13 @@ static unsigned long heap_size;
 void
 init_heap(unsigned long size)
 {
-    heap_size = (size + pagemask) & ~pagemask;
-    heap_base = (word *)malloc(2 * heap_size + pagemask);
+    size      = (size + pagemask) & ~pagemask;
+    heap_base = (word *)malloc(size + pagemask);
     if ( heap_base == NULL )
         sys_error("init_heap");
 
     heap_base  = (word *)(((long)heap_base + pagemask) & ~pagemask);
-    heap_size /= word_size;
+    heap_size  = size / word_size / 2;
     from_space = heap_base;
     to_space   = from_space + heap_size;
     heap_end   = to_space;
@@ -251,8 +251,8 @@ collect(unsigned int n_regs, unsigned int request)
 @
 When a node is copied from from-space to to-space, its info pointer in
 from-space is replaced by a forwarding pointer to the new location.
-The lowest bit of the info pointer is used to mark forwarding
-pointers.
+The least significant bit of the info pointer is used to mark
+forwarded nodes.
 
 <<Garbage collector definitions>>=
 #define GC_FLAGS                0x03
@@ -285,6 +285,9 @@ bound to the selected result of \texttt{coin} and this binding would
 not be undone when switching to the other solution because \texttt{z}
 is allocated in the top-most heap segment when it is bound and
 therefore it is not recorded on the trail.
+
+\ToDo{It would be safe to shorten indirection chains in the top most
+  heap segment even for the trail based implementation.}
 
 <<Garbage collector definitions>>=
 static inline Node *
@@ -424,16 +427,16 @@ while ( --scan_stack >= slim )
     *scan_stack = GC_copy(&copy, hlim, *scan_stack);
 
 @ 
-Processing of the trail is somewhat more complicated. First of all, we
+Processing of the trail is somewhat more complicated. First of all,
 note that nodes whose update was recorded on the trail may be no
 longer in use by the computation. Therefore, we consider the pointers
-to updated cells on the trail as weak roots, i.e., they do not
-contribute to the liveness of a node. Furthermore, if a node is
-promoted into a segment where an update for it was recorded on the
-trail, this trail entry becomes redundant since the old binding of the
-node will never be restored. Therefore, the first action while
-processing a heap segment is to compact its trail segment by removing
-all entries for nodes which were not copied up to this point.
+to updated cells on the trail weak roots, i.e., they do not contribute
+to the liveness of a node. Furthermore, if a node is promoted into a
+segment where an update for it was recorded on the trail, this trail
+entry becomes redundant since the old binding of the node will never
+be restored. Therefore, the first action while processing a heap
+segment is to compact its trail segment by removing all entries for
+nodes which were not copied up to this point.
 
 \attention\emph{Note:} This code assumes that only nodes within the
 heap are updated and their addresses recorded on the trail. If this

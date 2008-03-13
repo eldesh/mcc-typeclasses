@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2628 2008-02-20 16:27:30Z wlux $
+% $Id: CGen.lhs 2639 2008-03-13 08:09:02Z wlux $
 %
 % Copyright (c) 1998-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -53,8 +53,9 @@ variables.
 >   where fvDecl v vs =
 >           CStaticArray (CPointerType (CConstType "char")) v
 >                        (map CInit (map CString vs ++ [CNull]))
->         initVar v d = CppCondStmts d [setVar (Name v) (CExpr d)] []
+>         initVar v d = CppCondStmts (defined d) [setVar (Name v) (CExpr d)] []
 >         defaultValue v = "DEFAULT_" ++ map toUpper v
+>         defined v = "defined(" ++ v ++ ")"
 >         curry_main (Just _) = curry_eval
 >         curry_main Nothing = const . curry_exec
 >         curry_exec g args =

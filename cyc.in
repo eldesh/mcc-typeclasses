@@ -3,7 +3,7 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 2614 2008-02-03 23:42:26Z wlux $
+# $Id: cyc.in 2639 2008-03-13 08:09:02Z wlux $
 #
 # Copyright (c) 2002-2008, Wolfgang Lux
 # See LICENSE for the full license.
@@ -63,8 +63,8 @@ check_size ( ) {
     eval _x=\$"$2"
     case $_x in
       "" ) echo 1>&2 "$cyc: missing size after $1"; exit 1;;
-      *[kK] ) _y=`expr "$_x" : '\([0-9]*\)[kK]$'`"*k";;
-      *[mM] ) _y=`expr "$_x" : '\([0-9]*\)[mM]$'`"*M";;
+      *[kK] ) _y=`expr "$_x" : '\([0-9]*\)[kK]$'`"*1024";;
+      *[mM] ) _y=`expr "$_x" : '\([0-9]*\)[mM]$'`"*1024*1024";;
       * ) _y=`expr "$_x" : '\([0-9]*\)$'`;;
     esac
     case $_y in

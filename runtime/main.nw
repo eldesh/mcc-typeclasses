@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: main.nw 2347 2007-06-23 10:34:08Z wlux $
+% $Id: main.nw 2640 2008-03-13 08:11:47Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 @
@@ -75,14 +75,14 @@ static unsigned long parse_size(long max, const char *, const char *);
 #define M k*k
 
 #ifndef DEFAULT_HEAPSIZE
-# define DEFAULT_HEAPSIZE 4*M
+# define DEFAULT_HEAPSIZE 1*M * word_size
 #endif
 
 #ifndef DEFAULT_STACKSIZE
-# define DEFAULT_STACKSIZE 512*k
+# define DEFAULT_STACKSIZE 128*k * word_size
 #endif
 #ifndef DEFAULT_TRAILSIZE
-# define DEFAULT_TRAILSIZE 512*k
+# define DEFAULT_TRAILSIZE 128*k * word_size
 #endif
 
 #define DEFAULT_PAGESIZE 4*k

@@ -4,7 +4,7 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cyc.1.in 2614 2008-02-03 23:42:26Z wlux $
+.\" $Id: cyc.1.in 2640 2008-03-13 08:11:47Z wlux $
 .\"
 .\" Copyright (c) 2004-2008, Wolfgang Lux
 .\" See LICENSE for the full license.
@@ -338,7 +338,8 @@ a two-space copying collector. The abbreviations
 and
 .Ar size Ns Li M
 can be used for specifying the size in kBytes and MBytes,
-respectively. The default is to use a 4 MByte heap. 
+respectively. The default is to use a 4 MByte (8 MByte) heap on 32-bit
+(64-bit) targets. 
 .It Fl k Ar size
 Use
 .Ar size
@@ -347,7 +348,8 @@ bytes for the stack of the Curry program. The abbreviations
 and
 .Ar size Ns Li M
 can be used for specifying the size in kBytes and MBytes,
-respectively. The default is to use a 512 kByte stack.
+respectively. The default is to use a 512 kByte (1 MByte) stack on
+32-bit (64-bit) targets.
 .It Fl t Ar size
 Use
 .Ar size
@@ -356,7 +358,8 @@ bytes for the trail stack of the Curry program. The abbreviations
 and
 .Ar size Ns Li M
 can be used for specifying the size in kBytes and MBytes,
-respectively. The default is to use a 512 kByte trail stack.
+respectively. The default is to use a 512 kByte (1 MByte) trail stack
+on 32-bit (64-bit) targets.
 .It Fl f
 Print all failures during execution of a non-deterministic goal. If
 given multiple times, print also failures inside encapsulated search.

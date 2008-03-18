@@ -95,13 +95,13 @@ deleteBy p x (y:ys) = if p x y then ys else y : deleteBy p x ys
 (\\) = deleteFirstsBy (==)
 
 deleteFirstsBy :: (a -> a -> Bool) -> [a] -> [a] -> [a]
-deleteFirstsBy p xs ys = foldr (deleteBy p) ys xs
+deleteFirstsBy p xs ys = foldl (flip (deleteBy p)) xs ys
 
 union :: Eq a => [a] -> [a] -> [a]
 union = unionBy (==)
 
 unionBy :: (a -> a -> Bool) -> [a] -> [a] -> [a]
-unionBy p xs ys = xs ++ deleteFirstsBy p xs ys
+unionBy p xs ys = xs ++ deleteFirstsBy p (nubBy p ys) xs
 
 intersect :: Eq a => [a] -> [a] -> [a]
 intersect = intersectBy (==)
@@ -229,16 +229,15 @@ zip6 = zipWith6 (\u v w x y z -> (u,v,w,x,y,z))
 zip7 :: [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [g] -> [(a,b,c,d,e,f,g)]
 zip7 = zipWith7 (\t u v w x y z -> (t,u,v,w,x,y,z))
 
-zipWith4 :: (a -> b -> c -> d -> (a,b,c,d))
-	 -> [a] -> [b] -> [c] -> [d] -> [(a,b,c,d)]
+zipWith4 :: (a -> b -> c -> d -> e) -> [a] -> [b] -> [c] -> [d] -> [e]
 zipWith4 _ []     _      _      _      = []
 zipWith4 _ (_:_)  []     _      _      = []
 zipWith4 _ (_:_)  (_:_)  []     _      = []
 zipWith4 _ (_:_)  (_:_)  (_:_)  []     = []
 zipWith4 f (w:ws) (x:xs) (y:ys) (z:zs) = f w x y z : zipWith4 f ws xs ys zs
 
-zipWith5 :: (a -> b -> c -> d -> e -> (a,b,c,d,e))
-	 -> [a] -> [b] -> [c] -> [d] -> [e] -> [(a,b,c,d,e)]
+zipWith5 :: (a -> b -> c -> d -> e -> f)
+	 -> [a] -> [b] -> [c] -> [d] -> [e] -> [f]
 zipWith5 _ []     _      _      _      _      = []
 zipWith5 _ (_:_)  []     _      _      _      = []
 zipWith5 _ (_:_)  (_:_)  []     _      _      = []
@@ -247,8 +246,8 @@ zipWith5 _ (_:_)  (_:_)  (_:_)  (_:_)  []     = []
 zipWith5 f (v:vs) (w:ws) (x:xs) (y:ys) (z:zs) =
   f v w x y z : zipWith5 f vs ws xs ys zs
 
-zipWith6 :: (a -> b -> c -> d -> e -> f -> (a,b,c,d,e,f))
-	 -> [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [(a,b,c,d,e,f)]
+zipWith6 :: (a -> b -> c -> d -> e -> f -> g)
+	 -> [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [g]
 zipWith6 _ []     _      _      _      _      _      = []
 zipWith6 _ (_:_)  []     _      _      _      _      = []
 zipWith6 _ (_:_)  (_:_)  []     _      _      _      = []
@@ -258,8 +257,8 @@ zipWith6 _ (_:_)  (_:_)  (_:_)  (_:_)  (_:_)  []     = []
 zipWith6 f (u:us) (v:vs) (w:ws) (x:xs) (y:ys) (z:zs) =
   f u v w x y z : zipWith6 f us vs ws xs ys zs
 
-zipWith7 :: (a -> b -> c -> d -> e -> f -> g -> (a,b,c,d,e,f,g))
-	 -> [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [g] -> [(a,b,c,d,e,f,g)]
+zipWith7 :: (a -> b -> c -> d -> e -> f -> g -> h)
+	 -> [a] -> [b] -> [c] -> [d] -> [e] -> [f] -> [g] -> [h]
 zipWith7 _ []     _      _      _      _      _      _      = []
 zipWith7 _ (_:_)  []     _      _      _      _      _      = []
 zipWith7 _ (_:_)  (_:_)  []     _      _      _      _      = []

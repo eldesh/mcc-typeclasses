@@ -217,6 +217,34 @@ minimumBy cmp (x:xs) = foldr min x xs
 	    GT -> y
 	    _  -> x
 
+genericLength :: Integral a => [b] -> a
+genericLength = count 0
+  where count n []     = n
+  	count n (_:xs) = n' `seq` count n' xs where n' = n + 1
+
+genericTake :: Integral a => a -> [b] -> [b]
+genericTake n l = if n<=0 then [] else takep n l
+   where takep _ []     = []
+         takep n (x:xs) = x : genericTake (n-1) xs
+
+genericDrop :: Integral a => a -> [b] -> [b]
+genericDrop n l = if n<=0 then l else dropp n l
+   where dropp _ []     = []
+         dropp n (_:xs) = genericDrop (n-1) xs
+
+genericSplitAt :: Integral a => a -> [b] -> ([b],[b])
+genericSplitAt n l = if n <= 0 then ([],l) else splitAtp n l
+  where splitAtp _ []     = ([],[])
+	splitAtp n (x:xs) = let (ys,zs) = genericSplitAt (n-1) xs in (x:ys,zs)
+
+genericIndex :: Integral a => [b] -> a -> b
+genericIndex (x:xs) n 
+  | n == 0        = x
+  | n > 0         = genericIndex xs (n-1)
+
+genericReplicate :: Integral a => a -> b -> [b]
+genericReplicate n x = genericTake n (repeat x)
+
 zip4 :: [a] -> [b] -> [c] -> [d] -> [(a,b,c,d)]
 zip4 = zipWith4 (\w x y z -> (w,x,y,z))
 

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 2615 2008-02-07 08:54:11Z wlux $
+% $Id: spaces.nw 2646 2008-03-26 04:26:26Z wlux $
 %
 % Copyright (c) 2003-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -7,7 +7,7 @@
 \subsection{Managing Search Spaces}\label{sec:spaces}
 By default, the runtime system uses an extended trailing scheme in
 order to manage multiple bindings for variables and shared
-applications in an encapsulated search. A new search space is created
+applications in encapsulated search. A new search space is created
 each time [[try]] is applied to a new search goal. Variable nodes and
 shared lazy applications are tagged with the search space that was
 active at the time of their allocation. Search spaces are organized in
@@ -15,12 +15,12 @@ trees with the root space corresponding to the initial evaluation of a
 particular search goal, and the other nodes of that tree corresponding
 to different evaluation states of that goal. Within each tree, the
 bindings of only one space are active at each time. A pointer to this
-space is recorded in the [[active]] field of the root space. The
+space is recorded in the [[s.active]] field of the root space. The
 current search space is maintained in the register [[regs.ss]].
 
 \textbf{Invariant}: The runtime system preserves the invariant
-[[regs.ss->root->active == regs.ss]]. The garbage collector makes use
-of this invariant.
+[[regs.ss->root->s.active == regs.ss]]. The garbage collector makes
+use of this invariant.
 
 Since only local variables and applications can be changed by a
 computation and their bindings are not visible outside of the search
@@ -48,10 +48,12 @@ typedef struct script Script;
 struct search_space {
     NodeInfo	*info;
 #if !COPY_SEARCH_SPACE
-    SearchSpace	*root;		/* pointer to root space */
-    SearchSpace	*parent;	/* parent space */
-    SearchSpace	*active;	/* active space (valid only on root) */
-    Script	*script;	/* saved local bindings */
+    SearchSpace	    *root;	/* pointer to root space */
+    SearchSpace	    *parent;	/* parent space */
+    union {
+	SearchSpace *active;	/* active space (root space) */
+	Script	    *script;	/* saved local bindings (non-root space) */
+    } s;
 #endif
 };
 
@@ -91,8 +93,7 @@ const SearchSpace global_space = {
     &search_space_info,
     (SearchSpace *)&global_space,
     0,
-    (SearchSpace *)&global_space,
-    0
+    { (SearchSpace *)&global_space }
 #else
     &search_space_info
 #endif
@@ -111,15 +112,16 @@ space and the current search space have the same root.
 #endif
 
 @ 
-When [[try]] returns, a new search space is created, which saves the
-bindings of all variables updated during the evaluation of [[try]] and
-also their previous values, which are recorded on the global trail
-stack. They are saved to the \emph{script} of the new search space.
+When an encapsulated search returns, a new search space is created,
+which saves the bindings of all variable and shared application nodes
+updated during the evaluation of the search goal and also their
+previous values, which are recorded on the global trail stack. These
+values are saved to the \emph{script} of the new search space.
 
-\emph{Note}: The script is not made part of the search space, but
-referenced indirectly because the garbage collector currently can
-handle only fixed size nodes and variable size nodes, which are
-composed of equally sized elements.
+Note that the [[s.script]] field of a search space node is shared with
+the [[s.active]] field. This is possible because a root space does not
+have any bindings to save and the [[s.active]] field does not have a
+meaning for non-root spaces.
 
 <<spaces.h>>=
 #if !COPY_SEARCH_SPACE
@@ -177,13 +179,12 @@ static void
 switch_bindings(SearchSpace *space)
 {
     unsigned int n;
-    ScriptRec	 *script;
+    ScriptRec	 *scr;
     SearchSpace	 *root, *common, *child, *parent;
 
-    root = space->root;
-
     /* Return if the space is already active */
-    if ( root->active == space )
+    root = space->root;
+    if ( root->s.active == space )
 	return;
 
     /* Phase 1: mark everything up to the root and reverse parent pointers */
@@ -197,7 +198,7 @@ switch_bindings(SearchSpace *space)
     }
 
     /* Phase 2: undo bindings up to closest common ancestor */
-    space = root->active;
+    space = root->s.active;
     while ( !((long)space->parent & 0x01) )
     {
 	<<Undo the bindings of space [[space]]>>
@@ -223,36 +224,36 @@ switch_bindings(SearchSpace *space)
     }
 
     /* The new space is now active */
-    root->active = parent;
+    root->s.active = parent;
 }
 #endif
 
 @ 
 <<Undo the bindings of space [[space]]>>=
-if ( space->script )
+if ( space->s.script )
 {
-    n	   = vector_argc(space->script) / wordsof(ScriptRec);
-    script = space->script->data + n;
+    n	= vector_argc(space->s.script) / wordsof(ScriptRec);
+    scr = space->s.script->data + n;
     while ( n-- > 0 )
     {
-	--script;
-	ASSERT(heap_base <= script->addr && script->addr < heap_end);
-	script->addr[INFO_OFS]	  = script->outInfo;
-	script->addr[script->ofs] = script->outVal;
+	--scr;
+	ASSERT(heap_base <= scr->addr && scr->addr < heap_end);
+	scr->addr[INFO_OFS] = scr->outInfo;
+	scr->addr[scr->ofs] = scr->outVal;
     }
 }
 
 @ 
 <<Redo the bindings of space [[space]]>>=
-if ( space->script )
+if ( space->s.script )
 {
-    n = vector_argc(space->script) / wordsof(ScriptRec);
-    script = space->script->data;
-    for ( ; n-- > 0; script++ )
+    n	= vector_argc(space->s.script) / wordsof(ScriptRec);
+    scr = space->s.script->data;
+    for ( ; n-- > 0; scr++ )
     {
-	ASSERT(heap_base <= script->addr && script->addr < heap_end);
-	script->addr[INFO_OFS]    = script->inInfo;
-	script->addr[script->ofs] = script->inVal;
+	ASSERT(heap_base <= scr->addr && scr->addr < heap_end);
+	scr->addr[INFO_OFS] = scr->inInfo;
+	scr->addr[scr->ofs] = scr->inVal;
     }
 }
 
@@ -263,7 +264,7 @@ the runtime system. If a search goal is evaluated inside another
 encapsulated search or within a global backtracking search, failure of
 the outer search may leave dangling pointers in the heap because the
 active space of the inner search goal may have become garbage. For that
-reason, we always set the [[active]] pointer in the root space to a
+reason, we always set the [[s.active]] pointer in the root space to a
 ``safe'' space, which is a space that is allocated in the same heap
 segment as the root space. To that end, the runtime system must call
 the function [[leave_context]] before dropping the current search
@@ -309,11 +310,15 @@ set_safe_ancestor(SearchSpace *space, Choicepoint *cp)
     unsigned int n;
     word	 *lim;
     SearchSpace  *root;
-    ScriptRec	 *script;
+    ScriptRec	 *scr;
+
+    /* return immediately if the root is already active */
+    root = space->root;
+    if ( space == root )
+	return;
 
     /* find the heap segment containing the root space */
-    root = space->root;
-    lim	 = regs.hp;
+    lim = regs.hp;
     while ( cp && root < (SearchSpace *)cp->btHp )
     {
 	lim = cp->btHp;
@@ -321,14 +326,14 @@ set_safe_ancestor(SearchSpace *space, Choicepoint *cp)
     }
 
     /* undo the bindings of all spaces above that segment */
-    while ( space >= (SearchSpace *)lim )
+    while ( space >= (SearchSpace *)lim && space != root )
     {
 	<<Undo the bindings of space [[space]]>>
 	space = space->parent;
     }
 
     /* save the active space */
-    root->active = space;
+    root->s.active = space;
 }
 #endif
 
@@ -353,8 +358,7 @@ new_search_space(unsigned int n_regs)
 #if !COPY_SEARCH_SPACE
     newSpace->root     = newSpace;
     newSpace->parent   = 0;
-    newSpace->active   = newSpace;
-    newSpace->script   = 0;
+    newSpace->s.active = newSpace;
 #endif
     regs.hp	      += wordsof(SearchSpace);
 }
@@ -384,13 +388,13 @@ inject_search_space(SearchSpace *space)
 	return false;
 
     /* otherwise re-parent the current space */
-    regs.ss->root   = space->root;
-    regs.ss->parent = space;
-    regs.ss->active = 0;
+    regs.ss->root     = space->root;
+    regs.ss->parent   = space;
+    regs.ss->s.script = 0;
 
     /* activate the parent's bindings and succeed */
     switch_bindings(space);
-    regs.ss->root->active = regs.ss;
+    regs.ss->root->s.active = regs.ss;
     return true;
 }
 #endif
@@ -418,8 +422,9 @@ save_search_space(unsigned int n_regs)
 {
     unsigned int i, n;
     SearchSpace	 *space;
-    SaveRec	 *trail;
     Script	 *script;
+    ScriptRec	 *scr;
+    SaveRec	 *tp;
 
     assert(regs.ss != &global_space);
 
@@ -434,33 +439,33 @@ save_search_space(unsigned int n_regs)
     if ( n > 0 )
     {
 	/* initialize the script of the space */
-	trail	       = regs.bp->btTp;
 	script	       = (Script *)regs.hp;
 	script->info   = &script_info;
 	script->length = vector_node_size(n * wordsof(ScriptRec));
 	regs.hp	      += vector_node_size(n * wordsof(ScriptRec));
 
+	scr = script->data;
+	tp  = regs.bp->btTp;
 	for ( i = 0; i < n; i++ )
 	{
-	    script->data[i].addr    = trail[i].addr;
-	    script->data[i].inInfo  = trail[i].addr[INFO_OFS];
-	    script->data[i].outInfo = trail[i].info;
-	    script->data[i].ofs     = trail[i].ofs;
-	    script->data[i].inVal   = trail[i].addr[trail[i].ofs];
-	    script->data[i].outVal  = trail[i].val;
+	    scr[i].addr    = tp[i].addr;
+	    scr[i].inInfo  = tp[i].addr[INFO_OFS];
+	    scr[i].outInfo = tp[i].info;
+	    scr[i].ofs     = tp[i].ofs;
+	    scr[i].inVal   = tp[i].addr[tp[i].ofs];
+	    scr[i].outVal  = tp[i].val;
 	}
 
 	/* allocate a new search space */
-	space	      = (SearchSpace *)regs.hp;
-	space->info   = &search_space_info;
-	space->root   = regs.ss->root;
-	space->parent = regs.ss;
-	space->active = 0;
-	space->script = script;
-	regs.hp	     += wordsof(SearchSpace);
+	space		= (SearchSpace *)regs.hp;
+	space->info	= &search_space_info;
+	space->root	= regs.ss->root;
+	space->parent	= regs.ss;
+	space->s.script = script;
+	regs.hp	       += wordsof(SearchSpace);
 
 	/* the new search space is now active */
-	regs.ss = space->root->active = space;
+	regs.ss = space->root->s.active = space;
     }
 }
 #endif
@@ -734,8 +739,8 @@ copy_search_space(SearchSpace *spc, SearchSpace *space)
     /* eventually copy the active space and its parents */
     /* NB don't activate the copied space's bindings since this could
      *    leave cross segment pointers behind */
-    if ( !is_forwarded(spc->root->active) )
-	copy_search_space(spc->root->active, space);
+    if ( !is_forwarded(spc->root->s.active) )
+	copy_search_space(spc->root->s.active, space);
 
     /* copy all parent spaces */
     /* NB parent pointers will be updated later */
@@ -836,7 +841,7 @@ copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space)
 	unsigned int i, n;
 	ThreadQueue  tq;
 #if !COPY_SEARCH_SPACE
-	Script	     *script;
+	ScriptRec    *scr;
 #endif
 	Node	     *node;
 
@@ -925,16 +930,13 @@ copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space)
 
 #if !COPY_SEARCH_SPACE
 	case SCRIPT_KIND:
-	    script = (Script *)node;
-	    n	   = vector_argc(script) / wordsof(ScriptRec);
+	    n	= vector_argc(node) / wordsof(ScriptRec);
+	    scr = ((Script *)node)->data;
 	    for ( i = 0; i < n; i++ )
 	    {
-		script->data[i].addr =
-		    (word *)copy_node((Node *)script->data[i].addr, space);
-		script->data[i].inVal =
-		    (word)copy_node((Node *)script->data[i].inVal, space);
-		script->data[i].outVal =
-		    (word)copy_node((Node *)script->data[i].outVal, space);
+		scr[i].addr   = (word *)copy_node((Node *)scr[i].addr, space);
+		scr[i].inVal  = (word)copy_node((Node *)scr[i].inVal, space);
+		scr[i].outVal = (word)copy_node((Node *)scr[i].outVal, space);
 	    }
 	    break;
 #endif

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: gc_2space.nw 2641 2008-03-13 08:13:05Z wlux $
+% $Id: gc_2space.nw 2646 2008-03-26 04:26:26Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -60,7 +60,7 @@ cross segment pointers into younger heap segments are undone, and
 therefore it is sufficient to scan the global trail and the trails of
 the parents of the current search space. If this policy were changed,
 the runtime system would have to record -- at least -- all root spaces
-with cross segment [[active]] pointers, and the garbage collector
+with cross segment [[s.active]] pointers, and the garbage collector
 would have to scan the trails of those spaces as well. See
 Sect.~\ref{sec:spaces} and in particular the to do note on
 p.~\pageref{todo:lazy-spaces} for more details.
@@ -190,6 +190,7 @@ collect(unsigned int n_regs, unsigned int request)
     Node	     **scan, **copy, **scan_stack, **slim;
 #if !COPY_SEARCH_SPACE
     SaveRec	     *from_trail, *scan_trail, *copy_trail, *tlim;
+    ScriptRec	     *scr;
     SearchSpace	     *spc;
     Choicepoint	     *scan_cp;
 #endif
@@ -341,8 +342,9 @@ Note that the garbage collector updates the active pointer of the root
 space of the current search space explicitly because that pointer is
 almost always a cross segment pointer into a younger heap segment and
 therefore does not get updated when the root search space is copied
-into to-space. We make use of the invariant [[ss->root->active == ss]]
-that is preserved by the runtime system (cf. Sect.~\ref{sec:spaces}).
+into to-space. We make use of the invariant
+[[ss->root->s.active == ss]] that is preserved by the runtime system
+(cf. Sect.~\ref{sec:spaces}).
 
 <<Collect the heap segment below [[cp]]>>=
 hlim = cp->btHp;
@@ -366,7 +368,7 @@ cp->btTp   = copy_trail;
 #if !COPY_SEARCH_SPACE
 spc = cp->btSpc;
 if ( spc != &global_space )
-    spc->root->active = spc;
+    spc->root->s.active = spc;
 #endif
 scan_stack = (Node **)cp;
 cp->btHp   = (word *)copy;
@@ -391,7 +393,7 @@ regs.tp = copy_trail;
 <<Scan to-space and copy all reachable nodes into to-space>>
 #if !COPY_SEARCH_SPACE
 if ( regs.ss != &global_space )
-    regs.ss->root->active = regs.ss;
+    regs.ss->root->s.active = regs.ss;
 #endif
 
 @ 
@@ -405,8 +407,8 @@ for ( roots = local_roots; roots; roots = roots->next )
     *roots->root = GC_copy(&copy, hlim, *roots->root);
 
 @ 
-All nodes referenced from the first [[n_regs]] arguments registers
-arc copied into to-space as well.
+All nodes referenced from the first [[n_regs]] argument registers
+are copied into to-space as well.
 
 <<Collect the argument registers>>=
 for ( i = 0; i < n_regs; i++ )
@@ -501,16 +503,15 @@ while ( scan_cp )
 {
     scan_cp = scan_cp->btBp;
     for ( spc = scan_cp ? scan_cp->btSpc : regs.ss;
-	  spc && !is_forwarded(spc);
+	  spc->parent && !is_forwarded(spc);
 	  spc = spc->parent )
-	if ( spc->script )
+	if ( spc->s.script )
 	{
-	    len = vector_argc(spc->script) / wordsof(ScriptRec);
+	    scr	= spc->s.script->data;
+	    len = vector_argc(spc->s.script) / wordsof(ScriptRec);
 	    for ( i = 0; i < len; i++ )
-		if ( spc->script->data[i].ofs )
-		    spc->script->data[i].outVal =
-			GC_copy(&copy, hlim,
-				(Node *)spc->script->data[i].outVal);
+		if ( scr[i].ofs )
+		    scr[i].outVal = GC_copy(&copy, hlim, (Node *)scr[i].outVal);
 	}
 }
 

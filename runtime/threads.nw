@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: threads.nw 2347 2007-06-23 10:34:08Z wlux $
+% $Id: threads.nw 2664 2008-04-21 06:43:57Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -28,16 +28,16 @@ be continued.
 
 @
 The state of a thread that is not running is saved in a thread node
-structure, which is allocated in the heap. The state information
-includes the thread id, the reason for its suspension, the
-continuation address, and a pointer to the current exception frame.
-The runtime system does not use thread ids in any way except that it
-requires them to be non-zero. Nevertheless, they can be quite useful
-for debugging compiled programs. Thread nodes can be linked via the
-[[next]] field into a thread queue. Suspended threads are added to the
-wait queue of the variable or queue-me node that caused the
-suspension. The runnable threads are collected in the ready queue,
-which is available though the register [[rq]].
+structure which is allocated in the heap. The state information
+includes a thread id, the reason for its suspension, the continuation
+address, and a pointer to the current exception frame. The runtime
+system does not use thread ids in any way except that it requires them
+to be non-zero. Nevertheless, they can be quite useful for debugging
+compiled programs. Thread nodes can be linked to a thread queue via
+the [[next]] field. Suspended threads are added to the wait queue of
+the variable or queue-me node that caused the suspension. The runnable
+threads are collected in the ready queue, which is available through
+the register [[regs.rq]].
 
 When a thread is interrupted and inserted at the head of the ready
 queue, its stack segment is retained on the global stack. If a thread
@@ -48,7 +48,7 @@ restored at a different address when the thread is resumed, the base
 address of the stack is saved in the thread node so that the exception
 handler chain can be relocated appropriately. We do not use relative
 offsets for the exception handler chain because they could be
-mistakingly identified as node pointers by the garbage collector.
+misidentified as node pointers by the garbage collector.
 
 A thread may be added to more than one queue. This is implemented by
 adding a surrogate to each of the queues. These surrogates are linked
@@ -60,16 +60,17 @@ reserved thread id [[0]] is used for them.
 
 The runtime system maintains the invariant that the head of the ready
 queue is never a surrogate whose state pointer is [[0]]. Thus, it is
-safe to check whether [[regs.rq != 0]] in order to test whether other
-runnable threads exist.
+safe to check [[regs.rq != 0]] in order to test whether other runnable
+threads exist.
 
 <<threads.h>>=
-#ifdef CURRY_RTS
-enum { THREAD_TAG, SURROGATE_TAG };
-
 # if 0
 typedef union thread_node *ThreadQueue; /* already declared in heap.h */
 # endif
+
+@ 
+<<threads.c>>=
+enum { THREAD_TAG, SURROGATE_TAG };
 
 # define THREAD_INFO \
     NodeInfo	     *info; \
@@ -96,10 +97,7 @@ union thread_node {
     struct thread_state	    t;
     struct thread_surrogate s;
 };
-#endif
 
-@
-<<threads.c>>=
 #define thread_node_size	wordsof(union thread_node)
 #define thread_state_size	wordsof(struct thread_state)
 #define thread_surrogate_size	wordsof(struct thread_surrogate)
@@ -131,18 +129,14 @@ thread was performing a yield. The reasons [[Eval]] and [[Delay]] are
 used if the thread is suspended due to a queue-me and unbound variable
 node, respectively.
 
-<<threads.h>>=
-#ifdef CURRY_RTS
+<<threads.c>>=
 enum suspend_reason {
     None,			/* interrupted */
     Yield,			/* rescheduled due non-determinism */
     Delay,			/* suspended due to unbound variable */
     Eval			/* suspended due to locked application */
 };
-#endif
 
-@
-<<threads.c>>=
 static const char *reasons[] = { "None", "Yield", "Delay", "Eval" };
 
 @
@@ -511,7 +505,7 @@ FUNCTION(activate_thread)
     if ( regs.efp && regs.ds_base != thd->t.ds_base )
 	regs.efp = relocate_thread(regs.efp, regs.ds_base - thd->t.ds_base);
 
-    /* return the continuation address of the thread */
+    /* continue the activated thread */
     if ( reason != None )
 	TRACE(("%I resume (%s)\n", reasons[reason]));
     GOTO_INDIR(ip);

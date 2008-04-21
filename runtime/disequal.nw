@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2347 2007-06-23 10:34:08Z wlux $
+% $Id: disequal.nw 2668 2008-04-21 06:50:50Z wlux $
 %
-% Copyright (c) 2002-2007, Wolfgang Lux
+% Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Disequality Constraints}
@@ -205,8 +205,7 @@ FUNCTION(diseq_var)
     cstr->node	     = regs.sp[0];
     regs.hp	    += diseq_constraint_size;
 
-    SAVE(regs.r[0], v.cstrs);
-    regs.r[0]->v.cstrs = (Constraint *)cstr;
+    SET_FIELD(regs.r[0], v.cstrs, (Constraint *)cstr);
 
     /* if necessary, evaluate the argument to normal form */
     if ( nf )

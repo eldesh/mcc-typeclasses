@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: vector.nw 2309 2007-06-20 11:52:36Z wlux $
+% $Id: vector.nw 2668 2008-04-21 06:50:50Z wlux $
 %
-% Copyright (c) 2002-2007, Wolfgang Lux
+% Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Mutable Vectors}
@@ -90,7 +90,7 @@ primNewIOVector(Node *len, Node *wrappedArg)
 	vec->a.length = vector_node_size(n);
 	for ( i = 0; i < n; i++ )
 	    vec->a.args[i] = init;
-	regs.hp += vector_node_size(n);
+	regs.hp	     += vector_node_size(n);
 	END_LOCAL_ROOTS
     }
 
@@ -162,8 +162,7 @@ primWriteIOVector(Node *vec, Node *ofs, Node *wrappedArg)
 
     if ( i < 0 || (unsigned long)i >= vector_argc(vec) )
 	fail_with("writeIOVector: index out range (%ld)", i);
-    SAVE(vec, a.args[i]);
-    vec->a.args[i] = wrappedArg->c.args[0];
+    SET_FIELD(vec, a.args[i], wrappedArg->c.args[0]);
 }
 
 @ 

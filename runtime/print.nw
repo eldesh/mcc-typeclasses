@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 2615 2008-02-07 08:54:11Z wlux $
+% $Id: print.nw 2668 2008-04-21 06:50:50Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -439,8 +439,7 @@ print_constrained_var(Node *var)
     ASSERT(is_variable_node(var) && var->v.cstrs != 0);
 
     cstrs = var->v.cstrs;
-    SAVE(var, v.cstrs);
-    var->v.cstrs = 0;
+    SET_FIELD(var, v.cstrs, 0);
 
     for ( ; cstrs; cstrs = cstrs->cstrs )
     {

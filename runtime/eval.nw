@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2347 2007-06-23 10:34:08Z wlux $
+% $Id: eval.nw 2668 2008-04-21 06:50:50Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Evaluation}\label{sec:eval}
@@ -137,10 +137,7 @@ FUNCTION(eval_queueMe)
 	    {
 		wq = join_queues(susp->q.wq, wq);
 		if ( wq != susp->q.wq )
-		{
-		    SAVE(susp, q.wq);
-		    susp->q.wq = wq;
-		}
+		    SET_FIELD(susp, q.wq, wq);
 	    }
 
 	    regs.ret = (Label)regs.sp[1];

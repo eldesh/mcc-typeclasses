@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2624 2008-02-16 17:53:31Z wlux $
+% $Id: unify.nw 2668 2008-04-21 06:50:50Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -888,10 +888,7 @@ FUNCTION(bind_var)
     if ( wq )
     {
 	if ( is_var )
-	{
-	    SAVE(node, v.wq);
-	    node->v.wq = join_queues(wq, node->v.wq);
-	}
+	    SET_FIELD(node, v.wq, join_queues(wq, node->v.wq));
 	else
 	{
 	    SAVE_RET1((Node *)wq);
@@ -911,8 +908,7 @@ FUNCTION(bind_var)
     {
         SAVE_RET1((Node *)node->v.cstrs);
 	regs.ret = check_constraints;
-	SAVE(node, v.cstrs);
-	node->v.cstrs = 0;
+	SET_FIELD(node, v.cstrs, 0);
     }
 
     /* continue evaluation */

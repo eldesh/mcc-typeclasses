@@ -1,18 +1,18 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: trail.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: trail.nw 2668 2008-04-21 06:50:50Z wlux $
 %
-% Copyright (c) 2002-2006, Wolfgang Lux
+% Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{The Trail}
 In the default configuration, the trail stack is used to record all
 destructive updates that must be undone when backtracking to a choice
-point or switching search spaces. Updates apply to updatable nodes,
-i.e., variables, shared lazy applications, and queue-me nodes, but also
-array elements and thread-queue entries can be changed. Some of these
-updates only change one field of a node, while other also change the
-node type by overwriting the info pointer. For simplicity we always
-save the info pointer on the trail.
+point or leaving the current search space. Updates apply to updatable
+nodes, i.e., variables, shared lazy applications, and queue-me nodes,
+but also array elements and thread queue entries can be changed. Some
+of these updates only change one field of a node, while others also
+change the node type by overwriting the info pointer. For simplicity
+we always save the info pointer on the trail.
 
 If the runtime system was configured with the
 \texttt{--enable-copying} option, no trail stack is used and the code
@@ -30,10 +30,10 @@ typedef struct save_rec {
 
 @
 The trail stack is implemented as a single array starting at address
-[[trail_base]] and ending at [[trail_end]]. The register [[tp]] serves
-as allocation pointer for the trail. Before adding a new entry to the
-trail it must be checked that there is no trail overflow. This can be
-done with the [[CHECK_TRAIL]] and [[CHECK_TRAIL1]] macros.
+[[trail_base]] and ending at [[trail_end]]. The register [[regs.tp]]
+serves as allocation pointer for the trail. Before adding a new entry
+to the trail the code must check that there is no trail overflow. This
+can be done with the [[CHECK_TRAIL]] and [[CHECK_TRAIL1]] macros.
 
 <<trail.h>>=
 #if !COPY_SEARCH_SPACE
@@ -98,29 +98,29 @@ init_trail(unsigned int trail_size)
 #endif
 
 @
-When an updatable node is changed, the info-pointer and the changed
+When an updatable node is changed, its info pointer and the changed
 field of the node have to be saved on the trail if the overwritten
 state of the node may be restored later. This is the case for all
-nodes which are not allocated in the current heap segment, i.e. before
-the current choice point or search context was pushed onto the
-stack. In addition, for fields that can be updated more than, like the
-wait-queue of a variable node, the old state need to be saved only
+nodes which are not allocated in the current heap segment. In
+addition, for fields that can be updated more than once, like the
+wait-queue of a variable node, the old state needs to be saved only
 once for each heap segment. As the compiler uses fresh values to
 overwrite the node in this case, we need not scan the trail to detect
-such multiple changes of the same field. Instead we can check the
-contents field that is going to be saved. If its current value points
-to a node in the current heap segment while the node itself is in
-another segment, the node has been overwritten and saved
-already. Thus, it is not necessary to save it again. The [[SAVE]]
-macro checks for both conditions and saves the info pointer and old
-value only when necessary. In contrast, the [[DO_SAVE]] macro always
-saves its argument to the trail.
+multiple changes of the same field. Instead we can check the contents
+field that is going to be saved. If its current value points to a node
+in the current heap segment while the node itself belongs to an older
+segment, the node has been overwritten and saved already and therefore
+it is not necessary to save it again. The [[SAVE]] macro checks for
+both conditions and saves the info pointer and old value only when
+necessary. In contrast, the [[DO_SAVE]] macro always saves its
+argument to the trail. The convenience macro [[SET_FIELD]] combines
+the [[SAVE]] macro with a subsequent assignment to the saved field.
 
 <<trail.h>>=
 #if !COPY_SEARCH_SPACE
-#define INFO_OFS	word_offsetof(Node, info)
+# define INFO_OFS	word_offsetof(Node, info)
 
-#define DO_SAVE(v,f) do {				\
+# define DO_SAVE(v,f) do {				\
 	CHECK_TRAIL1();					\
 	regs.tp->addr = (word *)(v);			\
 	regs.tp->info = regs.tp->addr[INFO_OFS];	\
@@ -128,7 +128,7 @@ saves its argument to the trail.
 	regs.tp->val  = (word)(v->f);			\
 	regs.tp++;					\
     } while (0)
-#define SAVE(v,f) do {						     \
+# define SAVE(v,f) do {						     \
 	if ( (word *)(v) < regs.hlim && (word *)(v->f) < regs.hlim ) \
 	    DO_SAVE(v,f);					     \
     } while (0)
@@ -136,6 +136,8 @@ saves its argument to the trail.
 # define DO_SAVE(v,f)  /* empty */
 # define SAVE(v,f)     /* empty */
 #endif
+
+#define SET_FIELD(v,f,x) do { SAVE(v,f); (v->f) = (x); } while ( 0 )
 
 @
 Upon backtracking, the values saved in the trail have to be

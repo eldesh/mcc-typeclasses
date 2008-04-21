@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: threads.nw 2664 2008-04-21 06:43:57Z wlux $
+% $Id: threads.nw 2668 2008-04-21 06:50:50Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Thread Management}
@@ -277,9 +277,8 @@ FUNCTION(suspend_thread)
     susp = regs.r[0];
     ASSERT(is_tagged_ptr(susp) && is_queueMe_node(susp));
     assert(is_local_space(susp->q.spc));
-    SAVE(susp, q.wq);
     thd->t.next = susp->q.wq;
-    susp->q.wq  = thd;
+    SET_FIELD(susp, q.wq, thd);
 
     GOTO(activate_thread);
 }
@@ -294,9 +293,8 @@ FUNCTION(delay_thread)
     var = regs.r[0];
     ASSERT(is_tagged_ptr(var) && is_variable_node(var));
     assert(is_local_space(var->v.spc));
-    SAVE(var, v.wq);
     thd->t.next = var->v.wq;
-    var->v.wq   = thd;
+    SET_FIELD(var, v.wq, thd);
 
     GOTO(activate_thread);
 }
@@ -337,14 +335,13 @@ FUNCTION(yield_delay_thread)
     var = regs.r[0];
     ASSERT(is_tagged_ptr(var) && is_variable_node(var));
     assert(is_local_space(var->v.spc));
-    SAVE(var, v.wq);
     thd		= (ThreadQueue)regs.hp;
     thd->s.info = &surrogate_info;
     thd->s.id   = 0;
     thd->s.thd  = thd1;
     thd->s.next = var->v.wq;
     thd->s.link = (ThreadQueue)(regs.hp + thread_surrogate_size);
-    var->v.wq   = thd;
+    SET_FIELD(var, v.wq, thd);
 
     thd		= (ThreadQueue)(regs.hp + thread_surrogate_size);
     thd->s.info = &surrogate_info;
@@ -396,7 +393,7 @@ wake_threads(ThreadQueue wq)
 }
 
 @
-The function [[join_queues]] combines the two thread-queues [[tq1]]
+The function [[join_queues]] combines the two thread queues [[tq1]]
 and [[tq2]] such that the resulting queue starts with the threads
 from [[tq1]] followed by those from [[tq2]].
 
@@ -418,8 +415,7 @@ join_queues(ThreadQueue tq1, ThreadQueue tq2)
 	tq = tq1;
 	while ( tq1->t.next )
 	    tq1 = tq1->t.next;
-	SAVE(tq1, t.next);
-	tq1->t.next = tq2;
+	SET_FIELD(tq1, t.next, tq2);
     }
 
     return tq;
@@ -479,9 +475,8 @@ FUNCTION(activate_thread)
 	while ( sur->s.thd )
 	{
 	    ASSERT(sur->s.id == 0 && sur->s.link != 0);
-	    SAVE(sur, s.thd);
-	    sur->s.thd = 0;
-	    sur	       = sur->s.link;
+	    SET_FIELD(sur, s.thd, 0);
+	    sur = sur->s.link;
 	}
     }
     regs.cid = thd->t.id;
@@ -642,12 +637,12 @@ save_continuation(unsigned int n_regs)
 	    ds_size = tq->t.ds_size;
 
 	    CHECK_HEAP(n_regs, vector_node_size(ds_size));
-	    SAVE(tq, t.ds);
-	    ds = tq->t.ds = (Node *)regs.hp;
+	    ds		  = (Node *)regs.hp;
 	    ds->info	  = &saved_stack_info;
 	    ds->a.length  = vector_node_size(ds_size);
 	    memcpy(ds->a.args, regs.sp, ds_size * word_size);
 	    regs.hp	 += vector_node_size(ds_size);
+	    SET_FIELD(tq, t.ds, ds);
 
 	    regs.sp += ds_size;
 	    ASSERT(regs.sp == tq->t.ds_base);

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 2663 2008-04-21 06:43:03Z wlux $
+% $Id: spaces.nw 2665 2008-04-21 06:44:49Z wlux $
 %
 % Copyright (c) 2003-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -143,83 +143,97 @@ static NodeInfo script_info = {
 
 @
 When the runtime system activates the bindings of a search space, only
-the bindings of those search spaces up to the closest common ancestor
-of the current active space and the new active space are undone. In
-order to find that ancestor, the function [[switch_bindings]] first
-marks all search spaces along the path from the new active space up
-to the root of the tree. Next, it processes all search spaces along
-the path from the current active space to the root and undoes their
-bindings until reaching a marked search space. Obviously, this is the
-closest common ancestor. Finally, the marks along the path from the
-root space to the new active space are reset and the bindings of all
-search spaces starting at the closest common ancestor are restored.
-
-During the marking phase, we apply the usual pointer reversal trick to
-the parent pointer chain in order to keep track of the path from the
-root to the space being activated. A search space is marked by setting
-the least significant bit of the reversed parent pointer.
+the bindings of the search spaces up to the closest common ancestor
+of the current active space and the designated active space are
+changed. In order to find that ancestor, [[switch_bindings]] first
+computes the depths of both spaces.\footnote{Actually, only the
+  difference of both depths is computed.} Next, the algorithm either
+undoes the bindings of the current active space and its ancestors or
+it reverts the parent pointer chain of the designated active space and
+its ancestors until reaching two spaces at the same depth. From then
+on, the algorithm undoes the bindings of the current active space's
+ancestors and reverts the parent pointer chain of the designated
+active space's ancestors until reaching the closest common ancestor.
+Finally, the algorithm restores the parent pointer chain of the
+designated active space and redoes its bindings on the fly.
 
 <<spaces.c>>=
 #if !COPY_SEARCH_SPACE
 static void
 switch_bindings(SearchSpace *space)
 {
+    int		 balance;
     unsigned int n;
     ScriptRec	 *scr;
-    SearchSpace	 *root, *common, *child, *parent;
+    SearchSpace	 *root, *active, *child, *parent;
 
-    /* Return if the space is already active */
-    root = space->root;
-    if ( root->s.active == space )
+    /* Return if the designated space is already active */
+    root   = space->root;
+    active = root->s.active;
+    if ( active == space )
 	return;
 
-    /* Phase 1: mark everything up to the root and reverse parent pointers */
+    /* Determine the depths of the current and the designated active space */
+    balance = 0;
+    for ( parent = active; parent; parent = parent->parent )
+	balance++;
+    for ( parent = space; parent; parent = parent->parent )
+	balance--;
+
+    /* Undo bindings up to two balanced spaces */
     child = 0;
-    while ( space )
-    {
-	parent	      = space->parent;
-	space->parent = (SearchSpace *)((long)child | 0x01);
-	child 	      = space;
-	space 	      = parent;
-    }
-
-    /* Phase 2: undo bindings up to closest common ancestor */
-    space = root->s.active;
-    while ( !((long)space->parent & 0x01) )
-    {
-	<<Undo the bindings of space [[space]]>>
-	space = space->parent;
-    }
-
-    /* Phase 3: unmark everything and activate bindings of new space */
-    common = space;
-    parent = 0;
-    space  = root;
-    while ( space )
-    {
-	child	      = (SearchSpace *)((long)space->parent & ~0x01);
-	space->parent = parent;
-	if ( space == common )
-	    common = 0;
-	else if ( common == 0 )
+    if ( balance > 0 )
+	do
 	{
-	    <<Redo the bindings of space [[space]]>>
+	    <<Undo the bindings of space [[active]]>>
+	    active = active->parent;
+	    balance--;
 	}
-	parent	      = space;
-	space	      = child;
+	while ( balance > 0 );
+    else
+	while ( balance < 0 )
+	{
+	    parent	  = space->parent;
+	    space->parent = child;
+	    child	  = space;
+	    space	  = parent;
+	    balance++;
+	}
+
+    /* Undo bindings up to the closest common ancestor */
+    while ( active != space )
+    {
+	<<Undo the bindings of space [[active]]>>
+	active = active->parent;
+
+	parent	      = space->parent;
+	space->parent = child;
+	child	      = space;
+	space	      = parent;
     }
 
-    /* The new space is now active */
-    root->s.active = parent;
+    /* Redo the bindings down to the designated active space */
+    while ( child )
+    {
+	parent	       = active;
+	active	       = child;
+	child	       = active->parent;
+	active->parent = parent;
+
+	<<Redo the bindings of space [[active]]>>
+    }
+
+    /* The designated space is now active */
+    root->s.active = active;
 }
 #endif
 
 @ 
-<<Undo the bindings of space [[space]]>>=
-if ( space->s.script )
+<<Undo the bindings of space [[active]]>>=
+if ( active->s.script )
 {
-    n	= vector_argc(space->s.script) / wordsof(ScriptRec);
-    scr = space->s.script->data + n;
+    n	= vector_argc(active->s.script) / wordsof(ScriptRec);
+    scr = active->s.script->data + n;
     while ( n-- > 0 )
     {
 	--scr;
@@ -230,11 +244,11 @@ if ( space->s.script )
 }
 
 @ 
-<<Redo the bindings of space [[space]]>>=
-if ( space->s.script )
+<<Redo the bindings of space [[active]]>>=
+if ( active->s.script )
 {
-    n	= vector_argc(space->s.script) / wordsof(ScriptRec);
-    scr = space->s.script->data;
+    n	= vector_argc(active->s.script) / wordsof(ScriptRec);
+    scr = active->s.script->data;
     for ( ; n-- > 0; scr++ )
     {
 	ASSERT(heap_base <= scr->addr && scr->addr < heap_end);
@@ -291,7 +305,7 @@ leave_context()
 }
 
 static void
-set_safe_ancestor(SearchSpace *space, Choicepoint *cp)
+set_safe_ancestor(SearchSpace *active, Choicepoint *cp)
 {
     unsigned int n;
     word	 *lim;
@@ -299,8 +313,8 @@ set_safe_ancestor(SearchSpace *space, Choicepoint *cp)
     ScriptRec	 *scr;
 
     /* return immediately if the root is already active */
-    root = space->root;
-    if ( space == root )
+    root = active->root;
+    if ( active == root )
 	return;
 
     /* find the heap segment containing the root space */
@@ -312,14 +326,14 @@ set_safe_ancestor(SearchSpace *space, Choicepoint *cp)
     }
 
     /* undo the bindings of all spaces above that segment */
-    while ( space >= (SearchSpace *)lim && space != root )
+    while ( active >= (SearchSpace *)lim && active != root )
     {
-	<<Undo the bindings of space [[space]]>>
-	space = space->parent;
+	<<Undo the bindings of space [[active]]>>
+	active = active->parent;
     }
 
     /* save the active space */
-    root->s.active = space;
+    root->s.active = active;
 }
 #endif
 

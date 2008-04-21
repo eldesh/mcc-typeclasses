@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: gc_2space.nw 2662 2008-04-21 06:41:25Z wlux $
+% $Id: gc_2space.nw 2666 2008-04-21 06:45:41Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -10,10 +10,10 @@ collector operates on a heap that is split among two separate
 semi-spaces, from-space and to-space. Allocation is always performed
 in from-space. When the allocator runs out of memory, it copies all
 live nodes from from-space to to-space and then flips the roles of
-both semi-spaces. The big advantage of a copying collector is that is
-has to scan only the live nodes in the heap and that it touches every
-live node only once. A disadvantage of the two-space copying collector
-is that only half of the heap is used for allocation.
+both semi-spaces. The big advantage of a two-space copying collector
+is that it scans only the live nodes in the heap and that it touches
+every live node only once. A disadvantage is that only half of the
+heap is used for allocation.
 
 A problem of copying collectors in the context of logic and functional
 logic languages is that they do not preserve allocation order.
@@ -24,63 +24,68 @@ This, in turn, will increase the size of saved search spaces in our
 implementation, and also will prevent the trailed nodes and their
 bindings from being garbage collected.
 
-In order to avoid these problems, we use a segment order preserving
-copying algorithm, which was proposed by Demoen, Engels, and
-Tarau~\cite{DemoenEngelsTarau96:OrderPreserving}. Their key idea is
-that it is not necessary to preserve allocation order exactly, but
-only with respect to the heap limits defined by the choice points.
-Therefore, the heap is divided into segments separated by
-choice points, and these segments are collected independently. Thus,
-their algorithm can be seen as a variant of generational garbage
-collection with the -- dynamically defined -- heap segments being the
-analogue of generations.
+In order to avoid these problems, we use the segment order preserving
+copying algorithm which was proposed by Demoen, Engels, and
+Tarau~\cite{DemoenEngelsTarau96:OrderPreserving}. The key idea of
+their algorithm is that it is not necessary to preserve allocation
+order exactly, but only with respect to the heap limits defined by the
+choice points. Therefore, the heap is divided into segments separated
+by choice points, and these segments are collected independently.
+This makes the algorithm resemble a generational garbage collection
+scheme with the -- dynamically defined -- heap segments being the
+analogue of generations. However, there are some subtle differences.
 
 An important issue with generational garbage collection schemes are
 cross generation pointers, which must be taken into account as
-additional roots for those generations that they are pointing to. In
-the usual implementations of generational garbage collection, before a
-particular generation is collected all live values from younger
-generations are first promoted into that generation and, therefore, no
-cross generation pointers from younger generations exist. In order to
-handle cross generation pointers from older generations, their roots are
-recorded in a special table. This is made feasible by the fact that
-such pointers can be created only by updating existing data structures
-in older generations, and such updates are expected to occur rarely.
+additional roots for those generations that they are pointing to.
+Usually, before a generation is collected all live nodes from younger
+generations are promoted into the collected generation and, thus, no
+cross generation pointers from younger generations exist. Cross
+generation pointers from older generations are recorded in a special
+table and taken into account as additional roots when collecting
+younger generations. This is made feasible by the fact that such
+pointers can be created only by updating existing nodes in older
+generations and such updates are expected to occur rarely.
 
-In a logic or functional logic language using trailing, exactly those
-updates are recorded on the trail. Thus, we get upward cross segment
-pointers from older heap segments essentially for free. During a
-garbage collection, we only need to scan the trail in order to find
-the roots of those pointers. There is a minor complication in our
-implementation because of the trails in saved search spaces that are
-scattered around in the heap. Fortunately, the runtime system always
-sets the active space of a search goal to a space in the same heap
-segment as its root space. Thereby, all updates which might result in
-cross segment pointers into younger heap segments are undone, and
-therefore it is sufficient to scan the global trail and the trails of
-the parents of the current search space. If this policy were changed,
-the runtime system would have to record -- at least -- all root spaces
-with cross segment [[s.active]] pointers, and the garbage collector
-would have to scan the trails of those spaces as well. See
+Updates of nodes in older generations can be detected with a
+write-barrier. In trail based implementations of logic and functional
+logic languages the necessary write-barrier is already present, since
+updates of nodes in older heap segments must be recorded on the trail.
+Thus, as already observed by Demoen, Engels, and Tarau, we get upward
+cross segment pointers from older heap segments essentially for free.
+During a garbage collection, we only need to scan the trail in order
+to find the roots of those pointers. There is a minor complication in
+our implementation because of the scripts of saved search spaces that
+are scattered around in the heap. In order to control the number of
+upward cross segment pointers, the runtime system always sets the
+active space of a search goal to a space in the same heap segment as
+its root space when an encapsulated search is left. Thereby, all
+updates which might result in cross segment pointers into younger heap
+segments are undone and therefore it is sufficient to scan the global
+trail and the scripts of the current search space and its ancestors to
+find the roots of upward cross segment pointers. If this policy were
+changed, the runtime system would have to record -- at least -- all
+root spaces with cross segment [[s.active]] pointers, and the garbage
+collector would have to scan the scripts of those spaces as well. See
 Sect.~\ref{sec:spaces} and in particular the to do note on
 p.~\pageref{todo:lazy-spaces} for more details.
 
-With respect to downward cross generation pointers, we make no special
-provision at all. By collecting heap segments in bottom up order,
-nodes are promoted into the least recent segment in which they are
-actually used. This may be a younger segment than before the
-collection. Such promotion is rarely desired in a traditional
-generational garbage collector, but in logic and functional logic
-languages it has the benefit of allowing the promoted nodes to be
-released earlier upon failure, and also may help to avoid trailing for
-those nodes.
+In contrast to generational garbage collection schemes, the segment
+order preserving algorithm processes heap segments from bottom to top,
+i.e., the oldest heap segment is collected first. Nevertheless, the
+algorithm makes no special provision for downward cross segment
+pointers. This has the effect that nodes can be promoted into younger
+heap segments during a garbage collection. Such promotion is rarely
+desired in generational garbage collection schemes, but has the
+benefit of allowing the promoted nodes to be released upon failure
+more early and also may help to avoid trailing for those nodes.
 
 In our implementation, the garbage collector allocates one large heap
 array and then splits it among the two semi-spaces. The pointer
 [[from_space]] points to the base of the active semi-space and
 [[to_space]] points to the inactive semi-space. The size of each
 semi-space is stored in the variable [[heap_size]]. The size of the
-heap as well as the start of both heap spaces is aligned to a page
+heap as well as the start of both semi-spaces is aligned to a page
 boundary.
 
 Note that we must keep the variables [[heap_base]] and [[heap_end]] in
@@ -266,12 +271,12 @@ forwarded nodes.
 Before copying a node, we must check whether its info pointer is
 already replaced by a forwarding pointer. In that case, only the
 pointer to the node is updated to point to the new location.
-Otherwise, a binary copy of the node is created at the top of
-to-space and its info pointer is replaced. Pointers to nodes outside
-of the heap as well as pointers to nodes above the current heap
-segment are not followed at all. We also shorten indirection chains,
-but only if the runtime system was configured with the
-\texttt{--enable-copying} option. It is not safe to shorten
+Otherwise, a binary copy of the node is created at the top of to-space
+and its info pointer is replaced by a forwarding pointer. Pointers to
+nodes outside the heap as well as pointers to nodes above the current
+heap segment are not followed at all. We shorten indirection chains
+only if the runtime system was configured with the
+\texttt{--enable-copying} option because it is not safe to shorten
 indirection chains in general when trailing is used, as the following
 example demonstrates.
 \begin{verbatim}
@@ -284,11 +289,10 @@ evaluating the guard \verb|z =:= y| \verb|&>| \verb|x =:= y| and
 indirection chains were shortened, the variable \texttt{z} would be
 bound to the selected result of \texttt{coin} and this binding would
 not be undone when switching to the other solution because \texttt{z}
-is allocated in the top-most heap segment when it is bound and
-therefore it is not recorded on the trail.
-
-\ToDo{It would be safe to shorten indirection chains in the top most
-  heap segment even for the trail based implementation.}
+is allocated in the topmost heap segment when it is bound to
+\texttt{y} and therefore this update is not recorded on the trail.
+Note that it is not even possible to shorten indirection chains in the
+topmost heap segment because of saved search goals.
 
 <<Garbage collector definitions>>=
 static inline Node *
@@ -333,18 +337,11 @@ GC_copy(Node ***p_alloc, word *hlim, Node *node)
 For each heap segment, the garbage collector first compacts the
 corresponding trail segment by removing redundant entries. Next, the
 external roots, the stack, and the trail are scanned and all
-referenced objects below the current choice point's heap limit are           %'
+referenced objects below the current choice point's heap limit are
 copied into to-space. Finally, the collector copies all nodes that are
 referenced directly or indirectly from these nodes into to-space as
-well.
-
-Note that the garbage collector updates the active pointer of the root
-space of the current search space explicitly because that pointer is
-almost always a cross segment pointer into a younger heap segment and
-therefore does not get updated when the root search space is copied
-into to-space. We make use of the invariant
-[[ss->root->s.active == ss]] that is preserved by the runtime system
-(cf. Sect.~\ref{sec:spaces}).
+well and then updates any cross segment roots found via the scripts of
+the heap segment's active search space.
 
 <<Collect the heap segment below [[cp]]>>=
 hlim = cp->btHp;
@@ -366,8 +363,8 @@ cp->btTp   = copy_trail;
 #endif
 <<Scan to-space and copy all reachable nodes into to-space>>
 #if !COPY_SEARCH_SPACE
-spc		    = cp->btSpc;
-spc->root->s.active = spc;
+spc = cp->btSpc;
+<<Update cross segment pointers for space [[spc]]>>
 #endif
 scan_stack = (Node **)cp;
 cp->btHp   = (word *)copy;
@@ -391,7 +388,8 @@ regs.tp = copy_trail;
 #endif
 <<Scan to-space and copy all reachable nodes into to-space>>
 #if !COPY_SEARCH_SPACE
-regs.ss->root->s.active = regs.ss;
+spc = regs.ss;
+<<Update cross segment pointers for space [[spc]]>>
 #endif
 
 @ 
@@ -441,7 +439,7 @@ nodes which were not copied up to this point.
 \attention\emph{Note:} This code assumes that only nodes within the
 heap are updated and their addresses recorded on the trail. If this
 were not the case, the code below would have to be changed so as to
-retain all trail entries which refer to updated nodes outside of the
+retain all trail entries which refer to updated nodes outside the
 heap, too.
 
 <<Compact the current trail segment>>=
@@ -454,16 +452,16 @@ for ( ; from_trail < tlim; from_trail++ )
     }
 
 @ 
-After compacting the current trail segment, and copying the external
+After compacting the current trail segment and copying the external
 roots and the current stack segment, the garbage collector processes
 the (partially compacted) trail. First, it scans the current trail
 segment in order to copy the current bindings of all nodes that were
-updated in this segment. These bindings have not been copied up to
-this point only if they are reached by an upward cross segment pointer
-and there are no other references from older segments. Since in that
-case the last reference to these bindings will be dropped upon
-backtracking from the current segment, it is safe to promote them into
-the current heap segment.
+updated in this segment. If a binding has not been copied up to this
+point it is reached only by an upward cross segment pointer and there
+are no other references to the binding from other segments older than
+the current segment. Since in that case the last reference to this
+binding will be dropped upon backtracking from the current segment, it
+is safe to promote it into the current heap segment.
 
 <<Collect the current trail segment>>=
 for ( ; scan_trail < copy_trail; scan_trail++ )
@@ -492,8 +490,7 @@ for ( scan_trail = cp->btTp; scan_trail < regs.tp; scan_trail++ )
 
 @ 
 Besides the younger trail segments, the garbage collector must also
-process the scripts of the current search spaces' parents, since they %'
-are (implicitly) part of the corresponding trail segments.
+process the scripts of the current search spaces' ancestors. %'
 
 <<Collect all younger trail segments>>=
 scan_cp = cp;
@@ -575,6 +572,43 @@ for ( ; scan != copy; scan += len )
 	}
     }
 }
+
+@ 
+The active search space of a search goal is distinguished by the fact
+that its and its ancestors' scripts may contain references to nodes
+whose updated fields contain upward cross segment pointers. In order
+to update these cross segment pointers, we process the scripts of the
+active search space of a heap segment and its ancestors after all live
+nodes from that segment, including the scripts themselves, have been
+copied. In addition, we also update the [[active]] pointer of the
+active space's root space using the invariant
+[[ss->root->s.active == ss]] (cf.\ Sect.~\ref{sec:spaces}), since this
+pointer may be an upward cross segment pointer as well.
+
+Note that we cannot simply write back the script entries' [[inVal]]
+fields to the updated nodes because further updates for those nodes
+may be present on the trail. %'
+
+<<Update cross segment pointers for space [[spc]]>>=
+spc->root->s.active = spc;
+for ( ; spc->parent; spc = spc->parent )
+    if ( spc->s.script )
+    {
+	scr = spc->s.script->data;
+	len = vector_argc(spc->s.script) / wordsof(ScriptRec);
+	for ( i = 0; i < len; i++ )
+	    if ( scr[i].ofs )
+	    {
+		word val = scr[i].addr[scr[i].ofs];
+
+		if ( is_tagged_ptr(val) && val >= (word)heap_base &&
+		     val < (word)hlim )
+		{
+		    assert(is_forwarded(val));
+		    scr[i].addr[scr[i].ofs] = get_forward(val);
+		}
+	    }
+    }
 
 @ 
 At the end of the collection, the variable name dictionary and the

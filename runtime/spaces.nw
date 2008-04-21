@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 2662 2008-04-21 06:41:25Z wlux $
+% $Id: spaces.nw 2663 2008-04-21 06:43:03Z wlux $
 %
 % Copyright (c) 2003-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -78,12 +78,11 @@ struct search_space {
 #if !COPY_SEARCH_SPACE
 static void switch_bindings(SearchSpace *space);
 static void set_safe_ancestor(SearchSpace *space, Choicepoint *cp);
-static SearchSpace *copy_search_space(SearchSpace *spc, SearchSpace *space);
 #endif
 static Node *copy_node(Node *node, SearchSpace *space);
 
 static NodeInfo search_space_info = {
-    CAPP_KIND, 0, wordsof(struct search_space), 0, 0, no_eval, 0, 0, 0
+    SEARCH_SPACE_KIND, 0, wordsof(struct search_space), 0, 0, no_eval, 0, 0, 0
 };
 
 @ 
@@ -568,37 +567,55 @@ In order to request a garbage collection while copying a graph, a
 static jmp_buf restart_copy;
 
 @
-The function [[copy_node]] copies a single node from the graph. It
-returns the original node if the node is allocated outside of the heap
-as well as for non-local variables, shared applications, and search
-continuations. Otherwise, the node is copied to the top of the heap
-and a forwarding pointer is left in the old node. As a special case,
-when [[copy_node]] is called with [[space == 0]], all nodes are copied
-into the current space. This is used in order to support the
-[[getSearchTree]] function, which implements encapsulated search with
-strong encapsulation (see p.~\pageref{encapsulation} in
-Sect.~\ref{encapsulation}).
+The function [[copy_node]] copies a single node from the graph. If the
+node is allocated outside the heap or is a constant, a pointer to the
+original node is returned. The same is true for non-local variables,
+shared applications, and search continuations when [[space != 0]].
+When [[copy_node]] is called with a node that has been copied
+(forwarded) to the current search space already, the new address of
+the copied node is returned. For all other nodes, including non-local
+variables, shared applications, and search continuations when
+[[space == 0]], [[copy_node]] creates a copy of the node, writes a
+forwarding pointer to the original node, and returns the new address
+of the copied node.
+
+A special case is made for search space nodes. Since the purpose of
+[[copy_graph]] is to copy a graph into the current search space,
+[[copy_node]] in general returns the current search space when it is
+called with a non-forwarded search space node. However, if the address
+of that node is equal to the [[space]] argument, a copy of the search
+space is created. This is used by [[copy_search_space]] to copy the
+local search space tree of a search continuation (see below). Note
+that [[copy_graph]] calls [[copy_node]] only for the root of the graph
+and for nodes that have been copied already. The search space of the
+root of the graph is forwarded to the current search space at the
+beginning of [[copy_graph]] and nodes that have been copied into the
+current search space can contain pointers to non-forwarded search
+spaces only when [[space == 0]]. Thus, the special exception for
+[[copy_search_space]] cannot lead to a search space node being
+unintentionally copied.
 
 One has to be careful when the copied graph contains (local) search
 continuations. Since these continuations may contain references to
-variables from the copied graph, they have to be copied as well using
-fresh search spaces. There are two options here. Either one can create
-a fresh root space for each local search space encountered, or one
-retains the original search tree structure. We have chosen the latter
-option because the copying algorithm uses a breadth first traversal,
-whereas copying local continuations into fresh root spaces requires a
-depth first traversal in order to ensure that the local bindings of a
-space are in effect while its nodes are being copied.
+other nodes from the copied graph, they have to be copied as well
+using fresh search spaces. There are two options here. Either one can
+create a fresh root space for each local search space encountered, or
+one retains the original search tree structure. We have chosen the
+latter option because the copying algorithm uses a breadth first
+traversal, whereas copying local continuations into fresh root spaces
+requires a depth first traversal in order to ensure that the local
+bindings of a space are in effect while its nodes are begin copied. We
+duplicate the search continuation's local search space tree by calling        %'
+[[copy_search_tree]] for it when the continuation node is copied.
 
-In our implementation, we cannot activate the bindings of a particular
-local search space during copying, as this could leave cross segment
-pointers in the graph at the end of [[copy_graph]]. Therefore, we must
-not shorten any indirection chains within those spaces. Shortening is
-valid only for indirection nodes from the copied graph as well as for
-indirections in outer search spaces. Note that this restriction does
-not apply when the runtime system is configured to use a copying
-implementation of encapsulated search. In that case, all indirection
-chains can be shortened.
+Due to the breadth first traversal of the graph, we cannot activate
+the bindings of a particular local search space during copying.
+Therefore, we must not shorten any indirection chains within those
+spaces. Shortening is valid only for indirection nodes from the copied
+graph as well as for indirections in outer search spaces. Note that
+this restriction does not apply when the runtime system is configured
+to use a copying implementation of encapsulated search. In that case,
+all indirection chains can be shortened.
 
 Actually, copying of local continuations could be avoided for
 continuations that are closed, i.e., which do not reference any
@@ -606,6 +623,12 @@ non-local nodes. However, the runtime system currently offers no means
 to check whether a search continuation is closed.
 
 <<spaces.c>>=
+#if !COPY_SEARCH_SPACE
+static void copy_search_space(SearchSpace *spc);
+#else
+# define copy_search_space(spc) copy_node((Node *)(spc), spc)
+#endif
+
 static Node *
 copy_node(Node *node, SearchSpace *space)
 {
@@ -657,10 +680,24 @@ copy_node(Node *node, SearchSpace *space)
 		continue;
 
 	    case SEARCH_CONT_KIND:
-		do_copy = !space || is_forwarded(node->sc.spc)
-		    || is_forwarded(node->sc.ss);
+		if ( is_forwarded(node->sc.ss) )
+		    do_copy = true;
+		else
+		{
+		    do_copy = !space || is_forwarded(node->sc.spc);
+		    if ( do_copy )
+			copy_search_space(node->sc.ss);
+		}
 		break;
 
+	    case SEARCH_SPACE_KIND:
+		if ( node != (Node *)space )
+		{
+		    do_copy = false;
+		    node    = (Node *)regs.ss;
+		    break;
+		}
+		/* FALL THROUGH!!! */
 	    default:
 		do_copy = true;
 		break;
@@ -707,31 +744,23 @@ applies itself to the active space of the search space tree.
 
 <<spaces.c>>=
 #if !COPY_SEARCH_SPACE
-static SearchSpace *
-copy_search_space(SearchSpace *spc, SearchSpace *space)
+static void
+copy_search_space(SearchSpace *spc)
 {
-    SearchSpace *copy;
-
     /* copy the space itself */
-    copy = (SearchSpace *)copy_node((Node *)spc, space);
+    copy_node((Node *)spc, spc);
 
     /* eventually copy the active space and its parents */
     /* NB don't activate the copied space's bindings since this could
      *    leave cross segment pointers behind */
     if ( !is_forwarded(spc->root->s.active) )
-	copy_search_space(spc->root->s.active, space);
+	copy_search_space(spc->root->s.active);
 
     /* copy all parent spaces */
     /* NB parent pointers will be updated later */
     for ( spc = spc->parent; spc && !is_forwarded(spc); spc = spc->parent )
-	copy_node((Node *)spc, space);
-
-    /* return the copied space */
-    return copy;
+	copy_node((Node *)spc, spc);
 }
-#else
-# define copy_search_space(spc, space) \
-    (SearchSpace *)copy_node((Node *)(spc), space)
 #endif
 
 @
@@ -816,123 +845,58 @@ copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space)
     /* copy all children */
     for ( scan = (Node **)regs.hp; scan < alloc; scan += sz )
     {
-	unsigned int i, n;
-	ThreadQueue  tq;
-#if !COPY_SEARCH_SPACE
-	ScriptRec    *scr;
-#endif
-	Node	     *node;
+	bool	  is_vect;
+	int	  i, j, n, el_len;
+	NodeInfo  *info;
+	const int *otable;
 
-	node = (Node *)scan;
-	sz   = node_size(node);
-	if ( sz == 0 )
-	    sz = node->a.length;
+	info	= ((Node *)scan)->info;
+	sz	= info->length;
+	otable	= info->offset_table;
+	is_vect = sz == 0;
+	if ( is_vect )
+	    sz = ((Node *)scan)->a.length;
 
-	switch ( node_kind(node) )
+	if ( otable == 0 )
 	{
-	case CAPP_KIND:
-	case PAPP_KIND:
-	    n = closure_argc(node);
-	    for ( i = 0; i < n; i++ )
-		node->c.args[i] = copy_node(node->c.args[i], space);
-	    break;
-
-	case LVAR_KIND:
-	    if ( is_forwarded(node->v.spc) )
-		node->v.spc = (SearchSpace *)get_forward(node->v.spc);
-	    else
-		node->v.spc = regs.ss;
-	    node->v.wq	  = (ThreadQueue)copy_node((Node *)node->v.wq, space);
-	    node->v.cstrs =
-		(Constraint *)copy_node((Node *)node->v.cstrs, space);
-	    break;
-
-	case LAZY_KIND:
-	    switch ( node_tag(node) )
+	    for ( i = is_vect ? 2 : 1; i < sz; i++ )
+		scan[i] = copy_node(scan[i], space);
+	}
+	else
+	{
+	    n = *otable++;
+	    if ( n >= 0 )
 	    {
-	    case NOUPD_TAG:
-		for ( i = 0, n = closure_argc(node); i < n; i++ )
-		    node->c.args[i] = copy_node(node->c.args[i], space);
-		break;
-	    case UPD_TAG:
-	    case QUEUEME_TAG:
-		if ( is_forwarded(node->s.spc) )
-		    node->s.spc = (SearchSpace *)get_forward(node->s.spc);
-		else
-		    node->s.spc = regs.ss;
-		for ( i = 0, n = suspend_argc(node); i < n; i++ )
-		    node->s.args[i] = copy_node(node->s.args[i], space);
-		break;
-	    default:
-		unexpected_tag("copy_graph", node_tag(node));
-		break;
-	    }
-	    break;
-
-#if !COPY_SEARCH_SPACE
-	case INDIR_KIND:
-	    assert(is_forwarded(node->n.spc));
-	    node->n.spc = (SearchSpace *)get_forward(node->n.spc);
-	    for ( i = 0, n = suspend_argc(node); i < n; i++ )
-		node->s.args[i] = copy_node(node->s.args[i], space);
-	    break;
-#endif
-
-	case VECTOR_KIND:
-	    n = vector_argc(node);
-	    for ( i = 0; i < n; i++ )
-		node->a.args[i] = copy_node(node->a.args[i], space);
-	    break;
-
-	case THREAD_KIND:
-	    tq = (ThreadQueue)node;
-	    if ( tq->t.id )
-	    {
-		tq->t.next = (ThreadQueue)copy_node((Node *)tq->t.next, space);
-		tq->t.ds   = copy_node(tq->t.ds, space);
+		while ( n-- > 0 )
+		{
+		    i = *otable++;
+		    scan[i] = copy_node(scan[i], space);
+		}
 	    }
 	    else
 	    {
-		tq->s.next = (ThreadQueue)copy_node((Node *)tq->s.next, space);
-		tq->s.thd  = (ThreadQueue)copy_node((Node *)tq->s.thd, space);
-		tq->s.link = (ThreadQueue)copy_node((Node *)tq->s.link, space);
+		assert(is_vect);
+		el_len = -n;
+		for ( j = 2; j < sz; j += el_len )
+		{
+		    otable = info->offset_table + 1;
+		    n	   = *otable++;
+		    while ( n-- > 0 )
+		    {
+			i	  = *otable++;
+			scan[j+i] = copy_node(scan[j+i], space);
+		    }
+		}
+		assert(j == sz);
 	    }
-	    break;
-
-	case SEARCH_CONT_KIND:
-	    if ( is_forwarded(node->sc.spc) ) 
-		node->sc.spc = (SearchSpace *)get_forward(node->sc.spc);
-	    else
-		node->sc.spc = regs.ss;
-	    node->sc.ss	  = copy_search_space(node->sc.ss, space);
-	    node->sc.susp = copy_node(node->sc.susp, space);
-	    node->sc.var  = copy_node(node->sc.var, space);
-	    node->sc.rq	  = (ThreadQueue)copy_node((Node *)node->sc.rq, space);
-	    break;
-
-#if !COPY_SEARCH_SPACE
-	case SCRIPT_KIND:
-	    n	= vector_argc(node) / wordsof(ScriptRec);
-	    scr = ((Script *)node)->data;
-	    for ( i = 0; i < n; i++ )
-	    {
-		scr[i].addr   = (word *)copy_node((Node *)scr[i].addr, space);
-		scr[i].inVal  = (word)copy_node((Node *)scr[i].inVal, space);
-		scr[i].outVal = (word)copy_node((Node *)scr[i].outVal, space);
-	    }
-	    break;
-#endif
-
-	default:
-	    invalid_arg("copy_graph", node_kind(node));
 	}
     }
     assert(scan == (Node **)alloc);
     END_LOCAL_ROOTS
     regs.hp = (word *)alloc;
 
-    /* eventually update the stack */
 #if COPY_SEARCH_SPACE
+    /* eventually update the stack */
     if ( !copy )
     {
 	for ( scan = (Node **)regs.bp; scan-- > regs.sp; )

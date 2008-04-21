@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2661 2008-04-21 06:39:54Z wlux $
+% $Id: heap.nw 2663 2008-04-21 06:43:03Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -149,6 +149,7 @@ enum {
     ABSTRACT_KIND,		/* external objects */
     THREAD_KIND,		/* thread queue node */
     SEARCH_CONT_KIND,		/* search continuation */
+    SEARCH_SPACE_KIND,		/* search space */
     SCRIPT_KIND			/* saved script/trail */
 };
 

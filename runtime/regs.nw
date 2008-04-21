@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: regs.nw 2338 2007-06-23 09:42:14Z wlux $
+% $Id: regs.nw 2662 2008-04-21 06:41:25Z wlux $
 %
-% Copyright (c) 2006-2007, Wolfgang Lux
+% Copyright (c) 2006-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{The Abstract Machine Registers}\label{sec:registers}
@@ -94,7 +94,7 @@ init_regs()
     regs.efp	  = 0;
     regs.rq	  = 0;
     regs.hp	  = regs.hlim = heap_base;
-    regs.ss	  = (SearchSpace *)&global_space;
+    regs.ss	  = 0;
 #if !COPY_SEARCH_SPACE
     regs.tp	  = trail_base;
 #endif

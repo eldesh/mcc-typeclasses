@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: gc_2space.nw 2646 2008-03-26 04:26:26Z wlux $
+% $Id: gc_2space.nw 2662 2008-04-21 06:41:25Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -366,9 +366,8 @@ cp->btTp   = copy_trail;
 #endif
 <<Scan to-space and copy all reachable nodes into to-space>>
 #if !COPY_SEARCH_SPACE
-spc = cp->btSpc;
-if ( spc != &global_space )
-    spc->root->s.active = spc;
+spc		    = cp->btSpc;
+spc->root->s.active = spc;
 #endif
 scan_stack = (Node **)cp;
 cp->btHp   = (word *)copy;
@@ -392,8 +391,7 @@ regs.tp = copy_trail;
 #endif
 <<Scan to-space and copy all reachable nodes into to-space>>
 #if !COPY_SEARCH_SPACE
-if ( regs.ss != &global_space )
-    regs.ss->root->s.active = regs.ss;
+regs.ss->root->s.active = regs.ss;
 #endif
 
 @ 

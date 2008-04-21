@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 2372 2007-06-23 14:09:45Z wlux $
+% $Id: backtrack.nw 2662 2008-04-21 06:41:25Z wlux $
 %
-% Copyright (c) 2002-2007, Wolfgang Lux
+% Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Global Search}\label{sec:global-search}
@@ -286,6 +286,7 @@ curry_eval(NodeInfo *goal_info, const char *fv_names[], int argc, char **argv)
     }
 
     /* evaluate and display solutions of the goal */
+    new_search_space(0);
     goal = eval_first(eval_apply(goal_info, fv_names));
     if ( goal )
 	for ( ;; )
@@ -351,7 +352,7 @@ eval_apply(NodeInfo *goal_info, const char *fv_names[])
     clos->info = goal_info;
     for ( i = 0; i <= n; i++ )
 	clos->c.args[i] = (Node *)(vars + i);
-    regs.hp += closure_node_size(n + 1);
+    regs.hp   += closure_node_size(n + 1);
 
     for ( i = 0; i < n; i++ )
 	add_name((Node *)(vars + i + 1), fv_names[i]);

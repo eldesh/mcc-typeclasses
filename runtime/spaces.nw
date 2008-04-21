@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 2661 2008-04-21 06:39:54Z wlux $
+% $Id: spaces.nw 2662 2008-04-21 06:41:25Z wlux $
 %
 % Copyright (c) 2003-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -57,8 +57,6 @@ struct search_space {
 #endif
 };
 
-extern const SearchSpace global_space;
-
 @ 
 <<spaces.c>>=
 #include "config.h"
@@ -86,17 +84,6 @@ static Node *copy_node(Node *node, SearchSpace *space);
 
 static NodeInfo search_space_info = {
     CAPP_KIND, 0, wordsof(struct search_space), 0, 0, no_eval, 0, 0, 0
-};
-
-const SearchSpace global_space = {
-#if !COPY_SEARCH_SPACE
-    &search_space_info,
-    (SearchSpace *)&global_space,
-    0,
-    { (SearchSpace *)&global_space }
-#else
-    &search_space_info
-#endif
 };
 
 @ 
@@ -427,7 +414,7 @@ save_search_space(unsigned int n_regs)
     ScriptRec	 *scr;
     SaveRec	 *tp;
 
-    assert(regs.ss != &global_space);
+    assert(regs.ss->root->s.active == regs.ss);
 
     /* compute the size of the trail segment to be saved */
     n = regs.tp - regs.bp->btTp;
@@ -726,7 +713,6 @@ copy_search_space(SearchSpace *spc, SearchSpace *space)
     SearchSpace *copy;
 
     /* copy the space itself */
-    assert(spc != &global_space);
     copy = (SearchSpace *)copy_node((Node *)spc, space);
 
     /* eventually copy the active space and its parents */
@@ -767,7 +753,6 @@ copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space)
 
     assert(graph != 0);
 #endif
-    assert(space != &global_space);
 
     /* handle gc request */
     BEGIN_LOCAL_ROOTS2(graph, space)

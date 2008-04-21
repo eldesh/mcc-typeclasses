@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: io_monad.nw 2346 2007-06-23 10:23:59Z wlux $
+% $Id: io_monad.nw 2662 2008-04-21 06:41:25Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Monadic Code}\label{sec:io-monad}
@@ -63,6 +63,7 @@ DECLARE_LABEL(extern, __ioError);
 #include "heap.h"
 #include "stack.h"
 #include "threads.h"
+#include "spaces.h"
 #include "eval.h"
 #include "data.h"
 #include "io_monad.h"
@@ -191,6 +192,7 @@ FUNCTION(start_io)
  ENTRY_LABEL(static, start_io)
     regs.handlers = &io_handlers;
     TRACE(("start program\n"));
+    new_search_space(1);
     start_thread(1, 0);
     /* Hack: Change the return address of the main thread */
     regs.ret = stop_io;

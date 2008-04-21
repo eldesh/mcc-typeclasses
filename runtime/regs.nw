@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: regs.nw 2662 2008-04-21 06:41:25Z wlux $
+% $Id: regs.nw 2671 2008-04-21 06:55:42Z wlux $
 %
 % Copyright (c) 2006-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -15,6 +15,8 @@ available as fields of the global [[regs]] structure.
   thread's stack segment. %'
 \item The register [[efp]] points to the current I/O exception handler
   frame. Note that each thread has its own exception handler.
+\item If stability is enabled, the register [[thd]] points to the
+  thread node of the current thread.
 \item The state of threads which are ready to run but not active is
   maintained in the ready queue [[rq]].
 \item The register [[hp]] maintains the allocation pointer into the
@@ -52,6 +54,9 @@ extern struct regs {
     union node			 **sp;
     union node			 **ds_base;
     struct exception_frame	 *efp;
+#if YIELD_NONDET
+    struct thread		 *thd;
+#endif
     union thread_node		 *rq;
     word			 *hp;
     word			 *hlim;
@@ -92,6 +97,9 @@ init_regs()
     regs.sp	  = stack_end;
     regs.ds_base  = 0;
     regs.efp	  = 0;
+#if YIELD_NONDET
+    regs.thd	  = 0;
+#endif
     regs.rq	  = 0;
     regs.hp	  = regs.hlim = heap_base;
     regs.ss	  = 0;

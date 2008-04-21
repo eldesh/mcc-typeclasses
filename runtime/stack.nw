@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: stack.nw 2669 2008-04-21 06:52:23Z wlux $
+% $Id: stack.nw 2671 2008-04-21 06:55:42Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -112,6 +112,9 @@ typedef struct choicepoint {
     unsigned int       btCid;		/* id of current thread */
     Node	       **btDsBase;	/* saved thread stack base */
     struct choicepoint *btBp;		/* previous choice point */
+#if YIELD_NONDET
+    struct thread      *btThd;		/* saved thread pointer */
+#endif
     union thread_node  *btRq;		/* saved run queue */
 #if !COPY_SEARCH_SPACE
     struct save_rec    *btTp;		/* saved trail pointer */
@@ -147,6 +150,9 @@ push_choice_point(const Label *alts)
     regs.bp->btCid	= regs.cid;
     regs.bp->btDsBase	= regs.ds_base;
     regs.bp->btBp	= oldBp;
+#if YIELD_NONDET
+    regs.bp->btThd	= regs.thd;
+#endif
     regs.bp->btRq	= regs.rq;
 #if !COPY_SEARCH_SPACE
     regs.bp->btTp	= regs.tp;
@@ -177,6 +183,9 @@ reset_choice_point()
 {
     regs.cid     = regs.bp->btCid;
     regs.ds_base = regs.bp->btDsBase;
+#if YIELD_NONDET
+    regs.thd	 = regs.bp->btThd;
+#endif
     regs.rq	 = regs.bp->btRq;
     regs.ss	 = regs.bp->btSpc;
     regs.sp	 = (Node **)regs.bp;

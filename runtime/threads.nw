@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: threads.nw 2670 2008-04-21 06:53:30Z wlux $
+% $Id: threads.nw 2671 2008-04-21 06:55:42Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -26,18 +26,18 @@ be continued.
 #include "trail.h"
 #include "trace.h"
 
-@
-The state of a thread that is not running is saved in a thread node
-structure which is allocated in the heap. The state information
-includes a thread id, the reason for its suspension, the continuation
-address, and a pointer to the current exception frame. The runtime
-system does not use thread ids in any way except that it requires them
-to be non-zero. Nevertheless, they can be quite useful for debugging
-compiled programs. Thread nodes can be linked to a thread queue via
-the [[next]] field. Suspended threads are added to the wait queue of
-the variable or queue-me node that caused the suspension. The runnable
-threads are collected in the ready queue, which is available through
-the register [[regs.rq]].
+@ 
+The state of a thread that is not running is saved in a thread state
+node which is allocated in the heap. The state information includes a
+thread id, the reason for its suspension, the continuation address,
+and a pointer to the current exception frame. The runtime system does
+not use thread ids in any way except that it requires them to be
+non-zero. Nevertheless, they can be quite useful for debugging
+compiled programs. Thread state nodes can be linked to a thread queue
+via their [[next]] field. Suspended threads are added to the wait
+queue of the variable or queue-me node that caused their suspension.
+The runnable threads are collected in the ready queue, which is
+saved in the register [[regs.rq]].
 
 When a thread is interrupted and inserted at the head of the ready
 queue, its stack segment is retained on the global stack. If a thread
@@ -50,23 +50,44 @@ handler chain can be relocated appropriately. We do not use relative
 offsets for the exception handler chain because they could be
 misidentified as node pointers by the garbage collector.
 
-When stability is enabled, a thread may be part of the ready queue and
-the wait queue of a variable at the same time. This is implemented by
-adding a surrogate to each of the queues. These surrogates are linked
-into a ring and share a common thread state, which is allocated
-separately in the heap. When the thread is woken through one of the
-queues, the state pointer of all its surrogates is set to [[0]]. In
-order to distinguish surrogates from regular thread states, the
-reserved thread id [[0]] is used for them.
+When stability is enabled, the runtime system maintains a global
+thread list that makes the textual order of threads manifest. When no
+other runnable threads are available, the runtime system schedules the
+leftmost non-deterministic thread.\footnote{We call a thread
+  non-deterministic when it is about to perform a non-deterministic
+  computation step.} A pointer to the current thread is maintained in
+the register [[regs.thd]]. A new thread shares the thread node of its
+parent until it suspends for the first time. This avoids creating
+redundant temporary thread nodes for concurrent conjunctions whose
+left argument terminates without being suspended by an unbound
+variable or a queue-me node.
+
+In general, saved thread states refer to nodes in the thread list, but
+not vice versa. This allows releasing the state of a thread that is no
+longer actively used by the computation. However, there is an
+exception for non-deterministic threads. Such threads are not recorded
+in the ready queue and their saved state is linked to the thread node.
+A non-deterministic thread may also be part of the wait queue of a
+variable. This is implemented by saving a surrogate to the thread node
+and adding another surrogate to the wait queue of the variable. All
+surrogates of a thread are linked into a ring and share a common
+thread state, which is allocated separately in the heap. When the
+thread is woken through one of the queues, the state pointer of all
+its surrogates is set to [[0]]. In order to distinguish surrogates
+from real thread states, the reserved thread id [[0]] is used for
+them.
 
 The runtime system maintains the invariant that the head of the ready
-queue is never a surrogate whose state pointer is [[0]]. Thus, it is
+queue never is a surrogate whose state pointer is [[0]]. Thus, it is
 safe to check [[regs.rq != 0]] in order to test whether other runnable
-threads exist.
+threads are available.
 
 <<threads.h>>=
 #if 0
 typedef union thread_node *ThreadQueue; /* already declared in heap.h */
+#endif
+#if YIELD_NONDET
+typedef struct thread	  Thread;
 #endif
 
 @ 
@@ -86,6 +107,9 @@ struct thread_state {
     THREAD_INFO
     int		     reason;		/* reason for suspension */
     Label	     ip;		/* next instruction to be executed */
+#if YIELD_NONDET
+    Thread	     *thd;		/* thread node */
+#endif
     ExceptionFrame   *efp;		/* pointer to exception frame */
     Node	     **ds_base;		/* base address of stack */
     unsigned int     ds_size;		/* size of data stack (segment) */
@@ -107,19 +131,37 @@ union thread_node {
 #endif
 };
 
+#if YIELD_NONDET
+struct thread {
+    NodeInfo	 *info;
+    unsigned int id;			/* thread id */
+    Thread	 *prev, *next;		/* links to predecessor and successor */
+    ThreadQueue  tq;			/* saved state of a non-det. thread */
+};
+#endif
+
 #define thread_node_size	wordsof(union thread_node)
 #define thread_state_size	wordsof(struct thread_state)
 #if YIELD_NONDET
 # define thread_surrogate_size	wordsof(struct thread_surrogate)
+# define thread_size		wordsof(struct thread)
 #endif
 
-static const int ot_thread[] = {
+static const int ot_thread_state[] = {
+#if YIELD_NONDET
+    3,
+    word_offsetof(struct thread_state, next),
+    word_offsetof(struct thread_state, thd),
+    word_offsetof(struct thread_state, ds)
+#else
     2,
     word_offsetof(struct thread_state, next),
     word_offsetof(struct thread_state, ds)
+#endif
 };
-static NodeInfo thread_info = {
-    THREAD_KIND, THREAD_TAG, thread_state_size, ot_thread, 0, no_eval, 0, 0, 0
+static NodeInfo thread_state_info = {
+    THREAD_KIND, THREAD_TAG, thread_state_size, ot_thread_state, 0, no_eval,
+    0, 0, 0
 };
 
 #if YIELD_NONDET
@@ -133,14 +175,25 @@ static NodeInfo surrogate_info = {
     THREAD_KIND, SURROGATE_TAG, thread_surrogate_size, ot_surrogate, 0,
     no_eval, 0, 0, 0
 };
+
+static const int ot_thread[] = {
+    3,
+    word_offsetof(struct thread, prev),
+    word_offsetof(struct thread, next),
+    word_offsetof(struct thread, tq)
+
+};
+static NodeInfo thread_info = {
+    CAPP_KIND, 0, thread_size, ot_thread, 0, no_eval, 0, 0, 0
+};
 #endif
 
 @
 The thread state includes the reason why a thread was interrupted.
 Possible reasons are [[None]] in case of a fork and [[Yield]] if the
-thread was performing a yield. The reasons [[Eval]] and [[Delay]] are
-used if the thread is suspended due to a queue-me and unbound variable
-node, respectively.
+thread was performing a yield before a non-deterministic computation
+step. The reasons [[Eval]] and [[Delay]] are used if the thread is
+suspended due to a queue-me and unbound variable node, respectively.
 
 <<threads.c>>=
 enum suspend_reason {
@@ -166,13 +219,15 @@ functions [[suspend_thread]] and [[delay_thread]] suspend the current
 thread and add this thread to the wait queue of the node in register
 [[regs.r[0]]]. The former is intended to be used for locked suspended
 applications, the latter for unbound variables. The function
-[[yield_thread]] interrupts the current thread and moves it to the end
-of the ready queue. The function [[yield_delay_thread]] is a
-combination of [[yield_thread]] and [[delay_thread]]. It interrupts
-the running thread and moves it to the end of the ready queue. In
-addition, the running thread is inserted into the wait queue of the
-variable in register [[regs.r[0]]] so that it will be woken as well
-when that variable is bound.
+[[yield_thread]] interrupts the current thread before a
+non-deterministic computation step and does not add it to any queue,
+so that it will only be rescheduled if no other deterministic threads
+are available. The function [[yield_delay_thread]] is a combination of
+[[yield_thread]] and [[delay_thread]]. It interrupts the running
+thread and marks it as about to perform a non-deterministic
+computation step. In addition, the thread is inserted into the wait
+queue of the variable in register [[regs.r[0]]] so that it will also
+be woken when that variable is bound.
 
 The functions [[activate_threads]] and [[wake_threads]] wake a list of
 suspended threads. Whereas [[activate_threads]] interrupts the current
@@ -226,6 +281,11 @@ DECLARE_LABEL(static, activate_thread);
 static void terminate_thread(void);
 static ThreadQueue interrupt_thread(unsigned int, Label, enum suspend_reason);
 static ExceptionFrame *relocate_thread(ExceptionFrame *, int);
+#if YIELD_NONDET
+static bool schedule_nondet(Thread *);
+#else
+# define schedule_nondet(thd)	false
+#endif
 
 static NodeInfo saved_stack_info = {
     VECTOR_KIND, 0, 0, 0, 0, no_eval, 0, 0, 0
@@ -238,10 +298,10 @@ arguments to the new thread. The current thread is interrupted and
 will continue its execution at address [[l]]. If this parameter is
 [[0]], [[start_thread]] assumes that it is creating the initial thread
 of the program or an encapsulated search and therefore no thread is
-interrupted. Instead, the ready queue register [[regs.rq]] is reset.
-The initial return address of the new thread is set to [[stop_thread]]
-so that it is terminated automatically when it returns from its bottom
-frame.
+interrupted. Instead, the registers [[regs.thd]] and [[regs.rq]] are
+reset and a thread node for the root thread is allocated. The initial
+return address of the new thread is set to [[stop_thread]] so that it
+is terminated automatically when it returns from its bottom frame.
 
 <<threads.c>>=
 void
@@ -257,10 +317,28 @@ start_thread(unsigned int n_regs, Label l)
 	regs.rq	    = thd;
     }
     else
-	regs.rq = 0;
+    {
+#if YIELD_NONDET
+	regs.thd = 0;
+#endif
+	regs.rq	 = 0;
+    }
 
     /* start a new thread */
     new_thread();
+#if YIELD_NONDET
+    if ( l == 0 )
+    {
+	CHECK_HEAP(n_regs, thread_size);
+	regs.thd       = (Thread *)regs.hp;
+	regs.thd->info = &thread_info;
+	regs.thd->id   = regs.cid;
+	regs.thd->prev = 0;
+	regs.thd->next = 0;
+	regs.thd->tq   = 0;
+	regs.hp	      += thread_size;
+    }
+#endif
     TRACE(("%I starting\n"));
 
     /* set the ultimate return address */
@@ -285,7 +363,7 @@ The functions [[suspend_thread]] and [[delay_thread]] suspend the
 current thread and add it to the wait queue of the node in register
 [[regs.r[0]]]. This node must be either a queue-me node
 ([[suspend_thread]]) or an unbound variable ([[delay_thread]]). Both
-functions must be applied only to local nodes of the current search
+functions must only be applied to local nodes of the current search
 space.
 
 <<threads.c>>=
@@ -323,10 +401,13 @@ FUNCTION(delay_thread)
 
 @ 
 The functions [[yield_thread]] and [[yield_delay_thread]] interrupt
-the current thread and move it to the end of the ready queue. The
-function [[yield_delay_thread]] also adds the thread to the wait queue
-of the variable node in register [[regs.r[0]]] so that it is woken
-when that variable is bound.
+the current thread and mark it as about to perform a non-deterministic
+computation step. The function [[yield_delay_thread]] also adds the
+thread to the wait queue of the variable node in register
+[[regs.r[0]]] so that it is woken when that variable is bound. In
+order to avoid unnecessary context switches, both functions
+immediately return to the caller if the current thread is the leftmost
+thread capable of performing a non-deterministic computation step.
 
 <<threads.c>>=
 #if YIELD_NONDET
@@ -334,11 +415,11 @@ FUNCTION(yield_thread)
 {
     ThreadQueue thd;
  ENTRY_LABEL(extern, yield_thread)
-    if ( regs.rq == 0 )
+    if ( regs.rq == 0 && !schedule_nondet(regs.thd) )
 	GOTO_INDIR(regs.ret);
 
-    thd	    = interrupt_thread(0, regs.ret, Yield);
-    regs.rq = join_queues(regs.rq, thd);
+    thd = interrupt_thread(0, regs.ret, Yield);
+    SET_FIELD(regs.thd, tq, thd);
     GOTO(activate_thread);
 }
 
@@ -347,7 +428,7 @@ FUNCTION(yield_delay_thread)
     Node	*var;
     ThreadQueue thd, thd1;
  ENTRY_LABEL(extern, yield_delay_thread)
-    if ( regs.rq == 0 )
+    if ( regs.rq == 0 && !schedule_nondet(regs.thd) )
 	GOTO_INDIR(regs.ret);
 
     thd1 = interrupt_thread(1, regs.ret, Yield);
@@ -372,9 +453,9 @@ FUNCTION(yield_delay_thread)
     thd->s.thd  = thd1;
     thd->s.next = 0;
     thd->s.link = (ThreadQueue)regs.hp;
+    SET_FIELD(regs.thd, tq, thd);
     regs.hp    += 2*thread_surrogate_size;
 
-    regs.rq = join_queues(regs.rq, thd);
     GOTO(activate_thread);
 }
 #endif
@@ -394,6 +475,7 @@ activate_threads(ThreadQueue wq, Label l)
     ThreadQueue thd;
 
 #if YIELD_NONDET
+    /* skip surrogates of already woken threads */
     while ( wq && wq->t.id == 0 && wq->s.thd == 0 )
 	wq = wq->t.next;
 #endif
@@ -414,6 +496,7 @@ void
 wake_threads(ThreadQueue wq)
 {
 #if YIELD_NONDET
+    /* skip surrogates of already woken threads */
     while ( wq && wq->t.id == 0 && wq->s.thd == 0 )
 	wq = wq->t.next;
 #endif
@@ -454,10 +537,14 @@ The function [[new_thread]] initializes a new thread, which
 automatically becomes the running thread.
 
 A new thread id is generated by incrementing the private variable
-[[tid]]. We do not care about overflows, so thread ids may be no
-longer unique if you manage to generate more than $2^{32}$ threads.
-Recall that the thread id [[0]] is reserved and setting the
-[[regs.cid]] register to [[0]] denotes that no thread is running.
+[[tid]]. We do not care about overflows, so thread ids may no longer
+be unique if a program manages to start more than $2^{32}$ threads.
+Nevertheless, [[new_thread]] is careful enough to avoid the -- highly
+unlikely -- case that the new thread gets the same id as the ancestor
+that owns the shared thread node when stability is enabled.
+
+Note that the thread id [[0]] is reserved and setting the [[regs.cid]]
+register to [[0]] denotes that no thread is running.
 
 <<threads.c>>=
 static void
@@ -466,7 +553,11 @@ new_thread()
     static unsigned int tid;
 
     /* initialize the thread state */
+#if YIELD_NONDET
+    while ( tid == 0 || (regs.thd && tid == regs.thd->id) )
+#else
     if ( tid == 0 )
+#endif
 	tid++;
     regs.cid	 = tid++;
     regs.ds_base = regs.sp;
@@ -475,10 +566,31 @@ new_thread()
 
 @ 
 The function [[activate_thread]] activates the first thread of the
-ready queue. If the ready queue is empty the function jumps to the
-deadlock handler of the current context.
+ready queue. If the ready queue is empty and stability is enabled,
+this function looks for the leftmost thread in the global thread list
+that is capable of performing a non-deterministic computation step. If
+no such thread is found or stability is disabled, [[activate_thread]]
+jumps to the deadlock handler of the current context.
 
 <<threads.c>>=
+#if YIELD_NONDET
+static bool
+schedule_nondet(Thread *thd0)
+{
+    Thread *thd;
+
+    assert(regs.rq == 0);
+    for ( thd = (thd0 ? thd0 : regs.thd)->prev; thd; thd = thd->prev )
+	if ( thd->tq )
+	    regs.rq = thd->tq;
+    if ( !thd0 )
+	for ( thd = regs.thd->next; !regs.rq && thd; thd = thd->next )
+	    if ( thd->tq )
+		regs.rq = thd->tq;
+    return regs.rq != 0;
+}
+#endif
+
 static
 FUNCTION(activate_thread)
 {
@@ -487,7 +599,7 @@ FUNCTION(activate_thread)
     enum suspend_reason reason;
  ENTRY_LABEL(static, activate_thread)
     /* check for a deadlock */
-    if ( regs.rq == 0 )
+    if ( regs.rq == 0 && !schedule_nondet(0) )
 	GOTO(regs.handlers->deadlock);
 
     /* activate the head of the ready queue */
@@ -504,8 +616,8 @@ FUNCTION(activate_thread)
 	ASSERT(thd->t.id != 0);
 	while ( sur->s.thd )
 	{
-	    ASSERT(sur->s.id == 0 && sur->s.link != 0);
 	    SET_FIELD(sur, s.thd, 0);
+	    ASSERT(sur->s.id == 0 && sur->s.link != 0);
 	    sur = sur->s.link;
 	}
     }
@@ -513,6 +625,11 @@ FUNCTION(activate_thread)
     regs.cid = thd->t.id;
     ip	     = thd->t.ip;
     reason   = (enum suspend_reason)thd->t.reason;
+#if YIELD_NONDET
+    regs.thd = thd->t.thd;
+    if ( regs.thd->tq )
+	SET_FIELD(regs.thd, tq, 0);
+#endif
 
     /* eventually restore the stack */
     if ( thd->t.ds )
@@ -538,8 +655,9 @@ FUNCTION(activate_thread)
 }
 
 @ 
-The function [[terminate_thread]] terminates the current thread and
-discards its stack.
+The function [[terminate_thread]] terminates the current thread,
+discards its stack, and unlinks its thread node from the global thread
+list unless it shares the thread node of its parent.
 
 <<threads.c>>=
 static void
@@ -547,13 +665,38 @@ terminate_thread()
 {
     /* deallocate the current thread */
     regs.sp = regs.ds_base;
+
+#if YIELD_NONDET
+    /* eventually remove the current thread from the global thread list */
+    if ( regs.thd->id == regs.cid )
+    {
+	if ( regs.thd->prev )
+	{
+	    assert(regs.thd->prev->next == regs.thd);
+	    SET_FIELD(regs.thd->prev, next, regs.thd->next);
+	}
+	if ( regs.thd->next )
+	{
+	    assert(regs.thd->next->prev == regs.thd);
+	    SET_FIELD(regs.thd->next, prev, regs.thd->prev);
+	}
+    }
+#endif
 }
 
 @ 
 The function [[interrupt_thread]] interrupts the current thread and
 returns a thread node for it. The stack is saved to the heap except if
-the thread was interrupted with reason [[None]]. The caller is
-responsible for adding the thread to the appropriate queue.
+the thread is interrupted with reason [[None]]. The caller is
+responsible for adding the thread to an appropriate queue.
+
+When a thread is suspended for the first time with a reason other than
+[[None]], i.e., it is possibly rescheduled out of order, a new thread
+node is created for the current thread and inserted into the global
+thread list. The current thread becomes the left neighbor of its
+parent, since the runtime system starts a new thread only for the left
+argument of a concurrent conjunction and continues execution of the
+right argument in the parent thread (cf.\ Sect.~\ref{sec:concurrent}).
 
 <<threads.c>>=
 static ThreadQueue
@@ -563,12 +706,38 @@ interrupt_thread(unsigned int n_regs, Label l, enum suspend_reason reason)
     ThreadQueue  thd;
     bool	 save_ds = reason != None;
     unsigned int ds_size = regs.ds_base - regs.sp;
+#if YIELD_NONDET
+    bool	 new_thd = save_ds && regs.cid != regs.thd->id;
+    Thread	 *thread;
+#endif
 
     CHECK_HEAP(n_regs,
+#if YIELD_NONDET
+	       (new_thd ? thread_size : 0) +
+#endif
 	       thread_state_size + (save_ds ? vector_node_size(ds_size) : 0));
 
     if ( reason != None )
 	TRACE(("%I suspend (%s)\n", reasons[reason]));
+
+#if YIELD_NONDET
+    /* create a thread node for the current thread if necessary */
+    if ( new_thd )
+    {
+	thread	     = (Thread *)regs.hp;
+	thread->info = &thread_info;
+	thread->id   = regs.cid;
+	thread->prev = regs.thd->prev;
+	thread->next = regs.thd;
+	thread->tq   = 0;
+	regs.hp	    += thread_size;
+
+	if ( thread->prev )
+	    SET_FIELD(thread->prev, next, thread);
+	SET_FIELD(thread->next, prev, thread);
+	regs.thd = thread;
+    }
+#endif
 
     /* eventually save the stack */
     if ( save_ds )
@@ -586,11 +755,14 @@ interrupt_thread(unsigned int n_regs, Label l, enum suspend_reason reason)
     /* save the thread state */
     assert(regs.cid != 0);
     thd		   = (ThreadQueue)regs.hp;
-    thd->t.info	   = &thread_info;
+    thd->t.info	   = &thread_state_info;
     thd->t.id	   = regs.cid;
     thd->t.next	   = 0;
     thd->t.reason  = reason;
     thd->t.ip	   = l;
+#if YIELD_NONDET
+    thd->t.thd	   = regs.thd;
+#endif
     thd->t.efp	   = regs.efp;
     thd->t.ds_base = regs.ds_base;
     thd->t.ds_size = ds_size;
@@ -633,11 +805,10 @@ saved independently of the ready queue. Therefore, no continuation
 address is passed to [[save_continuation]].
 
 Note that the code in [[save_continuation]] examines only thread nodes
-but no surrogates. This is safe because the stacks of those threads
-which are not part of the ready queue are always saved in the heap and
-surrogates are used only when a thread is member of more than one
-queue.  Obviously, at least one of these queues cannot be the ready
-queue and, hence, the stack is already saved to the heap.
+but no surrogates. This is safe because surrogates are used only for
+threads that yield before a non-deterministic computation step and are
+added to the wait queue of a variable at the same time. Such threads
+obviously have their stack saved to the heap already.
 
 Also note that [[restore_continuation]] creates a new head for the
 ready queue before updating the continuation address. This is to
@@ -646,6 +817,15 @@ continuation is restored before the thread is actually woken. No such
 precaution is necessary when the runtime system was configured with
 the \texttt{--enable-copying} option and neither in function
 [[resume_continuation]] as it activates the first thread immediately.
+
+When a search continuation is injected into another computation via
+[[restore_continuation]], the thread list of the search goal is
+inserted into the global thread list \emph{before} the current thread.
+Since the evaluation of the current thread is not continued before the
+injected search continuation has successfully been evaluated, this
+makes a difference only in the unusual case where the search
+continuation has started a non-deterministic thread with
+\texttt{Unsafe.spawnConstraint}.
 
 <<threads.c>>=
 void
@@ -684,6 +864,10 @@ save_continuation(unsigned int n_regs)
 void
 restore_continuation(unsigned int n_regs, Label l, ThreadQueue tq)
 {
+#if YIELD_NONDET
+    Thread *thread;
+#endif
+
     assert(tq && tq->t.id != 0);
 
     /* update the continuation address of the first restored thread */
@@ -696,6 +880,23 @@ restore_continuation(unsigned int n_regs, Label l, ThreadQueue tq)
     END_LOCAL_ROOTS
 #endif
     tq->t.ip = l;
+
+#if YIELD_NONDET
+    /* insert the local thread list into the global thread list */
+    for ( thread = tq->t.thd; thread->prev; thread = thread->prev )
+	;
+    SET_FIELD(thread, prev, regs.thd->prev);
+    if ( thread->prev )
+    {
+	assert(thread->prev->next == regs.thd);
+	SET_FIELD(thread->prev, next, thread);
+    }
+
+    for ( thread = tq->t.thd; thread->next; thread = thread->next )
+	;
+    SET_FIELD(thread, next, regs.thd);
+    SET_FIELD(regs.thd, prev, thread);
+#endif
 
     /* wake all threads of the search space and add them to the ready queue */
     wake_threads(tq);

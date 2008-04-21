@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: gc_2space.nw 2667 2008-04-21 06:46:37Z wlux $
+% $Id: gc_2space.nw 2671 2008-04-21 06:55:42Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -352,6 +352,9 @@ tlim = cp->btTp;
 #endif
 <<Collect the external roots>>
 <<Collect the current stack segment>>
+#if YIELD_NONDET
+cp->btThd = (Thread *)GC_copy(&copy, hlim, (Node *)cp->btThd);
+#endif
 cp->btRq  = (ThreadQueue)GC_copy(&copy, hlim, (Node *)cp->btRq);
 cp->btSpc = (SearchSpace *)GC_copy(&copy, hlim, (Node *)cp->btSpc);
 #if !COPY_SEARCH_SPACE
@@ -379,8 +382,11 @@ tlim = regs.tp;
 <<Collect the external roots>>
 <<Collect the argument registers>>
 <<Collect the current stack segment>>
-regs.rq = (ThreadQueue)GC_copy(&copy, hlim, (Node *)regs.rq);
-regs.ss = (SearchSpace *)GC_copy(&copy, hlim, (Node *)regs.ss);
+#if YIELD_NONDET
+regs.thd = (Thread *)GC_copy(&copy, hlim, (Node *)regs.thd);
+#endif
+regs.rq	 = (ThreadQueue)GC_copy(&copy, hlim, (Node *)regs.rq);
+regs.ss	 = (SearchSpace *)GC_copy(&copy, hlim, (Node *)regs.ss);
 #if !COPY_SEARCH_SPACE
 <<Collect the current trail segment>>
 regs.tp = copy_trail;

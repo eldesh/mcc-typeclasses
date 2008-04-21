@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: search.nw 2661 2008-04-21 06:39:54Z wlux $
+% $Id: search.nw 2669 2008-04-21 06:52:23Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -57,64 +57,22 @@ static NodeInfo search_cont_papp_info_table[] = {
 @
 Search contexts are allocated on the stack in order to save the
 machine state before an encapsulated search starts and to restore the
-machine state after the encapsulated search is left again.
+machine state when the encapsulated search is left again.
 
 <<search.c>>=
-static void
+static inline void
 push_search_context()
 {
-    Choicepoint *oldBp = regs.bp;
-
-    CHECK_STACK(wordsof(Choicepoint));
-    regs.sp -= wordsof(Choicepoint);
-
-    /* allocate a new search context on the stack */
-    regs.bp		= (Choicepoint *)regs.sp;
-    regs.bp->btAlts	= 0;	    /* btAlts == 0 identifies search context */
-    regs.bp->btCid	= regs.cid;
-    regs.bp->btDsBase   = regs.ds_base;
-    regs.bp->btBp	= oldBp;
-    regs.bp->btRq	= regs.rq;
-#if !COPY_SEARCH_SPACE
-    regs.bp->btTp	= regs.tp;
-#endif
-    regs.bp->btDict	= names_tail;
-    regs.bp->btHp	= regs.hp;
-    regs.bp->btSpc	= regs.ss;
-    regs.bp->btHandlers = regs.handlers;
-
-    /* change the current handler vector */
+    push_choice_point(0);
     regs.handlers = &search_handlers;
-
-    /* initialize the machine state for the new context */
-    regs.cid	 = 0;
-    regs.ds_base = regs.sp;
-    regs.rq	 = 0;
-    regs.hlim	 = regs.hp;
 }
 
-static void
+static inline void
 pop_search_context()
 {
-    assert(regs.bp->btAlts == 0);
-
-    /* eventually restore a safe ancestor of the current search space */
+    assert(is_search_context(regs.bp));
     leave_context();
-
-    /* restore the machine state from the current search context */
-    regs.cid	  = regs.bp->btCid;
-    regs.ds_base  = regs.bp->btDsBase;
-    regs.rq	  = regs.bp->btRq;
-#if !COPY_SEARCH_SPACE
-    regs.tp	  = regs.bp->btTp;
-#endif
-    regs.ss	  = regs.bp->btSpc;
-    regs.handlers = regs.bp->btHandlers;
-    regs.sp	  = (Node **)(regs.bp + 1);
-
-    /* drop the search context */
-    regs.bp   = regs.bp->btBp;
-    regs.hlim = regs.bp ? regs.bp->btHp : heap_base;
+    pop_choice_point();
 }
 
 @ 

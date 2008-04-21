@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 2662 2008-04-21 06:41:25Z wlux $
+% $Id: backtrack.nw 2669 2008-04-21 06:52:23Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -16,7 +16,7 @@ to the standard output. This function initializes the abstract machine
 and then evaluates all solutions of the goal using backtracking.
 
 The names of all free variables to which the goal is applied are
-passed as second argument to [[curry_eval]] in a [[0]]-terminated
+passed to [[curry_eval]] in the second argument via a [[0]]-terminated
 array.
 
 <<backtrack.h>>=
@@ -46,61 +46,24 @@ will execute the next alternative either with an updated choice point
 or after dropping the choice point, depending on how many alternatives
 remain.
 
-Note that at present, saving the current search space and
-non-deterministic execution handlers in a choice point is rather
-redundant because they do not change. Yet, saving this information
-paves the way for implementing a predefined depth first search
-strategy for encapsulated search in a future version of the compiler.
-
 <<backtrack.c>>=
 static const struct nondet_handlers global_handlers = { choices, stop, fail };
 
-#if COPY_SEARCH_SPACE
-static void copy_goal_names(void);
-#endif
+static void copy_stack(void);
 
 static
 FUNCTION(choices)
 {
-    Choicepoint	 *oldBp;
-    unsigned int cp_sz, stk_sz;
-    const Label	 *choice_conts;
+    const Label *choice_conts;
  ENTRY_LABEL(static, choices)
     choice_conts = (const Label *)*regs.sp++;
     assert(choice_conts[1] != 0);
 
     TRACE(("%I try\n"));
-    oldBp  = regs.bp;
-    stk_sz = (regs.bp ? (Node **)regs.bp : stack_end) - regs.sp;
-    cp_sz  = wordsof(Choicepoint) + stk_sz;
 
-    /* create a new choice point on the stack */
-    CHECK_STACK(cp_sz);
-    regs.bp		= (Choicepoint *)(regs.sp - wordsof(Choicepoint));
-    regs.bp->btAlts	= choice_conts + 1;
-    regs.bp->btCid	= regs.cid;
-    regs.bp->btDsBase	= regs.ds_base;
-    regs.bp->btBp	= oldBp;
-    regs.bp->btRq	= regs.rq;
-#if !COPY_SEARCH_SPACE
-    regs.bp->btTp	= regs.tp;
-#endif
-    regs.bp->btDict	= names_tail;
-    regs.bp->btHp	= regs.hp;
-    regs.bp->btSpc	= regs.ss;
-    regs.bp->btHandlers = regs.handlers;
-
-    /* adjust the heap limit */
-    regs.hlim = regs.hp;
-
-    /* create a copy of the stack below the choice point */
-    memcpy(regs.sp - cp_sz, regs.sp, stk_sz*word_size);
-    regs.sp	 -= cp_sz;
-    regs.ds_base -= cp_sz;
-#if COPY_SEARCH_SPACE
-    (void)copy_graph(0, 0, 0);
-    copy_goal_names();
-#endif
+    /* create a choice point */
+    push_choice_point(choice_conts + 1);
+    copy_stack();
 
     /* continue at the first alternative */
     GOTO_INDIR(choice_conts[0]);
@@ -109,8 +72,7 @@ FUNCTION(choices)
 static
 FUNCTION(fail)
 {
-    unsigned int stk_sz;
-    const Label	 *choice_conts;
+    const Label *choice_conts;
  ENTRY_LABEL(static, fail)
     TRACE(("%I fail (%s)\n", (const char *)regs.r[0]));
     if ( print_fail )
@@ -128,10 +90,6 @@ FUNCTION(fail)
     RESTORE(regs.bp->btTp);
 #endif
 
-    /* restore registers from the choice point */
-    regs.cid = regs.bp->btCid;
-    regs.rq  = regs.bp->btRq;
-
     /* release the memory allocated since the last choice point */
     release_names(regs.bp->btDict);
     release_mem();
@@ -141,31 +99,16 @@ FUNCTION(fail)
     assert(choice_conts[0] != 0);
     if ( choice_conts[1] == 0 )
     {
-	regs.ds_base  = regs.bp->btDsBase;
-	regs.ss	      = regs.bp->btSpc;
-	regs.handlers = regs.bp->btHandlers;
-	regs.sp	      = (Node **)regs.bp + wordsof(Choicepoint);
-	regs.bp	      = regs.bp->btBp;
-	regs.hlim     = regs.bp ? regs.bp->btHp : 0;
+	pop_choice_point();
 	TRACE(("%I trust\n"));
     }
 
     /* otherwise update the choice point */
     else
     {
+	reset_choice_point();
 	regs.bp->btAlts = choice_conts + 1;
-
-	/* copy the stack */
-	stk_sz	     = (regs.bp->btBp ? (Node **)regs.bp->btBp : stack_end)
-		       - (Node **)(regs.bp + 1);
-	regs.sp	     = (Node **)regs.bp - stk_sz;
-	regs.ds_base = regs.bp->btDsBase - wordsof(Choicepoint) - stk_sz;
-	memcpy(regs.sp, regs.sp + wordsof(Choicepoint) + stk_sz,
-	       stk_sz * word_size);
-#if COPY_SEARCH_SPACE
-	(void)copy_graph(0, 0, 0);
-	copy_goal_names();
-#endif
+	copy_stack();
 	TRACE(("%I retry\n"));
     }
 
@@ -173,13 +116,24 @@ FUNCTION(fail)
     GOTO_INDIR(choice_conts[0]);
 }
 
-#if COPY_SEARCH_SPACE
 static void
-copy_goal_names()
+copy_stack()
 {
+    unsigned int stk_sz =
+	(regs.bp->btBp ? (Node **)regs.bp->btBp : stack_end)
+	- (Node **)(regs.bp + 1);
+#if COPY_SEARCH_SPACE
     unsigned int i, n;
     Node	 *old_goal, *goal;
+#endif
 
+    CHECK_STACK(stk_sz);
+    regs.sp	 -= stk_sz;
+    regs.ds_base -= wordsof(Choicepoint) + stk_sz;
+    memcpy(regs.sp, regs.sp + wordsof(Choicepoint) + stk_sz, stk_sz*word_size);
+
+#if COPY_SEARCH_SPACE
+    (void)copy_graph(0, 0, 0);
     /* insert the copied global variables into the dictionary */
     /* NB: copied names must be strdup'ed so that they can be
      *     released with free(3) upon backtracking */
@@ -187,8 +141,8 @@ copy_goal_names()
     goal     = ((Node **)regs.bp)[-2];
     for ( i = 1, n = closure_argc(goal); i < n; i++ )
 	add_name(goal->c.args[i], strdup(lookup_name(old_goal->c.args[i])));
-}
 #endif
+}
 
 @
 The function [[curry_eval]] is the main function for a program which

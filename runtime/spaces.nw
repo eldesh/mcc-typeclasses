@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 2665 2008-04-21 06:44:49Z wlux $
+% $Id: spaces.nw 2669 2008-04-21 06:52:23Z wlux $
 %
 % Copyright (c) 2003-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -446,7 +446,7 @@ save_search_space(unsigned int n_regs)
 	regs.hp	      += vector_node_size(n * wordsof(ScriptRec));
 
 	scr = script->data;
-	tp  = regs.bp->btTp;
+	tp  = regs.tp = regs.bp->btTp;
 	for ( i = 0; i < n; i++ )
 	{
 	    scr[i].addr    = tp[i].addr;

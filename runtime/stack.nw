@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: stack.nw 2302 2007-06-20 07:17:11Z wlux $
+% $Id: stack.nw 2669 2008-04-21 06:52:23Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{The Stack}
@@ -13,9 +13,9 @@ non-deterministic evaluation.
 
 The stack is allocated in an array starting at [[stack_base]] and
 ending at [[stack_end]]. The stack grows from top to bottom and
-overflows when the stack pointer [[sp]] drops below [[stack_base]].
-Note that [[sp]] always points to the node that was pushed last onto
-the stack.
+overflows when the value of the stack pointer register [[regs.sp]]
+drops below [[stack_base]]. Note that [[regs.sp]] always points to the
+node that was pushed last onto the stack.
 
 <<stack.h>>=
 extern Node **stack_base, **stack_end;
@@ -30,6 +30,7 @@ extern Node **stack_base, **stack_end;
 #include "regs.h"
 #include "heap.h"
 #include "stack.h"
+#include "vars.h"
 #include "main.h"
 
 Node **stack_base;
@@ -99,7 +100,7 @@ backtracking and when returning from a failed encapsulated search,
 respectively.
 
 A pointer to the current choice point or search context is saved in
-the [[bp]] register. Choice points and search contexts can be
+the [[regs.bp]] register. Choice points and search contexts can be
 distinguished by examining the [[btAlts]] field. It contains a null
 pointer for search contexts as there are no alternative continuations.
 
@@ -121,6 +122,76 @@ typedef struct choicepoint {
     const struct nondet_handlers *btHandlers;
 } Choicepoint;
 
+@ 
+The function [[push_choice_point]] creates a new choice point or
+search context on the stack and saves the current state of the
+abstract machine into that choice point.
+
+<<stack.h>>=
+extern void push_choice_point(const Label *);
+
+@ 
+<<stack.c>>=
+void
+push_choice_point(const Label *alts)
+{
+    Choicepoint *oldBp = regs.bp;
+
+    /* create a new choice point on the stack */
+    CHECK_STACK(wordsof(Choicepoint));
+    regs.sp -= wordsof(Choicepoint);
+    regs.bp  = (Choicepoint *)regs.sp;
+
+    /* save the machine state in the choice point */
+    regs.bp->btAlts	= alts;
+    regs.bp->btCid	= regs.cid;
+    regs.bp->btDsBase	= regs.ds_base;
+    regs.bp->btBp	= oldBp;
+    regs.bp->btRq	= regs.rq;
+#if !COPY_SEARCH_SPACE
+    regs.bp->btTp	= regs.tp;
+#endif
+    regs.bp->btDict	= names_tail;
+    regs.bp->btHp	= regs.hp;
+    regs.bp->btSpc	= regs.ss;
+    regs.bp->btHandlers = regs.handlers;
+
+    /* adjust the heap limit */
+    regs.hlim = regs.hp;
+}
+
+@ 
+The functions [[reset_choice_point]] and [[pop_choice_point]] restore
+the abstract machine state saved in a choice point or search context.
+In addition, [[pop_choice_point]] also pops the choice point or search
+context from the stack.
+
+<<stack.h>>=
+extern void reset_choice_point(void);
+extern void pop_choice_point(void);
+
+@ 
+<<stack.c>>=
+void
+reset_choice_point()
+{
+    regs.cid     = regs.bp->btCid;
+    regs.ds_base = regs.bp->btDsBase;
+    regs.rq	 = regs.bp->btRq;
+    regs.ss	 = regs.bp->btSpc;
+    regs.sp	 = (Node **)regs.bp;
+}
+
+void
+pop_choice_point()
+{
+    reset_choice_point();
+    regs.handlers = regs.bp->btHandlers;
+    regs.sp	  = (Node **)(regs.bp + 1);
+    regs.bp	  = regs.bp->btBp;
+    regs.hlim	  = regs.bp ? regs.bp->btHp : heap_base;
+}
+
 @
 \subsubsection{Non-deterministic evaluation}
 The abstract machine uses the \texttt{Choices} statement in order to
@@ -132,7 +203,7 @@ returned to the caller. In monadic code, the program is aborted with
 an error message. The runtime system uses a set of labels to handle
 non-deterministic choices and failures. A pointer to the current set
 of handlers, which also includes an entry point to handle deadlocks,
-is saved in the [[handlers]] register. When the abstract machine
+is saved in the [[regs.handlers]] register. When the abstract machine
 enters or leaves an encapsulated search, this register is updated
 appropriately.
 
@@ -159,7 +230,7 @@ is installed by the \texttt{catch} function. Each frame saves a
 pointer to the current exception handler, which must be a function of
 type \texttt{IOError -> IO a}, and the address of the previous
 exception frame. The pointer to the current exception frame is saved
-in the abstract machine register [[efp]].
+in the abstract machine register [[regs.efp]].
 
 In general, only the main thread of a program executes an I/O
 computation and therefore there will be only one dedicated exception
@@ -167,7 +238,7 @@ handler. However, it is possible to run an I/O computation on any
 thread -- even within an encapsulated search -- with the help of
 \texttt{unsafePerformIO}. Therefore, each thread uses its own
 exception handler chain. The runtime system will initialize the
-register [[efp]] with [[0]] when a new thread is created.
+register [[regs.efp]] with [[0]] when a new thread is created.
 
 <<stack.h>>=
 typedef struct exception_frame

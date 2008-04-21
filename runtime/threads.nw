@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: threads.nw 2671 2008-04-21 06:55:42Z wlux $
+% $Id: threads.nw 2672 2008-04-21 06:57:07Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -282,6 +282,7 @@ static void terminate_thread(void);
 static ThreadQueue interrupt_thread(unsigned int, Label, enum suspend_reason);
 static ExceptionFrame *relocate_thread(ExceptionFrame *, int);
 #if YIELD_NONDET
+static bool higher_priority(Thread *, Thread**);
 static bool schedule_nondet(Thread *);
 #else
 # define schedule_nondet(thd)	false
@@ -565,32 +566,135 @@ new_thread()
 }
 
 @ 
-The function [[activate_thread]] activates the first thread of the
-ready queue. If the ready queue is empty and stability is enabled,
-this function looks for the leftmost thread in the global thread list
-that is capable of performing a non-deterministic computation step. If
-no such thread is found or stability is disabled, [[activate_thread]]
-jumps to the deadlock handler of the current context.
+When stability is enabled and the ready queue becomes empty, the
+runtime system activates the leftmost non-deterministic thread. In
+determining the leftmost thread, we have to take into account that an
+expression may be evaluated by more than one thread. For instance,
+given the simple map coloring problem
+\begin{verbatim}
+  goal | l1=/=l2 & l1=/=l3 & l2=/=l3 = (l1,l2,l3)
+    where l1=color; l2=color; l3=color
+\end{verbatim}
+where the function \texttt{color} non-deterministically generates
+color values, colors would be evaluated in the order $l_1$, $l_3$,
+$l_2$ if the leftmost non-deterministic thread in the global thread
+list were chosen naively. The problem is that the first thread cannot
+evaluate $l_2$ after $l_1$ has been evaluated because $l_2$ is already
+being evaluated by the third thread. Therefore, we associate each
+non-deterministic thread an effective priority, which is computed as
+the maximum of the thread's own position in the global thread list            %'
+(giving highest priority to the first position) and the positions of
+all threads blocked by a queue-me node whose application is currently
+evaluated by the thread. This policy ensures that in the example the
+third thread is activated before the second thread after $l_1$ has
+been evaluated and thus ensures that colors are generated in the
+expected order.
+
+\ToDo{Find a way to determine effective priorities more efficiently.}
 
 <<threads.c>>=
 #if YIELD_NONDET
 static bool
+higher_priority(Thread *thd0, Thread **prio)
+{
+    bool	higher = false;
+    ThreadQueue tq;
+    Thread	*thd;
+    Node	**fp, **base;
+
+    /* check the thread's own priority */
+    for ( thd = thd0; thd && thd != *prio; thd = thd->prev )
+	;
+    if ( thd == 0 )
+	higher = true, *prio = thd0;
+
+    /* get the thread's stack */
+    if ( thd0 == regs.thd )
+    {
+	fp   = regs.sp;
+	base = regs.ds_base;
+    }
+    else
+    {
+	assert(thd0->tq);
+	tq = thd0->tq;
+	if ( tq->t.id == 0 )
+	{
+	    assert(tq->s.thd != 0);
+	    tq = tq->s.thd;
+	}
+	assert(tq->t.id != 0 && tq->t.reason == Yield);
+
+	fp   = tq->t.ds->a.args;
+	base = fp + tq->t.ds_size;
+    }
+
+    /* check priorities of all threads blocked by a queue-me node */
+    for ( ; fp < base; fp++ )
+	if ( (Label)*fp == update )
+	{
+	    fp += 1;
+	    assert(is_tagged_ptr(*fp) && is_queueMe_node(*fp));
+	    for ( tq = (*fp)->q.wq; tq; tq = tq->t.next )
+	    {
+		assert(tq->t.id != 0);
+		for ( thd = tq->t.thd; thd && thd != *prio; thd = thd->prev )
+		    ;
+		if ( thd == 0 )
+		    higher = true, *prio = tq->t.thd;
+	    }
+	}
+    return higher;
+}
+
+static bool
 schedule_nondet(Thread *thd0)
 {
-    Thread *thd;
+    Thread *sched, *prio, *thd;
 
     assert(regs.rq == 0);
+    sched = thd0;
+    prio  = 0;
     for ( thd = (thd0 ? thd0 : regs.thd)->prev; thd; thd = thd->prev )
 	if ( thd->tq )
-	    regs.rq = thd->tq;
-    if ( !thd0 )
-	for ( thd = regs.thd->next; !regs.rq && thd; thd = thd->next )
-	    if ( thd->tq )
-		regs.rq = thd->tq;
-    return regs.rq != 0;
+	{
+	    if ( !sched )
+		sched = thd;
+	    else
+	    {
+		if ( !prio )
+		    higher_priority(sched, &prio);
+		if ( higher_priority(thd, &prio) )
+		    sched = thd;
+	    }
+	}
+    for ( thd = (thd0 ? thd0 : regs.thd)->next; thd; thd = thd->next )
+	if ( thd->tq )
+	{
+	    if ( !sched )
+		sched = thd;
+	    else
+	    {
+		if ( !prio )
+		    higher_priority(sched, &prio);
+		if ( higher_priority(thd, &prio) )
+		    sched = thd;
+	    }
+	}
+    if ( sched != thd0 )
+	regs.rq = sched->tq;
+    return sched != thd0;
 }
 #endif
 
+@ 
+The function [[activate_thread]] activates the first thread of the
+ready queue or the leftmost non-deterministic thread if the ready
+queue is empty and stability is enabled. If no thread to activate
+exists, [[activate_thread]] jumps to the deadlock handler of the
+current context.
+
+<<threads.c>>=
 static
 FUNCTION(activate_thread)
 {

@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: curry.nw 2540 2007-10-26 06:56:21Z wlux $
+% $Id: curry.nw 2673 2008-04-21 07:00:31Z wlux $
 %
-% Copyright (c) 2002-2007, Wolfgang Lux
+% Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \section{The Runtime System}
@@ -97,18 +97,18 @@ Currently, the following configuration options are supported.
   order to record destructive updates of the search goal's graph but
   rather uses independent copies for each branch of the goal's search
   tree.
-\item [[YIELD_NONDET]]: If this flag is non-zero, the abstract machine
-  prioritizes deterministic threads over non-deterministic threads. By
-  enabling this flag, unnecessary non-deterministic splittings may be
-  avoided, e.g., for the goal \verb|nat n & n =:= S Z| and the program
+\item [[NO_STABILITY]]: If this flag is non-zero, the abstract machine
+  does not delay the execution of non-deterministic computation steps
+  until no other deterministic threads can be run. This means that
+  unnecessary non-deterministic splittings may be introduced, e.g.,
+  for the goal \verb|nat n & n =:= S Z| and the program
 \begin{verbatim}
 data Nat = Z | S Nat
 nat Z     = success
 nat (S n) = nat n
 \end{verbatim}
-  On the other hand, setting this flag may result in a high degree of
-  concurrency and even lead to non-termination, e.g., for the goal
-  \verb|repeat coin =:= from 0| and the program
+  Note that stability may lead to non-termination in some unusual
+  cases, e.g., the goal \verb|repeat coin =:= from 0| for the program
 \begin{verbatim}
 coin = 0
 coin = 1
@@ -117,8 +117,8 @@ from   n = n : from (n + 1)
 \end{verbatim}
   Note that this non-termination is due to the implicit concurrent
   unification of the arguments of the two data structures. The setting
-  of this flag is controlled by the \texttt{--enable-stability} option
-  of \texttt{configure}.
+  of this flag is controlled by the \texttt{--disable-stability}
+  option of \texttt{configure}.
 \item [[NO_OCCURS_CHECK]]: If this flag is non-zero, the abstract
   machine does not perform an occurs check in unifications. Programs
   without occurs check might be executed more efficiently, but they
@@ -132,7 +132,7 @@ from   n = n : from (n + 1)
 \begin{sloppy}
   The template definitions below ensure that the symbols
   [[USE_TRAMPOLINE]], [[NO_POINTER_TAGS]], [[COPY_SEARCH_SPACE]],
-  [[YIELD_NONDET]], and [[NO_OCCURS_CHECK]] are always defined. This
+  [[NO_STABILITY]], and [[NO_OCCURS_CHECK]] are always defined. This
   will ensure a consistent use of these options throughout the runtime
   system, as a redefinition will raise a compilation error.
 
@@ -154,8 +154,8 @@ from   n = n : from (n + 1)
 /* Define as 1 to use a copying implementation for non-deterministic search */
 #define COPY_SEARCH_SPACE 0
 
-/* Define as 1 to enable stability */
-#define YIELD_NONDET 0
+/* Define as 1 to disable stability */
+#define NO_STABILITY 0
 
 /* Define as 1 to disable occurs check in unification */
 #define NO_OCCURS_CHECK 0

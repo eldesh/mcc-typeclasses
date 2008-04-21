@@ -1,4 +1,4 @@
-dnl $Id: configure.in 2615 2008-02-07 08:54:11Z wlux $
+dnl $Id: configure.in 2673 2008-04-21 07:00:31Z wlux $
 dnl
 dnl Copyright (c) 2002-2008, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -66,10 +66,10 @@ case $enable_copying in
 esac
 
 AC_ARG_ENABLE(stability,
- [  --enable-stability      don't perform a non-deterministic computation step
-                          while other threads can run deterministic code])
+ [  --disable-stability     perform non-deterministic computation steps even if
+                          deterministic computation steps could be executed])
 case $enable_stability in
-   yes ) AC_DEFINE(YIELD_NONDET);;
+   no ) AC_DEFINE(NO_STABILITY);;
 esac
 
 AC_ARG_ENABLE(occurs-check,

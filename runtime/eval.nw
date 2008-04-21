@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2668 2008-04-21 06:50:50Z wlux $
+% $Id: eval.nw 2673 2008-04-21 07:00:31Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -245,7 +245,7 @@ FUNCTION(sync_var)
 }
 
 @ 
-When stability is enabled, the current thread suspends before it
+Unless stability is disabled, the current thread suspends before it
 instantiates an unbound variable non-deterministically. After the
 thread is resumed, it must check whether the variable was bound in the
 meantime. In this case, execution returns to the beginning of the
@@ -256,13 +256,13 @@ the variable node, and the entry point of the switch in that order on
 the stack.
 
 <<eval.h>>=
-#if YIELD_NONDET
+#if !NO_STABILITY
 DECLARE_LABEL(extern, flex_yield_resume);
 #endif
 
 @ 
 <<eval.c>>=
-#if YIELD_NONDET
+#if !NO_STABILITY
 FUNCTION(flex_yield_resume)
 {
     Node *node;

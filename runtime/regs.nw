@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: regs.nw 2671 2008-04-21 06:55:42Z wlux $
+% $Id: regs.nw 2673 2008-04-21 07:00:31Z wlux $
 %
 % Copyright (c) 2006-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -54,7 +54,7 @@ extern struct regs {
     union node			 **sp;
     union node			 **ds_base;
     struct exception_frame	 *efp;
-#if YIELD_NONDET
+#if !NO_STABILITY
     struct thread		 *thd;
 #endif
     union thread_node		 *rq;
@@ -97,7 +97,7 @@ init_regs()
     regs.sp	  = stack_end;
     regs.ds_base  = 0;
     regs.efp	  = 0;
-#if YIELD_NONDET
+#if !NO_STABILITY
     regs.thd	  = 0;
 #endif
     regs.rq	  = 0;

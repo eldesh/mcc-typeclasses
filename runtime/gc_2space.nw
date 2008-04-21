@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: gc_2space.nw 2671 2008-04-21 06:55:42Z wlux $
+% $Id: gc_2space.nw 2673 2008-04-21 07:00:31Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -352,7 +352,7 @@ tlim = cp->btTp;
 #endif
 <<Collect the external roots>>
 <<Collect the current stack segment>>
-#if YIELD_NONDET
+#if !NO_STABILITY
 cp->btThd = (Thread *)GC_copy(&copy, hlim, (Node *)cp->btThd);
 #endif
 cp->btRq  = (ThreadQueue)GC_copy(&copy, hlim, (Node *)cp->btRq);
@@ -382,7 +382,7 @@ tlim = regs.tp;
 <<Collect the external roots>>
 <<Collect the argument registers>>
 <<Collect the current stack segment>>
-#if YIELD_NONDET
+#if !NO_STABILITY
 regs.thd = (Thread *)GC_copy(&copy, hlim, (Node *)regs.thd);
 #endif
 regs.rq	 = (ThreadQueue)GC_copy(&copy, hlim, (Node *)regs.rq);

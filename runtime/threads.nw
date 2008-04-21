@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: threads.nw 2672 2008-04-21 06:57:07Z wlux $
+% $Id: threads.nw 2673 2008-04-21 07:00:31Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -50,7 +50,7 @@ handler chain can be relocated appropriately. We do not use relative
 offsets for the exception handler chain because they could be
 misidentified as node pointers by the garbage collector.
 
-When stability is enabled, the runtime system maintains a global
+Unless stability is disabled, the runtime system maintains a global
 thread list that makes the textual order of threads manifest. When no
 other runnable threads are available, the runtime system schedules the
 leftmost non-deterministic thread.\footnote{We call a thread
@@ -86,13 +86,13 @@ threads are available.
 #if 0
 typedef union thread_node *ThreadQueue; /* already declared in heap.h */
 #endif
-#if YIELD_NONDET
+#if !NO_STABILITY
 typedef struct thread	  Thread;
 #endif
 
 @ 
 <<threads.c>>=
-#if YIELD_NONDET
+#if !NO_STABILITY
 enum { THREAD_TAG, SURROGATE_TAG };
 #else
 enum { THREAD_TAG };
@@ -107,7 +107,7 @@ struct thread_state {
     THREAD_INFO
     int		     reason;		/* reason for suspension */
     Label	     ip;		/* next instruction to be executed */
-#if YIELD_NONDET
+#if !NO_STABILITY
     Thread	     *thd;		/* thread node */
 #endif
     ExceptionFrame   *efp;		/* pointer to exception frame */
@@ -116,7 +116,7 @@ struct thread_state {
     Node	     *ds;		/* saved data stack */
 };
 
-#if YIELD_NONDET
+#if !NO_STABILITY
 struct thread_surrogate {
     THREAD_INFO
     ThreadQueue	     thd;		/* pointer to the "real" thread */
@@ -126,12 +126,12 @@ struct thread_surrogate {
 
 union thread_node {
     struct thread_state	    t;
-#if YIELD_NONDET
+#if !NO_STABILITY
     struct thread_surrogate s;
 #endif
 };
 
-#if YIELD_NONDET
+#if !NO_STABILITY
 struct thread {
     NodeInfo	 *info;
     unsigned int id;			/* thread id */
@@ -142,13 +142,13 @@ struct thread {
 
 #define thread_node_size	wordsof(union thread_node)
 #define thread_state_size	wordsof(struct thread_state)
-#if YIELD_NONDET
+#if !NO_STABILITY
 # define thread_surrogate_size	wordsof(struct thread_surrogate)
 # define thread_size		wordsof(struct thread)
 #endif
 
 static const int ot_thread_state[] = {
-#if YIELD_NONDET
+#if !NO_STABILITY
     3,
     word_offsetof(struct thread_state, next),
     word_offsetof(struct thread_state, thd),
@@ -164,7 +164,7 @@ static NodeInfo thread_state_info = {
     0, 0, 0
 };
 
-#if YIELD_NONDET
+#if !NO_STABILITY
 static const int ot_surrogate[] = {
     3,
     word_offsetof(struct thread_surrogate, next),
@@ -198,14 +198,14 @@ suspended due to a queue-me and unbound variable node, respectively.
 <<threads.c>>=
 enum suspend_reason {
     None,			/* interrupted */
-#if YIELD_NONDET
+#if !NO_STABILITY
     Yield,			/* rescheduled due to non-determinism */
 #endif
     Delay,			/* suspended due to unbound variable */
     Eval			/* suspended due to locked application */
 };
 
-#if YIELD_NONDET
+#if !NO_STABILITY
 static const char *reasons[] = { "None", "Yield", "Delay", "Eval" };
 #else
 static const char *reasons[] = { "None", "Delay", "Eval" };
@@ -241,7 +241,7 @@ extern void start_thread(unsigned int n, Label l);
 DECLARE_LABEL(extern, stop_thread);
 DECLARE_LABEL(extern, suspend_thread);
 DECLARE_LABEL(extern, delay_thread);
-#if YIELD_NONDET
+#if !NO_STABILITY
 DECLARE_LABEL(extern, yield_thread);
 DECLARE_LABEL(extern, yield_delay_thread);
 #endif
@@ -281,7 +281,7 @@ DECLARE_LABEL(static, activate_thread);
 static void terminate_thread(void);
 static ThreadQueue interrupt_thread(unsigned int, Label, enum suspend_reason);
 static ExceptionFrame *relocate_thread(ExceptionFrame *, int);
-#if YIELD_NONDET
+#if !NO_STABILITY
 static bool higher_priority(Thread *, Thread**);
 static bool schedule_nondet(Thread *);
 #else
@@ -319,7 +319,7 @@ start_thread(unsigned int n_regs, Label l)
     }
     else
     {
-#if YIELD_NONDET
+#if !NO_STABILITY
 	regs.thd = 0;
 #endif
 	regs.rq	 = 0;
@@ -327,7 +327,7 @@ start_thread(unsigned int n_regs, Label l)
 
     /* start a new thread */
     new_thread();
-#if YIELD_NONDET
+#if !NO_STABILITY
     if ( l == 0 )
     {
 	CHECK_HEAP(n_regs, thread_size);
@@ -411,7 +411,7 @@ immediately return to the caller if the current thread is the leftmost
 thread capable of performing a non-deterministic computation step.
 
 <<threads.c>>=
-#if YIELD_NONDET
+#if !NO_STABILITY
 FUNCTION(yield_thread)
 {
     ThreadQueue thd;
@@ -475,7 +475,7 @@ activate_threads(ThreadQueue wq, Label l)
 {
     ThreadQueue thd;
 
-#if YIELD_NONDET
+#if !NO_STABILITY
     /* skip surrogates of already woken threads */
     while ( wq && wq->t.id == 0 && wq->s.thd == 0 )
 	wq = wq->t.next;
@@ -496,7 +496,7 @@ activate_threads(ThreadQueue wq, Label l)
 void
 wake_threads(ThreadQueue wq)
 {
-#if YIELD_NONDET
+#if !NO_STABILITY
     /* skip surrogates of already woken threads */
     while ( wq && wq->t.id == 0 && wq->s.thd == 0 )
 	wq = wq->t.next;
@@ -554,7 +554,7 @@ new_thread()
     static unsigned int tid;
 
     /* initialize the thread state */
-#if YIELD_NONDET
+#if !NO_STABILITY
     while ( tid == 0 || (regs.thd && tid == regs.thd->id) )
 #else
     if ( tid == 0 )
@@ -566,7 +566,7 @@ new_thread()
 }
 
 @ 
-When stability is enabled and the ready queue becomes empty, the
+When the ready queue becomes empty and stability is not disabled, the
 runtime system activates the leftmost non-deterministic thread. In
 determining the leftmost thread, we have to take into account that an
 expression may be evaluated by more than one thread. For instance,
@@ -593,7 +593,7 @@ expected order.
 \ToDo{Find a way to determine effective priorities more efficiently.}
 
 <<threads.c>>=
-#if YIELD_NONDET
+#if !NO_STABILITY
 static bool
 higher_priority(Thread *thd0, Thread **prio)
 {
@@ -690,7 +690,7 @@ schedule_nondet(Thread *thd0)
 @ 
 The function [[activate_thread]] activates the first thread of the
 ready queue or the leftmost non-deterministic thread if the ready
-queue is empty and stability is enabled. If no thread to activate
+queue is empty and stability is not disabled. If no thread to activate
 exists, [[activate_thread]] jumps to the deadlock handler of the
 current context.
 
@@ -709,7 +709,7 @@ FUNCTION(activate_thread)
     /* activate the head of the ready queue */
     thd	    = regs.rq;
     regs.rq = thd->t.next;
-#if YIELD_NONDET
+#if !NO_STABILITY
     while ( regs.rq && regs.rq->t.id == 0 && regs.rq->s.thd == 0 )
 	regs.rq = regs.rq->t.next;
     if ( thd->t.id == 0 )
@@ -729,7 +729,7 @@ FUNCTION(activate_thread)
     regs.cid = thd->t.id;
     ip	     = thd->t.ip;
     reason   = (enum suspend_reason)thd->t.reason;
-#if YIELD_NONDET
+#if !NO_STABILITY
     regs.thd = thd->t.thd;
     if ( regs.thd->tq )
 	SET_FIELD(regs.thd, tq, 0);
@@ -770,7 +770,7 @@ terminate_thread()
     /* deallocate the current thread */
     regs.sp = regs.ds_base;
 
-#if YIELD_NONDET
+#if !NO_STABILITY
     /* eventually remove the current thread from the global thread list */
     if ( regs.thd->id == regs.cid )
     {
@@ -810,13 +810,13 @@ interrupt_thread(unsigned int n_regs, Label l, enum suspend_reason reason)
     ThreadQueue  thd;
     bool	 save_ds = reason != None;
     unsigned int ds_size = regs.ds_base - regs.sp;
-#if YIELD_NONDET
+#if !NO_STABILITY
     bool	 new_thd = save_ds && regs.cid != regs.thd->id;
     Thread	 *thread;
 #endif
 
     CHECK_HEAP(n_regs,
-#if YIELD_NONDET
+#if !NO_STABILITY
 	       (new_thd ? thread_size : 0) +
 #endif
 	       thread_state_size + (save_ds ? vector_node_size(ds_size) : 0));
@@ -824,7 +824,7 @@ interrupt_thread(unsigned int n_regs, Label l, enum suspend_reason reason)
     if ( reason != None )
 	TRACE(("%I suspend (%s)\n", reasons[reason]));
 
-#if YIELD_NONDET
+#if !NO_STABILITY
     /* create a thread node for the current thread if necessary */
     if ( new_thd )
     {
@@ -864,7 +864,7 @@ interrupt_thread(unsigned int n_regs, Label l, enum suspend_reason reason)
     thd->t.next	   = 0;
     thd->t.reason  = reason;
     thd->t.ip	   = l;
-#if YIELD_NONDET
+#if !NO_STABILITY
     thd->t.thd	   = regs.thd;
 #endif
     thd->t.efp	   = regs.efp;
@@ -968,7 +968,7 @@ save_continuation(unsigned int n_regs)
 void
 restore_continuation(unsigned int n_regs, Label l, ThreadQueue tq)
 {
-#if YIELD_NONDET
+#if !NO_STABILITY
     Thread *thread;
 #endif
 
@@ -985,7 +985,7 @@ restore_continuation(unsigned int n_regs, Label l, ThreadQueue tq)
 #endif
     tq->t.ip = l;
 
-#if YIELD_NONDET
+#if !NO_STABILITY
     /* insert the local thread list into the global thread list */
     for ( thread = tq->t.thd; thread->prev; thread = thread->prev )
 	;

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 2671 2008-04-21 06:55:42Z wlux $
+% $Id: spaces.nw 2673 2008-04-21 07:00:31Z wlux $
 %
 % Copyright (c) 2003-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -851,7 +851,7 @@ copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space)
 	assert(regs.bp != 0);
 	for ( scan = (Node **)regs.bp; scan-- > regs.sp; )
 	    copy_node(*scan, space);
-# if YIELD_NONDET
+# if !NO_STABILITY
 	copy_node((Node *)regs.thd, space);
 # endif
 	copy_node((Node *)regs.rq, space);
@@ -918,7 +918,7 @@ copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space)
     {
 	for ( scan = (Node **)regs.bp; scan-- > regs.sp; )
 	    *scan = copy_node(*scan, space);
-# if YIELD_NONDET
+# if !NO_STABILITY
 	regs.thd = (Thread *)copy_node((Node *)regs.thd, space);
 # endif
 	regs.rq	 = (ThreadQueue)copy_node((Node *)regs.rq, space);

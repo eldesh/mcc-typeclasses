@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: gc_2space.nw 2666 2008-04-21 06:45:41Z wlux $
+% $Id: gc_2space.nw 2667 2008-04-21 06:46:37Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -351,7 +351,6 @@ tlim = cp->btTp;
 <<Compact the current trail segment>>
 #endif
 <<Collect the external roots>>
-<<Collect the argument registers>>
 <<Collect the current stack segment>>
 cp->btRq  = (ThreadQueue)GC_copy(&copy, hlim, (Node *)cp->btRq);
 cp->btSpc = (SearchSpace *)GC_copy(&copy, hlim, (Node *)cp->btSpc);
@@ -403,8 +402,9 @@ for ( roots = local_roots; roots; roots = roots->next )
     *roots->root = GC_copy(&copy, hlim, *roots->root);
 
 @ 
-All nodes referenced from the first [[n_regs]] argument registers
-are copied into to-space as well.
+All nodes referenced from the first [[n_regs]] argument registers are
+copied into to-space as well when the segment above the current choice
+point is collected.
 
 <<Collect the argument registers>>=
 for ( i = 0; i < n_regs; i++ )
@@ -465,9 +465,8 @@ is safe to promote it into the current heap segment.
 
 <<Collect the current trail segment>>=
 for ( ; scan_trail < copy_trail; scan_trail++ )
-    if ( scan_trail->ofs )
-	scan_trail->addr[scan_trail->ofs] =
-	    GC_copy(&copy, hlim, (Node *)scan_trail->addr[scan_trail->ofs]);
+    scan_trail->addr[scan_trail->ofs] =
+	GC_copy(&copy, hlim, (Node *)scan_trail->addr[scan_trail->ofs]);
 
 @ 
 Finally, the garbage collector scans the saved values in all younger
@@ -490,7 +489,8 @@ for ( scan_trail = cp->btTp; scan_trail < regs.tp; scan_trail++ )
 
 @ 
 Besides the younger trail segments, the garbage collector must also
-process the scripts of the current search spaces' ancestors. %'
+process the scripts of the current active search spaces and their
+ancestors.
 
 <<Collect all younger trail segments>>=
 scan_cp = cp;
@@ -505,8 +505,7 @@ while ( scan_cp )
 	    scr	= spc->s.script->data;
 	    len = vector_argc(spc->s.script) / wordsof(ScriptRec);
 	    for ( i = 0; i < len; i++ )
-		if ( scr[i].ofs )
-		    scr[i].outVal = GC_copy(&copy, hlim, (Node *)scr[i].outVal);
+		scr[i].outVal = GC_copy(&copy, hlim, (Node *)scr[i].outVal);
 	}
 }
 
@@ -597,17 +596,16 @@ for ( ; spc->parent; spc = spc->parent )
 	scr = spc->s.script->data;
 	len = vector_argc(spc->s.script) / wordsof(ScriptRec);
 	for ( i = 0; i < len; i++ )
-	    if ( scr[i].ofs )
-	    {
-		word val = scr[i].addr[scr[i].ofs];
+	{
+	    word val = scr[i].addr[scr[i].ofs];
 
-		if ( is_tagged_ptr(val) && val >= (word)heap_base &&
-		     val < (word)hlim )
-		{
-		    assert(is_forwarded(val));
-		    scr[i].addr[scr[i].ofs] = get_forward(val);
-		}
+	    if ( is_tagged_ptr(val) && val >= (word)heap_base &&
+		 val < (word)hlim )
+	    {
+		assert(is_forwarded(val));
+		scr[i].addr[scr[i].ofs] = get_forward(val);
 	    }
+	}
     }
 
 @ 

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: threads.nw 2669 2008-04-21 06:52:23Z wlux $
+% $Id: threads.nw 2670 2008-04-21 06:53:30Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -50,7 +50,8 @@ handler chain can be relocated appropriately. We do not use relative
 offsets for the exception handler chain because they could be
 misidentified as node pointers by the garbage collector.
 
-A thread may be added to more than one queue. This is implemented by
+When stability is enabled, a thread may be part of the ready queue and
+the wait queue of a variable at the same time. This is implemented by
 adding a surrogate to each of the queues. These surrogates are linked
 into a ring and share a common thread state, which is allocated
 separately in the heap. When the thread is woken through one of the
@@ -64,17 +65,21 @@ safe to check [[regs.rq != 0]] in order to test whether other runnable
 threads exist.
 
 <<threads.h>>=
-# if 0
+#if 0
 typedef union thread_node *ThreadQueue; /* already declared in heap.h */
-# endif
+#endif
 
 @ 
 <<threads.c>>=
+#if YIELD_NONDET
 enum { THREAD_TAG, SURROGATE_TAG };
+#else
+enum { THREAD_TAG };
+#endif
 
-# define THREAD_INFO \
-    NodeInfo	     *info; \
-    unsigned int     id;		/* (unique) thread id */ \
+#define THREAD_INFO							\
+    NodeInfo	     *info;						\
+    unsigned int     id;		/* (unique) thread id */	\
     ThreadQueue	     next;		/* link to next thread of queue */
 
 struct thread_state {
@@ -87,20 +92,26 @@ struct thread_state {
     Node	     *ds;		/* saved data stack */
 };
 
+#if YIELD_NONDET
 struct thread_surrogate {
     THREAD_INFO
     ThreadQueue	     thd;		/* pointer to the "real" thread */
     ThreadQueue	     link;		/* ring of surrogates for the thread */
 };
+#endif
 
 union thread_node {
     struct thread_state	    t;
+#if YIELD_NONDET
     struct thread_surrogate s;
+#endif
 };
 
 #define thread_node_size	wordsof(union thread_node)
 #define thread_state_size	wordsof(struct thread_state)
-#define thread_surrogate_size	wordsof(struct thread_surrogate)
+#if YIELD_NONDET
+# define thread_surrogate_size	wordsof(struct thread_surrogate)
+#endif
 
 static const int ot_thread[] = {
     2,
@@ -111,6 +122,7 @@ static NodeInfo thread_info = {
     THREAD_KIND, THREAD_TAG, thread_state_size, ot_thread, 0, no_eval, 0, 0, 0
 };
 
+#if YIELD_NONDET
 static const int ot_surrogate[] = {
     3,
     word_offsetof(struct thread_surrogate, next),
@@ -121,6 +133,7 @@ static NodeInfo surrogate_info = {
     THREAD_KIND, SURROGATE_TAG, thread_surrogate_size, ot_surrogate, 0,
     no_eval, 0, 0, 0
 };
+#endif
 
 @
 The thread state includes the reason why a thread was interrupted.
@@ -132,12 +145,18 @@ node, respectively.
 <<threads.c>>=
 enum suspend_reason {
     None,			/* interrupted */
-    Yield,			/* rescheduled due non-determinism */
+#if YIELD_NONDET
+    Yield,			/* rescheduled due to non-determinism */
+#endif
     Delay,			/* suspended due to unbound variable */
     Eval			/* suspended due to locked application */
 };
 
+#if YIELD_NONDET
 static const char *reasons[] = { "None", "Yield", "Delay", "Eval" };
+#else
+static const char *reasons[] = { "None", "Delay", "Eval" };
+#endif
 
 @
 The interface to the thread management code consists of four global
@@ -167,8 +186,10 @@ extern void start_thread(unsigned int n, Label l);
 DECLARE_LABEL(extern, stop_thread);
 DECLARE_LABEL(extern, suspend_thread);
 DECLARE_LABEL(extern, delay_thread);
+#if YIELD_NONDET
 DECLARE_LABEL(extern, yield_thread);
 DECLARE_LABEL(extern, yield_delay_thread);
+#endif
 extern Label activate_threads(ThreadQueue wq, Label l);
 extern void wake_threads(ThreadQueue wq);
 extern ThreadQueue join_queues(ThreadQueue tq1, ThreadQueue tq2);
@@ -192,12 +213,10 @@ computation's ready queue with the specified address. %'
 
 <<threads.h>>=
 extern void save_continuation(unsigned int n_regs);
-#if !COPY_SEARCH_SPACE
-extern void restore_continuation(unsigned int n_regs, Label l, ThreadQueue rq);
-#else
-extern void restore_continuation(Label l, ThreadQueue rq);
-# define restore_continuation(n_regs, l, rq) restore_continuation(l, rq)
+#if COPY_SEARCH_SPACE
+# define restore_continuation(n_regs, l, rq)	restore_continuation(l, rq)
 #endif
+extern void restore_continuation(unsigned int n_regs, Label l, ThreadQueue rq);
 extern Label resume_continuation(Label l, ThreadQueue rq);
 
 @
@@ -310,6 +329,7 @@ of the variable node in register [[regs.r[0]]] so that it is woken
 when that variable is bound.
 
 <<threads.c>>=
+#if YIELD_NONDET
 FUNCTION(yield_thread)
 {
     ThreadQueue thd;
@@ -357,6 +377,7 @@ FUNCTION(yield_delay_thread)
     regs.rq = join_queues(regs.rq, thd);
     GOTO(activate_thread);
 }
+#endif
 
 @ 
 The functions [[activate_threads]] and [[wake_threads]] wake a list of
@@ -372,8 +393,10 @@ activate_threads(ThreadQueue wq, Label l)
 {
     ThreadQueue thd;
 
+#if YIELD_NONDET
     while ( wq && wq->t.id == 0 && wq->s.thd == 0 )
 	wq = wq->t.next;
+#endif
     if ( wq == 0 )
 	return l;
 
@@ -390,8 +413,10 @@ activate_threads(ThreadQueue wq, Label l)
 void
 wake_threads(ThreadQueue wq)
 {
+#if YIELD_NONDET
     while ( wq && wq->t.id == 0 && wq->s.thd == 0 )
 	wq = wq->t.next;
+#endif
     regs.rq = join_queues(wq, regs.rq);
 }
 
@@ -458,7 +483,7 @@ static
 FUNCTION(activate_thread)
 {
     Label		ip;
-    ThreadQueue		thd, sur;
+    ThreadQueue		thd;
     enum suspend_reason reason;
  ENTRY_LABEL(static, activate_thread)
     /* check for a deadlock */
@@ -468,11 +493,13 @@ FUNCTION(activate_thread)
     /* activate the head of the ready queue */
     thd	    = regs.rq;
     regs.rq = thd->t.next;
+#if YIELD_NONDET
     while ( regs.rq && regs.rq->t.id == 0 && regs.rq->s.thd == 0 )
 	regs.rq = regs.rq->t.next;
     if ( thd->t.id == 0 )
     {
-	sur = thd;
+	ThreadQueue sur = thd;
+
 	thd = (ThreadQueue)sur->s.thd;
 	ASSERT(thd->t.id != 0);
 	while ( sur->s.thd )
@@ -482,6 +509,7 @@ FUNCTION(activate_thread)
 	    sur = sur->s.link;
 	}
     }
+#endif
     regs.cid = thd->t.id;
     ip	     = thd->t.ip;
     reason   = (enum suspend_reason)thd->t.reason;
@@ -654,12 +682,7 @@ save_continuation(unsigned int n_regs)
 }
 
 void
-#if !COPY_SEARCH_SPACE
 restore_continuation(unsigned int n_regs, Label l, ThreadQueue tq)
-#else
-# undef restore_continuation
-restore_continuation(Label l, ThreadQueue tq)
-#endif
 {
     assert(tq && tq->t.id != 0);
 

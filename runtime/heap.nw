@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2624 2008-02-16 17:53:31Z wlux $
+% $Id: heap.nw 2661 2008-04-21 06:39:54Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -728,17 +728,25 @@ NodeInfo queueMe_info_table[] = {
 #endif
 
 @ 
-Search continuations.
+Search continuation nodes represent the continuation of a search goal
+in an encapsulated search. Note that search continuations have two
+search space fields. The [[spc]] field, just like the field with the
+same name of indirection, variable, lazy application, and queue-me
+nodes, points to the search space of the computation in which the
+search continuation was created. The [[ss]] field, on the other hand,
+points to the search goal's local search space and thus maintains the
+local bindings of its updatable nodes. %'
 
 <<heap.h>>=
 extern NodeInfo search_cont_info;
 struct search_cont_node {
     NodeInfo	*info;
-    SearchSpace *spc;		/* local space of the continuation */
+    SearchSpace *spc;		/* defining search space */
     Node	*susp;		/* suspended goal application */
     Node	*var;		/* goal variable */
     Label	code;		/* next instruction to be executed */
     ThreadQueue rq;		/* saved ready queue */
+    SearchSpace *ss;		/* saved search space of the continuation */
 };
 #define search_cont_node_size   wordsof(struct search_cont_node)
 

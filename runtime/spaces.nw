@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 2646 2008-03-26 04:26:26Z wlux $
+% $Id: spaces.nw 2661 2008-04-21 06:39:54Z wlux $
 %
 % Copyright (c) 2003-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -285,8 +285,8 @@ context.
 
 Note that when a search succeeds or returns because of a
 non-deterministic split, its heap segment becomes part of the
-enclosing search space. Therefore, the choicepoint that identifies the
-top-most heap segment must be passed to [[set_safe_ancestor]].
+enclosing search space. Therefore, the choice point that identifies
+the top-most heap segment must be passed to [[set_safe_ancestor]].
 
 <<spaces.h>>=
 #if !COPY_SEARCH_SPACE
@@ -339,8 +339,9 @@ set_safe_ancestor(SearchSpace *space, Choicepoint *cp)
 
 @ 
 The function [[new_search_space]] allocates a new empty search space
-for a search goal and assigns it to the register [[ss]]. The new space
-is its own root and its (non-existent) bindings are considered active.
+for a search goal and assigns it to the register [[regs.ss]]. The new
+space is its own root and its (non-existent) bindings are considered
+active.
 
 <<spaces.h>>=
 extern void new_search_space(unsigned int n_regs);
@@ -384,7 +385,7 @@ bool
 inject_search_space(SearchSpace *space)
 {
     /* fail if current space is not a root space */
-    if ( regs.ss == &global_space || regs.ss->parent )
+    if ( regs.ss->parent )
 	return false;
 
     /* otherwise re-parent the current space */
@@ -494,7 +495,7 @@ discard_search_space()
 
 @
 The function [[restore_search_space]] restores the bindings of a
-search space and assigns it to the register [[ss]].
+search space and assigns it to the register [[regs.ss]].
 
 <<spaces.h>>=
 #if !COPY_SEARCH_SPACE
@@ -532,26 +533,26 @@ extern Node *copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space);
 @
 We use an algorithm similar to a two-space copying garbage collector
 in [[copy_graph]]. The algorithm uses two pointers into the free space
-above the current allocation pointer [[hp]]. The pointer [[alloc]] is
-a temporary allocation pointer and [[scan]] is used for processing the
-nodes that have been copied already, but whose arguments still need to
-be copied. Whenever a node is copied, its info pointer is replaced by
-a forwarding pointer to the new node. However, in contrast to a
-copying garbage collector, we have to restore the old info pointer
-after the graph has been copied. Therefore, we record the addresses of
-all copied nodes at the end of the heap using our own trail pointer
-[[ntp]]. Note that we do not need to save the info pointers as they
-can be recovered from the copied nodes.
+above the current allocation pointer [[regs.hp]]. The pointer
+[[alloc]] is a temporary allocation pointer and [[scan]] is used for
+processing the nodes that have been copied already, but whose
+arguments still need to be copied. Whenever a node is copied, its info
+pointer is replaced by a forwarding pointer to the new node. However,
+in contrast to a copying garbage collector, we have to restore the old
+info pointer after the graph has been copied. Therefore, we record the
+addresses of all copied nodes at the end of the heap using our own
+trail pointer [[ntp]]. Note that we do not need to save the info
+pointers as they can be recovered from the copied nodes.
 
-Some special care is necessary when we run out of memory while copying
-a graph, i.e., when [[alloc]] reaches [[ntp]]. Instead of extending
-the garbage collector such as to handle the forwarding pointers and
-preserve the allocation order with respect to the [[scan]] pointer, we
-resort to a simpler solution that discards the partial copy, performs
-the garbage collection, and then restarts the copying process. Note
-that this is computationally not more expensive than an extended
-garbage collection scheme because otherwise the garbage collector
-would be copying the partial copy of the graph.
+Special care is necessary when we run out of memory while copying a
+graph, i.e., when [[alloc]] reaches [[ntp]]. Instead of extending the
+garbage collector to handle forwarding pointers and preserve
+allocation order with respect to the [[scan]] pointer, we resort to a
+simpler solution and discard the partial copy, perform the garbage
+collection, and then restart copying. Note that this is
+computationally not more expensive than an extended garbage collection
+scheme because otherwise the garbage collector would be copying the
+partial copy of the graph.
 
 If we run out of memory in [[copy_graph]] for a second time, the
 program is aborted because further garbage collections cannot reclaim
@@ -582,26 +583,25 @@ static jmp_buf restart_copy;
 @
 The function [[copy_node]] copies a single node from the graph. It
 returns the original node if the node is allocated outside of the heap
-as well as for non-local variables and shared applications. Otherwise,
-the node is copied to the top of the heap and a forwarding pointer is
-left in the old node. As a special case, when [[copy_node]] is called
-with [[space == 0]], all variables and shared applications are copied
+as well as for non-local variables, shared applications, and search
+continuations. Otherwise, the node is copied to the top of the heap
+and a forwarding pointer is left in the old node. As a special case,
+when [[copy_node]] is called with [[space == 0]], all nodes are copied
 into the current space. This is used in order to support the
 [[getSearchTree]] function, which implements encapsulated search with
 strong encapsulation (see p.~\pageref{encapsulation} in
-Sect.~\ref{encapsulation}). Note that [[space]] cannot be null when
-copying a search goal that was returned from an encapsulated search.
+Sect.~\ref{encapsulation}).
 
 One has to be careful when the copied graph contains (local) search
-continuations. Since these continuations could contain references to
+continuations. Since these continuations may contain references to
 variables from the copied graph, they have to be copied as well using
-fresh search spaces. There are two options here. Either one can
-create a fresh root space for each local search space encountered, or
-one retains the original search tree structure. We have chosen the
-latter option because the copying algorithm uses a breadth first
-traversal, whereas copying local continuations into fresh root spaces
-requires a depth first traversal in order to ensure that the local
-bindings of a space are in effect while its nodes are being copied.
+fresh search spaces. There are two options here. Either one can create
+a fresh root space for each local search space encountered, or one
+retains the original search tree structure. We have chosen the latter
+option because the copying algorithm uses a breadth first traversal,
+whereas copying local continuations into fresh root spaces requires a
+depth first traversal in order to ensure that the local bindings of a
+space are in effect while its nodes are being copied.
 
 In our implementation, we cannot activate the bindings of a particular
 local search space during copying, as this could leave cross segment
@@ -611,19 +611,12 @@ valid only for indirection nodes from the copied graph as well as for
 indirections in outer search spaces. Note that this restriction does
 not apply when the runtime system is configured to use a copying
 implementation of encapsulated search. In that case, all indirection
-chains can be shartened.
+chains can be shortened.
 
 Actually, copying of local continuations could be avoided for
 continuations that are closed, i.e., which do not reference any
-non-local nodes. There is also no need to copy search continuations
-from global spaces. However, the runtime system currently offers no
-means to distinguish local and non-local continuations and to check
-whether a search continuation is closed.
-
-\ToDo{Avoid copying of search continuations that were allocated
-outside of the copied space. Checking for such continuations requires
-adding a pointer to that space in which a search continuation node was
-allocated to them.}
+non-local nodes. However, the runtime system currently offers no means
+to check whether a search continuation is closed.
 
 <<spaces.c>>=
 static Node *
@@ -677,8 +670,8 @@ copy_node(Node *node, SearchSpace *space)
 		continue;
 
 	    case SEARCH_CONT_KIND:
-		/* FIXME: non-local continuations need not be copied */
-		do_copy = true;
+		do_copy = !space || is_forwarded(node->sc.spc)
+		    || is_forwarded(node->sc.ss);
 		break;
 
 	    default:
@@ -922,7 +915,11 @@ copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space)
 	    break;
 
 	case SEARCH_CONT_KIND:
-	    node->sc.spc  = copy_search_space(node->sc.spc, space);
+	    if ( is_forwarded(node->sc.spc) ) 
+		node->sc.spc = (SearchSpace *)get_forward(node->sc.spc);
+	    else
+		node->sc.spc = regs.ss;
+	    node->sc.ss	  = copy_search_space(node->sc.ss, space);
 	    node->sc.susp = copy_node(node->sc.susp, space);
 	    node->sc.var  = copy_node(node->sc.var, space);
 	    node->sc.rq	  = (ThreadQueue)copy_node((Node *)node->sc.rq, space);

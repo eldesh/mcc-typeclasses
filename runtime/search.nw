@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: search.nw 2346 2007-06-23 10:23:59Z wlux $
+% $Id: search.nw 2661 2008-04-21 06:39:54Z wlux $
 %
-% Copyright (c) 2002-2007, Wolfgang Lux
+% Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Encapsulated Search}
@@ -173,7 +173,7 @@ FUNCTION(__try_1)
     {
 	sc = regs.r[0]->c.args[0];
 #if COPY_SEARCH_SPACE
-	sc = copy_graph(0, sc, sc->sc.spc);
+	sc = copy_graph(0, sc, sc->sc.ss);
 #endif
 
 	CHECK_STACK(2);
@@ -181,7 +181,7 @@ FUNCTION(__try_1)
 	regs.sp[0] = sc->sc.susp;
 	regs.sp[1] = sc->sc.var;
 #if !COPY_SEARCH_SPACE
-	restore_search_space(sc->sc.spc);
+	restore_search_space(sc->sc.ss);
 #endif
 	GOTO_INDIR(resume_continuation(sc->sc.code, sc->sc.rq));
     }
@@ -237,7 +237,7 @@ FUNCTION(solved_goal)
     Node  *cont, *res, *arg;
  ENTRY_LABEL(static, solved_goal)
     cont = regs.r[0];
-    res	 = copy_graph(2, cont->sc.var, cont->sc.spc);
+    res	 = copy_graph(2, cont->sc.var, cont->sc.ss);
 
     arg = regs.r[1];
     while ( is_tagged_ptr(arg) && is_indir_node(arg) )
@@ -273,13 +273,19 @@ implementation of pruning search strategies. Note that [[try]]
 implicitly performs this unification when it is applied to a partially
 solved search goal by sharing the goal variable.
 
-If the current search space is a root space, i.e., if no
-non-deterministic choice was performed for the current goal, the
-current space will be adopted as a child by the search space of the
-resumed search goal. Otherwise, the saved state must be copied into
-the current search space. This policy ensures that -- except for some
-unusual cases, e.g., continuing a partially solved goal in a global
-context -- expensive copying is avoided.
+When a search goal is resumed in another (encapsulated or global)
+search, its saved state in general must be copied into the current
+space. If, however, the current search space is a root space, i.e., if
+no non-deterministic choice was performed for the current goal, the
+current space is adopted as a child of the resumed goal's search space.
+This avoids -- possibly expensive -- copying for the common case where
+a pruning search strategy sets up additional constraints on the goal
+variable before resuming a search goal, e.g.,
+\verb|try (\z -> (z<x)=:=True & g z)|, where \verb|g| is a search
+continuation and \verb|x| an upper limit for the goal variable. In the
+unusual case where a search goal is continued in the enclosing
+computation, the saved state is always copied, even if the enclosing
+computation's search space is a root space.
 
 Note that [[search_goal_proceed]] discards the value on the top of the
 stack and therefore it does not matter that [[bind_var]] returns the
@@ -293,8 +299,8 @@ FUNCTION(search_cont)
     Node *arg, *cont;
  ENTRY_LABEL(static, search_cont)
     cont = regs.r[0];
-    if ( !inject_search_space(cont->sc.spc) )
-	regs.r[0] = cont = copy_graph(2, cont, cont->sc.spc);
+    if ( is_local_space(cont->sc.spc) || !inject_search_space(cont->sc.ss) )
+	regs.r[0] = cont = copy_graph(2, cont, cont->sc.ss);
     restore_continuation(2, cont->sc.code, cont->sc.rq);
 
     /* NB reload cont -- restore_continuation might invoke gc */
@@ -376,11 +382,12 @@ FUNCTION(deadlock_search)
     CHECK_HEAP(0, search_cont_node_size + closure_node_size(1) + cons_node_size);
     sc		= (Node *)regs.hp;
     sc->info	= &search_cont_info;
-    sc->sc.spc	= regs.ss;
+    sc->sc.spc	= regs.bp->btSpc;
     sc->sc.susp	= 0;
     sc->sc.var	= regs.sp[1];
     sc->sc.code	= 0;
     sc->sc.rq	= 0;
+    sc->sc.ss	= regs.ss;
     regs.hp    += search_cont_node_size;
 
     clos	    = (Node *)regs.hp;
@@ -438,11 +445,12 @@ suspend_search(unsigned int n_regs, SearchSpace *space)
 	CHECK_HEAP(n_regs, search_cont_node_size);
 	sc	    = (Node *)regs.hp;
 	sc->info    = &search_cont_info;
-	sc->sc.spc  = regs.ss;
+	sc->sc.spc  = regs.bp->btSpc;
 	sc->sc.susp = regs.sp[0];
 	sc->sc.var  = regs.sp[1];
 	sc->sc.code = regs.ret;
 	sc->sc.rq   = regs.rq;
+	sc->sc.ss   = regs.ss;
 	regs.hp	   += search_cont_node_size;
 
 	/* save the search continuation and set up a return frame that
@@ -479,7 +487,7 @@ FUNCTION(resume_search)
     regs.sp   -= 2;
     regs.sp[0] = sc->sc.susp;
     regs.sp[1] = sc->sc.var;
-    restore_search_space(sc->sc.spc);
+    restore_search_space(sc->sc.ss);
     GOTO_INDIR(resume_continuation(sc->sc.code, sc->sc.rq));
 }
 
@@ -527,11 +535,12 @@ FUNCTION(choices_search)
     {
 	sc	    = (Node *)regs.hp;
 	sc->info    = &search_cont_info;
-	sc->sc.spc  = regs.ss;
+	sc->sc.spc  = regs.bp->btSpc;
 	sc->sc.susp = regs.sp[0];
 	sc->sc.var  = regs.sp[1];
 	sc->sc.code = *--conts;
 	sc->sc.rq   = regs.rq;
+	sc->sc.ss   = regs.ss;
 	regs.hp	   += search_cont_node_size;
 
 	clos		= (Node *)regs.hp;
@@ -676,11 +685,12 @@ FUNCTION(__encapsulate)
     CHECK_HEAP(0, search_cont_node_size + closure_node_size(1));
     sc		= (Node *)regs.hp;
     sc->info	= &search_cont_info;
-    sc->sc.spc	= regs.ss;
-    sc->sc.susp = regs.sp[0];
+    sc->sc.spc	= regs.bp->btSpc;
+    sc->sc.susp	= regs.sp[0];
     sc->sc.var	= regs.sp[1];
     sc->sc.code	= __encapsulate_1;
     sc->sc.rq	= regs.rq;
+    sc->sc.ss	= regs.ss;
     regs.hp    += search_cont_node_size;
 
     clos	    = (Node *)regs.hp;

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: threads.nw 2673 2008-04-21 07:00:31Z wlux $
+% $Id: threads.nw 2674 2008-04-21 07:02:28Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -813,13 +813,14 @@ interrupt_thread(unsigned int n_regs, Label l, enum suspend_reason reason)
 #if !NO_STABILITY
     bool	 new_thd = save_ds && regs.cid != regs.thd->id;
     Thread	 *thread;
-#endif
 
     CHECK_HEAP(n_regs,
-#if !NO_STABILITY
 	       (new_thd ? thread_size : 0) +
-#endif
 	       thread_state_size + (save_ds ? vector_node_size(ds_size) : 0));
+#else
+    CHECK_HEAP(n_regs,
+	       thread_state_size + (save_ds ? vector_node_size(ds_size) : 0));
+#endif
 
     if ( reason != None )
 	TRACE(("%I suspend (%s)\n", reasons[reason]));

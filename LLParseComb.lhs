@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: LLParseComb.lhs 1782 2005-10-06 13:45:22Z wlux $
+% $Id: LLParseComb.lhs 2679 2008-04-22 15:04:17Z wlux $
 %
-% Copyright (c) 1999-2005, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{LLParseComb.lhs}
@@ -23,7 +23,7 @@ string in this case.
 > module LLParseComb(Symbol(..),Parser,
 >                    applyParser,prefixParser, position,succeed,symbol,
 >                    (<?>),(<|>),(<|?>),(<*>),(<\>),(<\\>),
->                    opt,(<$>),(<$->),(<*->),(<-*>),(<**>),(<??>),(<.>),
+>                    opt,(<$>),(<$->),(<*->),(<-*>),(<**>),(<?*>),(<**?>),(<.>),
 >                    many,many1, sepBy,sepBy1, chainr,chainr1,chainl,chainl1,
 >                    bracket,ops, layoutOn,layoutOff,layoutEnd) where
 > import Prelude hiding(lex)
@@ -36,7 +36,7 @@ string in this case.
 > import LexComb
 
 > infixl 5 <\>, <\\>
-> infixl 4 <*>, <$>, <$->, <*->, <-*>, <**>, <??>, <.>
+> infixl 4 <*>, <$>, <$->, <*->, <-*>, <**>, <?*>, <**?>, <.>
 > infixl 3 <|>, <|?>
 > infixl 2 <?>, `opt`
 
@@ -47,7 +47,6 @@ string in this case.
 > class (Ord s,Show s) => Symbol s where
 >   isEOF :: s -> Bool
 
-> type Empty = Bool
 > type SuccessCont s a = Position -> s -> L a
 > type FailureCont a = Position -> String -> L a
 > type Lexer s a = SuccessCont s a -> FailureCont a -> L a
@@ -102,7 +101,7 @@ string in this case.
 
 > symbol :: Symbol s => s -> Parser s s a
 > symbol s = Parser Nothing (addToFM s p zeroFM)
->   where p lexer success fail pos s = lexer (success s) fail
+>   where p lexer success fail _ s = lexer (success s) fail
 
 > (<?>) :: Symbol s => Parser s a b -> String -> Parser s a b
 > p <?> msg = p <|> Parser (Just pfail) zeroFM
@@ -212,12 +211,15 @@ paper, but were taken from the implementation found on the web.
 > (<**>) :: Symbol s => Parser s a c -> Parser s (a -> b) c -> Parser s b c
 > p <**> q = flip ($) <$> p <*> q
 
-> (<??>) :: Symbol s => Parser s a b -> Parser s (a -> a) b -> Parser s a b
-> p <??> q = p <**> (q `opt` id)
+> (<?*>) :: Symbol s => Parser s (a -> a) b -> Parser s a b -> Parser s a b
+> p <?*> q = (p `opt` id) <*> q
+
+> (<**?>) :: Symbol s => Parser s a b -> Parser s (a -> a) b -> Parser s a b
+> p <**?> q = p <**> (q `opt` id)
 
 > (<.>) :: Symbol s => Parser s (a -> b) d -> Parser s (b -> c) d
 >       -> Parser s (a -> c) d
-> p1 <.> p2 = p1 <**> ((.) <$> p2)
+> p <.> q = p <**> ((.) <$> q)
 
 > many :: Symbol s => Parser s a b -> Parser s [a] b
 > many p = many1 p `opt` []

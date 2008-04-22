@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: SyntaxCheck.lhs 2682 2008-04-22 17:42:33Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{SyntaxCheck.lhs}
@@ -529,12 +529,14 @@ runtime system.
 
 > checkExpr :: Position -> VarEnv -> Expression a -> Error (Expression a)
 > checkExpr _ _ (Literal a l) = return (Literal a l)
-> checkExpr p env (Variable a v) =
->   case qualLookupNestEnv v env of
->     [] -> errorAt p (undefinedVariable v)
->     [Constr _] -> return (Constructor a v)
->     [Var _ _] -> return (Variable a v)
->     rs -> errorAt p (ambiguousIdent rs v)
+> checkExpr p env (Variable a v)
+>   | unqualify v == anonId = return (Variable a v)
+>   | otherwise =
+>       case qualLookupNestEnv v env of
+>         [] -> errorAt p (undefinedVariable v)
+>         [Constr _] -> return (Constructor a v)
+>         [Var _ _] -> return (Variable a v)
+>         rs -> errorAt p (ambiguousIdent rs v)
 > checkExpr p env (Constructor a c) = checkExpr p env (Variable a c)
 > checkExpr p env (Paren e) = liftE Paren (checkExpr p env e)
 > checkExpr p env (Typed e ty) = liftE (flip Typed ty) (checkExpr p env e)

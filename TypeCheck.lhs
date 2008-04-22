@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2628 2008-02-20 16:27:30Z wlux $
+% $Id: TypeCheck.lhs 2682 2008-04-22 17:42:33Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -722,6 +722,7 @@ context because the context of a function's type signature is
 > isNonExpansiveApp :: ValueEnv -> Int -> Expression a -> Bool
 > isNonExpansiveApp _ _ (Literal _ _) = True
 > isNonExpansiveApp tyEnv n (Variable _ v)
+>   | unqualify v == anonId = False
 >   | isRenamed (unqualify v) = n == 0 || n < arity v tyEnv
 >   | otherwise = n < arity v tyEnv
 > isNonExpansiveApp _ _ (Constructor _ _) = True
@@ -1091,7 +1092,9 @@ in \texttt{tcFunctionDecl} above.
 >     return (cx,ty,Literal ty l)
 > tcExpr _ _ _ (Variable _ v) =
 >   do
->     (cx,ty) <- fetchSt >>= inst . funType v
+>     (cx,ty) <-
+>       if unRenameIdent (unqualify v) == anonId then freshQualType []
+>       else fetchSt >>= inst . funType v
 >     return (cx,ty,Variable ty v)
 > tcExpr _ _ _ (Constructor _ c) =
 >   do
@@ -1658,17 +1661,17 @@ We use negative offsets for fresh type variables.
 > freshTypeVar :: TcState Type
 > freshTypeVar = freshVar TypeVariable
 
-> freshQualType :: QualIdent -> TcState (Context,Type)
-> freshQualType cls =
+> freshQualType :: [QualIdent] -> TcState (Context,Type)
+> freshQualType clss =
 >   do
 >     tv <- freshTypeVar
->     return ([TypePred cls tv],tv)
+>     return ([TypePred cls tv | cls <- clss],tv)
 
 > freshEnumType, freshNumType, freshFracType :: TcState (Context,Type)
-> freshEnumType = freshQualType qEnumId
-> freshNumType = freshQualType qNumId
-> freshFracType = freshQualType qFractionalId
-> freshMonadType = freshQualType qMonadId
+> freshEnumType = freshQualType [qEnumId]
+> freshNumType = freshQualType [qNumId]
+> freshFracType = freshQualType [qFractionalId]
+> freshMonadType = freshQualType [qMonadId]
 
 > freshConstrained :: [Type] -> TcState Type
 > freshConstrained tys = freshVar (TypeConstrained tys)

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2628 2008-02-20 16:27:30Z wlux $
+% $Id: Desugar.lhs 2682 2008-04-22 17:42:33Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -468,7 +468,15 @@ type \texttt{Bool} of the guard because the guard's type defaults to
 > desugarExpr :: ModuleIdent -> Position -> Expression Type
 >             -> DesugarState (Expression Type)
 > desugarExpr m p (Literal ty l) = desugarLiteral m p ty l
-> desugarExpr _ _ (Variable ty v) = return (Variable ty v)
+> desugarExpr m p (Variable ty v)
+>   -- NB The name of the initial goal is anonId (not renamed, cf. goalModule
+>   --    above) and must not be changed
+>   | isRenamed v' && unRenameIdent v' == anonId =
+>       do
+>         v'' <- freshVar m "_#var" ty
+>         return (Let [FreeDecl p [snd v'']] (uncurry mkVar v''))
+>   | otherwise = return (Variable ty v)
+>   where v' = unqualify v
 > desugarExpr _ _ (Constructor ty c) = return (Constructor ty c)
 > desugarExpr m p (Paren e) = desugarExpr m p e
 > desugarExpr m p (Typed e _) = desugarExpr m p e

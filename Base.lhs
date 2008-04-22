@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: Base.lhs 2682 2008-04-22 17:42:33Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Base.lhs}
@@ -89,7 +89,8 @@ variables cannot be computed independently for each declaration.
 
 > instance QualExpr (Expression a) where
 >   qfv _ (Literal _ _) = []
->   qfv m (Variable _ v) = maybe [] return (localIdent m v)
+>   qfv m (Variable _ v) =
+>     maybe [] (\v' -> [v' | v' /= anonId]) (localIdent m v)
 >   qfv _ (Constructor _ _) = []
 >   qfv m (Paren e) = qfv m e
 >   qfv m (Typed e _) = qfv m e

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Trust.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: Trust.lhs 2684 2008-04-23 17:46:29Z wlux $
 %
-% Copyright (c) 2006-2007, Wolfgang Lux
+% Copyright (c) 2006-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Trust.lhs}
@@ -113,6 +113,7 @@ the local functions \texttt{h} and \texttt{i} are trusted, but
 >   trust tr (Do sts e) = trust tr sts . trust tr e
 >   trust tr (IfThenElse e1 e2 e3) = trust tr e1 . trust tr e2 . trust tr e3
 >   trust tr (Case e as) = trust tr e . trust tr as
+>   trust tr (Fcase e as) = trust tr e . trust tr as
 
 > instance SyntaxTree (Statement a) where
 >   trust tr (StmtExpr e) = trust tr e

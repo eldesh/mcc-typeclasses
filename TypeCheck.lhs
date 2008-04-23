@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2682 2008-04-22 17:42:33Z wlux $
+% $Id: TypeCheck.lhs 2684 2008-04-23 17:46:29Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1292,6 +1292,12 @@ in \texttt{tcFunctionDecl} above.
 >     tyRhs <- freshTypeVar
 >     (cxs,as') <- liftM unzip $ mapM (tcAlt m tcEnv tyLhs tyRhs) as
 >     return (cx ++ concat cxs,tyRhs,Case e' as')
+> tcExpr m tcEnv p (Fcase e as) =
+>   do
+>     (cx,tyLhs,e') <- tcExpr m tcEnv p e
+>     tyRhs <- freshTypeVar
+>     (cxs,as') <- liftM unzip $ mapM (tcAlt m tcEnv tyLhs tyRhs) as
+>     return (cx ++ concat cxs,tyRhs,Fcase e' as')
 
 > tcAlt :: ModuleIdent -> TCEnv -> Type -> Type -> Alt a
 >       -> TcState (Context,Alt Type)

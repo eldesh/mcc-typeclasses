@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Lift.lhs 2585 2007-12-19 22:56:54Z wlux $
+% $Id: Lift.lhs 2684 2008-04-23 17:46:29Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Lift.lhs}
@@ -251,6 +251,11 @@ variables in order to avoid an inadvertent name capturing.
 >     e' <- abstractExpr m pre lvs env e
 >     alts' <- mapM (abstractAlt m pre lvs env) alts
 >     return (Case e' alts')
+> abstractExpr m pre lvs env (Fcase e alts) =
+>   do
+>     e' <- abstractExpr m pre lvs env e
+>     alts' <- mapM (abstractAlt m pre lvs env) alts
+>     return (Fcase e' alts')
 > abstractExpr m _ _ _ _ = internalError "abstractExpr"
 
 > abstractAlt :: ModuleIdent -> String -> [Ident] -> AbstractEnv -> Alt Type
@@ -302,6 +307,9 @@ to the top-level.
 >   where (ds',ds'') = liftDeclGroup ds
 >         (e',ds''') = liftExpr e
 > liftExpr (Case e alts) = (Case e' alts',concat (ds':dss'))
+>   where (e',ds') = liftExpr e
+>         (alts',dss') = unzip (map liftAlt alts)
+> liftExpr (Fcase e alts) = (Fcase e' alts',concat (ds':dss'))
 >   where (e',ds') = liftExpr e
 >         (alts',dss') = unzip (map liftAlt alts)
 > liftExpr _ = internalError "liftExpr"

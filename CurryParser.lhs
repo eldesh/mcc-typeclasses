@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2682 2008-04-22 17:42:33Z wlux $
+% $Id: CurryParser.lhs 2684 2008-04-23 17:46:29Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -703,8 +703,10 @@ the left-hand side of a declaration.
 >                     <*-> (token KW_else <?> "else expected") <*> expr
 
 > caseExpr :: Parser Token (Expression ()) a
-> caseExpr = Case <$-> token KW_case <*> expr
->                 <*-> (token KW_of <?> "of expected") <*> layout alts
+> caseExpr =
+>   tokenOps caseKW <*> expr <*-> (token KW_of <?> "of expected")
+>                   <*> layout alts
+>   where caseKW = [(KW_case,Case),(KW_fcase,Fcase)]
 
 > alts :: Parser Token [Alt ()] a
 > alts = (:) <$> alt <*> semiBlock (block alt) []

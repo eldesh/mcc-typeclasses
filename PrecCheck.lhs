@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: PrecCheck.lhs 2684 2008-04-23 17:46:29Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{PrecCheck.lhs}
@@ -59,7 +59,7 @@ by a local declaration of $f$.
 \begin{verbatim}
 
 > cleanPrecs :: Decl a -> PEnv -> PEnv
-> cleanPrecs (InfixDecl _ _c _ _) pEnv = pEnv
+> cleanPrecs (InfixDecl _ _ _ _) pEnv = pEnv
 > cleanPrecs (TypeSig _ fs _) pEnv = foldr localUnimportTopEnv pEnv fs
 > cleanPrecs (FunctionDecl _ f _) pEnv = localUnimportTopEnv f pEnv
 > cleanPrecs (ForeignDecl _ _ _ _ f _) pEnv = localUnimportTopEnv f pEnv
@@ -265,6 +265,8 @@ because it is used for constructing the module's interface.
 >          (checkExpr m p pEnv e3)
 > checkExpr m p pEnv (Case e alts) =
 >   liftE2 Case (checkExpr m p pEnv e) (mapE (checkAlt m pEnv) alts)
+> checkExpr m p pEnv (Fcase e alts) =
+>   liftE2 Fcase (checkExpr m p pEnv e) (mapE (checkAlt m pEnv) alts)
 
 > checkStmt :: ModuleIdent -> Position -> PEnv -> Statement a
 >           -> Error (Statement a)

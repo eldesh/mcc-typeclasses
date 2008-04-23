@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2527 2007-10-22 13:49:27Z wlux $
+% $Id: DictTrans.lhs 2684 2008-04-23 17:46:29Z wlux $
 %
-% Copyright (c) 2006-2007, Wolfgang Lux
+% Copyright (c) 2006-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{DictTrans.lhs}
@@ -736,6 +736,10 @@ similarly.
 >     liftM2 Case
 >            (dictTrans m tcEnv nEnv iEnv tyEnv dictEnv e)
 >            (mapM (dictTrans m tcEnv nEnv iEnv tyEnv dictEnv) as)
+>   dictTrans m tcEnv nEnv iEnv tyEnv dictEnv (Fcase e as) =
+>     liftM2 Fcase
+>            (dictTrans m tcEnv nEnv iEnv tyEnv dictEnv e)
+>            (mapM (dictTrans m tcEnv nEnv iEnv tyEnv dictEnv) as)
 
 > instance DictTrans Alt where
 >   dictTrans m tcEnv nEnv iEnv tyEnv dictEnv (Alt p t rhs) =
@@ -947,6 +951,8 @@ environment.
 >   apply (Let (map (dictSpecialize mEnv) ds) (dictSpecialize mEnv e)) es
 > dictSpecializeApp mEnv (Case e as) es =
 >   apply (Case (dictSpecialize mEnv e) (map (dictSpecialize mEnv) as)) es
+> dictSpecializeApp mEnv (Fcase e as) es =
+>   apply (Fcase (dictSpecialize mEnv e) (map (dictSpecialize mEnv) as)) es
 
 > isKnownType :: Type -> Bool
 > isKnownType (TypeConstructor _) = True
@@ -963,6 +969,7 @@ environment.
 > unapply (Apply e1 e2) es = unapply e1 (e2:es)
 > unapply (Let ds e) es = (Let ds e,es)
 > unapply (Case e as) es = (Case e as,es)
+> unapply (Fcase e as) es = (Fcase e as,es)
 
 \end{verbatim}
 \paragraph{Unification}

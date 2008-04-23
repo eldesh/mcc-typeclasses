@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2682 2008-04-22 17:42:33Z wlux $
+% $Id: SyntaxCheck.lhs 2684 2008-04-23 17:46:29Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -612,6 +612,8 @@ runtime system.
 >          (checkExpr p env e3)
 > checkExpr p env (Case e alts) =
 >   liftE2 Case (checkExpr p env e) (mapE (checkAlt env) alts)
+> checkExpr p env (Fcase e alts) =
+>   liftE2 Fcase (checkExpr p env e) (mapE (checkAlt env) alts)
 
 > checkStmt :: Position -> VarEnv -> Statement a -> Error (VarEnv,Statement a)
 > checkStmt p env (StmtExpr e) =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2682 2008-04-22 17:42:33Z wlux $
+% $Id: Base.lhs 2684 2008-04-23 17:46:29Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -113,6 +113,7 @@ variables cannot be computed independently for each declaration.
 >   qfv m (Do sts e) = foldr (qfvStmt m) (qfv m e) sts
 >   qfv m (IfThenElse e1 e2 e3) = qfv m e1 ++ qfv m e2 ++ qfv m e3
 >   qfv m (Case e alts) = qfv m e ++ qfv m alts
+>   qfv m (Fcase e alts) = qfv m e ++ qfv m alts
 
 > qfvStmt :: ModuleIdent -> Statement a -> [Ident] -> [Ident]
 > qfvStmt m st fvs = qfv m st ++ filterBv st fvs

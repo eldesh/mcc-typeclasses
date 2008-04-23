@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2684 2008-04-23 17:46:29Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeSyntaxCheck.lhs}
@@ -208,8 +208,8 @@ not contain any additional constraints for that type variable
 >   liftE (NewRecordDecl p c l) (checkClosedType env p tvs ty)
 
 \end{verbatim}
-Checking expressions is rather straight forward. The compiler must
-only traverse the structure of expressions in order to find local
+Checking expressions is rather straightforward. The compiler must only
+traverse the structure of expressions in order to find local
 declaration groups.
 \begin{verbatim}
 
@@ -273,6 +273,8 @@ declaration groups.
 >          (checkExpr env p e3)
 > checkExpr env p (Case e alts) =
 >   liftE2 Case (checkExpr env p e) (mapE (checkAlt env) alts)
+> checkExpr env p (Fcase e alts) =
+>   liftE2 Fcase (checkExpr env p e) (mapE (checkAlt env) alts)
 
 > checkStmt :: TypeEnv -> Position -> Statement a -> Error (Statement a)
 > checkStmt env p (StmtExpr e) = liftE StmtExpr (checkExpr env p e)
@@ -364,7 +366,7 @@ interpret the identifier as such.
 >     rs -> errorAt p (ambiguousIdent rs cls)
 
 \end{verbatim}
-The compiler reports an error when more than once instance is defined
+The compiler reports an error when more than one instance is defined
 for a particular pair of a type class and type constructor. This
 includes duplicate instances defined in the current module as well as
 conflicts between locally defined instances and imported instances.

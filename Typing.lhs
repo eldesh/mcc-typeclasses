@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 2534 2007-10-24 17:03:37Z wlux $
+% $Id: Typing.lhs 2684 2008-04-23 17:46:29Z wlux $
 %
-% Copyright (c) 2003-2007, Wolfgang Lux
+% Copyright (c) 2003-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Typing.lhs}
@@ -24,7 +24,7 @@
 
 \end{verbatim}
 After the compiler has attributed patterns and expressions with type
-information during type inference, it is straight forward to recompute
+information during type inference, it is straightforward to recompute
 the type of every pattern and expression. Since all annotated types
 are monomorphic, there is no need to instantiate any variables or
 perform any (non-trivial) unifications.
@@ -86,6 +86,7 @@ perform any (non-trivial) unifications.
 >   typeOf (Do _ e) = typeOf e
 >   typeOf (IfThenElse _ e _) = typeOf e
 >   typeOf (Case _ as) = head [typeOf rhs | Alt _ _ rhs <- as]
+>   typeOf (Fcase _ as) = head [typeOf rhs | Alt _ _ rhs <- as]
 
 > instance Typeable a => Typeable (Rhs a) where
 >   typeOf (SimpleRhs _ e _) = typeOf e

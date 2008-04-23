@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: Qual.lhs 2684 2008-04-23 17:46:29Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Qual.lhs}
@@ -206,6 +206,8 @@ order to compile this module with hbc.
 >                (qual phase tEnv vEnv e3)
 >   qual phase tEnv vEnv (Case e alts) =
 >     Case (qual phase tEnv vEnv e) (qual phase tEnv vEnv alts)
+>   qual phase tEnv vEnv (Fcase e alts) =
+>     Fcase (qual phase tEnv vEnv e) (qual phase tEnv vEnv alts)
 
 > instance Qual (Statement a) where
 >   qual phase tEnv vEnv (StmtExpr e) = StmtExpr (qual phase tEnv vEnv e)

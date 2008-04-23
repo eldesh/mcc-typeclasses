@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: KindCheck.lhs 2684 2008-04-23 17:46:29Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{KindCheck.lhs}
@@ -178,6 +178,7 @@ declarations.
 >   fts m (Do sts e) = fts m sts . fts m e
 >   fts m (IfThenElse e1 e2 e3) = fts m e1 . fts m e2 . fts m e3
 >   fts m (Case e as) = fts m e . fts m as
+>   fts m (Fcase e as) = fts m e . fts m as
 
 > instance HasType (Statement a) where
 >   fts m (StmtExpr e) = fts m e
@@ -478,6 +479,7 @@ have kind $\star$.
 > kcExpr tcEnv p (IfThenElse e1 e2 e3) =
 >   kcExpr tcEnv p e1 >> kcExpr tcEnv p e2 >> kcExpr tcEnv p e3
 > kcExpr tcEnv p (Case e alts) = kcExpr tcEnv p e >> mapM_ (kcAlt tcEnv) alts
+> kcExpr tcEnv p (Fcase e alts) = kcExpr tcEnv p e >> mapM_ (kcAlt tcEnv) alts
 
 > kcStmt :: TCEnv -> Position -> Statement a -> KcState ()
 > kcStmt tcEnv p (StmtExpr e) = kcExpr tcEnv p e

@@ -1,16 +1,16 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2585 2007-12-19 22:56:54Z wlux $
+% $Id: Simplify.lhs 2684 2008-04-23 17:46:29Z wlux $
 %
-% Copyright (c) 2003-2007, Wolfgang Lux
+% Copyright (c) 2003-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Simplify.lhs}
 \section{Optimizing the Desugared Code}\label{sec:simplify}
 After desugaring the source code, but before lifting local
 declarations, the compiler performs a few simple optimizations to
-improve the efficiency of the generated code. In addition, the
-optimizer replaces pattern bindings with simple variable bindings and
-selector functions.
+improve efficiency of the generated code. In addition, the optimizer
+replaces pattern bindings with simple variable bindings and selector
+functions.
 
 Currently, the following optimizations are implemented:
 \begin{itemize}
@@ -208,7 +208,8 @@ only a single equation whose body is a non-expansive expression.
 >   where n' = n - length ts
 > isNonExpansive tyEnv n (Let ds e) =
 >   all (isNonExpansiveDecl tyEnv) ds && isNonExpansive tyEnv n e
-> isNonExpansive tyEnv n (Case _ _) = False
+> isNonExpansive _ _ (Case _ _) = False
+> isNonExpansive _ _ (Fcase _ _) = False
 
 > isNonExpansiveDecl :: ValueEnv -> Decl a -> Bool
 > isNonExpansiveDecl _ (FunctionDecl _ _ _) = True
@@ -225,6 +226,7 @@ only a single equation whose body is a non-expansive expression.
 > exprArity tyEnv (Lambda _ ts _) = length ts
 > exprArity tyEnv (Let _ e) = exprArity tyEnv e
 > exprArity _ (Case _ _) = 0
+> exprArity _ (Fcase _ _) = 0
 
 \end{verbatim}
 We perform $\eta$-expansion even across newtypes, so that, for
@@ -263,18 +265,19 @@ not visible in the current module.
 >   where match _ (TypeArrow _ ty) = ty
 > fixType ty (Let ds e) = Let ds (fixType ty e)
 > fixType _ (Case _ _) = internalError "fixType"
+> fixType _ (Fcase _ _) = internalError "fixType"
 
 \end{verbatim}
 Before other optimizations are applied to expressions, the simplifier
-first transforms applications of let and case expressions by pushing
-the application down into the body of let expressions and into the
-alternatives of case expressions, respectively. In order to avoid code
-duplication, arguments that are pushed into the alternatives of a case
-expression by this transformation are bound to local variables (unless
-there is only one alternative). If these arguments are just simple
-variables or constant literals, the optimizations performed in
-\texttt{simplifyExpr} below will substitute these values and the let
-declarations will be removed.
+first transforms applications of let and (f)case expressions by
+pushing the application down into the body of let expressions and into
+the alternatives of (f)case expressions, respectively. In order to
+avoid code duplication, arguments that are pushed into the
+alternatives of a (f)case expression by this transformation are bound
+to local variables (unless there is only one alternative). If these
+arguments are just simple variables or literal constants, the
+optimizations performed in \texttt{simplifyExpr} below will substitute
+these values and the let declarations will be removed.
 
 \ToDo{Optimize (saturated) applications of $\lambda$-abstractions by
   performing a compile time $\beta$-reduction.}
@@ -294,15 +297,22 @@ declarations will be removed.
 > simplifyApp m p (Case e as) es =
 >   do
 >     e' <- simplifyApp m p e []
->     mkCase e' es as
+>     mkCase m p (Case e') es as
+> simplifyApp m p (Fcase e as) es =
+>   do
+>     e' <- simplifyApp m p e []
+>     mkCase m p (Fcase e') es as
+
+> mkCase :: ModuleIdent -> Position -> ([Alt Type] -> Expression Type)
+>        -> [Expression Type] -> [Alt Type] -> SimplifyState (Expression Type)
+> mkCase m p f es as
+>   | length as == 1 = return (f (map (applyToAlt es) as))
+>   | otherwise =
+>       do
+>         vs <- mapM (freshVar m argId) es
+>         let es' = map (uncurry mkVar) vs
+>         return (foldr2 mkLet (f (map (applyToAlt es') as)) vs es)
 >   where argId n = mkIdent ("_#arg" ++ show n)
->         mkCase e es as
->           | length as == 1 = return (Case e (map (applyToAlt es) as))
->           | otherwise =
->               do
->                 vs <- mapM (freshVar m argId) es
->                 let es' = map (uncurry mkVar) vs
->                 return (foldr2 mkLet (Case e (map (applyToAlt es') as)) vs es)
 >         applyToAlt es (Alt p t rhs) = Alt p t (applyToRhs es rhs)
 >         applyToRhs es (SimpleRhs p e _) = SimpleRhs p (apply e es) []
 >         mkLet (ty,v) e1 e2 = Let [varDecl p ty v e1] e2
@@ -367,12 +377,30 @@ functions in later phases of the compiler.
 >   do
 >     dss' <- mapM (sharePatternRhs m) ds
 >     simplifyLet m env (scc bv (qfv m) (foldr hoistDecls [] (concat dss'))) e
-> simplifyExpr m env (Case e alts) =
+> simplifyExpr m env (Case e as) =
 >   do
 >     e' <- simplifyExpr m env e
->     maybe (liftM (Case e') (mapM (simplifyAlt m env) alts))
+>     maybe (liftM (Case e') (mapM (simplifyAlt m env) as))
 >           (simplifyExpr m env)
->           (simplifyMatch e' alts)
+>           (simplifyMatch e' as)
+> simplifyExpr m env (Fcase e as) =
+>   do
+>     e' <- simplifyExpr m env e
+>     let as' = filter (compat e' . pattern) as
+>     if null as'
+>       then return (prelFailed (typeOf (Fcase e as)))
+>       else liftM (Fcase e') (mapM (simplifyAlt m env) as')
+>   where pattern (Alt _ t _) = t
+>         compat e (LiteralPattern _ l) =
+>           case e of
+>             Literal _ l' -> l == l'
+>             _ -> True
+>         compat _ (VariablePattern _ _) = True
+>         compat e (ConstructorPattern _ c ts) =
+>           case unapply e [] of
+>             (Constructor _ c',es') -> c == c' && and (zipWith compat es' ts)
+>             _ -> True
+>         compat e (AsPattern _ t) = compat e t
 
 > simplifyAlt :: ModuleIdent -> InlineEnv -> Alt Type
 >             -> SimplifyState (Alt Type)
@@ -398,7 +426,7 @@ A constant is considered simple if it is either a literal, a
 constructor, or a non-nullary function. Note that it is not possible
 to define nullary functions in local declarations in Curry. Thus, an
 unqualified name always refers to either a variable or a non-nullary
-function.  Applications of constructors and partial applications of
+function. Applications of constructors and partial applications of
 functions to at least one argument are not inlined in order to avoid
 code duplication (for the allocation of the terms). In order to
 prevent non-termination, no inlining is performed for entities defined
@@ -474,15 +502,15 @@ functions to access the pattern variables.
 >   | otherwise = Let ds e
 
 \end{verbatim}
-When the scrutinized expression in a case expression is a literal or a
-constructor application, the compiler can perform the pattern matching
-already at compile time and simplify the case expression to the right
-hand side of the matching alternative or to \texttt{Prelude.failed} if
-no alternative matches. When a case expression collapses to a matching
-alternative, the pattern variables are bound to the matching
-(sub)terms of the scrutinized expression. We have to be careful with
-as-patterns in order to avoid losing sharing by code duplication. For
-instance, the expression
+When the scrutinized expression in a rigid case expression is a
+literal or a constructor application, the compiler can perform the
+pattern matching already at compile time and simplify the case
+expression to the right hand side of the matching alternative or to
+\texttt{Prelude.failed} if no alternative matches. When a case
+expression collapses to a matching alternative, the pattern variables
+are bound to the matching (sub)terms of the scrutinized expression. We
+have to be careful with as-patterns in order to avoid losing sharing
+by code duplication. For instance, the expression
 \begin{verbatim}
   case (0?1) : undefined of
     l@(x:_) -> (x,l)
@@ -517,13 +545,14 @@ form where all arguments of applications are variables.
 > unapply (Apply e1 e2) es = unapply e1 (e2:es)
 > unapply (Lambda p ts e) es = (Lambda p ts e,es)
 > unapply (Let ds e) es = (Let ds e,es)
-> unapply (Case e alts) es = (Case e alts,es)
+> unapply (Case e as) es = (Case e as,es)
+> unapply (Fcase e as) es = (Fcase e as,es)
 
 > match :: Either (Type,Literal) (Type,QualIdent,[Expression Type])
 >       -> [Alt Type] -> Expression Type
-> match e alts =
->   head ([expr p t rhs | Alt p t rhs <- alts, t `matches` e] ++
->         [prelFailed (typeOf (Case (matchExpr e) alts))])
+> match e as =
+>   head ([expr p t rhs | Alt p t rhs <- as, t `matches` e] ++
+>         [prelFailed (typeOf (Case (matchExpr e) as))])
 >   where expr p t (SimpleRhs _ e' _) = bindPattern p e t e'
 
 > matches :: ConstrTerm a -> Either (a,Literal) (a,QualIdent,[Expression a])

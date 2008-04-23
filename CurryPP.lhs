@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2628 2008-02-20 16:27:30Z wlux $
+% $Id: CurryPP.lhs 2684 2008-04-23 17:46:29Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -388,6 +388,10 @@ Expressions
 > ppExpr p (Case e alts) =
 >   parenExp (p > 0)
 >            (text "case" <+> ppExpr 0 e <+> text "of" $$
+>             indent (vcat (map ppAlt alts)))
+> ppExpr p (Fcase e alts) =
+>   parenExp (p > 0)
+>            (text "fcase" <+> ppExpr 0 e <+> text "of" $$
 >             indent (vcat (map ppAlt alts)))
 
 > ppStmt :: Statement a -> Doc

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2531 2007-10-24 15:55:44Z wlux $
+% $Id: Imports.lhs 2690 2008-05-01 20:40:17Z wlux $
 %
-% Copyright (c) 2000-2007, Wolfgang Lux
+% Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Imports.lhs}
@@ -24,6 +24,7 @@ interfaces into the current module.
 > import Maybe
 > import Map
 > import PrecInfo
+> import PredefIdent
 > import Set
 > import TopEnv
 > import Types

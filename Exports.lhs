@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: Exports.lhs 2690 2008-05-01 20:40:17Z wlux $
 %
-% Copyright (c) 2000-2007, Wolfgang Lux
+% Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Exports.lhs}
@@ -26,6 +26,7 @@ exported together with their classes and types as explained below.
 > import Maybe
 > import Monad
 > import PrecInfo
+> import PredefIdent
 > import Set
 > import TopEnv
 > import Types

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: IntfEquiv.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: IntfEquiv.lhs 2690 2008-05-01 20:40:17Z wlux $
 %
-% Copyright (c) 2000-2007, Wolfgang Lux
+% Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{IntfEquiv.lhs}
@@ -22,6 +22,7 @@ inadvertently mix up these cases.
 > module IntfEquiv(fixInterface, intfEquiv) where
 > import Curry
 > import List
+> import PredefIdent
 > import Set
 
 > infix 4 =~=, `eqvList`, `eqvSet`

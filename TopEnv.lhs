@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TopEnv.lhs 2389 2007-07-04 17:05:20Z wlux $
+% $Id: TopEnv.lhs 2690 2008-05-01 20:40:17Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TopEnv.lhs}
@@ -45,6 +45,7 @@ imported.
 > import Env
 > import Ident
 > import Maybe
+> import PredefIdent
 > import Utils
 
 > data TopEnv a = TopEnv (Maybe [a]) (Env QualIdent [(Source,a)])

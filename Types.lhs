@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 2505 2007-10-16 21:22:00Z wlux $
+% $Id: Types.lhs 2690 2008-05-01 20:40:17Z wlux $
 %
-% Copyright (c) 2002-2007, Wolfgang Lux
+% Copyright (c) 2002-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Types.lhs}
@@ -12,6 +12,7 @@ of types in the compiler.
 
 > module Types where
 > import Ident
+> import PredefIdent
 > import List
 
 \end{verbatim}

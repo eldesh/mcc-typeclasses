@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: PrecInfo.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: PrecInfo.lhs 2690 2008-05-01 20:40:17Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{PrecInfo.lhs}
@@ -15,6 +15,7 @@ default precedence 9 and assumed to be a left-associative operator.
 
 > module PrecInfo where
 > import Curry
+> import PredefIdent
 > import TopEnv
 
 > data OpPrec = OpPrec Infix Integer deriving Eq

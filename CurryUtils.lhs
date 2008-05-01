@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryUtils.lhs 2585 2007-12-19 22:56:54Z wlux $
+% $Id: CurryUtils.lhs 2690 2008-05-01 20:40:17Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryUtils.lhs}
@@ -13,6 +13,7 @@ and goals.
 
 > module CurryUtils where
 > import Curry
+> import PredefIdent
 
 \end{verbatim}
 Here is a list of predicates identifying various kinds of

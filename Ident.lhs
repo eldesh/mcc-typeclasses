@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Ident.lhs 2504 2007-10-16 20:51:03Z wlux $
+% $Id: Ident.lhs 2690 2008-05-01 20:40:17Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Ident.lhs}
@@ -31,11 +31,7 @@ unqualified identifier.}
 >              mkMIdent,moduleName,moduleQualifiers,isInfixOp,isQInfixOp,
 >              qualify,qualifyWith,qualifyLike,qualQualify,isQualified,
 >              unqualify,qualUnqualify,localIdent,splitQualIdent,
->              anonId,unitId,nilId,consId,listId,arrowId,
->              tupleId,isTupleId,tupleArity,
->              qUnitId,qNilId,qConsId,qListId,qArrowId,
->              qTupleId,isQTupleId,qTupleArity,
->              isPrimTypeId) where
+>              anonId) where
 > import Char
 > import List
 
@@ -140,55 +136,10 @@ given module prefix, respectively).
 > splitQualIdent (QualIdent m x) = (Just m,x)
 
 \end{verbatim}
-The anonymous identifier and identifiers for the ubiquitous unit,
-list, arrow, and tuple (type) constructors are defined here, too. These
-identifiers must never be qualified with a module name. The function
-\texttt{isPrimTypeId} can be used to check for them.
+The ubiquitous anonymous identifier is defined here, too.
 \begin{verbatim}
 
 > anonId :: Ident
 > anonId = Ident "_" 0
-
-> unitId, nilId, consId, listId, arrowId :: Ident
-> unitId  = Ident "()" 0
-> nilId   = Ident "[]" 0
-> consId  = Ident ":" 0
-> listId  = Ident "[]" 0
-> arrowId = Ident "->" 0
-
-> tupleId :: Int -> Ident
-> tupleId n
->   | n >= 2 = Ident ("(" ++ replicate (n - 1) ',' ++ ")") 0
->   | otherwise = error "internal error: tupleId"
-
-> isTupleId :: Ident -> Bool
-> isTupleId x = n > 1 && x == tupleId n
->   where n = length (name x) - 1
-
-> tupleArity :: Ident -> Int
-> tupleArity x
->   | n > 1 && x == tupleId n = n
->   | otherwise = error "internal error: tupleArity"
->   where n = length (name x) - 1
-
-> qUnitId, qNilId, qConsId, qListId, qArrowId :: QualIdent
-> qUnitId  = UnqualIdent unitId
-> qNilId   = UnqualIdent nilId
-> qConsId  = UnqualIdent consId
-> qListId  = UnqualIdent listId
-> qArrowId = UnqualIdent arrowId
-
-> qTupleId :: Int -> QualIdent
-> qTupleId = UnqualIdent . tupleId
-
-> isQTupleId :: QualIdent -> Bool
-> isQTupleId = isTupleId . unqualify
-
-> qTupleArity :: QualIdent -> Int
-> qTupleArity = tupleArity . unqualify
-
-> isPrimTypeId :: QualIdent -> Bool
-> isPrimTypeId tc = tc `elem` [qUnitId,qListId,qArrowId] || isQTupleId tc
-
 
 \end{verbatim}

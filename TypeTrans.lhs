@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2690 2008-05-01 20:40:17Z wlux $
+% $Id: TypeTrans.lhs 2691 2008-05-01 22:08:36Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -128,7 +128,8 @@ indices independently in each type expression.
 
 > toTypeApp :: FM Ident Int -> TypeExpr -> [Type] -> Type
 > toTypeApp tvs (ConstructorType tc) tys
->   | tc == qArrowId && length tys == 2 = TypeArrow (tys !! 0) (tys !! 1)
+>   | unqualify tc == arrowId && length tys == 2 =
+>       TypeArrow (tys !! 0) (tys !! 1)
 >   | otherwise = foldl TypeApply (TypeConstructor tc) tys
 > toTypeApp tvs (VariableType tv) tys =
 >   maybe (internalError ("toType " ++ show tv))
@@ -161,8 +162,8 @@ indices independently in each type expression.
 >   TypePred (qualQualify m cls) (qualifyType m ty)
 
 > qualifyType :: ModuleIdent -> Type -> Type
-> qualifyType m (TypeConstructor tc) =
->   TypeConstructor (if isPrimTypeId tc then tc else qualQualify m tc)
+> qualifyType m (TypeConstructor tc) = TypeConstructor tc'
+>   where tc' = qualQualify (if isPrimTypeId tc then preludeMIdent else m) tc
 > qualifyType _ (TypeVariable tv) = TypeVariable tv
 > qualifyType m (TypeConstrained tys tv) =
 >   TypeConstrained (map (qualifyType m) tys) tv
@@ -201,9 +202,11 @@ unqualified names.
 
 > fromTypeApp :: [Ident] -> Type -> [TypeExpr] -> TypeExpr
 > fromTypeApp _ (TypeConstructor tc) tys
->   | isQTupleId tc && length tys == qTupleArity tc = TupleType tys
->   | tc == qListId && length tys == 1 = ListType (head tys)
->   | otherwise = foldl ApplyType (ConstructorType tc) tys
+>   | tc' == listId && length tys == 1 = ListType (head tys)
+>   | isTupleId tc' && length tys == tupleArity tc' = TupleType tys
+>   | otherwise = foldl ApplyType (ConstructorType tc'') tys
+>   where tc' = unqualify tc
+>         tc'' = if isPrimTypeId (qualify tc') then (qualify tc') else tc
 > fromTypeApp tvs (TypeVariable tv) tys =
 >   foldl ApplyType
 >         (VariableType (if tv >= 0 then tvs !! tv

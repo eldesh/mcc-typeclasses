@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeInfo.lhs 2519 2007-10-18 23:09:52Z wlux $
+% $Id: TypeInfo.lhs 2691 2008-05-01 22:08:36Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeInfo.lhs}
@@ -74,7 +74,7 @@ types.
 >   where emptyTCEnv =
 >           emptyTopEnv (Just (map (tupleTC . unapplyType True) tupleTypes))
 >         predefTC (TypeConstructor tc,tys) cs =
->           predefTopEnv tc (DataType tc k (map fst cs))
+>           predefTopEnv tc (DataType tc k (map (unqualify . fst) cs))
 >           where k = simpleKind (length tys)
 >         tupleTC (TypeConstructor tc,tys) = DataType tc k [unqualify tc]
 >           where k = simpleKind (length tys)

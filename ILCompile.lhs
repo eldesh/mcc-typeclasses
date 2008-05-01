@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 2621 2008-02-08 14:42:02Z wlux $
+% $Id: ILCompile.lhs 2691 2008-05-01 22:08:36Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -128,7 +128,8 @@ world.
 >     "fixIO" -> fixIO
 >     _ -> const . (Cam.Exec (Cam.mangle f))
 >   where failed _ _ = Cam.Choices []
->         success _ _ = Cam.Return (Cam.Constr (Cam.mangle "Success") [])
+>         success _ _ =
+>           Cam.Return (Cam.Constr (Cam.mangleQualified "Prelude.Success") [])
 >         seq (v1:v2:_) (w1:_) =
 >           Cam.Seq (w1 Cam.:<- Cam.Enter v1) (Cam.Enter v2)
 >         ensureNotFree (v1:_) (w1:_) = rigidArg v1 w1 (Cam.Return (Cam.Var w1))
@@ -239,7 +240,7 @@ expression whose innermost expression is the matched variable.
 > compileSelectorExpr _ _ = internalError "invalid selector function"
 
 \end{verbatim}
-The compilation of expressions is straight forward. The compiler
+The compilation of expressions is straightforward. The compiler
 attempts to avoid redundant evaluations of nodes. To this end, a list
 of the names of those variables whose bindings are known to be in head
 normal form, is passed as an additional argument to
@@ -522,7 +523,7 @@ equivalences.
 >   Cam.StaticCall f [(ty,unaliasVar aliases x) | (ty,x) <- xs]
 > unaliasCCall aliases (Cam.DynamicCall f xs) =
 >   Cam.DynamicCall f [(ty,unaliasVar aliases x) | (ty,x) <- xs]
-> unaliasCCall _liases (Cam.StaticAddr x) = Cam.StaticAddr x
+> unaliasCCall _ (Cam.StaticAddr x) = Cam.StaticAddr x
 
 > unaliasExpr :: AliasMap -> Cam.Expr -> Cam.Expr
 > unaliasExpr _ (Cam.Lit l) = Cam.Lit l

@@ -1,8 +1,8 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2589 2007-12-20 00:18:21Z wlux $
+% $Id: DTransform.lhs 2691 2008-05-01 22:08:36Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
-% Copyright (c) 2003-2007, Wolfgang Lux
+% Copyright (c) 2003-2008, Wolfgang Lux
 %
 % 2002/04/10 19:00:00 Added emptyNode as constructor in type cTree
 \nwfilename{DTransform.lhs}
@@ -154,7 +154,7 @@ Some auxiliary functions widely used throughout the module.
 \end{verbatim}
 
 Qualified data types representing some useful types in the transformed program:
-{\tt [a], (a,b), Char, [Char], CTree} and {\tt [Ctree]}. Also function for
+{\tt [a], (a,b), Char, [Char], CTree} and {\tt [Ctree]}. Also functions for
 constructing expressions of the form (a,b) and the name of function 
 {\tt clean}.
 
@@ -243,7 +243,7 @@ $\eta$-expand them. Without $\eta$-expansion the transformed goal's
 type is \texttt{(IO ($\tau'$,CTree), CTree)}, whereas it lacks the
 outer computation tree with $\eta$-expansion, i.e., the type is just
 \texttt{IO ($\tau'$,CTree)}. In order to accomodate this difference,
-\texttt{debugMain} first applies \texttt{DebugPrelude.performIIO} to
+\texttt{debugMain} first applies \texttt{DebugPrelude.performIO} to
 the transformed goal if it is a nullary function. Note that the
 desugarer transforms all non-IO goals \emph{goal} into unary functions
 equivalent to \texttt{\char`\\z -> z =:= }\emph{goal} when generating
@@ -371,7 +371,8 @@ generates the new auxiliary functions.
 > generateAuxFuncs m (f,IsFunction,n,ty) =
 >   map (generateAuxFunc m f ty (Function f n)) [0..n-2]
 > generateAuxFuncs m (c,IsConstructor,n,ty) =
->   map (generateAuxFunc m c ty (Constructor c n)) [0..n-1]
+>   map (generateAuxFunc m c' ty (Constructor c n)) [0..n-1]
+>   where c' = if isPrimDataId c then qualify (unqualify c) else c
 
 > generateAuxFunc :: ModuleIdent -> QualIdent -> Type -> Expression -> Int
 >                 -> Decl
@@ -427,13 +428,13 @@ for \texttt{IO}.
 \begin{verbatim}
 
 > transformFunType :: Int -> Type -> Type
-> transformFunType 0 fType = debugTypePair (transformType fType) debugTypeCTree
-> transformFunType _ fType@(TypeArrow ty1 (TypeConstructor tc [ty2,ty3]))
+> transformFunType 0 ty = debugTypePair (transformType ty) debugTypeCTree
+> transformFunType _ ty@(TypeArrow ty1 (TypeConstructor tc [ty2,ty3]))
 >   | tc == qPairId && ty1 == TypeConstructor qWorldId [] && ty1 == ty3 =
->       transformType fType
-> transformFunType n (TypeArrow type1 type2) =
->   TypeArrow (transformType type1) (transformFunType (n-1) type2)
-> transformFunType _ fType = transformType fType
+>       transformType ty
+> transformFunType n (TypeArrow ty1 ty2) =
+>   TypeArrow (transformType ty1) (transformFunType (n-1) ty2)
+> transformFunType _ ty = transformType ty
 
 > transformType :: Type -> Type
 > transformType (TypeArrow ty1 (TypeConstructor tc [ty2,ty3]))
@@ -501,9 +502,8 @@ these definitions here.
 > typesExpr (Variable _) env = env
 > typesExpr (Function _ _) env = env
 > typesExpr (Constructor qId n) env =
->   if idModule == Nothing && n > 0 then env' else env
->   where (idModule,ident) = splitQualIdent qId
->         env' = (qId,IsConstructor,n,debugTypePredef ident n) : env
+>   if isPrimDataId qId && n > 0 then env' else env
+>   where env' = (qId,IsConstructor,n,debugTypePredef qId n) : env
 > typesExpr (Apply e1 e2) env = typesExpr e1 (typesExpr e2 env)
 > typesExpr (Case _ e alts) env = typesExpr e (foldr typesAlt env alts)
 >   where typesAlt (Alt _ e) = typesExpr e
@@ -514,11 +514,11 @@ these definitions here.
 >   where typesBinding (Binding _ e) = typesExpr e
 > typesExpr (SrcLoc _ e) env = typesExpr e env
 
-> debugTypePredef :: Ident -> Int -> Type
-> debugTypePredef ident n
->   | ident == consId && n == 2 = typeCons
->   | isTupleId ident = typeTuple n
->   | otherwise = error ("debugTypePredef: " ++ show ident ++ "/" ++ show n)
+> debugTypePredef :: QualIdent -> Int -> Type
+> debugTypePredef qId n
+>   | qId == qConsId && n == 2 = typeCons
+>   | isQTupleId qId = typeTuple n
+>   | otherwise = error ("debugTypePredef: " ++ show qId ++ "/" ++ show n)
 
 \end{verbatim}
 
@@ -561,8 +561,9 @@ function and partial constructor applications.
 >     | d < n-1         = Function (qidAuxiliaryFunction m f d) (d+1)
 >     | otherwise       = Function (changeFunctionqId m f) n
 >   firstPhase m d (Constructor c n)
->     | d < n     = Function (qidAuxiliaryFunction m c d) (d+1)
+>     | d < n     = Function (qidAuxiliaryFunction m c' d) (d+1)
 >     | otherwise = Constructor c n
+>      where c' = if isPrimDataId c then qualify (unqualify c) else c
 >   firstPhase m d (Apply e1 e2) =
 >     Apply (firstPhase m (d+1) e1) (firstPhase m 0 e2)
 >   firstPhase m _ (Case rf e as) =
@@ -592,7 +593,7 @@ We only need:
       appropriate name and include only the function variables in the node.
 \end{itemize}
 
-A special cases handles $\eta$-expanded functions with result type
+A special case handles $\eta$-expanded functions with result type
 \texttt{IO}~$t$. According to the special transformation rule that
 applies to the \texttt{IO} type (see notes on \texttt{transformFunType}),
 we must not add a computation tree to the result of the transformed

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: CurryParser.lhs 2691 2008-05-01 22:08:36Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -272,7 +272,7 @@ directory path to the module is ignored.
 >           | otherwise = funDecl p (op',OpLhs (f t1) op' t2)
 >           where op' = unqualify op
 >         opDecl p f t = PatternDecl p (f t)
->         isConstrId c = c == qConsId || isQualified c || isQTupleId c
+>         isConstrId c = isQualified c || isPrimDataId c
 
 > funDecl :: Position -> (Ident,Lhs a) -> Rhs a -> Decl a
 > funDecl p (f,lhs) rhs = FunctionDecl p f [Equation p lhs rhs]
@@ -481,11 +481,12 @@ directory path to the module is ignored.
 
 > tupleType :: Parser Token TypeExpr a
 > tupleType = type0 <**?> (tuple <$> many1 (comma <-*> type0))
->       `opt` ConstructorType qUnitId
+>       `opt` ConstructorType (qualify unitId)
 >   where tuple tys ty = TupleType (ty:tys)
 
 > listType :: Parser Token TypeExpr a
-> listType = brackets (ListType <$> type0 `opt` ConstructorType qListId)
+> listType =
+>   brackets (ListType <$> type0 `opt` ConstructorType (qualify listId))
 
 > gtyconId :: Parser Token QualIdent a
 > gtyconId = rightArrow <|> tupleCommas
@@ -593,7 +594,7 @@ the left-hand side of a declaration.
 
 > parenTuplePattern :: Parser Token (ConstrTerm ()) a
 > parenTuplePattern = constrTerm0 <**> optTuplePattern
->               `opt` ConstructorPattern () qUnitId []
+>               `opt` ConstructorPattern () (qualify unitId) []
 
 \end{verbatim}
 \paragraph{Expressions}
@@ -640,7 +641,7 @@ the left-hand side of a declaration.
 >             <|> Constructor () <$> tupleCommas <*-> rightParen
 >             <|> leftSectionOrTuple <\> minus <*-> rightParen
 >             <|> opOrRightSection <\> minus
->             <|> Constructor () qUnitId <$-> rightParen
+>             <|> Constructor () (qualify unitId) <$-> rightParen
 >         minusOrTuple = const . UnaryMinus <$> expr1 <.> infixOrTuple
 >                                           <*-> rightParen
 >                    <|> rightParen <-*> optRecord qualify Variable
@@ -855,16 +856,16 @@ prefix of a let expression.
 >   where mkQIdent a = qualifyWith (mkMIdent (modul a)) (mkIdent (sval a))
 
 > colon :: Parser Token QualIdent a
-> colon = qConsId <$-> token Colon
+> colon = qualify consId <$-> token Colon
 
 > rightArrow :: Parser Token QualIdent a
-> rightArrow = qArrowId <$-> token RightArrow
+> rightArrow = qualify arrowId <$-> token RightArrow
 
 > minus :: Parser Token Ident a
 > minus = minusId <$-> token Sym_Minus
 
 > tupleCommas :: Parser Token QualIdent a
-> tupleCommas = qTupleId . (1 + ) . length <$> many1 comma
+> tupleCommas = qualify . tupleId . (1 + ) . length <$> many1 comma
 
 \end{verbatim}
 \paragraph{Layout}

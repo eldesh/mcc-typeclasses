@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TopEnv.lhs 2690 2008-05-01 20:40:17Z wlux $
+% $Id: TopEnv.lhs 2691 2008-05-01 22:08:36Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -77,7 +77,9 @@ imported.
 > predefTopEnv x y (TopEnv tup env) =
 >   case lookupEnv x env of
 >     Just _ -> error "internal error: predefTopEnv"
->     Nothing -> TopEnv tup (bindEnv x [(Import [],y)] env)
+>     Nothing -> TopEnv tup (bindEnv x' xs (bindEnv x xs env))
+>   where x' = qualify (unqualify x)
+>         xs = [(Import [],y)]
 
 \end{verbatim}
 In general, two entities are considered equal if the names of their

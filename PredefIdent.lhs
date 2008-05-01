@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PredefIdent.lhs 2690 2008-05-01 20:40:17Z wlux $
+% $Id: PredefIdent.lhs 2691 2008-05-01 22:08:36Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -96,14 +96,14 @@ Sect.~\ref{sec:simplify}).
 > minusId = mkIdent "-"
 
 > qUnitId, qNilId, qConsId, qListId, qArrowId :: QualIdent
-> qUnitId  = qualify unitId
-> qNilId   = qualify nilId
-> qConsId  = qualify consId
-> qListId  = qualify listId
-> qArrowId = qualify arrowId
+> qUnitId  = qualifyWith preludeMIdent unitId
+> qNilId   = qualifyWith preludeMIdent nilId
+> qConsId  = qualifyWith preludeMIdent consId
+> qListId  = qualifyWith preludeMIdent listId
+> qArrowId = qualifyWith preludeMIdent arrowId
 
 > qTupleId :: Int -> QualIdent
-> qTupleId = qualify . tupleId
+> qTupleId = qualifyWith preludeMIdent . tupleId
 
 > isQTupleId :: QualIdent -> Bool
 > isQTupleId = isTupleId . unqualify
@@ -146,12 +146,21 @@ Sect.~\ref{sec:simplify}).
 > isQSelectorId = isSelectorId . unqualify
 
 \end{verbatim}
-The identifiers of the unit, list, and tuple types must never be
-qualified with a module name. The function \texttt{isPrimTypeId} can
-be used to check for these identifiers.
+The type and data constructors of the unit, list, and tuple types are
+handled specially. Conceptually, these entities belong to the Prelude
+but they can be accessed only with special syntax and cannot be
+defined by the user. Furthermore, these entities are available in
+every module. The functions \texttt{isPrimTypeId} and
+\texttt{isPrimDataId} can be used to check for the type and data
+constructor identifiers of these types.
 \begin{verbatim}
 
 > isPrimTypeId :: QualIdent -> Bool
-> isPrimTypeId tc = tc `elem` [qUnitId,qListId,qArrowId] || isQTupleId tc
+> isPrimTypeId tc = tc' `elem` [unitId,listId,arrowId] || isTupleId tc'
+>   where tc' = unqualify tc
+
+> isPrimDataId :: QualIdent -> Bool
+> isPrimDataId c = c' `elem` [unitId,nilId,consId] || isTupleId c'
+>   where c' = unqualify c
 
 \end{verbatim}

@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: data.nw 2345 2007-06-23 09:58:12Z wlux $
+% $Id: data.nw 2691 2008-05-01 22:08:36Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Predefined Data Types}
@@ -31,67 +31,67 @@ The descriptors for the data constructors \texttt{()}, \texttt{[]},
 \texttt{:}, and \texttt{Success} are defined by the runtime system.
 
 <<data.h>>=
-#define UNIT_TAG	___40__41__tag
-#define NIL_TAG		___91__93__tag
-#define CONS_TAG	___58__tag
-#define SUCCESS_TAG	__Success_tag
+#define UNIT_TAG	__Prelude___40__41__tag
+#define NIL_TAG		__Prelude___91__93__tag
+#define CONS_TAG	__Prelude___58__tag
+#define SUCCESS_TAG	__Prelude__Success_tag
 
 enum { UNIT_TAG };
 enum { NIL_TAG, CONS_TAG };
 enum { SUCCESS_TAG };
 
-DECLARE_CONST(___40__41_);
-DECLARE_CONST(___91__93_);
-DECLARE_DATA(___58_);
-DECLARE_CONST(__Success);
+DECLARE_CONST(__Prelude___40__41_);
+DECLARE_CONST(__Prelude___91__93_);
+DECLARE_DATA(__Prelude___58_);
+DECLARE_CONST(__Prelude__Success);
 
 #ifdef CURRY_RTS
-# define nil		CONST(___91__93_)
-# define unit		CONST(___40__41_)
-# define Success	CONST(__Success)
-# define cons_info	___58__info
+# define nil		CONST(__Prelude___91__93_)
+# define unit		CONST(__Prelude___40__41_)
+# define Success	CONST(__Prelude__Success)
+# define cons_info	__Prelude___58__info
 # define cons_node_size	closure_node_size(2)
 #endif
 
 @ 
 <<data.c>>=
-DEFINE_CONST(___40__41_, "()", UNIT_TAG);
-DEFINE_CONST(___91__93_, "[]", NIL_TAG);
-DEFINE_DATA(___58_, ":", CONS_TAG, 2);
-DEFINE_CONST(__Success, "success", SUCCESS_TAG);
+DEFINE_CONST(__Prelude___40__41_, "()", UNIT_TAG);
+DEFINE_CONST(__Prelude___91__93_, "[]", NIL_TAG);
+DEFINE_DATA(__Prelude___58_, ":", CONS_TAG, 2);
+DEFINE_CONST(__Prelude__Success, "success", SUCCESS_TAG);
 
 @ 
-The functions [[___40__41__unify]], [[___91__93__unify]], and
-[[___58__unify]] instantiate an unbound variable with a fresh data
-term. There is no corresponding function for type [[Success]] because
-its constructor is hidden and cannot be instantiated in a flexible
-match. Note that these functions expect the variable to be bound and
-the return address on the stack rather than in argument registers
-because these functions are usually invoked after continuing an
-encapsulated search.
+The functions [[__Prelude___40__41__unify]],
+[[__Prelude___91__93__unify]], and [[__Prelude___58__unify]]
+instantiate an unbound variable with a fresh data term. There is no
+corresponding function for type [[Success]] because its constructor is
+hidden and cannot be instantiated in a flexible match. Note that these
+functions expect the variable to be bound and the return address on
+the stack rather than in argument registers because these functions
+are usually invoked after continuing an encapsulated search.
 
 <<data.h>>=
-DECLARE_LABEL(extern, ___40__41__unify);
-DECLARE_LABEL(extern, ___91__93__unify);
-DECLARE_LABEL(extern, ___58__unify);
+DECLARE_LABEL(extern, __Prelude___40__41__unify);
+DECLARE_LABEL(extern, __Prelude___91__93__unify);
+DECLARE_LABEL(extern, __Prelude___58__unify);
 
 <<data.c>>=
-FUNCTION(___40__41__unify)
+FUNCTION(__Prelude___40__41__unify)
 {
- ENTRY_LABEL(extern, ___40__41__unify)
-    CALL_RET2(bind_var, 1, regs.sp[0], CONST(___40__41_));
+ ENTRY_LABEL(extern, __Prelude___40__41__unify)
+    CALL_RET2(bind_var, 1, regs.sp[0], CONST(__Prelude___40__41_));
 }
 
-FUNCTION(___91__93__unify)
+FUNCTION(__Prelude___91__93__unify)
 {
- ENTRY_LABEL(extern, ___91__93__unify)
-    CALL_RET2(bind_var, 1, regs.sp[0], CONST(___91__93_));
+ ENTRY_LABEL(extern, __Prelude___91__93__unify)
+    CALL_RET2(bind_var, 1, regs.sp[0], CONST(__Prelude___91__93_));
 }
 
-FUNCTION(___58__unify)
+FUNCTION(__Prelude___58__unify)
 {
     Node *v1, *v2, *n;
- ENTRY_LABEL(extern, ___58__unify)
+ ENTRY_LABEL(extern, __Prelude___58__unify)
     CHECK_HEAP(0, 2 * variable_node_size + cons_node_size);
 
     v1		= (Node *)regs.hp;
@@ -118,25 +118,27 @@ FUNCTION(___58__unify)
 }
 
 @ 
-The function [[___58_]] is used for partial applications of the list
-constructor. Note that it is not necessary to export the entry point
-because the function will never be called directly.
+The function [[__Prelude___58_]] is used for partial applications of
+the list constructor. Note that it is not necessary to export the
+entry point because the function will never be called directly.
 
 <<data.h>>=
-extern NodeInfo ___58__papp_info_table[];
-extern const struct closure_node ___58__function;
+extern NodeInfo __Prelude___58__papp_info_table[];
+extern const struct closure_node __Prelude___58__function;
 
 @ 
 <<data.c>>=
-DECLARE_LABEL(static, ___58_);
+DECLARE_LABEL(static, __Prelude___58_);
 DECLARE_LABEL(static, apply_clos_0_2);
 DECLARE_LABEL(static, apply_clos_1_2);
 
-NodeInfo ___58__papp_info_table[] = {
-    PAPPINFO(":", 0, ___58_, 2)
-    PAPPINFO(":", 1, ___58_, 2)
+NodeInfo __Prelude___58__papp_info_table[] = {
+    PAPPINFO(":", 0, __Prelude___58_, 2)
+    PAPPINFO(":", 1, __Prelude___58_, 2)
 };
-const struct closure_node ___58__function = { ___58__papp_info_table, { 0 } };
+const struct closure_node __Prelude___58__function = {
+    __Prelude___58__papp_info_table, { 0 }
+};
 
 static
 FUNCTION(apply_clos_0_2)
@@ -157,10 +159,10 @@ FUNCTION(apply_clos_1_2)
 }
 
 static
-FUNCTION(___58_)
+FUNCTION(__Prelude___58_)
 {
     Node *cons;
- ENTRY_LABEL(static, ___58_)
+ ENTRY_LABEL(static, __Prelude___58_)
     TRACE_FUN(":", 2);
 
     CHECK_HEAP(2, cons_node_size);

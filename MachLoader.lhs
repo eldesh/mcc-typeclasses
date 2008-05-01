@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachLoader.lhs 2621 2008-02-08 14:42:02Z wlux $
+% $Id: MachLoader.lhs 2691 2008-05-01 22:08:36Z wlux $
 %
 % Copyright (c) 1998-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -281,7 +281,7 @@ names to node tags and function names to function triples.
 >         isApName ('@':cs) = all isDigit cs
 >         isApName _ = False
 >         apArity ('@':cs) = if null cs then 1 else read cs
->         tupleArity f' = length f' - 1
+>         tupleArity ('P':'r':'e':'l':'u':'d':'e':'.':'(':cs) = length cs
 
 \end{verbatim}
 The environment holding the \verb|ccall|able primitives does not change.

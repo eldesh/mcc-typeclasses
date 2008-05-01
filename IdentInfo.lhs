@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: IdentInfo.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: IdentInfo.lhs 2691 2008-05-01 22:08:36Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{IdentInfo.lhs}
@@ -60,7 +60,8 @@ types.
 > initTEnv = foldr (uncurry (predefType . rootOfType)) emptyTEnv predefTypes
 >   where emptyTEnv =
 >           emptyTopEnv (Just (map (tupleType . rootOfType) tupleTypes))
->         predefType tc cs = predefTopEnv tc (Data tc (map fst cs))
+>         predefType tc cs =
+>           predefTopEnv tc (Data tc (map (unqualify . fst) cs))
 >         tupleType tc = Data tc [unqualify tc]
 
 \end{verbatim}
@@ -115,8 +116,7 @@ and tuple types.
 >     | otherwise = Nothing
 
 > initVEnv :: FunEnv
-> initVEnv =
->   foldr (predefCon . qualify . fst) emptyVEnv (concatMap snd predefTypes)
+> initVEnv = foldr (predefCon . fst) emptyVEnv (concatMap snd predefTypes)
 >   where emptyVEnv = emptyTopEnv (Just (map (Constr . rootOfType) tupleTypes))
 >         predefCon c = predefTopEnv c (Constr c)
 

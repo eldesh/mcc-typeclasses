@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: Desugar.lhs 2691 2008-05-01 22:08:36Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -103,12 +103,13 @@ too, unless the compiler is compiling module \texttt{Ratio}.
 
 > bindPredef :: ModuleIdent -> ValueEnv -> ValueEnv
 > bindPredef m tyEnv =
->   foldr (bindConstr m) tyEnv [successConstr,ratioConstr (TypeVariable 0)]
+>   foldr (uncurry bindConstr) tyEnv
+>         [(Nothing,successConstr),(Just m,ratioConstr (TypeVariable 0))]
 >   where bindConstr m (Constructor ty c) =
->           if Just m == m' then id else bind m' c' (dataConstr c ty)
+>           if m == m' then id else bind m c m' c' (dataConstr c ty)
 >           where (m',c') = splitQualIdent c
->         bind (Just m) = qualImportTopEnv m
->         bind Nothing = localBindTopEnv
+>         bind Nothing c _ _ = qualBindTopEnv c
+>         bind (Just _) _ (Just m) c = qualImportTopEnv m c
 >         dataConstr c ty = DataConstructor c [] stdConstrInfo (polyType ty)
 
 \end{verbatim}
@@ -899,14 +900,14 @@ Prelude entities
 > preludeFun tys ty f =
 >   Variable (foldr TypeArrow ty tys) (qualifyWith preludeMIdent (mkIdent f))
 
-> successConstr = Constructor successType (qualify successId)
+> successConstr = Constructor successType qSuccessId
 > ratioConstr a =
 >   Constructor (TypeArrow a (TypeArrow a (ratioType a)))
 >               (qualifyWith ratioMIdent (mkIdent ":%"))
 
 > truePattern = ConstructorPattern boolType qTrueId []
 > falsePattern = ConstructorPattern boolType qFalseId []
-> successPattern = ConstructorPattern successType (qualify successId) []
+> successPattern = ConstructorPattern successType qSuccessId []
 
 \end{verbatim}
 Auxiliary definitions

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PredefTypes.lhs 2628 2008-02-20 16:27:30Z wlux $
+% $Id: PredefTypes.lhs 2691 2008-05-01 22:08:36Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -12,7 +12,6 @@ compiler.
 
 > module PredefTypes where
 > import Ident
-> import PredefIdent
 > import PredefIdent
 > import Types
 
@@ -41,11 +40,11 @@ The unit, list, and tuple types are predefined and available in every
 module.
 \begin{verbatim}
 
-> predefTypes :: [(Type,[(Ident,Type)])]
+> predefTypes :: [(Type,[(QualIdent,Type)])]
 > predefTypes =
 >   let a = TypeVariable 0; b = TypeVariable 1 in [
->     (unitType,   [(unitId,unitType)]),
->     (listType a, [(nilId,nilType a), (consId,consType a)]),
+>     (unitType,   [(qUnitId,unitType)]),
+>     (listType a, [(qNilId,nilType a), (qConsId,consType a)]),
 >     (arrowType a b, [])
 >   ]
 >   where nilType a = listType a

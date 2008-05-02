@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 2693 2008-05-02 13:56:53Z wlux $
+% $Id: print.nw 2694 2008-05-02 14:02:26Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -24,7 +24,6 @@ extern void print_result(const char *var_names[], Node *vars[], Node *result);
 #include "heap.h"
 #include "stack.h"
 #include "trail.h"
-#include "data.h"
 #include "disequal.h"
 #include "vars.h"
 #include "cstring.h"

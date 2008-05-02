@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: equal.nw 2347 2007-06-23 10:34:08Z wlux $
+% $Id: equal.nw 2694 2008-05-02 14:02:26Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -30,14 +30,10 @@ DECLARE_LABEL(extern, ___61__61_);
 #include "stack.h"
 #include "eval.h"
 #include "threads.h"
-#include "data.h"
 #include "equal.h"
 #include "unify.h"
 #include "cam.h"
 #include "trace.h"
-
-DECLARE_CONST(__Prelude__True);
-DECLARE_CONST(__Prelude__False);
 
 #define pair_cons_node_size closure_node_size(3)
 static DEFINE_DATA(pair_cons, ",:", CONS_TAG, 3);

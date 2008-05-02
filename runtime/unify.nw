@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2692 2008-05-02 13:22:41Z wlux $
+% $Id: unify.nw 2694 2008-05-02 14:02:26Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -39,7 +39,6 @@ extern bool eq_args(unsigned int, Node *, Node *, unsigned int, Node **);
 #include "threads.h"
 #include "spaces.h"
 #include "trail.h"
-#include "data.h"
 #include "equal.h"
 #include "unify.h"
 #include "cam.h"
@@ -47,8 +46,6 @@ extern bool eq_args(unsigned int, Node *, Node *, unsigned int, Node **);
 
 #define pair_cons_node_size closure_node_size(3)
 static DEFINE_DATA(pair_cons, ",:", CONS_TAG, 3);
-
-DECLARE_CONST(__Prelude__True);
 
 DECLARE_LABEL(static, ___61__58__61__1);
 DECLARE_LABEL(static, ___61__58__61__2);

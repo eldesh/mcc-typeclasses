@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2692 2008-05-02 13:22:41Z wlux $
+% $Id: heap.nw 2694 2008-05-02 14:02:26Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -16,7 +16,6 @@
 #include "regs.h"
 #include "heap.h"
 #include "eval.h"
-#include "data.h"
 #include "main.h"
 
 @ 
@@ -821,6 +820,38 @@ info pointer of a data constructor.
 #ifdef CURRY_RTS
 # define CONST(name)		((Node *)(&name##_node))
 # define INFO(name)		(&name##_info)
+#endif
+
+@ 
+The descriptors for the data constructors \texttt{()}, \texttt{[]},
+\texttt{:}, \texttt{Bool}, and \texttt{Success}, which are defined in
+the Prelude, are used at various places in the runtime system.
+
+<<heap.h>>=
+#ifdef CURRY_RTS
+# define UNIT_TAG	__Prelude___40__41__tag
+# define NIL_TAG	__Prelude___91__93__tag
+# define CONS_TAG	__Prelude___58__tag
+# define SUCCESS_TAG	__Prelude__Success_tag
+
+enum { UNIT_TAG };
+enum { NIL_TAG, CONS_TAG };
+enum { SUCCESS_TAG };
+
+DECLARE_CONST(__Prelude___40__41_);
+DECLARE_CONST(__Prelude___91__93_);
+DECLARE_DATA(__Prelude___58_);
+DECLARE_CONST(__Prelude__True);
+DECLARE_CONST(__Prelude__False);
+DECLARE_CONST(__Prelude__Success);
+
+# define nil		CONST(__Prelude___91__93_)
+# define unit		CONST(__Prelude___40__41_)
+# define Prelude_False	CONST(__Prelude__False)
+# define Prelude_True	CONST(__Prelude__True)
+# define Success	CONST(__Prelude__Success)
+# define cons_info	__Prelude___58__info
+# define cons_node_size	closure_node_size(2)
 #endif
 
 @ 

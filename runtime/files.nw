@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2540 2007-10-26 06:56:21Z wlux $
+% $Id: files.nw 2694 2008-05-02 14:02:26Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -52,7 +52,6 @@ extern void init_files(int, long);
 #include "search.h"
 #include "trail.h"
 #include "eval.h"
-#include "data.h"
 #include "cstring.h"
 #include "cam.h"
 #include "io_monad.h"

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: curry.nw 2673 2008-04-21 07:00:31Z wlux $
+% $Id: curry.nw 2694 2008-05-02 14:02:26Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -35,7 +35,6 @@ header files from the standard C library.
 #include "threads.h"
 #include "spaces.h"
 #include "search.h"
-#include "data.h"
 #include "eval.h"
 #include "backtrack.h"
 #include "io_monad.h"

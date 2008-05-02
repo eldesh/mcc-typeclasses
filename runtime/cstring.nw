@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cstring.nw 2311 2007-06-20 11:58:18Z wlux $
+% $Id: cstring.nw 2694 2008-05-02 14:02:26Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -41,7 +41,6 @@ extern char *lit_double(char *buf, double d);
 #include "run.h"
 #include "regs.h"
 #include "heap.h"
-#include "data.h"
 #include "cstring.h"
 
 @

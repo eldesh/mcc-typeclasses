@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2673 2008-04-21 07:00:31Z wlux $
+% $Id: eval.nw 2694 2008-05-02 14:02:26Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -292,9 +292,6 @@ its argument evaluates to an unbound variable. This function is
 implemented only for compatibility with PAKCS.
 
 <<eval.c>>=
-DECLARE_CONST(__Prelude__True);
-DECLARE_CONST(__Prelude__False);
-
 DECLARE_LABEL(extern, __isVar);
 DECLARE_LABEL(static, __isVar_1);
 

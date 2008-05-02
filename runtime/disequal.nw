@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2673 2008-04-21 07:00:31Z wlux $
+% $Id: disequal.nw 2694 2008-05-02 14:02:26Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -39,14 +39,11 @@ DECLARE_LABEL(extern, ___61__47__61_);
 #include "threads.h"
 #include "spaces.h"
 #include "trail.h"
-#include "data.h"
 #include "unify.h"
 #include "equal.h"
 #include "disequal.h"
 #include "cam.h"
 #include "trace.h"
-
-DECLARE_CONST(__Prelude__True);
 
 DECLARE_LABEL(static, ___61__47__61__1);
 DECLARE_LABEL(static, ___61__47__61__2);

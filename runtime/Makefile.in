@@ -1,6 +1,6 @@
 # Makefile for the Curry runtime system
 #
-# $Id: Makefile.in 2638 2008-03-13 08:07:44Z wlux $
+# $Id: Makefile.in 2694 2008-05-02 14:02:26Z wlux $
 #
 # Copyright (c) 2001-2008, Wolfgang Lux
 # See ../LICENSE for the full license.
@@ -58,7 +58,6 @@ rts_H = curry.h \
 	backtrack.h \
 	search.h \
 	io_monad.h \
-	data.h \
 	eval.h \
 	equal.h \
 	unify.h \
@@ -92,7 +91,6 @@ rts_C = debug.c \
 	backtrack.c \
 	search.c \
 	io_monad.c \
-	data.c \
 	eval.c \
 	constraints.c \
 	unify.c \

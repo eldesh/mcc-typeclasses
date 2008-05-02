@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: KindCheck.lhs 2692 2008-05-02 13:22:41Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -23,6 +23,7 @@ applies kind checking to the module's type signatures.
 > import KindTrans
 > import List
 > import Monad
+> import PredefIdent
 > import Pretty
 > import SCC
 > import TopEnv
@@ -138,9 +139,9 @@ declarations.
 > instance HasType TypeExpr where
 >   fts m (ConstructorType tc) = fts m tc
 >   fts _ (VariableType _) = id
->   fts m (TupleType tys) = fts m tys
->   fts m (ListType ty) = fts m ty
->   fts m (ArrowType ty1 ty2) = fts m ty1 . fts m ty2
+>   fts m (TupleType tys) = (tupleId (length tys) :) . fts m tys
+>   fts m (ListType ty) = (listId :) . fts m ty
+>   fts m (ArrowType ty1 ty2) = (arrowId :) . fts m ty1 . fts m ty2
 >   fts m (ApplyType ty1 ty2) = fts m ty1 . fts m ty2
 
 > instance HasType (Equation a) where

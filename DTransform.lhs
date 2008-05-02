@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2691 2008-05-01 22:08:36Z wlux $
+% $Id: DTransform.lhs 2692 2008-05-02 13:22:41Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2008, Wolfgang Lux
@@ -52,7 +52,7 @@ children.
 
 > dTransform :: (QualIdent -> Bool) -> Module -> Module
 > dTransform trusted (Module m is ds) =
->   Module m (debugPreludeMIdent:is) (debugDecls m trusted ds)
+>   Module m (debugPreludeMIdent:is) (debugDecls trusted ds)
 
 \end{verbatim}
 
@@ -79,31 +79,29 @@ all.
 
 > data SymbolType = IsFunction | IsConstructor deriving (Eq,Show)
 
-> debugDecls :: ModuleIdent -> (QualIdent -> Bool) -> [Decl] -> [Decl]
-> debugDecls m trusted ds = 
->   concatMap (generateAuxFuncs m) (nub (typesPredefined ds)) ++
->   concatMap (debugDecl m trusted) ds
+> debugDecls :: (QualIdent -> Bool) -> [Decl] -> [Decl]
+> debugDecls trusted ds = concatMap (debugDecl trusted) ds
 
-> debugDecl :: ModuleIdent -> (QualIdent -> Bool) -> Decl -> [Decl]
-> debugDecl m _ (DataDecl tc n cs) = DataDecl tc n cs' : concat ds'
->   where (cs',ds') = unzip (map (debugConstrDecl m ty0) cs)
+> debugDecl :: (QualIdent -> Bool) -> Decl -> [Decl]
+> debugDecl _ (DataDecl tc n cs) = DataDecl tc n cs' : concat ds'
+>   where (cs',ds') = unzip (map (debugConstrDecl ty0) cs)
 >         ty0 = TypeConstructor tc (map TypeVariable [0..n-1])
-> debugDecl m _ (TypeDecl tc n ty) = [TypeDecl tc n (transformType ty)]
-> debugDecl m trusted (FunctionDecl f vs ty e)
+> debugDecl _ (TypeDecl tc n ty) = [TypeDecl tc n (transformType ty)]
+> debugDecl trusted (FunctionDecl f vs ty e)
 >   | isQSelectorId f = [FunctionDecl f vs ty e]
 >   | otherwise =
->       generateAuxFuncs m (f,IsFunction,length vs,ty) ++
->       [debugFunction m trusted f vs ty e]
-> debugDecl m _ (ForeignDecl f cc s ty) =
->   generateAuxFuncs m (f,IsFunction,n',ty) ++
->   generateForeign m f cc s n' ty
+>       generateAuxFuncs (f,IsFunction,length vs,ty) ++
+>       [debugFunction trusted f vs ty e]
+> debugDecl _ (ForeignDecl f cc s ty) =
+>   generateAuxFuncs (f,IsFunction,n',ty) ++
+>   generateForeign f cc s n' ty
 >   where n = typeArity ty
 >         n' = if isIOType (resultType ty) then n + 1 else n
 
-> debugConstrDecl :: ModuleIdent -> Type -> ConstrDecl -> (ConstrDecl,[Decl])
-> debugConstrDecl m ty0 (ConstrDecl c tys) =
+> debugConstrDecl :: Type -> ConstrDecl -> (ConstrDecl,[Decl])
+> debugConstrDecl ty0 (ConstrDecl c tys) =
 >   (ConstrDecl c (map transformType tys),
->    generateAuxFuncs m (c,IsConstructor,length tys,ty))
+>    generateAuxFuncs (c,IsConstructor,length tys,ty))
 >   where ty = normalizeType (foldr TypeArrow ty0 tys)
 
 > normalizeType :: Type -> Type
@@ -146,9 +144,9 @@ Some auxiliary functions widely used throughout the module.
 > debugRenameId suffix ident =
 >   renameIdent (mkIdent (debugPrefix ++ name ident ++ suffix)) (uniqueId ident)
 
-> debugRenameqId :: String -> ModuleIdent -> QualIdent -> QualIdent
-> debugRenameqId suffix mIdent qIdent =
->   qualifyWith (maybe mIdent id mIdent') (debugRenameId suffix ident')
+> debugRenameqId :: String -> QualIdent -> QualIdent
+> debugRenameqId suffix qIdent =
+>   maybe qualify qualifyWith mIdent' (debugRenameId suffix ident')
 >   where (mIdent',ident') = splitQualIdent qIdent
 
 \end{verbatim}
@@ -159,14 +157,6 @@ constructing expressions of the form (a,b) and the name of function
 {\tt clean}.
 
 \begin{verbatim}
-
-> typeCons :: Type
-> typeCons = TypeArrow t (TypeArrow (debugTypeList t) (debugTypeList t))
->   where t = TypeVariable 0
-
-> typeTuple :: Int -> Type
-> typeTuple n = foldr TypeArrow (debugTypeTuple ts) ts
->   where ts = [TypeVariable i | i <- [0 .. n - 1]]
 
 > debugTypeList :: Type -> Type
 > debugTypeList t = TypeConstructor qListId [t]
@@ -306,10 +296,9 @@ higher order primitives defined in \texttt{DebugPrelude} indeed have
 the same arity as the original primitives.
 \begin{verbatim}
 
-> generateForeign :: ModuleIdent -> QualIdent -> CallConv -> String -> Int
->                 -> Type -> [Decl]
-> generateForeign m f cc s n ty = FunctionDecl f' vs ty' e : ds
->   where f' = changeFunctionqId m f
+> generateForeign :: QualIdent -> CallConv -> String -> Int -> Type -> [Decl]
+> generateForeign f cc s n ty = FunctionDecl f' vs ty' e : ds
+>   where f' = changeFunctionqId f
 >         vs = map (mkIdent . ("_"++) . show) [0..n-1]
 >         ty' = transformFunType n ty
 >         (e,ds) = debugForeign f cc s n (map Variable vs) ty
@@ -367,24 +356,22 @@ generates the new auxiliary functions.
 
 \begin{verbatim}
 
-> generateAuxFuncs :: ModuleIdent -> (QualIdent,SymbolType,Int,Type) -> [Decl]
-> generateAuxFuncs m (f,IsFunction,n,ty) =
->   map (generateAuxFunc m f ty (Function f n)) [0..n-2]
-> generateAuxFuncs m (c,IsConstructor,n,ty) =
->   map (generateAuxFunc m c' ty (Constructor c n)) [0..n-1]
->   where c' = if isPrimDataId c then qualify (unqualify c) else c
+> generateAuxFuncs :: (QualIdent,SymbolType,Int,Type) -> [Decl]
+> generateAuxFuncs (f,IsFunction,n,ty) =
+>   map (generateAuxFunc f ty (Function f n)) [0..n-2]
+> generateAuxFuncs (c,IsConstructor,n,ty) =
+>   map (generateAuxFunc c ty (Constructor c n)) [0..n-1]
 
-> generateAuxFunc :: ModuleIdent -> QualIdent -> Type -> Expression -> Int
->                 -> Decl
-> generateAuxFunc m f ty e i = FunctionDecl f' vs ty' e'
->   where f' = qidAuxiliaryFunction m f i
+> generateAuxFunc :: QualIdent -> Type -> Expression -> Int -> Decl
+> generateAuxFunc f ty e i = FunctionDecl f' vs ty' e'
+>   where f' = qidAuxiliaryFunction f i
 >         vs = map (mkIdent . ("_"++) . show) [0..i]
 >         ty' = transformFunType (i+1) ty
->         app = debugFirstPhase m (createApply e (map Variable vs))
+>         app = debugFirstPhase (createApply e (map Variable vs))
 >         e' = debugBuildPairExp app void
 
-> qidAuxiliaryFunction :: ModuleIdent -> QualIdent -> Int -> QualIdent
-> qidAuxiliaryFunction m f n = debugRenameqId ('#':show n) m f
+> qidAuxiliaryFunction :: QualIdent -> Int -> QualIdent
+> qidAuxiliaryFunction f n = debugRenameqId ('#':show n) f
 
 > extractApply :: Expression -> [Expression] -> (Expression,[Expression])
 > extractApply (Apply e1 e2) l = extractApply e1 (e2:l)
@@ -443,7 +430,8 @@ for \texttt{IO}.
 > transformType ty@(TypeArrow _ _) = transformFunType 1 ty
 > transformType (TypeConstructor tc tys)
 >   | tc `elem` [qPtrId,qFunPtrId,qStablePtrId] = TypeConstructor tc tys
->   | tc == qIOId = TypeConstructor tc [transformFunType 0 (head tys)]
+>   | tc == qIOId && length tys == 1 =
+>       TypeConstructor tc [transformFunType 0 (head tys)]
 >   | otherwise = TypeConstructor tc (map transformType tys)
 > transformType (TypeVariable v) = TypeVariable v
 
@@ -480,62 +468,20 @@ for \texttt{IO}.
 
 \end{verbatim}
 
-The transformation must add auxiliary functions for all partial applications
-of the list constructor and tuple constructors which are used in the module.
-These constructors are defined implicitly in every module, therefore we collect
-these definitions here.
-\begin{verbatim}
-
-> type DebugTypeList = [(QualIdent,SymbolType,Int,Type)]
-
-> typesPredefined :: [Decl] -> DebugTypeList
-> typesPredefined ds = nub (foldr typesBody [] ds)
-
-> typesBody :: Decl -> DebugTypeList -> DebugTypeList
-> typesBody (DataDecl _ _ _) = id
-> typesBody (TypeDecl _ _ _) = id
-> typesBody (FunctionDecl _ _ _ e) = typesExpr e
-> typesBody (ForeignDecl _ _ _ _) = id
-
-> typesExpr :: Expression -> DebugTypeList -> DebugTypeList
-> typesExpr (Literal _) env = env
-> typesExpr (Variable _) env = env
-> typesExpr (Function _ _) env = env
-> typesExpr (Constructor qId n) env =
->   if isPrimDataId qId && n > 0 then env' else env
->   where env' = (qId,IsConstructor,n,debugTypePredef qId n) : env
-> typesExpr (Apply e1 e2) env = typesExpr e1 (typesExpr e2 env)
-> typesExpr (Case _ e alts) env = typesExpr e (foldr typesAlt env alts)
->   where typesAlt (Alt _ e) = typesExpr e
-> typesExpr (Or e1 e2) env = typesExpr e1 (typesExpr e2 env)
-> typesExpr (Exist _ e) env = typesExpr e env
-> typesExpr (Let (Binding _ e1) e2) env = typesExpr e1 (typesExpr e2 env)
-> typesExpr (Letrec binds e) env = foldr typesBinding (typesExpr e env) binds
->   where typesBinding (Binding _ e) = typesExpr e
-> typesExpr (SrcLoc _ e) env = typesExpr e env
-
-> debugTypePredef :: QualIdent -> Int -> Type
-> debugTypePredef qId n
->   | qId == qConsId && n == 2 = typeCons
->   | isQTupleId qId = typeTuple n
->   | otherwise = error ("debugTypePredef: " ++ show qId ++ "/" ++ show n)
-
-\end{verbatim}
-
 The transformation of user defined functions is performed in two
 phases.
 
 \begin{verbatim}
 
-> debugFunction :: ModuleIdent -> (QualIdent -> Bool) -> QualIdent -> [Ident]
->               -> Type -> Expression -> Decl
-> debugFunction m trusted f vs ty e = FunctionDecl f' vs ty' e'
->   where f' = changeFunctionqId m f
+> debugFunction :: (QualIdent -> Bool) -> QualIdent -> [Ident] -> Type
+>               -> Expression -> Decl
+> debugFunction trusted f vs ty e = FunctionDecl f' vs ty' e'
+>   where f' = changeFunctionqId f
 >         ty' = transformFunType (length vs) ty
->         e' = debugSecondPhase f (trusted f) vs ty' (debugFirstPhase m e)
+>         e' = debugSecondPhase f (trusted f) vs ty' (debugFirstPhase e)
 
-> changeFunctionqId :: ModuleIdent -> QualIdent -> QualIdent
-> changeFunctionqId m f = debugRenameqId "" m f
+> changeFunctionqId :: QualIdent -> QualIdent
+> changeFunctionqId f = debugRenameqId "" f
 
 \end{verbatim}
 
@@ -544,41 +490,38 @@ function and partial constructor applications.
 
 \begin{verbatim}
 
-> debugFirstPhase :: ModuleIdent -> Expression -> Expression
-> debugFirstPhase m e = firstPhase m 0 e
+> debugFirstPhase :: Expression -> Expression
+> debugFirstPhase e = firstPhase 0 e
 
 > class FirstPhase a where
->   firstPhase :: ModuleIdent -> Int -> a -> a
+>   firstPhase :: Int -> a -> a
 
 > instance FirstPhase a => FirstPhase [a] where
->   firstPhase m d = map (firstPhase m d)
+>   firstPhase d = map (firstPhase d)
 
 > instance FirstPhase Expression where
->   firstPhase _ _ (Literal l) = Literal l
->   firstPhase _ _ (Variable v) = Variable v
->   firstPhase m d (Function f n)
+>   firstPhase _ (Literal l) = Literal l
+>   firstPhase _ (Variable v) = Variable v
+>   firstPhase d (Function f n)
 >     | isQSelectorId f = Function f n
->     | d < n-1         = Function (qidAuxiliaryFunction m f d) (d+1)
->     | otherwise       = Function (changeFunctionqId m f) n
->   firstPhase m d (Constructor c n)
->     | d < n     = Function (qidAuxiliaryFunction m c' d) (d+1)
+>     | d < n-1         = Function (qidAuxiliaryFunction f d) (d+1)
+>     | otherwise       = Function (changeFunctionqId f) n
+>   firstPhase d (Constructor c n)
+>     | d < n     = Function (qidAuxiliaryFunction c d) (d+1)
 >     | otherwise = Constructor c n
->      where c' = if isPrimDataId c then qualify (unqualify c) else c
->   firstPhase m d (Apply e1 e2) =
->     Apply (firstPhase m (d+1) e1) (firstPhase m 0 e2)
->   firstPhase m _ (Case rf e as) =
->     Case rf (firstPhase m 0 e) (firstPhase m 0 as)
->   firstPhase m _ (Or e1 e2) = Or (firstPhase m 0 e1) (firstPhase m 0 e2)
->   firstPhase m _ (Exist v e) = Exist v (firstPhase m 0 e)
->   firstPhase m _ (Let d e) = Let (firstPhase m 0 d) (firstPhase m 0 e)
->   firstPhase m _ (Letrec ds e) = Letrec (firstPhase m 0 ds) (firstPhase m 0 e)
->   firstPhase m _ (SrcLoc p e) = SrcLoc p (firstPhase m 0 e)
+>   firstPhase d (Apply e1 e2) = Apply (firstPhase (d+1) e1) (firstPhase 0 e2)
+>   firstPhase _ (Case rf e as) = Case rf (firstPhase 0 e) (firstPhase 0 as)
+>   firstPhase _ (Or e1 e2) = Or (firstPhase 0 e1) (firstPhase 0 e2)
+>   firstPhase _ (Exist v e) = Exist v (firstPhase 0 e)
+>   firstPhase _ (Let d e) = Let (firstPhase 0 d) (firstPhase 0 e)
+>   firstPhase _ (Letrec ds e) = Letrec (firstPhase 0 ds) (firstPhase 0 e)
+>   firstPhase _ (SrcLoc p e) = SrcLoc p (firstPhase 0 e)
 
 > instance FirstPhase Alt where
->   firstPhase m d (Alt t e) = Alt t (firstPhase m d e)
+>   firstPhase d (Alt t e) = Alt t (firstPhase d e)
 
 > instance FirstPhase Binding where
->   firstPhase m d (Binding v e) = Binding v (firstPhase m d e)
+>   firstPhase d (Binding v e) = Binding v (firstPhase d e)
 
 \end{verbatim}
 

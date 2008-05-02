@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ImportSyntaxCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: ImportSyntaxCheck.lhs 2692 2008-05-02 13:22:41Z wlux $
 %
-% Copyright (c) 2000-2007, Wolfgang Lux
+% Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ImportSyntaxCheck.lhs}
@@ -20,6 +20,7 @@ import declarations.
 > import IdentInfo
 > import List
 > import Maybe
+> import PredefIdent
 
 > checkImports :: Interface -> Maybe ImportSpec -> Error (Maybe ImportSpec)
 > checkImports (Interface m _ ds) =
@@ -135,13 +136,18 @@ The functions \texttt{expandImport} and \texttt{expandHiding} check
 that all entities in an import specification are actually exported
 from the module. In addition, all imports of type constructors are
 changed into a \texttt{T()} specification and explicit imports for the
-data constructors are added.
+data constructors are added. The code of \texttt{expandSpecs} ensures
+that the unit, list, and tuple types are always imported from the
+Prelude even if its imported entities are specified explicitly.
 \begin{verbatim}
 
 > expandSpecs :: ModuleIdent -> ExpTypeEnv -> ExpFunEnv -> ImportSpec
 >             -> Error ImportSpec
 > expandSpecs m tEnv vEnv (Importing p is) =
->   liftE (Importing p . concat) (mapE (expandImport p m tEnv vEnv) is)
+>   liftE (Importing p . (is' ++) . concat)
+>         (mapE (expandImport p m tEnv vEnv) is)
+>   where is' = [importType t | m == preludeMIdent,
+>                               (tc,t) <- envToList tEnv, isPrimTypeId tc]
 > expandSpecs m tEnv vEnv (Hiding p is) =
 >   liftE (Hiding p . concat) (mapE (expandHiding p m tEnv vEnv) is)
 
@@ -214,6 +220,10 @@ data constructors are added.
 >     Just (Alias _) -> return (True,[])
 >     Just (Class _ fs) -> return (False,fs)
 >     Nothing -> errorAt p (undefinedEntity m tc)
+
+> importType :: TypeKind -> Import
+> importType (Data tc xs) = ImportTypeWith (unqualify tc) xs
+> importType (Alias tc) = ImportTypeWith (unqualify tc) []
 
 \end{verbatim}
 Error messages.

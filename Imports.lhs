@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2690 2008-05-01 20:40:17Z wlux $
+% $Id: Imports.lhs 2692 2008-05-02 13:22:41Z wlux $
 %
 % Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -95,7 +95,8 @@ all instance declarations are always imported into the current module.
 
 > addCT :: ModuleIdent -> IDecl -> InstSet -> InstSet
 > addCT m (IInstanceDecl _ _ cls ty _) = addToSet $
->   CT (qualQualify m cls) (if isPrimTypeId tc then tc else qualQualify m tc)
+>   CT (qualQualify m cls)
+>      (if isPrimTypeId (unqualify tc) then tc else qualQualify m tc)
 >   where tc = typeConstr ty
 > addCT _ _ = id
 

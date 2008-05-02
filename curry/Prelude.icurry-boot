@@ -16,6 +16,7 @@ infix 4 <;
 infix 4 <=;
 infix 4 >=;
 infix 4 >;
+infixr 5 :;
 infixr 0 $;
 infixr 0 $!;
 infixr 0 $!!;
@@ -33,6 +34,67 @@ infix 4 `elem`;
 infix 4 `notElem`;
 infixr 0 `seq`;
 infixr 2 ||;
+data () = ();
+data (,) a b = (,) a b;
+data (,,) a b c = (,,) a b c;
+data (,,,) a b c d = (,,,) a b c d;
+data (,,,,) a b c d e = (,,,,) a b c d e;
+data (,,,,,) a b c d e f = (,,,,,) a b c d e f;
+data (,,,,,,) a b c d e f g = (,,,,,,) a b c d e f g;
+data (,,,,,,,) a b c d e f g h = (,,,,,,,) a b c d e f g h;
+data (,,,,,,,,) a b c d e f g h i = (,,,,,,,,) a b c d e f g h i;
+data (,,,,,,,,,) a b c d e f g h i j
+  = (,,,,,,,,,) a b c d e f g h i j;
+data (,,,,,,,,,,) a b c d e f g h i j k
+  = (,,,,,,,,,,) a b c d e f g h i j k;
+data (,,,,,,,,,,,) a b c d e f g h i j k l
+  = (,,,,,,,,,,,) a b c d e f g h i j k l;
+data (,,,,,,,,,,,,) a b c d e f g h i j k l m
+  = (,,,,,,,,,,,,) a b c d e f g h i j k l m;
+data (,,,,,,,,,,,,,) a b c d e f g h i j k l m n
+  = (,,,,,,,,,,,,,) a b c d e f g h i j k l m n;
+data (,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o
+  = (,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o;
+data (,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p
+  = (,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p;
+data (,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q
+  = (,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q;
+data (,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r
+  = (,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r;
+data (,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s
+  = (,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s;
+data (,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t
+  = (,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t;
+data (,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u
+  = (,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u;
+data (,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v
+  = (,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u
+			    v;
+data (,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w
+  = (,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t
+			     u v w;
+data (,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x
+  = (,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t
+			      u v w x;
+data (,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y
+  = (,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s
+			       t u v w x y;
+data (,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y z
+  = (,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s
+				t u v w x y z;
+data (,,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y z a1
+  = (,,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r
+				 s t u v w x y z a1;
+data (,,,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y z a1 b1
+  = (,,,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r
+				  s t u v w x y z a1 b1;
+data (,,,,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y z a1 b1 c1
+  = (,,,,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q
+				   r s t u v w x y z a1 b1 c1;
+data (,,,,,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y z a1 b1 c1 d1
+  = (,,,,,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q
+				    r s t u v w x y z a1 b1 c1 d1;
+data (->) a b;
 data Bool = False | True;
 class Bounded a where {
 minBound :: a;
@@ -123,6 +185,7 @@ showList :: [a] -> [Char] -> [Char]
 type ShowS = [Char] -> [Char];
 type String = [Char];
 data Success;
+data [] a = [] | (:) a [a];
 type Ratio.Rational = Ratio.Ratio Integer;
 (!!) :: [a] -> Int -> a;
 ($) :: (a -> b) -> a -> b;
@@ -270,10 +333,10 @@ instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f) =>
 	 Eq (a, b, c, d, e, f);
 instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g) =>
 	 Eq (a, b, c, d, e, f, g);
-instance Eq a => Eq [a];
 instance Eq Bool;
 instance Eq Char;
 instance (Eq a, Eq b) => Eq (Either a b);
+instance Eq a => Eq [a];
 instance Enum Float;
 instance Eq Float;
 {-# DATA Ratio.Ratio a #-};
@@ -289,9 +352,9 @@ instance Integral Int;
 instance Integral Integer;
 instance Eq a => Eq (Maybe a);
 instance Functor Maybe;
-instance Monad [];
 instance Monad IO;
 instance Monad Maybe;
+instance Monad [];
 instance Num Float;
 instance Num Int;
 instance Num Integer;
@@ -305,7 +368,6 @@ instance (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f) =>
 	 Ord (a, b, c, d, e, f);
 instance (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g) =>
 	 Ord (a, b, c, d, e, f, g);
-instance Ord a => Ord [a];
 instance Ord Bool;
 instance Ord Char;
 instance (Ord a, Ord b) => Ord (Either a b);
@@ -313,6 +375,7 @@ instance Ord Float;
 instance Ord Int;
 instance Ord Integer;
 instance Ord a => Ord (Maybe a);
+instance Ord a => Ord [a];
 instance Bounded Ordering;
 instance Enum Ordering;
 instance Eq Ordering;
@@ -332,7 +395,6 @@ instance (Show a, Show b, Show c, Show d, Show e, Show f) =>
 instance (Show a, Show b, Show c, Show d, Show e, Show f,
 	  Show g) =>
 	 Show (a, b, c, d, e, f, g);
-instance Show a => Show [a];
 instance Show Bool;
 instance Show Char;
 instance (Show a, Show b) => Show (Either a b);
@@ -341,6 +403,7 @@ instance Show Int;
 instance Show Integer;
 instance Show a => Show (Maybe a);
 instance Show Ordering;
+instance Show a => Show [a];
 instance Show Success;
 instance Integral a => Enum (Ratio.Ratio a) {-# MODULE Ratio #-};
 instance Integral a => Eq (Ratio.Ratio a) {-# MODULE Ratio #-};

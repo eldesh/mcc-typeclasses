@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IdentInfo.lhs 2691 2008-05-01 22:08:36Z wlux $
+% $Id: IdentInfo.lhs 2692 2008-05-02 13:22:41Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -14,19 +14,15 @@ map type and value identifiers on their kinds.
 > import Ident
 > import List
 > import NestEnv
-> import PredefTypes
 > import Set
 > import TopEnv
-> import Types
 
 \end{verbatim}
 At the type level, we distinguish data and renaming types, synonym
 types, and type classes. Type variables are not recorded. Type
 synonyms use a kind of their own so that the compiler can verify that
 no type synonyms are used in type expressions in interface files. The
-initial type identifier environment \texttt{initTEnv} is initialized
-with the type constructors of the predefined unit, list, and tuple
-types.
+initial type identifier environment \texttt{initTEnv} is empty.
 \begin{verbatim}
 
 > type TypeEnv = TopEnv TypeKind
@@ -57,12 +53,7 @@ types.
 >     | otherwise = Nothing
 
 > initTEnv :: TypeEnv
-> initTEnv = foldr (uncurry (predefType . rootOfType)) emptyTEnv predefTypes
->   where emptyTEnv =
->           emptyTopEnv (Just (map (tupleType . rootOfType) tupleTypes))
->         predefType tc cs =
->           predefTopEnv tc (Data tc (map (unqualify . fst) cs))
->         tupleType tc = Data tc [unqualify tc]
+> initTEnv = emptyTopEnv
 
 \end{verbatim}
 When checking for duplicate instance declarations, the compiler uses a
@@ -90,9 +81,7 @@ import paths of the constructors and labels are not relevant.
 Since scopes can be nested in source code, we use a nested environment
 for checking source modules and goals, whereas a flat top-level
 environment is sufficient for checking import and export declarations.
-The initial value identifier environment \texttt{initVEnv} is
-initialized with the data constructors of the predefined unit, list,
-and tuple types.
+The initial value identifier environment \texttt{initVEnv} is empty.
 \begin{verbatim}
 
 > type FunEnv = TopEnv ValueKind
@@ -116,8 +105,6 @@ and tuple types.
 >     | otherwise = Nothing
 
 > initVEnv :: FunEnv
-> initVEnv = foldr (predefCon . fst) emptyVEnv (concatMap snd predefTypes)
->   where emptyVEnv = emptyTopEnv (Just (map (Constr . rootOfType) tupleTypes))
->         predefCon c = predefTopEnv c (Constr c)
+> initVEnv = emptyTopEnv
 
 \end{verbatim}

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PredefIdent.lhs 2691 2008-05-01 22:08:36Z wlux $
+% $Id: PredefIdent.lhs 2692 2008-05-02 13:22:41Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -147,20 +147,17 @@ Sect.~\ref{sec:simplify}).
 
 \end{verbatim}
 The type and data constructors of the unit, list, and tuple types are
-handled specially. Conceptually, these entities belong to the Prelude
-but they can be accessed only with special syntax and cannot be
-defined by the user. Furthermore, these entities are available in
-every module. The functions \texttt{isPrimTypeId} and
-\texttt{isPrimDataId} can be used to check for the type and data
-constructor identifiers of these types.
+handled specially. These entities are defined in the Prelude but they
+can be accessed only with special syntax and are available in every
+module. The functions \texttt{isPrimTypeId} and\texttt{isPrimDataId}
+can be used to check for the type and data constructor identifiers of
+these types.
 \begin{verbatim}
 
-> isPrimTypeId :: QualIdent -> Bool
-> isPrimTypeId tc = tc' `elem` [unitId,listId,arrowId] || isTupleId tc'
->   where tc' = unqualify tc
+> isPrimTypeId :: Ident -> Bool
+> isPrimTypeId tc = tc `elem` [unitId,listId,arrowId] || isTupleId tc
 
-> isPrimDataId :: QualIdent -> Bool
-> isPrimDataId c = c' `elem` [unitId,nilId,consId] || isTupleId c'
->   where c' = unqualify c
+> isPrimDataId :: Ident -> Bool
+> isPrimDataId c = c `elem` [unitId,nilId,consId] || isTupleId c
 
 \end{verbatim}

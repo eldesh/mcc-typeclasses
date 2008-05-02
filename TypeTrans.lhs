@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2691 2008-05-01 22:08:36Z wlux $
+% $Id: TypeTrans.lhs 2692 2008-05-02 13:22:41Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -162,8 +162,8 @@ indices independently in each type expression.
 >   TypePred (qualQualify m cls) (qualifyType m ty)
 
 > qualifyType :: ModuleIdent -> Type -> Type
-> qualifyType m (TypeConstructor tc) = TypeConstructor tc'
->   where tc' = qualQualify (if isPrimTypeId tc then preludeMIdent else m) tc
+> qualifyType m (TypeConstructor tc) = TypeConstructor (qualQualify m' tc)
+>   where m' = if isPrimTypeId (unqualify tc) then preludeMIdent else m
 > qualifyType _ (TypeVariable tv) = TypeVariable tv
 > qualifyType m (TypeConstrained tys tv) =
 >   TypeConstrained (map (qualifyType m) tys) tv
@@ -206,7 +206,7 @@ unqualified names.
 >   | isTupleId tc' && length tys == tupleArity tc' = TupleType tys
 >   | otherwise = foldl ApplyType (ConstructorType tc'') tys
 >   where tc' = unqualify tc
->         tc'' = if isPrimTypeId (qualify tc') then (qualify tc') else tc
+>         tc'' = if isPrimTypeId tc' then qualify tc' else tc
 > fromTypeApp tvs (TypeVariable tv) tys =
 >   foldl ApplyType
 >         (VariableType (if tv >= 0 then tvs !! tv

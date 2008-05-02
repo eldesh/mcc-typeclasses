@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ValueInfo.lhs 2691 2008-05-01 22:08:36Z wlux $
+% $Id: ValueInfo.lhs 2692 2008-05-02 13:22:41Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -28,7 +28,6 @@ information.
 > module ValueInfo where
 > import Base
 > import Ident
-> import PredefTypes
 > import TopEnv
 > import Types
 
@@ -44,22 +43,11 @@ information.
 >   origName (Value x _ _) = x
 
 \end{verbatim}
-The initial value type environment \texttt{initDCEnv} is initialized
-with the types of the predefined unit, list, and tuple data
-constructors.
+The initial value type environment \texttt{initDCEnv} is empty.
 \begin{verbatim}
 
 > initDCEnv :: ValueEnv
-> initDCEnv = foldr (uncurry predefDC) emptyDCEnv (concatMap snd predefTypes)
->   where emptyDCEnv = emptyTopEnv (Just (map tupleDC tupleTypes))
->         predefDC c ty =
->           predefTopEnv c (DataConstructor c ls stdConstrInfo (polyType ty))
->           where ls = replicate (arrowArity ty) anonId
->         tupleDC ty =
->           DataConstructor tc (replicate n anonId) stdConstrInfo
->                           (ForAll n (qualType (foldr TypeArrow ty tys)))
->           where (TypeConstructor tc,tys) = unapplyType True ty
->                 n = length tys
+> initDCEnv = emptyTopEnv
 
 \end{verbatim}
 The functions \texttt{bindFun} and \texttt{rebindFun} respectively add

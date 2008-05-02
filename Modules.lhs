@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2609 2008-02-03 23:22:17Z wlux $
+% $Id: Modules.lhs 2692 2008-05-02 13:22:41Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -503,10 +503,12 @@ with the actual definitions in the current module.
 >         entity (IFunctionDecl _ f _ _) = f
 
 \end{verbatim}
-The Prelude is imported implicitly into every module that does not
-import the Prelude explicitly with an import declaration. Obviously,
-no import declaration is added to the Prelude itself. Furthermore, the
-module \texttt{DebugPrelude} is imported into every module when it is
+The Prelude is imported implicitly into every module other than the
+Prelude. If the module does not import the Prelude explicitly, the
+added declaration brings all Prelude entities with qualified and
+unqualified names into scope. Otherwise, only the identifiers of the
+unit, list, and tuple types are imported. Furthermore, the module
+\texttt{DebugPrelude} is imported into every module when it is
 compiled for debugging. However, none of its entities are brought into
 scope because the debugging transformation is applied to the
 intermediate language.
@@ -515,10 +517,11 @@ intermediate language.
 > importPrelude :: Bool -> FilePath -> ModuleIdent
 >               -> [ImportDecl] -> [ImportDecl]
 > importPrelude debug fn m is =
->   imp True preludeMIdent True ++ imp debug debugPreludeMIdent False ++ is
+>   imp True preludeMIdent (preludeMIdent `notElem` ms) ++
+>   imp debug debugPreludeMIdent False ++ is
 >   where p = first fn
->         ms = m : [m | ImportDecl _ m _ _ _ <- is]
->         imp cond m all = [importDecl p m all | cond && m `notElem` ms]
+>         ms = [m | ImportDecl _ m _ _ _ <- is]
+>         imp cond m' all = [importDecl p m' all | cond && m /= m']
 
 > importDecl :: Position -> ModuleIdent -> Bool -> ImportDecl
 > importDecl p m all =

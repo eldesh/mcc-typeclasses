@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PredefTypes.lhs 2691 2008-05-01 22:08:36Z wlux $
+% $Id: PredefTypes.lhs 2692 2008-05-02 13:22:41Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -34,26 +34,6 @@ compiler.
 
 > tupleType :: [Type] -> Type
 > tupleType tys = foldl TypeApply (TypeConstructor (qTupleId (length tys))) tys
-
-\end{verbatim}
-The unit, list, and tuple types are predefined and available in every
-module.
-\begin{verbatim}
-
-> predefTypes :: [(Type,[(QualIdent,Type)])]
-> predefTypes =
->   let a = TypeVariable 0; b = TypeVariable 1 in [
->     (unitType,   [(qUnitId,unitType)]),
->     (listType a, [(qNilId,nilType a), (qConsId,consType a)]),
->     (arrowType a b, [])
->   ]
->   where nilType a = listType a
->         consType a = TypeArrow a (TypeArrow (listType a) (listType a))
->         arrowType a b = TypeArrow a b
-
-> tupleTypes :: [Type]
-> tupleTypes = [tupleType (take n tvs) | n <- [2..]]
->   where tvs = map TypeVariable [0..]
 
 \end{verbatim}
 The variable \texttt{guardTypes} maintains the list of types

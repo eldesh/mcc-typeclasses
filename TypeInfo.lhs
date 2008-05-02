@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeInfo.lhs 2691 2008-05-01 22:08:36Z wlux $
+% $Id: TypeInfo.lhs 2692 2008-05-02 13:22:41Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -43,7 +43,6 @@ constructors in the interface.
 > import Ident
 > import Kinds
 > import List
-> import PredefTypes
 > import TopEnv
 > import Types
 
@@ -63,21 +62,11 @@ constructors in the interface.
 >   origName (TypeVar _) = internalError "origName TypeVar"
 
 \end{verbatim}
-The initial type constructor environment \texttt{initTCEnv} is
-initialized with the types of the predefined unit, list, and tuple
-types.
+The initial type constructor environment \texttt{initTCEnv} is empty.
 \begin{verbatim}
 
 > initTCEnv :: TCEnv
-> initTCEnv =
->   foldr (uncurry (predefTC . unapplyType True)) emptyTCEnv predefTypes
->   where emptyTCEnv =
->           emptyTopEnv (Just (map (tupleTC . unapplyType True) tupleTypes))
->         predefTC (TypeConstructor tc,tys) cs =
->           predefTopEnv tc (DataType tc k (map (unqualify . fst) cs))
->           where k = simpleKind (length tys)
->         tupleTC (TypeConstructor tc,tys) = DataType tc k [unqualify tc]
->           where k = simpleKind (length tys)
+> initTCEnv = emptyTopEnv
 
 \end{verbatim}
 The function \texttt{constrKind} returns the kind of a type

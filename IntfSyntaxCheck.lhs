@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2692 2008-05-02 13:22:41Z wlux $
 %
-% Copyright (c) 2000-2007, Wolfgang Lux
+% Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{IntfSyntaxCheck.lhs}
@@ -11,9 +11,12 @@ to parsed interface files. In particular, the compiler must
 disambiguate nullary type constructors and type variables. In
 addition, the compiler also checks that all type constructor
 applications are saturated. Since interface files are closed -- i.e.,
-they include declarations of all types and classes which are defined
-in other modules and used in the interface -- the compiler can perform
-this check without reference to the global environments.
+they include declarations of all entities which are defined in other
+modules\footnote{Strictly speaking this is not true. The unit, list,
+  and tuple types are available in all modules but are included only
+  in the interface of the Prelude, which contains the definitions of
+  these types.} -- the compiler can perform this check without
+reference to the global environments.
 \begin{verbatim}
 
 > module IntfSyntaxCheck(intfSyntaxCheck) where
@@ -26,6 +29,7 @@ this check without reference to the global environments.
 > import List
 > import Monad
 > import Pretty
+> import PredefIdent
 > import TopEnv
 
 > intfSyntaxCheck :: [IDecl] -> Error [IDecl]
@@ -228,8 +232,10 @@ during syntax checking of type expressions.
 > checkType env p (ConstructorType tc) =
 >   case qualLookupTopEnv tc env of
 >     []
+>       | isPrimTypeId tc' -> return (ConstructorType tc)
 >       | isQualified tc -> errorAt p (undefinedType tc)
->       | otherwise -> return (VariableType (unqualify tc))
+>       | otherwise -> return (VariableType tc')
+>       where tc' = unqualify tc
 >     [Data _ _] -> return (ConstructorType tc)
 >     [Alias _] -> errorAt p (badTypeSynonym tc)
 >     [Class _ _] -> errorAt p (undefinedType tc)
@@ -266,6 +272,7 @@ Auxiliary functions.
 > isTypeSynonym :: TypeEnv -> QualIdent -> Bool
 > isTypeSynonym env tc =
 >   case qualLookupTopEnv tc env of
+>     [] | isPrimTypeId (unqualify tc) -> False
 >     [Data _ _] -> False
 >     [Alias _] -> True
 >     _ -> internalError "isTypeSynonym"

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2691 2008-05-01 22:08:36Z wlux $
+% $Id: CurryParser.lhs 2692 2008-05-02 13:22:41Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -171,24 +171,34 @@ directory path to the module is ignored.
 >             -> (Parser Token (Ident,[Ident]) c -> Parser Token a c)
 >             -> Parser Token b c
 > typeDeclLhs f kw g =
->   f <$> position <*-> token kw <*> g ((,) <$> tycon <*> many typeVar)
+>   f <$> position <*-> token kw <*> g ((,) <$> gtycon <*> many typeVar)
 >   where typeVar = tyvar <|> anonId <$-> token Underscore
+>         gtycon = tycon <|> ptycon
+
+> ptycon :: Parser Token Ident a
+> ptycon = brackets (succeed listId) <|> parens (rightArrow <|> tupleCommas)
 
 > constrDecl :: Parser Token ConstrDecl a
 > constrDecl = position <**> (existVars <**> withContext (flip ($)) constr)
 >   where existVars = token Id_forall <-*> many1 tyvar <*-> dot `opt` []
 >         constr = conId <**> identDecl
 >              <|> leftParen <-*> parenDecl
->              <|> type1 <\> conId <\> leftParen <**> opDecl
+>              <|> leftBracket <-*> bracketDecl
+>              <|> type1 <\> conId <\> leftParen <\> leftBracket <**> opDecl
 >         identDecl = many type2 <**> (conType <$> opDecl `opt` conDecl)
 >                 <|> recDecl <$> fields
->         parenDecl = conSym <*-> rightParen <**> opSymDecl
+>         parenDecl = (conSym <|> colon) <*-> rightParen <**> opSymDecl
+>                 <|> tupleCommas <*-> rightParen <**> identDecl
 >                 <|> applyType <$> parenType <*-> rightParen <*> many type2
 >                               <**> opDecl
+>         bracketDecl = nilId <$-> rightBracket <**> identDecl
+>                   <|> applyType <$> listType <*-> rightBracket <*> many type2
+>                                 <**> opDecl
 >         opSymDecl = conDecl <$> many type2
 >                 <|> recDecl <$> fields
->         parenType = tupleType <|> ConstructorType <$> gtyconId
->         opDecl = conOpDecl <$> conop <*> type1
+>         parenType = tupleType <|> ConstructorType . qualify <$> rightArrow
+>         listType = ListType <$> type0
+>         opDecl = conOpDecl <$> (conop <|> colon) <*> type1
 >         fields = braces (fieldDecl `sepBy` comma)
 >         conType f tys c = f (applyType (ConstructorType (qualify c)) tys)
 >         conDecl tys c cx tvs p = ConstrDecl p tvs cx c tys
@@ -244,7 +254,9 @@ directory path to the module is ignored.
 >               <*> parens (type0 `sepBy` comma)
 
 > infixDecl :: Parser Token (Decl ()) a
-> infixDecl = infixDeclLhs InfixDecl <*> option integer <*> funop `sepBy1` comma
+> infixDecl =
+>   infixDeclLhs InfixDecl <*> option integer <*> (funop <|> colon) `sepBy1`
+>   comma
 
 > infixDeclLhs :: (Position -> Infix -> a) -> Parser Token a b
 > infixDeclLhs f = f <$> position <*> tokenOps infixKW
@@ -272,7 +284,7 @@ directory path to the module is ignored.
 >           | otherwise = funDecl p (op',OpLhs (f t1) op' t2)
 >           where op' = unqualify op
 >         opDecl p f t = PatternDecl p (f t)
->         isConstrId c = isQualified c || isPrimDataId c
+>         isConstrId c = isQualified c || isPrimDataId (unqualify c)
 
 > funDecl :: Position -> (Ident,Lhs a) -> Rhs a -> Decl a
 > funDecl p (f,lhs) rhs = FunctionDecl p f [Equation p lhs rhs]
@@ -342,7 +354,7 @@ directory path to the module is ignored.
 >        <|> hidingClassDecl <|> iClassDecl <|> iInstanceDecl <|> iFunctionDecl
 
 > iInfixDecl :: Parser Token IDecl a
-> iInfixDecl = infixDeclLhs IInfixDecl <*> integer <*> qfunop
+> iInfixDecl = infixDeclLhs IInfixDecl <*> integer <*> (qfunop <|> qcolon)
 
 > hidingDataDecl :: Parser Token IDecl a
 > hidingDataDecl = position <**> pragma DataPragma hidingDecl
@@ -374,7 +386,8 @@ directory path to the module is ignored.
 >                  -> Parser Token a c)
 >              -> Parser Token b c
 > iTypeDeclLhs f kw g =
->   f <$> position <*-> token kw <*> g ((,) <$> withKind qtycon <*> many tyvar)
+>   f <$> position <*-> token kw <*> g ((,) <$> withKind gtycon <*> many tyvar)
+>   where gtycon = qtycon <|> qualify <$> ptycon
 
 > iHidden :: Parser Token [Ident] a
 > iHidden = pragma HidingPragma (con `sepBy` comma)
@@ -427,7 +440,7 @@ directory path to the module is ignored.
 
 > withKind :: Parser Token a b -> Parser Token (a,Maybe KindExpr) b
 > withKind p = implicitKind <$> p
->          <|> parens (explicitKind <$> p <*-> token DoubleColon <*> kind0)
+>         <|?> parens (explicitKind <$> p <*-> token DoubleColon <*> kind0)
 >   where implicitKind x = (x,Nothing)
 >         explicitKind x k = (x,Just k)
 
@@ -481,7 +494,6 @@ directory path to the module is ignored.
 
 > tupleType :: Parser Token TypeExpr a
 > tupleType = type0 <**?> (tuple <$> many1 (comma <-*> type0))
->       `opt` ConstructorType (qualify unitId)
 >   where tuple tys ty = TupleType (ty:tys)
 
 > listType :: Parser Token TypeExpr a
@@ -489,7 +501,7 @@ directory path to the module is ignored.
 >   brackets (ListType <$> type0 `opt` ConstructorType (qualify listId))
 
 > gtyconId :: Parser Token QualIdent a
-> gtyconId = rightArrow <|> tupleCommas
+> gtyconId = qualify <$> (rightArrow <|> tupleCommas)
 
 \end{verbatim}
 \paragraph{Literals}
@@ -562,7 +574,7 @@ the left-hand side of a declaration.
 \begin{verbatim}
 
 > gconSym :: Parser Token QualIdent a
-> gconSym = gConSym <|> tupleCommas
+> gconSym = gConSym <|> qualify <$> tupleCommas
 
 > negLit :: Parser Token (ConstrTerm ()) a
 > negLit =
@@ -594,7 +606,6 @@ the left-hand side of a declaration.
 
 > parenTuplePattern :: Parser Token (ConstrTerm ()) a
 > parenTuplePattern = constrTerm0 <**> optTuplePattern
->               `opt` ConstructorPattern () (qualify unitId) []
 
 \end{verbatim}
 \paragraph{Expressions}
@@ -638,10 +649,9 @@ the left-hand side of a declaration.
 > parenExpr :: Parser Token (Expression ()) a
 > parenExpr = leftParen <-*> pExpr
 >   where pExpr = minus <**> minusOrTuple
->             <|> Constructor () <$> tupleCommas <*-> rightParen
 >             <|> leftSectionOrTuple <\> minus <*-> rightParen
 >             <|> opOrRightSection <\> minus
->             <|> Constructor () (qualify unitId) <$-> rightParen
+>             <|> Constructor () . qualify <$> tupleCommas <*-> rightParen
 >         minusOrTuple = const . UnaryMinus <$> expr1 <.> infixOrTuple
 >                                           <*-> rightParen
 >                    <|> rightParen <-*> optRecord qualify Variable
@@ -656,7 +666,7 @@ the left-hand side of a declaration.
 >         tupleExpr = tuple <$> many1 (comma <-*> expr)
 >               `opt` Paren
 >         opOrRightSection = qFunSym <**> optRightSection InfixOp Variable
->                        <|> colon <**> optRightSection InfixConstr Constructor
+>                        <|> qcolon <**> optRightSection InfixConstr Constructor
 >                        <|> infixOp <\> colon <\> qFunSym <**> rightSection
 >                                                          <*-> rightParen
 >         optRightSection op var = (. op ()) <$> rightSection <*-> rightParen
@@ -670,7 +680,7 @@ the left-hand side of a declaration.
 
 > infixOp :: Parser Token (InfixOp ()) a
 > infixOp = InfixOp () <$> qfunop
->       <|> InfixConstr () <$> colon
+>       <|> InfixConstr () <$> qcolon
 
 > listExpr :: Parser Token (Expression ()) a
 > listExpr = brackets (elements `opt` List () [])
@@ -821,7 +831,7 @@ prefix of a let expression.
 > qFunSym, qConSym :: Parser Token QualIdent a
 > qFunSym = qSym
 > qConSym = qSym
-> gConSym = qConSym <|> colon
+> gConSym = qConSym <|> qcolon
 
 > qfun, qcon :: Parser Token QualIdent a
 > qfun = qFunId <|> parens (qFunSym <?> "operator symbol expected")
@@ -855,17 +865,20 @@ prefix of a let expression.
 > qSym = qualify <$> sym <|> mkQIdent <$> token QSym
 >   where mkQIdent a = qualifyWith (mkMIdent (modul a)) (mkIdent (sval a))
 
-> colon :: Parser Token QualIdent a
-> colon = qualify consId <$-> token Colon
+> colon :: Parser Token Ident a
+> colon = consId <$-> token Colon
 
-> rightArrow :: Parser Token QualIdent a
-> rightArrow = qualify arrowId <$-> token RightArrow
+> qcolon :: Parser Token QualIdent a
+> qcolon = qualify <$> colon
+
+> rightArrow :: Parser Token Ident a
+> rightArrow = arrowId <$-> token RightArrow
 
 > minus :: Parser Token Ident a
 > minus = minusId <$-> token Sym_Minus
 
-> tupleCommas :: Parser Token QualIdent a
-> tupleCommas = qualify . tupleId . (1 + ) . length <$> many1 comma
+> tupleCommas :: Parser Token Ident a
+> tupleCommas = tupleId . (1 + ) . length <$> many1 comma `opt` unitId
 
 \end{verbatim}
 \paragraph{Layout}

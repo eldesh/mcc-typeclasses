@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2630 2008-02-20 17:46:10Z wlux $
+-- $Id: Prelude.curry 2692 2008-05-02 13:22:41Z wlux $
 --
 -- Copyright (c) 1999-2008, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -7,17 +7,13 @@ module Prelude(module Prelude, Rational) where
 import Ratio(Rational, numerator, denominator)
 import IO
 
--- Lines beginning with "--++" are part of the prelude, but are already
--- predefined by the compiler (or cannot be defined at all)
-
 -- Infix operator declarations:
 
 infixl 9 !!
 infixr 9 .
 infixl 7 *, /, `quot`, `rem`, `div`, `mod`
 infixl 6 +, -
---++ infixr 5 :
-infixr 5 ++
+infixr 5 :, ++
 infix  4 =:=, =/=, ==, /=, <, >, <=, >=
 infix  4 `elem`, `notElem`
 infixr 3 &&
@@ -26,6 +22,9 @@ infixl 1 >>, >>=
 infixr 0 $, $!, $!!, $#, $##, `seq`, &, &>, ?
 
 -- Some standard combinators:
+
+--- The function arrow type
+data (->) a b
 
 --- Function composition.
 (.)   :: (b -> c) -> (a -> b) -> (a -> c)
@@ -242,122 +241,70 @@ otherwise       = True
 data Ordering = LT | EQ | GT deriving (Eq,Ord,Enum,Show,Bounded)
 
 
--- Pairs
+-- Tuples
 
---++ data (a,b) = (a,b)
-instance (Eq a,Eq b) => Eq (a,b) where
-  x == y =
-    case (x,y) of
-      ((x1,x2),(y1,y2)) -> x1 == y1 && x2 == y2
-instance (Ord a,Ord b) => Ord (a,b) where
-  x `compare` y =
-    case (x,y) of
-      ((x1,x2),(y1,y2)) ->
-        case x1 `compare` y1 of
-	  LT -> LT
-	  EQ -> x2 `compare` y2
-	  GT -> GT
-instance (Bounded a,Bounded b) => Bounded (a,b) where
-  minBound = (minBound,minBound)
-  maxBound = (maxBound,maxBound)
+data (,) a b = (,) a b deriving(Eq,Ord,Bounded)
+data (,,) a b c = (,,) a b c deriving(Eq,Ord,Bounded)
+data (,,,) a b c d = (,,,) a b c d deriving(Eq,Ord,Bounded)
+data (,,,,) a b c d e = (,,,,) a b c d e deriving(Eq,Ord,Bounded)
+data (,,,,,) a b c d e f = (,,,,,) a b c d e f deriving(Eq,Ord,Bounded)
+data (,,,,,,) a b c d e f g = (,,,,,,) a b c d e f g deriving(Eq,Ord,Bounded)
+data (,,,,,,,) a b c d e f g h = (,,,,,,,) a b c d e f g h
+data (,,,,,,,,) a b c d e f g h i = (,,,,,,,,) a b c d e f g h i
+data (,,,,,,,,,) a b c d e f g h i j = (,,,,,,,,,) a b c d e f g h i j
+data (,,,,,,,,,,) a b c d e f g h i j k = (,,,,,,,,,,) a b c d e f g h i j k
+data (,,,,,,,,,,,) a b c d e f g h i j k l =
+  (,,,,,,,,,,,) a b c d e f g h i j k l
+data (,,,,,,,,,,,,) a b c d e f g h i j k l m =
+  (,,,,,,,,,,,,) a b c d e f g h i j k l m
+data (,,,,,,,,,,,,,) a b c d e f g h i j k l m n =
+  (,,,,,,,,,,,,,) a b c d e f g h i j k l m n
+data (,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o =
+  (,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o
+data (,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p =
+  (,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p
+data (,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q =
+  (,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q
+data (,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r =
+  (,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r
+data (,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s =
+  (,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s
+data (,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t =
+  (,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t
+data (,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u =
+  (,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u
+data (,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v =
+  (,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v
+data (,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w =
+  (,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w
+data (,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x =
+  (,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x
+data (,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y =
+  (,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y
+data (,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y z =
+  (,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y z
+data (,,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y z a1 =
+  (,,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y z a1
+data (,,,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y z a1 b1 =
+  (,,,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y z a1 b1
+data (,,,,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y z a1 b1 c1 =
+  (,,,,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y z a1 b1 c1
+data (,,,,,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y z a1 b1 c1 d1 =
+  (,,,,,,,,,,,,,,,,,,,,,,,,,,,,,) a b c d e f g h i j k l m n o p q r s t u v w x y z a1 b1 c1 d1
 instance (Show a,Show b) => Show (a,b) where
   showsPrec _ (x1,x2) =
     showChar '(' . shows x1 . showChar ',' . shows x2 . showChar ')'
-
---- Selects the first component of a pair.
-fst             :: (a,b) -> a
-fst (x,_)       = x
-
---- Selects the second component of a pair.
-snd             :: (a,b) -> b
-snd (_,y)       = y
-
-
--- Triples and other tuples
-instance (Eq a,Eq b,Eq c) => Eq (a,b,c) where
-  x == y =
-    case (x,y) of
-      ((x1,x2,x3),(y1,y2,y3)) -> x1 == y1 && x2 == y2 && x3 == y3
-instance (Ord a,Ord b,Ord c) => Ord (a,b,c) where
-  x `compare` y =
-    case (x,y) of
-      ((x1,x2,x3),(y1,y2,y3)) ->
-        case x1 `compare` y1 of
-	  LT -> LT
-	  EQ ->
-	    case x2 `compare` y2 of
-	      LT -> LT
-	      EQ -> x3 `compare` y3
-	      GT -> GT
-	  GT -> GT
-instance (Bounded a,Bounded b,Bounded c) => Bounded (a,b,c) where
-  minBound = (minBound,minBound,minBound)
-  maxBound = (maxBound,maxBound,maxBound)
 instance (Show a,Show b,Show c) => Show (a,b,c) where
   showsPrec _ (x1,x2,x3) =
     showChar '(' . shows x1 . showChar ',' .
                    shows x2 . showChar ',' .
                    shows x3 . showChar ')'
-
-instance (Eq a,Eq b,Eq c,Eq d) => Eq (a,b,c,d) where
-  x == y =
-    case (x,y) of
-      ((x1,x2,x3,x4),(y1,y2,y3,y4)) ->
-         x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4
-instance (Ord a,Ord b,Ord c,Ord d) => Ord (a,b,c,d) where
-  x `compare` y =
-    case (x,y) of
-      ((x1,x2,x3,x4),(y1,y2,y3,y4)) ->
-        case x1 `compare` y1 of
-	  LT -> LT
-	  EQ ->
-	    case x2 `compare` y2 of
-	      LT -> LT
-	      EQ ->
-	        case x3 `compare` y3 of
-		  LT -> LT
-		  EQ -> x4 `compare` y4
-		  GT -> GT
-	      GT -> GT
-	  GT -> GT
-instance (Bounded a,Bounded b,Bounded c,Bounded d) => Bounded (a,b,c,d) where
-  minBound = (minBound,minBound,minBound,minBound)
-  maxBound = (maxBound,maxBound,maxBound,maxBound)
 instance (Show a,Show b,Show c,Show d) => Show (a,b,c,d) where
   showsPrec _ (x1,x2,x3,x4) =
     showChar '(' . shows x1 . showChar ',' .
                    shows x2 . showChar ',' .
                    shows x3 . showChar ',' .
                    shows x4 . showChar ')'
-
-instance (Eq a,Eq b,Eq c,Eq d,Eq e) => Eq (a,b,c,d,e) where
-  x == y =
-    case (x,y) of
-      ((x1,x2,x3,x4,x5),(y1,y2,y3,y4,y5)) ->
-         x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5
-instance (Ord a,Ord b,Ord c,Ord d,Ord e) => Ord (a,b,c,d,e) where
-  x `compare` y =
-    case (x,y) of
-      ((x1,x2,x3,x4,x5),(y1,y2,y3,y4,y5)) ->
-        case x1 `compare` y1 of
-	  LT -> LT
-	  EQ ->
-	    case x2 `compare` y2 of
-	      LT -> LT
-	      EQ ->
-	        case x3 `compare` y3 of
-		  LT -> LT
-		  EQ ->
-		    case x4 `compare` y4 of
-		      LT -> LT
-		      EQ -> x5 `compare` y5
-		      GT -> GT
-		  GT -> GT
-	      GT -> GT
-	  GT -> GT
-instance (Bounded a,Bounded b,Bounded c,Bounded d,Bounded e) => Bounded (a,b,c,d,e) where
-  minBound = (minBound,minBound,minBound,minBound,minBound)
-  maxBound = (maxBound,maxBound,maxBound,maxBound,maxBound)
 instance (Show a,Show b,Show c,Show d,Show e) => Show (a,b,c,d,e) where
   showsPrec _ (x1,x2,x3,x4,x5) =
     showChar '(' . shows x1 . showChar ',' .
@@ -365,39 +312,6 @@ instance (Show a,Show b,Show c,Show d,Show e) => Show (a,b,c,d,e) where
                    shows x3 . showChar ',' .
                    shows x4 . showChar ',' .
                    shows x5 . showChar ')'
-
-instance (Eq a,Eq b,Eq c,Eq d,Eq e,Eq f) => Eq (a,b,c,d,e,f) where
-  x == y =
-    case (x,y) of
-      ((x1,x2,x3,x4,x5,x6),(y1,y2,y3,y4,y5,y6)) ->
-         x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 && x5 == y5 && x6 == y6
-instance (Ord a,Ord b,Ord c,Ord d,Ord e,Ord f) => Ord (a,b,c,d,e,f) where
-  x `compare` y =
-    case (x,y) of
-      ((x1,x2,x3,x4,x5,x6),(y1,y2,y3,y4,y5,y6)) ->
-        case x1 `compare` y1 of
-	  LT -> LT
-	  EQ ->
-	    case x2 `compare` y2 of
-	      LT -> LT
-	      EQ ->
-	        case x3 `compare` y3 of
-		  LT -> LT
-		  EQ ->
-		    case x4 `compare` y4 of
-		      LT -> LT
-		      EQ ->
-		        case x5 `compare` y5 of
-			  LT -> LT
-			  EQ -> x6 `compare` y6
-			  GT -> GT
-		      GT -> GT
-		  GT -> GT
-	      GT -> GT
-	  GT -> GT
-instance (Bounded a,Bounded b,Bounded c,Bounded d,Bounded e,Bounded f) => Bounded (a,b,c,d,e,f) where
-  minBound = (minBound,minBound,minBound,minBound,minBound,minBound)
-  maxBound = (maxBound,maxBound,maxBound,maxBound,maxBound,maxBound)
 instance (Show a,Show b,Show c,Show d,Show e,Show f) => Show (a,b,c,d,e,f) where
   showsPrec _ (x1,x2,x3,x4,x5,x6) =
     showChar '(' . shows x1 . showChar ',' .
@@ -406,44 +320,6 @@ instance (Show a,Show b,Show c,Show d,Show e,Show f) => Show (a,b,c,d,e,f) where
                    shows x4 . showChar ',' .
                    shows x5 . showChar ',' .
                    shows x6 . showChar ')'
-
-instance (Eq a,Eq b,Eq c,Eq d,Eq e,Eq f,Eq g) => Eq (a,b,c,d,e,f,g) where
-  x == y =
-    case (x,y) of
-      ((x1,x2,x3,x4,x5,x6,x7),(y1,y2,y3,y4,y5,y6,y7)) ->
-         x1 == y1 && x2 == y2 && x3 == y3 && x4 == y4 &&
-	 x5 == y5 && x6 == y6 && x7 == y7
-instance (Ord a,Ord b,Ord c,Ord d,Ord e,Ord f,Ord g) => Ord (a,b,c,d,e,f,g) where
-  x `compare` y =
-    case (x,y) of
-      ((x1,x2,x3,x4,x5,x6,x7),(y1,y2,y3,y4,y5,y6,y7)) ->
-        case x1 `compare` y1 of
-	  LT -> LT
-	  EQ ->
-	    case x2 `compare` y2 of
-	      LT -> LT
-	      EQ ->
-	        case x3 `compare` y3 of
-		  LT -> LT
-		  EQ ->
-		    case x4 `compare` y4 of
-		      LT -> LT
-		      EQ ->
-		        case x5 `compare` y5 of
-			  LT -> LT
-			  EQ ->
-			    case x6 `compare` y6 of
-			      LT -> LT
-			      EQ -> x7 `compare` y7
-			      GT -> GT
-			  GT -> GT
-		      GT -> GT
-		  GT -> GT
-	      GT -> GT
-	  GT -> GT
-instance (Bounded a,Bounded b,Bounded c,Bounded d,Bounded e,Bounded f,Bounded g) => Bounded (a,b,c,d,e,f,g) where
-  minBound = (minBound,minBound,minBound,minBound,minBound,minBound,minBound)
-  maxBound = (maxBound,maxBound,maxBound,maxBound,maxBound,maxBound,maxBound)
 instance (Show a,Show b,Show c,Show d,Show e,Show f,Show g) => Show (a,b,c,d,e,f,g) where
   showsPrec _ (x1,x2,x3,x4,x5,x6,x7) =
     showChar '(' . shows x1 . showChar ',' .
@@ -454,13 +330,17 @@ instance (Show a,Show b,Show c,Show d,Show e,Show f,Show g) => Show (a,b,c,d,e,f
                    shows x6 . showChar ',' .
                    shows x7 . showChar ')'
 
+--- Selects the first component of a pair.
+fst             :: (a,b) -> a
+fst (x,_)       = x
+
+--- Selects the second component of a pair.
+snd             :: (a,b) -> b
+snd (_,y)       = y
+
 
 -- Unit type
---++ data () = ()
-instance Eq () where
-  x == y = case (x,y) of ((),()) -> True
-instance Ord () where
-  x `compare` y = case (x,y) of ((),()) -> EQ
+data () = () deriving(Eq,Ord,Bounded)
 instance Enum () where
   pred () = failed
   succ () = failed
@@ -470,33 +350,13 @@ instance Enum () where
   enumFromTo () () = [()]
   enumFromThen () () = repeat ()
   enumFromThenTo () () () = repeat ()
-instance Bounded () where
-  minBound = ()
-  maxBound = ()
 instance Show () where
   showsPrec _ () = showString "()"
 
 
 -- Lists
 
---++ data [a] = [] | a : [a]
-instance Eq a => Eq [a] where
-  x == y =
-    case (x,y) of
-      ([],[]) -> True
-      (x1:xs,y1:ys) -> x1 == y1 && xs == ys
-      _ -> False
-instance Ord a => Ord [a] where
-  x `compare` y =
-    case (x,y) of
-      ([],[]) -> EQ
-      ([],_:_) -> LT
-      (_:_,[]) -> GT
-      (x1:xs,y1:ys) ->
-        case x1 `compare` y1 of
-	  LT -> LT
-	  EQ -> xs `compare` ys
-	  GT -> GT
+data [] a = [] | a : [a] deriving(Eq,Ord)
 instance Show a => Show [a] where
   showsPrec _ = showList
 instance Functor [] where

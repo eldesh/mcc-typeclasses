@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2668 2008-04-21 06:50:50Z wlux $
+% $Id: unify.nw 2692 2008-05-02 13:22:41Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -149,9 +149,7 @@ for which equality still needs to be checked.
 In general, two nodes are considered equal if they have the same info
 pointer. In addition, for primitive nodes representing characters and
 numbers, their values must match. Abstract nodes are considered equal
-only if they are physically equal. A special case is needed for
-tuples and their partial applications because the compiler allocates
-(private) info pointers for tuples in every module.
+only if they are physically equal.
 
 \label{unsafe-equality}
 Note that [[eq_root]] is capable of comparing terms of different
@@ -259,14 +257,6 @@ eq_root(Node *arg1, Node *arg2, unsigned int *argc)
 	default:
 	    invalid_arg("eq_root", node_kind(arg1));
         }
-    }
-    else if ( is_tuple(arg1->info) && is_tuple(arg2->info) &&
-	      arg1->info->kind == arg2->info->kind &&
-	      arg1->info->tag == arg2->info->tag &&
-	      arg1->info->length == arg2->info->length )
-    {
-	eq = true;
-	*argc = closure_argc(arg1);
     }
     else
 	eq = false;
@@ -382,9 +372,7 @@ eq_args(unsigned int n_regs, Node *arg1, Node *arg2,
 	    case CAPP_KIND:
 		if ( is_capp_node(y) )
 		{
-		    if ( x->info != y->info &&
-			 (!is_tuple(x->info) || !is_tuple(y->info) ||
-			  x->info->length != y->info->length) )
+		    if ( x->info != y->info )
 			return false;
 		    if ( closure_argc(x) == 0 )
 			continue;
@@ -393,10 +381,7 @@ eq_args(unsigned int n_regs, Node *arg1, Node *arg2,
 	    case PAPP_KIND:
 		if ( is_papp_node(y) )
 		{
-		    if ( x->info != y->info &&
-			 (!is_tuple(x->info) || !is_tuple(y->info) ||
-			  x->info->tag != y->info->tag ||
-			  x->info->length != y->info->length) )
+		    if ( x->info != y->info )
 			return false;
 		    if ( closure_argc(x) == 0 )
 			continue;

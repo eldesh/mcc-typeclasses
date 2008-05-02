@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ExportSyntaxCheck.lhs 2522 2007-10-21 18:08:18Z wlux $
+% $Id: ExportSyntaxCheck.lhs 2692 2008-05-02 13:22:41Z wlux $
 %
-% Copyright (c) 2000-2007, Wolfgang Lux
+% Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ExportSyntaxCheck.lhs}
@@ -21,6 +21,7 @@ entities.
 > import List
 > import Map
 > import Maybe
+> import PredefIdent
 > import Set
 > import TopEnv
 
@@ -55,12 +56,23 @@ functions, the former are translated into the equivalent form
 \verb|T()|. Note that the export specification \texttt{x} may export a
 type constructor \texttt{x} \emph{and} a global function \texttt{x} at
 the same time.
+
+The code of \texttt{expandSpecs} ensures that the unit, list, and
+tuple types are exported from the Prelude even if its exported
+entities are specified explicitly. On the other hand, the function
+\texttt{expandModule} carefully excludes the identifiers of these
+particular types in case a module's export list contains the
+specification \texttt{module Prelude} so that these types are not
+exported by any module other than the Prelude.
 \begin{verbatim}
 
 > expandSpecs :: Set ModuleIdent -> ModuleIdent -> TypeEnv -> FunEnv
 >             -> Maybe ExportSpec -> Error ExportSpec
 > expandSpecs ms m tEnv fEnv (Just (Exporting p es)) =
->   liftE (Exporting p . concat) (mapE (expandExport p ms m tEnv fEnv) es)
+>   liftE (Exporting p . (es' ++) . concat)
+>         (mapE (expandExport p ms m tEnv fEnv) es)
+>   where es' = [exportType t | m == preludeMIdent,
+>                               (tc,t) <- localBindings tEnv, isPrimTypeId tc]
 > expandSpecs _ _ tEnv fEnv Nothing =
 >   return (Exporting noPos (expandLocalModule tEnv fEnv))
 >   where noPos = undefined
@@ -128,7 +140,7 @@ the same time.
 
 > expandModule :: TypeEnv -> FunEnv -> ModuleIdent -> [Export]
 > expandModule tEnv fEnv m =
->   [exportType t | (_,t) <- moduleImports m tEnv] ++
+>   [exportType t | (tc,t) <- moduleImports m tEnv, not (isPrimTypeId tc)] ++
 >   [Export f | (_,Var f _) <- moduleImports m fEnv]
 
 > exportType :: TypeKind -> Export

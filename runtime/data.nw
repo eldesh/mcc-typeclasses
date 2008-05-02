@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: data.nw 2691 2008-05-01 22:08:36Z wlux $
+% $Id: data.nw 2692 2008-05-02 13:22:41Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -18,34 +18,26 @@ because there is no upper limit on the size of tuples.
 #include "run.h"
 #include "regs.h"
 #include "heap.h"
-#include "stack.h"
-#include "spaces.h"
 #include "eval.h"
-#include "unify.h"
-#include "trace.h"
 #include "data.h"
-#include "cam.h"
 
 @ 
 The descriptors for the data constructors \texttt{()}, \texttt{[]},
 \texttt{:}, and \texttt{Success} are defined by the runtime system.
 
 <<data.h>>=
-#define UNIT_TAG	__Prelude___40__41__tag
-#define NIL_TAG		__Prelude___91__93__tag
-#define CONS_TAG	__Prelude___58__tag
-#define SUCCESS_TAG	__Prelude__Success_tag
+#ifdef CURRY_RTS
+# define UNIT_TAG	__Prelude___40__41__tag
+# define NIL_TAG	__Prelude___91__93__tag
+# define CONS_TAG	__Prelude___58__tag
 
 enum { UNIT_TAG };
 enum { NIL_TAG, CONS_TAG };
-enum { SUCCESS_TAG };
 
 DECLARE_CONST(__Prelude___40__41_);
 DECLARE_CONST(__Prelude___91__93_);
 DECLARE_DATA(__Prelude___58_);
-DECLARE_CONST(__Prelude__Success);
 
-#ifdef CURRY_RTS
 # define nil		CONST(__Prelude___91__93_)
 # define unit		CONST(__Prelude___40__41_)
 # define Success	CONST(__Prelude__Success)
@@ -53,124 +45,10 @@ DECLARE_CONST(__Prelude__Success);
 # define cons_node_size	closure_node_size(2)
 #endif
 
+#define SUCCESS_TAG	__Prelude__Success_tag
+enum { SUCCESS_TAG };
+DECLARE_CONST(__Prelude__Success);
+
 @ 
 <<data.c>>=
-DEFINE_CONST(__Prelude___40__41_, "()", UNIT_TAG);
-DEFINE_CONST(__Prelude___91__93_, "[]", NIL_TAG);
-DEFINE_DATA(__Prelude___58_, ":", CONS_TAG, 2);
 DEFINE_CONST(__Prelude__Success, "success", SUCCESS_TAG);
-
-@ 
-The functions [[__Prelude___40__41__unify]],
-[[__Prelude___91__93__unify]], and [[__Prelude___58__unify]]
-instantiate an unbound variable with a fresh data term. There is no
-corresponding function for type [[Success]] because its constructor is
-hidden and cannot be instantiated in a flexible match. Note that these
-functions expect the variable to be bound and the return address on
-the stack rather than in argument registers because these functions
-are usually invoked after continuing an encapsulated search.
-
-<<data.h>>=
-DECLARE_LABEL(extern, __Prelude___40__41__unify);
-DECLARE_LABEL(extern, __Prelude___91__93__unify);
-DECLARE_LABEL(extern, __Prelude___58__unify);
-
-<<data.c>>=
-FUNCTION(__Prelude___40__41__unify)
-{
- ENTRY_LABEL(extern, __Prelude___40__41__unify)
-    CALL_RET2(bind_var, 1, regs.sp[0], CONST(__Prelude___40__41_));
-}
-
-FUNCTION(__Prelude___91__93__unify)
-{
- ENTRY_LABEL(extern, __Prelude___91__93__unify)
-    CALL_RET2(bind_var, 1, regs.sp[0], CONST(__Prelude___91__93_));
-}
-
-FUNCTION(__Prelude___58__unify)
-{
-    Node *v1, *v2, *n;
- ENTRY_LABEL(extern, __Prelude___58__unify)
-    CHECK_HEAP(0, 2 * variable_node_size + cons_node_size);
-
-    v1		= (Node *)regs.hp;
-    v1->info	= variable_info_table;
-    v1->v.spc	= regs.ss;
-    v1->v.wq	= 0;
-    v1->v.cstrs = 0;
-    regs.hp    += variable_node_size;
-
-    v2		= (Node *)regs.hp;
-    v2->info	= variable_info_table;
-    v2->v.spc	= regs.ss;
-    v2->v.wq	= 0;
-    v2->v.cstrs = 0;
-    regs.hp    += variable_node_size;
-
-    n		 = (Node *)regs.hp;
-    n->info	 = &cons_info;
-    n->c.args[0] = v1;
-    n->c.args[1] = v2;
-    regs.hp	+= cons_node_size;
-
-    CALL_RET2(bind_var, 1, regs.sp[0], n);
-}
-
-@ 
-The function [[__Prelude___58_]] is used for partial applications of
-the list constructor. Note that it is not necessary to export the
-entry point because the function will never be called directly.
-
-<<data.h>>=
-extern NodeInfo __Prelude___58__papp_info_table[];
-extern const struct closure_node __Prelude___58__function;
-
-@ 
-<<data.c>>=
-DECLARE_LABEL(static, __Prelude___58_);
-DECLARE_LABEL(static, apply_clos_0_2);
-DECLARE_LABEL(static, apply_clos_1_2);
-
-NodeInfo __Prelude___58__papp_info_table[] = {
-    PAPPINFO(":", 0, __Prelude___58_, 2)
-    PAPPINFO(":", 1, __Prelude___58_, 2)
-};
-const struct closure_node __Prelude___58__function = {
-    __Prelude___58__papp_info_table, { 0 }
-};
-
-static
-FUNCTION(apply_clos_0_2)
-{
-    Node *clos;
- ENTRY_LABEL(static, apply_clos_0_2)
-    clos = regs.r[0];
-    CALL_RET2(clos->info->entry, 2, regs.sp[0], regs.sp[1]);
-}
-
-static
-FUNCTION(apply_clos_1_2)
-{
-    Node *clos;
- ENTRY_LABEL(static, apply_clos_1_2)
-    clos = regs.r[0];
-    CALL_RET2(clos->info->entry, 1, clos->c.args[0], regs.sp[0]);
-}
-
-static
-FUNCTION(__Prelude___58_)
-{
-    Node *cons;
- ENTRY_LABEL(static, __Prelude___58_)
-    TRACE_FUN(":", 2);
-
-    CHECK_HEAP(2, cons_node_size);
-    cons	    = (Node *)regs.hp;
-    cons->info	    = &cons_info;
-    cons->c.args[0] = regs.r[0];
-    cons->c.args[1] = regs.r[1];
-    regs.hp	   += cons_node_size;
-
-    RET(cons);
-}

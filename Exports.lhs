@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2690 2008-05-01 20:40:17Z wlux $
+% $Id: Exports.lhs 2692 2008-05-02 13:22:41Z wlux $
 %
 % Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -149,7 +149,7 @@ exported together with their classes and types as explained below.
 > instDecl :: ModuleIdent -> TCEnv -> [Ident] -> CT -> (ModuleIdent,Context)
 >          -> [IDecl] -> [IDecl]
 > instDecl m tcEnv tvs (CT cls tc) (m',cx) ds
->   | mIdent m cls /= m' && (isPrimTypeId tc || mIdent m tc /= m') =
+>   | mIdent m cls /= m' && (isPrimTypeId (unqualify tc) || mIdent m tc /= m') =
 >       iInstDecl m tcEnv tvs (CT cls tc) (m',cx) : ds
 >   | otherwise = ds
 >   where mIdent m = fromMaybe m . fst . splitQualIdent 
@@ -331,7 +331,7 @@ environment.
 >   where d' = declIs m d
 >         ds'' =
 >           map (hiddenTypeDecl m tcEnv tvs)
->               (filter (not . isPrimTypeId) (usedTypes d [])) ++
+>               (filter (not . isPrimTypeId . unqualify) (usedTypes d [])) ++
 >           instances m tcEnv iEnv tvs ds' d'
 
 > declIs :: ModuleIdent -> IDecl -> DeclIs
@@ -344,7 +344,7 @@ environment.
 > declIs m (IClassDecl _ _ cls _ _ _ _) = IsClass (qualQualify m cls)
 > declIs m (IInstanceDecl _ _ cls ty _) = IsInst (CT cls' tc')
 >   where cls' = qualQualify m cls 
->         tc' = if isPrimTypeId tc then tc else qualQualify m tc
+>         tc' = if isPrimTypeId (unqualify tc) then tc else qualQualify m tc
 >         tc = typeConstr ty
 > declIs _ (IFunctionDecl _ _ _ _) = IsOther
 
@@ -364,7 +364,8 @@ environment.
 >   | (CT cls' tc,(m',cx)) <- envToList iEnv,
 >     cls == cls',
 >     mIdent m cls == m',
->     m /= m' || isPrimTypeId tc || mIdent m tc /= m || IsType tc `elemSet` ds']
+>     m /= m' || isPrimTypeId (unqualify tc) || mIdent m tc /= m
+>             || IsType tc `elemSet` ds']
 >   where mIdent m = fromMaybe m . fst . splitQualIdent
 > instances _ _ _ _ _ (IsInst _) = []
 

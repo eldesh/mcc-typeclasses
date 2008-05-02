@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2691 2008-05-01 22:08:36Z wlux $
+% $Id: CGen.lhs 2692 2008-05-02 13:22:41Z wlux $
 %
 % Copyright (c) 1998-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -79,21 +79,17 @@ The C code for a module is divided into code generated for the data
 type declarations and code generated for the function definitions of
 the module. Code generation is complicated by a few special cases that
 need to be handled. In particular, the compiler must provide
-definitions for those tuples that are used in the module and for the
-functions \texttt{@}$_n$ that implement applications of a higher order
-variable to $n$ arguments.\footnote{The function name \texttt{@} is
-used instead of \texttt{@}$_1$.} These functions cannot be predefined
-because there are no upper limits on the arity of a tuple or
-application. Since these functions may be added in each module, they
-must be declared as private -- i.e., \verb|static| -- functions.
-
-\ToDo{The runtime system should preallocate tuple descriptors up to a
-reasonable size (e.g., 10). Thus the compiler only has to create
-private descriptors if a module uses a tuple with a higher arity.}
+definitions for the functions \texttt{@}$_n$ that implement
+applications of a higher-order variable to $n$ arguments.\footnote{The
+function name \texttt{@} is used instead of \texttt{@}$_1$.} These
+functions cannot be predefined because there is no upper limit on the
+arity of an application. Since these functions may be added in each
+module, they must be declared as private -- i.e., \verb|static| --
+functions.
 
 In addition, the code generator preallocates the nodes for literal
 constants globally. In fact, it preallocates all constants, but this
-is done independently. Constant constructors are defined together with
+happens elsewhere. Constant constructors are defined together with
 their node info and other constants are allocated separately for every
 function because there is not much chance for them to be shared.
 \begin{verbatim}
@@ -135,10 +131,10 @@ function because there is not much chance for them to be shared.
 > letNodes sts0 = [n | Let bds <- sts0, Bind _ n <- bds]
 
 > ccallNodes :: [Stmt] -> [Expr]
-> ccallNodes sts
->   | TypeBool `elem` [ty | CCall _ (Just ty) _ <- sts] =
->       [Constr prelTrue [],Constr prelFalse []]
->   | otherwise = []
+> ccallNodes sts = concatMap nodes (nub [ty | CCall _ ty _ <- sts])
+>   where nodes (Just TypeBool) = [Constr prelTrue [],Constr prelFalse []]
+>         nodes (Just _) = []
+>         nodes Nothing = [Constr prelUnit []]
 
 > rigidNodes :: [Stmt] -> [Expr]
 > rigidNodes sts =
@@ -190,27 +186,18 @@ upon their first use.
 >   -- imported/used data constructors
 >   [tagDecl t vs cs | DataDecl t vs cs <- impDs, any (`conElem` usedTs) cs] ++
 >   [dataDecl (ConstrDecl c (replicate n undefined)) | (c,n) <- usedCs] ++
->   -- (private) tuple constructors
->   map (tupleTagDecl . fst) (nub (usedTts ++ usedTcs)) ++
->   concatMap (dataDef CPrivate . uncurry tupleConstr) usedTcs ++
 >   -- local data declarations
 >   [tagDecl t vs cs | (t,vs,cs) <- ds] ++
->   concat [dataDecl c : dataDef CPublic c | cs <- map thd3 ds, c <- cs] ++
+>   concat [dataDecl c : dataDef c | cs <- map thd3 ds, c <- cs] ++
 >   -- literal constants
 >   literals [c | Lit c <- ns]
 >   where constrs = [(c,length vs) | Constr c vs <- ns]
->         (usedTts,usedTs) = partition (isTuple . fst) (nub (switchTags sts))
->         (usedTcs',usedCs) = partition (isTuple . fst) (nub constrs)
->         usedTcs = nub (usedTcs' ++ usedTfs)
->         usedTfs = [(f,tupleArity f) | Papp f _ <- ns, isTuple f]
+>         usedTs = nub (switchTags sts)
+>         usedCs = nub constrs
 >         conElem c = (constr c `elem`)
 
 > constr :: ConstrDecl -> (Name,Int)
 > constr (ConstrDecl c tys) = (c,length tys)
-
-> tupleConstr :: Name -> Int -> ConstrDecl
-> tupleConstr c n = ConstrDecl c (map TypeVar vs)
->   where vs = [Name ('a' : show i) | i <- [1..n]]
 
 > tagDecl :: Name -> [Name] -> [ConstrDecl] -> CTopDecl
 > tagDecl _ vs cs =
@@ -224,21 +211,18 @@ upon their first use.
 >         hasExistVar (TypeApp _ tys) = any hasExistVar tys
 >         hasExistVar (TypeArr ty1 ty2) = hasExistVar ty1 || hasExistVar ty2
 
-> tupleTagDecl :: Name -> CTopDecl
-> tupleTagDecl c = CEnumDecl [CConst (dataTag c) (Just 0)]
-
 > dataDecl :: ConstrDecl -> CTopDecl
 > dataDecl (ConstrDecl c tys)
 >   | null tys = CExternVarDecl nodeInfoConstPtrType (constNode c)
 >   | otherwise = CExternVarDecl nodeInfoType (nodeInfo c)
 
-> dataDef :: CVisibility -> ConstrDecl -> [CTopDecl]
-> dataDef vb (ConstrDecl c tys)
+> dataDef :: ConstrDecl -> [CTopDecl]
+> dataDef (ConstrDecl c tys)
 >   | null tys =
 >       [CVarDef CPrivate nodeInfoType (nodeInfo c) (Just nodeinfo),
->        CVarDef vb nodeInfoConstPtrType (constNode c)
+>        CVarDef CPublic nodeInfoConstPtrType (constNode c)
 >                (Just (CInit (addr (nodeInfo c))))]
->   | otherwise = [CVarDef vb nodeInfoType (nodeInfo c) (Just nodeinfo)]
+>   | otherwise = [CVarDef CPublic nodeInfoType (nodeInfo c) (Just nodeinfo)]
 >   where nodeinfo = CStruct (map CInit nodeinfo')
 >         nodeinfo' =
 >           [CExpr "CAPP_KIND",CExpr (dataTag c),closureNodeSize (length tys),
@@ -313,17 +297,16 @@ partial applications of the functions and for (updatable and
 non-updatable) lazy application nodes. In addition, the compiler
 introduces auxiliary functions that instantiate unbound variables with
 literals and data constructors, respectively, and functions that
-implement partial applications of data constructors including tuple
-constructors used in the current module. Furthermore, the code for
-those functions \texttt{@}$_n$, which are used in the current module,
-is generated.
+implement partial applications of data constructors. Furthermore, the
+code for those functions \texttt{@}$_n$, which are used in the current
+module, is generated.
 \begin{verbatim}
 
 > genFunctions :: [(Name,[Name],[ConstrDecl])] -> [(Name,[Name],Stmt)]
 >              -> [Stmt] -> [Expr] -> [CTopDecl]
 > genFunctions ds fs sts ns =
 >   -- imported functions
->   map (instEntryDecl CPublic) (nonLocalData (map fst flexData)) ++
+>   map instEntryDecl (nonLocalData (map fst flexData)) ++
 >   map (entryDecl CPublic) (nonLocal call) ++
 >   map pappDecl (nonLocal papp) ++
 >   map evalDecl (nonLocal clos) ++
@@ -335,24 +318,16 @@ is generated.
 >   concat [[evalEntryDecl n,evalFunction n] | n <- closArities] ++
 >   concat [[lazyEntryDecl n,lazyFunction n] | n <- lazyArities] ++
 >   -- instantiation functions for data constructors
->   map (instEntryDecl CPublic . fst) cs ++
->   [instFunction CPublic c n | (c,n) <- cs] ++
+>   map (instEntryDecl . fst) cs ++
+>   [instFunction c n | (c,n) <- cs] ++
 >   -- (private) instantiation functions for literals
 >   map litInstEntryDecl flexLits ++
 >   map litInstFunction flexLits ++
->   -- (private) instantiation functions for tuples
->   map (instEntryDecl CPrivate . fst) flexTuples ++
->   [instFunction CPrivate c n | (c,n) <- flexTuples] ++
 >   -- (private) @ functions
 >   [entryDecl CPrivate (apName n) | n <- [2..maxApArity]] ++
 >   concat [evalDef CPrivate f (apArity f) | f <- apClos] ++
 >   concat [lazyDef CPrivate f (apArity f) | f <- apLazy] ++
 >   concat [apFunction (apName n) n | n <- [2..maxApArity]] ++
->   -- (private) auxiliary functions for partial applications of tuples
->   map (entryDecl CPrivate) tuplePapp ++
->   concat [pappDef CPrivate f (tupleArity f) | f <- tuplePapp] ++
->   concat [fun0Def CPrivate f (tupleArity f) | f <- tupleFun0] ++
->   concat [conFunction CPrivate f (tupleArity f) | f <- tuplePapp] ++
 >   -- auxiliary functions for partial applications of data constructors
 >   map (entryDecl CPublic . fst) cs ++
 >   concat [pappDef CPublic c n | (c,n) <- cs, n > 0] ++
@@ -367,13 +342,11 @@ is generated.
 >   concat [function (public f) f vs st | (f,vs,st) <- fs]
 >   where nonLocal = filter (`notElem` map fst3 fs)
 >         nonLocalData = filter (`notElem` map fst cs)
->         (tuplePapp,papp) = partition isTuple (nub [f | Papp f _ <- ns])
+>         papp = nub [f | Papp f _ <- ns]
 >         (apCall,call) = partition isAp (nub [f | Exec f _ <- sts])
 >         (apClos,clos) = partition isAp (nub [f | Closure f _ <- ns])
 >         (apLazy,lazy) = partition isAp (nub [f | Lazy f _ <- ns])
->         (tupleFun0,fun0) =
->           partition isTuple
->                     (nub ([f | Papp f [] <- ns] ++ [f | Closure f [] <- ns]))
+>         fun0 = nub ([f | Papp f [] <- ns] ++ [f | Closure f [] <- ns])
 >         maxApArity = maximum (0 : map apArity (apCall ++ apClos ++ apLazy))
 >         cs = [constr c | c <- concatMap thd3 ds]
 >         fs' = [(f,n) | (f,vs,_) <- fs, let n = length vs, (f,n) `notElem` cs]
@@ -381,15 +354,12 @@ is generated.
 >         clos' = filter (used clos . fst) fs'
 >         lazy' = filter (used lazy . fst) fs'
 >         fun0' = filter (used fun0 . fst) fs'
->         pappArities =
->           nub (map snd cs ++ map tupleArity tuplePapp ++ map snd papp')
+>         pappArities = nub (map snd cs ++ map snd papp')
 >         closArities = nub (map apArity apClos ++ map snd clos')
 >         lazyArities = nub (map apArity apLazy ++ map snd lazy')
 >         ts = [t | Switch Flex _ cs <- sts, Case t _ <- cs]
 >         flexLits = nub [l | LitCase l <- ts]
->         (flexTuples,flexData) =
->           partition (isTuple . fst)
->                     (nub [(c,length vs) | ConstrCase c vs <- ts])
+>         flexData = nub [(c,length vs) | ConstrCase c vs <- ts]
 >         used fs f = isPublic f || f `elem` fs
 >         public f = if isPublic f then CPublic else CPrivate
 
@@ -405,8 +375,8 @@ is generated.
 > lazyEntryDecl :: Int -> CTopDecl
 > lazyEntryDecl n = CFuncDecl CPrivate (lazyFunc n)
 
-> instEntryDecl :: CVisibility -> Name -> CTopDecl
-> instEntryDecl vb c = CFuncDecl vb (instFunc c)
+> instEntryDecl :: Name -> CTopDecl
+> instEntryDecl c = CFuncDecl CPublic (instFunc c)
 
 > litInstEntryDecl :: Literal -> CTopDecl
 > litInstEntryDecl l = CFuncDecl CPrivate (litInstFunc l)
@@ -507,9 +477,9 @@ the suspend node associated with the abstract machine code function.
 > apFunction f n = funcDefs CPrivate f vs (cpsApply f vs)
 >   where vs = [Name ('v' : show i) | i <- [1..n]]
 
-> instFunction :: CVisibility -> Name -> Int -> CTopDecl
-> instFunction vb c n =
->   CFuncDef vb (instFunc c)
+> instFunction :: Name -> Int -> CTopDecl
+> instFunction c n =
+>   CFuncDef CPublic (instFunc c)
 >            (funCode False (cpsInst (Name "") v (ConstrCase c vs)))
 >   where v:vs = [Name ('v' : show i) | i <- [0..n]]
 
@@ -1442,17 +1412,13 @@ contains one of the substrings \verb"_#lambda", \verb"_#sel", and
 \verb"_#app" are considered private, too. These names are used by the
 compiler for naming lambda abstractions, lazy pattern selection
 functions, and the implicit functions introduced for lifted argument
-expressions. Furthermore, the auxiliary functions introduced by the
-debugging transformation for partial applications of the (non-empty)
-list constructor and the tuple constructors, respectively, are
-considered private as well.
+expressions.
 \begin{verbatim}
 
 > isPublic, isPrivate :: Name -> Bool
 > isPublic x = not (isPrivate x)
 > isPrivate (Name x) =
->   any (\cs -> any (`isPrefixOf` cs) [app,lambda,sel,debugCons,debugTuple])
->       (tails x) ||
+>   any (\cs -> any (`isPrefixOf` cs) [app,lambda,sel]) (tails x) ||
 >   case span isDigit (reverse x) of
 >     ([],_) -> False
 >     (_:_,cs) -> reverse dot `isPrefixOf` cs
@@ -1460,8 +1426,6 @@ considered private as well.
 >         Name app = mangle "_#app"
 >         Name lambda = mangle "_#lambda"
 >         Name sel = mangle "_#sel"
->         Name debugCons = mangle "_debug#:"
->         Name debugTuple = mangle "_debug#(,"
 
 \end{verbatim}
 In order to avoid some trivial name conflicts with the standard C
@@ -1534,25 +1498,6 @@ used for constant constructors and functions, respectively.
 
 > resName :: Name
 > resName = Name "_"
-
-\end{verbatim}
-The function \texttt{tupleArity} computes the arity of a tuple
-constructor by counting the commas in the -- demangled -- name. Note
-that \texttt{()} is \emph{not} a tuple name.
-\begin{verbatim}
-
-> isTuple :: Name -> Bool
-> isTuple c = isTupleName (demangle c)
->   where isTupleName ('P':'r':'e':'l':'u':'d':'e':'.':'(':',':cs) =
->           dropWhile (',' ==) cs == ")"
->         isTupleName _ = False
-
-> tupleArity :: Name -> Int
-> tupleArity c = arity (demangle c)
->   where arity ('P':'r':'e':'l':'u':'d':'e':'.':'(':',':cs)
->           | cs'' == ")" = length cs' + 2
->           where (cs',cs'') = span (',' ==) cs
->         arity _ = error "internal error: tupleArity"
 
 \end{verbatim}
 The function \texttt{apArity} returns the arity of an application

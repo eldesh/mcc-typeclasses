@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2691 2008-05-01 22:08:36Z wlux $
+% $Id: Desugar.lhs 2693 2008-05-02 13:56:53Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -82,37 +82,6 @@ variables.
 > run m tcEnv tyEnv = runSt (callRt (callSt m tyEnv) tcEnv) 1
 
 \end{verbatim}
-During desugaring, the compiler transforms constraint guards into case
-expressions matching the guard expression against the constructor
-\texttt{Success}, which is defined in the runtime system. Thus, the
-compiler assumes that the type \texttt{Success} is defined by
-\begin{verbatim}
-  data Success = Success
-\end{verbatim}
-Since the internal constructor \texttt{Success} occurs in the
-desugared code, its type is added to the type environment.
-
-Similarly, rational literals are transformed into applications of the
-constructor \texttt{Ratio.:\%}, which is not exported from module
-\texttt{Ratio}. Therefore its type is added to the type environment,
-too, unless the compiler is compiling module \texttt{Ratio}.
-
-\ToDo{Define \texttt{Success} explicitly in module \texttt{Prelude}
-  without exporting the \texttt{Success} constructor.}
-\begin{verbatim}
-
-> bindPredef :: ModuleIdent -> ValueEnv -> ValueEnv
-> bindPredef m tyEnv =
->   foldr (uncurry bindConstr) tyEnv
->         [(Nothing,successConstr),(Just m,ratioConstr (TypeVariable 0))]
->   where bindConstr m (Constructor ty c) =
->           if m == m' then id else bind m c m' c' (dataConstr c ty)
->           where (m',c') = splitQualIdent c
->         bind Nothing c _ _ = qualBindTopEnv c
->         bind (Just _) _ (Just m) c = qualImportTopEnv m c
->         dataConstr c ty = DataConstructor c [] stdConstrInfo (polyType ty)
-
-\end{verbatim}
 The desugaring phase keeps only the type, function, and value
 declarations of the module. As type declarations are not desugared and
 cannot occur in local declaration groups they are filtered out
@@ -124,9 +93,8 @@ of a module.
 \begin{verbatim}
 
 > desugar :: TCEnv -> ValueEnv -> Module Type -> (Module Type,ValueEnv)
-> desugar tcEnv tyEnv (Module m es is ds) = (Module m es is ds',tyEnv'')
->   where (ds',tyEnv'') = run (desugarModule m tyEnv' ds) tcEnv tyEnv'
->         tyEnv' = bindPredef m tyEnv
+> desugar tcEnv tyEnv (Module m es is ds) = (Module m es is ds',tyEnv')
+>   where (ds',tyEnv') = run (desugarModule m tyEnv ds) tcEnv tyEnv
 
 > desugarModule :: ModuleIdent -> ValueEnv -> [TopDecl Type]
 >               -> DesugarState ([TopDecl Type],ValueEnv)

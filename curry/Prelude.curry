@@ -1,9 +1,42 @@
--- $Id: Prelude.curry 2692 2008-05-02 13:22:41Z wlux $
+-- $Id: Prelude.curry 2693 2008-05-02 13:56:53Z wlux $
 --
 -- Copyright (c) 1999-2008, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
-module Prelude(module Prelude, Rational) where
+module Prelude((.), id, const, curry, uncurry, flip, until,
+               seq, ensureNotFree, ensureGround, ensureSpine,
+               ($), ($!), ($!!), ($#), ($##),
+               error, undefined, failed,
+               Eq(..), Ord(..), Enum(..), Bounded(..), Show(..),
+               Functor(..), Monad(..),
+               Bool(..), (&&), (||), not, if_then_else, otherwise,
+               Ordering(..),
+               fst, snd,
+               head, tail, null, (++), length, (!!),
+               map, foldl, foldl1, foldr, foldr1, filter,
+               zip, zip3, zipWith, zipWith3, unzip, unzip3,
+               concat, concatMap, iterate, repeat, replicate,
+               take, drop, splitAt, takeWhile, dropWhile, span, break,
+               reverse, and, or, any, all, elem, notElem, lookup,
+               Char(), ord, chr,
+               String, lines, unlines, words, unwords,
+               ShowS, shows, showChar, showString, showParen,
+               Num(..), Real(..), Integral(..), Fractional(..), RealFrac(..),
+               fromIntegral, realToFrac,
+               Int(), Integer(), Float(), Rational(),
+               Success(), (=:=), (=/=), success, (&), (&>),
+               Maybe(..), maybe,
+               Either(..), either,
+               IO(), done, sequence, sequence_, mapM, mapM_,
+               sequenceIO, sequenceIO_, mapIO, mapIO_,
+               getChar, getLine, getContents,
+               putChar, putStr, putStrLn, print,
+               FilePath, readFile, writeFile, appendFile,
+               IOError, ioError, catch,
+               interact, doSolve,
+               (?), unknown,
+               try, inject, solveAll, once, best, findall, findfirst,
+               browse, browseList, unpack) where
 import Ratio(Rational, numerator, denominator)
 import IO
 
@@ -994,7 +1027,9 @@ instance RealFrac Float where
 
 
 -- Constraints
-data Success
+-- NB The Success constructor is not exported from the Prelude, but the
+--    compiler knows about it
+data Success = Success
 instance Show Success where
   show c | c = "success"
 
@@ -1005,14 +1040,15 @@ foreign import primitive (=:=) :: a -> a -> Success
 foreign import primitive (=/=) :: a -> a -> Success
 
 --- Always satisfiable constraint
-foreign import primitive success :: Success
+success :: Success
+success = Success
 
 --- Concurrent conjunction of constraints
 foreign import primitive (&) :: Success -> Success -> Success
 
 --- Guarded evaluation
 (&>) :: Success -> a -> a
-c1 &> c2 | c1 = c2
+c &> e = case c of Success -> e
 
 
 -- Maybe type

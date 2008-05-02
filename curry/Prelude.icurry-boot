@@ -184,7 +184,7 @@ showList :: [a] -> [Char] -> [Char]
 };
 type ShowS = [Char] -> [Char];
 type String = [Char];
-data Success;
+data Success = Success {-# HIDING Success #-};
 data [] a = [] | (:) a [a];
 type Ratio.Rational = Ratio.Ratio Integer;
 (!!) :: [a] -> Int -> a;

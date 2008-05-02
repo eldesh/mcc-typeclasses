@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 2691 2008-05-01 22:08:36Z wlux $
+% $Id: print.nw 2693 2008-05-02 13:56:53Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -88,7 +88,7 @@ print_result(const char **var_names, Node **vars, Node *result)
 	while ( is_tagged_ptr(result) && is_indir_node(result) )
 	    result = result->n.node;
 	if ( !is_tagged_ptr(result)
-	     || result->info != INFO(__Prelude__Success) )
+	     || result->info != CONST(__Prelude__Success)->info )
 	{
 	    printf("} ");
 	    print_node(0, result);

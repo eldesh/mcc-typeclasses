@@ -1,13 +1,15 @@
 interface Ratio where {
 import Prelude;
 infixl 7 %;
-data Ratio a;
+data Prelude.Integral a => Ratio a = (:%) a a {-# HIDING (:%) #-};
 type Rational = Ratio Prelude.Integer;
 (%) :: Prelude.Integral a => a -> a -> Ratio a;
 approxRational :: Prelude.RealFrac a =>
 		  a -> a -> Ratio Prelude.Integer;
 denominator :: Prelude.Integral a => Ratio a -> a;
 numerator :: Prelude.Integral a => Ratio a -> a;
+{-# CLASS (Prelude.Enum a, Prelude.Real a) =>
+	  Prelude.Integral a #-};
 instance Prelude.Integral a => Prelude.Enum (Ratio a);
 instance Prelude.Integral a => Prelude.Eq (Ratio a);
 instance Prelude.Integral a => Prelude.Fractional (Ratio a);
@@ -17,19 +19,17 @@ instance Prelude.Integral a => Prelude.Real (Ratio a);
 instance Prelude.Integral a => Prelude.RealFrac (Ratio a);
 instance Prelude.Integral a => Prelude.Show (Ratio a);
 {-# DATA Prelude.Integer #-};
-{-# CLASS (Prelude.Enum a, Prelude.Real a) =>
-	  Prelude.Integral a #-};
 {-# CLASS (Prelude.Fractional a, Prelude.Real a) =>
 	  Prelude.RealFrac a #-};
 {-# CLASS Prelude.Enum a #-};
+{-# CLASS (Prelude.Num a, Prelude.Ord a) => Prelude.Real a #-};
+instance Prelude.Integral Prelude.Int {-# MODULE Prelude #-};
+instance Prelude.Integral Prelude.Integer {-# MODULE Prelude #-};
 {-# CLASS Prelude.Eq a #-};
 {-# CLASS Prelude.Num a => Prelude.Fractional a #-};
 {-# CLASS (Prelude.Eq a, Prelude.Show a) => Prelude.Num a #-};
 {-# CLASS Prelude.Eq a => Prelude.Ord a #-};
-{-# CLASS (Prelude.Num a, Prelude.Ord a) => Prelude.Real a #-};
 {-# CLASS Prelude.Show a #-};
-instance Prelude.Integral Prelude.Int {-# MODULE Prelude #-};
-instance Prelude.Integral Prelude.Integer {-# MODULE Prelude #-};
 instance Prelude.RealFrac Prelude.Float {-# MODULE Prelude #-};
 instance Prelude.Enum () {-# MODULE Prelude #-};
 instance Prelude.Enum Prelude.Bool {-# MODULE Prelude #-};
@@ -38,6 +38,10 @@ instance Prelude.Enum Prelude.Float {-# MODULE Prelude #-};
 instance Prelude.Enum Prelude.Int {-# MODULE Prelude #-};
 instance Prelude.Enum Prelude.Integer {-# MODULE Prelude #-};
 instance Prelude.Enum Prelude.Ordering {-# MODULE Prelude #-};
+instance Prelude.Real Prelude.Float {-# MODULE Prelude #-};
+instance Prelude.Real Prelude.Int {-# MODULE Prelude #-};
+instance Prelude.Real Prelude.Integer {-# MODULE Prelude #-};
+{-# DATA Prelude.Int #-};
 instance Prelude.Eq () {-# MODULE Prelude #-};
 instance (Prelude.Eq a, Prelude.Eq b) =>
 	 Prelude.Eq (a, b) {-# MODULE Prelude #-};
@@ -55,7 +59,6 @@ instance (Prelude.Eq a, Prelude.Eq b, Prelude.Eq c, Prelude.Eq d,
 instance (Prelude.Eq a, Prelude.Eq b, Prelude.Eq c, Prelude.Eq d,
 	  Prelude.Eq e, Prelude.Eq f, Prelude.Eq g) =>
 	 Prelude.Eq (a, b, c, d, e, f, g) {-# MODULE Prelude #-};
-instance Prelude.Eq a => Prelude.Eq [a] {-# MODULE Prelude #-};
 instance Prelude.Eq Prelude.Bool {-# MODULE Prelude #-};
 instance Prelude.Eq Prelude.Char {-# MODULE Prelude #-};
 instance (Prelude.Eq a, Prelude.Eq b) =>
@@ -66,6 +69,7 @@ instance Prelude.Eq Prelude.Integer {-# MODULE Prelude #-};
 instance Prelude.Eq a =>
 	 Prelude.Eq (Prelude.Maybe a) {-# MODULE Prelude #-};
 instance Prelude.Eq Prelude.Ordering {-# MODULE Prelude #-};
+instance Prelude.Eq a => Prelude.Eq [a] {-# MODULE Prelude #-};
 instance Prelude.Fractional Prelude.Float {-# MODULE Prelude #-};
 instance Prelude.Num Prelude.Float {-# MODULE Prelude #-};
 instance Prelude.Num Prelude.Int {-# MODULE Prelude #-};
@@ -87,7 +91,6 @@ instance (Prelude.Ord a, Prelude.Ord b, Prelude.Ord c,
 instance (Prelude.Ord a, Prelude.Ord b, Prelude.Ord c,
 	  Prelude.Ord d, Prelude.Ord e, Prelude.Ord f, Prelude.Ord g) =>
 	 Prelude.Ord (a, b, c, d, e, f, g) {-# MODULE Prelude #-};
-instance Prelude.Ord a => Prelude.Ord [a] {-# MODULE Prelude #-};
 instance Prelude.Ord Prelude.Bool {-# MODULE Prelude #-};
 instance Prelude.Ord Prelude.Char {-# MODULE Prelude #-};
 instance (Prelude.Ord a, Prelude.Ord b) =>
@@ -98,9 +101,7 @@ instance Prelude.Ord Prelude.Integer {-# MODULE Prelude #-};
 instance Prelude.Ord a =>
 	 Prelude.Ord (Prelude.Maybe a) {-# MODULE Prelude #-};
 instance Prelude.Ord Prelude.Ordering {-# MODULE Prelude #-};
-instance Prelude.Real Prelude.Float {-# MODULE Prelude #-};
-instance Prelude.Real Prelude.Int {-# MODULE Prelude #-};
-instance Prelude.Real Prelude.Integer {-# MODULE Prelude #-};
+instance Prelude.Ord a => Prelude.Ord [a] {-# MODULE Prelude #-};
 instance Prelude.Show () {-# MODULE Prelude #-};
 instance (Prelude.Show a, Prelude.Show b) =>
 	 Prelude.Show (a, b) {-# MODULE Prelude #-};
@@ -118,7 +119,6 @@ instance (Prelude.Show a, Prelude.Show b, Prelude.Show c,
 instance (Prelude.Show a, Prelude.Show b, Prelude.Show c,
 	  Prelude.Show d, Prelude.Show e, Prelude.Show f, Prelude.Show g) =>
 	 Prelude.Show (a, b, c, d, e, f, g) {-# MODULE Prelude #-};
-instance Prelude.Show a => Prelude.Show [a] {-# MODULE Prelude #-};
 instance Prelude.Show Prelude.Bool {-# MODULE Prelude #-};
 instance Prelude.Show Prelude.Char {-# MODULE Prelude #-};
 instance (Prelude.Show a, Prelude.Show b) =>
@@ -130,7 +130,7 @@ instance Prelude.Show a =>
 	 Prelude.Show (Prelude.Maybe a) {-# MODULE Prelude #-};
 instance Prelude.Show Prelude.Ordering {-# MODULE Prelude #-};
 instance Prelude.Show Prelude.Success {-# MODULE Prelude #-};
-{-# DATA Prelude.Int #-};
+instance Prelude.Show a => Prelude.Show [a] {-# MODULE Prelude #-};
 {-# DATA Prelude.Float #-};
 {-# DATA Prelude.Bool #-};
 {-# DATA Prelude.Char #-};

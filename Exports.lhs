@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2692 2008-05-02 13:22:41Z wlux $
+% $Id: Exports.lhs 2693 2008-05-02 13:56:53Z wlux $
 %
 % Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -9,9 +9,23 @@
 After checking a module, the compiler generates the interface's
 declarations from the list of exported types and values. If an entity
 is imported from another module, its name is qualified with the name
-of the module containing its definition. Newtypes whose constructor is
-not exported are transformed into (abstract) data types. Instances are
-exported together with their classes and types as explained below.
+of the module containing its definition. Instances are exported
+together with their classes and types as explained below.
+
+Data types whose constructors are not exported are exported as
+abstract types, i.e., their data constructors do not appear in the
+interface. If only some data constructors of a data type are not
+exported those constructors appear in the interface together with the
+exported constructors, but a pragma marks them as hidden so that they
+cannot be used in user code. A special case is made for the Prelude's
+\texttt{Success} type, whose only constructor is not exported from the
+Prelude. Since the compiler makes use of this constructor when
+desugaring guard expressions (cf.\ Sect.~\ref{sec:desugar}),
+\texttt{typeDecl}'s \texttt{DataType} case explicitly forces the
+\texttt{Success} constructor to appear as hidden data constructor in
+the interface. For a similar reason, the compiler also forces the
+\verb|:%| constructor of type \texttt{Ratio.Ratio} to appear in
+interfaces.
 \begin{verbatim}
 
 > module Exports(exportInterface) where
@@ -75,7 +89,7 @@ exported together with their classes and types as explained below.
 >             xs' = guard vis >> filter (`notElem` xs) (cs ++ ls)
 >             (cxs,cs') = unzip (map (constrDecl tcEnv tyEnv xs tc tvs) cs)
 >             ls = nub (concatMap labels cs')
->             vis = not (null xs)
+>             vis = not (null xs) || tc `elem` [qSuccessId,qRatioId]
 >     [RenamingType _ k c] ->
 >       iTypeDecl INewtypeDecl m cx' tc tvs n k nc' xs' : ds
 >       where n = kindArity k

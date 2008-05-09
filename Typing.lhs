@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: Typing.lhs 2695 2008-05-09 13:30:07Z wlux $
 %
 % Copyright (c) 2003-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -100,10 +100,10 @@ $T\,\tau_1\dots\tau_n$ and $\tau[u_1/\tau_1,\dots,u_n/\tau_n]$ are
 considered equal. However, in contrast to type synonyms renaming types
 can be recursive. Therefore, we expand renaming types lazily when
 necessary with the help of an auxiliary environment that maps each
-newtype type constructor $T$ onto the argument type $\tau$ of its
-newtype constructor. This environment is initialized trivially from
-the value type environment. Note that it always contains an entry for
-type \texttt{IO}, which is assumed to be defined implicitly as
+newtype type constructor $T$ onto the pair $(n,\tau)$. This
+environment is initialized trivially from the value type environment and
+Note that it always contains an entry for type \texttt{IO}, which is
+assumed to be defined implicitly as
 \begin{verbatim}
   newtype IO a = IO (World -> (a,World))
 \end{verbatim}
@@ -111,16 +111,17 @@ for some abstract type \texttt{World} representing the state of the
 external world.
 \begin{verbatim}
 
-> type NewtypeEnv = Env QualIdent Type
+> type NewtypeEnv = Env QualIdent (Int,Type)
 
 > newtypeEnv :: ValueEnv -> NewtypeEnv
 > newtypeEnv tyEnv = foldr bindNewtype initNewtypeEnv (allEntities tyEnv)
->   where initNewtypeEnv = bindEnv qIOId ioType' emptyEnv
+>   where initNewtypeEnv = bindEnv qIOId (1,ioType') emptyEnv
 >         ioType' = TypeArrow worldType (tupleType [TypeVariable 0,worldType])
 >         worldType = TypeConstructor (qualify (mkIdent "World"))
 >         bindNewtype (DataConstructor _ _ _ _) = id
->         bindNewtype (NewtypeConstructor _ _ ty) = bindEnv (rootOfType ty2) ty1
+>         bindNewtype (NewtypeConstructor _ _ ty) = bindEnv tc (length tvs,ty1)
 >           where TypeArrow ty1 ty2 = rawType ty
+>                 (TypeConstructor tc,tvs) = unapplyType True ty2
 >         bindNewtype (Value _ _ _) = id
 
 > etaType :: NewtypeEnv -> Int -> Type -> Type
@@ -130,7 +131,11 @@ external world.
 >   case unapplyType True ty of
 >     (TypeConstructor tc,tys) ->
 >       case lookupEnv tc nEnv of
->         Just ty -> etaType nEnv n (expandAliasType tys ty)
+>         Just (n,ty)
+>           | n > n' -> ty
+>           | n == n' -> etaType nEnv n (expandAliasType tys ty)
+>           | otherwise -> internalError "etaType"
+>           where n' = length tys
 >         Nothing -> ty
 >     _ -> ty
 
@@ -183,8 +188,13 @@ effectively become type synonyms after desugaring.
 > expand :: NewtypeEnv -> Type -> [Type]
 > expand nEnv ty = ty : uncurry (expandType nEnv) (unapplyType False ty)
 >   where expandType nEnv (TypeConstructor tc) tys =
->           maybe [] (expand nEnv . expandAliasType tys) (lookupEnv tc nEnv)
->           where nEnv' = unbindEnv tc nEnv
+>           case lookupEnv tc nEnv of
+>             Just (n,ty)
+>               | n > n' -> []
+>               | n == n' -> expand (unbindEnv tc nEnv) (expandAliasType tys ty)
+>               | otherwise -> internalError "expand"
+>               where n' = length tys
+>             Nothing -> []
 >         expandType _ _ _ = []
 
 \end{verbatim}

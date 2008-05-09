@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: DictTrans.lhs 2695 2008-05-09 13:30:07Z wlux $
 %
 % Copyright (c) 2006-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1003,7 +1003,12 @@ newtypes lazily.
 > newExpand nEnv ty = ty : expand nEnv (unapplyType True ty)
 >   where expand nEnv (TypeConstructor tc,tys) =
 >           case lookupEnv tc nEnv of
->             Just ty -> newExpand (unbindEnv tc nEnv) (expandAliasType tys ty)
+>             Just (n,ty)
+>               | n > n' -> []
+>               | n == n' ->
+>                   newExpand (unbindEnv tc nEnv) (expandAliasType tys ty)
+>               | otherwise -> internalError "newExpand"
+>               where n' = length tys
 >             Nothing -> []
 >         expand _ _ = []
 

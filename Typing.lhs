@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 2695 2008-05-09 13:30:07Z wlux $
+% $Id: Typing.lhs 2696 2008-05-09 19:05:03Z wlux $
 %
 % Copyright (c) 2003-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -9,7 +9,7 @@
 \begin{verbatim}
 
 > module Typing(Typeable(..), NewtypeEnv, newtypeEnv, etaType,
->               withType, argumentTypes) where
+>               withType, matchType, argumentTypes) where
 > import Base
 > import Curry
 > import CurryUtils
@@ -170,19 +170,25 @@ effectively become type synonyms after desugaring.
 >           "matchType " ++ showsPrec 11 ty1 " " ++ showsPrec 11 ty2 ""
 
 > matchTypeApp :: NewtypeEnv -> Type -> Type -> Maybe (TypeSubst -> TypeSubst)
-> matchTypeApp nEnv (TypeVariable tv) ty
+> matchTypeApp _ (TypeVariable tv) ty
 >   | ty == TypeVariable tv = Just id
 >   | otherwise = Just (bindSubst tv ty)
-> matchTypeApp nEnv (TypeConstructor tc1) (TypeConstructor tc2)
+> matchTypeApp _ (TypeConstructor tc1) (TypeConstructor tc2)
 >   | tc1 == tc2 = Just id
-> matchTypeApp nEnv (TypeConstrained _ tv1) (TypeConstrained _ tv2)
+> matchTypeApp _ (TypeConstrained _ tv1) (TypeConstrained _ tv2)
 >   | tv1 == tv2 = Just id
-> matchTypeApp nEnv (TypeSkolem k1) (TypeSkolem k2)
+> matchTypeApp _ (TypeSkolem k1) (TypeSkolem k2)
 >   | k1 == k2 = Just id
 > matchTypeApp nEnv (TypeApply ty11 ty12) (TypeApply ty21 ty22) =
 >   fmap (. matchType nEnv ty12 ty22) (matchTypeApp nEnv ty11 ty21)
 > matchTypeApp nEnv (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) =
 >   Just (matchType nEnv ty11 ty21 . matchType nEnv ty12 ty22)
+> matchTypeApp nEnv (TypeApply ty11 ty12) (TypeArrow ty21 ty22) =
+>   fmap (. matchType nEnv ty12 ty22)
+>        (matchTypeApp nEnv ty11 (TypeApply (TypeConstructor qArrowId) ty21))
+> matchTypeApp nEnv (TypeArrow ty11 ty12) (TypeApply ty21 ty22) =
+>   fmap (. matchType nEnv ty12 ty22)
+>        (matchTypeApp nEnv (TypeApply (TypeConstructor qArrowId) ty11) ty21)
 > matchTypeApp _ _ _ = Nothing
 
 > expand :: NewtypeEnv -> Type -> [Type]

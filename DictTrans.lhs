@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2695 2008-05-09 13:30:07Z wlux $
+% $Id: DictTrans.lhs 2696 2008-05-09 19:05:03Z wlux $
 %
 % Copyright (c) 2006-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -990,42 +990,18 @@ the dictionary transformation has already been applied to the
 component types of the dictionary constructor. Therefore,
 \texttt{matchContext} tries to find a suffix of the context whose
 transformation matches the initial arrows of the instance type.
-
-Another problem is that newtype constructors have been removed from
-the source at this point. Thus, newtypes are effectively like type
-synonyms and eventually must be expanded in order to match types
-successfully. However, one must be careful with expanding newtypes
-because they may be recursive. For that reason, \texttt{match} expands
-newtypes lazily.
 \begin{verbatim}
-
-> newExpand :: NewtypeEnv -> Type -> [Type]
-> newExpand nEnv ty = ty : expand nEnv (unapplyType True ty)
->   where expand nEnv (TypeConstructor tc,tys) =
->           case lookupEnv tc nEnv of
->             Just (n,ty)
->               | n > n' -> []
->               | n == n' ->
->                   newExpand (unbindEnv tc nEnv) (expandAliasType tys ty)
->               | otherwise -> internalError "newExpand"
->               where n' = length tys
->             Nothing -> []
->         expand _ _ = []
 
 > matchContext :: TCEnv -> NewtypeEnv -> TypeScheme -> Type -> Context
 > matchContext tcEnv nEnv (ForAll _ (QualType cx ty1)) ty2 =
 >   foldr (\(cx1,cx2) cx' -> fromMaybe cx' (qualMatch nEnv cx1 ty1 cx2 ty2))
->         (error "impossible: matchContext")
+>         (internalError "matchContext")
 >         (splits (maxContext tcEnv cx))
 
 > qualMatch :: NewtypeEnv -> Context -> Type -> Context -> Type -> Maybe Context
 > qualMatch nEnv cx1 ty1 cx2 ty2 =
 >   case contextMatch cx2 ty2 of
->     Just ty2' ->
->       case match nEnv ty1 ty2' idSubst of
->         Just sigma -> Just (subst sigma cx1)
->         Nothing ->
->           internalError ("qualMatch (" ++ show ty1 ++ ") (" ++ show ty2 ++ ")")
+>     Just ty2' -> Just (subst (matchType nEnv ty1 ty2' idSubst) cx1)
 >     Nothing -> Nothing
 
 > contextMatch :: Context -> Type -> Maybe Type
@@ -1034,39 +1010,6 @@ newtypes lazily.
 >   case ty of
 >     TypeArrow ty1 ty2 | ty1 == dictType tp -> contextMatch cx ty2
 >     _ -> Nothing
-
-> match :: NewtypeEnv -> Type -> Type -> TypeSubst -> Maybe TypeSubst
-> match nEnv ty1 ty2 sigma = listToMaybe $ catMaybes $
->   [match1 nEnv ty1 ty2 sigma | ty1 <- tys1, ty2 <- tys2]
->   where tys1 = newExpand nEnv ty1
->         tys2 = newExpand nEnv ty2
-
-> match1 :: NewtypeEnv -> Type -> Type -> TypeSubst -> Maybe TypeSubst
-> match1 _ (TypeConstructor tc1) (TypeConstructor tc2) sigma
->   | tc1 == tc2 = Just sigma
-> match1 _ (TypeVariable tv) ty sigma
->   | tv >= 0 = Just (bindSubst tv ty sigma)
-> match1 _ (TypeVariable tv1) (TypeVariable tv2) sigma
->   | tv1 == tv2 = Just sigma
-> match1 _ (TypeConstrained _ tv1) (TypeConstrained _ tv2) sigma
->   | tv1 == tv2 = Just sigma
-> match1 _ (TypeSkolem k1) (TypeSkolem k2) sigma
->   | k1 == k2 = Just sigma
-> match1 nEnv (TypeApply ty11 ty12) (TypeApply ty21 ty22) sigma =
->   match nEnv ty11 ty21 sigma >>= match nEnv ty12 ty22
-> match1 nEnv (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) sigma =
->   match nEnv ty11 ty21 sigma >>= match nEnv ty12 ty22
-> match1 nEnv (TypeApply ty11 ty12) (TypeArrow ty21 ty22) sigma =
->   match nEnv ty11 (TypeApply (TypeConstructor qArrowId) ty21) sigma >>=
->   match nEnv ty12 ty22
-> match1 nEnv (TypeArrow ty11 ty12) (TypeApply ty21 ty22) sigma =
->   match nEnv (TypeApply (TypeConstructor qArrowId) ty11) ty21 sigma >>=
->   match nEnv ty12 ty22
-> match1 _ ty1 (TypeConstrained (ty2:_) tv2) sigma
->   | ty1 == ty2 = Just (bindSubst tv2 ty1 sigma)
-> match1 _ (TypeConstrained (ty1:_) tv1) ty2 sigma
->   | ty1 == ty2 = Just (bindSubst tv1 ty2 sigma)
-> match1 _ ty1 ty2 sigma = Nothing
 
 > splits :: [a] -> [([a],[a])]
 > splits [] = [([],[])]

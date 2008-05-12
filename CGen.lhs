@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2692 2008-05-02 13:22:41Z wlux $
+% $Id: CGen.lhs 2697 2008-05-12 18:01:29Z wlux $
 %
 % Copyright (c) 1998-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -164,20 +164,26 @@ constructors and literal constants. Native integer constants as well
 as multiple precision integer constants need to be allocated only if
 they cannot be represented in $n-1$ bits where $n$ is the number of
 bits per word of the target architecture. The generated code uses the
-preprocessor macro \texttt{is\_large\_int} defined in the runtime
-system (see Sect.~\ref{sec:heap}) in order to determine whether
-allocation is necessary. Note that this macro always returns true if
-the system was configured with the \texttt{--disable-pointer-tags}
-configuration option. Character constants are encoded in pointers
-unless the system was configured with the
-\texttt{--disable-pointer-tags} configuration option. In that case,
-character constants with codes below 256, which are most commonly
-used, are allocated in a table defined by the runtime system and only
-constants with larger codes need to be preallocated in the generated
-code. Multiple precision integer constants are preallocated as well
-but they cannot be initialized statically because their underlying
-representation is opaque. Instead, these constants are initialized
-upon their first use.
+preprocessor macros \texttt{is\_large\_int} and
+\texttt{is\_large\_int\_32\_64} defined in the runtime system (see
+Sect.~\ref{sec:heap}) in order to determine whether allocation is
+necessary. The latter macro is used only for multiple precision
+integer constants that require more than 32 bits and less than 64
+bits. On a 32-bit target this macro always yields true, whereas it
+yields true on a 64-bit architecture only when the constant does not
+fit into 63 bits.  Multiple precision integer constants that do not
+fit into 64 bits are always allocated. Note that both macros always
+return true if the system was configured with the
+\texttt{--disable-pointer-tags} configuration option. Character
+constants are encoded in pointers unless the system was configured
+with the \texttt{--disable-pointer-tags} configuration option. In that
+case, character constants with codes below 256, which are most
+commonly used, are allocated in a table defined by the runtime system
+and only constants with larger codes need to be preallocated in the
+generated code. Multiple precision integer constants are preallocated
+as well but they cannot be initialized statically because their
+underlying representation is opaque. Instead, these constants are
+initialized upon their first use.
 \begin{verbatim}
 
 > genTypes :: [Decl] -> [(Name,[Name],[ConstrDecl])] -> [Stmt] -> [Expr]
@@ -264,13 +270,12 @@ upon their first use.
 > integerConstant i =
 >   CppCondDecls (isLargeInt [CInt i])
 >     [CVarDef CPrivate (CType "struct bigint_node") (constInteger i) Nothing,
->      CppDefine (constInteger i)
->                (CFunCall iNTEGER [CExpr (constInteger i),CInt i])]
+>      CppDefine (constInteger i) (constRef (constInteger i))]
 >     [CppDefine (constInteger i) (CFunCall "tag_int" [CInt i])]
->   where (isLargeInt,iNTEGER)
->           | fits32bits i = (CFunCall "is_large_int","INTEGER32")
->           | fits64bits i = (CFunCall "is_large_int_32_64","INTEGER64")
->           | otherwise = (const (CInt 1),"INTEGER")
+>   where isLargeInt
+>           | fits32bits i = CFunCall "is_large_int"
+>           | fits64bits i = CFunCall "is_large_int_32_64"
+>           | otherwise = const (CInt 1)
 
 > floatConstant :: Double -> CTopDecl
 > floatConstant f =
@@ -849,7 +854,17 @@ split into minimal binding groups.
 >         _ -> [localVar v (Just alloc),incrAlloc (nodeSize n)]
 
 > initNode :: FM Name CExpr -> Bind -> [CStmt]
-> initNode _ (Bind _ (Lit _)) = []
+> initNode _ (Bind _ (Lit l)) =
+>   case l of
+>     Integer i ->
+>       [CppCondStmts (isLargeInt i)
+>          [CProcCall initINTEGER [CExpr (constInteger i),CInt i]]
+>          []]
+>       where (isLargeInt,initINTEGER)
+>               | fits32bits i = (\i -> "is_large_int("++show i++")","INIT_INTEGER32")
+>               | fits64bits i = (\i -> "is_large_int_32_64("++show i++")","INIT_INTEGER64")
+>               | otherwise = (const "1","INIT_INTEGER")
+>     _ -> []
 > initNode consts (Bind v (Constr c vs))
 >   | isConstant consts v = []
 >   | otherwise = initConstr v c vs

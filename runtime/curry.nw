@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: curry.nw 2694 2008-05-02 14:02:26Z wlux $
+% $Id: curry.nw 2699 2008-05-14 16:14:13Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -289,4 +289,18 @@ operating systems use [[socklen_t *]] instead.
 <<Portability definitions>>=
 /* Define to empty if socklen_t is not defined */
 #undef HAVE_SOCKLEN_T
+
+@ 
+By default, multiple precision integer arithmetic is implemented via
+the Gnu MP library\footnote{\url{http://www.swox.com/gmp/}}. If the
+Gnu MP library is not available, an alternative implementation based
+on libcrypto (part of OpenSSL\footnote{\url{http://www.openssl.org}})
+is used instead.
+
+<<Portability definitions>>=
+/* Define to empty if the system does not have gmp.h */
+#undef HAVE_GMP_H
+
+/* Define to empty if the system does not have openssl/bn.h */
+#undef HAVE_OPENSSL_BN_H
 

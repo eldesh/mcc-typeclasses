@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: main.nw 2641 2008-03-13 08:13:05Z wlux $
+% $Id: main.nw 2699 2008-05-14 16:14:13Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -235,6 +235,7 @@ curry_init(int *p_argc, char *argv[])
 
     /* initialize runtime system */
     init_chars();
+    init_bigint();
     init_stack(stacksize);
 #if !COPY_SEARCH_SPACE
     init_trail(trailsize);

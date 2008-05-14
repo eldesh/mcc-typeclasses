@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2697 2008-05-12 18:01:29Z wlux $
+% $Id: heap.nw 2699 2008-05-14 16:14:13Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -352,7 +352,7 @@ bits, respectively, using the most efficient initialization available.
   available.}
 
 <<heap.h>>=
-#include <gmp.h>
+#include "bigint.h"
 
 #define is_large_mpz(mp)			\
     (NO_POINTER_TAGS				\

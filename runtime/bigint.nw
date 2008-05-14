@@ -1,0 +1,629 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: bigint.nw 2699 2008-05-14 16:14:13Z wlux $
+%
+% Copyright (c) 2007-2008, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Multiprecision Arithmetic}\label{sec:bigint}
+By default, multi-precision integer arithmetic uses the Gnu multiple
+precision arithmetic library\footnote{\url{http://www.swox.com/gmp/}}.
+If the Gnu MP library is not available, we try to emulate the needed
+functionality. At present, the emulation uses the arithmetic library
+that is part of the OpenSSL
+toolkit\footnote{\url{http://www.openssl.org/}}.
+
+<<bigint.h>>=
+#if defined(HAVE_GMP_H)
+# include <gmp.h>
+# define init_bigint()
+#elif defined(HAVE_OPENSSL_BN_H)
+# include <openssl/crypto.h>
+# include <openssl/bn.h>
+extern void init_bigint(void);
+<<libcrypto based emulation code>>
+#else
+# error No supported multiple precision integer library available
+#endif
+
+@ 
+<<bigint.c>>=
+#include "config.h"
+#include "debug.h"
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <limits.h>
+#include <float.h>
+#include <math.h>
+#include "bigint.h"
+
+@ 
+\subsubsection{libcrypto/OpenSSL}
+Below we define a set of wrappers around libcrypto's API that
+(partially) implements the gmp library interface. %'
+
+<<libcrypto based emulation code>>=
+/* multi-precision integer type */
+typedef BIGNUM mpz_t[1];
+
+/* initialization */
+#define mpz_init(x)		bnz_init(x)
+#define mpz_clear(x)		bnz_free(x)
+
+/* assignments */
+#define mpz_set(z,x)		bnz_set(z,x)
+#define mpz_set_si(z,x)		bnz_set_si(z,x)
+#define mpz_set_d(z,d)		bnz_set_d(z,d)
+#define mpz_set_str(z,s,b)	bnz_set_str(z,s,b)
+
+/* combined initialization and assignment */
+#define mpz_init_set(z,x)	(mpz_init(z), mpz_set(z,x))
+#define mpz_init_set_si(z,l)	(mpz_init(z), mpz_set_si(z,l))
+#define mpz_init_set_d(z,d)	(mpz_init(z), mpz_set_d(z,d))
+#define mpz_init_set_str(z,s,b)	(mpz_init(z), mpz_set_str(z,s,b))
+
+/* conversions */
+#define mpz_get_si(x)		bnz_get_si(x)
+#define mpz_get_d(x)		bnz_get_d(x)
+#define mpz_get_str(buf,b,x)	bnz_get_str(buf,b,x)
+
+/* arithmetic functions */
+#define mpz_add(z,x,y)		bnz_add(z,x,y)
+#define mpz_add_ui(z,x,y)	bnz_add_ui(z,x,y)
+#define mpz_sub(z,x,y)		bnz_sub(z,x,y)
+#define mpz_sub_ui(z,x,y)	bnz_sub_ui(z,x,y)
+#define mpz_mul(z,x,y)		bnz_mul(z,x,y)
+#define mpz_mul_si(z,x,y)	bnz_mul_si(z,x,y)
+#define mpz_neg(z,x)		bnz_neg(z,x)
+#define mpz_abs(z,x)		bnz_abs(z,x)
+
+/* division functions */
+#define mpz_fdiv_q(q,n,d)	bnz_fdiv_q(q,n,d)
+#define mpz_fdiv_r(r,n,d)	bnz_fdiv_r(r,n,d)
+#define mpz_fdiv_qr(q,r,x,y)	bnz_fdiv_qr(q,r,x,y)
+#define mpz_tdiv_q(q,n,d)	bnz_tdiv_q(q,n,d)
+#define mpz_tdiv_r(r,n,d)	bnz_tdiv_r(r,n,d)
+#define mpz_tdiv_qr(q,r,x,y)	bnz_tdiv_qr(q,r,x,y)
+
+/* comparison functions */
+#define mpz_cmp(x,y)		bnz_cmp(x,y)
+#define mpz_cmp_si(x,y)		bnz_cmp_si(x,y)
+#define mpz_sgn(x)		bnz_sgn(x)
+
+/* input and output functions */
+#define mpz_out_str(fp,base,x)	bnz_out_str(fp,base,x)
+
+/* miscellaneous functions */
+#define mp_get_memory_functions	bn_get_memory_functions
+
+/* rational number type */
+typedef struct { BIGNUM num, den; } RATNUM;
+typedef RATNUM mpq_t[1];
+#define mpq_canonicalize(x)	bnq_canonicalize(x)
+ 
+/* rational number initialization */
+#define mpq_init(x)		bnq_init(x)
+#define mpq_clear(x)		bnq_free(x)
+
+/* rational number conversions */ 
+#define mpq_set_d(z,x)		bnq_set_d(z,x)
+#define mpq_numref(x)		bnq_numref(x)
+#define mpq_denref(x)		bnq_denref(x)
+#define mpq_get_num(z,x)	bnq_get_num(z,x)
+#define mpq_get_den(z,x)	bnq_get_den(z,x)
+
+@ 
+A lot of the functions from the Gnu MP interface map directly to their
+counterparts in libcrypto. However, for some functions we need a more
+elaborate interface layer. Note that the emulation code \emph{does
+  not} attempt to provide a general purpose implementation of the Gnu
+MP library, but only as far as necessary for the compiler's runtime
+system. %'
+
+\ToDo{Check the results of the [[BN_]]\dots{} function calls. This
+  might be done along the lines of, e.g., \\
+  [[if ( !BN_add(z,x,y) ) { ERR_print_errors_fp(stderr); exit(1); }]].}
+
+<<bigint.c>>=
+#if !defined(HAVE_GMP_H) && defined(HAVE_OPENSSL_BN_H)
+
+@ 
+The emulation code uses a few global variables that must be
+initialized at the beginning of the program.
+
+<<libcrypto based emulation code>>=
+extern BIGNUM *big_zero, *big_aux;
+
+@ 
+<<bigint.c>>=
+BIGNUM *big_zero, *big_aux;
+
+void
+init_bigint()
+{
+    big_aux  = BN_new();
+    big_zero = BN_new();
+    BN_zero(big_zero);
+}
+
+@ 
+The initialization and finalization functions for multi-precision
+integer numbers can be implemented directly using the corresponding
+functions from libcrypto.
+
+<<libcrypto based emulation code>>=
+#define bnz_init(x)		BN_init(x)
+#define bnz_free(x)		BN_free(x)
+
+@ 
+Assignments are a little bit more complicated. The libcrypto library
+supports only assignments from another multi-precision integer, from
+an unsigned long int, and from a string, respectively (the latter
+being restricted to bases 10 and 16). Assignments from signed long int
+values and from doubles require additional glue code.
+
+<<libcrypto based emulation code>>=
+#define bnz_set(z,x)		(void)BN_copy(z,x)
+#define bnz_set_si(z,x) \
+	((x) >= 0 ? BN_set_word(z,x) : (BN_zero(z), BN_sub_word(z,-x)))
+
+extern void bnz_set_d(BIGNUM *, double);
+extern void bnz_set_str(BIGNUM *, const char *, int);
+
+@ 
+<<bigint.c>>=
+void
+bnz_set_d(BIGNUM *z, double d)
+{
+    int	   neg, exp;
+    double norm;
+
+    /* FIXME: special cases for +/-Infinity and NaN */
+    neg = d < 0;
+    if ( neg )
+	d = -d;
+    norm = frexp(d, &exp);
+    if ( exp <= 0 )
+	BN_zero(z);
+    else if ( exp < CHAR_BIT * sizeof(long) )
+    {
+	if ( neg )
+	{
+	    BN_zero(z);
+	    BN_sub_word(z, (unsigned long)d);
+	}
+	else
+	    BN_set_word(z, (unsigned long)d);
+    }
+    else if ( sizeof(long) >= sizeof(double) )
+    {
+	d = ldexp(norm, CHAR_BIT * sizeof(long));
+	if ( neg )
+	{
+	    BN_zero(z);
+	    BN_sub_word(z, (unsigned long)d);
+	}
+	else
+	    BN_set_word(z, (unsigned long)d);
+	BN_lshift(z, z, exp - CHAR_BIT * sizeof(long));
+    }
+    else if ( 2 * sizeof(long) >= sizeof(double) )
+    {
+	exp -= 2 * CHAR_BIT * sizeof(long);
+	d    = ldexp(norm, CHAR_BIT * sizeof(long) + (exp < 0 ? exp : 0));
+	if ( neg )
+	{
+	    BN_zero(z);
+	    BN_sub_word(z, (unsigned long)d);
+	}
+	else
+	    BN_set_word(z, (unsigned long)d);
+	BN_lshift(z, z, CHAR_BIT * sizeof(long));
+	d = ldexp(d - floor(d), CHAR_BIT * sizeof(long));
+	if ( neg )
+	    BN_sub_word(z, (unsigned long)d);
+	else
+	    BN_add_word(z, (unsigned long)d);
+	if ( exp > 0 )
+	    BN_lshift(z, z, exp);
+    }
+    else
+	curry_panic("bnz_set_d: 2*sizeof(long) < sizeof(double)\n");
+}
+
+void
+bnz_set_str(BIGNUM *z, const char *str, int base)
+{
+    switch ( base )
+    {
+    case 10:
+	BN_dec2bn(&z, str);
+	break;
+    case 16:
+	BN_hex2bn(&z, str);
+	break;
+    default:
+	curry_panic("bnz_set_str: unsupported base: %d\n", base);
+    }
+}
+
+@ 
+Implementing the conversions from multi-precision integer numbers into
+(signed and unsigned) long int values is complicated by the fact that
+[[BN_get_word]] returns either [[0]] or [[ULONG_MAX]] if the
+multi-precision integer does not fit into an unsigned long, whereas
+the Gnu MP library's [[mpz_get_si]] function returns the least
+significant long int of a multi-precision integer if it is out of
+range. The code below implements this semantics on top of libcrypto. %'
+
+<<libcrypto based emulation code>>=
+extern long   bnz_get_si(BIGNUM *);
+extern double bnz_get_d(BIGNUM *);
+extern char   *bnz_get_str(char *, int, BIGNUM *);
+
+@ 
+<<bigint.c>>=
+long
+bnz_get_si(BIGNUM *x)
+{
+    BN_copy(big_aux, x);
+    BN_mask_bits(big_aux, CHAR_BIT * sizeof(long));
+    return BN_get_word(big_aux);
+}
+
+double
+bnz_get_d(BIGNUM *x)
+{
+    int		       neg, n;
+    double	       d;
+    unsigned long long y;
+    BIGNUM	       aux2;
+
+    neg = bnz_sgn(x) < 0;
+    bnz_abs(big_aux, x);
+
+    n = BN_num_bits(big_aux);
+    if ( n < CHAR_BIT * sizeof(long) )
+	d = (double)BN_get_word(big_aux);
+    else if ( sizeof(long) >= sizeof(double) )
+    {
+	n -= CHAR_BIT * sizeof(long);
+	BN_rshift(big_aux, big_aux, n);
+	d = ldexp((double)BN_get_word(big_aux), n);
+    }
+    else if ( 2 * sizeof(long) >= sizeof(double) )
+    {
+	BN_init(&aux2);
+	n -= 2 * CHAR_BIT * sizeof(long);
+	if ( n > 0 )
+	    BN_rshift(big_aux, big_aux, n);
+	BN_rshift(&aux2, big_aux, CHAR_BIT * sizeof(long));
+	BN_mask_bits(big_aux, CHAR_BIT * sizeof(long));
+	assert(2*sizeof(long) <= sizeof(long long));
+	y = (unsigned long long)BN_get_word(&aux2) << CHAR_BIT * sizeof(long);
+	d = (double)(y + BN_get_word(big_aux));
+	if ( n > 0 )
+	    d = ldexp(d, n);
+	BN_free(&aux2);
+    }
+    else
+	curry_panic("bnz_get_d: 2*sizeof(long) < sizeof(double)\n");
+
+    return neg ? -d : d;
+}
+
+char *
+bnz_get_str(char *buf, int base, BIGNUM *x)
+{
+    char *cp;
+
+    switch ( base )
+    {
+    case 10:
+	cp = BN_bn2dec(x);
+	break;
+    case 16:
+	cp = BN_bn2hex(x);
+	break;
+    default:
+	curry_panic("bnz_get_str: unsupported base %d\n", base);
+    }
+
+    if ( buf )
+	strcpy(buf, cp);
+    else
+	buf = strdup(cp);
+    OPENSSL_free(cp);
+
+    return buf;
+}
+
+@ 
+The arithmetic functions map (almost) directly onto the libcrpyto API
+except for [[mpz_mul_si]] because libcrypto's [[BN_mul_word]] does not
+handle negative numbers. %'
+
+<<libcrypto based emulation code>>=
+#define bnz_add(z,x,y)		(void)BN_add(z,x,y)
+#define bnz_add_ui(z,x,y)	(void)(BN_copy(z,x), BN_add_word(z,y))
+#define bnz_sub(z,x,y)		(void)BN_sub(z,x,y)
+#define bnz_sub_ui(z,x,y)	(void)(BN_copy(z,x), BN_sub_word(z,y))
+#define bnz_neg(z,x)		bnz_sub(z,big_zero,x)
+#define bnz_abs(z,x)		(bnz_sgn(x) < 0 ? bnz_neg(z,x) : bnz_set(z,x))
+
+extern void bnz_mul(BIGNUM *, BIGNUM *, BIGNUM *);
+extern void bnz_mul_si(BIGNUM *, BIGNUM *, long);
+
+@ 
+<<bigint.c>>=
+void
+bnz_mul(BIGNUM *z, BIGNUM *x, BIGNUM *y)
+{
+    BN_CTX *ctx;
+
+    ctx = BN_CTX_new();
+    BN_mul(z, x, y, ctx);
+    BN_CTX_free(ctx);
+}
+
+void
+bnz_mul_si(BIGNUM *z, BIGNUM *x, long y)
+{
+    if ( y >= 0 )
+    {
+	BN_copy(z, x);
+	BN_mul_word(z, y);
+    }
+    else
+    {
+	BN_sub(z, big_zero, x);
+	BN_mul_word(z, -y);
+    }
+}
+
+@ 
+The division functions provided by libcrypto require an additional
+context argument. In addition, libcrypto provides only division
+functions that truncate towards zero.
+
+<<libcrypto based emulation code>>=
+#define bnz_fdiv_q(q,x,y)	(void)bnz_fdiv_qr(q,NULL,x,y)
+#define bnz_fdiv_r(r,x,y)	(void)bnz_fdiv_qr(NULL,r,x,y)
+#define bnz_tdiv_q(q,x,y)	(void)bnz_tdiv_qr(q,NULL,x,y)
+#define bnz_tdiv_r(r,x,y)	(void)bnz_tdiv_qr(NULL,r,x,y)
+
+extern void bnz_fdiv_qr(BIGNUM *, BIGNUM *, BIGNUM *, BIGNUM *);
+extern void bnz_tdiv_qr(BIGNUM *, BIGNUM *, BIGNUM *, BIGNUM *);
+
+@ 
+<<bigint.c>>=
+void
+bnz_tdiv_qr(BIGNUM *q, BIGNUM *r, BIGNUM *x, BIGNUM *y)
+{
+    BN_CTX *ctx;
+    
+    if ( BN_is_zero(y) )
+    {
+	/* force division by zero, ... */
+	BN_mod_word(x, 0);
+
+	/* ... but do something reasonable if this does not fail (PowerPC) */
+	if ( q )
+	    BN_zero(q);
+	if ( r )
+	    BN_copy(r, x);
+    }
+    else
+    {
+	ctx = BN_CTX_new();
+	BN_div(q, r, x, y, ctx);
+	BN_CTX_free(ctx);
+    }
+}
+
+void
+bnz_fdiv_qr(BIGNUM *q, BIGNUM *r, BIGNUM *x, BIGNUM *y)
+{
+    int sgnx, sgny;
+    
+    sgnx = bnz_sgn(x);
+    sgny = bnz_sgn(y);
+    bnz_tdiv_qr(q, r, x, y);
+    if ( (sgnx > 0 && sgny < 0) || (sgnx < 0 && sgny > 0) )
+    {
+	if ( q )
+	    BN_sub_word(q, 1);
+	if ( r )
+	    BN_add(r, r, y);
+    }
+}
+
+@ 
+Unfortunately, libcrypto implements only comparisons between two
+multi-precision integers. Comparison with a signed or unsigned long
+require an auxiliary temporary. Since such comparisons are used quite
+frequently in the code, we use macros for this.
+
+<<libcrypto based emulation code>>=
+#define bnz_cmp(x,y)		BN_cmp(x,y)
+#define bnz_cmp_si(x,y)		(bnz_set_si(big_aux, y), bnz_cmp(x, big_aux))
+#define bnz_sgn(x)		bnz_cmp(x,big_zero)
+
+@ 
+The function [[mpz_out_str]] can be implemented directly only for a
+fixed set of bases with libcrypto. However, these are (at present)
+sufficient for the runtime system.
+
+<<libcrypto based emulation code>>=
+extern void bnz_out_str(FILE *, int, BIGNUM *);
+
+@ 
+<<bigint.c>>=
+void
+bnz_out_str(FILE *fp, int base, BIGNUM *x)
+{
+    char *cp;
+
+    switch ( base )
+    {
+    case 10:
+	cp = BN_bn2dec(x);
+	fprintf(fp, "%s", cp);
+	OPENSSL_free(cp);
+	break;
+    case 16:
+	BN_print_fp(fp, x);
+	break;
+    default:
+	curry_panic("bnz_out_str: unsupported base %d\n", base);
+    }
+}
+
+@ 
+The Gnu MP library allows using custom allocation functions. The
+runtime system currently does not make use of this feature.
+Nevertheless, it retrieves the Gnu MP library's current [[free]]
+function in order to release temporary strings allocated by the
+library. OpenSSL's libcrypto does not provide a similar
+feature. Therefore, the emulation of [[mp_get_memory_functions]]
+simply returns the standard allocation functions.
+
+<<libcrypto based emulation code>>=
+extern void bn_get_memory_functions(void *(**)(), void *(**)(), void (**)());
+
+@ 
+<<bigint.c>>=
+void
+bn_get_memory_functions(void *(**alloc_fun)(),
+			void *(**realloc_fun)(),
+			void (**free_fun)())
+{
+    if ( alloc_fun )
+	*alloc_fun = malloc;
+    if ( realloc_fun )
+	*realloc_fun = realloc;
+    if ( free_fun )
+	*free_fun = free;
+}
+
+@ 
+Libcrypto does not have a built-in rational type. We emulate this type
+by a (normalized) pair of multi-precision integer numbers. Whenever a
+component of a rational number is changed, the rational number must be
+renormalized by calling [[bnq_canoncalize]]. This function ensures
+that the denominator of the rational is positive and the numerator and
+the denominator have no common divisor. Furthermore, the canonical
+representation of zero uses numerator [[0]] and denominator [[1]].
+Note that we do not check for a zero denominator because the Gnu MP
+library does not check for it either.
+
+<<libcrypto based emulation code>>=
+extern void bnq_canonicalize(RATNUM *x);
+
+@ 
+<<bigint.c>>=
+void
+bnq_canonicalize(RATNUM *x)
+{
+    BN_CTX *ctx;
+
+    if ( bnz_sgn(&x->den) < 0 )
+    {
+	BN_sub(&x->num, big_zero, &x->num);
+	BN_sub(&x->den, big_zero, &x->den);
+    }
+
+    if ( BN_is_zero(&x->num) == 0 )
+	BN_one(&x->den);
+    else
+    {
+	ctx = BN_CTX_new();
+	BN_gcd(big_aux, &x->num, &x->den, ctx);
+	BN_div(&x->num, NULL, &x->num, big_aux, ctx);
+	BN_div(&x->den, NULL, &x->den, big_aux, ctx);
+	BN_CTX_free(ctx);
+    }
+}
+
+@ 
+Initialization of an emulated rational is achieved by initializing
+both components.
+
+<<libcrypto based emulation code>>=
+#define bnq_init(x)		(bnz_init(&(x)->num), BN_zero(&(x)->num), \
+				 bnz_init(&(x)->den), BN_one(&(x)->den))
+#define bnq_free(x)		(bnz_free(&(x)->num), bnz_free(&(x)->den))
+
+@ 
+Most conversions are trivial. Only the conversion from a
+floating-point number to a rational number is a bit more complicated.
+
+<<libcrypto based emulation code>>=
+#define bnq_numref(x)		(&(x)->num)
+#define bnq_denref(x)		(&(x)->den)
+#define bnq_get_num(z,x)	bnz_set(z, &(x)->num)
+#define bnq_get_den(z,x)	bnz_set(z, &(x)->den)
+
+extern void bnq_set_d(RATNUM *, double);
+
+@ 
+<<bigint.c>>=
+void
+bnq_set_d(RATNUM *z, double d)
+{
+    int	   neg, exp;
+    double norm, hi, lo;
+
+    /* FIXME: special cases for +/-Infinity and NaN */
+    neg = d < 0;
+    if ( neg )
+	d = -d;
+    norm = frexp(d, &exp);
+
+    if ( CHAR_BIT * sizeof(long) < DBL_MANT_DIG )
+    {
+	assert(2 * CHAR_BIT * sizeof(long) >= DBL_MANT_DIG);
+	norm = ldexp(norm, DBL_MANT_DIG - CHAR_BIT * sizeof(long));
+	lo   = ldexp(modf(norm, &hi), CHAR_BIT * sizeof(long));
+	exp -= DBL_MANT_DIG;
+	if ( neg )
+	{
+	    BN_zero(&z->num);
+	    BN_sub_word(&z->num, (unsigned long)hi);
+	    BN_lshift(&z->num, &z->num, CHAR_BIT * sizeof(long));
+	    BN_sub_word(&z->num, (unsigned long)lo);
+	}
+	else
+	{
+	    BN_set_word(&z->num, (unsigned long)hi);
+	    BN_lshift(&z->num, &z->num, CHAR_BIT * sizeof(long));
+	    BN_add_word(&z->num, (unsigned long)lo);
+	}
+    }
+    else
+    {
+	norm = ldexp(norm, DBL_MANT_DIG);
+	exp -= DBL_MANT_DIG;
+	if ( neg )
+	{
+	    BN_zero(&z->num);
+	    BN_sub_word(&z->num, (unsigned long)d);
+	}
+	else
+	    BN_set_word(&z->num, (unsigned long)d);
+    }
+
+    BN_one(&z->den);
+    if ( exp > 0 )
+	BN_lshift(&z->num, &z->num, exp);
+    else if ( exp < 0 )
+    {
+	BN_lshift(&z->den, &z->den, -exp);
+	bnq_canonicalize(z);
+    }
+}
+
+@ 
+<<bigint.c>>=
+#endif /* !defined(HAVE_GMP_H) && defined(HAVE_OPENSSL_BN_H) */

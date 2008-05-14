@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: integer.nw 2698 2008-05-12 20:35:40Z wlux $
+% $Id: integer.nw 2699 2008-05-14 16:14:13Z wlux $
 %
 % Copyright (c) 2007-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -7,8 +7,8 @@
 \subsection{Multi-Precision Integer Primitives}
 This file contains the implementation of the arithmetic operations of
 the multi-precision \texttt{Integer} type. Our implementation is based
-on the Gnu MP library\footnote{\url{http://www.swox.com/gmp/}}. All
-functions employ the \texttt{rawcall} calling convention.
+on the API of the Gnu MP library. All functions employ the
+\texttt{rawcall} calling convention.
 
 Note that ``small'' numbers are represented as tagged integers. The
 functions below always return tagged integers when possible but they

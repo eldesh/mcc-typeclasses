@@ -1,4 +1,4 @@
-dnl $Id: configure.in 2673 2008-04-21 07:00:31Z wlux $
+dnl $Id: configure.in 2699 2008-05-14 16:14:13Z wlux $
 dnl
 dnl Copyright (c) 2002-2008, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -208,7 +208,8 @@ if test -f $srcdir/config.h.in; then
   if test -z "$TANGLE" || test -z "$CPIF"; then TANGLE=':' CPIF=':'; fi
   if test -z "$WEAVE"; then WEAVE=': \#'; fi
 elif test -z "$TANGLE" || test -z "$CPIF" || test -z "$WEAVE"; then
-  AC_MSG_ERROR([Noweb not found.  If not installed on your machine you can
+  AC_MSG_ERROR([
+Noweb not found.  If not installed on your machine you can
 download noweb from http://www.eecs.harvard.edu/~nr/noweb/])
 fi
 
@@ -264,16 +265,49 @@ case $have_sys_mman_h in
 esac
 
 
-dnl Check for GNU MP.
-AC_CHECK_LIB(gmp, __gmpz_init,
-    	     [LIBS="-lgmp $LIBS" have_libgmp=yes],
-    	     [have_libgmp=no])
-AC_CHECK_HEADER([gmp.h], [have_gmp_h=yes], [have_gmp_h=no])
-if test $have_gmp_h = no || test $have_libgmp = no; then
-  AC_MSG_ERROR([Gnu MP library not found.  If it is installed in a
-non-standard location be sure to invoke configure with the correct
-settings for CPPFLAGS and LDFLAGS.  If not installed you can download
-the Gnu MP library from http://www.swox.com/gmp/])
+dnl Check for GNU MP or OpenSSL's libcrypto.
+AC_ARG_WITH(gmp,
+ [  --with-gmp              use Gnu MP library for multi-precision integer
+                          arithmetic (default if available)])
+AC_ARG_WITH(libcrypto,
+ [  --with-libcrypto        use libcrypto (part of OpenSSL) for multi-precision
+                          integer arithmetic (default if gmp is not available)])
+
+have_gmp=no
+if test x"$with_gmp" != xno; then
+  AC_CHECK_HEADERS([gmp.h], [have_gmp=yes])
+fi
+
+have_libcrypto=no
+if test $have_gmp = no && test x"$with_libcrypto" != xno; then
+  AC_CHECK_HEADERS([openssl/bn.h], [have_libcrypto=yes])
+fi
+
+if test $have_gmp = yes; then
+  AC_CHECK_LIB(gmp, __gmpz_init, [LIBS="-lgmp $LIBS"], [have_gmp=no])
+  if test $have_gmp = no; then
+    AC_MSG_ERROR([
+Could not find a working libgmp for gmp.h.  Check the
+CPPFLAGS and LDFLAGS environment variables, or disable
+gmp via --without-gmp if configure has found a bogus
+gmp.h.])
+  fi
+elif test $have_libcrypto = yes; then
+  AC_CHECK_LIB(crypto, BN_init, [LIBS="-lcrypto $LIBS"], [have_libcrypto=no])
+  if test $have_libcrypto = no; then
+    AC_MSG_ERROR([
+Could not find a working libcrypto for openssl/bn.h.  Check
+the CPPFLAGS and LDFLAGS environment variables, or disable
+libcrypto via --without-libcrypto if configure has found a
+bogus openssl/bn.h.])
+  fi
+else
+  AC_MSG_ERROR([
+Neither the Gnu MP library nor OpenSSL's libcrypto could be
+found.  If they are installed in a non-standard location be
+sure to invoke configure with the correct settings for
+CPPFLAGS and LDFLAGS.  If not installed you can download the
+Gnu MP library from http://www.swox.com/gmp/])
 fi
 
 

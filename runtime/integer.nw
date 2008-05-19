@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: integer.nw 2699 2008-05-14 16:14:13Z wlux $
+% $Id: integer.nw 2702 2008-05-19 18:38:47Z wlux $
 %
 % Copyright (c) 2007-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -277,7 +277,7 @@ primEqInteger(Node *x, Node *y)
     if ( is_tagged_int(x) )
     {
 	if ( is_tagged_int(y) )
-	    cmp = x > y ? 1 : x < y ? -1 : 0;
+	    cmp = (long)x > (long)y ? 1 : (long)x < (long)y ? -1 : 0;
 	else
 	    cmp = -mpz_cmp_si(y->bi.mpz, untag_int(x));
     }
@@ -299,7 +299,7 @@ primNeqInteger(Node *x, Node *y)
     if ( is_tagged_int(x) )
     {
 	if ( is_tagged_int(y) )
-	    cmp = x > y ? 1 : x < y ? -1 : 0;
+	    cmp = (long)x > (long)y ? 1 : (long)x < (long)y ? -1 : 0;
 	else
 	    cmp = -mpz_cmp_si(y->bi.mpz, untag_int(x));
     }
@@ -321,7 +321,7 @@ primLtInteger(Node *x, Node *y)
     if ( is_tagged_int(x) )
     {
 	if ( is_tagged_int(y) )
-	    cmp = x > y ? 1 : x < y ? -1 : 0;
+	    cmp = (long)x > (long)y ? 1 : (long)x < (long)y ? -1 : 0;
 	else
 	    cmp = -mpz_cmp_si(y->bi.mpz, untag_int(x));
     }
@@ -343,7 +343,7 @@ primLeqInteger(Node *x, Node *y)
     if ( is_tagged_int(x) )
     {
 	if ( is_tagged_int(y) )
-	    cmp = x > y ? 1 : x < y ? -1 : 0;
+	    cmp = (long)x > (long)y ? 1 : (long)x < (long)y ? -1 : 0;
 	else
 	    cmp = -mpz_cmp_si(y->bi.mpz, untag_int(x));
     }
@@ -365,7 +365,7 @@ primGeqInteger(Node *x, Node *y)
     if ( is_tagged_int(x) )
     {
 	if ( is_tagged_int(y) )
-	    cmp = x > y ? 1 : x < y ? -1 : 0;
+	    cmp = (long)x > (long)y ? 1 : (long)x < (long)y ? -1 : 0;
 	else
 	    cmp = -mpz_cmp_si(y->bi.mpz, untag_int(x));
     }
@@ -387,7 +387,7 @@ primGtInteger(Node *x, Node *y)
     if ( is_tagged_int(x) )
     {
 	if ( is_tagged_int(y) )
-	    cmp = x > y ? 1 : x < y ? -1 : 0;
+	    cmp = (long)x > (long)y ? 1 : (long)x < (long)y ? -1 : 0;
 	else
 	    cmp = -mpz_cmp_si(y->bi.mpz, untag_int(x));
     }
@@ -409,7 +409,7 @@ primCompareInteger(Node *x, Node *y)
     if ( is_tagged_int(x) )
     {
 	if ( is_tagged_int(y) )
-	    cmp = x > y ? 1 : x < y ? -1 : 0;
+	    cmp = (long)x > (long)y ? 1 : (long)x < (long)y ? -1 : 0;
 	else
 	    cmp = -mpz_cmp_si(y->bi.mpz, untag_int(x));
     }

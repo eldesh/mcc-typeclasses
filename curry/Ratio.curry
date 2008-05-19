@@ -79,7 +79,3 @@ instance Integral a => Enum (Ratio a) where
 instance Integral a => Show (Ratio a) where
   showsPrec p (x :% y) =
     showParen (p > 7) (showsPrec 8 x . showString " % " . showsPrec 8 y)
-
-{- FIXME: include the following definition in the Prelude -}
-gcd x y | x /= 0 && y /= 0 = gcd' (abs x) (abs y)
-  where gcd' x y = if y == 0 then x else gcd' y (x `rem` y)

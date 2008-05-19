@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2693 2008-05-02 13:56:53Z wlux $
+-- $Id: Prelude.curry 2701 2008-05-19 18:26:34Z wlux $
 --
 -- Copyright (c) 1999-2008, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -22,6 +22,7 @@ module Prelude((.), id, const, curry, uncurry, flip, until,
                String, lines, unlines, words, unwords,
                ShowS, shows, showChar, showString, showParen,
                Num(..), Real(..), Integral(..), Fractional(..), RealFrac(..),
+               subtract, even, odd, gcd, lcm, (^), (^^),
                fromIntegral, realToFrac,
                Int(), Integer(), Float(), Rational(),
                Success(), (=:=), (=/=), success, (&), (&>),
@@ -44,6 +45,7 @@ import IO
 
 infixl 9 !!
 infixr 9 .
+infixl 8 ^, ^^
 infixl 7 *, /, `quot`, `rem`, `div`, `mod`
 infixl 6 +, -
 infixr 5 :, ++
@@ -773,6 +775,34 @@ class (Real a, Fractional a) => RealFrac a where
   ceiling x = case properFraction x of (n,r) -> if r > 0 then n + 1 else n
   floor x   = case properFraction x of (n,r) -> if r < 0 then n - 1 else n
 
+subtract :: Num a => a -> a -> a
+subtract x y = y - x
+
+even, odd :: Integral a => a -> Bool
+even n = n `rem` 2 == 0
+odd n = not (even n)
+
+gcd, lcm :: Integral a => a -> a -> a
+gcd m n
+  | m == 0 && n == 0 = error "Prelude.gcd 0 0"
+  | otherwise = gcd' (abs m) (abs n)
+  where gcd' m n = if n == 0 then m else gcd' n (m `rem` n)
+lcm m n
+  | m == 0 || n == 0 = 0
+  | otherwise = abs ((m `quot` gcd m n) * n)
+
+(^) :: (Num a,Integral b) => a -> b -> a
+x ^ n
+  | n == 0 = 1
+  | n > 0  = f x (n - 1) x
+  | otherwise = error "Prelude.^: negative exponent"
+  where f x n y = if n == 0 then y else g x n y
+        g x n y =
+          if even n then g (x * x) (n `quot` 2) y else f x (n - 1) (x * y)
+
+(^^) :: (Fractional a,Integral b) => a -> b -> a
+x ^^ n = if n >= 0 then x ^ n else 1 / x ^ (-n)
+
 fromIntegral :: (Integral a,Num b) => a -> b
 fromIntegral n = fromInteger (toInteger n)
 
@@ -825,6 +855,7 @@ instance Num Int where
     where foreign import ccall "prims.h" primSubInt :: Int -> Int -> Int
   (*) = primMulInt
     where foreign import ccall "prims.h" primMulInt :: Int -> Int -> Int
+  negate n = 0 - n
   abs n = if n >= 0 then n else - n
   signum n = if n > 0 then 1 else if n < 0 then -1 else 0
   fromInt n = n
@@ -993,6 +1024,7 @@ instance Num Float where
     where foreign import ccall "prims.h" primSubFloat :: Float -> Float -> Float
   (*) = primMulFloat
     where foreign import ccall "prims.h" primMulFloat :: Float -> Float -> Float
+  negate x = 0 - x
   abs x =
     -- NB this implementation ensures that abs of a negative zero is positive
     if x <= 0 then - x else x

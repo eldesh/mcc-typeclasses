@@ -1,12 +1,13 @@
--- $Id: Float.curry 2018 2006-11-21 13:34:30Z wlux $
+-- $Id: Float.curry 2701 2008-05-19 18:26:34Z wlux $
 --
--- Copyright (c) 2004, Wolfgang Lux
+-- Copyright (c) 2004-2008, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
-module Float((+.), (-.), (*.), (/.), (^), (^^), (**), (<.), (>.), (<=.), (>=.),
+module Float((+.), (-.), (*.), (/.), (^.), (^^.), (**.),
+             (<.), (>.), (<=.), (>=.),
 	     pi, i2f, truncate, round, sqrt, log, log10, exp,
 	     sin, cos, tan, asin, acos, atan, atan2, sinh, cosh, tanh) where
-infixl 8 ^, ^^, **
+infixl 8 ^., ^^., **.
 
 -- (+.), (-.), (*.), (/.) float operators for compatibility with PAKCS
 (+.), (-.), (*.), (/.) :: Float -> Float -> Float
@@ -29,25 +30,17 @@ pi = 3.14159265358979323846
 i2f :: Int -> Float
 i2f = fromInt
 
---- x^n computes the nth power of x, n must be non-negative
-(^) :: Float -> Int -> Float
-x ^ n
-  | n > 0 = f x (n - 1) x
-  | n == 0 = 1
-  where f x n y
-          | n == 0 = y
-          | otherwise = g x n y
-        g x n y =
-          if n `rem` 2 == 0 then g (x * x) (n `quot` 2) y
-                            else f x (n - 1) (x * y)
+--- x^.n computes the nth power of x, n must be non-negative
+(^.) :: Float -> Int -> Float
+(^.) = (^)
 
---- x^^n computes the nth power of x, n may be negative
-(^^) :: Float -> Int -> Float
-x ^^ n = if n >= 0 then x ^ n else 1 / x ^ (-n)
+--- x^^.n computes the nth power of x, n may be negative
+(^^.) :: Float -> Int -> Float
+(^^.) = (^^)
 
 --- Power
-(**) :: Float -> Float -> Float
-x ** y = exp (log x * y)
+(**.) :: Float -> Float -> Float
+x **. y = exp (log x * y)
 
 --- Square root
 foreign import ccall "math.h" sqrt :: Float -> Float

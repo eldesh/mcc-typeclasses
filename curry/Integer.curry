@@ -1,6 +1,6 @@
--- $Id: Integer.curry 2028 2006-11-28 09:05:38Z wlux $
+-- $Id: Integer.curry 2701 2008-05-19 18:26:34Z wlux $
 --
--- Copyright (c) 2004-2006, Wolfgang Lux
+-- Copyright (c) 2004-2008, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module Integer(pow, ilog, isqrt, factorial, binomial, abs,
@@ -11,10 +11,7 @@ import Float
 
 --- (pow m n) returns the m raised to the power of n
 pow :: Int -> Int -> Int
-pow m n
-  | n > 0 = let n' = pow m (n `quot` 2) in
-  	    if even n then n' * n' else n' * n' * m
-  | n == 0 = 1
+pow = (^)
 
 --- (ilog n) returns the floor of the logarithm in base 10 of n
 ilog :: Int -> Int
@@ -73,11 +70,3 @@ bitNot = complement
 --- (bitXor m n) returns the bitwise exclusive or of m and n
 bitXor :: Int -> Int -> Int
 bitXor = xor
-
---- (even n) returns whether n is even
-even :: Int -> Bool
-even n = n `rem` 2 == 0
-
---- (odd n) returns whether n is odd
-odd :: Int -> Bool
-odd n = not (even n)

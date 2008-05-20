@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2712 2008-05-20 16:40:23Z wlux $
+% $Id: CGen.lhs 2714 2008-05-20 22:56:04Z wlux $
 %
 % Copyright (c) 1998-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -94,10 +94,10 @@ their node info and other constants are allocated separately for every
 function because there is not much chance for them to be shared.
 \begin{verbatim}
 
-> genModule :: [Decl] -> Module -> CFile
-> genModule impDs cam =
+> genModule :: [(Name,[Name])] -> Module -> CFile
+> genModule ts cam =
 >   map CppInclude (nub ("curry.h" : [h | CCall (Just h) _ _ <- sts])) ++
->   genTypes impDs ds sts ns ++
+>   genTypes ts ds sts ns ++
 >   genFunctions ds fs sts ns
 >   where (_,ds,fs) = splitCam cam
 >         (sts0,sts) = foldr linStmts ([],[]) (map thd3 fs)
@@ -183,25 +183,24 @@ underlying representation is opaque. Instead, these constants are
 initialized upon their first use.
 \begin{verbatim}
 
-> genTypes :: [Decl] -> [(Name,[Name],[ConstrDecl])] -> [Stmt] -> [Expr]
->          -> [CTopDecl]
-> genTypes impDs ds sts ns =
->   -- imported/used data constructors
->   [tagDecl cs | DataDecl _ _ cs <- impDs, any (`conElem` usedTs) cs] ++
->   [dataDecl (ConstrDecl c (replicate n undefined)) | (c,n) <- usedCs] ++
+> genTypes :: [(Name,[Name])] -> [(Name,[Name],[ConstrDecl])] -> [Stmt]
+>          -> [Expr] -> [CTopDecl]
+> genTypes ts ds sts ns =
+>   -- imported data constructors
+>   [tagDecl cs | (_,cs) <- ts, any (`elem` usedTs) cs] ++
+>   [dataDecl c n | (c,n) <- usedCs] ++
 >   -- local data declarations
->   [tagDecl (thd3 d) | d <- ds] ++
->   concat [dataDecl c : dataDef ex c | d <- ds, let ex = existType d,
->                                       c <- thd3 d] ++
+>   [tagDecl (map fst cs) | (_,cs) <- ds'] ++
+>   concat [dataDef ex c n | (ex,cs) <- ds', (c,n) <- cs] ++
 >   -- literal constants
 >   literals [c | Lit c <- ns]
->   where constrs = [(c,length vs) | Constr c vs <- ns]
->         usedTs = nub (switchTags sts)
->         usedCs = nub constrs
->         conElem c = (constr c `elem`)
+>   where ds' = [(existType vs cs,map constr cs) | (_,vs,cs) <- ds]
+>         cs = concatMap snd ds'
+>         usedTs = map fst (nub (switchTags sts) \\ cs)
+>         usedCs = nub [(c,length vs) | Constr c vs <- ns] \\ cs
 
-> existType :: (Name,[Name],[ConstrDecl]) -> Bool
-> existType (_,vs,cs) = any hasExistType cs
+> existType :: [Name] -> [ConstrDecl] -> Bool
+> existType vs cs = any hasExistType cs
 >   where hasExistType (ConstrDecl _ tys) = any hasExistVar tys
 >         hasExistVar (TypeVar v) = v `notElem` vs
 >         hasExistVar (TypeApp _ tys) = any hasExistVar tys
@@ -210,27 +209,28 @@ initialized upon their first use.
 > constr :: ConstrDecl -> (Name,Int)
 > constr (ConstrDecl c tys) = (c,length tys)
 
-> tagDecl :: [ConstrDecl] -> CTopDecl
+> tagDecl :: [Name] -> CTopDecl
 > tagDecl cs =
 >   CEnumDecl [CConst (dataTag c) (Just n)
->             | (ConstrDecl c _,n) <- zip cs [0..], c /= Name "_"]
+>             | (c,n) <- zip cs [0..], c /= Name "_"]
 
-> dataDecl :: ConstrDecl -> CTopDecl
-> dataDecl (ConstrDecl c tys)
->   | null tys = CExternVarDecl nodeInfoConstPtrType (constNode c)
->   | otherwise = CExternVarDecl nodeInfoType (nodeInfo c)
+> dataDecl :: Name -> Int -> CTopDecl
+> dataDecl c n = head (dataDef undefined c n)
 
-> dataDef :: Bool -> ConstrDecl -> [CTopDecl]
-> dataDef ex (ConstrDecl c tys)
->   | null tys =
->       [CVarDef CPrivate nodeInfoType (nodeInfo c) (Just nodeinfo),
+> dataDef :: Bool -> Name -> Int -> [CTopDecl]
+> dataDef ex c n
+>   | n == 0 =
+>       [CExternVarDecl nodeInfoConstPtrType (constNode c),
+>        CVarDef CPrivate nodeInfoType (nodeInfo c) (Just nodeinfo),
 >        CVarDef CPublic nodeInfoConstPtrType (constNode c)
 >                (Just (CInit (addr (nodeInfo c))))]
->   | otherwise = [CVarDef CPublic nodeInfoType (nodeInfo c) (Just nodeinfo)]
+>   | otherwise =
+>       [CExternVarDecl nodeInfoType (nodeInfo c),
+>        CVarDef CPublic nodeInfoType (nodeInfo c) (Just nodeinfo)]
 >   where nodeinfo = CStruct (map CInit nodeinfo')
 >         nodeinfo' =
 >           [CExpr (if ex then "EAPP_KIND" else "CAPP_KIND"),CExpr (dataTag c),
->            closureNodeSize (length tys),gcPointerTable,CString name,
+>            closureNodeSize n,gcPointerTable,CString name,
 >            CExpr "eval_whnf",noApply,noEntry,notFinalized]
 >         name = snd $ splitQualified $ demangle c
 

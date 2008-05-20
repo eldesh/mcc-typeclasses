@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2696 2008-05-09 19:05:03Z wlux $
+% $Id: DictTrans.lhs 2714 2008-05-20 22:56:04Z wlux $
 %
 % Copyright (c) 2006-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -17,8 +17,7 @@ dictionaries themselves are derived from the type class and instance
 declarations in the module.
 \begin{verbatim}
 
-> module DictTrans(dictTransModule, dictTransInterface,
->                  dictSpecializeModule) where
+> module DictTrans(dictTransModule, dictSpecializeModule) where
 > import Base
 > import Combined
 > import Curry
@@ -118,68 +117,6 @@ p.~\pageref{dict-specialize}.
 > liftDecls _ _ _ (BlockDecl d) = [BlockDecl d]
 
 \end{verbatim}
-Besides the source code definitions, the compiler must also transform
-the imported interface modules because their declarations are used to
-supply the appropriate environment for the abstract machine code
-generator.
-\begin{verbatim}
-
-> dictTransInterface :: TCEnv -> ValueEnv -> Interface -> Interface
-> dictTransInterface tcEnv tyEnv (Interface m is ds) =
->   Interface m is (map (dictTransIntfDecl m tcEnv') dss)
->   where dss = concatMap (liftIntfDecls m tcEnv' tyEnv) ds
->         tcEnv' = bindDictTypes m tcEnv
-
-> liftIntfDecls :: ModuleIdent -> TCEnv -> ValueEnv -> IDecl -> [IDecl]
-> liftIntfDecls _ _ _ (IInfixDecl p fix pr op) = [IInfixDecl p fix pr op]
-> liftIntfDecls _ _ _ (HidingDataDecl p tc k tvs) = [HidingDataDecl p tc k tvs]
-> liftIntfDecls _ _ _ (IDataDecl p cx tc k tvs cs cs') =
->   [IDataDecl p cx tc k tvs cs cs']
-> liftIntfDecls _ _ _ (INewtypeDecl p cx tc k tvs nc cs') =
->   [INewtypeDecl p cx tc k tvs nc cs']
-> liftIntfDecls _ _ _ (ITypeDecl p tc k tvs ty) = [ITypeDecl p tc k tvs ty]
-> liftIntfDecls m tcEnv _ (HidingClassDecl p _ cls k tv) =
->   classIDecls m tcEnv p cls k tv Nothing
-> liftIntfDecls m tcEnv _ (IClassDecl p _ cls k tv ds _) =
->   classIDecls m tcEnv p cls k tv (Just ds) ++ intfMethodStubs cls tv ds
-> liftIntfDecls m tcEnv tyEnv (IInstanceDecl p cx cls ty m') =
->   instIDecls tcEnv tyEnv p cls' (toQualType m (QualTypeExpr cx ty)) m''
->   where cls' = qualQualify m cls
->         m'' = fromMaybe m m'
-> liftIntfDecls _ _ _ (IFunctionDecl p f n ty) = [IFunctionDecl p f n ty]
-
-> dictTransIntfDecl :: ModuleIdent -> TCEnv -> IDecl -> IDecl
-> dictTransIntfDecl m tcEnv (IDataDecl p cxL tc k tvs cs cs') =
->   IDataDecl p [] tc k tvs (map dictTransConstrDecl cs) cs'
->   where dictTransConstrDecl (ConstrDecl p evs cxR c tys) =
->           dictTransConstrDecl' p evs cxR c tys
->         dictTransConstrDecl (ConOpDecl p evs cxR ty1 op ty2) =
->           dictTransConstrDecl' p evs cxR op [ty1,ty2]
->         dictTransConstrDecl (RecordDecl p evs cxR c fs) =
->           dictTransConstrDecl' p evs cxR c tys
->           where tys = [ty | FieldDecl _ ls ty <- fs, l <- ls]
->         dictTransConstrDecl' p evs cxR c tys = ConstrDecl p evs [] c tys'
->           where tys' = map (fromType tcEnv (tvs ++ evs)) . arrowArgs $
->                        uncurry (transformConstrType tcEnv) $
->                        toConstrType m cxL tc tvs cxR tys
-> dictTransIntfDecl m tcEnv (INewtypeDecl p _ tc k tvs nc cs') =
->   INewtypeDecl p [] tc k tvs nc cs'
-> dictTransIntfDecl m tcEnv (IFunctionDecl p f n ty) =
->   IFunctionDecl p f (fmap (+ toInteger d) n)
->                 (fromQualType tcEnv (nub (fv ty)) (qualType ty''))
->   where ty' = toQualType m ty
->         ty'' = transformQualType tcEnv ty'
->         d = arrowArity ty'' - arrowArity (unqualType ty')
-> dictTransIntfDecl _ _ d = d
-
-> transformConstrType :: TCEnv -> ConstrInfo -> QualType -> Type
-> transformConstrType tcEnv ci ty =
->   transformQualType tcEnv (constrTypeRhs ci ty)
-
-> transformQualType :: TCEnv -> QualType -> Type
-> transformQualType tcEnv = transformType . contextMap (maxContext tcEnv)
-
-\end{verbatim}
 \paragraph{Class Declarations}
 For every type class declaration
 \begin{displaymath}
@@ -272,26 +209,6 @@ uses a default implementation that is equivalent to
 >   methodDecl qUndefinedId p (defaultMethodId cls f) ty (lookup f ds)
 >   where ty = rawType (varType f tyEnv)
 
-> classIDecls :: ModuleIdent -> TCEnv -> Position -> QualIdent -> Maybe KindExpr
->             -> Ident -> Maybe [IMethodDecl] -> [IDecl]
-> classIDecls m tcEnv p cls k tv (Just ds) =
->   dictIDataDecl m tcEnv p cls k tv ds : map (defaultIMethodDecl cls tv) ds
-> classIDecls _ _ p cls k tv Nothing = [dictIDataDecl' p cls k tv]
-
-> dictIDataDecl :: ModuleIdent ->  TCEnv -> Position -> QualIdent
->               -> Maybe KindExpr -> Ident -> [IMethodDecl] -> IDecl
-> dictIDataDecl m tcEnv p cls k tv ds =
->   dictIDecl (IDataDecl p []) cls k tv cs []
->   where cs = [dictConstrDecl tcEnv p (unqualify cls) tv tys]
->         tys = [toMethodType m cls tv ty | IMethodDecl _ _ ty <- ds]
-
-> defaultIMethodDecl :: QualIdent -> Ident -> IMethodDecl -> IDecl
-> defaultIMethodDecl cls tv (IMethodDecl p f ty) =
->   intfMethodDecl cls tv p (qDefaultMethodId cls f) ty
-
-> dictIDataDecl' :: Position -> QualIdent -> Maybe KindExpr -> Ident -> IDecl
-> dictIDataDecl' p cls k tv = dictIDecl (HidingDataDecl p) cls k tv
-
 > classDictType :: TCEnv -> ValueEnv -> QualIdent -> [Ident] -> Type
 > classDictType tcEnv tyEnv cls =
 >   foldr (TypeArrow . transformMethodType tcEnv . classMethodType tyEnv cls) ty
@@ -300,10 +217,6 @@ uses a default implementation that is equivalent to
 > classMethodType :: ValueEnv -> QualIdent -> Ident -> QualType
 > classMethodType tyEnv cls f = ty
 >   where ForAll _ ty = funType (qualifyLike cls f) tyEnv
-
-> dictIDecl :: (QualIdent -> Maybe KindExpr -> [Ident] -> a)
->           -> QualIdent -> Maybe KindExpr -> Ident -> a
-> dictIDecl f cls k tv = f (qDictTypeId cls) (fmap (`ArrowKind` Star) k) [tv]
 
 > dictConstrDecl :: TCEnv -> Position -> Ident -> Ident -> [QualType]
 >                -> ConstrDecl
@@ -399,19 +312,6 @@ method's class can be shared among all method stubs of that class.
 >         (i,cx) = methodStubContext tcEnv cls'
 >         (ps,fs) = unzip [(p,f) | TypeSig p fs _ <- ds, f <- fs]
 > methodStubs _ _ _ _ = return []
-
-> intfMethodStubs :: QualIdent -> Ident -> [IMethodDecl] -> [IDecl]
-> intfMethodStubs cls tv ds = map (intfMethodStub cls tv) ds
-
-> intfMethodStub :: QualIdent -> Ident -> IMethodDecl -> IDecl
-> intfMethodStub cls tv (IMethodDecl p f ty) =
->   intfMethodDecl cls tv p (qualifyLike cls f) ty
-
-> intfMethodDecl :: QualIdent -> Ident -> Position -> QualIdent -> QualTypeExpr
->                -> IDecl
-> intfMethodDecl cls tv p f (QualTypeExpr cx ty) =
->   IFunctionDecl p f Nothing (QualTypeExpr (methodContext cls tv cx) ty)
->   where methodContext cls tv cx = ClassAssert cls (VariableType tv) : cx
 
 > methodStubContext :: TCEnv -> QualIdent -> (Int,Context)
 > methodStubContext tcEnv cls = (i,cx)
@@ -524,28 +424,6 @@ of method $f_i$ in class $C$.
 >   Let [FunctionDecl p f eqs] (mkVar ty f)
 > methodExpr f0 ty Nothing = Variable ty f0
 
-> instIDecls :: TCEnv -> ValueEnv -> Position -> QualIdent -> QualType
->            -> ModuleIdent -> [IDecl]
-> instIDecls tcEnv tyEnv p cls (QualType cx ty) m =
->   instIDictDecl m tcEnv p (TypePred cls ty) (maxContext tcEnv cx) :
->   map (instIMethodDecl m tcEnv tyEnv p cx cls ty) fs
->   where fs = classMethods cls tcEnv
-
-> instIDictDecl :: ModuleIdent -> TCEnv -> Position -> TypePred -> Context
->               -> IDecl
-> instIDictDecl m tcEnv p tp cx =
->   instIDecl tcEnv nameSupply p (qInstFunId m tp) (qualDictType cx tp)
-
-> instIMethodDecl :: ModuleIdent -> TCEnv -> ValueEnv -> Position -> Context
->                 -> QualIdent -> Type -> Ident -> IDecl
-> instIMethodDecl m tcEnv tyEnv p cx cls ty f =
->   instIDecl tcEnv nameSupply p (qInstMethodId m cls ty f)
->             (instMethodType tyEnv cx cls ty f)
-
-> instIDecl :: TCEnv -> [Ident] -> Position -> QualIdent -> QualType -> IDecl
-> instIDecl tcEnv tvs p f ty =
->   IFunctionDecl p f Nothing (fromQualType tcEnv tvs ty)
-
 > instDictType :: TCEnv -> ValueEnv -> QualIdent -> Type -> [Ident] -> Type
 > instDictType tcEnv tyEnv cls ty fs =
 >   instanceType ty (classDictType tcEnv tyEnv cls fs)
@@ -632,6 +510,13 @@ the implicit dictionary arguments to the declaration.
 >         transInfo (Value f n ty) = Value f n' ty'
 >           where n' = n + arrowArity (rawType ty') - arrowArity (rawType ty)
 >                 ty' = tmap (qualType . transformQualType tcEnv) ty
+
+> transformConstrType :: TCEnv -> ConstrInfo -> QualType -> Type
+> transformConstrType tcEnv ci ty =
+>   transformQualType tcEnv (constrTypeRhs ci ty)
+
+> transformQualType :: TCEnv -> QualType -> Type
+> transformQualType tcEnv = transformType . contextMap (maxContext tcEnv)
 
 > class DictTrans a where
 >   dictTrans :: ModuleIdent -> TCEnv -> NewtypeEnv -> InstEnv -> ValueEnv

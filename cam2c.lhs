@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: cam2c.lhs 1884 2006-04-05 16:48:01Z wlux $
+% $Id: cam2c.lhs 2714 2008-05-20 22:56:04Z wlux $
 %
 % Copyright (c) 2005, Wolfgang Lux
 % See LICENSE for the full license.
@@ -137,10 +137,12 @@ constructor tags in the code.
 >     cam <- if null fns then parseInput else parseFiles fns
 >     let (ms,_,_) = splitCam cam
 >     cam' <- mapM (lookupModule importPath) ms >>= parseFiles
+>     let ts = [(tc,map constr cs) | DataDecl tc _ cs <- cam ++ cam']
 >     let ccode =
->           maybe id (flip mergeCFile . uncurry genGoal) g (genModule cam' cam)
+>           maybe id (flip mergeCFile . uncurry genGoal) g (genModule ts cam)
 >     maybe putStr writeFile ofn $ showln $ ppCFile ccode
 >   where showln x = shows x "\n"
+>         constr (ConstrDecl c _) = c
 
 > genGoal :: String -> Maybe [String] -> CFile
 > genGoal f (Just vs) =

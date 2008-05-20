@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 2693 2008-05-02 13:56:53Z wlux $
+% $Id: ILCompile.lhs 2714 2008-05-20 22:56:04Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,7 +10,7 @@ This section describes the transformation from the intermediate
 language into abstract machine code.
 \begin{verbatim}
 
-> module ILCompile(camCompile, camCompileData, var, fun, apFun, con) where
+> module ILCompile(camCompile, var, fun, apFun, con) where
 > import qualified Cam
 > import Combined
 > import Env
@@ -29,9 +29,6 @@ language into abstract machine code.
 > camCompile (Module m is ds) =
 >   map compileImport is ++ concat (map compileDecl ds)
 >   where compileImport = Cam.ImportDecl . Cam.mangle . moduleName
-
-> camCompileData :: [Decl] -> [Cam.Decl]
-> camCompileData ds = [compileData tc n cs | DataDecl tc n cs <- ds]
 
 > compileDecl :: Decl -> [Cam.Decl]
 > compileDecl (DataDecl tc n cs) = [compileData tc n cs]

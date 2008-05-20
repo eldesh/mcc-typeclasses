@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: ILTrans.lhs 2714 2008-05-20 22:56:04Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -17,7 +17,7 @@ representations, we can only use a qualified import of the \texttt{IL}
 module.
 \begin{verbatim}
 
-> module ILTrans(ilTrans,ilTransIntf) where
+> module ILTrans(ilTrans) where
 > import Base
 > import Curry
 > import CurryUtils
@@ -94,39 +94,6 @@ synonyms in place of newtype declarations (see Sect.~\ref{sec:IL}).
 >   where callConv CallConvPrimitive = IL.Primitive
 >         callConv CallConvCCall = IL.CCall
 >         callConv CallConvRawCall = IL.RawCall
-
-\end{verbatim}
-\paragraph{Interfaces}
-In order to generate code, the compiler also needs to know the tags
-and arities of all imported data constructors. For that reason, we
-compile the data type declarations of all interfaces into the
-intermediate language, too. In this case we do not look up the
-types in the environment because the types in the interfaces are
-already fully expanded. Note that we do not translate data types
-which are imported into the interface from another module.
-\begin{verbatim}
-
-> ilTransIntf :: Interface -> [IL.Decl]
-> ilTransIntf (Interface m _ ds) = foldr (translIntfDecl m) [] ds
-
-> translIntfDecl :: ModuleIdent -> IDecl -> [IL.Decl] -> [IL.Decl]
-> translIntfDecl m (IDataDecl _ _ tc _ tvs cs _) ds
->   | not (isQualified tc) = translIntfData m (unqualify tc) tvs cs : ds
-> translIntfDecl _ _ ds = ds
-
-> translIntfData :: ModuleIdent -> Ident -> [Ident] -> [ConstrDecl] -> IL.Decl
-> translIntfData m tc tvs cs =
->   IL.DataDecl (qualifyWith m tc) (length tvs)
->               (map (translIntfConstrDecl m tvs) cs)
-
-> translIntfConstrDecl :: ModuleIdent -> [Ident] -> ConstrDecl -> IL.ConstrDecl
-> translIntfConstrDecl m tvs (ConstrDecl _ _ _ c tys) =
->   IL.ConstrDecl (qualifyWith m c) (map translType (toTypes m tvs tys))
-> translIntfConstrDecl m tvs (ConOpDecl _ _ _ ty1 op ty2) =
->   IL.ConstrDecl (qualifyWith m op) (map translType (toTypes m tvs [ty1,ty2]))
-> translIntfConstrDecl m tvs (RecordDecl _ _ _ c fs) =
->   IL.ConstrDecl (qualifyWith m c) (map translType (toTypes m tvs tys))
->   where tys = [ty | FieldDecl _ ls ty <- fs, l <- ls]
 
 \end{verbatim}
 \paragraph{Types}

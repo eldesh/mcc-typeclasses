@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2707 2008-05-20 08:40:38Z wlux $
+% $Id: disequal.nw 2712 2008-05-20 16:40:23Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -116,8 +116,7 @@ FUNCTION(___61__47__61__2)
 
 	    /* NB assign exist_type before calling eq_args because a
 	     *    garbage collection in eq_args will invalidate arg1 */
-	    exist_type = is_papp_node(arg1)
-		|| (is_capp_node(arg1) && node_tag(arg1) < 0);
+	    exist_type = is_eapp_node(arg1) || is_papp_node(arg1);
 	    arglist = nil;
 	    if ( !eq_args(0, arg1, arg2, n, &arglist) )
 		RETURN(Success, 1);

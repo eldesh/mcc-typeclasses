@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 2694 2008-05-02 14:02:26Z wlux $
+% $Id: print.nw 2712 2008-05-20 16:40:23Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -145,6 +145,7 @@ print_node(unsigned int prec, Node *node)
 		else
 		    print_app(prec, node, closure_argc(node), node->c.args);
 		break;
+	    case EAPP_KIND:
 	    case PAPP_KIND:
 		print_app(prec, node, closure_argc(node), node->c.args);
 		break;
@@ -391,6 +392,7 @@ print_constraints(Node *node)
 	    switch ( node_kind(node) )
 	    {
 	    case CAPP_KIND:
+	    case EAPP_KIND:
 	    case PAPP_KIND:
 		print_app_constraints(closure_argc(node), node->c.args);
 		break;

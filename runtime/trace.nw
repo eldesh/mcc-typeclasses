@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: trace.nw 2615 2008-02-07 08:54:11Z wlux $
+% $Id: trace.nw 2712 2008-05-20 16:40:23Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -240,6 +240,7 @@ trace_shownode(int depth, Node *node)
 	    fprintf(stderr, "%s@%p", name, node);
 	    break;
 	case CAPP_KIND:
+	case EAPP_KIND:
 	case PAPP_KIND:
 	    trace_showapp(depth, node, closure_argc(node), node->c.args);
 	    break;

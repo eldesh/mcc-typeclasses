@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2708 2008-05-20 08:42:10Z wlux $
+% $Id: eval.nw 2712 2008-05-20 16:40:23Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -424,6 +424,7 @@ FUNCTION(__ensureGround_1)
 	    sz	    = node->a.length;
 	    break;
 	case CAPP_KIND:
+	case EAPP_KIND:
 	case PAPP_KIND:
 	    is_vect = false;
 	    n	    = closure_argc(node);

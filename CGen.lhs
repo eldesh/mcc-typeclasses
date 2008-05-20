@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2697 2008-05-12 18:01:29Z wlux $
+% $Id: CGen.lhs 2712 2008-05-20 16:40:23Z wlux $
 %
 % Copyright (c) 1998-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -150,13 +150,10 @@ function because there is not much chance for them to be shared.
 \end{verbatim}
 \subsection{Data Types and Constants}
 For every data type, the compiler defines an enumeration that assigns
-tag numbers to its data constructors. Normally, tags starting at zero
-are assigned to the constructors of each type from left to right.
-However, in order to distinguish constructors of existentially
-quantified types, those constructors are assigned negative tag values
-starting at $-1$. The \verb|enum| declarations are not strictly
-necessary, but simplify the code generator because it does not need to
-determine the tag value of a constructor when it is used.
+tag numbers starting at zero to its data constructors from left to
+right. The \verb|enum| declarations are not strictly necessary, but
+simplify the code generator because it does not need to determine the
+tag value of a constructor when it is used.
 
 In addition to the tag enumerations, the compiler also defines node
 info structures for every data constructor and preallocates constant
@@ -190,11 +187,12 @@ initialized upon their first use.
 >          -> [CTopDecl]
 > genTypes impDs ds sts ns =
 >   -- imported/used data constructors
->   [tagDecl t vs cs | DataDecl t vs cs <- impDs, any (`conElem` usedTs) cs] ++
+>   [tagDecl cs | DataDecl _ _ cs <- impDs, any (`conElem` usedTs) cs] ++
 >   [dataDecl (ConstrDecl c (replicate n undefined)) | (c,n) <- usedCs] ++
 >   -- local data declarations
->   [tagDecl t vs cs | (t,vs,cs) <- ds] ++
->   concat [dataDecl c : dataDef c | cs <- map thd3 ds, c <- cs] ++
+>   [tagDecl (thd3 d) | d <- ds] ++
+>   concat [dataDecl c : dataDef ex c | d <- ds, let ex = existType d,
+>                                       c <- thd3 d] ++
 >   -- literal constants
 >   literals [c | Lit c <- ns]
 >   where constrs = [(c,length vs) | Constr c vs <- ns]
@@ -202,28 +200,28 @@ initialized upon their first use.
 >         usedCs = nub constrs
 >         conElem c = (constr c `elem`)
 
-> constr :: ConstrDecl -> (Name,Int)
-> constr (ConstrDecl c tys) = (c,length tys)
-
-> tagDecl :: Name -> [Name] -> [ConstrDecl] -> CTopDecl
-> tagDecl _ vs cs =
->   CEnumDecl [CConst (dataTag c) (Just n)
->             | (ConstrDecl c _,n) <- zip cs tags, c /= Name "_"]
->   where tags
->           | any hasExistType cs = [-1,-2..]
->           | otherwise = [0..]
->         hasExistType (ConstrDecl _ tys) = any hasExistVar tys
+> existType :: (Name,[Name],[ConstrDecl]) -> Bool
+> existType (_,vs,cs) = any hasExistType cs
+>   where hasExistType (ConstrDecl _ tys) = any hasExistVar tys
 >         hasExistVar (TypeVar v) = v `notElem` vs
 >         hasExistVar (TypeApp _ tys) = any hasExistVar tys
 >         hasExistVar (TypeArr ty1 ty2) = hasExistVar ty1 || hasExistVar ty2
+
+> constr :: ConstrDecl -> (Name,Int)
+> constr (ConstrDecl c tys) = (c,length tys)
+
+> tagDecl :: [ConstrDecl] -> CTopDecl
+> tagDecl cs =
+>   CEnumDecl [CConst (dataTag c) (Just n)
+>             | (ConstrDecl c _,n) <- zip cs [0..], c /= Name "_"]
 
 > dataDecl :: ConstrDecl -> CTopDecl
 > dataDecl (ConstrDecl c tys)
 >   | null tys = CExternVarDecl nodeInfoConstPtrType (constNode c)
 >   | otherwise = CExternVarDecl nodeInfoType (nodeInfo c)
 
-> dataDef :: ConstrDecl -> [CTopDecl]
-> dataDef (ConstrDecl c tys)
+> dataDef :: Bool -> ConstrDecl -> [CTopDecl]
+> dataDef ex (ConstrDecl c tys)
 >   | null tys =
 >       [CVarDef CPrivate nodeInfoType (nodeInfo c) (Just nodeinfo),
 >        CVarDef CPublic nodeInfoConstPtrType (constNode c)
@@ -231,9 +229,9 @@ initialized upon their first use.
 >   | otherwise = [CVarDef CPublic nodeInfoType (nodeInfo c) (Just nodeinfo)]
 >   where nodeinfo = CStruct (map CInit nodeinfo')
 >         nodeinfo' =
->           [CExpr "CAPP_KIND",CExpr (dataTag c),closureNodeSize (length tys),
->            gcPointerTable,CString name,CExpr "eval_whnf",noApply,noEntry,
->            notFinalized]
+>           [CExpr (if ex then "EAPP_KIND" else "CAPP_KIND"),CExpr (dataTag c),
+>            closureNodeSize (length tys),gcPointerTable,CString name,
+>            CExpr "eval_whnf",noApply,noEntry,notFinalized]
 >         name = snd $ splitQualified $ demangle c
 
 > literals :: [Literal] -> [CTopDecl]
@@ -1113,7 +1111,7 @@ literals when set to a non-zero value.
 >           [intCase | not (null ints)] ++
 >           [integerCase | not (null integers)] ++
 >           [floatCase | not (null floats)] ++
->           [constrCase | not (null constrs)]
+>           if not (null constrs) then constrCase else []
 >         varCase = cCase "LVAR_KIND"
 >         charCase =
 >           cCase "CHAR_KIND"
@@ -1127,7 +1125,9 @@ literals when set to a non-zero value.
 >           cCase "BIGINT_KIND"
 >                 (integerSwitch (field v "bi.mpz") integers ++ [CBreak])
 >         floatCase = cCase "FLOAT_KIND" (floatSwitch v floats ++ [CBreak])
->         constrCase = cCase "CAPP_KIND" [tagSwitch v constrs,CBreak]
+>         constrCase =
+>           [cCase "CAPP_KIND" [],
+>            cCase "EAPP_KIND" [tagSwitch v constrs,CBreak]]
 >         partition (t,stmts) ~(lits,constrs,vars,dflts) =
 >           case t of
 >              CPSLitCase l -> ((l,stmts) : lits,constrs,vars,dflts)

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2699 2008-05-14 16:14:13Z wlux $
+% $Id: heap.nw 2712 2008-05-20 16:40:23Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -123,6 +123,14 @@ logical variables, and a few other primitive data types. Other kinds
 of nodes are used for managing the internal state of the runtime
 system, e.g., the state of inactive threads.
 
+Note that applications of data constructors of a data type with
+existentially quantified type variables use the distinguished kind
+[[EAPP_KIND]] instead of [[CAPP_KIND]] due to typing issues (cf.\ 
+p.~\pageref{unsafe-equality} in Sect.~\ref{unsafe-equality}). At
+present, [[EAPP_KIND]] and [[CAPP_KIND]] must be used consistently per
+data type, i.e., \emph{all} data constructors of a data type with
+existentially quantified types must have kind [[EAPP_KIND]].
+
 The kind [[ABSTRACT_KIND]] is used for references to external data,
 e.g., files. The runtime system will never duplicate such nodes and
 use physical equality when comparing them in equality and disequality
@@ -134,6 +142,7 @@ the runtime system.
 <<heap.h>>=
 enum {
     CAPP_KIND,			/* constructor application */
+    EAPP_KIND,                  /* ditto for existentially quantified types */
     PAPP_KIND,			/* partial application node */
     LVAR_KIND,			/* (unbound) logic variable */
     LAZY_KIND,			/* lazy function application node */
@@ -173,9 +182,7 @@ constructor applications, it is used to distinguish data constructors
 of the same type. For instance, the constructors of the type
 \texttt{data Num = Prec Num | Zero | Succ Num} are assigned tags 0
 (\verb|Prec|), 1 (\verb|Zero|), and 2 (\verb|Succ|),
-respectively. Usually, data constructor tags are positive
-numbers. However, data constructors of existentially quantified
-types are assigned negative tags.
+respectively.
 
 For partial application nodes, the [[tag]] field denotes the arity --
 i.e., the number of missing arguments -- of the application. In
@@ -232,6 +239,7 @@ struct node_info
 #define node_tag(node)		(node)->info->tag
 #define node_size(node)		(node)->info->length
 #define is_capp_node(node)	(node_kind(node) == CAPP_KIND)
+#define is_eapp_node(node)	(node_kind(node) == EAPP_KIND)
 #define is_papp_node(node)	(node_kind(node) == PAPP_KIND)
 #define is_variable_node(node)	(node_kind(node) == LVAR_KIND)
 #define is_lazy_node(node)	(node_kind(node) == LAZY_KIND)

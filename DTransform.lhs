@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2692 2008-05-02 13:22:41Z wlux $
+% $Id: DTransform.lhs 2710 2008-05-20 08:45:28Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2008, Wolfgang Lux
@@ -51,8 +51,11 @@ children.
 \begin{verbatim}
 
 > dTransform :: (QualIdent -> Bool) -> Module -> Module
-> dTransform trusted (Module m is ds) =
->   Module m (debugPreludeMIdent:is) (debugDecls trusted ds)
+> dTransform trusted (Module m is ds) = Module m is' ds'
+>   where ms = m:is
+>         is' = imp preludeMIdent ++ imp debugPreludeMIdent ++ is
+>         ds' = debugDecls trusted ds
+>         imp m = [m | m `notElem` ms]
 
 \end{verbatim}
 

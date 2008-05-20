@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2694 2008-05-02 14:02:26Z wlux $
+% $Id: disequal.nw 2707 2008-05-20 08:40:38Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -150,6 +150,12 @@ add the expression directly to the constraint list here, which should
 not cause any problems as the runtime system does not rely on
 disequality constraints being in normal form.
 
+If a disequality constraint is applied to two unbound variables, we
+add the constraint (only) to the variable at the higher address. As
+for the unification of two variables, this policy avoids redundant
+trailing when one of the variables is allocated in the current heap
+segment and the other one is protected below a choice point.
+
 Note that this implementation is incomplete. For instance, it will not
 compute the valid solution \verb|x=Nothing| for the constraint
 \verb|x =/= Just undefined|. In order to compute such solutions, the
@@ -181,14 +187,14 @@ FUNCTION(diseq_var)
     bool	nf;
     Disequality *cstr;
  ENTRY_LABEL(static, diseq_var)
-    if ( !is_local_space(regs.r[0]->v.spc) )
+    if ( is_tagged_ptr(regs.sp[0]) && is_variable_node(regs.sp[0]) &&
+	 is_local_space(regs.sp[0]->v.spc) )
     {
-	if ( is_tagged_ptr(regs.sp[0]) && is_variable_node(regs.sp[0]) &&
-	     is_local_space(regs.sp[0]->v.spc) )
+	if ( regs.sp[0] > regs.r[0] || !is_local_space(regs.r[0]->v.spc) )
 	    SWAPn(0);
-	else
-	    CALL1(sync_var, ___61__47__61__1, regs.r[0]);
     }
+    else if ( !is_local_space(regs.r[0]->v.spc) )
+	CALL1(sync_var, ___61__47__61__1, regs.r[0]);
 
     nf = true;
     if ( occurs(regs.r[0], regs.sp[0], &nf) )

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2694 2008-05-02 14:02:26Z wlux $
+% $Id: unify.nw 2707 2008-05-20 08:40:38Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -599,6 +599,19 @@ FUNCTION(unify_papp_args)
 }
 
 @
+When two (different) variables are unified, [[unify_var]] binds the
+variable at the higher address to the one at the lower address. This
+policy avoids redundant trailing if one of the variables is allocated
+in the current heap segment and the other one is protected below a
+choice point. Furthermore, it prevents the free variables of a
+top-level goal from being instantiated unnecessarily -- at least
+before the first garbage collection.\footnote{The garbage collector
+  (Sect.~\ref{sec:copying-gc}) does not preserve allocation order
+  within heap segments. Due to the breadth first traversal, it might
+  copy local variables before copying the goal variables.} A special
+case prevents binding a non-local variable within an encapsulated
+search regardless of allocation order.
+
 If a variable is unified with a data term, we have to perform an
 occurs check in order to ensure that the term remains finite. The
 check can be disabled with the \texttt{--disable-occurs-check}
@@ -668,14 +681,14 @@ FUNCTION(unify_var)
     unsigned int i, n, sz;
     Node	 *var, *arg, *next, *arglist, **argp;
  ENTRY_LABEL(static, unify_var)
-    if ( !is_local_space(regs.r[0]->v.spc) )
+    if ( is_tagged_ptr(regs.sp[0]) && is_variable_node(regs.sp[0]) &&
+	 is_local_space(regs.sp[0]->v.spc) )
     {
-	if ( is_tagged_ptr(regs.sp[0]) && is_variable_node(regs.sp[0]) &&
-	     is_local_space(regs.sp[0]->v.spc) )
+	if ( regs.sp[0] > regs.r[0] || !is_local_space(regs.r[0]->v.spc) )
 	    SWAPn(0);
-	else
-	    CALL1(sync_var, ___61__58__61__1, regs.r[0]);
     }
+    else if ( !is_local_space(regs.r[0]->v.spc) )
+	CALL1(sync_var, ___61__58__61__1, regs.r[0]);
 
     nf	= true;
     var = regs.r[0];

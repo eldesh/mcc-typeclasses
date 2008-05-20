@@ -1,14 +1,14 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: vars.nw 2262 2007-06-16 14:46:48Z wlux $
+% $Id: vars.nw 2709 2008-05-20 08:43:20Z wlux $
 %
-% Copyright (c) 2002-2005, Wolfgang Lux
+% Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Naming variables}
-For printing the result as well as for the \texttt{browse} function
-and for the debugger we need to associate variable nodes with unique
-names. This is done by maintaining a dictionary that maps the
-addresses of variables onto names.
+When printing the result of a goal, we need to associate variable
+nodes with unique names. To this end, the runtime system maintains a
+dictionary that maps the addresses of variable nodes onto their names.
+This dictionary is also consulted by the \texttt{dval} function.
 
 <<vars.c>>=
 #include "config.h"
@@ -23,14 +23,13 @@ addresses of variables onto names.
 #include "vars.h"
 
 @ 
-At present the dictionary is implemented as a simple linked list
+At present the dictionary is implemented as a single-linked list
 rooted in [[names_dict]] and a pointer to the last node of the
 dictionary is saved in [[names_tail]].
 
 The type of dictionary nodes has to be exported because the garbage
-collector must update the node pointers in the
-dictionary. \textbf{These declarations should not be used in any other
-module!}
+collector must update the node pointers in the dictionary.
+\textbf{These declarations should not be used in any other module!}
 
 \ToDo{Use a hash table for the dictionary.}
 
@@ -90,10 +89,10 @@ The function [[release_names]] releases all dictionary entries after
 [[new_tail]]. If this argument is [[0]] the whole dictionary is
 released.
 
-This function should be used to remove only the segment of dictionary
-that was created since that last choicepoint or search context was
-installed. Releasing a bigger segment might leave dangling pointers in
-the control stack.
+This function should be used only to remove the tail of the dictionary
+that was created since the last choice point or search context was
+installed. Releasing longer tails might leave dangling pointers in the
+stack.
 
 <<vars.h>>=
 extern void release_names(struct dict_node *new_tail);
@@ -129,26 +128,27 @@ release_names(struct dict_node *new_tail)
 }
 
 @ 
-In order to cleanup the dictionary after a garbage collection and
-update all pointers in the control stack, the function
-[[cleanup_names]] should be used. This function looks for dictionary
-nodes which point to no node at all and release the memory occupied by
-them. In addition, the saved dictionary tails on the control stack
-are moved to the previous node which is still in use.
+In order to cleanup the dictionary after a garbage collection, the
+function [[cleanup_names]] should be used. This function looks for
+dictionary nodes whose referenced (variable) node has been released
+and in turn releases those dictionary nodes themselves. In addition,
+the saved dictionary tails in choice points and search contexts are
+updated to a preceding live dictionary node if necessary.
 
-The processing is performed in three steps. First the dictionary list
-is reversed (in order to be able to advance the dictionary pointers
-backwards). In a next step the choicepoints and search contexts in the
-control stack are processed from top to bottom and all dictionary
-pointers are set to the next dictionary node with a non-null node
-pointer. In the last phase, the dictionary list is reversed again and
-all nodes which do not point to a node are released.
+The function proceeds in three steps. First, the dictionary list is
+reversed in order to be able to advance dictionary pointers backwards.
+In the next step, the choice points and search contexts in the stack
+are processed from top to bottom and all dictionary pointers are set
+to the next dictionary node with a non-null node pointer. In the last
+phase, the dictionary list is reversed again and all nodes which do
+not point to a node are released. In addition, the tail pointer of the
+dictionary is set to the last live dictionary node (if any).
 
 \ToDo{We can speed up the second phase a bit by making use of the fact
-the many choicepoints will save the same dictionary. We only need to
-find the next used dictionary for the first choicepoint in such a
-sequence and can re-use the new dictionary tail for all these
-choicepoints.}
+that many choice points will save the same dictionary. We only need to
+find the next used dictionary for the first choice point of such a
+group and can reuse the new dictionary tail for the other choice
+points of that group.}
 
 <<vars.h>>=
 extern void cleanup_names(void);
@@ -180,6 +180,11 @@ cleanup_names()
     }
 
     /* Phase III: re-reverse the dictionary and release unused nodes */
+    for ( names_tail = prev;
+	  names_tail && names_tail->node == 0;
+	  names_tail = names_tail->next )
+	;
+
     curr = prev;
     prev = 0;
     for ( ; curr; curr = next )
@@ -231,11 +236,11 @@ order to create unique names. In order to avoid name conflicts with
 entities defined in the program, all generated names start with an
 underscore.
 
-\ToDo{Provide a runtime option is to use either uppercase or lowercase
+\ToDo{Provide a runtime option to choose either uppercase or lowercase
 names for generated names.}
 
-\ToDo{The counter should be reset when the dictionary is released
-during backtracking.}
+\ToDo{Reset the counter when the dictionary is released during
+backtracking.}
 
 <<vars.c>>=
 static unsigned long dict_index;

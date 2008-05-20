@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2694 2008-05-02 14:02:26Z wlux $
+% $Id: eval.nw 2708 2008-05-20 08:42:10Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -156,13 +156,21 @@ FUNCTION(eval_queueMe)
     GOTO(suspend_thread);
 }
 
-@
-When a thread is continued, which has been suspended because of
-entering a queue-me node, the node on the top of the stack has to be
-dereferenced before actually returning. The [[resume]] code performs
-this task. Note that the node on the top of the stack is always in
-weak head normal form when [[resume]] is entered. Therefore, it is
-safe to return to the caller without entering the result.
+@ 
+When a thread, which has been suspended because of entering a queue-me
+node, is continued the node on the top of the stack has to be
+dereferenced and evaluated before actually returning. The [[resume]]
+code performs this task. In general, the node on the top of the stack
+is in head normal form when [[resume]] is entered. However, the
+pattern binding update projection functions (cf.\ 
+Sect.~\ref{pattern-binding}) may create indirection nodes that point
+to an unevaluated application. Consider, e.g., the pattern
+declaration
+\begin{verbatim}
+  (xs,ys) = splitAt 5 (replicate 10 'a') in
+\end{verbatim}
+where \texttt{ys} is bound to the unevaluated application
+\texttt{replicate 5 'a'} when \texttt{xs} is evaluated.
 
 <<eval.h>>=
 DECLARE_LABEL(extern, resume);
@@ -173,12 +181,20 @@ FUNCTION(resume)
 {
     Node *result;
  ENTRY_LABEL(extern, resume)
-    /* dereference the indirection */
     result = regs.sp[0];
-    while ( is_tagged_ptr(result) && is_indir_node(result) )
-	result = result->n.node;
-
-    /* return to the caller */
+    for (;;)
+    {
+	if ( is_tagged_ptr(result) )
+	    switch ( node_kind(result) )
+	    {
+	    case INDIR_KIND:
+		result = result->n.node;
+		continue;
+	    case LAZY_KIND:
+		ENTER(result, 1);
+	    }
+	break;
+    }
     RETURN(result, 1);
 }
 

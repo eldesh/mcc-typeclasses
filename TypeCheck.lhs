@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: TypeCheck.lhs 2716 2008-06-10 12:18:58Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1555,7 +1555,10 @@ may cause a further extension of the current substitution.
 >         [] ->
 >           errorAt p (noInstance what doc tcEnv cls (TypeConstrained tys tv))
 >         [ty'] -> return (bindSubst tv ty' theta)
->         _ -> return theta
+>         tys'
+>           | length tys == length tys' -> return theta
+>           | otherwise ->
+>               liftM (flip (bindSubst tv) theta) (freshConstrained tys')
 >     ty'
 >       | hasInstance iEnv cls ty' -> return theta
 >       | otherwise -> errorAt p (noInstance what doc tcEnv cls ty')

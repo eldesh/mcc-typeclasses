@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: bigint.nw 2699 2008-05-14 16:14:13Z wlux $
+% $Id: bigint.nw 2715 2008-06-10 08:59:56Z wlux $
 %
 % Copyright (c) 2007-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -166,7 +166,7 @@ values and from doubles require additional glue code.
 <<libcrypto based emulation code>>=
 #define bnz_set(z,x)		(void)BN_copy(z,x)
 #define bnz_set_si(z,x) \
-	((x) >= 0 ? BN_set_word(z,x) : (BN_zero(z), BN_sub_word(z,-x)))
+	((x) >= 0 ? BN_set_word(z,x) : (BN_zero(z), BN_sub_word(z,-(x))))
 
 extern void bnz_set_d(BIGNUM *, double);
 extern void bnz_set_str(BIGNUM *, const char *, int);
@@ -269,7 +269,7 @@ bnz_get_si(BIGNUM *x)
 {
     BN_copy(big_aux, x);
     BN_mask_bits(big_aux, CHAR_BIT * sizeof(long));
-    return BN_get_word(big_aux);
+    return bnz_sgn(x) >= 0 ? BN_get_word(big_aux) : -BN_get_word(big_aux);
 }
 
 double

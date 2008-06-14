@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2628 2008-02-20 16:27:30Z wlux $
+% $Id: Deriving.lhs 2723 2008-06-14 15:56:40Z wlux $
 %
 % Copyright (c) 2006-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -60,7 +60,7 @@ derived.
 >         tc' = qualifyWith m tc
 >         tvs' = take (length tvs) (map TypeVariable [0..])
 >         cls' = origName (head (qualLookupTopEnv cls tcEnv))
->         QualTypeExpr cx' ty' = fromQualType tcEnv tvs (QualType cx ty)
+>         QualTypeExpr cx' ty' = fromQualType tvs (QualType cx ty)
 >         constr (ConstrDecl _ _ _ c tys) = (qualifyWith m c,length tys,Nothing)
 >         constr (ConOpDecl _ _ _ _ op _) = (qualifyWith m op,2,Nothing)
 >         constr (RecordDecl _ _ _ c fs) = (qualifyWith m c,length ls,Just ls)

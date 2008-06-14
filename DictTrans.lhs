@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2714 2008-05-20 22:56:04Z wlux $
+% $Id: DictTrans.lhs 2723 2008-06-14 15:56:40Z wlux $
 %
 % Copyright (c) 2006-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -223,7 +223,7 @@ uses a default implementation that is equivalent to
 > dictConstrDecl tcEnv p cls tv tys =
 >   ConstrDecl p (filter (tv /=) (nub (fv tys'))) [] (dictConstrId cls) tys'
 >   where tvs = tv : filter (unRenameIdent tv /=) nameSupply
->         tys' = map (fromType tcEnv tvs . transformMethodType tcEnv) tys
+>         tys' = map (fromType tvs . transformMethodType tcEnv) tys
 
 > transformMethodType :: TCEnv -> QualType -> Type
 > transformMethodType tcEnv =
@@ -523,7 +523,7 @@ the implicit dictionary arguments to the declaration.
 >             -> DictEnv -> a Type -> DictState (a Type)
 
 > instance DictTrans TopDecl where
->   dictTrans m tcEnv nEnv iEnv tyEnv dictEnv (DataDecl p cxL tc tvs cs clss) =
+>   dictTrans _ tcEnv nEnv iEnv tyEnv dictEnv (DataDecl p cxL tc tvs cs clss) =
 >     return (DataDecl p [] tc tvs (map dictTransConstrDecl cs) clss)
 >     where dictTransConstrDecl (ConstrDecl p evs cxR c tys) =
 >             dictTransConstrDecl' p evs cxR c tys
@@ -533,7 +533,7 @@ the implicit dictionary arguments to the declaration.
 >             dictTransConstrDecl' p evs cxR c tys
 >             where tys = [ty | FieldDecl _ ls ty <- fs, l <- ls]
 >           dictTransConstrDecl' p evs cxR c tys = ConstrDecl p evs [] c tys'
->             where tys' = map (fromType tcEnv (tvs ++ evs)) . arrowArgs $
+>             where tys' = map (fromType (tvs ++ evs)) . arrowArgs $
 >                          uncurry (transformConstrType tcEnv) $
 >                          expandConstrType tcEnv cxL (qualify tc) tvs cxR tys
 >   dictTrans _ _ _ _ _ _ (NewtypeDecl p cx tc tvs nc clss) =

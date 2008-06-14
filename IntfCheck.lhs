@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2722 2008-06-14 14:08:49Z wlux $
+% $Id: IntfCheck.lhs 2723 2008-06-14 15:56:40Z wlux $
 %
 % Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -66,16 +66,15 @@ interface module only. However, this has not been implemented yet.
 > intfCheck :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> ValueEnv -> [IDecl]
 >           -> Error ()
 > intfCheck m pEnv tcEnv iEnv tyEnv ds =
->   mapE_ (checkImport m pEnv tcEnv iEnv tyEnv)
+>   mapE_ (checkImport pEnv tcEnv iEnv tyEnv)
 >         (filter (isNothing . localIdent m . entity) ds)
 
-> checkImport :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> ValueEnv -> IDecl
->             -> Error ()
-> checkImport _ pEnv _ _ _ (IInfixDecl p fix pr op) =
+> checkImport :: PEnv -> TCEnv -> InstEnv -> ValueEnv -> IDecl -> Error ()
+> checkImport pEnv _ _ _ (IInfixDecl p fix pr op) =
 >   checkPrecInfo checkPrec pEnv p op
 >   where checkPrec (PrecInfo op' (OpPrec fix' pr')) =
 >           op == op' && fix == fix' && pr == pr'
-> checkImport _ _ tcEnv _ _ (HidingDataDecl p tc k tvs) =
+> checkImport _ tcEnv _ _ (HidingDataDecl p tc k tvs) =
 >   checkTypeInfo "hidden data type" checkData tcEnv p tc
 >   where checkData (DataType tc' k' _)
 >           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' =
@@ -84,102 +83,101 @@ interface module only. However, this has not been implemented yet.
 >           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' =
 >               Just (return ())
 >         checkData _ = Nothing
-> checkImport m _ tcEnv _ tyEnv (IDataDecl p cx tc k tvs cs _) =
+> checkImport _ tcEnv _ tyEnv (IDataDecl p cx tc k tvs cs _) =
 >   checkTypeInfo "data type" checkData tcEnv p tc
 >   where checkData (DataType tc' k' cs')
 >           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' &&
 >             (null cs || map constr cs == cs') =
->               Just (mapM_ (checkConstrImport m tyEnv cx tc tvs) cs)
+>               Just (mapM_ (checkConstrImport tyEnv cx tc tvs) cs)
 >         checkData _ = Nothing
-> checkImport m _ tcEnv _ tyEnv (INewtypeDecl p cx tc k tvs nc _) =
+> checkImport _ tcEnv _ tyEnv (INewtypeDecl p cx tc k tvs nc _) =
 >   checkTypeInfo "newtype" checkNewtype tcEnv p tc
 >   where checkNewtype (RenamingType tc' k' nc')
 >           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' &&
 >             nconstr nc == nc' =
->               Just (checkNewConstrImport m tyEnv cx tc tvs nc)
+>               Just (checkNewConstrImport tyEnv cx tc tvs nc)
 >         checkNewtype _ = Nothing
-> checkImport m _ tcEnv _ _ (ITypeDecl p tc k tvs ty) =
+> checkImport _ tcEnv _ _ (ITypeDecl p tc k tvs ty) =
 >   checkTypeInfo "synonym type" checkType tcEnv p tc
 >   where checkType (AliasType tc' n' k' ty')
 >           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' &&
->             length tvs == n' && toType m tvs ty == ty' =
+>             length tvs == n' && toType tvs ty == ty' =
 >               Just (return ())
 >         checkType _ = Nothing
-> checkImport _ _ tcEnv _ _ (HidingClassDecl p cx cls k tv) =
+> checkImport _ tcEnv _ _ (HidingClassDecl p cx cls k tv) =
 >   checkTypeInfo "hidden type class" checkClass tcEnv p cls
 >   where checkClass (TypeClass cls' k' clss' _)
 >           | cls == cls' && maybe KindStar toKind k == k' &&
 >             [cls | ClassAssert cls _ <- cx] == clss' =
 >               Just (return ())
 >         checkClass _ = Nothing
-> checkImport m _ tcEnv _ tyEnv (IClassDecl p cx cls k tv ds _) =
+> checkImport _ tcEnv _ tyEnv (IClassDecl p cx cls k tv ds _) =
 >   checkTypeInfo "type class" checkClass tcEnv p cls
 >   where checkClass (TypeClass cls' k' clss' fs')
 >           | cls == cls' && maybe KindStar toKind k == k' &&
 >             [cls | ClassAssert cls _ <- cx] == clss' &&
 >             map imethod ds == fs' =
->               Just (mapM_ (checkMethodImport m tyEnv cls tv) ds)
+>               Just (mapM_ (checkMethodImport tyEnv cls tv) ds)
 >         checkClass _ = Nothing
-> checkImport m _ _ iEnv _ (IInstanceDecl p cx cls ty m') =
->   checkInstInfo checkContext iEnv p cls tc m'
->   where QualType cx' ty' = toQualType m (QualTypeExpr cx ty)
+> checkImport _ _ iEnv _ (IInstanceDecl p cx cls ty m) =
+>   checkInstInfo checkContext iEnv p cls tc m
+>   where QualType cx' ty' = toQualType (QualTypeExpr cx ty)
 >         tc = rootOfType ty'
 >         checkContext cx'' = cx' == cx''
-> checkImport m _ _ _ tyEnv (IFunctionDecl p f n ty) =
+> checkImport _ _ _ tyEnv (IFunctionDecl p f n ty) =
 >   checkValueInfo "function" checkFun tyEnv p f
 >   where checkFun (Value f' n' (ForAll _ ty')) =
->           f == f' && maybe True (toInteger n' ==) n && toQualType m ty == ty'
+>           f == f' && maybe True (toInteger n' ==) n && toQualType ty == ty'
 >         checkFun _ = False
 
-> checkConstrImport :: ModuleIdent -> ValueEnv -> [ClassAssert] -> QualIdent
->                   -> [Ident] -> ConstrDecl -> Error ()
-> checkConstrImport m tyEnv cxL tc tvs (ConstrDecl p evs cxR c tys) =
+> checkConstrImport :: ValueEnv -> [ClassAssert] -> QualIdent -> [Ident]
+>                   -> ConstrDecl -> Error ()
+> checkConstrImport tyEnv cxL tc tvs (ConstrDecl p evs cxR c tys) =
 >   checkValueInfo "data constructor" checkConstr tyEnv p qc
 >   where qc = qualifyLike tc c
 >         checkConstr (DataConstructor c' _ ci' (ForAll n' ty')) =
 >           qc == c' && length (tvs ++ evs) == n' &&
->           toConstrType m cxL tc tvs cxR tys == (ci',ty')
+>           toConstrType cxL tc tvs cxR tys == (ci',ty')
 >         checkConstr _ = False
-> checkConstrImport m tyEnv cxL tc tvs (ConOpDecl p evs cxR ty1 op ty2) =
+> checkConstrImport tyEnv cxL tc tvs (ConOpDecl p evs cxR ty1 op ty2) =
 >   checkValueInfo "data constructor" checkConstr tyEnv p qc
 >   where qc = qualifyLike tc op
 >         checkConstr (DataConstructor c' _ ci' (ForAll n' ty')) =
 >           qc == c' && length (tvs ++ evs) == n' &&
->           toConstrType m cxL tc tvs cxR [ty1,ty2] == (ci',ty')
+>           toConstrType cxL tc tvs cxR [ty1,ty2] == (ci',ty')
 >         checkConstr _ = False
-> checkConstrImport m tyEnv cxL tc tvs (RecordDecl p evs cxR c fs) =
+> checkConstrImport tyEnv cxL tc tvs (RecordDecl p evs cxR c fs) =
 >   checkValueInfo "data constructor" checkConstr tyEnv p qc
 >   where qc = qualifyLike tc c
 >         (ls,tys) = unzip [(l,ty) | FieldDecl _ ls ty <- fs, l <- ls]
 >         checkConstr (DataConstructor c' ls' ci' (ForAll n' ty')) =
 >           qc == c' && length (tvs ++ evs) == n' && ls == ls' &&
->           toConstrType m cxL tc tvs cxR tys == (ci',ty')
+>           toConstrType cxL tc tvs cxR tys == (ci',ty')
 >         checkConstr _ = False
 
-> checkNewConstrImport :: ModuleIdent -> ValueEnv -> [ClassAssert] -> QualIdent
->                      -> [Ident] -> NewConstrDecl -> Error ()
-> checkNewConstrImport m tyEnv cx tc tvs (NewConstrDecl p c ty) =
+> checkNewConstrImport :: ValueEnv -> [ClassAssert] -> QualIdent -> [Ident]
+>                      -> NewConstrDecl -> Error ()
+> checkNewConstrImport tyEnv cx tc tvs (NewConstrDecl p c ty) =
 >   checkValueInfo "newtype constructor" checkNewConstr tyEnv p qc
 >   where qc = qualifyLike tc c
 >         checkNewConstr (NewtypeConstructor c' _ (ForAll n' ty')) =
 >           qc == c' && length tvs == n' &&
->           snd (toConstrType m cx tc tvs [] [ty]) == ty'
+>           snd (toConstrType cx tc tvs [] [ty]) == ty'
 >         checkNewConstr _ = False
-> checkNewConstrImport m tyEnv cx tc tvs (NewRecordDecl p c l ty) =
+> checkNewConstrImport tyEnv cx tc tvs (NewRecordDecl p c l ty) =
 >   checkValueInfo "newtype constructor" checkNewConstr tyEnv p qc
 >   where qc = qualifyLike tc c
 >         checkNewConstr (NewtypeConstructor c' l' (ForAll n' ty')) =
 >           qc == c' && length tvs == n' && l == l' &&
->           snd (toConstrType m cx tc tvs [] [ty]) == ty'
+>           snd (toConstrType cx tc tvs [] [ty]) == ty'
 >         checkNewConstr _ = False
 
-> checkMethodImport :: ModuleIdent -> ValueEnv -> QualIdent -> Ident
->                   -> IMethodDecl -> Error ()
-> checkMethodImport m tyEnv cls tv (IMethodDecl p f ty) =
+> checkMethodImport :: ValueEnv -> QualIdent -> Ident -> IMethodDecl -> Error ()
+> checkMethodImport tyEnv cls tv (IMethodDecl p f ty) =
 >   checkValueInfo "method" checkMethod tyEnv p qf
 >   where qf = qualifyLike cls f
 >         checkMethod (Value f' _ (ForAll _ ty')) =
->           qf == f' && toMethodType m cls tv ty == ty'
+>           qf == f' && toMethodType cls tv ty == ty'
 >         checkMethod _ = False
 
 > checkPrecInfo :: (PrecInfo -> Bool) -> PEnv -> Position

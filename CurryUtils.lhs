@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryUtils.lhs 2722 2008-06-14 14:08:49Z wlux $
+% $Id: CurryUtils.lhs 2724 2008-06-14 16:42:57Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -212,6 +212,24 @@ defined by an interface declaration.
 > entity (IClassDecl _ _ cls _ _ _ _) = cls
 > entity (IInstanceDecl _ _ _ _ m) = maybe qualify qualifyWith m anonId
 > entity (IFunctionDecl _ f _ _) = f
+
+\end{verbatim}
+The function \texttt{unhide} makes interface declarations transparent,
+i.e., it replaces hidden data type and class declarations by standard
+data type and class declarations, respectively, and removes all hiding
+specifications from interface declarations.
+\begin{verbatim}
+
+> unhide :: IDecl -> IDecl
+> unhide (IInfixDecl p fix pr op) = IInfixDecl p fix pr op
+> unhide (HidingDataDecl p tc k tvs) = IDataDecl p [] tc k tvs [] []
+> unhide (IDataDecl p cx tc k tvs cs _) = IDataDecl p cx tc k tvs cs []
+> unhide (INewtypeDecl p cx tc k tvs nc _) = INewtypeDecl p cx tc k tvs nc []
+> unhide (ITypeDecl p tc k tvs ty) = ITypeDecl p tc k tvs ty
+> unhide (HidingClassDecl p cx cls k tv) = IClassDecl p cx cls k tv [] []
+> unhide (IClassDecl p cx cls k tv ds _) = IClassDecl p cx cls k tv ds []
+> unhide (IInstanceDecl p cx cls ty m) = IInstanceDecl p cx cls ty m
+> unhide (IFunctionDecl p f n ty) = IFunctionDecl p f n ty
 
 \end{verbatim}
 Here are a few convenience functions for constructing (elements of)

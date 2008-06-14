@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IdentInfo.lhs 2692 2008-05-02 13:22:41Z wlux $
+% $Id: IdentInfo.lhs 2724 2008-06-14 16:42:57Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -11,13 +11,15 @@ map type and value identifiers on their kinds.
 \begin{verbatim}
 
 > module IdentInfo where
-> import Ident
+> import Curry
+> import CurryUtils
 > import List
 > import NestEnv
 > import Set
 > import TopEnv
 
 \end{verbatim}
+\subsection{Type Identifiers}
 At the type level, we distinguish data and renaming types, synonym
 types, and type classes. Type variables are not recorded. Type
 synonyms use a kind of their own so that the compiler can verify that
@@ -30,7 +32,7 @@ initial type identifier environment \texttt{initTEnv} is empty.
 >     Data QualIdent [Ident]
 >   | Alias QualIdent
 >   | Class QualIdent [Ident]
->   deriving (Eq,Show)
+>   deriving Show
 
 > instance Entity TypeKind where
 >   origName (Data tc _) = tc
@@ -56,6 +58,31 @@ initial type identifier environment \texttt{initTEnv} is empty.
 > initTEnv = emptyTopEnv
 
 \end{verbatim}
+The function \texttt{tidents} returns the type kind of the type
+constructor or type class identifier declared by an interface
+declaration, if any. Note that hiding data type and class declarations
+are ignored deliberately, they must be changed into standard data type
+declarations with \texttt{CurryUtils.unhide} before applying
+\texttt{tidents} when necessary.
+\begin{verbatim}
+
+> tidents :: IDecl -> [TypeKind]
+> tidents (IInfixDecl _ _ _ _) = []
+> tidents (HidingDataDecl _ _ _ _) = []
+> tidents (IDataDecl _ _ tc _ _ cs xs') = [Data tc (filter (`notElem` xs') xs)]
+>   where xs = map constr cs ++ nub (concatMap labels cs)
+> tidents (INewtypeDecl _ _ tc _ _ nc xs') =
+>   [Data tc (filter (`notElem` xs') xs)]
+>   where xs = nconstr nc : nlabel nc
+> tidents (ITypeDecl _ tc _ _ _) = [Alias tc]
+> tidents (HidingClassDecl _ _ _ _ _) = []
+> tidents (IClassDecl _ _ cls _ _ ds fs) =
+>   [Class cls (filter (`notElem` fs) (map imethod ds))]
+> tidents (IInstanceDecl _ _ _ _ _) = []
+> tidents (IFunctionDecl _ _ _ _) = []
+
+\end{verbatim}
+\subsection{Instances}
 When checking for duplicate instance declarations, the compiler uses a
 set of $C$-$T$ pairs, which contains one element for each defined or
 imported instance. Instances are recorded only for the original names
@@ -70,6 +97,7 @@ set \texttt{instISet} is empty.
 > initISet = zeroSet
 
 \end{verbatim}
+\subsection{Value Identifiers}
 At pattern and expression level, we distinguish constructors on one
 side and functions (including type class methods) and variables on the
 other side. Field labels are represented as variables here, too. Each
@@ -90,7 +118,7 @@ The initial value identifier environment \texttt{initVEnv} is empty.
 > data ValueKind =
 >     Constr QualIdent
 >   | Var QualIdent [QualIdent]
->   deriving (Eq,Show)
+>   deriving Show
 
 > instance Entity ValueKind where
 >   origName (Constr c) = c
@@ -106,5 +134,36 @@ The initial value identifier environment \texttt{initVEnv} is empty.
 
 > initVEnv :: FunEnv
 > initVEnv = emptyTopEnv
+
+\end{verbatim}
+The function \texttt{vidents} returns the value kinds of the value
+identifiers declared by an interface declaration.
+\begin{verbatim}
+
+> vidents :: IDecl -> [ValueKind]
+> vidents (IInfixDecl _ _ _ _) = []
+> vidents (HidingDataDecl _ _ _ _) = []
+> vidents (IDataDecl _ _ tc _ _ cs xs) =
+>   cidents tc xs (map constr cs) ++
+>   lidents tc xs [(l,constrs cs l) | l <- nub (concatMap labels cs)]
+>   where constrs cs l = [constr c | c <- cs, l `elem` labels c]
+> vidents (INewtypeDecl _ _ tc _ _ nc xs) =
+>   cidents tc xs [nconstr nc] ++
+>   lidents tc xs [(l,[c]) | NewRecordDecl _ c l _ <- [nc]]
+> vidents (ITypeDecl _ _ _ _ _) = []
+> vidents (HidingClassDecl _ _ _ _ _) = []
+> vidents (IClassDecl _ _ cls _ _ ds fs) = midents cls fs (map imethod ds)
+> vidents (IInstanceDecl _ _ _ _ _) = []
+> vidents (IFunctionDecl _ f _ _) = [Var f []]
+
+> cidents :: QualIdent -> [Ident] -> [Ident] -> [ValueKind]
+> cidents tc xs cs = [Constr (qualifyLike tc c) | c <- cs, c `notElem` xs]
+
+> lidents :: QualIdent -> [Ident] -> [(Ident,[Ident])] -> [ValueKind]
+> lidents tc xs ls = [lident l cs | (l,cs) <- ls, l `notElem` xs]
+>   where lident l cs = Var (qualifyLike tc l) (map (qualifyLike tc) cs)
+
+> midents :: QualIdent -> [Ident] -> [Ident] -> [ValueKind]
+> midents cls fs' fs = [Var (qualifyLike cls f) [] | f <- fs, f `notElem` fs']
 
 \end{verbatim}

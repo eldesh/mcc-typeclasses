@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ImportSyntaxCheck.lhs 2722 2008-06-14 14:08:49Z wlux $
+% $Id: ImportSyntaxCheck.lhs 2724 2008-06-14 16:42:57Z wlux $
 %
 % Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -21,12 +21,13 @@ import declarations.
 > import List
 > import Maybe
 > import PredefIdent
+> import TopEnv
 
 > checkImports :: Interface -> Maybe ImportSpec -> Error (Maybe ImportSpec)
 > checkImports (Interface m _ ds) =
 >   maybe (return Nothing) (liftE Just . expandSpecs m tEnv vEnv)
->   where tEnv = foldr bindType emptyEnv ds
->         vEnv = foldr bindValue emptyEnv ds
+>   where tEnv = bindIdents tidents ds
+>         vEnv = bindIdents vidents ds
 
 \end{verbatim}
 The compiler uses two environments collecting the type and value
@@ -38,67 +39,9 @@ declarations.
 > type ExpTypeEnv = Env Ident TypeKind
 > type ExpFunEnv = Env Ident ValueKind
 
-> bindType :: IDecl -> ExpTypeEnv -> ExpTypeEnv
-> bindType (IDataDecl _ _ tc _ _ cs xs') = bindData tc xs' xs
->   where xs = map constr cs ++ nub (concatMap labels cs)
-> bindType (INewtypeDecl _ _ tc _ _ nc xs') = bindData tc xs' xs
->   where xs = nconstr nc : nlabel nc
-> bindType (ITypeDecl _ tc _ _ _) = bindAlias tc
-> bindType (IClassDecl _ _ cls _ _ ds fs') = bindClass cls fs' (map imethod ds)
-> bindType _ = id
-
-> bindData :: QualIdent -> [Ident] -> [Ident] -> ExpTypeEnv -> ExpTypeEnv
-> bindData tc xs' xs = bindUnqual tc (Data tc (filter (`notElem` xs') xs))
-
-> bindAlias :: QualIdent -> ExpTypeEnv -> ExpTypeEnv
-> bindAlias tc = bindUnqual tc (Alias tc)
-
-> bindClass :: QualIdent -> [Ident] -> [Ident] -> ExpTypeEnv -> ExpTypeEnv
-> bindClass cls fs' fs = bindUnqual cls (Class cls (filter (`notElem` fs') fs))
-
-> bindValue :: IDecl -> ExpFunEnv -> ExpFunEnv
-> bindValue (IDataDecl _ _ tc _ _ cs xs) =
->   bindConstrs tc xs (map constr cs) .
->   bindLabels tc xs [(l,constrs cs l) | l <- nub (concatMap labels cs)]
->   where constrs cs l = [constr c | c <- cs, l `elem` labels c]
-> bindValue (INewtypeDecl _ _ tc _ _ nc xs) =
->   bindConstrs tc xs [nconstr nc] .
->   case nc of
->     NewConstrDecl _ _ _ -> id
->     NewRecordDecl _ c l _ -> bindLabels tc xs [(l,[c])]
-> bindValue (IClassDecl _ _ cls _ _ ds fs') =
->   bindMethods cls fs' (map imethod ds)
-> bindValue (IFunctionDecl _ f _ _) = bindFun f
-> bindValue _ = id
-
-> bindConstrs :: QualIdent -> [Ident] -> [Ident] -> ExpFunEnv -> ExpFunEnv
-> bindConstrs tc xs cs env =
->   foldr (bindConstr tc) env (filter (`notElem` xs) cs)
-
-> bindConstr :: QualIdent -> Ident -> ExpFunEnv -> ExpFunEnv
-> bindConstr tc c = bindEnv c (Constr (qualifyLike tc c))
-
-> bindLabels :: QualIdent -> [Ident] -> [(Ident,[Ident])] -> ExpFunEnv
->            -> ExpFunEnv
-> bindLabels tc xs ls env =
->   foldr (uncurry (bindLabel tc)) env (filter ((`notElem` xs) . fst) ls)
-
-> bindLabel :: QualIdent -> Ident -> [Ident] -> ExpFunEnv -> ExpFunEnv
-> bindLabel tc l cs =
->   bindEnv l (Var (qualifyLike tc l) (map (qualifyLike tc) cs))
-
-> bindMethods :: QualIdent -> [Ident] -> [Ident] -> ExpFunEnv -> ExpFunEnv
-> bindMethods cls fs' fs env =
->   foldr (bindMethod cls) env (filter (`notElem` fs') fs)
-
-> bindMethod :: QualIdent -> Ident -> ExpFunEnv -> ExpFunEnv
-> bindMethod cls f = bindEnv f (Var (qualifyLike cls f) [])
-
-> bindFun :: QualIdent -> ExpFunEnv -> ExpFunEnv
-> bindFun f = bindUnqual f (Var f [])
-
-> bindUnqual :: QualIdent -> a -> Env Ident a -> Env Ident a
-> bindUnqual x = bindEnv (unqualify x)
+> bindIdents :: Entity a => (IDecl -> [a]) -> [IDecl] -> Env Ident a
+> bindIdents idents ds = foldr bindIdent emptyEnv (concatMap idents ds)
+>   where bindIdent x = bindEnv (unqualify (origName x)) x
 
 \end{verbatim}
 After the environments have been initialized, the optional import

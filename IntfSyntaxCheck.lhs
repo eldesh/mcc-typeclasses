@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2692 2008-05-02 13:22:41Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2724 2008-06-14 16:42:57Z wlux $
 %
 % Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -32,10 +32,6 @@ reference to the global environments.
 > import PredefIdent
 > import TopEnv
 
-> intfSyntaxCheck :: [IDecl] -> Error [IDecl]
-> intfSyntaxCheck ds = mapE (checkIDecl env) ds
->   where env = foldr bindType initTEnv ds
-
 \end{verbatim}
 The compiler requires information about the arity of each defined type
 constructor as well as information whether the type constructor
@@ -43,28 +39,10 @@ denotes an algebraic data type, a renaming type, or a type synonym.
 The latter must not occur in type expressions in interfaces.
 \begin{verbatim}
 
-> bindType :: IDecl -> TypeEnv -> TypeEnv
-> bindType (IInfixDecl _ _ _ _) = id
-> bindType (HidingDataDecl _ tc _ _) = bindData tc [] []
-> bindType (IDataDecl _ _ tc _ _ cs xs) =
->   bindData tc xs (map constr cs ++ nub (concatMap labels cs))
-> bindType (INewtypeDecl _ _ tc _ _ nc xs) =
->   bindData tc xs (nconstr nc : nlabel nc)
-> bindType (ITypeDecl _ tc _ _ _) = bindAlias tc
-> bindType (HidingClassDecl _ _ cls _ _) = bindClass cls [] []
-> bindType (IClassDecl _ cx cls _ _ ds fs') = bindClass cls fs' (map imethod ds)
-> bindType (IInstanceDecl _ _ _ _ _) = id
-> bindType (IFunctionDecl _ _ _ _) = id
-
-> bindData :: QualIdent -> [Ident] -> [Ident] -> TypeEnv -> TypeEnv
-> bindData tc xs' xs = qualBindTopEnv tc (Data tc (filter (`notElem` xs') xs))
-
-> bindAlias :: QualIdent -> TypeEnv -> TypeEnv
-> bindAlias tc = qualBindTopEnv tc (Alias tc)
-
-> bindClass :: QualIdent -> [Ident] -> [Ident] -> TypeEnv -> TypeEnv
-> bindClass cls fs' fs =
->   qualBindTopEnv cls (Class cls (filter (`notElem` fs') fs))
+> intfSyntaxCheck :: [IDecl] -> Error [IDecl]
+> intfSyntaxCheck ds = mapE (checkIDecl env) ds
+>   where env = foldr bindType initTEnv (concatMap tidents (map unhide ds))
+>         bindType t = qualBindTopEnv (origName t) t
 
 \end{verbatim}
 The checks applied to the interface are similar to those performed

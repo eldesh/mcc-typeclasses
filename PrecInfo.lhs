@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecInfo.lhs 2692 2008-05-02 13:22:41Z wlux $
+% $Id: PrecInfo.lhs 2725 2008-06-14 17:24:48Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -42,6 +42,9 @@ because precedences are checked after renaming.
 
 > instance Entity PrecInfo where
 >   origName (PrecInfo op _) = op
+>   merge p1 p2
+>     | p1 == p2 = Just p1
+>     | otherwise = Nothing
 
 \end{verbatim}
 The initial precedence environment \texttt{initPEnv} is empty.

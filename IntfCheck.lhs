@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2723 2008-06-14 15:56:40Z wlux $
+% $Id: IntfCheck.lhs 2725 2008-06-14 17:24:48Z wlux $
 %
 % Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -7,22 +7,26 @@
 \nwfilename{IntfCheck.lhs}
 \section{Interface Consistency Checks}
 Interface files include declarations of all entities that are exported
-by the module, but defined in another module. Since these declarations
+by the module but defined in another module. Since these declarations
 can become inconsistent if client modules are not recompiled properly,
-the compiler checks that all imported declarations in an interface
-agree with their original definitions.
+the compiler checks that all imported declarations in interfaces are
+consistent and agree with their original definitions where they are
+available.
 
-One may ask why we include imported declarations at all, if the
-compiler always has to compare those declarations with the original
-definitions. The main reason for this is that it helps avoiding
-unnecessary recompilation of client modules. As an example, consider
-the three modules
+The main rationale for this design decision is that it is sufficient
+to read only the interfaces of the Prelude and those modules that are
+imported explicitly by the compiled module if the definitions of all
+exported entities are present in an interface. This makes
+bootstrapping simpler for mutually recursive modules, in particular if
+the mutual recursion also shows up in the interfaces. Furthermore, it
+helps avoiding unnecessary recompilation of client modules. As an
+example, consider the three modules
 \begin{verbatim}
   module A where { data T = C }
   module B(T(..)) where { import A }
   module C where { import B; f = C }
 \end{verbatim}
-where module \texttt{B} could be considered as a public interface of
+where module \texttt{B} could be considered the public interface of
 module \texttt{A}, which restricts access to type \texttt{A.T} and its
 constructor \texttt{C}. The client module \texttt{C} imports this type
 via the public interface \texttt{B}. If now module \texttt{A} is
@@ -38,11 +42,16 @@ interface. By including the declaration of type \texttt{A.T} in
 \texttt{B}'s interface remains unchanged and therefore the client
 module \texttt{C} is not recompiled.
 
-Another reason for including imported declarations in interfaces is
-that the compiler in principle could avoid loading interfaces of
-modules that are imported only indirectly, which would save processing
-time and allow distributing binary packages of a library with a public
-interface module only. However, this has not been implemented yet.
+When detecting a conflict between the definition of an imported
+entity, say \texttt{A.x}, in the interfaces of modules \texttt{B} and
+\texttt{C}, respectively, we have to distinguish whether the interface
+of module \texttt{A} has been loaded as well or not. In the former
+case, we can give an authoritative answer whether \texttt{A.x}'s
+definition in \texttt{B} is wrong or whether the definition in
+\texttt{C} is wrong. We can even detect if \texttt{A} does not export
+\texttt{x} at all. In the latter case, we can not give an
+authoritative answer which definition is wrong and therefore report an
+error for both.
 \begin{verbatim}
 
 > module IntfCheck(intfCheck) where
@@ -183,13 +192,12 @@ interface module only. However, this has not been implemented yet.
 > checkPrecInfo :: (PrecInfo -> Bool) -> PEnv -> Position
 >               -> QualIdent -> Error ()
 > checkPrecInfo check pEnv p op = checkImported checkInfo op
->   where checkInfo m op' =
+>   where what = "precedence"
+>         checkInfo m op' =
 >           case qualLookupTopEnv op pEnv of
 >             [] -> errorAt p (noPrecedence m op')
->             [pi] ->
->               unless (check pi)
->                      (errorAt p (importConflict "precedence" m op'))
->             _ -> internalError "checkPrecInfo"
+>             [pi] -> unless (check pi) (errorAt p (importConflict what m op'))
+>             _ -> errorAt p (inconsistentImports what op)
 
 > checkTypeInfo :: String -> (TypeInfo -> Maybe (Error ())) -> TCEnv -> Position
 >               -> QualIdent -> Error ()
@@ -199,7 +207,7 @@ interface module only. However, this has not been implemented yet.
 >             [] -> errorAt p (notExported what m tc')
 >             [ti] ->
 >               fromMaybe (errorAt p (importConflict what m tc')) (check ti)
->             _ -> internalError "checkTypeInfo"
+>             _ -> errorAt p (inconsistentImports what tc)
 
 > checkValueInfo :: String -> (ValueInfo -> Bool) -> ValueEnv -> Position
 >                -> QualIdent -> Error ()
@@ -208,7 +216,7 @@ interface module only. However, this has not been implemented yet.
 >           case qualLookupTopEnv x tyEnv of
 >             [] -> errorAt p (notExported what m x')
 >             [vi] -> unless (check vi) (errorAt p (importConflict what m x'))
->             _ -> internalError "checkValueInfo"
+>             _ -> errorAt p (inconsistentImports what x)
 
 > checkInstInfo :: (Context -> Bool) -> InstEnv -> Position
 >               -> QualIdent -> QualIdent -> Maybe ModuleIdent -> Error ()
@@ -257,5 +265,10 @@ Error messages.
 >   "Inconsistent module interfaces\n" ++
 >   "Declaration of instance " ++ qualName cls ++ " " ++ qualName tc ++
 >   " does not match its definition in module " ++ moduleName m
+
+> inconsistentImports :: String -> QualIdent -> String
+> inconsistentImports what x =
+>   "Inconsistent module interfaces\n" ++
+>   "Found inconsistent declarations for imported " ++ what ++ " " ++ qualName x
 
 \end{verbatim}

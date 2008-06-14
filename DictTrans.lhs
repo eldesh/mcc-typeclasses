@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2723 2008-06-14 15:56:40Z wlux $
+% $Id: DictTrans.lhs 2725 2008-06-14 17:24:48Z wlux $
 %
 % Copyright (c) 2006-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -958,7 +958,7 @@ environment.
 > bindEntity :: Entity a => ModuleIdent -> QualIdent -> a -> TopEnv a
 >            -> TopEnv a
 > bindEntity m x =
->   uncurry (maybe (globalBindTopEnv m) qualImportTopEnv)
+>   uncurry (maybe (globalBindTopEnv m) (\m' -> qualImportTopEnv m' . const x))
 >           (splitQualIdent (qualUnqualify m x))
 
 \end{verbatim}

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TopEnv.lhs 2692 2008-05-02 13:22:41Z wlux $
+% $Id: TopEnv.lhs 2725 2008-06-14 17:24:48Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -81,20 +81,15 @@ import are performed.
 > importTopEnv :: Entity a => Bool -> ModuleIdent -> Ident -> a
 >              -> TopEnv a -> TopEnv a
 > importTopEnv qual
->   | qual = qualImportTopEnv
->   | otherwise = \m x y -> unqualImportTopEnv m x y . qualImportTopEnv m x y
+>   | qual = qualImport
+>   | otherwise = \m x y -> unqualImport m x y . qualImport m x y
+>   where unqualImport m x = qualImportTopEnv m (qualify x)
+>         qualImport m x = qualImportTopEnv m (qualifyWith m x)
 
-> unqualImportTopEnv :: Entity a => ModuleIdent -> Ident -> a
->                    -> TopEnv a -> TopEnv a
-> unqualImportTopEnv m x y (TopEnv env) =
->   TopEnv (bindEnv x' (mergeImport m y (entities x' env)) env)
->   where x' = qualify x
-
-> qualImportTopEnv :: Entity a => ModuleIdent -> Ident -> a -> TopEnv a
+> qualImportTopEnv :: Entity a => ModuleIdent -> QualIdent -> a -> TopEnv a
 >                  -> TopEnv a
 > qualImportTopEnv m x y (TopEnv env) =
->   TopEnv (bindEnv x' (mergeImport m y (entities x' env)) env)
->   where x' = qualifyWith m x
+>   TopEnv (bindEnv x (mergeImport m y (entities x env)) env)
 
 > mergeImport :: Entity a => ModuleIdent -> a -> [(Source,a)] -> [(Source,a)]
 > mergeImport m x [] = [(Import [m],x)]

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2724 2008-06-14 16:42:57Z wlux $
+% $Id: Imports.lhs 2725 2008-06-14 17:24:48Z wlux $
 %
 % Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -106,42 +106,32 @@ all instance declarations are always imported into the current module.
 
 \end{verbatim}
 Importing an interface into another interface is somewhat simpler
-because all entities are imported into the environments. In addition,
-only a qualified import is necessary. Only those entities that are
-actually defined in the module are imported. Since the compiler
-imports all used interfaces into other interfaces, entities defined in
-one module and reexported by another module are made available by
-their defining modules. Furthermore, ignoring reexported entities
-avoids a problem with the fact that the unqualified name of an entity
-defined in an interface may be ambiguous if hidden data type and class
-declarations are taken into account. For instance, for the interface
-\begin{verbatim}
-  module M where {
-    import N;
-    hiding data N.T;
-    type T a = (a,N.T)
-  }
-\end{verbatim}
-the unqualified type identifier \verb|T| would be ambiguous if
-\verb|N.T| were not ignored. Instance declarations are always included
-(by returning \verb|qualify anonId| from \verb|entity|) because there
-is no means to distinguish instances defined in a module from
-instances imported from another module.
+because only a qualified import is necessary and there are no import
+restrictions. Besides entities defined in the interface's module, we
+must also import entities that are reexported from other modules
+provided that the compiler did not load the respective interfaces.
+
+Note that the first argument of \texttt{importInterfaceIntf} is the
+list of names of the modules whose interfaces have been read by the
+compiler. Obviously, this must include the current interface's module
+name.
 \begin{verbatim}
 
-> importInterfaceIntf :: (PEnv,TCEnv,InstEnv,ValueEnv) -> Interface
->                     -> (PEnv,TCEnv,InstEnv,ValueEnv)
-> importInterfaceIntf (pEnv,tcEnv,iEnv,tyEnv) (Interface m _ ds) =
+> importInterfaceIntf :: [ModuleIdent] -> (PEnv,TCEnv,InstEnv,ValueEnv)
+>                     -> Interface -> (PEnv,TCEnv,InstEnv,ValueEnv)
+> importInterfaceIntf ms (pEnv,tcEnv,iEnv,tyEnv) (Interface m is ds) =
 >   (importEntitiesIntf precs m ds' pEnv,
 >    importEntitiesIntf types m ds' tcEnv,
 >    importInstances ds' iEnv,
 >    importEntitiesIntf values m ds' tyEnv)
->   where ds' = map unhide (filter (isJust . localIdent m . entity) ds)
+>   where ms' = m : [m | IImportDecl _ m <- is, m `notElem` ms]
+>         ds' = map unhide (filter (importEntity . entity) ds)
+>         importEntity = maybe True (`elem` ms') . fst . splitQualIdent
 
 > importEntitiesIntf :: Entity a => (IDecl -> [a]) -> ModuleIdent -> [IDecl]
 >                    -> TopEnv a -> TopEnv a
 > importEntitiesIntf ents m ds env = foldr importEntity env (concatMap ents ds)
->   where importEntity x = qualImportTopEnv m (unqualify (origName x)) x
+>   where importEntity x = qualImportTopEnv m (origName x) x
 
 \end{verbatim}
 The list of entities exported from a module is computed with the

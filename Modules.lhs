@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2723 2008-06-14 15:56:40Z wlux $
+% $Id: Modules.lhs 2725 2008-06-14 17:24:48Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -119,7 +119,7 @@ declaration to the module.
 >   do
 >     Module m es is ds <- liftErr (readFile fn) >>= okM . parseModule fn
 >     let is' = importPrelude debug fn m is
->     mEnv <- loadInterfaces paths [] emptyEnv m (modules is')
+>     mEnv <- loadInterfaces paths emptyEnv m (modules is')
 >     okM $ checkInterfaces mEnv
 >     let mEnv' = sanitizeInterfaces m mEnv
 >     (tEnv,vEnv,m') <- okM $ checkModuleSyntax mEnv' (Module m es is' ds)
@@ -233,8 +233,8 @@ declaration to the module.
 >    foldr (importEntities tcEnv) tcEnv' ms,
 >    foldr (importEntities tyEnv) tyEnv' ms)
 >   where ms = nub [(m,asM) | ImportDecl _ m False asM _ <- is]
->         (pEnv',tcEnv',_,tyEnv') =
->           foldl importInterfaceIntf initEnvs (map snd (envToList mEnv))
+>         (ms',is') = unzip (envToList mEnv)
+>         (pEnv',tcEnv',_,tyEnv') = foldl (importInterfaceIntf ms') initEnvs is'
 >         importEntities env (m,asM) env' =
 >           foldr (uncurry (importTopEnv False m)) env'
 >                 (moduleImports (fromMaybe m asM) env)
@@ -245,8 +245,8 @@ declaration to the module.
 >   (foldr (uncurry (globalBindTopEnv m)) pEnv' (localBindings pEnv),
 >    foldr (uncurry (globalBindTopEnv m)) tcEnv' (localBindings tcEnv),
 >    foldr (uncurry (bindTopEnv m)) tyEnv' (localBindings tyEnv))
->   where (pEnv',tcEnv',_,tyEnv') =
->           foldl importInterfaceIntf initEnvs (map snd (envToList mEnv))
+>   where (ms,is) = unzip (envToList mEnv)
+>         (pEnv',tcEnv',_,tyEnv') = foldl (importInterfaceIntf ms) initEnvs is
 
 > splitModule :: Module a -> [Module a]
 > splitModule (Module m es is ds) = [Module m es is [d] | d <- ds, isCodeDecl d]
@@ -345,7 +345,7 @@ interfaces are in scope with their qualified names.
 >                 -> ErrorT IO (ModuleEnv,ModuleIdent)
 > loadGoalModules paths debug fns =
 >   do
->     mEnv <- foldM (loadInterface paths []) emptyEnv ms
+>     mEnv <- foldM (loadInterface paths) emptyEnv ms
 >     (mEnv',ms') <- mapAccumM (loadGoalInterface paths) mEnv fns
 >     okM $ checkInterfaces mEnv'
 >     return (mEnv',last (preludeMIdent:ms'))
@@ -355,10 +355,12 @@ interfaces are in scope with their qualified names.
 >                   -> ErrorT IO (ModuleEnv,ModuleIdent)
 > loadGoalInterface paths mEnv fn
 >   | extension fn `elem` [srcExt,litExt,intfExt] || pathSep `elem` fn =
->       compileInterface paths [] mEnv (interfaceName fn)
+>       do
+>         (m,i) <- compileInterface (interfaceName fn)
+>         return (bindModule i mEnv,m)
 >   | otherwise =
 >       do
->         mEnv' <- loadInterface paths [] mEnv (P (first "") m)
+>         mEnv' <- loadInterface paths mEnv (P (first "") m)
 >         return (mEnv',m)
 >   where m = mkMIdent (components ('.':fn))
 >         components [] = []
@@ -512,73 +514,63 @@ intermediate language.
 >              (if all then Nothing else Just (Importing p []))
 
 \end{verbatim}
-If an import declaration for a module is found, the compiler loads the
-module's interface unless a load is already pending. Such is possible
-in the case of cyclic module dependencies, which are accepted as an
-extension to the Curry language. An error is reported only if a module
-contains an import declaration directly importing itself.
+The compiler loads the interfaces of all modules imported by the
+compiled module or specified on the command line when compiling a
+goal. Since interfaces are closed, it is not necessary to load the
+interfaces of other modules whose entities are reexported by the
+imported modules.
 \begin{verbatim}
 
-> loadInterfaces :: [FilePath] -> [ModuleIdent] -> ModuleEnv
->                -> ModuleIdent -> [P ModuleIdent] -> ErrorT IO ModuleEnv
-> loadInterfaces paths ctxt mEnv m ms =
+> loadInterfaces :: [FilePath] -> ModuleEnv -> ModuleIdent -> [P ModuleIdent]
+>                -> ErrorT IO ModuleEnv
+> loadInterfaces paths mEnv m ms =
 >   do
 >     okM $ sequenceE_ [errorAt p (cyclicImport m) | P p m' <- ms, m == m']
->     foldM (loadInterface paths ctxt) mEnv ms
+>     foldM (loadInterface paths) mEnv ms
 
-> loadInterface :: [FilePath] -> [ModuleIdent] -> ModuleEnv -> P ModuleIdent
+> loadInterface :: [FilePath] -> ModuleEnv -> P ModuleIdent
 >               -> ErrorT IO ModuleEnv
-> loadInterface paths ctxt mEnv (P p m)
->   | m `elem` ctxt || isJust (lookupEnv m mEnv) = return mEnv
->   | otherwise =
+> loadInterface paths mEnv (P p m) =
+>   case lookupEnv m mEnv of
+>     Just _ -> return mEnv
+>     Nothing ->
 >       liftErr (lookupInterface paths m) >>=
 >       maybe (errorAt p (interfaceNotFound m))
->             (compileModuleInterface paths ctxt mEnv m)
+>             (compileModuleInterface mEnv m)
 
-> compileModuleInterface :: [FilePath] -> [ModuleIdent] -> ModuleEnv
->                        -> ModuleIdent -> FilePath -> ErrorT IO ModuleEnv
-> compileModuleInterface paths ctxt mEnv m fn =
+> compileModuleInterface :: ModuleEnv -> ModuleIdent -> FilePath
+>                        -> ErrorT IO ModuleEnv
+> compileModuleInterface mEnv m fn =
 >   do
->     (mEnv',m') <- compileInterface paths ctxt mEnv fn
+>     (m',i) <- compileInterface fn
 >     unless (m == m') (errorAt (first fn) (wrongInterface m m'))
->     return mEnv'
+>     return (bindModule i mEnv)
 
 \end{verbatim}
-After parsing an interface, all of its imported interfaces are
-recursively loaded and entered into the module environment. In
-addition, the compiler applies syntax checking to the interface, which
-is possible because interface files are self-contained.
-
-\ToDo{Avoid recursive loading of imported interfaces. All information
-that is needed for compiling a module is present in the interfaces
-that are imported directly from that module.}
+After parsing an interface, the compiler applies syntax checking to
+the interface. This is possible because interface files are
+self-contained.
 \begin{verbatim}
 
-> compileInterface :: [FilePath] -> [ModuleIdent] -> ModuleEnv
->                  -> FilePath -> ErrorT IO (ModuleEnv,ModuleIdent)
-> compileInterface paths ctxt mEnv fn =
+> compileInterface :: FilePath -> ErrorT IO (ModuleIdent,Interface)
+> compileInterface fn =
 >   do
 >     Interface m is ds <- liftErr (readFile fn) >>= okM . parseInterface fn
->     mEnv' <- loadInterfaces paths (m:ctxt) mEnv m (modules is)
 >     ds' <- okM $ intfSyntaxCheck ds
->     return (bindModule (Interface m is (qualIntf m ds')) mEnv',m)
->   where modules is = [P p m | IImportDecl p m <- is]
+>     return (m,Interface m is (qualIntf m ds'))
 
 \end{verbatim}
 After all interface files have been loaded, the compiler checks that
-reexported definitions in the interfaces are compatible with their
-original definitions in order to ensure that the set of loaded
-interfaces is consistent.
+reexported definitions in the interfaces are consistent and compatible
+with their original definitions where the latter are available.
 \begin{verbatim}
 
 > checkInterfaces :: ModuleEnv -> Error ()
-> checkInterfaces mEnv = mapE_ (checkInterface mEnv . snd) (envToList mEnv)
-
-> checkInterface :: ModuleEnv -> Interface -> Error ()
-> checkInterface mEnv (Interface m is ds) = intfCheck m pEnv tcEnv iEnv tyEnv ds
->   where (pEnv,tcEnv,iEnv,tyEnv) = foldl importModule initEnvs is
->         importModule envs (IImportDecl _ m) =
->           importInterfaceIntf envs (moduleInterface m mEnv)
+> checkInterfaces mEnv = mapE_ checkInterface is
+>   where (ms,is) = unzip (envToList mEnv)
+>         (pEnv,tcEnv,iEnv,tyEnv) = foldl (importInterfaceIntf ms) initEnvs is
+>         checkInterface (Interface m _ ds) =
+>           intfCheck m pEnv tcEnv iEnv tyEnv ds
 
 \end{verbatim}
 After checking a module successfully, the compiler may need to update

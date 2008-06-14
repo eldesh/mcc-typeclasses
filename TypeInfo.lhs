@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeInfo.lhs 2692 2008-05-02 13:22:41Z wlux $
+% $Id: TypeInfo.lhs 2725 2008-06-14 17:24:48Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -60,6 +60,19 @@ constructors in the interface.
 >   origName (AliasType tc _ _ _) = tc
 >   origName (TypeClass cls _ _ _) = cls
 >   origName (TypeVar _) = internalError "origName TypeVar"
+>   merge (DataType tc1 k1 cs1) (DataType tc2 k2 cs2)
+>     | tc1 == tc2 && k1 == k2 && (null cs1 || null cs2 || cs1 == cs2) =
+>         Just (DataType tc1 k1 (if null cs1 then cs2 else cs1))
+>   merge (RenamingType tc1 k1 nc1) (RenamingType tc2 k2 nc2)
+>     | tc1 == tc2 && k1 == k2 && nc1 == nc2 = Just (RenamingType tc1 k1 nc1)
+>   merge (AliasType tc1 n1 k1 ty1) (AliasType tc2 n2 k2 ty2)
+>     | tc1 == tc2 && n1 == n2 && k1 == k2 && ty1 == ty2 =
+>         Just (AliasType tc1 n1 k1 ty1)
+>   merge (TypeClass cls1 k1 clss1 fs1) (TypeClass cls2 k2 clss2 fs2)
+>     | cls1 == cls2 && k1 == k2 && clss1 == clss2 &&
+>       (null fs1 || null fs2 || fs1 == fs2) =
+>         Just (TypeClass cls1 k1 clss1 (if null fs1 then fs2 else fs1))
+>   merge _ _ = Nothing
 
 \end{verbatim}
 The initial type constructor environment \texttt{initTCEnv} is empty.

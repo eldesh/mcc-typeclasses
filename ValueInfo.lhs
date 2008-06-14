@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ValueInfo.lhs 2692 2008-05-02 13:22:41Z wlux $
+% $Id: ValueInfo.lhs 2725 2008-06-14 17:24:48Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -41,6 +41,26 @@ information.
 >   origName (DataConstructor c _ _ _) = c
 >   origName (NewtypeConstructor c _ _) = c
 >   origName (Value x _ _) = x
+>   merge (DataConstructor c1 ls1 ci1 ty1) (DataConstructor c2 ls2 ci2 ty2)
+>     | c1 == c2 && ci1 == ci2 && ty1 == ty2 =
+>         do
+>           ls' <- sequence (zipWith mergeLabel ls1 ls2)
+>           Just (DataConstructor c1 ls' ci1 ty1)
+>   merge (NewtypeConstructor c1 l1 ty1) (NewtypeConstructor c2 l2 ty2)
+>     | c1 == c2 && ty1 == ty2 =
+>         do
+>           l' <- mergeLabel l1 l2
+>           Just (NewtypeConstructor c1 l' ty1)
+>   merge (Value x1 n1 ty1) (Value x2 n2 ty2)
+>     | x1 == x2 && n1 == n2 && ty1 == ty2 = Just (Value x1 n1 ty1)
+>   merge _ _ = Nothing
+
+> mergeLabel :: Ident -> Ident -> Maybe Ident
+> mergeLabel l1 l2
+>   | l1 == anonId = Just l2
+>   | l2 == anonId = Just l1
+>   | l1 == l2 = Just l1
+>   | otherwise = Nothing
 
 \end{verbatim}
 The initial value type environment \texttt{initDCEnv} is empty.

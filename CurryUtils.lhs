@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryUtils.lhs 2690 2008-05-01 20:40:17Z wlux $
+% $Id: CurryUtils.lhs 2722 2008-06-14 14:08:49Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -196,6 +196,22 @@ in which the labels appear in the record's declaration.
 
 > orderFields :: [Field a] -> [Ident] -> [Maybe a]
 > orderFields fs ls = map (flip lookup [(unqualify l,x) | Field l x <- fs]) ls
+
+\end{verbatim}
+The function \texttt{entity} returns the qualified name of the entity
+defined by an interface declaration.
+\begin{verbatim}
+
+> entity :: IDecl -> QualIdent
+> entity (IInfixDecl _ _ _ op) = op
+> entity (HidingDataDecl _ tc _ _) = tc
+> entity (IDataDecl _ _ tc _ _ _ _) = tc
+> entity (INewtypeDecl _ _ tc _ _ _ _) = tc
+> entity (ITypeDecl _ tc _ _ _) = tc
+> entity (HidingClassDecl _ _ cls _ _) = cls
+> entity (IClassDecl _ _ cls _ _ _ _) = cls
+> entity (IInstanceDecl _ _ _ _ m) = maybe qualify qualifyWith m anonId
+> entity (IFunctionDecl _ f _ _) = f
 
 \end{verbatim}
 Here are a few convenience functions for constructing (elements of)

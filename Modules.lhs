@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2714 2008-05-20 22:56:04Z wlux $
+% $Id: Modules.lhs 2722 2008-06-14 14:08:49Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -27,6 +27,7 @@ This module controls the compilation of modules.
 > import ShadowCheck(shadowCheck,shadowCheckGoal)
 > import OverlapCheck(overlapCheck,overlapCheckGoal)
 > import IntfSyntaxCheck(intfSyntaxCheck)
+> import IntfQual(qualIntf,unqualIntf)
 > import IntfCheck(intfCheck)
 > import IntfEquiv(fixInterface,intfEquiv)
 > import Imports(importIdents,importInterface,importInterfaceIntf,
@@ -483,16 +484,6 @@ with the actual definitions in the current module.
 > sanitizeInterface :: ModuleIdent -> Interface -> Interface
 > sanitizeInterface m (Interface m' is' ds') =
 >   Interface m' is' (filter ((Just m /=) . fst . splitQualIdent . entity) ds')
->   where entity (IInfixDecl _ _ _ op) = op
->         entity (HidingDataDecl _ tc _ _) = tc
->         entity (IDataDecl _ _ tc _ _ _ _) = tc
->         entity (INewtypeDecl _ _ tc _ _ _ _) = tc
->         entity (ITypeDecl _ tc _ _ _) = tc
->         entity (HidingClassDecl _ _ cls _ _) = cls
->         entity (IClassDecl _ _ cls _ _ _ _) = cls
->         entity (IInstanceDecl _ _ _ _ m'') =
->           qualifyWith (fromMaybe m' m'') anonId
->         entity (IFunctionDecl _ f _ _) = f
 
 \end{verbatim}
 The Prelude is imported implicitly into every module other than the
@@ -570,12 +561,12 @@ that are imported directly from that module.}
 >     Interface m is ds <- liftErr (readFile fn) >>= okM . parseInterface fn
 >     mEnv' <- loadInterfaces paths (m:ctxt) mEnv m (modules is)
 >     ds' <- okM $ intfSyntaxCheck ds
->     return (bindModule (Interface m is ds') mEnv',m)
+>     return (bindModule (Interface m is (qualIntf m ds')) mEnv',m)
 >   where modules is = [P p m | IImportDecl p m <- is]
 
 \end{verbatim}
 After all interface files have been loaded, the compiler checks that
-re-exported definitions in the interfaces are compatible with their
+reexported definitions in the interfaces are compatible with their
 original definitions in order to ensure that the set of loaded
 interfaces is consistent.
 \begin{verbatim}

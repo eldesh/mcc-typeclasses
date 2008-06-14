@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2693 2008-05-02 13:56:53Z wlux $
+% $Id: Exports.lhs 2722 2008-06-14 14:08:49Z wlux $
 %
 % Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -34,6 +34,7 @@ interfaces.
 > import CurryUtils
 > import Env
 > import InstInfo
+> import IntfQual
 > import Kinds
 > import KindTrans
 > import List
@@ -51,36 +52,33 @@ interfaces.
 > exportInterface :: Module a -> PEnv -> TCEnv -> InstEnv -> ValueEnv
 >                 -> Interface
 > exportInterface (Module m (Just (Exporting _ es)) _ _) pEnv tcEnv iEnv tyEnv =
->   Interface m imports (precs ++ ds)
+>   Interface m imports (unqualIntf m (precs ++ ds))
 >   where tvs = nameSupply
->         imports = map (IImportDecl noPos) (usedModules ds)
->         precs = foldr (infixDecl m pEnv) [] es
+>         imports = map (IImportDecl noPos) (filter (m /=) (usedModules ds))
+>         precs = foldr (infixDecl pEnv) [] es
 >         ds =
 >           closeInterface m tcEnv iEnv tvs zeroSet (types ++ values ++ insts)
->         types = foldr (typeDecl m tcEnv tyEnv tvs) [] es
->         values = foldr (valueDecl m tcEnv tyEnv tvs) [] es
->         insts = foldr (uncurry (instDecl m tcEnv tvs)) [] (envToList iEnv)
+>         types = foldr (typeDecl tcEnv tyEnv tvs) [] es
+>         values = foldr (valueDecl tcEnv tyEnv tvs) [] es
+>         insts = foldr (uncurry (instDecl tcEnv tvs)) [] (envToList iEnv)
 
-> infixDecl :: ModuleIdent -> PEnv -> Export -> [IDecl] -> [IDecl]
-> infixDecl m pEnv (Export f) ds = iInfixDecl m pEnv f ds
-> infixDecl m pEnv (ExportTypeWith tc cs) ds =
->   foldr (iInfixDecl m pEnv . qualifyLike tc) ds cs
+> infixDecl :: PEnv -> Export -> [IDecl] -> [IDecl]
+> infixDecl pEnv (Export f) ds = iInfixDecl pEnv f ds
+> infixDecl pEnv (ExportTypeWith tc cs) ds =
+>   foldr (iInfixDecl pEnv . qualifyLike tc) ds cs
 
-> iInfixDecl :: ModuleIdent -> PEnv -> QualIdent -> [IDecl] -> [IDecl]
-> iInfixDecl m pEnv op ds =
+> iInfixDecl :: PEnv -> QualIdent -> [IDecl] -> [IDecl]
+> iInfixDecl pEnv op ds =
 >   case qualLookupTopEnv op pEnv of
 >     [] -> ds
->     [PrecInfo _ (OpPrec fix pr)] ->
->       IInfixDecl noPos fix pr (qualUnqualify m op) : ds
+>     [PrecInfo _ (OpPrec fix pr)] -> IInfixDecl noPos fix pr op : ds
 >     _ -> internalError "infixDecl"
 
-> typeDecl :: ModuleIdent -> TCEnv -> ValueEnv -> [Ident] -> Export -> [IDecl]
->          -> [IDecl]
-> typeDecl _ _ _ _ (Export _) ds = ds
-> typeDecl m tcEnv tyEnv tvs (ExportTypeWith tc xs) ds =
+> typeDecl :: TCEnv -> ValueEnv -> [Ident] -> Export -> [IDecl] -> [IDecl]
+> typeDecl _ _ _ (Export _) ds = ds
+> typeDecl tcEnv tyEnv tvs (ExportTypeWith tc xs) ds =
 >   case qualLookupTopEnv tc tcEnv of
->     [DataType _ k cs] ->
->       iTypeDecl IDataDecl m cx' tc tvs n k constrs xs' : ds
+>     [DataType _ k cs] -> iTypeDecl IDataDecl cx' tc tvs n k constrs xs' : ds
 >       where n = kindArity k
 >             cx' = guard vis >>
 >                   orderContext (map VariableType (take n tvs))
@@ -90,35 +88,32 @@ interfaces.
 >             (cxs,cs') = unzip (map (constrDecl tcEnv tyEnv xs tc tvs) cs)
 >             ls = nub (concatMap labels cs')
 >             vis = not (null xs) || tc `elem` [qSuccessId,qRatioId]
->     [RenamingType _ k c] ->
->       iTypeDecl INewtypeDecl m cx' tc tvs n k nc' xs' : ds
+>     [RenamingType _ k c] -> iTypeDecl INewtypeDecl cx' tc tvs n k nc' xs' : ds
 >       where n = kindArity k
 >             (cx',nc') = newConstrDecl tcEnv tyEnv xs tc tvs c
 >             xs' = [c | c `notElem` xs]
 >     [AliasType _ n k ty] ->
->       iTypeDecl (const . ITypeDecl) m [] tc tvs n k ty' : ds
+>       iTypeDecl (const . ITypeDecl) [] tc tvs n k ty' : ds
 >       where ty' = fromType tcEnv tvs ty
 >     [TypeClass _ k clss fs] ->
->       iClassDecl IClassDecl m tc tvs k clss methods fs' : ds
+>       iClassDecl IClassDecl tc tvs k clss methods fs' : ds
 >       where methods = map (methodDecl tcEnv tyEnv tc tvs) fs
 >             fs' = filter (`notElem` xs) fs
 >     _ -> internalError "typeDecl"
 
 > iTypeDecl :: (Position -> [ClassAssert] -> QualIdent -> Maybe KindExpr
 >               -> [Ident] -> a)
->           -> ModuleIdent -> [ClassAssert] -> QualIdent -> [Ident] -> Int
->           -> Kind -> a
-> iTypeDecl f m cx tc tvs n k = f noPos cx (qualUnqualify m tc) k' (take n tvs)
+>           -> [ClassAssert] -> QualIdent -> [Ident] -> Int -> Kind -> a
+> iTypeDecl f cx tc tvs n k = f noPos cx tc k' (take n tvs)
 >   where k' = if k == simpleKind n then Nothing else Just (fromKind k)
 
 > iClassDecl :: (Position -> [ClassAssert] -> QualIdent -> Maybe KindExpr
 >                -> Ident -> a)
->            -> ModuleIdent -> QualIdent -> [Ident] -> Kind -> [QualIdent] -> a
-> iClassDecl f m cls tvs k clss = f noPos cx (qualUnqualify m cls) k' tv
+>            -> QualIdent -> [Ident] -> Kind -> [QualIdent] -> a
+> iClassDecl f cls tvs k clss = f noPos cx cls k' tv
 >   where k' = if k == KindStar then Nothing else Just (fromKind k)
 >         tv = head tvs
->         cx =
->           [ClassAssert (qualUnqualify m cls) (VariableType tv) | cls <- clss]
+>         cx = [ClassAssert cls (VariableType tv) | cls <- clss]
 
 > constrDecl :: TCEnv -> ValueEnv -> [Ident] -> QualIdent -> [Ident] -> Ident
 >            -> ([ClassAssert],ConstrDecl)
@@ -149,45 +144,38 @@ interfaces.
 >   IMethodDecl noPos f (fromQualType tcEnv tvs (contextMap tail ty))
 >   where ForAll _ ty = funType (qualifyLike cls f) tyEnv
 
-> valueDecl :: ModuleIdent -> TCEnv -> ValueEnv -> [Ident] -> Export -> [IDecl]
->           -> [IDecl]
-> valueDecl m tcEnv tyEnv tvs (Export f) ds =
->   IFunctionDecl noPos (qualUnqualify m f) n' (fromQualType tcEnv tvs ty) : ds
+> valueDecl :: TCEnv -> ValueEnv -> [Ident] -> Export -> [IDecl] -> [IDecl]
+> valueDecl tcEnv tyEnv tvs (Export f) ds =
+>   IFunctionDecl noPos f n' (fromQualType tcEnv tvs ty) : ds
 >   where n = arity f tyEnv
 >         n'
 >           | arrowArity (unqualType ty) == n = Nothing
 >           | otherwise = Just (toInteger n)
 >         ForAll _ ty = funType f tyEnv
-> valueDecl _ _ _ _ (ExportTypeWith _ _) ds = ds
+> valueDecl _ _ _ (ExportTypeWith _ _) ds = ds
 
-> instDecl :: ModuleIdent -> TCEnv -> [Ident] -> CT -> (ModuleIdent,Context)
->          -> [IDecl] -> [IDecl]
-> instDecl m tcEnv tvs (CT cls tc) (m',cx) ds
->   | mIdent m cls /= m' && (isPrimTypeId (unqualify tc) || mIdent m tc /= m') =
->       iInstDecl m tcEnv tvs (CT cls tc) (m',cx) : ds
+> instDecl :: TCEnv -> [Ident] -> CT -> (ModuleIdent,Context) -> [IDecl]
+>          -> [IDecl]
+> instDecl tcEnv tvs (CT cls tc) (m,cx) ds
+>   | fst (splitQualIdent cls) /= Just m && fst (splitQualIdent tc) /= Just m =
+>       iInstDecl tcEnv tvs (CT cls tc) (m,cx) : ds
 >   | otherwise = ds
->   where mIdent m = fromMaybe m . fst . splitQualIdent 
 
-> iInstDecl :: ModuleIdent -> TCEnv -> [Ident] -> CT -> (ModuleIdent,Context)
->           -> IDecl
-> iInstDecl m tcEnv tvs (CT cls tc) (m',cx) =
->   IInstanceDecl noPos cx' (qualUnqualify m cls) ty' m''
->   where m'' = if m == m' then Nothing else Just m'
->         QualTypeExpr cx' ty' = fromQualType tcEnv tvs $
+> iInstDecl :: TCEnv -> [Ident] -> CT -> (ModuleIdent,Context) -> IDecl
+> iInstDecl tcEnv tvs (CT cls tc) (m,cx) =
+>   IInstanceDecl noPos cx' cls ty' (Just m)
+>   where QualTypeExpr cx' ty' = fromQualType tcEnv tvs $
 >           QualType cx (applyType (TypeConstructor tc) tvs')
 >         n = kindArity (constrKind tc tcEnv) - kindArity (classKind cls tcEnv)
 >         tvs' = take n (map TypeVariable [0..])
 
 \end{verbatim}
 The compiler determines the list of imported modules from the set of
-module qualifiers that are used in the interface. Careful readers
-probably will have noticed that the functions above carefully strip
-the module prefix from all entities that are defined in the current
-module. Note that the list of modules returned from
-\texttt{usedModules} is not necessarily a subset of the modules that
-were imported into the current module. This will happen when an
-imported module re-exports entities from another module. E.g., given
-the three modules
+module qualifiers that are used in the interface. Note that the list
+of modules returned from \texttt{usedModules} is not necessarily a
+subset of the union of the current module and the modules that were
+imported into it. This will happen when an imported module reexports
+entities from another module. E.g., given the three modules
 \begin{verbatim}
 module A where { data T = T; }
 module B(T(..)) where { import A; }
@@ -296,12 +284,12 @@ module $M_3$ is exported from module $M_4$ if either
   \item $M_1\not=M_3 \land M_2=M_3 \land M_2.T \in \emph{intf}(M_4)$, or
   \item $M_1\not=M_3 \land M_2\not=M_3$.
 \end{enumerate}
-The condition $M_1\not=M_3$ in the second alternative takes care to
-always export an instance of a class and a type which are defined in
-the same module together with the class only. As a special case, if
-the class and the type are both defined in the current module, the
-instance is exported only if both appear in the interface, i.e., we
-impose the additional restriction
+The condition $M_1\not=M_3$ in the second alternative takes care of
+exporting an instance of a class and a type defined in the same module
+together with the class only. As a special case, if the class and the
+type are both defined in the current module, the instance is exported
+only if both appear in the interface, i.e., we impose the additional
+restriction
 \begin{displaymath}
   M_1\not=M_4 \lor M_2\not=M_4 \lor M_3\not=M_4 \lor (M_1.C \in
   \emph{intf}(M_4) \land M_2.T \in \emph{intf}(M_4)) .
@@ -366,7 +354,7 @@ environment.
 >           -> DeclIs -> [IDecl]
 > instances _ _ _ _ _ IsOther = []
 > instances m tcEnv iEnv tvs ds' (IsType tc) =
->   [iInstDecl m tcEnv tvs (CT cls tc) (m',cx)
+>   [iInstDecl tcEnv tvs (CT cls tc) (m',cx)
 >   | (CT cls tc',(m',cx)) <- envToList iEnv,
 >     tc == tc',
 >     if mIdent m cls == m'
@@ -374,7 +362,7 @@ environment.
 >       else mIdent m tc == m']
 >   where mIdent m = fromMaybe m . fst . splitQualIdent
 > instances m tcEnv iEnv tvs ds' (IsClass cls) =
->   [iInstDecl m tcEnv tvs (CT cls tc) (m',cx)
+>   [iInstDecl tcEnv tvs (CT cls tc) (m',cx)
 >   | (CT cls' tc,(m',cx)) <- envToList iEnv,
 >     cls == cls',
 >     mIdent m cls == m',
@@ -387,10 +375,10 @@ environment.
 > hiddenTypeDecl m tcEnv tvs tc =
 >   case qualLookupTopEnv (qualQualify m tc) tcEnv of
 >     [DataType _ k _] ->
->       iTypeDecl hidingDataDecl m [] tc tvs (kindArity k) k undefined
+>       iTypeDecl hidingDataDecl [] tc tvs (kindArity k) k undefined
 >     [RenamingType _ k _] ->
->       iTypeDecl hidingDataDecl m [] tc tvs (kindArity k) k undefined
->     [TypeClass _ k clss _] -> iClassDecl HidingClassDecl m tc tvs k clss
+>       iTypeDecl hidingDataDecl [] tc tvs (kindArity k) k undefined
+>     [TypeClass _ k clss _] -> iClassDecl HidingClassDecl tc tvs k clss
 >     _ -> internalError "hiddenTypeDecl"
 >   where hidingDataDecl p _ tc k tvs _ = HidingDataDecl p tc k tvs
 

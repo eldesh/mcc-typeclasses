@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2527 2007-10-22 13:49:27Z wlux $
+% $Id: IntfCheck.lhs 2722 2008-06-14 14:08:49Z wlux $
 %
-% Copyright (c) 2000-2007, Wolfgang Lux
+% Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{IntfCheck.lhs}
@@ -14,8 +14,8 @@ agree with their original definitions.
 
 One may ask why we include imported declarations at all, if the
 compiler always has to compare those declarations with the original
-definitions. The main reason for this is that it helps to avoid
-unnecessary recompilations of client modules. As an example, consider
+definitions. The main reason for this is that it helps avoiding
+unnecessary recompilation of client modules. As an example, consider
 the three modules
 \begin{verbatim}
   module A where { data T = C }
@@ -65,8 +65,9 @@ interface module only. However, this has not been implemented yet.
 
 > intfCheck :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> ValueEnv -> [IDecl]
 >           -> Error ()
-> intfCheck m pEnv tcEnv iEnv tyEnv =
+> intfCheck m pEnv tcEnv iEnv tyEnv ds =
 >   mapE_ (checkImport m pEnv tcEnv iEnv tyEnv)
+>         (filter (isNothing . localIdent m . entity) ds)
 
 > checkImport :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> ValueEnv -> IDecl
 >             -> Error ()
@@ -104,23 +105,23 @@ interface module only. However, this has not been implemented yet.
 >             length tvs == n' && toType m tvs ty == ty' =
 >               Just (return ())
 >         checkType _ = Nothing
-> checkImport m _ tcEnv _ _ (HidingClassDecl p cx cls k tv) =
+> checkImport _ _ tcEnv _ _ (HidingClassDecl p cx cls k tv) =
 >   checkTypeInfo "hidden type class" checkClass tcEnv p cls
 >   where checkClass (TypeClass cls' k' clss' _)
 >           | cls == cls' && maybe KindStar toKind k == k' &&
->             [qualQualify m cls | ClassAssert cls _ <- cx] == clss' =
+>             [cls | ClassAssert cls _ <- cx] == clss' =
 >               Just (return ())
 >         checkClass _ = Nothing
 > checkImport m _ tcEnv _ tyEnv (IClassDecl p cx cls k tv ds _) =
 >   checkTypeInfo "type class" checkClass tcEnv p cls
 >   where checkClass (TypeClass cls' k' clss' fs')
 >           | cls == cls' && maybe KindStar toKind k == k' &&
->             [qualQualify m cls | ClassAssert cls _ <- cx] == clss' &&
+>             [cls | ClassAssert cls _ <- cx] == clss' &&
 >             map imethod ds == fs' =
 >               Just (mapM_ (checkMethodImport m tyEnv cls tv) ds)
 >         checkClass _ = Nothing
 > checkImport m _ _ iEnv _ (IInstanceDecl p cx cls ty m') =
->   checkInstInfo checkContext iEnv p (qualQualify m cls) tc m'
+>   checkInstInfo checkContext iEnv p cls tc m'
 >   where QualType cx' ty' = toQualType m (QualTypeExpr cx ty)
 >         tc = rootOfType ty'
 >         checkContext cx'' = cx' == cx''
@@ -225,10 +226,7 @@ interface module only. However, this has not been implemented yet.
 >             Nothing -> errorAt p (noInstance m' cls tc)
 
 > checkImported :: (ModuleIdent -> Ident -> Error ()) -> QualIdent -> Error ()
-> checkImported f x =
->   case splitQualIdent x of
->     (Just m,x') -> f m x'
->     (Nothing,_) -> return ()
+> checkImported f x = uncurry (f . fromJust) (splitQualIdent x)
 
 \end{verbatim}
 Error messages.

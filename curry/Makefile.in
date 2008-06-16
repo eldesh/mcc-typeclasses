@@ -1,6 +1,6 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 2727 2008-06-16 06:41:26Z wlux $
+# $Id: Makefile.in 2729 2008-06-16 07:26:00Z wlux $
 #
 # Copyright (c) 2004-2008, Wolfgang Lux
 # See ../LICENSE for the full license.
@@ -205,34 +205,24 @@ libcurry_g.a: $(debug_OBJS) $(debug_INTF) $(curry_INTF)
 	$(RANLIB) $@
 
 # special rules handling mutual recursion between Prelude, Ratio, and IO
-bootstrap:
+.Prelude.icurry-boot: $(srcdir)/Prelude.icurry-boot
 	cmp -s Prelude.icurry $(srcdir)/Prelude.icurry-boot || \
 		cp -p $(srcdir)/Prelude.icurry-boot Prelude.icurry
-
-Prelude.c: Prelude.curry
-	rm -rf .Prelude
-	mkdir .Prelude
-	../cycc $(CYCCFLAGS) $(Prelude_CYCCFLAGS) --split-code -o .Prelude/Prelude Prelude.curry
-	touch Prelude.c
+	touch $@
+.Prelude.icurry: Prelude.c
 	cmp -s Prelude.icurry $(srcdir)/Prelude.icurry-boot || \
 		{ cp -p Prelude.icurry $(srcdir)/Prelude.icurry-boot && \
-		  $(MAKE) Ratio.icurry IO.icurry; }
+		  touch .Prelude.icurry-boot && \
+		  $(MAKE) Prelude.icurry; }
+	touch $@
+Prelude.icurry: .Prelude.icurry
+Prelude.o: .Prelude.icurry
 
-Ratio.c: Ratio.curry $(srcdir)/Prelude.icurry-boot
-	$(MAKE) bootstrap
-	rm -rf .Ratio
-	mkdir .Ratio
-	../cycc $(CYCCFLAGS) $(Ratio_CYCCFLAGS) --split-code -o .Ratio/Ratio Ratio.curry
-	touch Ratio.c
+Ratio.c: .Prelude.icurry-boot
 Ratio.d.c: Prelude.icurry
 Ratio.o: Prelude.icurry
 
-IO.c: IO.curry $(srcdir)/Prelude.icurry-boot
-	$(MAKE) bootstrap
-	rm -rf .IO
-	mkdir .IO
-	../cycc $(CYCCFLAGS) $(IO_CYCCFLAGS) --split-code -o .IO/IO IO.curry
-	touch IO.c
+IO.c: .Prelude.icurry-boot
 IO.d.c: Prelude.icurry
 IO.o: Prelude.icurry
 
@@ -298,6 +288,7 @@ Makefile: $(srcdir)/Makefile.in ../config.status
 
 # clean up
 mostlyclean:
+	rm -f .Prelude.icurry .Prelude.icurry-boot
 	rm -f $(curry_CSRC) $(curry_INTF) $(curry_OBJS)
 	rm -f $(debug_CSRC) $(debug_INTF) $(debug_OBJS)
 	rm -rf $(curry_OBJS:%.o=.%) $(debug_OBJS:%.o=.%)

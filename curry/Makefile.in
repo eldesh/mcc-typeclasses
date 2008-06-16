@@ -1,6 +1,6 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 2638 2008-03-13 08:07:44Z wlux $
+# $Id: Makefile.in 2727 2008-06-16 06:41:26Z wlux $
 #
 # Copyright (c) 2004-2008, Wolfgang Lux
 # See ../LICENSE for the full license.
@@ -106,7 +106,7 @@ debug_CSRC = $(debug_INTF:.icurry=.c) $(curry_DCSRC)
 debug_OBJS = $(debug_INTF:.icurry=.o) $(curry_DOBJS)
 debug_LIBS = libcurry_g.a
 
-DISTFILES = Makefile.in Prelude.icurry-boot Ratio.icurry-boot \
+DISTFILES = Makefile.in Prelude.icurry-boot \
 	    $(curry_prelude_SRCS) $(curry_stdlib_SRCS) \
 	    $(curry_stdlib_HDRS) $(debug_SRCS)
 DISTFILES_PATH = $(DISTFILES:%=@srcdir@/%)
@@ -205,13 +205,9 @@ libcurry_g.a: $(debug_OBJS) $(debug_INTF) $(curry_INTF)
 	$(RANLIB) $@
 
 # special rules handling mutual recursion between Prelude, Ratio, and IO
-boot_filter = sed -e '/import IO;/d' -e '/IO\./d'
-
 bootstrap:
 	cmp -s Prelude.icurry $(srcdir)/Prelude.icurry-boot || \
-		$(boot_filter) $(srcdir)/Prelude.icurry-boot > Prelude.icurry
-	cmp -s Ratio.icurry $(srcdir)/Ratio.icurry-boot || \
-		$(boot_filter) $(srcdir)/Ratio.icurry-boot > Ratio.icurry
+		cp -p $(srcdir)/Prelude.icurry-boot Prelude.icurry
 
 Prelude.c: Prelude.curry
 	rm -rf .Prelude
@@ -228,8 +224,6 @@ Ratio.c: Ratio.curry $(srcdir)/Prelude.icurry-boot
 	mkdir .Ratio
 	../cycc $(CYCCFLAGS) $(Ratio_CYCCFLAGS) --split-code -o .Ratio/Ratio Ratio.curry
 	touch Ratio.c
-	cmp -s Ratio.icurry $(srcdir)/Ratio.icurry-boot || \
-		cp -p Ratio.icurry $(srcdir)/Ratio.icurry-boot
 Ratio.d.c: Prelude.icurry
 Ratio.o: Prelude.icurry
 

@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2701 2008-05-19 18:26:34Z wlux $
+-- $Id: Prelude.curry 2726 2008-06-16 06:11:54Z wlux $
 --
 -- Copyright (c) 1999-2008, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -24,7 +24,7 @@ module Prelude((.), id, const, curry, uncurry, flip, until,
                Num(..), Real(..), Integral(..), Fractional(..), RealFrac(..),
                subtract, even, odd, gcd, lcm, (^), (^^),
                fromIntegral, realToFrac,
-               Int(), Integer(), Float(), Rational(),
+               Int(), Integer(), Float(), Ratio(), Rational(),
                Success(), (=:=), (=/=), success, (&), (&>),
                Maybe(..), maybe,
                Either(..), either,
@@ -38,7 +38,7 @@ module Prelude((.), id, const, curry, uncurry, flip, until,
                (?), unknown,
                try, inject, solveAll, once, best, findall, findfirst,
                browse, browseList, unpack) where
-import Ratio(Rational, numerator, denominator)
+import Ratio(Ratio, Rational, numerator, denominator)
 import IO
 
 -- Infix operator declarations:

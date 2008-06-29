@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: constraints.nw 2671 2008-04-21 06:55:42Z wlux $
+% $Id: constraints.nw 2733 2008-06-29 17:37:18Z wlux $
 %
-% Copyright (c) 2002-2007, Wolfgang Lux
+% Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Concurrent Conjunction}\label{sec:concurrent}
@@ -22,13 +22,22 @@ This file implements the concurrent conjunction of two constraints
 #include "cam.h"
 
 @
-The code for a parallel conjunction of two constraints tries to avoid
-creating a new thread whenever this is possible. The only case when a
-new thread must be started is when both arguments are unevaluated
-application nodes. In this case, the evaluation of the first argument
-is started on a new thread. In order to synchronize the current thread
-and its new child, at least one of the applications must be updatable.
-Otherwise, a new queue-me node is created for this purpose.
+The code for a concurrent conjunction of two constraints creates a new
+thread only when both arguments are unevaluated applications. In that
+case, the first argument is evaluated in the child thread and the
+parent thread evaluates the second argument. After evaluating the
+second argument, the parent thread is suspended until the first
+constraint is solved. If the first argument is an updatable
+application node, this is achieved by evaluating the first argument in
+the parent after the second one. If the first argument is a
+non-updatable application, a fresh queue-me node is created for this
+purpose.
+
+\textbf{Don't try to avoid allocating a fresh queue-me node by
+  flipping the arguments if the first argument is a non-updatable
+  application and the second one is an updatable application, since
+  this would destroy the global thread order maintained by the thread
+  management code.}
 
 Note that an unbound variable can be returned from a concurrent
 conjunction, This follows the specification
@@ -66,31 +75,24 @@ FUNCTION(___38_)
 	switch ( node_tag(c1) )
 	{
 	case NOUPD_TAG:
-	    if ( node_kind(c2) == LAZY_KIND )
-		switch ( node_tag(c2) )
-		{
-		case NOUPD_TAG:
-		    regs.r[0] = c1;
-		    regs.r[1] = c2;
-		    CHECK_HEAP(2, queueMe_node_size);
-		    aux	       = (Node *)regs.hp;
-		    aux->info  = queueMe_info_table;
-		    aux->q.spc = regs.ss;
-		    aux->q.wq  = 0;
-		    regs.hp   += queueMe_node_size;
+	    if ( node_kind(c2) == LAZY_KIND && node_tag(c2) != QUEUEME_TAG )
+	    {
+		regs.r[0] = c1;
+		regs.r[1] = c2;
+		CHECK_HEAP(2, queueMe_node_size);
+		aux	   = (Node *)regs.hp;
+		aux->info  = queueMe_info_table;
+		aux->q.spc = regs.ss;
+		aux->q.wq  = 0;
+		regs.hp   += queueMe_node_size;
 
-		    SAVE_RET2(aux, regs.r[1]);
-		    regs.r[1] = aux;
-		    start_thread(2, ___38__1);
+		SAVE_RET2(aux, regs.r[1]);
+		regs.r[1] = aux;
+		start_thread(2, ___38__1);
 
-		    SAVE_REGS(1);
-		    CALL_INDIR_ENT(regs.r[0], update);
-		case UPD_TAG:
-		    aux = c1;
-		    c1	= c2;
-		    c2	= aux;
-		    break;
-		}
+		SAVE_REGS(1);
+		CALL_INDIR_ENT(regs.r[0], update);
+	    }
 	    /* FALL THROUGH!!! */
 	case UPD_TAG:
 	    switch ( node_kind(c2) )

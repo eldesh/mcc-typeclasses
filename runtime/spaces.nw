@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 2673 2008-04-21 07:00:31Z wlux $
+% $Id: spaces.nw 2732 2008-06-29 17:36:05Z wlux $
 %
 % Copyright (c) 2003-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -368,8 +368,20 @@ new_search_space(unsigned int n_regs)
 The function [[inject_search_space]] tries to inject the bindings of a
 space into the current search space by adopting the current space as a
 child of the other space. Obviously, this is possible only if the
-current space is a root space. Otherwise, the graph of the search
-continuation must be copied into the current space.
+current space is a root space and not shared with another computation.
+This is detected by checking whether the current search space is
+allocated in the current heap segment. Otherwise, the graph of the
+search continuation must be copied into the current space.
+
+\ToDo{The requirement that the current search space must be allocated
+  in the current heap segment is a little bit too strong. It would be
+  possible to reparent the current search space even if the
+  computation has been interrupted in order to evaluate a non-local
+  application or to wait for a non-local variable to become bound.
+  E.g., if \texttt{g} is bound to a (partially) solved search goal in
+  \texttt{let invalid = 3*3 in try (\char`\\x -> x=/=invalid \& g x)}
+  the search space allocated by \texttt{try} could be made a child of
+  \texttt{g}'s search space and copying could be avoided.} %'
 
 <<spaces.h>>=
 #if !COPY_SEARCH_SPACE
@@ -384,11 +396,12 @@ extern bool inject_search_space(SearchSpace *);
 bool
 inject_search_space(SearchSpace *space)
 {
-    /* fail if current space is not a root space */
-    if ( regs.ss->parent )
+    /* fail if current space is not allocated in the current heap segment */
+    if ( (word *)regs.ss < regs.hlim )
 	return false;
 
     /* otherwise re-parent the current space */
+    assert(!regs.ss->parent && regs.ss->root == regs.ss);
     regs.ss->root     = space->root;
     regs.ss->parent   = space;
     regs.ss->s.script = 0;

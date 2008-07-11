@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Curry.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: Curry.lhs 2735 2008-07-11 14:35:52Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -169,7 +169,16 @@ Interface declarations are restricted to type declarations and signatures.
 >   | Integer Integer
 >   | Rational Rational
 >   | String String                     -- should be [Int] to handle Unicode
->   deriving (Eq,Show)
+>   deriving Show
+
+> instance Eq Literal where
+>   Char c1 == Char c2 = c1 == c2
+>   Integer i1 == Integer i2 = i1 == i2
+>   Integer i == Rational r = fromInteger i == r
+>   Rational r == Integer i = r == fromInteger i
+>   Rational r1 == Rational r2 = r1 == r2
+>   String s1 == String s2 = s1 == s2
+>   _ == _ = False
 
 \end{verbatim}
 \paragraph{Patterns}

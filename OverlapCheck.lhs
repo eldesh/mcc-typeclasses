@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: OverlapCheck.lhs 2690 2008-05-01 20:40:17Z wlux $
+% $Id: OverlapCheck.lhs 2735 2008-07-11 14:35:52Z wlux $
 %
 % Copyright (c) 2006-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -136,9 +136,7 @@ The code checking whether the equations of a function and the
 alternatives of a flexible case expression, respectively, have
 overlapping patterns is essentially a simplified version of the
 pattern matching algorithm implemented in module \texttt{ILTrans} (see
-Sect.~\ref{sec:il-trans}). The code assumes that the program is type
-correct and accordingly promotes integer constants to floating-point
-when necessary.
+Sect.~\ref{sec:il-trans}).
 
 \ToDo{Implement a similar check to report completely overlapped
   patterns, and thus unreachable alternatives, in rigid case
@@ -157,27 +155,13 @@ when necessary.
 
 > matchInductive :: [[ConstrTerm ()]] -> [[[[ConstrTerm ()]]]]
 > matchInductive =
->   map (groupRules . promote) . filter isInductive . transpose .
->     map (matches id)
+>   map groupRules . filter isInductive . transpose . map (matches id)
 >   where isInductive = all (not . isVarPattern . fst)
 
 > groupRules :: [(ConstrTerm (),a)] -> [[a]]
 > groupRules [] = []
 > groupRules ((t,ts):tss) = (ts:map snd same) : groupRules tss
 >   where (same,other) = partition ((t ==) . fst) tss
-
-> promote :: [(ConstrTerm (),a)] -> [(ConstrTerm (),a)]
-> promote tss =
->   if any (isRational . fst) tss then map (apFst toRational) tss else tss
->   where isRational (LiteralPattern _ l) =
->           case l of
->             Rational _ -> True
->             _          -> False
->         isRational (ConstructorPattern _ _ _) = False
->         toRational (LiteralPattern a (Integer i)) =
->           LiteralPattern a (Rational (fromInteger i))
->         toRational (LiteralPattern a (Rational r)) =
->           LiteralPattern a (Rational r)
 
 > matches :: ([ConstrTerm a] -> [ConstrTerm a]) -> [ConstrTerm a]
 >         -> [(ConstrTerm a,[ConstrTerm a])]

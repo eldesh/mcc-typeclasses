@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2737 2008-07-14 14:41:12Z wlux $
+% $Id: Desugar.lhs 2738 2008-07-16 14:47:52Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -303,25 +303,23 @@ $t$ is a variable or an as-pattern are replaced by $t$ in combination
 with a local declaration for $v$.
 \begin{verbatim}
 
-> desugarLiteralTerm :: ModuleIdent -> Position -> [Decl Type] -> Type
->                    -> Literal -> DesugarState ([Decl Type],ConstrTerm Type)
-> desugarLiteralTerm _ _ ds ty (Char c) = return (ds,LiteralPattern ty (Char c))
-> desugarLiteralTerm _ _ ds ty (Integer i) =
->   return (ds,LiteralPattern ty (fixLiteral ty i))
+> desugarLiteralTerm :: Type -> Literal
+>                    -> Either (ConstrTerm Type) (ConstrTerm Type)
+> desugarLiteralTerm ty (Char c) = Right (LiteralPattern ty (Char c))
+> desugarLiteralTerm ty (Integer i) =
+>   Right (LiteralPattern ty (fixLiteral ty i))
 >   where fixLiteral (TypeConstrained tys _) = fixLiteral (head tys)
 >         fixLiteral ty
->           | ty `elem` [intType,integerType] = Integer
 >           | ty == floatType = Rational . toRational
->           | otherwise = internalError "desugarLiteralTerm"
-> desugarLiteralTerm _ _ ds ty (Rational r) =
->   return (ds,LiteralPattern ty (Rational r))
-> desugarLiteralTerm m p ds ty (String cs) =
->   desugarTerm m p ds
->               (ListPattern ty (map (LiteralPattern (elemType ty) . Char) cs))
+>           | otherwise = Integer
+> desugarLiteralTerm ty (Rational r) = Right (LiteralPattern ty (Rational r))
+> desugarLiteralTerm ty (String cs) =
+>   Left (ListPattern ty (map (LiteralPattern (elemType ty) . Char) cs))
 
 > desugarTerm :: ModuleIdent -> Position -> [Decl Type] -> ConstrTerm Type
 >             -> DesugarState ([Decl Type],ConstrTerm Type)
-> desugarTerm m p ds (LiteralPattern ty l) = desugarLiteralTerm m p ds ty l
+> desugarTerm m p ds (LiteralPattern ty l) =
+>   either (desugarTerm m p ds) (return . (,) ds) (desugarLiteralTerm ty l)
 > desugarTerm m p ds (NegativePattern ty l) =
 >   desugarTerm m p ds (LiteralPattern ty (negateLiteral l))
 >   where negateLiteral (Integer i) = Integer (-i)
@@ -410,10 +408,10 @@ guard's type is \texttt{Bool} because the type defaults to
 > booleanGuards [] = False
 > booleanGuards (CondExpr _ g _ : es) = not (null es) || typeOf g == boolType
 
-> desugarLiteral :: ModuleIdent -> Position -> Type -> Literal
->                -> DesugarState (Expression Type)
-> desugarLiteral _ _ ty (Char c) = return (Literal ty (Char c))
-> desugarLiteral _ _ ty (Integer i) = return (fixLiteral ty i)
+> desugarLiteral :: Type -> Literal
+>                -> Either (Expression Type) (Expression Type)
+> desugarLiteral ty (Char c) = Right (Literal ty (Char c))
+> desugarLiteral ty (Integer i) = Right (fixLiteral ty i)
 >   where fixLiteral (TypeConstrained tys _) = fixLiteral (head tys)
 >         fixLiteral ty'
 >           | ty' `elem` [intType,integerType] = Literal ty . Integer
@@ -421,14 +419,14 @@ guard's type is \texttt{Bool} because the type defaults to
 >           | ty' == rationalType = desugarRatio . fromInteger
 >           | otherwise =
 >               Apply (prelFromInteger ty) . Literal integerType . Integer
-> desugarLiteral _ _ ty (Rational r) = return (fixLiteral ty r)
+> desugarLiteral ty (Rational r) = Right (fixLiteral ty r)
 >   where fixLiteral (TypeConstrained tys _) = fixLiteral (head tys)
 >         fixLiteral ty'
 >           | ty' == floatType = Literal ty . Rational
 >           | ty' == rationalType = desugarRatio
 >           | otherwise = Apply (prelFromRational ty) . desugarRatio
-> desugarLiteral m p ty (String cs) =
->   desugarExpr m p (List ty (map (Literal (elemType ty) . Char) cs))
+> desugarLiteral ty (String cs) =
+>   Left (List ty (map (Literal (elemType ty) . Char) cs))
 
 > desugarRatio :: Rational -> Expression Type
 > desugarRatio r =
@@ -437,7 +435,8 @@ guard's type is \texttt{Bool} because the type defaults to
 
 > desugarExpr :: ModuleIdent -> Position -> Expression Type
 >             -> DesugarState (Expression Type)
-> desugarExpr m p (Literal ty l) = desugarLiteral m p ty l
+> desugarExpr m p (Literal ty l) =
+>   either (desugarExpr m p) return (desugarLiteral ty l)
 > desugarExpr m p (Variable ty v)
 >   -- NB The name of the initial goal is anonId (not renamed, cf. goalModule
 >   --    above) and must not be changed
@@ -625,6 +624,70 @@ alternatives are used in order to define a default (case) expression
 when the selected alternative is defined with a list of boolean
 guards.
 
+Overloaded (numeric) literals complicate pattern matching because the
+representation of an overloaded numeric literal is not known at
+compile time. Therefore, case alternatives with an overloaded literal
+pattern at the selected position are transformed into if-then-else
+expressions using \verb|(==)| in order to check for matches. In
+particular, an expression
+\begin{quote}\tt
+  case $x$ of \lb{} $i$ -> $e$; \emph{alts} \rb{}
+\end{quote}
+where $i$ is an overloaded numeric literal, is transformed into
+\begin{quote}\tt
+  if $x$ == $i$
+  then case $x$ of \lb{} \emph{alts'} \rb{}
+  else case $x$ of \lb{} \emph{alts''} \rb{}
+\end{quote}
+where $x$ is a fresh variable and \emph{alts'} and \emph{alts''} are
+derived from \emph{alts} as follows
+\begin{displaymath}
+  \begin{array}{l@{}ll}
+    \emph{alts'} &\null= \lbrace t_j' \rightarrow e_j \mid
+      t_j \rightarrow e_j \in \emph{alts} \rbrace &
+      t_j' = \left\lbrace \begin{array}{ll}
+          x & \mbox{if $t_j = i$} \\
+          t_j & \mbox{otherwise}
+        \end{array} \right. \\
+    \emph{alts''} &\null= \lbrace t_j \rightarrow e_j \mid
+      t_j \rightarrow e_j \in \emph{alts}, t_j \not=i \rbrace
+    \end{array}
+\end{displaymath}
+We use a case expression for the then branch in order to handle
+guarded alternatives, which can fall through to the next alternatives,
+and also case expressions where the literal occurs within another
+pattern. Note that we keep all alternatives in \emph{alts'} because
+different literals can have the same representation. This happens,
+e.g., for a \texttt{Num Bool} instance with
+\begin{verbatim}
+  fromInteger n = odd n
+\end{verbatim}
+
+A further complication arises because numeric literals and constructor
+rooted terms can occur at the same position in different alternatives
+of a case expression. For instance, given type
+\verb+data Nat = Z | S Nat+ and a suitable \verb|Num Nat| instance,
+one could define (a rigid variant of) \verb|even| as follows.
+\begin{verbatim}
+  even n =
+    case n of
+      Z   -> True
+      1   -> False
+      S n -> not (even n)
+\end{verbatim}
+Since the compiler does not know the representation of literal
+constants, it transforms such case expressions essentially into two
+separate matches, one for the numeric literals and the other for the
+constructor rooted terms. Thus, the above definition of \verb|even|
+would be handled as if it were defined as follows.
+\begin{verbatim}
+  even n =
+    case (n,n) of
+      (_,Z)   -> True
+      (1,_)   -> False
+      (_,S n) -> not (even n)
+\end{verbatim}
+
 The algorithm also removes redundant default alternatives in case
 expressions. As a simple example, consider the expression
 \begin{verbatim}
@@ -639,10 +702,7 @@ first two alternatives already match all terms of type
 roots of the terms at the selected position, we only need to compare
 the number of groups of alternatives with the number of constructors
 of the matched expression's type in order to check whether the default
-pattern is redundant. This works also for characters and numbers, as
-there are no constructors associated with the corresponding types and,
-therefore, default alternatives are never considered redundant when
-matching against literals.
+pattern is redundant.
 
 Note that the default case may no longer be redundant if there are
 guarded alternatives, e.g.
@@ -682,6 +742,18 @@ where the default alternative is redundant.
 > arguments (ConstructorPattern _ _ ts) = ts
 > arguments (AsPattern _ t) = arguments t
 
+> asLiteral :: (a,Ident) -> ConstrTerm a -> ConstrTerm a
+> asLiteral _ t@(LiteralPattern _ _) = t
+> asLiteral v (VariablePattern _ _) = uncurry VariablePattern v
+> asLiteral v (ConstructorPattern _ _ _) = uncurry VariablePattern v
+> asLiteral v (AsPattern v' t) = AsPattern v' (asLiteral v t)
+
+> asConstrApp :: (a,Ident) -> ConstrTerm a -> ConstrTerm a
+> asConstrApp v (LiteralPattern _ _) = uncurry VariablePattern v
+> asConstrApp _ t@(VariablePattern _ _) = t
+> asConstrApp _ t@(ConstructorPattern _ _ _) = t
+> asConstrApp v (AsPattern v' t) = AsPattern v' (asConstrApp v t)
+
 > bindVars :: Position -> (Type,Ident) -> ConstrTerm Type -> Rhs Type
 >          -> Rhs Type
 > bindVars _ _ (LiteralPattern _ _) = id
@@ -714,26 +786,49 @@ where the default alternative is redundant.
 >         toAlt vs (p,prefix,_,rhs) =
 >           Alt p (VariablePattern (TypeVariable 0) anonId)
 >               (foldr2 (bindVars p) rhs vs (prefix []))
-> desugarCase m ty prefix (v:vs) alts
->   | isVarPattern (fst (head alts')) =
->       if all isVarPattern (map fst (tail alts')) then
->         desugarCase m ty prefix vs (map dropArg alts)
->       else
->         desugarCase m ty (prefix . (v:)) vs (map skipArg alts)
->   | otherwise =
->       do
->         tcEnv <- liftSt envRt
->         liftM (Case (uncurry mkVar v))
->               (mapM (desugarCaseAlt m ty prefix vs alts')
->                     (if allCases tcEnv v ts then ts else ts ++ ts'))
+> desugarCase m ty prefix (v:vs) alts =
+>   case fst (head alts') of
+>     VariablePattern _ _
+>       | all isVarPattern (map fst (tail alts')) ->
+>           desugarCase m ty prefix vs (map dropArg alts)
+>       | otherwise -> desugarCase m ty (prefix . (v:)) vs (map skipArg alts)
+>     t'@(AsPattern _ (LiteralPattern ty' l'))
+>       | fst v `elem` (charType:numTypes) ->
+>           liftM (Case (uncurry mkVar v))
+>                 (mapM (desugarCaseAlt m ty prefix vs alts') (lts ++ vts))
+>       | otherwise ->
+>           liftM (Case (equal v (desugarLiteral ty' l')))
+>                 (sequence [desugarLitAlt True m ty prefix (v:vs) alts' t',
+>                            desugarLitAlt False m ty prefix (v:vs) alts' t'])
+>     AsPattern _ (ConstructorPattern _ _ _)
+>       | null lts ->
+>           do
+>             tcEnv <- liftSt envRt
+>             liftM (Case (uncurry mkVar v))
+>                   (mapM (desugarCaseAlt m ty prefix vs alts')
+>                         (cts ++ if allCases tcEnv v cts then [] else vts))
+>       | otherwise ->
+>           desugarCase m ty (prefix . (v:)) (v:vs) (map dupArg alts)
 >   where alts' = map tagAlt alts
->         (ts',ts) = partition isVarPattern (nub (map fst alts'))
+>         (lts,cts,vts) = partitionPatterns (nub (map fst alts'))
 >         tagAlt (p,prefix,t:ts,rhs) =
 >           (pattern v t,(p,prefix,t:ts,bindVars p v t rhs))
 >         skipArg (p,prefix,t:ts,rhs) = (p,prefix . (t:),ts,rhs)
 >         dropArg (p,prefix,t:ts,rhs) = (p,prefix,ts,bindVars p v t rhs)
+>         equal v (Right e) = apply (prelEq (fst v)) [uncurry mkVar v,e]
 >         allCases tcEnv (ty,_) ts = length cs == length ts
 >           where cs = constructors (rootOfType ty) tcEnv
+>         dupArg (p,prefix,t:ts,rhs) =
+>           (p,prefix . (asLiteral v t :),asConstrApp v t:ts,rhs)
+
+> partitionPatterns :: [ConstrTerm a]
+>                   -> ([ConstrTerm a],[ConstrTerm a],[ConstrTerm a])
+> partitionPatterns = foldr partition ([],[],[])
+>   where partition t@(AsPattern _ (LiteralPattern _ _)) ~(lts,cts,vts) =
+>           (t:lts,cts,vts)
+>         partition t@(VariablePattern _ _) ~(lts,cts,vts) = (lts,cts,t:vts)
+>         partition t@(AsPattern _ (ConstructorPattern _ _ _)) ~(lts,cts,vts) =
+>           (lts,t:cts,vts)
 
 > desugarCaseAlt :: ModuleIdent -> Type -> ([(Type,Ident)] -> [(Type,Ident)])
 >                -> [(Type,Ident)] -> [(ConstrTerm Type,Match Type)]
@@ -751,6 +846,22 @@ where the default alternative is redundant.
 >         expandPatternArgs vs t
 >           | isVarPattern t = map (uncurry VariablePattern) vs
 >           | otherwise = arguments t
+
+> desugarLitAlt :: Bool -> ModuleIdent -> Type
+>               -> ([(Type,Ident)] -> [(Type,Ident)]) -> [(Type,Ident)]
+>               -> [(ConstrTerm Type,Match Type)] -> ConstrTerm Type
+>               -> DesugarState (Alt Type)
+> desugarLitAlt eq m ty prefix vs alts t =
+>   liftM (caseAlt (pos (head alts')) t')
+>         (desugarCase m ty id (prefix vs) (map resetArgs alts'))
+>   where v = head vs
+>         t' = if eq then truePattern else falsePattern
+>         alts'
+>           | eq = [if t == t' then matchArg v alt else alt | (t',alt) <- alts]
+>           | otherwise = [alt | (t',alt) <- alts, t /= t']
+>         pos (p,_,_,_) = p
+>         matchArg v (p,prefix,t:ts,rhs) = (p,prefix,asConstrApp v t:ts,rhs)
+>         resetArgs (p,prefix,ts,rhs) = (p,id,prefix ts,rhs)
 
 > renameArgs :: [(Type,Ident)] -> ConstrTerm Type -> ConstrTerm Type
 > renameArgs _ (LiteralPattern ty l) = LiteralPattern ty l
@@ -844,6 +955,7 @@ Prelude entities
 > prelUnif a = preludeFun [a,a] successType "=:="
 > prelFromInteger a = preludeFun [integerType] a "fromInteger"
 > prelFromRational a = preludeFun [rationalType] a "fromRational"
+> prelEq a = preludeFun [a,a] boolType "=="
 > prelBind ma a mb = preludeFun [ma,a `TypeArrow` mb] mb ">>="
 > prelBind_ ma mb = preludeFun [ma,mb] mb ">>"
 > prelFlip a b c = preludeFun [a `TypeArrow` (b `TypeArrow` c),b,a] c "flip"
@@ -865,7 +977,6 @@ Prelude entities
 > preludeFun tys ty f =
 >   Variable (foldr TypeArrow ty tys) (qualifyWith preludeMIdent (mkIdent f))
 
-> successConstr = Constructor successType qSuccessId
 > ratioConstr a =
 >   Constructor (TypeArrow a (TypeArrow a (ratioType a)))
 >               (qualifyWith ratioMIdent (mkIdent ":%"))

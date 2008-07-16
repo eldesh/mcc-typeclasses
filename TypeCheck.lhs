@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2716 2008-06-10 12:18:58Z wlux $
+% $Id: TypeCheck.lhs 2738 2008-07-16 14:47:52Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -496,7 +496,7 @@ general than the type signature.
 >   tcFunctionDecl "function" m tcEnv cx (varType f tyEnv0) p f eqs
 > tcDecl m tcEnv tyEnv0 cx d@(PatternDecl p t rhs) =
 >   do
->     (cx',ty',t') <- tcConstrTerm tcEnv p t
+>     (cx',ty',t') <- tcConstrTerm False tcEnv p t
 >     (cx'',rhs') <-
 >       tcRhs m tcEnv rhs >>-
 >       unifyDecl p "pattern declaration" (ppDecl d) tcEnv tyEnv0 (cx++cx') ty'
@@ -943,12 +943,13 @@ equivalent to $\emph{World}\rightarrow(t,\emph{World})$.
 \paragraph{Patterns and Expressions}
 Note that the type attribute associated with a constructor or infix
 pattern is the type of the whole pattern and not the type of the
-constructor itself. Also note that overloaded literals are not
-supported in patterns.
+constructor itself. Overloaded (numeric) literals are supported in
+expressions and patterns of case alternatives, but not in other
+patterns.
 
-\ToDo{The types admissible for numeric literals in patterns should
-  in some way acknowledge the set of types specified in a default
-  declaration if one is present.}
+\ToDo{The types admissible for numeric literals in patterns without
+  overloading should in some way acknowledge the set of types
+  specified in a default declaration if one is present.}
 
 When computing the type of a variable in a pattern, we ignore the
 context of the variable's type (which can only be due to a type
@@ -969,92 +970,93 @@ in \texttt{tcFunctionDecl} above.
 > tcLhs :: TCEnv -> Position -> Lhs a -> TcState (Context,[Type],Lhs Type)
 > tcLhs tcEnv p (FunLhs f ts) =
 >   do
->     (cxs,tys,ts') <- liftM unzip3 $ mapM (tcConstrTerm tcEnv p) ts
+>     (cxs,tys,ts') <- liftM unzip3 $ mapM (tcConstrTerm False tcEnv p) ts
 >     return (concat cxs,tys,FunLhs f ts')
 > tcLhs tcEnv p (OpLhs t1 op t2) =
 >   do
->     (cx1,ty1,t1') <- tcConstrTerm tcEnv p t1
->     (cx2,ty2,t2') <- tcConstrTerm tcEnv p t2
+>     (cx1,ty1,t1') <- tcConstrTerm False tcEnv p t1
+>     (cx2,ty2,t2') <- tcConstrTerm False tcEnv p t2
 >     return (cx1 ++ cx2,[ty1,ty2],OpLhs t1' op t2')
 > tcLhs tcEnv p (ApLhs lhs ts) =
 >   do
 >     (cx,tys,lhs') <- tcLhs tcEnv p lhs
->     (cxs,tys',ts') <- liftM unzip3 $ mapM (tcConstrTerm tcEnv p) ts
+>     (cxs,tys',ts') <- liftM unzip3 $ mapM (tcConstrTerm False tcEnv p) ts
 >     return (cx ++ concat cxs,tys ++ tys',ApLhs lhs' ts')
 
-> tcConstrTerm :: TCEnv -> Position -> ConstrTerm a
+> tcConstrTerm :: Bool -> TCEnv -> Position -> ConstrTerm a
 >              -> TcState (Context,Type,ConstrTerm Type)
-> tcConstrTerm _ _ (LiteralPattern _ l) =
+> tcConstrTerm poly _ _ (LiteralPattern _ l) =
 >   do
->     (cx,ty) <- tcLiteral False l
+>     (cx,ty) <- tcLiteral poly l
 >     return (cx,ty,LiteralPattern ty l)
-> tcConstrTerm _ _ (NegativePattern _ l) =
+> tcConstrTerm poly _ _ (NegativePattern _ l) =
 >   do
->     (cx,ty) <- tcLiteral False l
+>     (cx,ty) <- tcLiteral poly l
 >     return (cx,ty,NegativePattern ty l)
-> tcConstrTerm _ _ (VariablePattern _ v) =
+> tcConstrTerm _ _ _ (VariablePattern _ v) =
 >   do
 >     (_,ty) <- fetchSt >>= inst . varType v
 >     return ([],ty,VariablePattern ty v)
-> tcConstrTerm tcEnv p t@(ConstructorPattern _ c ts) =
+> tcConstrTerm poly tcEnv p t@(ConstructorPattern _ c ts) =
 >   do
->     (cx,ty,ts') <- tcConstrApp tcEnv p (ppConstrTerm 0 t) c ts
+>     (cx,ty,ts') <- tcConstrApp poly tcEnv p (ppConstrTerm 0 t) c ts
 >     return (cx,ty,ConstructorPattern ty c ts')
-> tcConstrTerm tcEnv p t@(InfixPattern _ t1 op t2) =
+> tcConstrTerm poly tcEnv p t@(InfixPattern _ t1 op t2) =
 >   do
->     (cx,ty,[t1',t2']) <- tcConstrApp tcEnv p (ppConstrTerm 0 t) op [t1,t2]
+>     (cx,ty,[t1',t2']) <-
+>       tcConstrApp poly tcEnv p (ppConstrTerm 0 t) op [t1,t2]
 >     return (cx,ty,InfixPattern ty t1' op t2')
-> tcConstrTerm tcEnv p (ParenPattern t) =
+> tcConstrTerm poly tcEnv p (ParenPattern t) =
 >   do
->     (cx,ty,t') <- tcConstrTerm tcEnv p t
+>     (cx,ty,t') <- tcConstrTerm poly tcEnv p t
 >     return (cx,ty,ParenPattern t')
-> tcConstrTerm tcEnv p t@(RecordPattern _ c fs) =
+> tcConstrTerm poly tcEnv p t@(RecordPattern _ c fs) =
 >   do
 >     (cx,ty) <- liftM (apSnd arrowBase) (fetchSt >>= skol tcEnv . conType c)
->     (cxs,fs') <-
->       liftM unzip $ mapM (tcField tcConstrTerm "pattern" doc tcEnv p ty) fs
+>     (cxs,fs') <- liftM unzip $
+>       mapM (tcField (tcConstrTerm poly) "pattern" doc tcEnv p ty) fs
 >     return (cx ++ concat cxs,ty,RecordPattern ty c fs')
 >   where doc t1 = ppConstrTerm 0 t $-$ text "Term:" <+> ppConstrTerm 0 t1
-> tcConstrTerm tcEnv p (TuplePattern ts) =
+> tcConstrTerm poly tcEnv p (TuplePattern ts) =
 >   do
->     (cxs,tys,ts') <- liftM unzip3 $ mapM (tcConstrTerm tcEnv p) ts
+>     (cxs,tys,ts') <- liftM unzip3 $ mapM (tcConstrTerm poly tcEnv p) ts
 >     return (concat cxs,tupleType tys,TuplePattern ts')
-> tcConstrTerm tcEnv p t@(ListPattern _ ts) =
+> tcConstrTerm poly tcEnv p t@(ListPattern _ ts) =
 >   do
 >     ty <- freshTypeVar
 >     (cxs,ts') <- liftM unzip $ mapM (tcElem (ppConstrTerm 0 t) ty) ts
 >     return (concat cxs,listType ty,ListPattern (listType ty) ts')
 >   where tcElem doc ty t =
->           tcConstrTerm tcEnv p t >>-
+>           tcConstrTerm poly tcEnv p t >>-
 >           unify p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t)
 >                 tcEnv ty
-> tcConstrTerm tcEnv p t@(AsPattern v t') =
+> tcConstrTerm poly tcEnv p t@(AsPattern v t') =
 >   do
 >     (_,ty) <- fetchSt >>= inst . varType v
 >     (cx,t'') <-
->       tcConstrTerm tcEnv p t' >>-
+>       tcConstrTerm poly tcEnv p t' >>-
 >       unify p "pattern" (ppConstrTerm 0 t) tcEnv ty
 >     return (cx,ty,AsPattern v t'')
-> tcConstrTerm tcEnv p (LazyPattern t) =
+> tcConstrTerm poly tcEnv p (LazyPattern t) =
 >   do
->     (cx,ty,t') <- tcConstrTerm tcEnv p t
+>     (cx,ty,t') <- tcConstrTerm poly tcEnv p t
 >     return (cx,ty,LazyPattern t')
 
-> tcConstrApp :: TCEnv -> Position -> Doc -> QualIdent -> [ConstrTerm a]
+> tcConstrApp :: Bool -> TCEnv -> Position -> Doc -> QualIdent -> [ConstrTerm a]
 >             -> TcState (Context,Type,[ConstrTerm Type])
-> tcConstrApp tcEnv p doc c ts =
+> tcConstrApp poly tcEnv p doc c ts =
 >   do
 >     tyEnv <- fetchSt
 >     (cx,(tys,ty)) <- liftM (apSnd arrowUnapply) (skol tcEnv (conType c tyEnv))
 >     unless (length tys == n) (errorAt p (wrongArity c (length tys) n))
->     (cxs,ts') <- liftM unzip $ zipWithM (tcConstrArg tcEnv p doc) ts tys
+>     (cxs,ts') <- liftM unzip $ zipWithM (tcConstrArg poly tcEnv p doc) ts tys
 >     return (cx ++ concat cxs,ty,ts')
 >   where n = length ts
 
-> tcConstrArg :: TCEnv -> Position -> Doc -> ConstrTerm a -> Type
+> tcConstrArg :: Bool -> TCEnv -> Position -> Doc -> ConstrTerm a -> Type
 >             -> TcState (Context,ConstrTerm Type)
-> tcConstrArg tcEnv p doc t ty =
->   tcConstrTerm tcEnv p t >>-
+> tcConstrArg poly tcEnv p doc t ty =
+>   tcConstrTerm poly tcEnv p t >>-
 >   unify p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t) tcEnv ty
 
 > tcRhs :: ModuleIdent -> TCEnv -> Rhs a -> TcState (Context,Type,Rhs Type)
@@ -1258,7 +1260,7 @@ in \texttt{tcFunctionDecl} above.
 > tcExpr m tcEnv _ (Lambda p ts e) =
 >   do
 >     bindLambdaVars m ts
->     (cxs,tys,ts') <- liftM unzip3 $ mapM (tcConstrTerm tcEnv p) ts
+>     (cxs,tys,ts') <- liftM unzip3 $ mapM (tcConstrTerm False tcEnv p) ts
 >     (cx',ty,e') <- tcExpr m tcEnv p e
 >     return (concat cxs ++ cx',foldr TypeArrow ty tys,Lambda p ts' e')
 > tcExpr m tcEnv p (Let ds e) =
@@ -1305,7 +1307,7 @@ in \texttt{tcFunctionDecl} above.
 >   do
 >     bindLambdaVars m t
 >     (cx,t') <-
->       tcConstrTerm tcEnv p t >>-
+>       tcConstrTerm True tcEnv p t >>-
 >       unify p "case pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t)
 >             tcEnv tyLhs
 >     (cx',rhs') <- tcRhs m tcEnv rhs >>- unify p "case branch" doc tcEnv tyRhs
@@ -1322,7 +1324,7 @@ in \texttt{tcFunctionDecl} above.
 > tcQual m tcEnv _ q@(StmtBind p t e) =
 >   do
 >     bindLambdaVars m t
->     (cx,ty,t') <- tcConstrTerm tcEnv p t
+>     (cx,ty,t') <- tcConstrTerm False tcEnv p t
 >     (cx',e') <-
 >       tcExpr m tcEnv p e >>-
 >       unify p "generator" (ppStmt q $-$ text "Term:" <+> ppExpr 0 e)
@@ -1345,7 +1347,7 @@ in \texttt{tcFunctionDecl} above.
 > tcStmt m tcEnv _ mTy st@(StmtBind p t e) =
 >   do
 >     bindLambdaVars m t
->     (cx,ty,t') <- tcConstrTerm tcEnv p t
+>     (cx,ty,t') <- tcConstrTerm False tcEnv p t
 >     (cx',e') <-
 >       tcExpr m tcEnv p e >>-
 >       unify p "statement" (ppStmt st $-$ text "Term:" <+> ppExpr 0 e)

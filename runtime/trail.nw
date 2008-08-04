@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: trail.nw 2668 2008-04-21 06:50:50Z wlux $
+% $Id: trail.nw 2740 2008-08-04 15:27:39Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -88,11 +88,16 @@ void
 init_trail(unsigned int trail_size)
 {
     trail_size = (trail_size + pagemask) & ~pagemask;
-    trail_base = (SaveRec *)malloc(trail_size + pagemask);
+    trail_base = (SaveRec *)malloc(trail_size);
+    if ( (long)trail_base & pagemask )
+    {
+	free(trail_base);
+	trail_base = (SaveRec *)malloc(trail_size + pagemask);
+	trail_base = (SaveRec *)(((long)trail_base + pagemask) & ~pagemask);
+    }
     if ( trail_base == 0 )
 	sys_error("init_trail");
 
-    trail_base = (SaveRec *)(((long)trail_base + pagemask) & ~pagemask);
     trail_end = trail_base + trail_size / sizeof(SaveRec);
 }
 #endif

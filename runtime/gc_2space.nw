@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: gc_2space.nw 2673 2008-04-21 07:00:31Z wlux $
+% $Id: gc_2space.nw 2740 2008-08-04 15:27:39Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -84,9 +84,8 @@ In our implementation, the garbage collector allocates one large heap
 array and then splits it among the two semi-spaces. The pointer
 [[from_space]] points to the base of the active semi-space and
 [[to_space]] points to the inactive semi-space. The size of each
-semi-space is stored in the variable [[heap_size]]. The size of the
-heap as well as the start of both semi-spaces is aligned to a page
-boundary.
+semi-space is stored in the variable [[heap_size]]. The base addresses
+and the sizes of both semi-spaces are aligned to a page boundary.
 
 Note that we must keep the variables [[heap_base]] and [[heap_end]] in
 sync with these variables when the semi-spaces are flipped after a
@@ -119,15 +118,35 @@ static unsigned long heap_size;
 
 <<Garbage collector definitions>>
 
+@
+<<Flip the semi-spaces>>=
+aux = from_space; from_space = to_space; to_space = aux;
+heap_base = from_space; heap_end = from_space + heap_size;
+
+@ 
+The function [[init_heap]] allocates the memory for both semi-spaces
+of the heap. The total heap size specified by the user is first
+aligned to the next even page boundary in order to enforce page
+alignment of both semi spaces. Since modern [[malloc]] implementations
+return page aligned memory for large chunks anyway, we first attempt
+to allocate the requested size. If this does not yield page aligned
+memory, we overallocate a lit bit to do alignment ourselves.
+
+<<gc_2space.c>>=
 void
 init_heap(unsigned long size)
 {
-    size      = (size + pagemask) & ~pagemask;
-    heap_base = (word *)malloc(size + pagemask);
+    size      = (size + (2*pagemask+1)) & ~(2*pagemask+1);
+    heap_base = (word *)malloc(size);
+    if ( (long)heap_base & pagemask )
+    {
+	free(heap_base);
+	heap_base = (word *)malloc(size + pagemask);
+	heap_base = (word *)(((long)heap_base + pagemask) & ~pagemask);
+    }
     if ( heap_base == NULL )
         sys_error("init_heap");
 
-    heap_base  = (word *)(((long)heap_base + pagemask) & ~pagemask);
     heap_size  = size / word_size / 2;
     from_space = heap_base;
     to_space   = from_space + heap_size;
@@ -136,11 +155,6 @@ init_heap(unsigned long size)
     mprotect(to_space, heap_size * word_size, PROT_NONE);
 #endif
 }
-
-@
-<<Flip the semi-spaces>>=
-aux = from_space; from_space = to_space; to_space = aux;
-heap_base = from_space; heap_end = from_space + heap_size;
 
 @
 Since the collector scans only live cells in the heap, finalized

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILPP.lhs 2690 2008-05-01 20:40:17Z wlux $
+% $Id: ILPP.lhs 2741 2008-08-04 15:35:24Z wlux $
 %
 % Copyright (c) 1999-2008 Wolfgang Lux
 % See LICENSE for the full license.
@@ -63,8 +63,9 @@ Marlow's pretty printer for Haskell.
 
 > ppType :: Int -> Type -> Doc
 > ppType p (TypeConstructor tc tys)
->   | isQTupleId tc = parens (fsep (punctuate comma (map (ppType 0) tys)))
->   | tc == qListId = brackets (ppType 0 (head tys))
+>   | isQTupleId tc && length tys == qTupleArity tc =
+>       parens (fsep (punctuate comma (map (ppType 0) tys)))
+>   | tc == qListId && length tys == 1 = brackets (ppType 0 (head tys))
 >   | otherwise =
 >       ppParen (p > 1 && not (null tys))
 >               (ppQIdent tc <+> fsep (map (ppType 2) tys))

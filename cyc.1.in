@@ -4,7 +4,7 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cyc.1.in 2641 2008-03-13 08:13:05Z wlux $
+.\" $Id: cyc.1.in 2743 2008-08-05 15:10:42Z wlux $
 .\"
 .\" Copyright (c) 2004-2008, Wolfgang Lux
 .\" See LICENSE for the full license.
@@ -505,7 +505,15 @@ and
 .Fl RTS
 arguments on the command line. The
 .Fl RTS
-switch may be omitted if it is the last argument on the command line.
+switch may be omitted if it is the last argument on the command
+line. Additional runtime system options can be specified \(em without
+.Cm +RTS
+and
+.Fl RTS
+delimiters \(em in the environment variable
+.Ev CURRYRTS .
+These options are processed before those specified on the command line
+and therefore can be overridden by the latter.
 .Pp
 The Curry runtime system understands the following options:
 .Bl -tag -width -indent

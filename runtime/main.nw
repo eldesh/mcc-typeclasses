@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: main.nw 2699 2008-05-14 16:14:13Z wlux $
+% $Id: main.nw 2743 2008-08-05 15:10:42Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -58,6 +58,7 @@ from the argument vector.
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
+#include "debug.h"
 #include "run.h"
 #include "regs.h"
 #include "heap.h"
@@ -69,6 +70,7 @@ from the argument vector.
 #include "stats.h"
 
 static void	     bad_option(void) __attribute__((noreturn));
+static void	     rts_options(int, char **);
 static unsigned long parse_size(long max, const char *, const char *);
 
 #define k 1024
@@ -97,6 +99,9 @@ int print_fail = 0;
 
 unsigned long pagemask;
 
+static int bufmode = -1;
+static int bufsize = 0;
+
 static void
 bad_option()
 {
@@ -119,13 +124,103 @@ bad_option()
     exit(1);
 }
 
+static void
+rts_options(int argc, char *argv[])
+{
+    int	 i;
+    char *cp, *arg;
+
+    for ( i = 1; i < argc; i++ )
+    {
+	cp = argv[i];
+	if ( *cp == '-' )
+	    for ( cp++; *cp != '\0'; cp++ )
+		switch ( *cp )
+		{
+		case 'd':
+		    do_trace++;
+		    break;
+		case 'f':
+		    print_fail++;
+		    break;
+		case 'p':
+		    show_stats++;
+		    break;
+		case 'b':
+		case 'h':
+		case 'k':
+#if !COPY_SEARCH_SPACE
+		case 't':
+#endif
+
+		    if ( cp[1] != '\0' )
+			arg = cp + 1;
+		    else if ( ++i < argc )
+			arg = argv[i];
+		    else
+		    {
+			fprintf(stderr, "%s: missing argument after -%c\n",
+				argv[0], *cp);
+			bad_option();
+		    }
+		    switch ( *cp )
+		    {
+		    case 'b':
+			if ( strcmp(arg, "n") == 0 )
+			    bufmode = _IONBF;
+			else if ( strcmp(arg, "l") == 0 )
+			    bufmode = _IOLBF;
+			else if ( strcmp(arg, "f") == 0 )
+			    bufmode = _IOFBF;
+			else if ( *arg == 'f' )
+			{
+			    bufmode = _IOFBF;
+			    bufsize = (int)
+				parse_size(INT_MAX, "buffer size", arg + 1);
+			}
+			else
+			{
+			    fprintf(stderr, "%s: invalid file buffer mode %s\n",
+				    argv[0], arg);
+			    bad_option();
+			}
+			break;
+		    case 'h':
+			heapsize = parse_size(LONG_MAX, "heap size", arg);
+			break;
+		    case 'k':
+			stacksize = (unsigned int)
+			    parse_size(INT_MAX, "stack size", arg);
+			break;
+#if !COPY_SEARCH_SPACE
+		    case 't':
+			trailsize = (unsigned int)
+			    parse_size(INT_MAX, "trail size", arg);
+			break;
+#endif
+		    }
+		    cp = "\0";
+		    break;
+		default:
+		    fprintf(stderr, "%s: unknown runtime system option %c\n",
+			    argv[0], *cp);
+		    bad_option();
+		}
+	else
+	{
+	    fprintf(stderr, "%s: invalid runtime system argument %s\n",
+		    argv[0], cp);
+	    bad_option();
+	}
+    }
+}
+
 void
 curry_init(int *p_argc, char *argv[])
 {
-    bool rts;
-    char *cp, *arg;
-    int	 i, j, argc;
-    int  pagesize, bufmode = -1, bufsize = 0;
+    char *arg, *rts, **rargv;
+    int	 i, j, argc, rargc;
+    int	 pagesize;
 
     /* get system page size */
     pagesize = getpagesize();
@@ -133,105 +228,76 @@ curry_init(int *p_argc, char *argv[])
 	pagesize = DEFAULT_PAGESIZE;
     pagemask = pagesize - 1;
 
-    /* process rts options */
+    /* process rts environment options */
+    rts = getenv("CURRYRTS");
+    if ( rts != NULL )
+    {
+	const char *space = " \f\n\r\t\v";
+
+	rts = strdup(rts);
+	if ( rts == NULL )
+	    sys_error("curry_init");
+
+	rargv = (char **)malloc(8 * sizeof(char *));
+	if ( rargv == NULL )
+	    sys_error("curry_init");
+	rargv[0] = argv[0];
+
+	rargc = 1;
+	for ( arg = strtok(rts, space); arg != NULL; arg = strtok(NULL, space) )
+	{
+	    if ( rargc % 8 == 0 )
+	    {
+		rargv = (char **)realloc(rargv, (rargc + 8) * sizeof(char *));
+		if ( rargv == NULL )
+		    sys_error("curry_init");
+	    }
+
+	    rargv[rargc++] = arg;
+	}
+
+	rts_options(rargc, rargv);
+	free(rts);
+    }
+    else
+	rargv = 0;
+
+    /* process rts command line options */
     argc = *p_argc;
-    rts	 = false;
     for ( i = j = 1; i < argc; i++ )
     {
-	cp = argv[i];
-	if ( !rts )
-	    if ( strcmp(cp, "+RTS") == 0 )
-		rts = true;
-	    else
-		argv[j++] = cp;
-	else if ( strcmp(cp, "-RTS") == 0 )
-	    rts = false;
-	else
+	if ( strcmp(argv[i], "+RTS") == 0 )
 	{
-	    if ( *cp == '-' )
-		for ( cp++; *cp != '\0'; cp++ )
-		    switch ( *cp )
-		    {
-		    case 'd':
-			do_trace++;
-			break;
-		    case 'f':
-			print_fail++;
-			break;
-		    case 'p':
-			show_stats++;
-			break;
-		    case 'b':
-		    case 'h':
-		    case 'k':
-#if !COPY_SEARCH_SPACE
-		    case 't':
-#endif
-			if ( cp[1] != '\0' )
-			    arg = cp + 1;
-			else if ( ++i < argc )
-			    arg = argv[i];
-			else
-			{
-			    fprintf(stderr, "%s: missing argument after -%c\n",
-				    argv[0], *cp);
-			    bad_option();
-			}
-			switch ( *cp )
-			{
-			case 'b':
-			    if ( strcmp(arg, "n") == 0 )
-				bufmode = _IONBF;
-			    else if ( strcmp(arg, "l") == 0 )
-				bufmode = _IOLBF;
-			    else if ( strcmp(arg, "f") == 0 )
-				bufmode = _IOFBF;
-			    else if ( *arg == 'f' )
-			    {
-				bufmode = _IOFBF;
-				bufsize = (int)
-				    parse_size(INT_MAX, "buffer size", arg + 1);
-			    }
-			    else
-			    {
-				fprintf(stderr,
-					"%s: invalid file buffer mode %s\n",
-					argv[0], arg);
-				bad_option();
-			    }
-			    break;
-			case 'h':
-			    heapsize = parse_size(LONG_MAX, "heap size", arg);
-			    break;
-			case 'k':
-			    stacksize = (unsigned int)
-				parse_size(INT_MAX, "stack size", arg);
-			    break;
-#if !COPY_SEARCH_SPACE
-			case 't':
-			    trailsize = (unsigned int)
-				parse_size(INT_MAX, "trail size", arg);
-			    break;
-#endif
-			}
-			cp = "\0";
-			break;
-		    default:
-			fprintf(stderr,
-				"%s: unknown runtime system option %c\n",
-				argv[0], *cp);
-			bad_option();
-		    }
-	    else
+	    if ( rargv == NULL )
 	    {
-		fprintf(stderr, "%s: unknown runtime system argument %s\n",
-			argv[0], cp);
-		bad_option();
+		rargv = (char **)malloc(8 * sizeof(char *));
+		if ( rargv == NULL )
+		    sys_error("curry_init");
+		rargv[0] = argv[0];
 	    }
+
+	    rargc = 1;
+	    for ( i++; i < argc && strcmp(argv[i], "-RTS") != 0 ; i++ )
+	    {
+		if ( rargc % 8 == 0 )
+		{
+		    rargv =
+			(char **)realloc(rargv, (rargc + 8) * sizeof(char *));
+		    if ( rargv == NULL )
+			sys_error("curry_init");
+		}
+
+		rargv[rargc++] = argv[i];
+	    }
+	    rts_options(rargc, rargv);
 	}
+	else
+	    argv[j++] = argv[i];
     }
     argv[j] = NULL;
     *p_argc = j;
+    if ( rargv != NULL )
+	free(rargv);
 
     /* initialize runtime system */
     init_chars();

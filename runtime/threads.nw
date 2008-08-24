@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: threads.nw 2674 2008-04-21 07:02:28Z wlux $
+% $Id: threads.nw 2745 2008-08-24 09:19:44Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -432,14 +432,16 @@ FUNCTION(yield_delay_thread)
     if ( regs.rq == 0 && !schedule_nondet(regs.thd) )
 	GOTO_INDIR(regs.ret);
 
-    thd1 = interrupt_thread(1, regs.ret, Yield);
-    BEGIN_LOCAL_ROOTS1(thd1)
-    CHECK_HEAP(1, 2*thread_surrogate_size);
-    END_LOCAL_ROOTS
+    /* NB Don't use BEGIN_LOCAL_ROOTS1/END_LOCAL_ROOTS here since they
+     *    prevent the tail call optimization in Gnu C. */
+    regs.r[1] = (Node *)interrupt_thread(1, regs.ret, Yield);
+    CHECK_HEAP(2, 2*thread_surrogate_size);
 
-    var = regs.r[0];
+    var	 = regs.r[0];
     ASSERT(is_tagged_ptr(var) && is_variable_node(var));
     assert(is_local_space(var->v.spc));
+    thd1 = (ThreadQueue)regs.r[1];
+
     thd		= (ThreadQueue)regs.hp;
     thd->s.info = &surrogate_info;
     thd->s.id   = 0;

@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: equal.nw 2694 2008-05-02 14:02:26Z wlux $
+% $Id: equal.nw 2745 2008-08-24 09:19:44Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Strict Equality}
@@ -62,19 +62,19 @@ FUNCTION(___61__61__1)
 static
 FUNCTION(___61__61__2)
 {
-    bool	 is_vect;
-    unsigned int i, n;
-    Node	 *arg1, *arg2;
-    Node	 *next, *arglist;
-    Node	 **argp1, **argp2;
+    bool is_vect;
+    int	 i, n;
+    Node *arg1, *arg2;
+    Node *next, *arglist;
+    Node **argp1, **argp2;
  ENTRY_LABEL(static, ___61__61__2)
     MATCH_RIGID(___61__61__2);
 
-    n	 = 0;
     arg1 = regs.sp[0];
     arg2 = regs.r[0];
+    n	 = eq_root(arg1, arg2);
 
-    if ( !eq_root(arg1, arg2, &n) )
+    if ( n < 0 )
 	RETURN(CONST(__Prelude__False), 1);
     else if ( n == 0 )
 	RETURN(CONST(__Prelude__True), 1);

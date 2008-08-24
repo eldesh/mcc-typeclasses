@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2712 2008-05-20 16:40:23Z wlux $
+% $Id: disequal.nw 2745 2008-08-24 09:19:44Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -105,9 +105,9 @@ FUNCTION(___61__47__61__2)
     }
     else
     {
-	unsigned int n = 0;
+	int n = eq_root(arg1, arg2);
 
-	if ( !eq_root(arg1, arg2, &n) )
+	if ( n < 0 )
 	    RETURN(Success, 1);
 	else if ( n > 0 )
 	{
@@ -117,8 +117,8 @@ FUNCTION(___61__47__61__2)
 	    /* NB assign exist_type before calling eq_args because a
 	     *    garbage collection in eq_args will invalidate arg1 */
 	    exist_type = is_eapp_node(arg1) || is_papp_node(arg1);
-	    arglist = nil;
-	    if ( !eq_args(0, arg1, arg2, n, &arglist) )
+	    arglist    = eq_args(0, arg1, arg2, n);
+	    if ( !arglist )
 		RETURN(Success, 1);
 
 	    if ( arglist != nil )
@@ -183,7 +183,7 @@ data constructors are not known in the runtime system.
 static
 FUNCTION(diseq_var)
 {
-    bool	nf;
+    enum occurs occ;
     Disequality *cstr;
  ENTRY_LABEL(static, diseq_var)
     if ( is_tagged_ptr(regs.sp[0]) && is_variable_node(regs.sp[0]) &&
@@ -195,8 +195,9 @@ FUNCTION(diseq_var)
     else if ( !is_local_space(regs.r[0]->v.spc) )
 	CALL1(sync_var, ___61__47__61__1, regs.r[0]);
 
-    nf = true;
-    if ( occurs(regs.r[0], regs.sp[0], &nf) )
+    /* occurs check */
+    occ = occurs(regs.r[0], regs.sp[0]);
+    if ( occ == occurs_yes )
 	RETURN(Success, 1);
 
     /* add the constraint to the variable */
@@ -210,7 +211,7 @@ FUNCTION(diseq_var)
     SET_FIELD(regs.r[0], v.cstrs, (Constraint *)cstr);
 
     /* if necessary, evaluate the argument to normal form */
-    if ( nf )
+    if ( occ == occurs_no_nf )
 	RETURN(Success, 1);
     CALL_RET2(___61__58__61_, 1, regs.sp[0], regs.sp[0]);
 }

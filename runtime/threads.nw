@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: threads.nw 2745 2008-08-24 09:19:44Z wlux $
+% $Id: threads.nw 2750 2008-08-30 13:21:58Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -417,7 +417,7 @@ FUNCTION(yield_thread)
     ThreadQueue thd;
  ENTRY_LABEL(extern, yield_thread)
     if ( regs.rq == 0 && !schedule_nondet(regs.thd) )
-	GOTO_INDIR(regs.ret);
+	GOTO(regs.ret);
 
     thd = interrupt_thread(0, regs.ret, Yield);
     SET_FIELD(regs.thd, tq, thd);
@@ -430,10 +430,10 @@ FUNCTION(yield_delay_thread)
     ThreadQueue thd, thd1;
  ENTRY_LABEL(extern, yield_delay_thread)
     if ( regs.rq == 0 && !schedule_nondet(regs.thd) )
-	GOTO_INDIR(regs.ret);
+	GOTO(regs.ret);
 
     /* NB Don't use BEGIN_LOCAL_ROOTS1/END_LOCAL_ROOTS here since they
-     *    prevent the tail call optimization in Gnu C. */
+     *    prevent the tail-call optimization in Gnu C. */
     regs.r[1] = (Node *)interrupt_thread(1, regs.ret, Yield);
     CHECK_HEAP(2, 2*thread_surrogate_size);
 
@@ -757,7 +757,7 @@ FUNCTION(activate_thread)
     /* continue the activated thread */
     if ( reason != None )
 	TRACE(("%I resume (%s)\n", reasons[reason]));
-    GOTO_INDIR(ip);
+    GOTO(ip);
 }
 
 @ 

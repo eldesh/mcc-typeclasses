@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2745 2008-08-24 09:19:44Z wlux $
+% $Id: unify.nw 2750 2008-08-30 13:21:58Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -64,7 +64,7 @@ FUNCTION(___61__58__61_)
  ENTRY_LABEL(extern, ___61__58__61_)
     TRACE_FUN("=:=", 2);
     SAVE_REGS(1);
-    EVAL_INDIR(___61__58__61__1);
+    EVAL(___61__58__61__1);
 }
 
 static
@@ -989,7 +989,7 @@ FUNCTION(wake)
     regs.sp[0] = regs.r[0];
 
     /* wake all threads from the queue */
-    GOTO_INDIR(activate_threads(wq, wake_1));
+    GOTO(activate_threads(wq, wake_1));
 }
 
 static

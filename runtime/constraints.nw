@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: constraints.nw 2733 2008-06-29 17:37:18Z wlux $
+% $Id: constraints.nw 2750 2008-08-30 13:21:58Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -37,7 +37,7 @@ purpose.
   flipping the arguments if the first argument is a non-updatable
   application and the second one is an updatable application, since
   this would destroy the global thread order maintained by the thread
-  management code.}
+  management code.} %'
 
 Note that an unbound variable can be returned from a concurrent
 conjunction, This follows the specification
@@ -91,7 +91,7 @@ FUNCTION(___38_)
 		start_thread(2, ___38__1);
 
 		SAVE_REGS(1);
-		CALL_INDIR_ENT(regs.r[0], update);
+		CALL_ENT(regs.r[0], update);
 	    }
 	    /* FALL THROUGH!!! */
 	case UPD_TAG:
@@ -108,7 +108,7 @@ FUNCTION(___38_)
 		/* FALL THROUGH!!! */
 	    case LVAR_KIND:
 		SAVE_RET1(c2);
-		CALL_INDIR_ENT(c1, ___38__2);
+		CALL_ENT(c1, ___38__2);
 	    default:
 		assert(node_tag(c2) == CAPP_KIND);
 	    }
@@ -121,12 +121,12 @@ FUNCTION(___38_)
 		if ( node_kind(c2) != QUEUEME_TAG )
 		{
 		    SAVE_RET1(c1);
-		    CALL_INDIR_ENT(c2, ___38__2);
+		    CALL_ENT(c2, ___38__2);
 		}
 		/* FALL_THROUGH!!! */
 	    case LVAR_KIND:
 		SAVE_RET1(c2);
-		CALL_INDIR_ENT(c1, ___38__2);
+		CALL_ENT(c1, ___38__2);
 	    default:
 		assert(node_kind(c2) == CAPP_KIND);
 	    }
@@ -143,7 +143,7 @@ FUNCTION(___38_)
 	{
 	case LAZY_KIND:
 	    SAVE_RET1(c1);
-	    CALL_INDIR_ENT(c2, ___38__2);
+	    CALL_ENT(c2, ___38__2);
 	case LVAR_KIND:
 	    SAVE_RET1(c2);
 	    CALL1(sync_var, ___38__3, c1);

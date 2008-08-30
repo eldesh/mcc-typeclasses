@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2714 2008-05-20 22:56:04Z wlux $
+% $Id: CGen.lhs 2750 2008-08-30 13:21:58Z wlux $
 %
 % Copyright (c) 1998-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -558,7 +558,7 @@ has been evaluated. If an update frame is already on the top of the
 stack, the suspended application node is overwritten with an
 indirection node pointing to the queue-me node from the update frame
 and no additional update frame is pushed onto the stack. This avoids a
-potential stack overflow when performing tail calls to a variable
+potential stack overflow when performing tail-calls to a variable
 instead of a known function.
 
 The application entry points of partial application nodes use a
@@ -965,25 +965,22 @@ translation function.
 >   concatMap (allocNode consts) ds ++ concatMap (initNode consts) ds
 
 > jump :: (Bool,[Name],[Name]) -> CPSCont -> [CPSCont] -> [CStmt]
-> jump vs0 k ks = saveCont vs0 [] [] (k:ks) ++ [gotoRet vs0 (k:ks)]
+> jump vs0 k ks = saveCont vs0 [] [] (k:ks) ++ [gotoRet (k:ks)]
 
 > ret :: (Bool,[Name],[Name]) -> Name -> [CPSCont] -> [CStmt]
-> ret vs0 v ks = saveCont vs0 [v] [] ks ++ [gotoRet vs0 ks]
+> ret vs0 v ks = saveCont vs0 [v] [] ks ++ [gotoRet ks]
 
 > enter :: (Bool,[Name],[Name]) -> Name -> [CPSCont] -> [CStmt]
 > enter vs0 v ks =
 >   saveCont vs0 [v] [] ks ++
 >   [kindSwitch v [updVar (null ks,[v],[]) v] taggedSwitch
 >               [cCase "LAZY_KIND"
->                      (saveRet vs0 ks ++ [goto vs0 (field v "info->eval")])],
->    gotoRet vs0 ks]
->   where goto vs0 = if fst3 vs0 then gotoIndirExpr else gotoExpr
->         taggedSwitch switch = CIf (isTaggedPtr v) [switch] []
+>                      (saveRet vs0 ks ++ [gotoExpr (field v "info->eval")])],
+>    gotoRet ks]
+>   where taggedSwitch switch = CIf (isTaggedPtr v) [switch] []
 
 > exec :: (Bool,[Name],[Name]) -> Name -> [Name] -> [CPSCont] -> [CStmt]
-> exec vs0 f vs ks =
->   saveCont vs0 vs [] ks ++ saveRet vs0 ks ++ [exec vs0 (cName f)]
->   where exec vs0 = if fst3 vs0 then gotoIndir else goto
+> exec vs0 f vs ks = saveCont vs0 vs [] ks ++ saveRet vs0 ks ++ [goto (cName f)]
 
 > saveCont :: (Bool,[Name],[Name]) -> [Name] -> [Name] -> [CPSCont] -> [CStmt]
 > saveCont vs0 vs ws ks =
@@ -995,10 +992,10 @@ translation function.
 > saveRet (ent,_,_) [] = [setRet (var retIpName) | not ent]
 > saveRet _ (k:_) = [setRet (CExpr (contName k))]
 
-> gotoRet :: (Bool,[Name],[Name]) -> [CPSCont] -> CStmt
-> gotoRet _ [] = gotoIndir (show retIpName)
-> gotoRet vs0 (k:_) = ret vs0 (contName k)
->   where ret vs0 = if fst3 vs0 then gotoIndir else goto
+> gotoRet :: [CPSCont] -> CStmt
+> gotoRet ks = goto (contIp ks)
+>   where contIp [] = show retIpName
+>         contIp (k:_) = contName k
 
 > lock :: Name -> [CStmt]
 > lock v =
@@ -1655,14 +1652,8 @@ of the abstract syntax tree.
 > goto :: String -> CStmt
 > goto l = gotoExpr (CExpr l)
 
-> gotoIndir :: String -> CStmt
-> gotoIndir l = gotoIndirExpr (CExpr l)
-
 > gotoExpr :: CExpr -> CStmt
 > gotoExpr l = CProcCall "GOTO" [l]
-
-> gotoIndirExpr :: CExpr -> CStmt
-> gotoIndirExpr l = CProcCall "GOTO_INDIR" [l]
 
 > funCall :: String -> [String] -> CExpr
 > funCall f xs = CFunCall f (map CExpr xs)

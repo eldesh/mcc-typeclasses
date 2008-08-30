@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: io_monad.nw 2694 2008-05-02 14:02:26Z wlux $
+% $Id: io_monad.nw 2750 2008-08-30 13:21:58Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -285,7 +285,7 @@ FUNCTION(__catch)
     /* invoke the action */
     regs.sp[0] = regs.r[2];
     regs.sp[1] = (Node *)__catch_2;
-    EVAL_INDIR_NODE(__catch_1);
+    EVAL_NODE(__catch_1);
 }
 
 static
@@ -339,7 +339,7 @@ FUNCTION(__ioError)
     regs.r[0]  = handler;
     regs.sp[0] = exc;
     regs.sp[1] = regs.r[1];
-    EVAL_INDIR_NODE(__ioError_1);
+    EVAL_NODE(__ioError_1);
 }
 
 static

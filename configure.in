@@ -1,4 +1,4 @@
-dnl $Id: configure.in 2749 2008-08-30 13:11:27Z wlux $
+dnl $Id: configure.in 2750 2008-08-30 13:21:58Z wlux $
 dnl
 dnl Copyright (c) 2002-2008, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -31,64 +31,40 @@ AC_ARG_ENABLE(cheney,
                           (default: 32k bytes)])
 cheney_default_stack_size=32*1024
 
-conflict1= conflict2=
-case $enable_cheney in
-  "" ) ;;
+case $enable_trampoline in
+  yes ) ;;
   no )
-    case $enable_trampoline in
-      cheney ) conflict1=--enable-trampoline=cheney conflict2=--disable-cheney;;
-    esac;;
-  yes )
-    case $enable_trampoline in
-      fast | default | slow | standard )
-        conflict1=--enable-trampoline=$enable_trampoline
-	conflict2=--enable-cheney;;
-      no ) conflict1=--disable-trampoline conflict2=--enable-cheney;;
-      "" ) enable_trampoline=cheney;;
+    case $enable_cheney in
+      "" | no ) conflict=;;
+      yes ) conflict=--enable-cheney;;
+      * ) conflict=--enable-cheney=$enable_cheney;;
+    esac
+    if test -n "$conflict"; then
+      AC_MSG_ERROR([Conflicting options specified:
+--disable-trampoline and $conflict are mutually exclusive])
+    fi;;
+  "" )
+    case $enable_cheney in
+      "" | no )
+    	# enable trampoline when Gnu C is not used and on systems which use
+    	# position independent code
+    	if test "$GCC" != "yes"; then
+    	  enable_trampoline=yes
+    	else
+    	  case $target_os in
+    	    darwin* ) enable_trampoline=yes;;
+    	    * ) enable_trampoline=no;;
+    	  esac
+    	fi;;
+      * ) enable_trampoline=yes;;
     esac;;
   * )
-    case $enable_trampoline in
-      fast | default | slow | standard )
-        conflict1=--enable-trampoline=$enable_trampoline
-	conflict2=--enable-cheney=$enable_cheney;;
-      no )
-        conflict1=--disable-trampoline
-        conflict2=--enable-cheney=$enable_cheney;;
-      "" ) enable_trampoline=cheney;;
-    esac;;
+    AC_MSG_ERROR([invalid argument for --enable-trampoline: $enable_trampoline]);;
 esac
-if test -n "$conflict1"; then
-  AC_MSG_ERROR([Conflicting options specified:
-$conflict1 and $conflict2 are mutually exclusive])
+if test "$enable_trampoline" = yes; then
+  AC_DEFINE(USE_TRAMPOLINE)
 fi
 
-case $enable_trampoline in
-  yes | fast | default ) AC_DEFINE(USE_TRAMPOLINE);;
-  cheney )
-    test -n "$enable_cheney" || enable_cheney=yes
-    AC_DEFINE(USE_TRAMPOLINE);;
-  slow | standard )
-    AC_DEFINE(USE_TRAMPOLINE)
-    AC_DEFINE(USE_STANDARD_TRAMPOLINE);;
-  no ) ;;
-  "" )
-    # enable trampoline when Gnu C is not used and on systems which use
-    # position independent code
-    if test "$GCC" != "yes"; then
-      enable_trampoline=yes
-      AC_DEFINE(USE_TRAMPOLINE)
-    else
-      case $target_os in
-        darwin* )
-          enable_trampoline=yes
-          AC_DEFINE(USE_TRAMPOLINE);;
-	* ) enable_trampoline=no;;
-      esac
-    fi;;
-  * )
-    AC_MSG_ERROR([invalid argument for --enable-trampoline: $enable_trampoline
-should be either cheney, fast (synonym: default), or slow (synonym: standard)]);;
-esac
 case $enable_cheney in
   yes ) enable_cheney=$cheney_default_stack_size;;
   *k ) enable_cheney=`expr "$enable_cheney" : '\(.*\)'k`'*1024';;

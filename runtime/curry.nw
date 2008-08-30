@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: curry.nw 2749 2008-08-30 13:11:27Z wlux $
+% $Id: curry.nw 2750 2008-08-30 13:21:58Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -85,11 +85,6 @@ Currently, the following configuration options are supported.
   assembler jump instructions into the code (see
   Sect.~\ref{sec:execution}). This flag is controlled by the
   \texttt{--enable-trampoline} option of \texttt{configure}.
-\item [[USE_STANDARD_TRAMPOLINE]]: If [[USE_TRAMPOLINE]] is defined,
-  this flag determines whether \emph{all} tail-calls are performed
-  through the trampoline loop. This flag can be set passing the
-  [[standard]] argument to \texttt{--enable-trampoline} configuration
-  option.
 \item [[C_STACK_SIZE]]: If [[USE_TRAMPOLINE]] is defined and this
   macro is defined to a positive number, the runtime system uses
   Baker's ``Cheney on the M.T.A.'' technique~\cite{Baker95:CheneyMTA},
@@ -146,14 +141,15 @@ from   n = n : from (n + 1)
   the expression $e$ is in normal form (see
   Sect.~\ref{sec:unification}).
 \end{itemize}
-The template definitions below ensure that the symbols
-[[C_STACK_GROWS_UPWARD]], [[USE_TRAMPOLINE]],
-[[USE_STANDARD_TRAMPOLINE]], [[C_STACK_SIZE]], [[USE_RETURN]],
-[[NO_POINTER_TAGS]], [[COPY_SEARCH_SPACE]], [[NO_STABILITY]], and
-[[NO_OCCURS_CHECK]] are always defined. This will ensure a consistent
-definition of these options throughout the runtime system, as a
-redefinition will raise a compilation error.
+\begin{sloppy}
+  The template definitions below ensure that the symbols
+  [[C_STACK_GROWS_UPWARD]], [[USE_TRAMPOLINE]], [[C_STACK_SIZE]],
+  [[USE_RETURN]], [[NO_POINTER_TAGS]], [[COPY_SEARCH_SPACE]],
+  [[NO_STABILITY]], and [[NO_OCCURS_CHECK]] are always defined. This
+  will ensure a consistent definition of these options throughout the
+  runtime system, as a redefinition will raise a compilation error.
 
+\end{sloppy}
 <<Configuration options>>=
 /* Define to empty if doubles have alignment constraints */
 #undef UNALIGNED_DOUBLE
@@ -163,10 +159,6 @@ redefinition will raise a compilation error.
 
 /* Define as 1 to use trampoline code for tail-calls */
 #define USE_TRAMPOLINE 0
-
-/* Define as 1 to perform all tail-calls via the trampoline */
-/* NB This macro has an effect only if USE_TRAMPOLINE is non-zero */
-#define USE_STANDARD_TRAMPOLINE 0
 
 /* Define to a positive number for Cheney on the M.T.A. */
 #define C_STACK_SIZE 0

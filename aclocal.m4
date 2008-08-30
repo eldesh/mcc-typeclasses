@@ -1,4 +1,4 @@
-# $Id: aclocal.m4 2613 2008-02-03 23:40:31Z wlux $
+# $Id: aclocal.m4 2749 2008-08-30 13:11:27Z wlux $
 #
 # Copyright (c) 2002-2008, Wolfgang Lux
 #
@@ -353,5 +353,24 @@ AC_DEFUN([CURRY_UNALIGNED_DOUBLE],
      curry_cv_type_double_unaligned=no))
  if test "$curry_cv_type_double_unaligned" = yes; then
    AC_DEFINE(UNALIGNED_DOUBLE)
+ fi
+])
+
+# CURRY_STACK_GROWSUP
+# Check whether the stack grows upward. Define C_STACK_GROWS_UPWARD
+# via AC_DEFINE in this case.
+AC_DEFUN([CURRY_STACK_GROWSUP],
+[AC_REQUIRE([AC_PROG_CC]) dnl
+ AC_CACHE_CHECK([whether stack grows upward],
+   [curry_cv_sys_stack_growsup],
+   AC_TRY_RUN([#include <stdio.h>
+       void check(unsigned int p_addr) {
+         void *q; if ( (unsigned int)&q > p_addr ) exit(1); }
+       int main() { void *p; check ((unsigned int)&p); exit(0); }],
+     curry_cv_sys_stack_growsup=no,
+     curry_cv_sys_stack_growsup=yes,
+     curry_cv_sys_stack_growsup=yes))
+ if test "$curry_cv_sys_stack_growsup" = yes; then
+   AC_DEFINE(C_STACK_GROWS_UPWARD)
  fi
 ])

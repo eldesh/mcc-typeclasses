@@ -1,52 +1,53 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: run.nw 2346 2007-06-23 10:23:59Z wlux $
+% $Id: run.nw 2749 2008-08-30 13:11:27Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Execution}\label{sec:execution}
 While C can be used conveniently as a ``high-level'' assembly
-language, the lack of general tail-calls in the language\footnote{The
-  Gnu C compiler optimizes tail-calls into jumps to the beginning of
-  the function. However, this works only for calls to the same
-  function.} complicates the efficient implementation of declarative
-languages. The common workaround is to use a trampoline loop. In order
-to perform a tail call, a function simply returns the address of the
-callee to the trampoline, which then calls that function. This
-strategy is portable but inefficient because of the overhead
-introduced by returning to the trampoline. Furthermore, the indirect
-call sequence prevents intra-procedural optimizations by the C
-compiler and may also interfere with the processor's code prefetching.
+language, the lack of general tail-calls in the language complicates
+the efficient implementation of declarative languages. The common
+workaround is to use a trampoline loop. In order to perform a
+tail-call, a function simply returns the address of the callee to the
+trampoline, which then calls that function. This strategy is portable
+but may be inefficient due to the overhead introduced by returning to
+the trampoline. Furthermore, the indirect call sequence prevents
+intra-procedural optimizations by the C compiler and may also
+interfere with instruction prefetching.
 
-As a remedy, Baker~\cite{Baker95:CheneyMTA} has proposed to jump back
-to the trampoline only when the C runtime stack has been filled up,
-which can be detected either by an explicit address comparison or by
-using a protected virtual memory page at the high end of the stack. A
-variant of this technique was proposed for
-Java~\cite{SchinzOdersky01:TailCall}, which does not provide direct
-access to its stack. A tail call counter is used and the code returns
-to the trampoline after performing a fixed number of tail calls. Yet,
-experiments with our compiler show that these techniques do not always
-improve performance because naively growing the stack may invalidate
-the processor's cache lines to often. In addition, it is particularly
-expensive for architectures like SPARC, which are based on register
-windows.
+As a remedy, Baker~\cite{Baker95:CheneyMTA} proposed implementing
+tail-calls as normal function calls and jumping back to the trampoline
+only when the C runtime stack fills up, which can be detected either
+with an explicit address comparison or by using a protected virtual
+memory page at the high end of the stack. Experiments with our
+compiler show that this technique can substantially improve
+performance on x86 and x86-64 targets reducing execution time by up to
+a factor of 2 for some benchmarks. On PowerPC and probably most other
+RISC processors there is no such clear advantage. Usually these
+processors feature better branch prediction due to the use of a
+dedicated return address register. Furthermore, for the standard
+trampoline implementation many functions become leaf procedures which
+do not need to allocate a stack frame of their own. In fact, on SPARC
+hosts Baker's ``Cheney on the M.T.A.'' technique even turns out to be
+counterproductive, since it effectively generates an expensive
+register spill exception for each call. %'
 
 Therefore, we use our own variant of the trampoline technique. The
-decision whether to perform a tail call as a direct call or an
+decision whether to perform a tail-call as a direct call or an
 indirect call through the trampoline is purely syntactic, which means
 that there is no runtime overhead (no need to compare addresses or
 maintain an explicit counter), nor are there any portability issues
-(for handling traps after touching a protected memory page at the
-top of the stack).  Essentially, we use indirect calls when returning
-to the caller and switching contexts, respectively, and direct calls
-otherwise. The main exception are tail calls in leaf procedures, which
+(for handling traps after touching a protected memory page at the top
+of the stack). Essentially, we use indirect calls when returning to
+the caller and switching contexts, respectively, and direct calls
+otherwise. The main exception are tail-calls in leaf procedures, which
 are always performed as indirect calls in order to ensure that every
 Curry function returns to the trampoline at least once.
 
 A more efficient solution is possible for the Gnu C compiler. With the
 help of assembler labels inserted into the code and using computed
-\texttt{goto}s, a tail call is performed by jumping directly to these
+\texttt{goto}s, a tail-call is performed by jumping directly to these
 labels. Implemented this way, the standard function prologue, which
 sets up the local stack frame of the callee, is skipped over and no
 additional stack space is allocated. The stack space is allocated in
@@ -57,7 +58,7 @@ the case on many architectures when generating position independent
 code. Therefore, it can be turned off by defining the preprocessor
 macro [[USE_TRAMPOLINE]].
 
-The type of a code label which can be used in a tail call is either
+The type of a code label which can be used in a tail-call is either
 a function which returns a [[void]] pointer\footnote{In fact, the
 function returns another function with the same type. However, such
 recursive types cannot be declared in C.} or is itself a [[void]]
@@ -125,7 +126,7 @@ targets it is necessary.}
 
 In order to measure the effect of our improved trampoline
 implementation, the runtime system can be configured to perform
-\emph{every} tail call through the trampoline by defining the
+\emph{every} tail-call through the trampoline by defining the
 preprocessor macro [[USE_STANDARD_TRAMPOLINE]], which is set to a
 non-zero value when the compiler is configured with
 \texttt{--enable-trampoline=slow}.
@@ -135,17 +136,56 @@ non-zero value when the compiler is configured with
 
 # define FUNCTION(f)		void *f(void)
 # define DECLARE_LABEL(link, l) link void *l(void)
-# define ENTRY_LABEL(link, l)
 
-# if USE_STANDARD_TRAMPOLINE
-#  define GOTO(l)		GOTO_INDIR(l)
-# else
+# if C_STACK_SIZE > 0
+
+# define ENTRY_LABEL(link, l) {						\
+	_C_STACK_POINTER; if ( _C_STACK_OVERFLOW ) _c_stack_reset(l);	\
+    }
+
+#  if __GNUC__
+#   define _C_STACK_POINTER
+#   define _C_STACK_TOP		__builtin_frame_address(0)
+#  else
+#   define _C_STACK_POINTER	char _c_sp
+#   define _C_STACK_TOP		&_c_sp
+#  endif
+#  if C_STACK_GROWS_UPWARD
+#   define _C_STACK_OVERFLOW	_C_STACK_TOP >= c_stack.limit
+#  else
+#   define _C_STACK_OVERFLOW	_C_STACK_TOP <= c_stack.limit
+#  endif
+
+#  if USE_RETURN
+#   define _c_stack_reset(l)	return (void *)(l)
+#  else
+#   define _c_stack_reset(l)	jump(l)
+#  endif
+
+extern struct _c_stack {
+    unsigned int size;
+    void	 *limit;
+} c_stack;
+
 #  define GOTO(l)		return l()
-# endif
-# define GOTO_INDIR(l)		return (void *)(l)
+#  define GOTO_INDIR(l)		GOTO(l)
+
+# else /* C_STACK_SIZE <= 0 */
+
+#  define ENTRY_LABEL(link, l)
+
+#  if USE_STANDARD_TRAMPOLINE
+#   define GOTO(l)		GOTO_INDIR(l)
+#  else
+#   define GOTO(l)		return l()
+#  endif
+#  define GOTO_INDIR(l)		return (void *)(l)
+
+# endif /* C_STACK_SIZE <= 0 */
 
 #else /* !USE_TRAMPOLINE */
 
+# undef C_STACK_SIZE
 # define C_STACK_SIZE 8192
 
 # if __GNUC__ > 3 || __GNUC__ == 3 && __GNUC_MINOR__ >= 1
@@ -232,7 +272,7 @@ jump configuration, otherwise might overwrite register values saved in
 [[run]]'s stack frame.
 
 If the preprocessor macro [[COUNT_CALLS]] is defined while compiling
-the file [[run.c]], the number of tail calls performed via the
+the file [[run.c]], the number of tail-calls performed via the
 trampoline is computed and shown on standard error when the program
 exits.
 
@@ -242,6 +282,7 @@ exits.
 # include <stdio.h>
 #endif
 #include <setjmp.h>
+#include "debug.h"
 #include "run.h"
 
 static Label   jump_ip;
@@ -285,11 +326,14 @@ jump(Label ip)
 }
 
 @ 
-If the runtime system is compiled with the trampoline configuration,
-the [[do_run]] function is a tight loop that repeatedly calls the
-function returned from the previous call. In order to improve
-efficiency, the loop has been unrolled 8 times and does not perform
-null pointer tests.
+If the runtime system is compiled with the trampoline configuration
+and the ``Cheney on the M.T.A'' technique is not used, the [[do_run]]
+function is a tight loop that repeatedly calls the function returned
+from the previous call. In order to improve efficiency, the loop has
+been unrolled 8 times and does not perform null pointer tests. On the
+other hand, when the ``Cheney on the M.T.A.'' technique is used and
+[[USE_RETURN]] is not defined the code never returns directly to the
+trampoline. Thus, [[do_run]] just fires off a call to the label.
 
 <<run.c>>=
 #if USE_TRAMPOLINE
@@ -300,9 +344,26 @@ null pointer tests.
 #  define COUNT(ip)	(ip)
 # endif
 
+# if C_STACK_SIZE > 0
+struct _c_stack c_stack = { C_STACK_SIZE, 0 };
+# endif
+
 static void
 do_run(Label ip)
 {
+# if C_STACK_SIZE > 0
+    _C_STACK_POINTER;
+#  if C_STACK_GROWS_UPWARD
+    c_stack.limit = (char *)_C_STACK_TOP + c_stack.size;
+#  else
+    c_stack.limit = (char *)_C_STACK_TOP - c_stack.size;
+#  endif
+# endif
+
+# if C_STACK_SIZE > 0 && !USE_RETURN
+    COUNT(ip());
+    curry_panic("internal error: unexpected return from Curry code\n");
+# else
     for (;;)
     {
 	ip = COUNT((Label)ip());
@@ -314,6 +375,7 @@ do_run(Label ip)
 	ip = COUNT((Label)ip());
 	ip = COUNT((Label)ip());
     }
+# endif
 }
 #endif /* USE_TRAMPOLINE */
 

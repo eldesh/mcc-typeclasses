@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: main.nw 2743 2008-08-05 15:10:42Z wlux $
+% $Id: main.nw 2749 2008-08-30 13:11:27Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -110,6 +110,10 @@ bad_option()
     fprintf(stderr, "          valid MODEs: n  unbuffered\n");
     fprintf(stderr, "                       l  line buffered\n");
     fprintf(stderr, "                       f  fully buffered\n");
+#if USE_TRAMPOLINE && C_STACK_SIZE > 0
+    fprintf(stderr, " -c SIZE  set C stack size to SIZE bytes (default: %u)\n",
+	    c_stack.size);
+#endif
     fprintf(stderr, " -d       trace program execution\n");
     fprintf(stderr, " -f       print failures during goal evaluation\n");
     fprintf(stderr, " -h SIZE  set heap size to SIZE bytes (default: %lu)\n",
@@ -147,6 +151,9 @@ rts_options(int argc, char *argv[])
 		    show_stats++;
 		    break;
 		case 'b':
+#if USE_TRAMPOLINE && C_STACK_SIZE > 0
+		case 'c':
+#endif
 		case 'h':
 		case 'k':
 #if !COPY_SEARCH_SPACE
@@ -185,6 +192,12 @@ rts_options(int argc, char *argv[])
 			    bad_option();
 			}
 			break;
+#if USE_TRAMPOLINE && C_STACK_SIZE > 0
+		    case 'c':
+			c_stack.size = (unsigned int)
+			    parse_size(INT_MAX, "C stack size", arg);
+			break;
+#endif
 		    case 'h':
 			heapsize = parse_size(LONG_MAX, "heap size", arg);
 			break;

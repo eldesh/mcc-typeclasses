@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2712 2008-05-20 16:40:23Z wlux $
+% $Id: eval.nw 2751 2008-08-30 13:24:59Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -398,6 +398,7 @@ FUNCTION(eval_lazy_1)
 FUNCTION(__ensureGround)
 {
  ENTRY_LABEL(extern, __ensureGround)
+    C_STACK_CHECK(__ensureGround);
     TRACE_FUN("ensureGround", 1);
     SAVE_REGS(0);
     EVAL(__ensureGround_1);

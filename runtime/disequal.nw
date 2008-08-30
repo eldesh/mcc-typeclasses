@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2750 2008-08-30 13:21:58Z wlux $
+% $Id: disequal.nw 2751 2008-08-30 13:24:59Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -64,6 +64,7 @@ NodeInfo diseq_constraint_info = {
 FUNCTION(___61__47__61_)
 {
  ENTRY_LABEL(extern, ___61__47__61_)
+    C_STACK_CHECK(___61__47__61_);
     TRACE_FUN("=/=", 2);
     SAVE_REGS(1);
     EVAL(___61__47__61__1);

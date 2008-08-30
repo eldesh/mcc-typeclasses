@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2750 2008-08-30 13:21:58Z wlux $
+% $Id: unify.nw 2751 2008-08-30 13:24:59Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -62,6 +62,7 @@ DECLARE_LABEL(static, unify_papp_args);
 FUNCTION(___61__58__61_)
 {
  ENTRY_LABEL(extern, ___61__58__61_)
+    C_STACK_CHECK(___61__58__61_);
     TRACE_FUN("=:=", 2);
     SAVE_REGS(1);
     EVAL(___61__58__61__1);

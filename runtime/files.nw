@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2694 2008-05-02 14:02:26Z wlux $
+% $Id: files.nw 2751 2008-08-30 13:24:59Z wlux $
 %
 % Copyright (c) 2001-2007, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -712,6 +712,7 @@ FUNCTION(lazyRead)
     Node   *list, *tail;
     Handle *file;
  ENTRY_LABEL(static, lazyRead)
+    C_STACK_CHECK(lazyRead);
     TRACE_FUN("lazyRead", 1);
 
     file = (Handle *)regs.r[0];

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: run.nw 2750 2008-08-30 13:21:58Z wlux $
+% $Id: run.nw 2751 2008-08-30 13:24:59Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -73,17 +73,17 @@ M.T.A.''  technique is employed, these functions either simply return
 the address of the jump target to their caller (the trampoline) or
 call the target block directly when they want to perform a jump to
 another code block via the [[GOTO]] macro. When the ``Cheney on the
-M.T.A.'' technique is used, each function includes a check at the
-beginning whether the alloted C runtime stack space is exhausted and
-returns to the trampoline in that case. Usually, this is implemented
-with a single [[longjmp]]. However, if the preprocessor flag
-[[USE_RETURN]] is defined, the code will return normally to the
-trampoline. This may be useful when using the ``Cheney on the M.T.A.''
-technique with small stack sizes on a target with an expensive
-[[longjmp]] implementation. Note that for Gnu C, the stack check is
-implemented with the built-in function [[__builtin_frame_address]] so
-as to not disable the tail call optimization by taking the address of
-a local variable.
+M.T.A.'' technique is used, the entry code of each abstract machine
+function uses the [[C_STACK_CHECK]] macro to check whether the alloted
+C runtime stack space is exhausted and returns to the trampoline in
+that case. Usually, this is implemented with a single [[longjmp]].
+However, if the preprocessor flag [[USE_RETURN]] is defined, the code
+will return normally to the trampoline. This may be useful when using
+the ``Cheney on the M.T.A.''  technique with small stack sizes on a
+target with an expensive [[longjmp]] implementation. Note that for Gnu
+C, the stack check is implemented with the built-in function
+[[__builtin_frame_address]] so as to not disable the tail call
+optimization by taking the address of a local variable.
 
 In case of the direct jump model, which was derived from the
 implementation of the Mercury runtime
@@ -128,12 +128,9 @@ targets it is necessary.}
 
 # define FUNCTION(f)		void *f(void)
 # define DECLARE_LABEL(link, l) link void *l(void)
+# define ENTRY_LABEL(link, l)
 
 # if C_STACK_SIZE > 0
-
-# define ENTRY_LABEL(link, l) {						\
-	_C_STACK_POINTER; if ( _C_STACK_OVERFLOW ) _c_stack_reset(l);	\
-    }
 
 #  if __GNUC__
 #   define _C_STACK_POINTER
@@ -154,6 +151,10 @@ targets it is necessary.}
 #   define _c_stack_reset(l)	jump(l)
 #  endif
 
+#  define C_STACK_CHECK(l) {						\
+	_C_STACK_POINTER; if ( _C_STACK_OVERFLOW ) _c_stack_reset(l);	\
+    }
+
 extern struct _c_stack {
     unsigned int size;
     void	 *limit;
@@ -163,8 +164,7 @@ extern struct _c_stack {
 
 # else /* C_STACK_SIZE <= 0 */
 
-#  define ENTRY_LABEL(link, l)
-
+#  define C_STACK_CHECK(l)
 #  define GOTO(l)		return (void *)(l)
 
 # endif /* C_STACK_SIZE <= 0 */
@@ -194,6 +194,7 @@ extern struct _c_stack {
 # define _ENTRY_LABEL(l)	#l "_entry"
 # define _extern_LABEL(l)	" .globl " l "\n"
 # define _static_LABEL(l)
+# define C_STACK_CHECK(l)
 
 # if __GNUC__ == 2 && __GNUC_MINOR__ == 91 && defined(__sparc)
 /* work around an instruction scheduler bug in gcc 2.91 for sparc */

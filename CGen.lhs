@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2750 2008-08-30 13:21:58Z wlux $
+% $Id: CGen.lhs 2751 2008-08-30 13:24:59Z wlux $
 %
 % Copyright (c) 1998-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -501,15 +501,16 @@ the suspend node associated with the abstract machine code function.
 > entryDef :: CVisibility -> Name -> [Name] -> CPSFunction -> CTopDecl
 > entryDef vb f vs k
 >   | null (cpsEnv k) =
->       CFuncDef vb (cpsName k) (entryCode f (length vs) : funCode True k)
+>       CFuncDef vb (cpsName k) (entryCode f (length vs) ++ funCode True k)
 >   | otherwise = error ("internal error: entryDef " ++ demangle f ++ " " ++ show (cpsEnv k))
 
 > funcDef :: CPSFunction -> CTopDecl
 > funcDef k = CFuncDef CPrivate (cpsName k) (funCode False k)
 
-> entryCode :: Name -> Int -> CStmt
+> entryCode :: Name -> Int -> [CStmt]
 > entryCode f n =
->   CProcCall "TRACE_FUN" [CString (undecorate (demangle f)),int n]
+>   [procCall "C_STACK_CHECK" [cName f],
+>    CProcCall "TRACE_FUN" [CString (undecorate (demangle f)),int n]]
 
 \end{verbatim}
 The compiler generates a C function from every CPS function. At the

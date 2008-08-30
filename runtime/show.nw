@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2750 2008-08-30 13:21:58Z wlux $
+% $Id: show.nw 2751 2008-08-30 13:24:59Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -255,6 +255,7 @@ static
 FUNCTION(showp)
 {
  ENTRY_LABEL(static, showp)
+    C_STACK_CHECK(showp);
     TRACE_FUN("showp", 4);
     SAVE_REGS(3);
     if ( regs.r[2] == zero )
@@ -482,6 +483,7 @@ FUNCTION(showArgs)
 {
     Node *arglist, *susp, *susp2, *cons, *tail, *prec, *show;
  ENTRY_LABEL(static, showArgs)
+    C_STACK_CHECK(showArgs);
     TRACE_FUN("showArgs", 4);
 
     CHECK_HEAP(4, 2 * suspend_node_size(4) + cons_node_size);
@@ -690,6 +692,7 @@ FUNCTION(showTupleArgs)
 {
     Node *arglist, *susp, *susp2, *cons, *tail, *show;
  ENTRY_LABEL(static, showTupleArgs)
+    C_STACK_CHECK(showTupleArgs);
     TRACE_FUN("showTupleArgs", 3);
 
     CHECK_HEAP(3, suspend_node_size(3) + suspend_node_size(4) + cons_node_size);
@@ -935,6 +938,7 @@ static
 FUNCTION(showTail)
 {
  ENTRY_LABEL(static, showTail)
+    C_STACK_CHECK(showTail);
     TRACE_FUN("showTail", 3);
     SAVE_REGS(2);
     if ( regs.r[1] == zero )

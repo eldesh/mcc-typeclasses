@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2723 2008-06-14 15:56:40Z wlux $
+% $Id: Exports.lhs 2777 2009-03-26 21:29:00Z wlux $
 %
 % Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -20,7 +20,7 @@ exported constructors, but a pragma marks them as hidden so that they
 cannot be used in user code. A special case is made for the Prelude's
 \texttt{Success} type, whose only constructor is not exported from the
 Prelude. Since the compiler makes use of this constructor when
-desugaring guard expressions (cf.\ Sect.~\ref{sec:desugar}),
+flattening guard expressions (cf.\ Sect.~\ref{sec:flatcase}),
 \texttt{typeDecl}'s \texttt{DataType} case explicitly forces the
 \texttt{Success} constructor to appear as hidden data constructor in
 the interface. For a similar reason, the compiler also forces the

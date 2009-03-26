@@ -1,15 +1,19 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 2766 2009-03-26 08:59:48Z wlux $
+% $Id: print.nw 2771 2009-03-26 10:30:26Z wlux $
 %
-% Copyright (c) 2001-2008, Wolfgang Lux
+% Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Printing the Result}
-When the computation is finished, the computed result and the bindings of
-all global variables can be printed with the function [[print_result]].
+When the computation is finished, the normal form of the goal and the
+bindings of its free variables can be printed with function
+[[print_result]]. The first $n$ elements of the [[var_names]] and
+[[vars]] arrays are assumed to contain the names and the bindings of
+the goal's free variables, respectively, and the $(n+1)$th element of
+[[vars]] contains the normal form of the goal. %'
 
 <<print.h>>=
-extern void print_result(const char *var_names[], Node *vars[], Node *result);
+extern void print_result(const char *var_names[], Node *vars[]);
 
 @ 
 <<print.c>>=
@@ -56,10 +60,11 @@ for a variable is printed. In that case, also the redundant value
 static bool hasAnswer;
 
 void
-print_result(const char **var_names, Node **vars, Node *result)
+print_result(const char **var_names, Node **vars)
 {
     unsigned int     i, n;
     struct dict_node *tail;
+    Node	     *result;
 
     tail      = names_tail;
     hasAnswer = false;
@@ -76,6 +81,7 @@ print_result(const char **var_names, Node **vars, Node *result)
 	    print_node(0, vars[n]);
 	}
 
+    result = vars[n];
     print_constraints(result);
     for ( i = 0; i < n; i++ )
 	print_constraints(vars[i]);

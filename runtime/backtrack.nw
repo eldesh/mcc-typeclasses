@@ -1,23 +1,22 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 2766 2009-03-26 08:59:48Z wlux $
+% $Id: backtrack.nw 2771 2009-03-26 10:30:26Z wlux $
 %
-% Copyright (c) 2002-2008, Wolfgang Lux
+% Copyright (c) 2002-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Global Search}\label{sec:global-search}
 In global search mode, the abstract machine uses backtracking for the
-implementation of non-deterministic computations because it is more
+implementation of non-deterministic computations because this is more
 efficient than a depth-first search strategy implemented on top of
 encapsulated search.
 
-There is only one entry point to this file, viz. the function
+There is only one entry point to this file, viz., the function
 [[curry_eval]] which evaluates its arguments and prints all solutions
 to the standard output. This function initializes the abstract machine
 and then evaluates all solutions of the goal using backtracking.
 
-The names of all free variables to which the goal is applied are
-passed to [[curry_eval]] in the second argument via a [[0]]-terminated
-array.
+The names of all free variables of the goal are passed to
+[[curry_eval]] via a [[0]]-terminated array in the second argument.
 
 <<backtrack.h>>=
 extern int curry_eval(NodeInfo *goal_info, const char *fv_names[],
@@ -146,25 +145,25 @@ copy_stack()
 
 @
 The function [[curry_eval]] is the main function for a program which
-evaluates a (non-monadic) goal. It applies the goal function to a list
-of free variables and incrementally computes the non-deterministic
-solutions of this application. First, it calls [[eval_apply]] in order
-to create the application node. Next, [[eval_first]] is used in order
-to initialize the abstract machine for the evaluation of the application
-and to compute a first solution. The runtime system assumes that the
-goal expression has been transformed into a function
+evaluates a (non-IO) goal. The runtime system assumes that the goal
+expression has been transformed into a function
 \begin{quote}
-  $f$ $x_0$ $x_1$ \dots{} $x_n$ = $x_0$ \texttt{=:=} \emph{goal}
+  $f$ $x_1$ \dots{} $x_n$ $x_{n+1}$ = $x_{n+1}$ \texttt{=:=} \emph{goal}
 \end{quote}
 where $x_1$, \dots, $x_n$ are the free variables of the goal
-expression. The unification forces the evaluation of the goal to
-normal form. When this function returns successfully, the abstract
-machine halts and [[curry_eval]] prints the result bound to $x_0$
-together with the constraints for the free variables $x_1$, \dots,
-$x_n$. If there are non-deterministic alternatives to the computed
-solution -- i.e., if a choice point exists -- and the user chooses to
-see more solutions, [[eval_next]] is used in order to compute the next
-solution by backtracking to the current choice point.
+expression (cf.\ Sect.~\ref{sec:desugar}). It applies the transformed
+goal function to a list of free variables and incrementally computes
+the non-deterministic solutions of this application. First, it calls
+[[eval_apply]] in order to create an application node. Next,
+[[eval_first]] is used in order to initialize the abstract machine for
+the evaluation of the application and to compute a first solution.
+When this function returns successfully, the abstract machine halts
+and [[curry_eval]] prints the result bound to $x_{n+1}$ together with
+the constraints for the free variables $x_1$, \dots, $x_n$. If there
+are non-deterministic alternatives to the computed solution -- i.e.,
+if a choice point exists -- and the user chooses to see more
+solutions, [[eval_next]] is used in order to compute the next solution
+by backtracking to the current choice point.
 
 When the program is connected to a terminal, the user is asked after
 every solution if she wants to see more solutions. Otherwise, all
@@ -173,18 +172,18 @@ can be enforced by passing the options \texttt{-i} and \texttt{-n},
 respectively, to the program.
 
 The functions [[eval_first]] and [[eval_next]] use [[regs.cid == 0]]
-in order to check whether execution has stopped without a failure. The
+in order to check whether execution has stopped without failure. The
 [[fail]] code above does not reset the machine registers; therefore,
 if no alternative continuation is available in [[fail]] and the
 machine is halted, [[regs.cid]] contains a valid thread id. On the
 other hand, the [[stop]] code, which is invoked when a deadlock occurs
 in global search mode, sets [[regs.cid]] to [[0]]. Both [[eval_first]]
 and [[eval_next]] return the goal application upon successful
-termination.  Note that this node may be different from the one passed
+termination. Note that this node may be different from the one passed
 to [[eval_first]] when the runtime system was configured with the
 \texttt{--enable-copying} option. The special values [[-1]] and [[0]]
-are returned when a deadlock has occurred and when the are no
-solutions, respectively.
+are returned when a deadlock occurred and when the are no solutions,
+respectively.
 
 <<backtrack.c>>=
 static Node *eval_apply(NodeInfo *, const char **);
@@ -253,7 +252,7 @@ curry_eval(NodeInfo *goal_info, const char *fv_names[], int argc, char **argv)
 		    printf(" | ");
 	    }
 	    if ( goal != (Node *)-1 )
-		print_result(fv_names, goal->c.args + 1, goal->c.args[0]);
+		print_result(fv_names, goal->c.args);
 	    else
 		printf("Suspended");
 
@@ -304,12 +303,13 @@ eval_apply(NodeInfo *goal_info, const char *fv_names[])
 
     clos       = (Node *)regs.hp;
     clos->info = goal_info;
-    for ( i = 0; i <= n; i++ )
-	clos->c.args[i] = (Node *)(vars + i);
-    regs.hp   += closure_node_size(n + 1);
-
     for ( i = 0; i < n; i++ )
-	add_name((Node *)(vars + i + 1), fv_names[i]);
+    {
+	add_name((Node *)(vars + i), fv_names[i]);
+	clos->c.args[i] = (Node *)(vars + i);
+    }
+    clos->c.args[n] = (Node *)(vars + n);
+    regs.hp   += closure_node_size(n + 1);
 
     return clos;
 }

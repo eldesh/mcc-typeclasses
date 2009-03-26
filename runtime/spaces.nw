@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 2732 2008-06-29 17:36:05Z wlux $
+% $Id: spaces.nw 2766 2009-03-26 08:59:48Z wlux $
 %
 % Copyright (c) 2003-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -687,13 +687,12 @@ copy_node(Node *node, SearchSpace *space)
 	    case LVAR_KIND:
 		do_copy = !space || is_forwarded(node->v.spc);
 		break;
-
-	    case LAZY_KIND:
-		do_copy = node_tag(node) == NOUPD_TAG
-		    || !space
-		    || is_forwarded(node->s.spc);
+	    case SUSPEND_KIND:
+		do_copy = !space || is_forwarded(node->s.spc);
 		break;
-
+	    case QUEUEME_KIND:
+		do_copy = !space || is_forwarded(node->q.spc);
+		break;
 	    case INDIR_KIND:
 #if !COPY_SEARCH_SPACE
 		if ( is_forwarded(node->n.spc) &&

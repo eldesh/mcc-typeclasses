@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2751 2008-08-30 13:24:59Z wlux $
+% $Id: eval.nw 2766 2009-03-26 08:59:48Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -185,12 +185,12 @@ FUNCTION(resume)
     for (;;)
     {
 	if ( is_tagged_ptr(result) )
-	    switch ( node_kind(result) )
+	    switch ( node_tag(result) )
 	    {
-	    case INDIR_KIND:
+	    case INDIR_TAG:
 		result = result->n.node;
 		continue;
-	    case LAZY_KIND:
+	    case EVAL_TAG:
 		ENTER(result, 1);
 	    }
 	break;
@@ -287,12 +287,12 @@ FUNCTION(flex_yield_resume)
     for (;;)
     {
 	if ( is_tagged_ptr(node) )
-	    switch ( node->info->kind )
+	    switch ( node->info->tag )
 	    {
-	    case INDIR_KIND:
+	    case INDIR_TAG:
 		node = node->n.node;
 		continue;
-	    case LVAR_KIND:
+	    case LVAR_TAG:
 		regs.sp[1] = node;
 		GOTO(regs.handlers->choices);
 	    }

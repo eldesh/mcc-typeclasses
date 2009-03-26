@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: io_monad.nw 2750 2008-08-30 13:21:58Z wlux $
+% $Id: io_monad.nw 2766 2009-03-26 08:59:48Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -149,9 +149,8 @@ curry_exec(Node *main, int argc, char **argv)
     io_argc = argc;
     io_argv = argv;
 
-    if ( main->info->kind == LAZY_KIND )
-	assert(main->info->tag == NOUPD_TAG &&
-	       main->info->length == closure_node_size(0));
+    if ( main->info->kind == FAPP_KIND )
+	assert(main->info->length == closure_node_size(0));
     else if ( main->info->kind == PAPP_KIND )
 	assert(main->info->tag == 1 &&
 	       main->info->length == closure_node_size(0));
@@ -346,9 +345,7 @@ static
 FUNCTION(__ioError_1)
 {
  ENTRY_LABEL(static, __ioError_1)
-    MATCH_RIGID_PAPP(__ioError_1);
-    switch ( regs.r[0]->info->tag )
-    {
+    BEGIN_MATCH_RIGID_NODE(__ioError_1)
     case 1:
 	CHECK_STACK1();
 	regs.sp	  -= 1;
@@ -360,7 +357,7 @@ FUNCTION(__ioError_1)
     default:
 	curry_panic("ioError: invalid handler (arity %d)\n",
 		    regs.r[0]->info->tag);
-    }
+    END_MATCH_RIGID_NODE;
     GOTO(regs.r[0]->info->apply);
 }
 

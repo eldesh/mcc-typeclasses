@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cstring.nw 2694 2008-05-02 14:02:26Z wlux $
+% $Id: cstring.nw 2766 2009-03-26 08:59:48Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{C String Interface}\label{sec:string}
@@ -136,18 +136,24 @@ string_length(Node *list)
 {
     unsigned n = 0;
 
-    while ( list->info->kind != CAPP_KIND || list->info->tag != NIL_TAG )
+    for (;;)
     {
-	while ( list->info->kind == INDIR_KIND )
+	switch ( list->info->tag )
+	{
+	case INDIR_TAG:
 	    list = list->n.node;
-
-	assert(list->info->kind == CAPP_KIND);
-	if ( list->info->tag == CONS_TAG )
-	    n++, list = list->c.args[1];
-	else
-	    assert(list->info->tag == NIL_TAG);
+	    continue;
+	case NIL_TAG:
+	    break;
+	case CONS_TAG:
+	    n++;
+	    list = list->c.args[1];
+	    continue;
+	default:
+	    unexpected_tag("string_length", list->info->tag);
+	}
+	break;
     }
-
     return n;
 }
 
@@ -157,16 +163,18 @@ copy_string(Node *list, char *buf)
     char *cp = buf;
     Node *head;
 
-    while ( list->info->kind != CAPP_KIND || list->info->tag != NIL_TAG )
+    for (;;)
     {
-	while ( list->info->kind == INDIR_KIND )
-	    list = list->n.node;
-	assert(list->info->kind == CAPP_KIND);
-
-	if ( list->info->tag == CONS_TAG )
+	switch ( list->info->tag )
 	{
+	case INDIR_TAG:
+	    list = list->n.node;
+	    continue;
+	case NIL_TAG:
+	    break;
+	case CONS_TAG:
 	    head = list->c.args[0];
-	    while ( is_tagged_ptr(head) && head->info->kind == INDIR_KIND )
+	    while ( is_tagged_ptr(head) && head->info->tag == INDIR_TAG )
 		head = head->n.node;
 #if NO_POINTER_TAGS
 	    assert(head->info->kind == CHAR_KIND);
@@ -175,9 +183,11 @@ copy_string(Node *list, char *buf)
 #endif
 	    *cp++ = char_val(head);
 	    list  = list->c.args[1];
+	    continue;
+	default:
+	    unexpected_tag("copy_string", list->info->tag);
 	}
-	else
-	    assert(list->info->tag == NIL_TAG);
+	break;
     }
     *cp = '\0';
     return buf;

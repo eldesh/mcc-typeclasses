@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: constraints.nw 2750 2008-08-30 13:21:58Z wlux $
+% $Id: constraints.nw 2766 2009-03-26 08:59:48Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -71,84 +71,72 @@ FUNCTION(___38_)
 
     switch ( node_kind(c1) )
     {
-    case LAZY_KIND:
-	switch ( node_tag(c1) )
+    case FAPP_KIND:
+	switch ( node_kind(c2) )
 	{
-	case NOUPD_TAG:
-	    if ( node_kind(c2) == LAZY_KIND && node_tag(c2) != QUEUEME_TAG )
-	    {
-		regs.r[0] = c1;
-		regs.r[1] = c2;
-		CHECK_HEAP(2, queueMe_node_size);
-		aux	   = (Node *)regs.hp;
-		aux->info  = queueMe_info_table;
-		aux->q.spc = regs.ss;
-		aux->q.wq  = 0;
-		regs.hp   += queueMe_node_size;
+	case SUSPEND_KIND:
+	case FAPP_KIND:
+	    regs.r[0] = c1;
+	    regs.r[1] = c2;
+	    CHECK_HEAP(2, queueMe_node_size);
+	    aux	   = (Node *)regs.hp;
+	    aux->info  = queueMe_info_table;
+	    aux->q.spc = regs.ss;
+	    aux->q.wq  = 0;
+	    regs.hp   += queueMe_node_size;
 
-		SAVE_RET2(aux, regs.r[1]);
-		regs.r[1] = aux;
-		start_thread(2, ___38__1);
+	    SAVE_RET2(aux, regs.r[1]);
+	    regs.r[1] = aux;
+	    start_thread(2, ___38__1);
 
-		SAVE_REGS(1);
-		CALL_ENT(regs.r[0], update);
-	    }
-	    /* FALL THROUGH!!! */
-	case UPD_TAG:
-	    switch ( node_kind(c2) )
-	    {
-	    case LAZY_KIND:
-		if ( node_tag(c2) != QUEUEME_TAG )
-		{
-		    SAVE_RET2(c1, c2);
-		    regs.r[0] = c1;
-		    start_thread(1, ___38__1);
-		    ENT(regs.r[0]);
-		}
-		/* FALL THROUGH!!! */
-	    case LVAR_KIND:
-		SAVE_RET1(c2);
-		CALL_ENT(c1, ___38__2);
-	    default:
-		assert(node_tag(c2) == CAPP_KIND);
-	    }
-	    break;
-
-	case QUEUEME_TAG:
-	    switch ( node_kind(c2) )
-	    {
-	    case LAZY_KIND:
-		if ( node_kind(c2) != QUEUEME_TAG )
-		{
-		    SAVE_RET1(c1);
-		    CALL_ENT(c2, ___38__2);
-		}
-		/* FALL_THROUGH!!! */
-	    case LVAR_KIND:
-		SAVE_RET1(c2);
-		CALL_ENT(c1, ___38__2);
-	    default:
-		assert(node_kind(c2) == CAPP_KIND);
-	    }
-	    break;
-
+	    SAVE_REGS(1);
+	    CALL_ENT(regs.r[0], update);
+	}
+	/* FALL THROUGH!!! */
+    case SUSPEND_KIND:
+	switch ( node_kind(c2) )
+	{
+	case SUSPEND_KIND:
+	case FAPP_KIND:
+	    SAVE_RET2(c1, c2);
+	    regs.r[0] = c1;
+	    start_thread(1, ___38__1);
+	    ENT(regs.r[0]);
+	case QUEUEME_KIND:
+	case LVAR_KIND:
+	    SAVE_RET1(c2);
+	    CALL_ENT(c1, ___38__2);
 	default:
-	    unexpected_tag("(&)", node_tag(c1));
+	    assert(node_kind(c2) == CAPP_KIND);
+	}
+	ENT(c1);
+
+    case QUEUEME_KIND:
+	switch ( node_kind(c2) )
+	{
+	case SUSPEND_KIND:
+	case FAPP_KIND:
+	    SAVE_RET1(c1);
+	    CALL_ENT(c2, ___38__2);
+	case QUEUEME_KIND:
+	case LVAR_KIND:
+	    SAVE_RET1(c2);
+	    CALL_ENT(c1, ___38__2);
+	default:
+	    assert(node_kind(c2) == CAPP_KIND);
 	}
 	ENT(c1);
 
     case LVAR_KIND:
 	/* evaluate the other argument then delay */
-	switch ( node_kind(c2) )
+	switch ( node_tag(c2) )
 	{
-	case LAZY_KIND:
+	case EVAL_TAG:
 	    SAVE_RET1(c1);
 	    CALL_ENT(c2, ___38__2);
-	case LVAR_KIND:
+	case LVAR_TAG:
 	    SAVE_RET1(c2);
 	    CALL1(sync_var, ___38__3, c1);
-	default:
-	    assert(node_kind(c2) == CAPP_KIND);
 	}
 	RET(c1);
 
@@ -157,7 +145,7 @@ FUNCTION(___38_)
     }
 
     /* trivial case */
-    if ( is_lazy_node(c2) )
+    if ( c2->info->tag == EVAL_TAG )
 	ENT(c2);
     RET(c2);
 }
@@ -192,8 +180,7 @@ FUNCTION(___38__2)
     {
 	switch ( node_kind(c2) )
 	{
-	case LAZY_KIND:
-	    assert(node_tag(c2) == QUEUEME_TAG);
+	case QUEUEME_KIND:
 	    regs.sp[0] = c1;
 	    CALL_ENT(c2, ___38__2);
 	case LVAR_KIND:
@@ -206,11 +193,8 @@ FUNCTION(___38__2)
     }
 
     assert(node_kind(c1) == CAPP_KIND);
-    if ( node_kind(c2) == LAZY_KIND )
-    {
-	assert(node_tag(c2) == QUEUEME_TAG);
+    if ( node_kind(c2) == QUEUEME_KIND )
 	ENTER(c2, 1);
-    }
     RETURN(c2, 1);
 }
 
@@ -249,15 +233,22 @@ FUNCTION(__spawnConstraint)
 {
     Node *c, *x;
  ENTRY_LABEL(extern, __spawnConstraint)
-    for ( c = regs.r[0]; node_kind(c) == INDIR_KIND; c = c->n.node )
-	;
-
-    if ( node_kind(c) == LAZY_KIND && node_tag(c) != QUEUEME_TAG )
+    c = regs.r[0];
+    for (;;)
     {
-	SAVE_REGS(1);
-	regs.r[0] = c;
-	start_thread(1, __spawnConstraint_1);
-	ENT(regs.r[0]);
+	switch ( node_kind(c) )
+	{
+	case INDIR_KIND:
+	    c = c->n.node;
+	    continue;
+	case SUSPEND_KIND:
+	case FAPP_KIND:
+	    SAVE_REGS(1);
+	    regs.r[0] = c;
+	    start_thread(1, __spawnConstraint_1);
+	    ENT(regs.r[0]);
+	}
+	break;
     }
 
     x = regs.r[1];

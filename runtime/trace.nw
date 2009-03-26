@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: trace.nw 2712 2008-05-20 16:40:23Z wlux $
+% $Id: trace.nw 2766 2009-03-26 08:59:48Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -175,6 +175,28 @@ trace_shownode(int depth, Node *node)
     else
 	switch ( node_kind(node) )
 	{
+	case CAPP_KIND:
+	case EAPP_KIND:
+	case PAPP_KIND:
+	case FAPP_KIND:
+	    trace_showapp(depth, node, closure_argc(node), node->c.args);
+	    break;
+	case LVAR_KIND:
+	    fprintf(stderr, "var@%p", node);
+	    break;
+	case SUSPEND_KIND:
+	    fprintf(stderr, "app@%p=", node);
+	    argc = suspend_argc(node);
+	    if ( argc == 1 && node->s.args[0] == 0 )
+		argc = 0;
+	    trace_showapp(depth, node, argc, node->s.args);
+	    break;
+	case QUEUEME_KIND:
+	    fprintf(stderr, "que@%p", node);
+	    break;
+	case INDIR_KIND:
+	    trace_shownode(depth, node->n.node);
+	    break;
 	case CHAR_KIND:
 #if NO_POINTER_TAGS
 	    fprintf(stderr, "'%s'", lit_char(buf, '\0', node->ch.ch, '\''));
@@ -203,46 +225,14 @@ trace_shownode(int depth, Node *node)
 	case VECTOR_KIND:
 	    trace_showapp(depth, node, vector_argc(node), node->a.args);
 	    break;
-	case LVAR_KIND:
-	    fprintf(stderr, "var@%p", node);
-	    break;
-	case LAZY_KIND:
-	    switch ( node_tag(node) )
-	    {
-	    case NOUPD_TAG:
-		trace_showapp(depth, node, closure_argc(node), node->c.args);
-		break;
-	    case UPD_TAG:
-		fprintf(stderr, "app@%p=", node);
-		argc = suspend_argc(node);
-		if ( argc == 1 && node->s.args[0] == 0 )
-		    argc = 0;
-		trace_showapp(depth, node, argc, node->s.args);
-		break;
-	    case QUEUEME_TAG:
-		fprintf(stderr, "que@%p", node);
-		break;
-	    default:
-		unexpected_tag("trace_shownode", node_tag(node));
-		break;
-	    }
-	    break;
 	case SEARCH_CONT_KIND:
 	    fprintf(stderr, "cont@%p", node);
-	    break;
-	case INDIR_KIND:
-	    trace_shownode(depth, node->n.node);
 	    break;
 	case ABSTRACT_KIND:
 	    name = node->info->cname;
 	    if ( name == 0 )
 		name = "<abstract>";
 	    fprintf(stderr, "%s@%p", name, node);
-	    break;
-	case CAPP_KIND:
-	case EAPP_KIND:
-	case PAPP_KIND:
-	    trace_showapp(depth, node, closure_argc(node), node->c.args);
 	    break;
 	default:
 	    invalid_arg("trace_shownode", node_kind(node));
@@ -278,7 +268,7 @@ prints the name of the called function and its arguments. In addition,
 returns through the code [[trace_return]], which prints the result of
 the function. Because of this stack manipulation, [[trace_fun]] must
 be called before the calling function changes the stack itself.  Note
-that [[trace_fun]] carefully checks for tail calls in order to avoid
+that [[trace_fun]] carefully checks for tail-calls in order to avoid
 growing the stack unnecessarily.
 
 <<trace.c>>=

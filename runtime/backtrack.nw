@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 2750 2008-08-30 13:21:58Z wlux $
+% $Id: backtrack.nw 2766 2009-03-26 08:59:48Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -287,7 +287,7 @@ eval_apply(NodeInfo *goal_info, const char *fv_names[])
 
     for ( n = 0, fv = fv_names; *fv; n++, fv++ )
 	;
-    assert(goal_info->kind == LAZY_KIND && goal_info->tag == NOUPD_TAG &&
+    assert(goal_info->kind == FAPP_KIND &&
 	   goal_info->length == closure_node_size(n + 1));
 
     CHECK_HEAP(0, closure_node_size(n + 1) + (n + 1) * variable_node_size);
@@ -340,7 +340,7 @@ do_eval(Label ip)
     susp = regs.bp ? ((Node **)regs.bp)[-1] : stack_end[-1];
     while ( is_tagged_ptr(susp) && is_indir_node(susp) )
 	susp = susp->n.node;
-    if ( is_tagged_ptr(susp) && is_lazy_node(susp) )
+    if ( is_tagged_ptr(susp) && is_queueMe_node(susp) )
 	return (Node *)-1;
 
     return regs.bp ? ((Node **)regs.bp)[-2] : stack_end[-2];

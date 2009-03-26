@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2751 2008-08-30 13:24:59Z wlux $
+% $Id: CGen.lhs 2766 2009-03-26 08:59:48Z wlux $
 %
 % Copyright (c) 1998-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -416,15 +416,15 @@ module, is generated.
 >      [CArrayDef vb nodeInfoType (lazyInfoTable f)
 >                 [CStruct (map CInit suspinfo)]]]
 >   where suspinfo =
->           [CExpr "LAZY_KIND",CExpr "UPD_TAG",suspendNodeSize n,
+>           [CExpr "SUSPEND_KIND",CExpr "EVAL_TAG",suspendNodeSize n,
 >            gcPointerTable,CString (undecorate (demangle f)),
 >            CExpr (lazyFunc n),noApply,CExpr (cName f),notFinalized]
 >         queuemeinfo =
->           [CExpr "LAZY_KIND",CExpr "QUEUEME_TAG",suspendNodeSize n,
+>           [CExpr "QUEUEME_KIND",CExpr "EVAL_TAG",suspendNodeSize n,
 >            gcPointerTable,noName,CExpr "eval_queueMe",noApply,noEntry,
 >            notFinalized]
 >         indirinfo =
->           [CExpr "INDIR_KIND",CInt 0,suspendNodeSize n,
+>           [CExpr "INDIR_KIND",CExpr "INDIR_TAG",suspendNodeSize n,
 >            gcPointerTable,noName,CExpr "eval_indir",noApply,noEntry,
 >            notFinalized]
 
@@ -447,7 +447,7 @@ module, is generated.
 > funInfo :: Name -> Int -> CInitializer
 > funInfo f n = CStruct (map CInit funinfo)
 >   where funinfo =
->           [CExpr "LAZY_KIND",CExpr "NOUPD_TAG",closureNodeSize n,
+>           [CExpr "FAPP_KIND",CExpr "EVAL_TAG",closureNodeSize n,
 >            gcPointerTable,CString (undecorate (demangle f)),
 >            CExpr (evalFunc n),noApply,CExpr (cName f),notFinalized]
 
@@ -648,6 +648,7 @@ to the stack and keeping it on the stack as appropriate.
 >   zipWith fetchArg vs [0..]
 >   where arg = element (field v "c.args")
 >         fetchArg v i = localVar v (Just (arg i))
+> fetchArgs _ (CPSPappCase _) = []
 > fetchArgs _ CPSFreeCase = []
 > fetchArgs _ CPSDefaultCase = []
 
@@ -748,10 +749,11 @@ performing a stack check.
 > stackDepth :: CPSStmt -> Int
 > stackDepth (CPSJump k) = stackDepthCont k
 > stackDepth (CPSReturn _) = 0
+> stackDepth (CPSRetPapp _ _) = 0
 > stackDepth (CPSEnter _) = 0
 > stackDepth (CPSExec _ _) = 0
+> stackDepth (CPSApply _ vs) = 1 + length vs
 > stackDepth (CPSCCall _ _) = 0
-> stackDepth (CPSApply _ vs) = 2 + length vs
 > stackDepth (CPSUnify _ _) = 0
 > stackDepth (CPSDelay _) = 0
 > stackDepth (CPSDelayNonLocal _ st) = stackDepth st
@@ -936,10 +938,12 @@ translation function.
 >   case e of
 >     Var v -> ret vs0 v ks
 >     _ -> freshNode consts resName e ++ ret vs0 resName ks
+> cCode _ _ vs0 (CPSRetPapp v vs) ks =
+>   allocPartial vs0 resName v vs ++ ret vs0 resName ks
 > cCode _ _ vs0 (CPSEnter v) ks = enter vs0 v ks
 > cCode _ _ vs0 (CPSExec f vs) ks = exec vs0 f vs ks
-> cCode _ _ vs0 (CPSCCall ty cc) ks = cCall ty resName cc ++ ret vs0 resName ks
 > cCode _ _ vs0 (CPSApply v vs) ks = apply vs0 v vs ks
+> cCode _ _ vs0 (CPSCCall ty cc) ks = cCall ty resName cc ++ ret vs0 resName ks
 > cCode _ consts vs0 (CPSUnify v e) ks =
 >   case e of
 >     Var v' -> unifyVar vs0 v v' ks
@@ -974,9 +978,9 @@ translation function.
 > enter :: (Bool,[Name],[Name]) -> Name -> [CPSCont] -> [CStmt]
 > enter vs0 v ks =
 >   saveCont vs0 [v] [] ks ++
->   [kindSwitch v [updVar (null ks,[v],[]) v] taggedSwitch
->               [cCase "LAZY_KIND"
->                      (saveRet vs0 ks ++ [gotoExpr (field v "info->eval")])],
+>   [tagSwitch v [updVar (null ks,[v],[]) v] taggedSwitch
+>              [cCase "EVAL_TAG"
+>                     (saveRet vs0 ks ++ [gotoExpr (field v "info->eval")])],
 >    gotoRet ks]
 >   where taggedSwitch switch = CIf (isTaggedPtr v) [switch] []
 
@@ -1000,7 +1004,7 @@ translation function.
 
 > lock :: Name -> [CStmt]
 > lock v =
->   [assertLazyNode v "UPD_TAG",
+>   [assertLazyNode v "SUSPEND_KIND" "s.spc",
 >    CppCondStmts "!COPY_SEARCH_SPACE"
 >      [CIf (CRel (CCast wordPtrType (var v)) "<" (CExpr "regs.hlim"))
 >           [CProcCall "DO_SAVE" [var v,CExpr "q.wq"],
@@ -1011,7 +1015,7 @@ translation function.
 
 > update :: Name -> Name -> [CStmt]
 > update v1 v2 =
->   [assertLazyNode v1 "QUEUEME_TAG",
+>   [assertLazyNode v1 "QUEUEME_KIND" "q.spc",
 >    CLocalVar (CType "ThreadQueue") wq (Just (field v1 "q.wq")),
 >    CppCondStmts "!COPY_SEARCH_SPACE"
 >      [CProcCall "SAVE" [var v1,CExpr "q.wq"],
@@ -1023,7 +1027,7 @@ translation function.
 
 > lockIndir :: Name -> Name -> [CStmt]
 > lockIndir v1 v2 =
->   [assertLazyNode v2 "QUEUEME_TAG",
+>   [assertLazyNode v2 "QUEUEME_KIND" "q.spc",
 >    CppCondStmts "!COPY_SEARCH_SPACE"
 >      [CIf (CRel (CCast wordPtrType (var v1)) "<" (CExpr "regs.hlim"))
 >           [CProcCall "DO_SAVE" [var v1,CExpr "n.node"],
@@ -1032,11 +1036,10 @@ translation function.
 >      [setField v1 "info" (addr "indir_info")],
 >    setField v1 "n.node" (var v2)]
 
-> assertLazyNode :: Name -> String -> CStmt
-> assertLazyNode v tag =
->   rtsAssertList [isTaggedPtr v,CRel (nodeKind v) "==" (CExpr "LAZY_KIND"),
->                  CRel (nodeTag v) "==" (CExpr tag),
->                  CFunCall "is_local_space" [field v "s.spc"]]
+> assertLazyNode :: Name -> String -> String -> CStmt
+> assertLazyNode v kind spc =
+>   rtsAssertList [isTaggedPtr v,CRel (nodeKind v) "==" (CExpr kind),
+>                  CFunCall "is_local_space" [field v spc]]
 
 > unifyVar :: (Bool,[Name],[Name]) -> Name -> Name -> [CPSCont] -> [CStmt]
 > unifyVar vs0 v n ks =
@@ -1092,9 +1095,10 @@ literals when set to a non-zero value.
 > switchOnTerm :: Name -> Bool -> (Bool,[Name],[Name]) -> Name
 >              -> [(CPSTag,[CStmt])] -> [CStmt]
 > switchOnTerm f tagged vs0 v cases =
->   kindSwitch v [updVar vs0 v] taggedSwitch otherCases :
+>   tagSwitch v [updVar vs0 v] taggedSwitch otherCases :
 >   head (dflts ++ [failAndBacktrack (undecorate (demangle f) ++ ": no match")])
->   where (lits,constrs,vars,dflts) = foldr partition ([],[],[],[]) cases
+>   where (lits,constrs,papps,vars,dflts) =
+>           foldr partition ([],[],[],[],[]) cases
 >         (chars,ints,integers,floats) = foldr litPartition ([],[],[],[]) lits
 >         taggedSwitch switch
 >           | tagged && null chars && null ints && null integers =
@@ -1103,35 +1107,41 @@ literals when set to a non-zero value.
 >               taggedCharSwitch v chars $
 >               taggedIntSwitch v ints $
 >               taggedIntegerSwitch v integers switch
->         otherCases =
->           map varCase vars ++
+>         otherCases = varCase ++ litCases ++ constrCases ++ pappCases
+>         varCase = map (cCase "LVAR_TAG") vars
+>         litCases = map cCaseDefault $
 >           [charCase | not (null chars)] ++
 >           [intCase | not (null ints)] ++
 >           [integerCase | not (null integers)] ++
->           [floatCase | not (null floats)] ++
->           if not (null constrs) then constrCase else []
->         varCase = cCase "LVAR_KIND"
+>           [floatCase | not (null floats)]
 >         charCase =
->           cCase "CHAR_KIND"
->                 [CppCondStmts "NO_POINTER_TAGS"
->                    [charSwitch (field v "ch.ch") chars,CBreak]
->                    [CProcCall "curry_panic"
->                               [CString "impossible: kind(%p) == CHAR_KIND\n",
->                                var v]]]
->         intCase = cCase "INT_KIND" [intSwitch (field v "i.i") ints,CBreak]
+>           [CppCondStmts "NO_POINTER_TAGS"
+>              [CProcCall "assert" [CFunCall "is_char_node" [var v]],
+>               charSwitch (field v "ch.ch") chars,
+>               CBreak]
+>              [CProcCall "unexpected_tag"
+>                         [CString (undecorate (demangle f)),nodeTag v]]]
+>         intCase =
+>           [CProcCall "assert" [CFunCall "is_int_node" [var v]],
+>            intSwitch (field v "i.i") ints,
+>            CBreak]
 >         integerCase =
->           cCase "BIGINT_KIND"
->                 (integerSwitch (field v "bi.mpz") integers ++ [CBreak])
->         floatCase = cCase "FLOAT_KIND" (floatSwitch v floats ++ [CBreak])
->         constrCase =
->           [cCase "CAPP_KIND" [],
->            cCase "EAPP_KIND" [tagSwitch v constrs,CBreak]]
->         partition (t,stmts) ~(lits,constrs,vars,dflts) =
+>           CProcCall "assert" [CFunCall "is_bigint_node" [var v]] :
+>           integerSwitch (field v "bi.mpz") integers ++
+>           [CBreak]
+>         floatCase =
+>           CProcCall "assert" [CFunCall "is_float_node" [var v]] :
+>           floatSwitch v floats ++
+>           [CBreak]
+>         constrCases = [cCase (dataTag c) stmts | (c,stmts) <- constrs]
+>         pappCases = [cCaseInt n stmts | (n,stmts) <- papps]
+>         partition (t,stmts) ~(lits,constrs,papps,vars,dflts) =
 >           case t of
->              CPSLitCase l -> ((l,stmts) : lits,constrs,vars,dflts)
->              CPSConstrCase c _ -> (lits,(c,stmts) : constrs,vars,dflts)
->              CPSFreeCase -> (lits,constrs,stmts : vars,dflts)
->              CPSDefaultCase -> (lits,constrs,vars,stmts : dflts)
+>              CPSLitCase l -> ((l,stmts) : lits,constrs,papps,vars,dflts)
+>              CPSConstrCase c _ -> (lits,(c,stmts) : constrs,papps,vars,dflts)
+>              CPSPappCase n -> (lits,constrs,(n,stmts) : papps,vars,dflts)
+>              CPSFreeCase -> (lits,constrs,papps,stmts : vars,dflts)
+>              CPSDefaultCase -> (lits,constrs,papps,vars,stmts : dflts)
 >         litPartition (Char c,stmts) ~(chars,ints,integers,floats) =
 >           ((c,stmts):chars,ints,integers,floats)
 >         litPartition (Int i,stmts) ~(chars,ints,integers,floats) =
@@ -1182,11 +1192,11 @@ literals when set to a non-zero value.
 >           | otherwise =
 >               CppCondStmts condLP64 [intSwitch e ints64] [intSwitch e ints32]
 
-> kindSwitch :: Name -> [CStmt] -> (CStmt -> CStmt) -> [CCase] -> CStmt
-> kindSwitch v upd taggedSwitch cases =
->   CLoop [taggedSwitch (CSwitch (nodeKind v) allCases),CBreak]
+> tagSwitch :: Name -> [CStmt] -> (CStmt -> CStmt) -> [CCase] -> CStmt
+> tagSwitch v upd taggedSwitch cases =
+>   CLoop [taggedSwitch (CSwitch (nodeTag v) allCases),CBreak]
 >   where allCases =
->           cCase "INDIR_KIND"
+>           cCase "INDIR_TAG"
 >                 (setVar v (field v "n.node") : upd ++ [CContinue]) :
 >           cases
 
@@ -1216,54 +1226,30 @@ literals when set to a non-zero value.
 >   getFloat "d" (var v) ++ foldr (match (CExpr "d")) [] cases
 >   where match v (f,stmts) rest = [CIf (CRel v "==" (CFloat f)) stmts rest]
 
-> tagSwitch :: Name -> [(Name,[CStmt])] -> CStmt
-> tagSwitch v cases =
->   CSwitch (nodeTag v) [cCase (dataTag c) stmts | (c,stmts) <- cases]
-
 \end{verbatim}
-The code for \texttt{CPSApply} statements has to check to how many
-arguments a partial application is applied. If there are too few
-arguments, a new partial application node is returned, which includes
-the additional arguments. Otherwise, the application is entered through
-its application entry point. If the closure is applied to too many
-arguments, the code generated by \texttt{apply} creates a return frame
-on the stack, which takes care of applying the result of the
-application to the surplus arguments. Note that the apply entry point
-of a partial application node is called with the additional arguments
-and return address on the stack. Only the partial application node
-itself is passed in a register.
+Note that the application entry point of a partial application node is
+called with the additional arguments and return address on the stack.
+Only the partial application node itself is passed in a register.
 \begin{verbatim}
 
 > apply :: (Bool,[Name],[Name]) -> Name -> [Name] -> [CPSCont] -> [CStmt]
 > apply vs0 v vs ks =
->   CSwitch (nodeTag v)
->           [cCaseInt i (applyExec vs0 v (splitAt i vs) ks) | i <- [1..n]] :
->   applyPartial vs0 v vs ks
->   where n = length vs
+>   saveCont vs0 [v] [] (apEntry : ks) ++ [gotoExpr (field v "info->apply")]
+>   where apEntry = CPSCont (CPSFunction undefined 0 [v] vs undefined)
 
-> applyExec :: (Bool,[Name],[Name]) -> Name -> ([Name],[Name]) -> [CPSCont]
->           -> [CStmt]
-> applyExec vs0 v (vs,vs') ks =
->   saveCont vs0 [v] [] (apEntry : if null vs' then ks else apCont : ks) ++
->   [gotoExpr (field v "info->apply")]
->   where apEntry = cont undefined 0 [v] vs
->         apCont = cont (apName (length vs' + 1)) 1 [v] vs'
->         cont f n vs ws = CPSCont (CPSFunction f n vs ws undefined)
-
-> applyPartial :: (Bool,[Name],[Name]) -> Name -> [Name] -> [CPSCont]
->              -> [CStmt]
-> applyPartial vs0 v vs ks =
->   [assertRel (nodeTag v) ">" (CInt 0),
+> allocPartial :: (Bool,[Name],[Name]) -> Name -> Name -> [Name] -> [CStmt]
+> allocPartial vs0 r v vs =
+>   [localVar r Nothing,
+>    assertRel (nodeTag v) ">" (CInt 0),
 >    CLocalVar uintType "argc" (Just (CFunCall "closure_argc" [var v])),
 >    CLocalVar uintType "sz" (Just (CFunCall "node_size" [var v]))] ++
 >   heapCheck vs0 size ++
 >   [CBlock (loadVars vs0 ++
->            localVar resName (Just alloc) :
+>            setVar r alloc :
 >            incrAlloc size :
->            wordCopy (var resName) (var v) "sz" :
->            CIncrBy (lfield resName "info") (CInt n) :
->            zipWith (setArg (lfield resName "c.args")) [0..] vs ++
->            ret vs0 resName ks)]
+>            wordCopy (var r) (var v) "sz" :
+>            CIncrBy (lfield r "info") (CInt n) :
+>            zipWith (setArg (lfield r "c.args")) [0..] vs)]
 >   where n = toInteger (length vs)
 >         size = CExpr "sz" `CAdd` CInt n
 >         setArg base i v =
@@ -1649,6 +1635,9 @@ of the abstract syntax tree.
 
 > cCaseInt :: Int -> [CStmt] -> CCase
 > cCaseInt i = CCase (CCaseInt (toInteger i))
+
+> cCaseDefault :: [CStmt] -> CCase
+> cCaseDefault = CCase CCaseDefault
 
 > goto :: String -> CStmt
 > goto l = gotoExpr (CExpr l)

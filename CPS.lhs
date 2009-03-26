@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CPS.lhs 2624 2008-02-16 17:53:31Z wlux $
+% $Id: CPS.lhs 2766 2009-03-26 08:59:48Z wlux $
 %
 % Copyright (c) 2003-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -27,9 +27,16 @@ transformed code. During the translation, the compiler also adds code
 which instantiates unbound variables in flexible switch statements and
 implements stability when it is enabled.
 
-Special code is generated for the private functions that implement
-partial applications of tuple constructors and for the functions
-\texttt{@}$_n$.
+Special code is generated for the functions \texttt{@}$_n$. This code
+evaluates the first argument of the function and then matches the
+arity of the resulting partial application node. If too few arguments
+are supplied to the partial application, a new partial application
+node is returned, which includes the additional arguments. Otherwise,
+the application is entered through its application entry point. If the
+closure is applied to too many arguments the application entry point
+is entered with the expected number of arguments and the supplied
+continuation takes care of applying its result to the remaining
+arguments.
 
 An abstract machine code function may be transformed into more than
 one CPS function. In order to avoid name conflicts, the compiler
@@ -50,10 +57,11 @@ these continuation must not have proper function arguments (cf.
 > data CPSStmt =
 >     CPSJump CPSCont
 >   | CPSReturn Expr
+>   | CPSRetPapp Name [Name]
 >   | CPSEnter Name
 >   | CPSExec Name [Name]
->   | CPSCCall CRetType CCall
 >   | CPSApply Name [Name]
+>   | CPSCCall CRetType CCall
 >   | CPSUnify Name Expr
 >   | CPSDelay Name
 >   | CPSDelayNonLocal Name CPSStmt
@@ -68,6 +76,7 @@ these continuation must not have proper function arguments (cf.
 > data CPSTag =
 >     CPSLitCase Literal
 >   | CPSConstrCase Name [Name]
+>   | CPSPappCase Int
 >   | CPSFreeCase
 >   | CPSDefaultCase
 >   deriving Show
@@ -93,11 +102,18 @@ these continuation must not have proper function arguments (cf.
 > cpsApply :: Name -> [Name] -> [CPSFunction]
 > cpsApply f (v:vs) = [k0,k1]
 >   where k0 = CPSFunction f 0 (v:vs) [] (CPSWithCont (CPSCont k1) (CPSEnter v))
->         k1 = CPSFunction f 1 [v] vs
->                (CPSSwitch False v
->                   [CaseBlock CPSFreeCase
->                              (CPSWithCont (CPSCont k1) (CPSDelay v)),
->                    CaseBlock CPSDefaultCase (CPSApply v vs)])
+>         k1 = CPSFunction f 1 [v] vs (CPSSwitch False v cases)
+>         cases =
+>           CaseBlock CPSFreeCase (CPSWithCont (CPSCont k1) (CPSDelay v)) :
+>           [CaseBlock (CPSPappCase i) (apply v i vs) | i <- [1..length vs]] ++
+>           [CaseBlock CPSDefaultCase (CPSRetPapp v vs)]
+>         apply v i vs = applyCont vs'' (CPSApply v vs')
+>           where (vs',vs'') = splitAt i vs
+>         applyCont vs
+>           | null vs = id
+>           | otherwise = CPSWithCont (apCont (apName (length vs)) v vs)
+>         apCont f v vs = CPSCont (CPSFunction f 1 [v] vs undefined)
+>         apName n = mangle ('@' : if n == 1 then "" else show n)
 
 > cpsInst :: Name -> Name -> Tag -> CPSFunction
 > cpsInst f v t = CPSFunction f 0 [] [v] (cpsFresh v t)
@@ -294,10 +310,11 @@ duplication of shared continuations.
 > linearizeStmt :: Int -> CPSStmt -> [CPSFunction]
 > linearizeStmt n (CPSJump k) = linearizeCont n k
 > linearizeStmt _ (CPSReturn _) = []
+> linearizeStmt _ (CPSRetPapp _ _) = []
 > linearizeStmt _ (CPSEnter _) = []
 > linearizeStmt _ (CPSExec _ _) = []
-> linearizeStmt _ (CPSCCall _ _) = []
 > linearizeStmt _ (CPSApply _ _) = []
+> linearizeStmt _ (CPSCCall _ _) = []
 > linearizeStmt _ (CPSUnify _ _) = []
 > linearizeStmt _ (CPSDelay _) = []
 > linearizeStmt n (CPSDelayNonLocal _ st) = linearizeStmt n st

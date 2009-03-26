@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2751 2008-08-30 13:24:59Z wlux $
+% $Id: unify.nw 2766 2009-03-26 08:59:48Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -400,7 +400,9 @@ eq_args(unsigned int n_regs, Node *arg1, Node *arg2, int n)
 		if ( x == y )
 		    continue;
 		break;
-	    case LAZY_KIND:
+	    case SUSPEND_KIND:
+	    case FAPP_KIND:
+	    case QUEUEME_KIND:
 		break;
 	    case VECTOR_KIND:
 		if ( is_vector_node(y) )
@@ -541,21 +543,30 @@ FUNCTION(unify_args_1)
 {
     Node *r;
  ENTRY_LABEL(static, unify_args_1)
-    for ( r = regs.sp[0]; node_kind(r) == INDIR_KIND; r = r->n.node )
-	;
-
-    if ( node_kind(r) == CAPP_KIND )
+    r = regs.sp[0];
+    for ( ;; )
     {
-	regs.sp += 1;
-	GOTO(unify_args);
+	switch ( node_kind(r) )
+	{
+	case INDIR_KIND:
+	    r = r->n.node;
+	    continue;
+	case CAPP_KIND:
+	    regs.sp += 1;
+	    break;
+	case QUEUEME_KIND:
+	    CHECK_STACK1();
+	    regs.sp   -= 1;
+	    regs.sp[0] = regs.sp[2];
+	    regs.sp[1] = (Node *)unify_args_2;
+	    regs.sp[2] = r;
+	    break;
+	default:
+	    invalid_arg("unify_args_1", node_kind(r));
+	}
+	break;
     }
 
-    ASSERT(node_kind(r) == LAZY_KIND && node_tag(r) == QUEUEME_TAG);
-    CHECK_STACK1();
-    regs.sp   -= 1;
-    regs.sp[0] = regs.sp[2];
-    regs.sp[1] = (Node *)unify_args_2;
-    regs.sp[2] = r;
     GOTO(unify_args);
 }
 
@@ -565,13 +576,23 @@ FUNCTION(unify_args_2)
     Node *r;
  ENTRY_LABEL(static, unify_args_2)
     ASSERT(node_kind(regs.r[0]) == CAPP_KIND);
-    for ( r = regs.sp[0]; node_kind(r) == INDIR_KIND; r = r->n.node )
-	;
-
-    if ( node_kind(r) == LAZY_KIND && node_tag(r) == QUEUEME_TAG )
-	ENTER(r, 1);
-
-    ASSERT(node_kind(r) == CAPP_KIND);
+    r = regs.sp[0];
+    for (;;)
+    {
+	switch ( node_kind(r) )
+	{
+	case INDIR_KIND:
+	    r = r->n.node;
+	    continue;
+	case QUEUEME_KIND:
+	    ENTER(r, 1);
+	case CAPP_KIND:
+	    break;
+	default:
+	    invalid_arg("unify_args_2", node_kind(r));
+	}
+	break;
+    }
     RETURN(r, 1);
 }
 
@@ -669,7 +690,9 @@ occurs(Node *var, Node *arg)
 	    argc = closure_argc(arg);
 	    argp = arg->c.args;
 	    break;
-	case LAZY_KIND:
+	case SUSPEND_KIND:
+	case FAPP_KIND:
+	case QUEUEME_KIND:
 	    result = occurs_no;
 	    break;
 	case INDIR_KIND:
@@ -727,17 +750,17 @@ FUNCTION(unify_var)
     {
 	switch ( node_kind(arg) )
 	{
-	case VECTOR_KIND:
-	    is_vect = true;
-	    n	    = vector_argc(arg);
-	    sz	    = arg->a.length;
-	    break;
 	case CAPP_KIND:
 	case EAPP_KIND:
 	case PAPP_KIND:
 	    is_vect = false;
 	    n	    = closure_argc(arg);
 	    sz	    = arg->info->length;
+	    break;
+	case VECTOR_KIND:
+	    is_vect = true;
+	    n	    = vector_argc(arg);
+	    sz	    = arg->a.length;
 	    break;
 	default:
 	    is_vect = false;
@@ -761,11 +784,11 @@ FUNCTION(unify_var)
 		while ( is_tagged_ptr(arg) && is_indir_node(arg) )
 		    arg = arg->n.node;
 		if ( is_tagged_ptr(arg) &&
-		     ((is_capp_node(arg) && closure_argc(arg) > 0) ||
+		     (arg->info->tag == EVAL_TAG ||
+		      (is_capp_node(arg) && closure_argc(arg) > 0) ||
 		      (is_eapp_node(arg) && closure_argc(arg) > 0) ||
 		      (is_papp_node(arg) && closure_argc(arg) > 0) ||
-		      (is_vector_node(arg) && vector_argc(arg) > 0) ||
-		      is_lazy_node(arg)) )
+		      (is_vector_node(arg) && vector_argc(arg) > 0)) )
 		{
 		    var	= *argp	 = (Node *)regs.hp;
 		    var->info	 = variable_info_table;
@@ -868,12 +891,12 @@ FUNCTION(bind_var)
     for (;;)
     {
 	if ( is_tagged_ptr(node) )
-	    switch ( node->info->kind )
+	    switch ( node->info->tag )
 	    {
-	    case INDIR_KIND:
+	    case INDIR_TAG:
 		node = node->n.node;
 		continue;
-	    case LVAR_KIND:
+	    case LVAR_TAG:
 		if ( !is_local_space(node->v.spc) && (wq || cstrs) )
 		{
 		    SAVE_RET1(var);

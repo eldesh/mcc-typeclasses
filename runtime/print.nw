@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 2712 2008-05-20 16:40:23Z wlux $
+% $Id: print.nw 2766 2009-03-26 08:59:48Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -133,7 +133,7 @@ print_node(unsigned int prec, Node *node)
 	    switch ( node_kind(node) )
 	    {
 	    case CAPP_KIND:
-		if ( node->info == (NodeInfo *)&cons_info )
+		if ( node->info == &cons_info )
 		{
 		    if ( is_string(node) )
 			print_string(node);
@@ -147,29 +147,20 @@ print_node(unsigned int prec, Node *node)
 		break;
 	    case EAPP_KIND:
 	    case PAPP_KIND:
+	    case FAPP_KIND:
 		print_app(prec, node, closure_argc(node), node->c.args);
 		break;
 	    case LVAR_KIND:
 		printf("%s", lookup_name(node));
 		break;
-	    case LAZY_KIND:
-		switch ( node_tag(node) )
-		{
-		case NOUPD_TAG:
-		    print_app(prec, node, closure_argc(node), node->c.args);
-		    break;
-		case UPD_TAG:
-		    argc = suspend_argc(node);
-		    if ( argc == 1 && node->s.args[0] == 0 )
-			argc = 0;
-		    print_app(prec, node, argc, node->s.args);
-		    break;
-		case QUEUEME_TAG:
-		    printf("Suspended");
-		    break;
-		default:
-		    unexpected_tag("print_node", node_tag(node));
-		}
+	    case SUSPEND_KIND:
+		argc = suspend_argc(node);
+		if ( argc == 1 && node->s.args[0] == 0 )
+		    argc = 0;
+		print_app(prec, node, argc, node->s.args);
+		break;
+	    case QUEUEME_KIND:
+		printf("Suspended");
 		break;
 	    case INDIR_KIND:
 		node = node->n.node;
@@ -274,26 +265,40 @@ applied to finite data terms only.
 static bool
 is_string(Node *list)
 {
+    bool is_string = true;
     Node *head;
 
-    while ( list->info == &cons_info )
+    for (;;)
     {
-	head = list->c.args[0];
-	while ( is_tagged_ptr(head) && head->info->kind == INDIR_KIND )
-	    head = head->n.node;
-#if NO_POINTER_TAGS
-	if ( head->info->kind != CHAR_KIND )
-#else
-	if ( !is_tagged_char(head) )
-#endif
-	    return false;
-
-	list = list->c.args[1];
-	while ( list->info->kind == INDIR_KIND )
+	switch ( list->info->tag )
+	{
+	case INDIR_TAG:
 	    list = list->n.node;
+	    continue;
+	case NIL_TAG:
+	    break;
+	case CONS_TAG:
+	    head = list->c.args[0];
+	    while ( is_tagged_ptr(head) && head->info->kind == INDIR_KIND )
+		head = head->n.node;
+#if NO_POINTER_TAGS
+	    if ( head->info->kind != CHAR_KIND )
+#else
+	    if ( !is_tagged_char(head) )
+#endif
+	    {
+		is_string = false;
+		break;
+	    }
+	    list = list->c.args[1];
+	    continue;
+	default:
+	    is_string = false;
+	    break;
+	}
+	break;
     }
-
-    return list == nil;
+    return is_string;
 }
 
 static void
@@ -305,26 +310,35 @@ print_string(Node *list)
 
     c0 = '\0';
     putchar('"');
-    while ( list->info == &cons_info )
+    for (;;)
     {
-	head = list->c.args[0];
-	while ( is_tagged_ptr(head) && head->info->kind == INDIR_KIND )
-	    head = head->n.node;
-#if NO_POINTER_TAGS
-	ASSERT(head->info->kind == CHAR_KIND);
-#else
-	ASSERT(is_tagged_char(head));
-#endif
-	c = char_val(head);
-	printf("%s", lit_char(buf, c0, c, '"'));
-	c0 = c;;
-
-	list = list->c.args[1];
-	while ( list->info->kind == INDIR_KIND )
+	switch ( list->info->tag )
+	{
+	case INDIR_TAG:
 	    list = list->n.node;
-   }
-   ASSERT(list == nil);
-   putchar('"');
+	    continue;
+	case NIL_TAG:
+	    break;
+	case CONS_TAG:
+	    head = list->c.args[0];
+	    while ( is_tagged_ptr(head) && head->info->tag == INDIR_TAG )
+		head = head->n.node;
+#if NO_POINTER_TAGS
+	    ASSERT(head->info->kind == CHAR_KIND);
+#else
+	    ASSERT(is_tagged_char(head));
+#endif
+	    c = char_val(head);
+	    printf("%s", lit_char(buf, c0, c, '"'));
+	    c0	 = c;
+	    list = list->c.args[1];
+	    continue;
+	default:
+	    unexpected_tag("print_string", list->info->tag);
+	}
+	break;
+    }
+    putchar('"');
 }
 
 static void
@@ -332,21 +346,27 @@ print_list(Node *list)
 {
     char sep = '[';
 
-    while ( list->info == &cons_info )
+    for (;;)
     {
-	putchar(sep);
-	print_node(0, list->c.args[0]);
-	sep = ',';
-
-	list = list->c.args[1];
-	while ( list->info->kind == INDIR_KIND )
+	switch ( list->info->tag )
+	{
+	case INDIR_TAG:
 	    list = list->n.node;
-    }
-
-    if ( list != nil )
-    {
-	putchar('|');
-	print_node(0, list);
+	    continue;
+	case NIL_TAG:
+	    break;
+	case CONS_TAG:
+	    putchar(sep);
+	    print_node(0, list->c.args[0]);
+	    sep	 = ',';
+	    list = list->c.args[1];
+	    continue;
+	default:
+	    putchar('|');
+	    print_node(0, list);
+	    break;
+	}
+	break;
     }
 
     putchar(']');
@@ -365,7 +385,7 @@ print_tuple(unsigned int argc, Node **argv)
 	if ( first )
 	    first = false;
 	else
-	    printf(",");
+	    putchar(',');
 	print_node(0, argv[i]);
     }
 
@@ -394,24 +414,17 @@ print_constraints(Node *node)
 	    case CAPP_KIND:
 	    case EAPP_KIND:
 	    case PAPP_KIND:
+	    case FAPP_KIND:
 		print_app_constraints(closure_argc(node), node->c.args);
 		break;
 	    case LVAR_KIND:
 		if ( node->v.cstrs )
 		    print_constrained_var(node);
 		break;
-	    case LAZY_KIND:
-		switch ( node_tag(node) )
-		{
-		case NOUPD_TAG:
-		    print_app_constraints(closure_argc(node), node->c.args);
-		    break;
-		case UPD_TAG:
-		    argc = suspend_argc(node);
-		    if ( argc > 1 || node->s.args[0] )
-			print_app_constraints(argc, node->s.args);
-		    break;
-		}
+	    case SUSPEND_KIND:
+		argc = suspend_argc(node);
+		if ( argc > 1 || node->s.args[0] )
+		    print_app_constraints(argc, node->s.args);
 		break;
 	    case INDIR_KIND:
 		node = node->n.node;

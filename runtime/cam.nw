@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cam.nw 2750 2008-08-30 13:21:58Z wlux $
+% $Id: cam.nw 2766 2009-03-26 08:59:48Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -172,24 +172,24 @@ register always contains a node pointer.
 #define EVAL(l) do {							\
     for (;;) {								\
 	if ( is_tagged_ptr(regs.r[0]) )					\
-	    switch ( regs.r[0]->info->kind ) {				\
-	    case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue;	\
-	    case LAZY_KIND: regs.ret = (l); GOTO(regs.r[0]->info->eval); \
+	    switch ( regs.r[0]->info->tag ) {				\
+	    case INDIR_TAG: regs.r[0] = regs.r[0]->n.node; continue;	\
+	    case EVAL_TAG: regs.ret = (l); GOTO(regs.r[0]->info->eval);	\
 	    }								\
 	break;								\
     }									\
     GOTO(l);								\
 } while ( 0 )
 
-#define EVAL_NODE(l) do {					     \
-    for (;;) {							     \
-	switch ( regs.r[0]->info->kind ) {			     \
-	case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue;    \
-	case LAZY_KIND: regs.ret = (l); GOTO(regs.r[0]->info->eval); \
-	}							     \
-	break;							     \
-    }								     \
-    GOTO(l);							     \
+#define EVAL_NODE(l) do {					    \
+    for (;;) {							    \
+	switch ( regs.r[0]->info->tag ) {			    \
+	case INDIR_TAG: regs.r[0] = regs.r[0]->n.node; continue;    \
+	case EVAL_TAG: regs.ret = (l); GOTO(regs.r[0]->info->eval); \
+	}							    \
+	break;							    \
+    }								    \
+    GOTO(l);							    \
 } while ( 0 )
 
 @ 
@@ -224,21 +224,58 @@ is resumed after an unbound variable has been instantiated. In general
 this is the entry point of the function that uses the [[MATCH]] macro.
 
 <<cam.h>>=
-#define MATCH_RIGID_NODE(what, l)				  \
-    for (;;) {							  \
-	switch ( regs.r[0]->info->kind ) {			  \
-	case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue; \
-	case LVAR_KIND: regs.ret = (l); GOTO(sync_var);		  \
-	case what##_KIND: break;				  \
-	default: invalid_arg(#l, regs.r[0]->info->kind);	  \
-	}							  \
-	break;							  \
+#define BEGIN_MATCH_RIGID(l)					     \
+    for (;;) {							     \
+	if ( is_tagged_ptr(regs.r[0]) )				     \
+	    switch ( regs.r[0]->info->tag ) {			     \
+	    case INDIR_TAG: regs.r[0] = regs.r[0]->n.node; continue; \
+	    case LVAR_TAG: regs.ret = (l); GOTO(sync_var);
+#define END_MATCH_RIGID						     \
+	    }							     \
+	break;							     \
+    }
+
+#define BEGIN_MATCH_RIGID_NODE(l)				 \
+    for (;;) {							 \
+	switch ( regs.r[0]->info->tag ) {			 \
+	case INDIR_TAG: regs.r[0] = regs.r[0]->n.node; continue; \
+	case LVAR_TAG: regs.ret = (l); GOTO(sync_var);
+#define END_MATCH_RIGID_NODE					 \
+	}							 \
+	break;							 \
     }
 
 #if NO_POINTER_TAGS
-# define MATCH_RIGID_CHAR(l)		MATCH_RIGID_NODE(CHAR, l)
-# define MATCH_RIGID_INT(l)		MATCH_RIGID_NODE(INT, l)
+# define BEGIN_MATCH_RIGID_CHAR		BEGIN_MATCH_RIGID_NODE
+# define END_MATCH_RIGID_CHAR		END_MATCH_RIGID_NODE
+# define BEGIN_MATCH_RIGID_INT		BEGIN_MATCH_RIGID_NODE
+# define END_MATCH_RIGID_INT		END_MATCH_RIGID_NODE
+#else
+# define BEGIN_MATCH_RIGID_CHAR		BEGIN_MATCH_RIGID
+# define END_MATCH_RIGID_CHAR		END_MATCH_RIGID
+# define BEGIN_MATCH_RIGID_INT		BEGIN_MATCH_RIGID
+# define END_MATCH_RIGID_INT		END_MATCH_RIGID
 #endif
+
+#define MATCH_RIGID(l)					       \
+    BEGIN_MATCH_RIGID(l)				       \
+    END_MATCH_RIGID
+
+#define MATCH_RIGID_CHAR(l)				       \
+    BEGIN_MATCH_RIGID_CHAR(l)				       \
+	default: assert(regs.r[0]->info->kind == CHAR_KIND);   \
+    END_MATCH_RIGID_CHAR
+
+#define MATCH_RIGID_INT(l)				       \
+    BEGIN_MATCH_RIGID_INT(l)				       \
+	default: assert(regs.r[0]->info->kind == INT_KIND);    \
+    END_MATCH_RIGID_INT
+
+#define MATCH_RIGID_NODE(what, l)			       \
+    BEGIN_MATCH_RIGID_NODE(l)				       \
+	default: assert(regs.r[0]->info->kind == what##_KIND); \
+    END_MATCH_RIGID_NODE
+
 #define MATCH_RIGID_BIGINT(l)		MATCH_RIGID_NODE(BIGINT, l)
 #define MATCH_RIGID_FLOAT(l)		MATCH_RIGID_NODE(FLOAT, l)
 #define MATCH_RIGID_PTR(l)		MATCH_RIGID_NODE(PTR, l)
@@ -247,38 +284,3 @@ this is the entry point of the function that uses the [[MATCH]] macro.
 #define MATCH_RIGID_PAPP(l)		MATCH_RIGID_NODE(PAPP, l)
 #define MATCH_RIGID_VECTOR(l)		MATCH_RIGID_NODE(VECTOR, l)
 #define MATCH_RIGID_ABSTRACT(l)		MATCH_RIGID_NODE(ABSTRACT, l)
-
-#if !NO_POINTER_TAGS
-#define MATCH_RIGID_CHAR(l)					      \
-    for (;;) {							      \
-	if ( is_tagged_ptr(regs.r[0]) )				      \
-	    switch ( regs.r[0]->info->kind ) {			      \
-	    case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue; \
-	    case LVAR_KIND: regs.ret = (l); GOTO(sync_var);	      \
-	    default: invalid_arg(#l, regs.r[0]->info->kind);	      \
-	    }							      \
-	break;							      \
-    }
-
-# define MATCH_RIGID_INT(l)					      \
-    for (;;) {							      \
-	if ( is_tagged_ptr(regs.r[0]) )				      \
-	    switch ( regs.r[0]->info->kind ) {			      \
-	    case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue; \
-	    case LVAR_KIND: regs.ret = (l); GOTO(sync_var);	      \
-	    case INT_KIND: break;				      \
-	    default: invalid_arg(#l, regs.r[0]->info->kind);	      \
-	    }							      \
-	break;							      \
-    }
-#endif
-
-#define MATCH_RIGID(l)						      \
-    for (;;) {							      \
-	if ( is_tagged_ptr(regs.r[0]) )				      \
-	    switch ( regs.r[0]->info->kind ) {			      \
-	    case INDIR_KIND: regs.r[0] = regs.r[0]->n.node; continue; \
-	    case LVAR_KIND: regs.ret = (l); GOTO(sync_var);	      \
-	    }							      \
-	break;							      \
-    }

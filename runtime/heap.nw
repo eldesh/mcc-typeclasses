@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2712 2008-05-20 16:40:23Z wlux $
+% $Id: heap.nw 2766 2009-03-26 08:59:48Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -73,7 +73,7 @@ is encoded in the remaining $n-2$ bits. Note that 21 bits are
 sufficient in order to encode the complete Unicode character set
 range. Table~\ref{tab:pointer-tags} summarizes the encoding where $n$
 is the number of bits per word of the target architecture and bits are
-numbered start with the least significant bit. The optimization of
+numbered starting with the least significant bit. The optimization of
 using tagged pointers can be disabled with the
 \texttt{--disable-pointer-tags} configuration option, which in turn
 sets the [[NO_POINTER_TAGS]] preprocessor flag.
@@ -124,7 +124,7 @@ of nodes are used for managing the internal state of the runtime
 system, e.g., the state of inactive threads.
 
 Note that applications of data constructors of a data type with
-existentially quantified type variables use the distinguished kind
+existentially quantified type variables use the distinct kind
 [[EAPP_KIND]] instead of [[CAPP_KIND]] due to typing issues (cf.\ 
 p.~\pageref{unsafe-equality} in Sect.~\ref{unsafe-equality}). At
 present, [[EAPP_KIND]] and [[CAPP_KIND]] must be used consistently per
@@ -145,7 +145,9 @@ enum {
     EAPP_KIND,                  /* ditto for existentially quantified types */
     PAPP_KIND,			/* partial application node */
     LVAR_KIND,			/* (unbound) logic variable */
-    LAZY_KIND,			/* lazy function application node */
+    SUSPEND_KIND,		/* shared function application node */
+    FAPP_KIND,			/* unshard function application node */
+    QUEUEME_KIND,		/* queue-me node */
     INDIR_KIND,			/* indirection node */
     VECTOR_KIND,		/* vector nodes */
     CHAR_KIND,			/* character node */
@@ -177,18 +179,22 @@ missing arguments, the entry point of the function corresponding to a
 partial application or function application node, and an optional
 finalization function.
 
-The meaning of the [[tag]] field depends on the node's kind. For %'
-constructor applications, it is used to distinguish data constructors
-of the same type. For instance, the constructors of the type
-\texttt{data Num = Prec Num | Zero | Succ Num} are assigned tags 0
-(\verb|Prec|), 1 (\verb|Zero|), and 2 (\verb|Succ|),
-respectively.
+Pattern matching is implemented via the [[tag]] field of the node. For
+constructor applications, the [[tag]] field enumerates the data
+constructors of each type from left to right. For instance, the
+constructors of the type \texttt{data Num = Prec Num | Zero | Succ
+  Num} are assigned tags 0 (\verb|Prec|), 1 (\verb|Zero|), and 2
+(\verb|Succ|), respectively.
 
-For partial application nodes, the [[tag]] field denotes the arity --
-i.e., the number of missing arguments -- of the application. In
+For partial application nodes, the [[tag]] field denotes the arity of
+the application node, i.e., the number of its missing arguments. In
 principle, small integer numbers and character codes could be stored
 in the [[tag]] field of integer and character nodes, respectively.
 However, the runtime system does not use this possibility at present.
+
+The three special tag values [[INDIR_TAG]], [[LVAR_TAG]], and
+[[EVAL_TAG]] are reserved for indirection nodes, logical variables,
+and unevaluated function applications including queue-me nodes.
 
 The length of a node includes the descriptor pointer; a valid size
 must therefore be greater than 0. If the length in the descriptor is
@@ -235,6 +241,12 @@ struct node_info
     const FinalFun     final_fun;	/* optional finalization function */
 };
 
+enum {
+    INDIR_TAG = -1,
+    LVAR_TAG  = -2,
+    EVAL_TAG  = -3
+};
+
 #define node_kind(node)		(node)->info->kind
 #define node_tag(node)		(node)->info->tag
 #define node_size(node)		(node)->info->length
@@ -242,7 +254,9 @@ struct node_info
 #define is_eapp_node(node)	(node_kind(node) == EAPP_KIND)
 #define is_papp_node(node)	(node_kind(node) == PAPP_KIND)
 #define is_variable_node(node)	(node_kind(node) == LVAR_KIND)
-#define is_lazy_node(node)	(node_kind(node) == LAZY_KIND)
+#define is_suspend_node(node)	(node_kind(node) == SUSPEND_KIND)
+#define is_fapp_node(node)	(node_kind(node) == FAPP_KIND)
+#define is_queueMe_node(node)	(node_kind(node) == QUEUEME_KIND)
 #define is_indir_node(node)	(node_kind(node) == INDIR_KIND)
 #define is_vector_node(node)	(node_kind(node) == VECTOR_KIND)
 #define is_char_node(node)	(node_kind(node) == CHAR_KIND)
@@ -607,7 +621,7 @@ struct indir_node {
 @
 <<heap.c>>=
 NodeInfo indir_info = {
-    INDIR_KIND, 0, indir_node_size, 0, 0, eval_indir, 0, 0, 0
+    INDIR_KIND, INDIR_TAG, indir_node_size, 0, 0, eval_indir, 0, 0, 0
 };
 
 @ 
@@ -631,12 +645,12 @@ struct variable_node {
 <<heap.c>>=
 #if !COPY_SEARCH_SPACE
 NodeInfo variable_info_table[] = {
-    { LVAR_KIND, 0, variable_node_size, 0, 0, eval_whnf, 0, 0, 0 },
-    { INDIR_KIND, 0, variable_node_size, 0, 0, eval_indir, 0, 0, 0 }
+    { LVAR_KIND, LVAR_TAG, variable_node_size, 0, 0, eval_whnf, 0, 0, 0 },
+    { INDIR_KIND, INDIR_TAG, variable_node_size, 0, 0, eval_indir, 0, 0, 0 }
 };
 #else
 NodeInfo variable_info_table[] = {
-    { LVAR_KIND, 0, variable_node_size, 0, 0, eval_whnf, 0, 0, 0 }
+    { LVAR_KIND, LVAR_TAG, variable_node_size, 0, 0, eval_whnf, 0, 0, 0 }
 };
 #endif
 
@@ -669,27 +683,6 @@ Furthermore, in order to prevent multiple threads from evaluating a
 lazy application concurrently, the node is immediately overwritten
 with a queue-me node (see below) when the evaluation is started.
 
-When a lazy application node is not shared, there is no need to
-overwrite the node. In fact, since the node does not change, there is
-also no need to record the search space in which the node was created.
-Therefore, we use the standard closure layout for unshared application
-nodes. The different kinds of lazy application nodes can be
-distinguished by the [[tag]] value of their node descriptor, where
-[[NOUPD_TAG]] is used for unshared application nodes, which are not
-updated, [[UPD_TAG]] is used for shared lazy application nodes that
-are updated, and [[QUEUEME_TAG]] is used for queue-me nodes.
-
-<<heap.h>>=
-enum { NOUPD_TAG, UPD_TAG, QUEUEME_TAG };
-
-#define is_unshared_lazy_node(node) \
-    (is_lazy_node(node) && node_tag(node) == NOUPD_TAG)
-#define is_shared_lazy_node(node) \
-    (is_lazy_node(node) && node_tag(node) == UPD_TAG)
-#define is_queueMe_node(node) \
-    (is_lazy_node(node) && node_tag(node) == QUEUEME_TAG)
-
-@ 
 A shared lazy application node must provide space for at least one
 argument into which the result of the application can be written.
 When a shared lazy application node is overwritten that is protected
@@ -731,12 +724,12 @@ struct queueMe_node {
 <<heap.c>>=
 #if !COPY_SEARCH_SPACE
 NodeInfo queueMe_info_table[] = {
-    { LAZY_KIND, QUEUEME_TAG, queueMe_node_size, 0, 0, eval_queueMe, 0, 0, 0 },
-    { INDIR_KIND, 0, queueMe_node_size, 0, 0, eval_indir, 0, 0, 0 }
+    { QUEUEME_KIND, EVAL_TAG, queueMe_node_size, 0, 0, eval_queueMe, 0, 0, 0 },
+    { INDIR_KIND, INDIR_TAG, queueMe_node_size, 0, 0, eval_indir, 0, 0, 0 }
 };
 #else
 NodeInfo queueMe_info_table[] = {
-    { LAZY_KIND, QUEUEME_TAG, queueMe_node_size, 0, 0, eval_queueMe, 0, 0, 0 }
+    { QUEUEME_KIND, EVAL_TAG, queueMe_node_size, 0, 0, eval_queueMe, 0, 0, 0 }
 };
 #endif
 
@@ -880,7 +873,7 @@ or partial application node.
 
 <<heap.h>>=
 #define FUNINFO(fname,entrypoint,arity) \
-{ LAZY_KIND, NOUPD_TAG, closure_node_size(arity), 0, fname, \
+{ FAPP_KIND, EVAL_TAG, closure_node_size(arity), 0, fname, \
   eval_clos_##arity, 0, entrypoint, 0 }
 
 #define PAPPINFO(fname,argc,entrypoint,arity) \
@@ -895,18 +888,18 @@ is named by adding the function's arity to the prefix [[eval_lazy_]].        %'
 
 <<heap.h>>=
 #if !COPY_SEARCH_SPACE
-# define LAZYINFO(fname,entrypoint,arity) {		      \
-    { LAZY_KIND, UPD_TAG, suspend_node_size(arity), 0, fname, \
-      eval_lazy_##arity, 0, entrypoint, 0 },		      \
-    { LAZY_KIND, QUEUEME_TAG, suspend_node_size(arity), 0, 0, \
-      eval_queueMe, 0, 0, 0 },				      \
-    { INDIR_KIND, 0, suspend_node_size(arity), 0, 0,	      \
-      eval_indir, 0, 0, 0 }				      \
+# define LAZYINFO(fname,entrypoint,arity) {			  \
+    { SUSPEND_KIND, EVAL_TAG, suspend_node_size(arity), 0, fname, \
+      eval_lazy_##arity, 0, entrypoint, 0 },			  \
+    { QUEUEME_KIND, EVAL_TAG, suspend_node_size(arity), 0, 0,	  \
+      eval_queueMe, 0, 0, 0 },					  \
+    { INDIR_KIND, INDIR_TAG, suspend_node_size(arity), 0, 0,	  \
+      eval_indir, 0, 0, 0 }					  \
 }
 #else
-# define LAZYINFO(fname,entrypoint,arity) {		      \
-    { LAZY_KIND, UPD_TAG, suspend_node_size(arity), 0, fname, \
-      eval_lazy_##arity, 0, entrypoint, 0 }		      \
+# define LAZYINFO(fname,entrypoint,arity) {			  \
+    { SUSPEND_KIND, EVAL_TAG, suspend_node_size(arity), 0, fname, \
+      eval_lazy_##arity, 0, entrypoint, 0 }			  \
 }
 #endif
 

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2751 2008-08-30 13:24:59Z wlux $
+% $Id: show.nw 2766 2009-03-26 08:59:48Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -304,7 +304,9 @@ FUNCTION(showp_1)
 	    node = node->n.node;
 	    goto again;
 
-	case LAZY_KIND:
+	case SUSPEND_KIND:
+	case FAPP_KIND:
+	case QUEUEME_KIND:
 	    str = "_";
 	    break;
 
@@ -374,7 +376,7 @@ FUNCTION(showp_1)
 	    break;
 
 	case CAPP_KIND:
-	    if ( node->info == (NodeInfo *)&cons_info )
+	    if ( node->info == &cons_info )
 		CALL_RET4(showList, 3, node->c.args[0], node->c.args[1],
 			  show, tail);
 	    else if ( is_tuple(node->info) )
@@ -954,17 +956,17 @@ FUNCTION(showTail_1)
     list = regs.r[0];
     show = regs.sp[0];
  again:
-    switch ( node_kind(list) )
+    switch ( node_tag(list) )
     {
-    case INDIR_KIND:
+    case INDIR_TAG:
 	list = list->n.node;
 	goto again;
 
-    case LVAR_KIND:
+    case LVAR_TAG:
 	if ( show != zero )
 	    CALL1(sync_var, showTail_1, list);
 	/* FALL THROUGH!!! */
-    case LAZY_KIND:
+    case EVAL_TAG:
 	regs.r[0] = list;
 	CHECK_HEAP(1, suspend_node_size(4) + 2 * cons_node_size);
 	list = regs.r[0];
@@ -993,59 +995,51 @@ FUNCTION(showTail_1)
 	regs.hp	       += cons_node_size;
 	break;
 
-    case CAPP_KIND:
-	switch ( node_tag(list) )
-	{
-	case NIL_TAG:
-	    CHECK_HEAP(0, cons_node_size);
-	    tail = regs.sp[1];
+    case NIL_TAG:
+	CHECK_HEAP(0, cons_node_size);
+	tail = regs.sp[1];
 
-	    cons	    = (Node *)regs.hp;
-	    cons->info	    = &cons_info;
-	    cons->c.args[0] = rbracket;
-	    cons->c.args[1] = tail;
-	    regs.hp	   += cons_node_size;
-	    break;
+	cons		= (Node *)regs.hp;
+	cons->info	= &cons_info;
+	cons->c.args[0] = rbracket;
+	cons->c.args[1] = tail;
+	regs.hp	       += cons_node_size;
+	break;
 
-	case CONS_TAG:
-	    regs.r[0] = list;
-	    CHECK_HEAP(1, suspend_node_size(3) + suspend_node_size(4)
-		           + cons_node_size);
-	    list = regs.r[0];
-	    show = regs.sp[0];
-	    tail = regs.sp[1];
+    case CONS_TAG:
+	regs.r[0] = list;
+	CHECK_HEAP(1, suspend_node_size(3) + suspend_node_size(4)
+		       + cons_node_size);
+	list = regs.r[0];
+	show = regs.sp[0];
+	tail = regs.sp[1];
 
-	    susp	    = (Node *)regs.hp;
-	    susp->info	    = showTail_lazy_info_table;
-	    susp->s.spc	    = regs.ss;
-	    susp->s.args[0] = list->c.args[1];
-	    susp->s.args[1] = show;
-	    susp->s.args[2] = tail;
-	    regs.hp	   += suspend_node_size(3);
+	susp		= (Node *)regs.hp;
+	susp->info	= showTail_lazy_info_table;
+	susp->s.spc	= regs.ss;
+	susp->s.args[0] = list->c.args[1];
+	susp->s.args[1] = show;
+	susp->s.args[2] = tail;
+	regs.hp	       += suspend_node_size(3);
 
-	    susp2	     = (Node *)regs.hp;
-	    susp2->info	     = showp_lazy_info_table;
-	    susp2->s.spc     = regs.ss;
-	    susp2->s.args[0] = list->c.args[0];
-	    susp2->s.args[1] = zero;
-	    susp2->s.args[2] = show;
-	    susp2->s.args[3] = susp;
-	    regs.hp	    += suspend_node_size(4);
+	susp2		 = (Node *)regs.hp;
+	susp2->info	 = showp_lazy_info_table;
+	susp2->s.spc     = regs.ss;
+	susp2->s.args[0] = list->c.args[0];
+	susp2->s.args[1] = zero;
+	susp2->s.args[2] = show;
+	susp2->s.args[3] = susp;
+	regs.hp		+= suspend_node_size(4);
 
-	    cons	    = (Node *)regs.hp;
-	    cons->info	    = &cons_info;
-	    cons->c.args[0] = comma;
-	    cons->c.args[1] = susp2;
-	    regs.hp	   += cons_node_size;
-	    break;
-
-	default:
-	    unexpected_tag("showTail", node_tag(list));
-	}
+	cons		= (Node *)regs.hp;
+	cons->info	= &cons_info;
+	cons->c.args[0] = comma;
+	cons->c.args[1] = susp2;
+	regs.hp	       += cons_node_size;
 	break;
 
     default:
-	invalid_arg("showTail", node_kind(list));
+	unexpected_tag("showTail", node_tag(list));
     }
 
     RETURN(cons, 2);
@@ -1105,23 +1099,22 @@ FUNCTION(showStringTail_1)
 {
     Node *cons;
  ENTRY_LABEL(static, showStringTail_1)
-    MATCH_RIGID_DATA(showStringTail_1);
-
-    cons = regs.r[0];
-    if ( cons == nil )
-    {
+    BEGIN_MATCH_RIGID_NODE(showStringTail_1)
+    case NIL_TAG:
 	CHECK_HEAP(0, cons_node_size);
-
 	cons		= (Node *)regs.hp;
 	cons->info	= &cons_info;
 	cons->c.args[0] = dblquote;
 	cons->c.args[1] = regs.sp[1];
 	regs.hp	       += cons_node_size;
-
 	RETURN(cons, 2);
-    }
+    case CONS_TAG:
+	break;
+    default:
+	unexpected_tag("showStringTail", node_tag(regs.r[0]));
+    END_MATCH_RIGID_NODE;
 
-    ASSERT(cons->info == &cons_info);
+    cons = regs.r[0];
     CALL_RET4(showString, 2, cons->c.args[0], cons->c.args[1],
 	      regs.sp[0], regs.sp[1]);
 }

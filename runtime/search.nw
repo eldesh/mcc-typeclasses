@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: search.nw 2750 2008-08-30 13:21:58Z wlux $
+% $Id: search.nw 2766 2009-03-26 08:59:48Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -311,9 +311,7 @@ FUNCTION(deadlock_search)
 	{
 	case CAPP_KIND:
 	    break;
-	case LAZY_KIND:
-	    assert(goal->info->tag == QUEUEME_TAG);
-	    /* FALL THROUGH!!! */
+	case QUEUEME_KIND:
 	case LVAR_KIND:
 	    TRACE(("deadlock in encapsulated search\n"));
 	    discard_search_space();

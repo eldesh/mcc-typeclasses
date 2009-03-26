@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2771 2009-03-26 10:30:26Z wlux $
+% $Id: Desugar.lhs 2774 2009-03-26 15:09:24Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -727,13 +727,12 @@ where the default alternative is redundant.
 > type Match a =
 >   (Position,[ConstrTerm a] -> [ConstrTerm a],[ConstrTerm a],Rhs a)
 
-> pattern :: (Type,Ident) -> ConstrTerm Type -> ConstrTerm Type
-> pattern (ty,v) (LiteralPattern _ l) = AsPattern v (LiteralPattern ty l)
-> pattern (ty,v) (VariablePattern _ _) = VariablePattern ty v
-> pattern (ty,v) (ConstructorPattern _ c ts) =
->   AsPattern v (ConstructorPattern ty c ts')
->   where ts' = [VariablePattern (typeOf t) anonId | t <- ts]
-> pattern v (AsPattern _ t) = pattern v t
+> pattern :: ConstrTerm a -> ConstrTerm ()
+> pattern (LiteralPattern _ l) = LiteralPattern () l
+> pattern (VariablePattern _ _) = VariablePattern () anonId
+> pattern (ConstructorPattern _ c ts) =
+>   ConstructorPattern () c (map (const (VariablePattern () anonId)) ts)
+> pattern (AsPattern _ t) = pattern t
 
 > arguments :: ConstrTerm a -> [ConstrTerm a]
 > arguments (LiteralPattern _ _) = []
@@ -753,15 +752,16 @@ where the default alternative is redundant.
 > asConstrApp _ t@(ConstructorPattern _ _ _) = t
 > asConstrApp v (AsPattern v' t) = AsPattern v' (asConstrApp v t)
 
-> bindVars :: Position -> (Type,Ident) -> ConstrTerm Type -> Rhs Type
->          -> Rhs Type
+> bindVars :: Position -> Ident -> ConstrTerm Type -> Rhs Type -> Rhs Type
 > bindVars _ _ (LiteralPattern _ _) = id
-> bindVars p (ty,v) (VariablePattern ty' v')
->   | v /= v' = addDecls [varDecl p ty' v' (mkVar ty v)]
->   | otherwise = id
+> bindVars p v' (VariablePattern ty v) = bindVar p ty v v'
 > bindVars _ _ (ConstructorPattern _ _ _) = id
-> bindVars p (ty,v) (AsPattern v' t) =
->   addDecls [varDecl p ty v' (mkVar ty v)] . bindVars p (ty,v) t
+> bindVars p v' (AsPattern v t) = bindVar p (typeOf t) v v' . bindVars p v' t
+
+> bindVar :: Position -> a -> Ident -> Ident -> Rhs a -> Rhs a
+> bindVar p ty v v'
+>   | v /= v' = addDecls [varDecl p ty v (mkVar ty v')]
+>   | otherwise = id
 
 > desugarAltLhs :: ModuleIdent -> Alt Type -> DesugarState (Alt Type)
 > desugarAltLhs m (Alt p t rhs) =
@@ -784,36 +784,35 @@ where the default alternative is redundant.
 >         resetArgs (p,prefix,ts,rhs) = (p,id,prefix ts,rhs)
 >         toAlt vs (p,prefix,_,rhs) =
 >           Alt p (VariablePattern (TypeVariable 0) anonId)
->               (foldr2 (bindVars p) rhs vs (prefix []))
+>               (foldr2 (bindVars p . snd) rhs vs (prefix []))
 > desugarCase m ty prefix (v:vs) alts =
 >   case fst (head alts') of
 >     VariablePattern _ _
->       | all isVarPattern (map fst (tail alts')) ->
+>       | all (isVarPattern . fst) (tail alts') ->
 >           desugarCase m ty prefix vs (map dropArg alts)
 >       | otherwise -> desugarCase m ty (prefix . (v:)) vs (map skipArg alts)
->     t'@(AsPattern _ (LiteralPattern ty' l'))
+>     t'@(LiteralPattern _ l')
 >       | fst v `elem` (charType:numTypes) ->
 >           liftM (Case (uncurry mkVar v))
->                 (mapM (desugarCaseAlt m ty prefix vs alts') (lts ++ vts))
+>                 (mapM (desugarCaseAlt m ty prefix v vs alts') (lts ++ vts))
 >       | otherwise ->
->           liftM (Case (equal v (desugarLiteral ty' l')))
->                 (sequence [desugarLitAlt True m ty prefix (v:vs) alts' t',
->                            desugarLitAlt False m ty prefix (v:vs) alts' t'])
->     AsPattern _ (ConstructorPattern _ _ _)
+>           liftM (Case (equal v (desugarLiteral (fst v) l')))
+>                 (sequence [desugarLitAlt True m ty prefix v vs alts' t',
+>                            desugarLitAlt False m ty prefix v vs alts' t'])
+>     ConstructorPattern _ _ _
 >       | null lts ->
 >           do
 >             tcEnv <- liftSt envRt
 >             liftM (Case (uncurry mkVar v))
->                   (mapM (desugarCaseAlt m ty prefix vs alts')
+>                   (mapM (desugarCaseAlt m ty prefix v vs alts')
 >                         (cts ++ if allCases tcEnv v cts then [] else vts))
 >       | otherwise ->
 >           desugarCase m ty (prefix . (v:)) (v:vs) (map dupArg alts)
 >   where alts' = map tagAlt alts
 >         (lts,cts,vts) = partitionPatterns (nub (map fst alts'))
->         tagAlt (p,prefix,t:ts,rhs) =
->           (pattern v t,(p,prefix,t:ts,bindVars p v t rhs))
+>         tagAlt (p,prefix,t:ts,rhs) = (pattern t,(p,prefix,t:ts,rhs))
 >         skipArg (p,prefix,t:ts,rhs) = (p,prefix . (t:),ts,rhs)
->         dropArg (p,prefix,t:ts,rhs) = (p,prefix,ts,bindVars p v t rhs)
+>         dropArg (p,prefix,t:ts,rhs) = (p,prefix,ts,bindVars p (snd v) t rhs)
 >         equal v (Right e) = apply (prelEq (fst v)) [uncurry mkVar v,e]
 >         allCases tcEnv (ty,_) ts = length cs == length ts
 >           where cs = constructors (rootOfType ty) tcEnv
@@ -823,38 +822,39 @@ where the default alternative is redundant.
 > partitionPatterns :: [ConstrTerm a]
 >                   -> ([ConstrTerm a],[ConstrTerm a],[ConstrTerm a])
 > partitionPatterns = foldr partition ([],[],[])
->   where partition t@(AsPattern _ (LiteralPattern _ _)) ~(lts,cts,vts) =
->           (t:lts,cts,vts)
+>   where partition t@(LiteralPattern _ _) ~(lts,cts,vts) = (t:lts,cts,vts)
 >         partition t@(VariablePattern _ _) ~(lts,cts,vts) = (lts,cts,t:vts)
->         partition t@(AsPattern _ (ConstructorPattern _ _ _)) ~(lts,cts,vts) =
+>         partition t@(ConstructorPattern _ _ _) ~(lts,cts,vts) =
 >           (lts,t:cts,vts)
 
 > desugarCaseAlt :: ModuleIdent -> Type -> ([(Type,Ident)] -> [(Type,Ident)])
->                -> [(Type,Ident)] -> [(ConstrTerm Type,Match Type)]
->                -> ConstrTerm Type -> DesugarState (Alt Type)
-> desugarCaseAlt m ty prefix vs alts t =
+>                -> (Type,Ident) -> [(Type,Ident)]
+>                -> [(ConstrTerm (),Match Type)] -> ConstrTerm ()
+>                -> DesugarState (Alt Type)
+> desugarCaseAlt m ty prefix v vs alts t =
 >   do
->     vs' <- mapM (freshVar m "_#case") (arguments t)
->     liftM (caseAlt (pos (head alts')) (renameArgs vs' t))
->           (desugarCase m ty id (prefix (vs' ++ vs))
->                        (map (expandArgs vs') alts'))
->   where alts' = [alt | (t',alt) <- alts, t' == t || isVarPattern t']
+>     vs' <- freshVars m (map arguments ts)
+>     let ts' = map (uncurry VariablePattern) vs'
+>     e' <- desugarCase m ty id (prefix (vs' ++ vs)) (map (expandArg ts') alts')
+>     return (caseAlt (pos (head alts')) (renameArgs (snd v) vs' t') e')
+>   where t'
+>           | isVarPattern t = uncurry VariablePattern v
+>           | otherwise = head (filter (not . isVarPattern) ts)
+>         ts = [t | (_,_,t:_,_) <- alts']
+>         alts' = [alt | (t',alt) <- alts, t' == t || isVarPattern t']
 >         pos (p,_,_,_) = p
->         expandArgs vs (p,prefix,t:ts,rhs) =
->           (p,id,prefix (expandPatternArgs vs t ++ ts),rhs)
->         expandPatternArgs vs t
->           | isVarPattern t = map (uncurry VariablePattern) vs
->           | otherwise = arguments t
+>         expandArg ts' (p,prefix,t:ts,rhs) =
+>           (p,id,prefix (arguments' ts' t ++ ts),bindVars p (snd v) t rhs)
+>         arguments' ts' t = if isVarPattern t then ts' else arguments t
 
 > desugarLitAlt :: Bool -> ModuleIdent -> Type
->               -> ([(Type,Ident)] -> [(Type,Ident)]) -> [(Type,Ident)]
->               -> [(ConstrTerm Type,Match Type)] -> ConstrTerm Type
->               -> DesugarState (Alt Type)
-> desugarLitAlt eq m ty prefix vs alts t =
+>               -> ([(Type,Ident)] -> [(Type,Ident)]) -> (Type,Ident)
+>               -> [(Type,Ident)] -> [(ConstrTerm (),Match Type)]
+>               -> ConstrTerm () -> DesugarState (Alt Type)
+> desugarLitAlt eq m ty prefix v vs alts t =
 >   liftM (caseAlt (pos (head alts')) t')
->         (desugarCase m ty id (prefix vs) (map resetArgs alts'))
->   where v = head vs
->         t' = if eq then truePattern else falsePattern
+>         (desugarCase m ty id (prefix (v:vs)) (map resetArgs alts'))
+>   where t' = if eq then truePattern else falsePattern
 >         alts'
 >           | eq = [if t == t' then matchArg v alt else alt | (t',alt) <- alts]
 >           | otherwise = [alt | (t',alt) <- alts, t /= t']
@@ -862,12 +862,18 @@ where the default alternative is redundant.
 >         matchArg v (p,prefix,t:ts,rhs) = (p,prefix,asConstrApp v t:ts,rhs)
 >         resetArgs (p,prefix,ts,rhs) = (p,id,prefix ts,rhs)
 
-> renameArgs :: [(Type,Ident)] -> ConstrTerm Type -> ConstrTerm Type
-> renameArgs _ (LiteralPattern ty l) = LiteralPattern ty l
-> renameArgs _ (VariablePattern ty v) = VariablePattern ty v
-> renameArgs vs (ConstructorPattern ty c _) =
->   ConstructorPattern ty c (map (uncurry VariablePattern) vs)
-> renameArgs vs (AsPattern v t) = AsPattern v (renameArgs vs t)
+> freshVars :: ModuleIdent -> [[ConstrTerm Type]] -> DesugarState [(Type,Ident)]
+> freshVars m tss = mapM argName (transpose tss)
+>   where argName [VariablePattern ty v] = return (ty,v)
+>         argName [AsPattern v t] = return (typeOf t,v)
+>         argName (t:_) = freshVar m "_#case" t
+
+> renameArgs :: Ident -> [(a,Ident)] -> ConstrTerm a -> ConstrTerm a
+> renameArgs v _ (LiteralPattern ty l) = AsPattern v (LiteralPattern ty l)
+> renameArgs v _ (VariablePattern ty _) = VariablePattern ty v
+> renameArgs v vs (ConstructorPattern ty c _) =
+>   AsPattern v (ConstructorPattern ty c (map (uncurry VariablePattern) vs))
+> renameArgs v vs (AsPattern _ t) = renameArgs v vs t
 
 \end{verbatim}
 In general, a list comprehension of the form

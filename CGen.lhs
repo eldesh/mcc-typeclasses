@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2766 2009-03-26 08:59:48Z wlux $
+% $Id: CGen.lhs 2767 2009-03-26 09:03:29Z wlux $
 %
 % Copyright (c) 1998-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -982,7 +982,12 @@ translation function.
 >              [cCase "EVAL_TAG"
 >                     (saveRet vs0 ks ++ [gotoExpr (field v "info->eval")])],
 >    gotoRet ks]
->   where taggedSwitch switch = CIf (isTaggedPtr v) [switch] []
+>   where taggedSwitch switch
+>           | tagged ks = CIf (isTaggedPtr v) [switch] []
+>           | otherwise = switch
+>         tagged (CPSCont (CPSFunction _ _ vs _ (CPSSwitch tagged v _)) : _)
+>           | vs == [v] = tagged
+>         tagged _ = True
 
 > exec :: (Bool,[Name],[Name]) -> Name -> [Name] -> [CPSCont] -> [CStmt]
 > exec vs0 f vs ks = saveCont vs0 vs [] ks ++ saveRet vs0 ks ++ [goto (cName f)]

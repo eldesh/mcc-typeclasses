@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: Simplify.lhs 2775 2009-03-26 15:17:08Z wlux $
 %
-% Copyright (c) 2003-2008, Wolfgang Lux
+% Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Simplify.lhs}
@@ -167,7 +167,7 @@ only a single equation whose body is a non-expansive expression.
 >     tyEnv <- fetchSt
 >     nEnv <- liftSt envRt
 >     etaEquation m tyEnv nEnv eq
-> etaExpand m eqs = return eqs
+> etaExpand _ eqs = return eqs
 
 > etaEquation :: ModuleIdent -> ValueEnv -> NewtypeEnv -> Equation Type
 >             -> SimplifyState [Equation Type]
@@ -250,8 +250,10 @@ arity $n$. Note that this may fail when the newtype's definition is
 not visible in the current module.
 \begin{verbatim}
 
+> expandTypeAnnot :: NewtypeEnv -> Int -> Expression Type
+>                 -> (Type,Expression Type)
 > expandTypeAnnot nEnv n e
->   | n < arrowArity ty = (ty,e)
+>   | n <= arrowArity ty = (ty,e)
 >   | otherwise = (ty',fixType ty' e)
 >   where ty = typeOf e
 >         ty' = etaType nEnv n ty
@@ -264,8 +266,14 @@ not visible in the current module.
 > fixType ty (Lambda p ts e) = Lambda p ts (fixType (foldr match ty ts) e)
 >   where match _ (TypeArrow _ ty) = ty
 > fixType ty (Let ds e) = Let ds (fixType ty e)
-> fixType _ (Case _ _) = internalError "fixType"
-> fixType _ (Fcase _ _) = internalError "fixType"
+> fixType ty (Case e as) = Case e (map (fixTypeAlt ty) as)
+> fixType ty (Fcase e as) = Fcase e (map (fixTypeAlt ty) as)
+
+> fixTypeAlt :: Type -> Alt Type -> Alt Type
+> fixTypeAlt ty (Alt p t rhs) = Alt p t (fixTypeRhs ty rhs)
+
+> fixTypeRhs :: Type -> Rhs Type -> Rhs Type
+> fixTypeRhs ty (SimpleRhs p e _) = SimpleRhs p (fixType ty e) []
 
 \end{verbatim}
 Before other optimizations are applied to expressions, the simplifier

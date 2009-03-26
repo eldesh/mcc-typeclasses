@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2770 2009-03-26 10:12:39Z wlux $
+% $Id: show.nw 2773 2009-03-26 10:38:21Z wlux $
 %
-% Copyright (c) 2001-2008, Wolfgang Lux
+% Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Show Function}
@@ -107,7 +107,7 @@ static NodeInfo showStringTail_lazy_info_table[] =
 static
 FUNCTION(eval_lazy_3)
 {
-    Node  *susp, *x, *y, *z;
+    Node  *susp;
     Label entry;
  ENTRY_LABEL(static, eval_lazy_3)
     /* suspend the search if the node is not local */
@@ -115,11 +115,11 @@ FUNCTION(eval_lazy_3)
 	suspend_search(1, regs.r[0]->s.spc);
 
     /* get the arguments */
-    susp  = regs.r[0];
-    entry = susp->info->entry;
-    x	  = susp->s.args[0];
-    y	  = susp->s.args[1];
-    z	  = susp->s.args[2];
+    susp      = regs.r[0];
+    entry     = susp->info->entry;
+    regs.r[0] = susp->s.args[0];
+    regs.r[1] = susp->s.args[1];
+    regs.r[2] = susp->s.args[2];
 
     /* create an indirection if there is an update frame immediately above */
     if ( regs.ret == update )
@@ -156,13 +156,13 @@ FUNCTION(eval_lazy_3)
     }
 
     /* enter the callee */
-    EXEC3(entry, x, y, z);
+    EXEC3(entry, regs.r[0], regs.r[1], regs.r[2]);
 }
 
 static
 FUNCTION(eval_lazy_4)
 {
-    Node  *susp, *x, *y, *z, *t;
+    Node  *susp;
     Label entry;
  ENTRY_LABEL(static, eval_lazy_4)
     /* suspend the search if the node is not local */
@@ -170,12 +170,12 @@ FUNCTION(eval_lazy_4)
 	suspend_search(1, regs.r[0]->s.spc);
 
     /* get the arguments */
-    susp  = regs.r[0];
-    entry = susp->info->entry;
-    x	  = susp->s.args[0];
-    y	  = susp->s.args[1];
-    z	  = susp->s.args[2];
-    t	  = susp->s.args[3];
+    susp      = regs.r[0];
+    entry     = susp->info->entry;
+    regs.r[0] = susp->s.args[0];
+    regs.r[1] = susp->s.args[1];
+    regs.r[2] = susp->s.args[2];
+    regs.r[3] = susp->s.args[3];
 
     /* create an indirection if there is an update frame immediately above */
     if ( regs.ret == update )
@@ -212,7 +212,7 @@ FUNCTION(eval_lazy_4)
     }
 
     /* enter the callee */
-    EXEC4(entry, x, y, z, t);
+    EXEC4(entry, regs.r[0], regs.r[1], regs.r[2], regs.r[3]);
 }
 
 @

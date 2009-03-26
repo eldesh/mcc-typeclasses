@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2767 2009-03-26 09:03:29Z wlux $
+% $Id: CGen.lhs 2773 2009-03-26 10:38:21Z wlux $
 %
-% Copyright (c) 1998-2008, Wolfgang Lux
+% Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CGen.lhs}
@@ -598,23 +598,19 @@ applied to exactly its missing arguments.
 >       [] :
 >   loadVars vs0 ++
 >   CLocalVar labelType "entry" (Just (field v "info->entry")) :
->   zipWith fetchArg vs [0..] ++
+>   [setReg i (arg i) | i <- [0..n-1]] ++
 >   CIf (CRel (var retIpName) "==" (CExpr "update"))
 >       (localVar v' (Just (stk 0)) : lockIndir v v')
->       (stackCheck vs0 (CPSWithCont k (CPSExec undefined vs)) ++
+>       (stackCheck vs0 (CPSWithCont k (CPSEnter v)) ++
 >        saveCont vs0 [] [] [k] ++
 >        [setRet (CExpr "update")] ++
 >        lock v) :
->   zipWith setArg [0..] vs ++
 >   [goto "entry"]
 >   where v = Name "susp"
 >         v' = Name "que"
->         vs = [Name ('v' : show i) | i <- [1..n]]
 >         vs0 = (True,[v],[])
 >         k = CPSCont (CPSFunction (Name (lazyFunc n)) 0 [] [v] undefined)
 >         arg = element (field v "s.args")
->         fetchArg v i = localVar v (Just (arg i))
->         setArg i v = setReg i (var v)
 
 \end{verbatim}
 The CPS entry function of an abstract machine code function receives

@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2751 2008-08-30 13:24:59Z wlux $
+% $Id: files.nw 2773 2009-03-26 10:38:21Z wlux $
 %
-% Copyright (c) 2001-2007, Wolfgang Lux
+% Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Files}
@@ -655,7 +655,7 @@ static NodeInfo lazyRead_lazy_info_table[] = LAZYINFO("lazyRead", lazyRead, 1);
 static
 FUNCTION(eval_lazy_1)
 {
-    Node  *susp, *x;
+    Node  *susp;
     Label entry;
  ENTRY_LABEL(static, eval_lazy_1)
     /* suspend the search if the node is not local */
@@ -663,9 +663,9 @@ FUNCTION(eval_lazy_1)
 	suspend_search(1, regs.r[0]->s.spc);
 
     /* get the argument */
-    susp  = regs.r[0];
-    entry = susp->info->entry;
-    x	  = susp->s.args[0];
+    susp      = regs.r[0];
+    entry     = susp->info->entry;
+    regs.r[0] = susp->s.args[0];
 
     /* create an indirection if there is an update frame immediately above */
     if ( regs.ret == update )
@@ -702,7 +702,7 @@ FUNCTION(eval_lazy_1)
     }
 
     /* enter the callee */
-    EXEC1(entry, x);
+    EXEC1(entry, regs.r[0]);
 }
 
 static

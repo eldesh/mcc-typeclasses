@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: bigint.nw 2715 2008-06-10 08:59:56Z wlux $
+% $Id: bigint.nw 2770 2009-03-26 10:12:39Z wlux $
 %
 % Copyright (c) 2007-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -95,7 +95,7 @@ typedef BIGNUM mpz_t[1];
 #define mpz_out_str(fp,base,x)	bnz_out_str(fp,base,x)
 
 /* miscellaneous functions */
-#define mp_get_memory_functions	bn_get_memory_functions
+#define mpz_sizeinbase(x,b)	bnz_sizeinbase(x,b)
 
 /* rational number type */
 typedef struct { BIGNUM num, den; } RATNUM;
@@ -481,30 +481,38 @@ bnz_out_str(FILE *fp, int base, BIGNUM *x)
 }
 
 @ 
-The Gnu MP library allows using custom allocation functions. The
-runtime system currently does not make use of this feature.
-Nevertheless, it retrieves the Gnu MP library's current [[free]]
-function in order to release temporary strings allocated by the
-library. OpenSSL's libcrypto does not provide a similar
-feature. Therefore, the emulation of [[mp_get_memory_functions]]
-simply returns the standard allocation functions.
+Libcrypto does not provide a means to determine the size of the
+printable representation of a number. Therefore we convert the number
+into a string via [[BN_bn2dec]] and [[BN_bn2hex]], respectively, and
+count its length. For compatibility with gmp's [[mpz_sizeinbase]] we
+ignore the leading sign of negative numbers. %'
 
 <<libcrypto based emulation code>>=
-extern void bn_get_memory_functions(void *(**)(), void *(**)(), void (**)());
+extern long bnz_sizeinbase(BIGNUM *, int);
 
 @ 
 <<bigint.c>>=
-void
-bn_get_memory_functions(void *(**alloc_fun)(),
-			void *(**realloc_fun)(),
-			void (**free_fun)())
+long
+bnz_sizeinbase(BIGNUM *x, int base)
 {
-    if ( alloc_fun )
-	*alloc_fun = malloc;
-    if ( realloc_fun )
-	*realloc_fun = realloc;
-    if ( free_fun )
-	*free_fun = free;
+    char *cp;
+    long l;
+
+    switch ( base )
+    {
+    case 10:
+	cp = BN_bn2dec(x);
+	break;
+    case 16:
+	cp = BN_bn2hex(x);
+	break;
+    default:
+	curry_panic("bnz_sizeinbase: unsupported base %d\n", base);
+    }
+
+    l = strlen(cp[0] == '-' ? cp + 1 : cp);
+    OPENSSL_free(cp);
+    return l;
 }
 
 @ 

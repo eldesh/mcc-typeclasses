@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2766 2009-03-26 08:59:48Z wlux $
+% $Id: show.nw 2770 2009-03-26 10:12:39Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -331,8 +331,11 @@ FUNCTION(showp_1)
 	    break;
 
 	case BIGINT_KIND:
-	    isneg = mpz_sgn(node->bi.mpz) < 0;
-	    str   = mpz_str = mpz_get_str(NULL, 10, node->bi.mpz);
+	    isneg   = mpz_sgn(node->bi.mpz) < 0;
+	    mpz_str = malloc(mpz_sizeinbase(node->bi.mpz, 10) + 2);
+	    if ( !mpz_str )
+		sys_error("showp: mpz_get_str");
+	    str = mpz_get_str(mpz_str, 10, node->bi.mpz);
 	    break;
 
 	case FLOAT_KIND:
@@ -442,12 +445,7 @@ FUNCTION(showp_1)
 
     regs.r[0] = prefix_string(0, str, tail);
     if ( mpz_str )
-    {
-	void (*freefunc)(void *, size_t);
-
-	mp_get_memory_functions(NULL, NULL, &freefunc);
-	freefunc(mpz_str, strlen(mpz_str + 1));
-    }
+	free(mpz_str);
 
     CHECK_HEAP(1, 2*cons_node_size);
     cons = regs.r[0];

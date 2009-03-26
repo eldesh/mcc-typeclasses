@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2766 2009-03-26 08:59:48Z wlux $
+% $Id: heap.nw 2772 2009-03-26 10:36:11Z wlux $
 %
-% Copyright (c) 2001-2008, Wolfgang Lux
+% Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{The Heap}\label{sec:heap}
@@ -906,9 +906,10 @@ is named by adding the function's arity to the prefix [[eval_lazy_]].        %'
 @ 
 For benefit of the printing code, the runtime system implements two
 predicates [[is_tuple]] and [[is_operator]] that check whether a node
-info corresponds to a tuple and an operator, respectively. The function
-[[is_tuple]] returns [[true]], if the name consists of a (non-empty)
-sequence of commas which are enclosed in parentheses. The function
+info corresponds to a tuple and an operator, respectively. The
+function [[is_tuple]] returns [[true]], if the name consists of a
+(non-empty) sequence of commas which are enclosed in parentheses and
+optionally prefixed with module name \texttt{Prelude}. The function
 [[is_operator]] returns [[true]], if the name contains any
 non-alphanumeric characters except for [[']] and [[_]]. Dots ([[.]]) %'
 that precede an alphanumeric character are ignored because they are
@@ -926,6 +927,10 @@ bool
 is_tuple(NodeInfo *info)
 {
     const char *cp = info->cname;
+
+    /* magic number: 8 = strlen("Prelude.") */
+    if ( strncmp("Prelude.", cp, 8) == 0 )
+	cp += 8;
 
     if ( cp == 0 || *cp++ != '(' || *cp++ != ',' )
 	return false;

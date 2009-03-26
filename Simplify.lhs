@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2775 2009-03-26 15:17:08Z wlux $
+% $Id: Simplify.lhs 2776 2009-03-26 15:21:01Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -383,8 +383,8 @@ functions in later phases of the compiler.
 >     return (etaReduce m tyEnv p (ts ++ ts') e'')
 > simplifyExpr m env (Let ds e) =
 >   do
->     dss' <- mapM (sharePatternRhs m) ds
->     simplifyLet m env (scc bv (qfv m) (foldr hoistDecls [] (concat dss'))) e
+>     dss' <- mapM (sharePatternRhs m) (foldr hoistDecls [] ds)
+>     simplifyLet m env (scc bv (qfv m) (concat dss')) e
 > simplifyExpr m env (Case e as) =
 >   do
 >     e' <- simplifyExpr m env e
@@ -455,10 +455,11 @@ functions to access the pattern variables.
 >   do
 >     ds' <- mapM (simplifyDecl m env) ds
 >     tyEnv <- fetchSt
+>     nEnv <- liftSt envRt
 >     trEnv <- liftSt (liftRt envRt)
 >     e' <- simplifyLet m (inlineVars m tyEnv trEnv ds' env) dss e
->     dss'' <- mapM (expandPatternBindings m tyEnv (qfv m ds' ++ qfv m e')) ds'
->     return (mkSimplLet m (concat dss'') e')
+>     dss'' <- mapM (expandPatternBindings m (qfv m ds' ++ qfv m e')) ds'
+>     return (mkSimplLet m nEnv (concat dss'') e')
 
 > inlineVars :: ModuleIdent -> ValueEnv -> TrustEnv -> [Decl Type] -> InlineEnv
 >            -> InlineEnv
@@ -497,15 +498,16 @@ functions to access the pattern variables.
 > canInline tyEnv (Variable _ v) = not (isQualified v) || arity v tyEnv > 0
 > canInline _ _ = False
 
-> mkSimplLet :: ModuleIdent -> [Decl a] -> Expression a -> Expression a
-> mkSimplLet m [FreeDecl p vs] e
+> mkSimplLet :: ModuleIdent -> NewtypeEnv -> [Decl Type] -> Expression Type
+>            -> Expression Type
+> mkSimplLet m _ [FreeDecl p vs] e
 >   | null vs' = e
 >   | otherwise = Let [FreeDecl p vs'] e
 >   where vs' = filter (`elem` qfv m e) vs
-> mkSimplLet m [PatternDecl _ (VariablePattern _ v) (SimpleRhs _ e _)]
->       (Variable _ v')
->   | v' == qualify v && v `notElem` qfv m e = e
-> mkSimplLet m ds e
+> mkSimplLet m nEnv [PatternDecl _ (VariablePattern _ v) (SimpleRhs _ e _)]
+>       (Variable ty' v')
+>   | v' == qualify v && v `notElem` qfv m e = withType nEnv ty' e
+> mkSimplLet m _ ds e
 >   | null (filter (`elem` qfv m e) (bv ds)) = e
 >   | otherwise = Let ds e
 
@@ -659,21 +661,18 @@ exactly one declaration for each used variable.
 >   where patternId n = mkIdent ("_#pat" ++ show n)
 > sharePatternRhs _ d = return [d]
 
-> expandPatternBindings :: ModuleIdent -> ValueEnv -> [Ident] -> Decl Type
+> expandPatternBindings :: ModuleIdent -> [Ident] -> Decl Type
 >                       -> SimplifyState [Decl Type]
-> expandPatternBindings m tyEnv fvs (PatternDecl p t (SimpleRhs p' e _)) =
+> expandPatternBindings m fvs (PatternDecl p t (SimpleRhs p' e _)) =
 >   case t of
 >     VariablePattern _ _ -> return [PatternDecl p t (SimpleRhs p' e [])]
 >     _ ->
 >       do
 >         fs <- mapM (freshIdent m selectorId n . polyType) selectorTys
->         return (zipWith3 (projectionDecl p t e) selectorTys fs
->                          (shuffle (zip tys vs)))
+>         return (zipWith3 (projectionDecl p t e) selectorTys fs (shuffle vs))
 >       where n = length vs
->             vs = filter (`elem` fvs) (bv t)
->             ty = typeOf t
->             tys = [rawType (varType v tyEnv) | v <- vs]
->             selectorTys = map (selectorType ty) (shuffle tys)
+>             vs = filter ((`elem` fvs) . snd) (vars t)
+>             selectorTys = map (selectorType (typeOf t)) (shuffle (map fst vs))
 >             selectorType ty0 (ty:tys) = foldr TypeArrow ty (ty0:tys)
 >             selectorDecl p f t (v:vs) =
 >               funDecl p f (t:map (uncurry VariablePattern) vs)
@@ -682,7 +681,7 @@ exactly one declaration for each used variable.
 >               uncurry (varDecl p) v
 >                       (Let [selectorDecl p f t (v:vs)]
 >                            (apply (mkVar ty f) (e : map (uncurry mkVar) vs)))
-> expandPatternBindings _ _ _ d = return [d]
+> expandPatternBindings _ _ d = return [d]
 
 \end{verbatim}
 Auxiliary functions
@@ -706,6 +705,12 @@ Auxiliary functions
 >     v <- freshIdent m f 0 (monoType ty)
 >     return (ty,v)
 >   where ty = typeOf x
+
+> vars :: ConstrTerm Type -> [(Type,Ident)]
+> vars (LiteralPattern _ _) = []
+> vars (VariablePattern ty v) = [(ty,v)]
+> vars (ConstructorPattern _ _ ts) = concatMap vars ts
+> vars (AsPattern v t) = (typeOf t,v) : vars t
 
 > shuffle :: [a] -> [[a]]
 > shuffle xs = shuffle id xs

@@ -3,9 +3,9 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 2610 2008-02-03 23:24:59Z wlux $
+# $Id: cymake.in 2769 2009-03-26 09:14:55Z wlux $
 #
-# Copyright (c) 2002-2008, Wolfgang Lux
+# Copyright (c) 2002-2009, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -116,14 +116,14 @@ while test $# -gt 0; do
     -[cCS] ) echo 1>&2 "$cymake: unsupported option $1"; exit 1;;
     -a ) linkAlways="$1";;
     -e ) goal=$2; shift;;
-    -e* ) goal=`expr "$1" : '-e\(.*\)'`;;
+    -e* ) goal=`expr X"$1" : X'-e\(.*\)'`;;
     -T ) typeIt=$2; shift;;
-    -T* ) typeIt=`expr "$1" : '-T\(.*\)'`;;
+    -T* ) typeIt=`expr X"$1" : X'-T\(.*\)'`;;
     -g | --debug ) mkopts="$mkopts $1"; cyopts="$cyopts $1";;
     --clean ) clean=--clean;;
     --find ) find=--find;;
     -o ) output="$2"; shift;;
-    -o* ) output=`expr "$1" : '-o\(.*\)'`;;
+    -o* ) output=`expr X"$1" : X'-o\(.*\)'`;;
     -n ) exec=echo;;
     -v ) verbose=-v; echo=echo cyopts="$cyopts -v";;
     -q ) echo=noecho;;

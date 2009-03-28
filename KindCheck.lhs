@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2692 2008-05-02 13:22:41Z wlux $
+% $Id: KindCheck.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
-% Copyright (c) 1999-2008, Wolfgang Lux
+% Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{KindCheck.lhs}
@@ -89,6 +89,7 @@ declarations.
 > bt (InstanceDecl _ _ _ _ _) = []
 > bt (DefaultDecl _ tys) = []
 > bt (BlockDecl _) = []
+> bt (SplitAnnot _) = []
 
 > ft :: ModuleIdent -> TopDecl a -> [Ident]
 > ft m d = fts m d []
@@ -108,6 +109,7 @@ declarations.
 >     fts m cx . fts m cls . fts m ty . fts m ds
 >   fts m (DefaultDecl _ tys) = fts m tys
 >   fts m (BlockDecl d) = fts m d
+>   fts _ (SplitAnnot _) = id
 
 > instance HasType ConstrDecl where
 >   fts m (ConstrDecl _ _ cx _ tys) = fts m cx . fts m tys
@@ -297,6 +299,7 @@ have to do it while instantiating the remaining kind variables in
 > bindKind _ tcEnv (InstanceDecl _ _ _ _ _) = return tcEnv
 > bindKind _ tcEnv (DefaultDecl _ _) = return tcEnv
 > bindKind _ tcEnv (BlockDecl _) = return tcEnv
+> bindKind _ tcEnv (SplitAnnot _) = return tcEnv
 
 > bindTypeCon :: (QualIdent -> Kind -> a -> TypeInfo) -> ModuleIdent -> Ident
 >             -> [Ident] -> Maybe Kind -> a -> TCEnv -> KcState TCEnv
@@ -340,6 +343,7 @@ have to do it while instantiating the remaining kind variables in
 > bindDefaultKind _ _ (InstanceDecl _ _ _ _ _) tcEnv = tcEnv
 > bindDefaultKind _ _ (DefaultDecl _ _) tcEnv = tcEnv
 > bindDefaultKind _ _ (BlockDecl _) tcEnv = tcEnv
+> bindDefaultKind _ _ (SplitAnnot _) tcEnv = tcEnv
 
 \end{verbatim}
 After adding new assumptions to the environment, kind inference is
@@ -378,6 +382,7 @@ have kind $\star$.
 >     tcEnv' <- foldM bindFreshKind tcEnv (nub (fv tys))
 >     mapM_ (kcValueType tcEnv' p "default declaration" empty) tys
 > kcTopDecl _ tcEnv (BlockDecl d) = kcDecl tcEnv [] d
+> kcTopDecl _ _ (SplitAnnot _) = return ()
 
 > bindTypeVars :: ModuleIdent -> Ident -> [Ident] -> TCEnv -> (Kind,TCEnv)
 > bindTypeVars m tc tvs tcEnv =

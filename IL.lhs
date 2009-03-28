@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: IL.lhs 2621 2008-02-08 14:42:02Z wlux $
+% $Id: IL.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
-% Copyright (c) 1999-2008 Wolfgang Lux
+% Copyright (c) 1999-2009 Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{IL.lhs}
@@ -44,11 +44,12 @@ distinguishes (local) variables and (global) functions in expressions.
 
 > data Module = Module ModuleIdent [ModuleIdent] [Decl] deriving (Eq,Show)
 
-> data Decl = 
+> data Decl =
 >     DataDecl QualIdent Int [ConstrDecl]
 >   | TypeDecl QualIdent Int Type
 >   | FunctionDecl QualIdent [Ident] Type Expression
 >   | ForeignDecl QualIdent CallConv String Type
+>   | SplitAnnot
 >   deriving (Eq,Show)
 
 > data ConstrDecl = ConstrDecl QualIdent [Type] deriving (Eq,Show)

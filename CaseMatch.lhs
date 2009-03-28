@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 2778 2009-03-28 09:10:58Z wlux $
+% $Id: CaseMatch.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -94,6 +94,7 @@ p.~\pageref{pattern-binding} in Sect.~\ref{pattern-binding}).
 >     liftM (InstanceDecl p cx cls ty) (mapM (match m p) ds)
 >   match _ _ (DefaultDecl p tys) = return (DefaultDecl p tys)
 >   match m p (BlockDecl d) = liftM BlockDecl (match m p d)
+>   match _ _ (SplitAnnot p) = return (SplitAnnot p)
 
 > instance CaseMatch Decl where
 >   match _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)

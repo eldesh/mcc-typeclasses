@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: OverlapCheck.lhs 2735 2008-07-11 14:35:52Z wlux $
+% $Id: OverlapCheck.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
-% Copyright (c) 2006-2008, Wolfgang Lux
+% Copyright (c) 2006-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{OverlapCheck.lhs}
@@ -63,6 +63,7 @@ traversal of the syntax tree.
 >   overlap tyEnv _ (InstanceDecl p _ _ _ ds) = overlap tyEnv p ds 
 >   overlap _ _ (DefaultDecl _ _) = id
 >   overlap tyEnv p (BlockDecl d) = overlap tyEnv p d
+>   overlap _ _ (SplitAnnot _) = id
 
 > instance Syntax (Decl a) where
 >   overlap _ _ (InfixDecl _ _ _ _) = id

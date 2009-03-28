@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Unlambda.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: Unlambda.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
-% Copyright (c) 2007-2008, Wolfgang Lux
+% Copyright (c) 2007-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Unlambda.lhs}
@@ -51,6 +51,7 @@ lambda abstraction is recorded in the type environment.
 >     liftM (InstanceDecl p cx cls ty) (mapM (nameLambdas m) ds)
 >   nameLambdas _ (DefaultDecl p tys) = return (DefaultDecl p tys)
 >   nameLambdas m (BlockDecl d) = liftM BlockDecl (nameLambdas m d)
+>   nameLambdas _ (SplitAnnot p) = return (SplitAnnot p)
 
 > instance SyntaxTree Decl where
 >   nameLambdas _ (TypeSig p fs ty) = return (TypeSig p fs ty)

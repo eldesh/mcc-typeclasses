@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2725 2008-06-14 17:24:48Z wlux $
+% $Id: DictTrans.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
-% Copyright (c) 2006-2008, Wolfgang Lux
+% Copyright (c) 2006-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{DictTrans.lhs}
@@ -115,6 +115,7 @@ p.~\pageref{dict-specialize}.
 >   instDecls m tcEnv tyEnv p cls (expandPolyType tcEnv (QualTypeExpr cx ty)) ds
 > liftDecls _ _ _ (DefaultDecl p tys) = [DefaultDecl p tys]
 > liftDecls _ _ _ (BlockDecl d) = [BlockDecl d]
+> liftDecls _ _ _ (SplitAnnot p) = [SplitAnnot p]
 
 \end{verbatim}
 \paragraph{Class Declarations}
@@ -753,6 +754,7 @@ classes.
 >   dictSpecialize _ (TypeDecl p tc tvs ty) = TypeDecl p tc tvs ty
 >   dictSpecialize _ (DefaultDecl p tys) = DefaultDecl p tys
 >   dictSpecialize mEnv (BlockDecl d) = BlockDecl (dictSpecialize mEnv d)
+>   dictSpecialize _ (SplitAnnot p) = SplitAnnot p
 
 > instance DictSpecialize Decl where
 >   dictSpecialize _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops

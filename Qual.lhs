@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: Qual.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
-% Copyright (c) 2001-2008, Wolfgang Lux
+% Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Qual.lhs}
@@ -65,6 +65,7 @@ order to compile this module with hbc.
 >   qual phase tEnv vEnv (DefaultDecl p tys) =
 >     DefaultDecl p (qual phase tEnv vEnv tys)
 >   qual phase tEnv vEnv (BlockDecl d) = BlockDecl (qual phase tEnv vEnv d)
+>   qual _ _ _ (SplitAnnot p) = SplitAnnot p
 
 > instance Qual ConstrDecl where
 >   qual phase tEnv vEnv (ConstrDecl p evs cx c tys) =

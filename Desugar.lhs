@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2777 2009-03-26 21:29:00Z wlux $
+% $Id: Desugar.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -200,6 +200,7 @@ declaration.
 >     ds' <- desugarDeclGroup m ds
 >     return [InstanceDecl p cx cls ty ds']
 > desugarTopDecl _ _ (DefaultDecl p tys) = return [DefaultDecl p tys]
+> desugarTopDecl _ _ (SplitAnnot p) = return [SplitAnnot p]
 
 > selectorDecl :: ModuleIdent -> ValueEnv -> Position -> [QualIdent] -> Ident
 >              -> DesugarState (Decl Type)

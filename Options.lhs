@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Options.lhs 2777 2009-03-26 21:29:00Z wlux $
+% $Id: Options.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -24,6 +24,7 @@ all compiler options.
 >     typeIt :: Maybe String,           -- goal to be typed
 >     noInterface :: Bool,              -- do not create an interface file
 >     splitCode :: Bool,                -- split object code
+>     autoSplit :: Bool,                -- automatically insert split pragmas
 >     debug :: Bool,                    -- add debugging transformation
 >     trusted :: Bool,                  -- trusted module for debugging
 >     caseMode :: CaseMode,             -- case mode
@@ -40,6 +41,7 @@ all compiler options.
 >     typeIt = Nothing,
 >     noInterface = False,
 >     splitCode = False,
+>     autoSplit = False,
 >     debug = False,
 >     trusted = False,
 >     caseMode = FreeMode,
@@ -89,7 +91,7 @@ library.
 >     Help
 >   | ImportPath FilePath | Output FilePath
 >   | Eval (Maybe String) | Type String
->   | SplitCode | NoInterface | Debug | Trusted
+>   | SplitCode | AutoSplit | NoInterface | Debug | Trusted
 >   | CaseMode CaseMode | Warn [Warn] | Dump [Dump]
 >   deriving (Eq,Show)
 
@@ -111,6 +113,8 @@ recognized by the compiler.
 >            "do not create an interface file",
 >     Option "" ["split-code"] (NoArg SplitCode)
 >            "emit one C file for each function",
+>     Option "" ["auto-split"] (NoArg AutoSplit)
+>            "automatically insert split pragmas",
 >     Option "g" ["debug"] (NoArg Debug)
 >            "transform code for debugging",
 >     Option "" ["trusted"] (NoArg Trusted)
@@ -182,6 +186,7 @@ print its usage message and terminate.
 > selectOption (Type goal) opts = opts{ typeIt = Just goal }
 > selectOption NoInterface opts = opts{ noInterface = True }
 > selectOption SplitCode opts = opts{ splitCode = True }
+> selectOption AutoSplit opts = opts{ autoSplit = True }
 > selectOption Debug opts = opts{ debug = True }
 > selectOption Trusted opts = opts{ trusted = True }
 > selectOption (CaseMode cm) opts = opts{ caseMode = cm }

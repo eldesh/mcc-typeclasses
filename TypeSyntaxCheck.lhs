@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
-% Copyright (c) 1999-2008, Wolfgang Lux
+% Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeSyntaxCheck.lhs}
@@ -69,6 +69,7 @@ checking the optional export list of the current module.
 > bindType m (InstanceDecl _ _ _ _ _) = id
 > bindType _ (DefaultDecl _ _) = id
 > bindType _ (BlockDecl _) = id
+> bindType _ (SplitAnnot _) = id
 
 \end{verbatim}
 The compiler allows anonymous type variables on the left hand side of
@@ -120,6 +121,7 @@ signatures.
 > checkTopDecl env (DefaultDecl p tys) =
 >   liftE (DefaultDecl p) (mapE (checkType env p) tys)
 > checkTopDecl env (BlockDecl d) = liftE BlockDecl (checkDecl env d)
+> checkTopDecl _ (SplitAnnot p) = return (SplitAnnot p)
 
 > checkGoal :: TypeEnv -> Goal a -> Error (Goal a)
 > checkGoal env (Goal p e ds) =
@@ -413,6 +415,7 @@ Auxiliary definitions.
 > tident (InstanceDecl _ _ _ _ _) = internalError "tident"
 > tident (DefaultDecl _ _) = internalError "tident"
 > tident (BlockDecl _) = internalError "tident"
+> tident (SplitAnnot _) = internalError "tident"
 
 > instances :: TopDecl a -> [P CT]
 > instances (DataDecl p _ tc _ _ clss) =
@@ -424,6 +427,7 @@ Auxiliary definitions.
 > instances (InstanceDecl p _ cls ty _) = [P p (CT cls (typeConstr ty))]
 > instances (DefaultDecl _ _) = []
 > instances (BlockDecl _) = []
+> instances (SplitAnnot _) = []
 
 > isTypeSynonym :: TypeEnv -> QualIdent -> Bool
 > isTypeSynonym env tc =

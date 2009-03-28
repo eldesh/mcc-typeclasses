@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: SyntaxCheck.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
-% Copyright (c) 1999-2008, Wolfgang Lux
+% Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{SyntaxCheck.lhs}
@@ -125,6 +125,7 @@ declarations are passed to \texttt{checkMethodDecls}.
 >   return (InstanceDecl p cx cls ty ds)
 > checkTopDeclLhs _ (DefaultDecl p tys) = return (DefaultDecl p tys)
 > checkTopDeclLhs env (BlockDecl d) = liftE BlockDecl (checkDeclLhs True env d)
+> checkTopDeclLhs _ (SplitAnnot p) = return (SplitAnnot p)
 
 > joinTopEquations :: [TopDecl a] -> [TopDecl a]
 > joinTopEquations [] = []
@@ -151,6 +152,7 @@ declarations are passed to \texttt{checkMethodDecls}.
 >   where fs = map (P p) (classMthds cls tEnv)
 > checkTopDeclRhs _ _ _ (DefaultDecl p tys) = return (DefaultDecl p tys)
 > checkTopDeclRhs _ env _ (BlockDecl d) = liftE BlockDecl (checkDeclRhs env d)
+> checkTopDeclRhs _ _ _ (SplitAnnot p) = return (SplitAnnot p)
 
 \end{verbatim}
 The compiler checks field labels in data type declarations twice
@@ -707,6 +709,7 @@ Auxiliary definitions.
 > constrs (InstanceDecl _ _ _ _ _) = []
 > constrs (DefaultDecl _ _) = []
 > constrs (BlockDecl _) = []
+> constrs (SplitAnnot _) = []
 
 > fieldLabels :: TopDecl a -> [(P Ident,[Ident])]
 > fieldLabels (DataDecl _ _ _ _ cs _) =
@@ -724,6 +727,7 @@ Auxiliary definitions.
 > fieldLabels (InstanceDecl _ _ _ _ _) = []
 > fieldLabels (DefaultDecl _ _) = []
 > fieldLabels (BlockDecl _) = []
+> fieldLabels (SplitAnnot _) = []
 
 > mthds :: TopDecl a -> [P Ident]
 > mthds (DataDecl _ _ _ _ _ _) = []
@@ -733,6 +737,7 @@ Auxiliary definitions.
 > mthds (InstanceDecl _ _ _ _ _) = []
 > mthds (DefaultDecl _ _) = []
 > mthds (BlockDecl _) = []
+> mthds (SplitAnnot _) = []
 
 > vars :: Decl a -> [P Ident]
 > vars (InfixDecl p _ _ ops) = map (P p) ops

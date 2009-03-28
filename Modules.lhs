@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2777 2009-03-26 21:29:00Z wlux $
+% $Id: Modules.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
-% Copyright (c) 1999-2008, Wolfgang Lux
+% Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Modules.lhs}
@@ -95,28 +95,29 @@ declaration to the module.
 > compileModule :: Options -> FilePath -> ErrorT IO ()
 > compileModule opts fn =
 >   do
->     (pEnv,tcEnv,iEnv,tyEnv,m) <- loadModule paths dbg cm ws fn
+>     (pEnv,tcEnv,iEnv,tyEnv,m) <- loadModule paths dbg cm ws auto fn
 >     let (tyEnv',trEnv,m',dumps) = transModule dbg tr tcEnv tyEnv m
 >     liftErr $ mapM_ (doDump opts) dumps
 >     let intf = exportInterface m pEnv tcEnv iEnv tyEnv'
 >     liftErr $ unless (noInterface opts) (updateInterface fn intf)
 >     let (tcEnv',tyEnv'',m'',dumps) = dictTrans tcEnv iEnv tyEnv' m'
 >     liftErr $ mapM_ (doDump opts) dumps
->     let (il,dumps) = ilTransModule split dbg tyEnv'' trEnv m''
+>     let (il,dumps) = ilTransModule id dbg tyEnv'' trEnv m''
 >     liftErr $ mapM_ (doDump opts) dumps
->     let (ccode,dumps) = genCodeModule tcEnv' il
+>     let (ccode,dumps) = genCodeModule split tcEnv' il
 >     liftErr $ mapM_ (doDump opts) dumps >>
 >               writeCode (output opts) fn ccode
 >   where paths = importPath opts
 >         split = splitCode opts
+>         auto = autoSplit opts
 >         dbg = debug opts
 >         tr = if trusted opts then Trust else Suspect
 >         cm = caseMode opts
 >         ws = warn opts
 
-> loadModule :: [FilePath] -> Bool -> CaseMode -> [Warn] -> FilePath
+> loadModule :: [FilePath] -> Bool -> CaseMode -> [Warn] -> Bool -> FilePath
 >            -> ErrorT IO (PEnv,TCEnv,InstEnv,ValueEnv,Module Type)
-> loadModule paths debug caseMode warn fn =
+> loadModule paths debug caseMode warn autoSplit fn =
 >   do
 >     Module m es is ds <- liftErr (readFile fn) >>= okM . parseModule fn
 >     let is' = importPrelude debug fn m is
@@ -125,7 +126,8 @@ declaration to the module.
 >     let mEnv' = sanitizeInterfaces m mEnv
 >     (tEnv,vEnv,m') <- okM $ checkModuleSyntax mEnv' (Module m es is' ds)
 >     liftErr $ mapM_ putErrLn $ warnModuleSyntax caseMode warn m'
->     (pEnv,tcEnv,iEnv,tyEnv,m'') <- okM $ checkModule mEnv' tEnv vEnv m'
+>     (pEnv,tcEnv,iEnv,tyEnv,m'') <-
+>       okM $ checkModule mEnv' tEnv vEnv (autoSplitModule autoSplit m')
 >     liftErr $ mapM_ putErrLn $ warnModule warn tyEnv m''
 >     return (pEnv,tcEnv,iEnv,tyEnv,m'')
 >   where modules is = [P p m | ImportDecl p m _ _ _ <- is]
@@ -167,6 +169,12 @@ declaration to the module.
 > warnModule :: [Warn] -> ValueEnv -> Module a -> [String]
 > warnModule warn tyEnv m = overlapCheck warn tyEnv m
 
+> autoSplitModule :: Bool -> Module a -> Module a
+> autoSplitModule True (Module m es is ds) =
+>   Module m es is (foldr addSplitAnnot [] ds)
+>   where addSplitAnnot d ds = SplitAnnot (pos d) : d : ds
+> autoSplitModule False m = m
+
 > transModule :: Bool -> Trust -> TCEnv -> ValueEnv -> Module Type
 >             -> (ValueEnv,TrustEnv,Module Type,[(Dump,Doc)])
 > transModule debug tr tcEnv tyEnv m = (tyEnv'''',trEnv,nolambda,dumps)
@@ -192,17 +200,9 @@ declaration to the module.
 >           [(DumpDict,ppModule dict),
 >            (DumpSpecialize,ppModule spec)]
 
-> ilTransModule :: Bool -> Bool -> ValueEnv -> TrustEnv -> Module Type
->               -> (Either IL.Module [IL.Module],[(Dump,Doc)])
-> ilTransModule False debug tyEnv trEnv m = (Left il,dumps)
->   where (il,dumps) = ilTransModule1 id debug tyEnv trEnv m
-> ilTransModule True debug tyEnv trEnv m = (Right il,concat (transpose dumps))
->   where (il,dumps) =
->           unzip $ map (ilTransModule1 id debug tyEnv trEnv) (splitModule m)
-
-> ilTransModule1 :: (IL.Module -> IL.Module) -> Bool -> ValueEnv -> TrustEnv
->                -> Module Type -> (IL.Module,[(Dump,Doc)])
-> ilTransModule1 debugAddMain debug tyEnv trEnv m = (ilDbg,dumps)
+> ilTransModule :: (IL.Module -> IL.Module) -> Bool -> ValueEnv -> TrustEnv
+>               -> Module Type -> (IL.Module,[(Dump,Doc)])
+> ilTransModule debugAddMain debug tyEnv trEnv m = (ilDbg,dumps)
 >   where (lifted,tyEnv',trEnv') = lift tyEnv trEnv m
 >         il = ilTrans tyEnv' lifted
 >         ilDbg
@@ -213,12 +213,13 @@ declaration to the module.
 >            (DumpIL,ILPP.ppModule il)] ++
 >           [(DumpTransformed,ILPP.ppModule ilDbg) | debug]
 
-> genCodeModule :: TCEnv -> Either IL.Module [IL.Module]
+> genCodeModule :: Bool -> TCEnv -> IL.Module
 >               -> (Either CFile [CFile],[(Dump,Doc)])
-> genCodeModule tcEnv (Left il) = (Left ccode,dumps)
+> genCodeModule False tcEnv il = (Left ccode,dumps)
 >   where (ccode,dumps) = genCode (dataTypes tcEnv) il
-> genCodeModule tcEnv (Right il) = (Right ccode,concat (transpose dumps))
->   where (ccode,dumps) = unzip $ map (genCode (dataTypes tcEnv)) il
+> genCodeModule True tcEnv il = (Right ccode,concat (transpose dumps))
+>   where (ccode,dumps) =
+>           unzip $ map (genCode (dataTypes tcEnv)) (splitModule il)
 
 > genCode :: [(Cam.Name,[Cam.Name])] -> IL.Module -> (CFile,[(Dump,Doc)])
 > genCode ts il = (ccode,dumps)
@@ -251,15 +252,14 @@ declaration to the module.
 >   where (ms,is) = unzip (envToList mEnv)
 >         (pEnv',tcEnv',_,tyEnv') = foldl (importInterfaceIntf ms) initEnvs is
 
-> splitModule :: Module a -> [Module a]
-> splitModule (Module m es is ds) = [Module m es is [d] | d <- ds, isCodeDecl d]
->   where isCodeDecl (DataDecl _ _ _ _ cs _) = not (null cs)
->         isCodeDecl (NewtypeDecl _ _ _ _ _ _) = True
->         isCodeDecl (TypeDecl _ _ _ _) = False
->         isCodeDecl (ClassDecl _ _ _ _ _) = True
->         isCodeDecl (InstanceDecl _ _ _ _ _) = True
->         isCodeDecl (DefaultDecl _ _) = False
->         isCodeDecl (BlockDecl d) = isValueDecl d
+> splitModule :: IL.Module -> [IL.Module]
+> splitModule (IL.Module m is ds) =
+>   map (IL.Module m is)
+>       (filter (any isCodeDecl) (wordsBy (IL.SplitAnnot ==) ds))
+>   where isCodeDecl (IL.DataDecl _ _ cs) = not (null cs)
+>         isCodeDecl (IL.TypeDecl _ _ _) = True
+>         isCodeDecl (IL.FunctionDecl _ _ _ _) = True
+>         isCodeDecl (IL.ForeignDecl _ _ _ _) = True
 
 > trustedFun :: TrustEnv -> QualIdent -> Bool
 > trustedFun trEnv f = maybe True (Trust ==) (lookupEnv (unqualify f) trEnv)
@@ -304,7 +304,7 @@ interfaces are in scope with their qualified names.
 >     liftErr $ mapM_ (doDump opts) dumps
 >     let (tcEnv',tyEnv''',m''',dumps) = dictTrans tcEnv iEnv tyEnv'' m''
 >     liftErr $ mapM_ (doDump opts) dumps
->     let (il,dumps) = ilTransModule1 (dAddMain mainId) dbg tyEnv''' trEnv m'''
+>     let (il,dumps) = ilTransModule (dAddMain mainId) dbg tyEnv''' trEnv m'''
 >     liftErr $ mapM_ (doDump opts) dumps
 >     let (ccode,dumps) = genCodeGoal tcEnv' (qualifyWith m mainId) vs il
 >     liftErr $ mapM_ (doDump opts) dumps >>

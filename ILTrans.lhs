@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2778 2009-03-28 09:10:58Z wlux $
+% $Id: ILTrans.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -32,16 +32,19 @@ module.
 \paragraph{Modules}
 At the top-level, the compiler has to translate data type, newtype,
 function, and foreign declarations. When translating data type and
-newtype declarations, we ignore the types in the declarations and
-look up the types of the constructors in the type environment instead
+newtype declarations, we ignore the types in the declarations and look
+up the types of the constructors in the type environment instead
 because these types are already fully expanded, i.e., they do not
 include any alias types. On the other hand, we introduce new type
 synonyms in place of newtype declarations (see Sect.~\ref{sec:IL}).
+Note that \texttt{ilTrans} first sorts top-level declarations
+according to their textual order in order to ensure that split
+annotations are inserted in IL code at the correct places.
 \begin{verbatim}
 
 > ilTrans :: ValueEnv -> Module Type -> IL.Module
 > ilTrans tyEnv (Module m _ _ ds) = IL.Module m (imports m ds') ds'
->   where ds' = concatMap (translTopDecl m tyEnv) ds
+>   where ds' = concatMap (translTopDecl m tyEnv) (sortDecls ds)
 
 > translTopDecl :: ModuleIdent -> ValueEnv -> TopDecl Type -> [IL.Decl]
 > translTopDecl m tyEnv (DataDecl _ _ tc tvs cs _) =
@@ -53,6 +56,7 @@ synonyms in place of newtype declarations (see Sect.~\ref{sec:IL}).
 > translTopDecl _ _ (InstanceDecl _ _ _ _ _) = []
 > translTopDecl _ _ (DefaultDecl _ _) = []
 > translTopDecl m tyEnv (BlockDecl d) = translDecl m tyEnv d
+> translTopDecl _ _ (SplitAnnot _) = [IL.SplitAnnot]
 
 > translDecl :: ModuleIdent -> ValueEnv -> Decl Type -> [IL.Decl]
 > translDecl m tyEnv (FunctionDecl _ _ eqs) = map (translFunction m tyEnv) eqs
@@ -280,6 +284,7 @@ module.
 >   modules (IL.TypeDecl _ _ ty) = modules ty
 >   modules (IL.FunctionDecl _ _ ty e) = modules ty . modules e
 >   modules (IL.ForeignDecl _ _ _ ty) = modules ty
+>   modules IL.SplitAnnot = id
 
 > instance HasModule IL.ConstrDecl where
 >   modules (IL.ConstrDecl _ tys) = modules tys

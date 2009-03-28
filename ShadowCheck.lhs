@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: ShadowCheck.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
-% Copyright (c) 2005-2008, Wolfgang Lux
+% Copyright (c) 2005-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ShadowCheck.lhs}
@@ -85,6 +85,7 @@ traversal of the syntax tree.
 >   shadow _ (InstanceDecl p _ _ _ ds) = shadow p ds
 >   shadow _ (DefaultDecl _ _) = id
 >   shadow p (BlockDecl d) = shadow p d
+>   shadow _ (SplitAnnot _) = id
 
 >   shadowGroup p ds =
 >     bindVars (concatMap funs ds) >>> foldr ((&&&) . shadow p) id ds
@@ -177,6 +178,7 @@ declaration together with their positions.
 > funs (InstanceDecl _ _ _ _ _) = []
 > funs (DefaultDecl _ _) = []
 > funs (BlockDecl d) = vars d
+> funs (SplitAnnot _) = []
 
 > vars :: Decl a -> [P Ident]
 > vars (InfixDecl _ _ _ _) = []

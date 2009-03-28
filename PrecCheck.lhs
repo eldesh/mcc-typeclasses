@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: PrecCheck.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
-% Copyright (c) 2001-2008, Wolfgang Lux
+% Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{PrecCheck.lhs}
@@ -134,6 +134,7 @@ because it is used for constructing the module's interface.
 >                 (listToMaybe (qualLookupTopEnv cls tcEnv))
 > checkTopDecl _ _ _ (DefaultDecl p tys) = return (DefaultDecl p tys)
 > checkTopDecl m _ pEnv (BlockDecl d) = liftE BlockDecl (checkDecl m pEnv d)
+> checkTopDecl _ _ _ (SplitAnnot p) = return (SplitAnnot p)
 
 > checkDecl :: ModuleIdent -> PEnv -> Decl a -> Error (Decl a)
 > checkDecl _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)

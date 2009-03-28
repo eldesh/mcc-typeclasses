@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: CurryPP.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
-% Copyright (c) 1999-2008, Wolfgang Lux
+% Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryPP.lhs}
@@ -79,6 +79,7 @@ Declarations
 > ppTopDecl (DefaultDecl _ tys) =
 >   text "default" <+> parenList (map (ppTypeExpr 0) tys)
 > ppTopDecl (BlockDecl d) = ppDecl d
+> ppTopDecl (SplitAnnot _) = ppPragma "SPLIT" empty
 
 > ppTypeDeclLhs :: String -> [ClassAssert] -> Ident -> [Ident] -> Doc
 > ppTypeDeclLhs kw cx tc tvs =
@@ -370,9 +371,9 @@ Expressions
 >   parenExp (p > 0) (sep [ppExpr 1 e1 <+> ppOp op,indent (ppExpr 1 e2)])
 > ppExpr _ (LeftSection e op) = parens (ppExpr 1 e <+> ppOp op)
 > ppExpr _ (RightSection op e) = parens (ppOp op <+> ppExpr 1 e)
-> ppExpr p (Lambda _ t e) =
+> ppExpr p (Lambda _ ts e) =
 >   parenExp (p > 0)
->            (sep [backsl <> fsep (map (ppConstrTerm 2) t) <+> rarrow,
+>            (sep [backsl <> fsep (map (ppConstrTerm 2) ts) <+> rarrow,
 >                  indent (ppExpr 0 e)])
 > ppExpr p (Let ds e) =
 >   parenExp (p > 0)

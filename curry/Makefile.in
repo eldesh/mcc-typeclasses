@@ -1,8 +1,8 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 2729 2008-06-16 07:26:00Z wlux $
+# $Id: Makefile.in 2779 2009-03-28 10:22:16Z wlux $
 #
-# Copyright (c) 2004-2008, Wolfgang Lux
+# Copyright (c) 2004-2009, Wolfgang Lux
 # See ../LICENSE for the full license.
 #
 
@@ -146,12 +146,12 @@ rts_H = ../runtime/config.h $(rts_H_PATH:@top_srcdir@/runtime/config.h=)
 .curry.c:
 	rm -rf .$*
 	mkdir .$*
-	../cycc $(CYCCFLAGS) $($*_CYCCFLAGS) --split-code -o .$*/$* $<
+	../cycc $(CYCCFLAGS) $($*_CYCCFLAGS) --auto-split --split-code -o .$*/$* $<
 	touch $@
 .curry.d.c:
 	rm -rf .$*.d
 	mkdir .$*.d
-	../cycc -g --trusted $(CYCCFLAGS) $($*_CYCCFLAGS) --split-code -o .$*.d/$* $<
+	../cycc -g --trusted $(CYCCFLAGS) $($*_CYCCFLAGS) --auto-split --split-code -o .$*.d/$* $<
 	touch $@
 .c.icurry:
 	@test -f $@ || (echo "$@ does not exist!"; echo "Remove $< and run make again."; exit 1)

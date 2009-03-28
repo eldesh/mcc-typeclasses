@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryUtils.lhs 2724 2008-06-14 16:42:57Z wlux $
+% $Id: CurryUtils.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
-% Copyright (c) 1999-2008, Wolfgang Lux
+% Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryUtils.lhs}
@@ -13,7 +13,39 @@ and goals.
 
 > module CurryUtils where
 > import Curry
+> import List
 > import PredefIdent
+
+\end{verbatim}
+Some compiler phases rearrange (top-level) declarations according to
+semantic criteria. The following code allows restoring the textual
+order of textual declarations.
+\begin{verbatim}
+
+> sortDecls :: [TopDecl a] -> [TopDecl a]
+> sortDecls = sortBy (\d1 d2 -> compare (pos d1) (pos d2))
+
+> class Declaration a where
+>   pos :: a -> Position
+
+> instance Declaration (TopDecl a) where
+>   pos (DataDecl p _ _ _ _ _) = p
+>   pos (NewtypeDecl p _ _ _ _ _) = p
+>   pos (TypeDecl p _ _ _) = p
+>   pos (ClassDecl p _ _ _ _) = p
+>   pos (InstanceDecl p _ _ _ _) = p
+>   pos (DefaultDecl p _) = p
+>   pos (BlockDecl d) = pos d
+>   pos (SplitAnnot p) = p
+
+> instance Declaration (Decl a) where
+>   pos (InfixDecl p _ _ _) = p
+>   pos (TypeSig p _ _) = p
+>   pos (FunctionDecl p _ _) = p
+>   pos (ForeignDecl p _ _ _ _ _) = p
+>   pos (PatternDecl p _ _) = p
+>   pos (FreeDecl p _) = p
+>   pos (TrustAnnot p _ _) = p
 
 \end{verbatim}
 Here is a list of predicates identifying various kinds of
@@ -31,6 +63,7 @@ name space.
 > isTypeDecl (InstanceDecl _ _ _ _ _) = False
 > isTypeDecl (DefaultDecl _ _) = False
 > isTypeDecl (BlockDecl _) = False
+> isTypeDecl (SplitAnnot _) = False
 > isClassDecl (ClassDecl _ _ _ _ _) = True
 > isClassDecl _ = False
 > isInstanceDecl (InstanceDecl _ _ _ _ _) = True
@@ -161,7 +194,7 @@ source and interface modules, respectively.
 
 \end{verbatim}
 The function \texttt{eqnArity} returns the (syntactic) arity of a
-function equation and \texttt{funLhs} returns the function name and
+function equation and \texttt{flatLhs} returns the function name and
 the list of arguments from the left hand side of a function equation.
 \begin{verbatim}
 

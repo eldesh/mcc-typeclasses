@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2778 2009-03-28 09:10:58Z wlux $
+% $Id: Simplify.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -66,6 +66,7 @@ Currently, the following optimizations are implemented:
 > simplifyTopDecl _ (DefaultDecl p tys) = return (DefaultDecl p tys)
 > simplifyTopDecl m (BlockDecl d) =
 >   liftM BlockDecl (simplifyDecl m emptyEnv d)
+> simplifyTopDecl _ (SplitAnnot p) = return (SplitAnnot p)
 
 > simplifyDecl :: ModuleIdent -> InlineEnv -> Decl Type
 >              -> SimplifyState (Decl Type)

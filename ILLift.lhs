@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ILLift.lhs 2588 2007-12-20 00:07:10Z wlux $
+% $Id: ILLift.lhs 2779 2009-03-28 10:22:16Z wlux $
 %
-% Copyright (c) 2000-2007, Wolfgang Lux
+% Copyright (c) 2000-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ILLift.lhs}
@@ -31,6 +31,7 @@ positions are lifted into global functions.
 >         nameSupply = map (qualifyLike f . appIdent (name (unqualify f))) [1..]
 >         appIdent f i = mkIdent (f ++ "._#app" ++ show i)
 > liftDecl (ForeignDecl f cc ie ty) = [ForeignDecl f cc ie ty]
+> liftDecl SplitAnnot = [SplitAnnot]
 
 > liftExpr :: Expression -> LiftState (Expression,[Decl])
 > liftExpr (Literal l) = return (Literal l,[])

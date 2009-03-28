@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2776 2009-03-26 15:21:01Z wlux $
+% $Id: Simplify.lhs 2778 2009-03-28 09:10:58Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -394,21 +394,9 @@ functions in later phases of the compiler.
 > simplifyExpr m env (Fcase e as) =
 >   do
 >     e' <- simplifyExpr m env e
->     let as' = filter (compat e' . pattern) as
->     if null as'
->       then return (prelFailed (typeOf (Fcase e as)))
->       else liftM (Fcase e') (mapM (simplifyAlt m env) as')
->   where pattern (Alt _ t _) = t
->         compat e (LiteralPattern _ l) =
->           case e of
->             Literal _ l' -> l == l'
->             _ -> True
->         compat _ (VariablePattern _ _) = True
->         compat e (ConstructorPattern _ c ts) =
->           case unapply e [] of
->             (Constructor _ c',es') -> c == c' && and (zipWith compat es' ts)
->             _ -> True
->         compat e (AsPattern _ t) = compat e t
+>     maybe (liftM (Fcase e') (mapM (simplifyAlt m env) as))
+>           (simplifyExpr m env)
+>           (simplifyMatch e' as)
 
 > simplifyAlt :: ModuleIdent -> InlineEnv -> Alt Type
 >             -> SimplifyState (Alt Type)
@@ -512,7 +500,7 @@ functions to access the pattern variables.
 >   | otherwise = Let ds e
 
 \end{verbatim}
-When the scrutinized expression in a rigid case expression is a
+When the scrutinized expression in a $($f$)$case expression is a
 literal or a constructor application, the compiler can perform the
 pattern matching already at compile time and simplify the case
 expression to the right hand side of the matching alternative or to
@@ -604,16 +592,16 @@ In order to implement lazy pattern matching in local declarations,
 pattern declarations $t$~\texttt{=}~$e$ where $t$ is not a variable
 are transformed into a list of declarations
 $v_0$~\texttt{=}~$e$\texttt{;} $v_1$~\texttt{=}~$f_1$~$v_0$\texttt{;}
-\dots{} $v_n$~\texttt{=}~$f_n$~$v_0$ where $v_0$ is a fresh variable,
-$v_1,\dots,v_n$ are the variables occurring in $t$ and the auxiliary
-functions $f_i$ are defined by $f_i$~$t$~\texttt{=}~$v_i$ (see also
-appendix D.8 of the Curry report~\cite{Hanus:Report}). The bindings
-$v_0$~\texttt{=}~$e$ are introduced before splitting the declaration
-groups of the enclosing let expression (cf. the \texttt{Let} case in
-\texttt{simplifyExpr} above) so that they are placed in their own
-declaration group whenever possible. In particular, this ensures that
-the new binding is discarded when the expression $e$ is itself a
-variable.
+\dots{} \texttt{;} $v_n$~\texttt{=}~$f_n$~$v_0$ where $v_0$ is a fresh
+variable, $v_1,\dots,v_n$ are the variables occurring in $t$ and the
+auxiliary functions $f_i$ are defined by $f_i$~$t$~\texttt{=}~$v_i$
+(see also appendix D.8 of the Curry report~\cite{Hanus:Report}). The
+binding $v_0$~\texttt{=}~$e$ is introduced before splitting the
+declaration groups of the enclosing let expression (cf.\ the
+\texttt{Let} case in \texttt{simplifyExpr} above) so that they are
+placed in their own declaration group whenever possible. In
+particular, this ensures that the new binding is discarded when the
+expression $e$ is a variable itself.
 
 Unfortunately, this transformation introduces a well-known space
 leak~\cite{Wadler87:Leaks,Sparud93:Leaks} because the matched
@@ -647,41 +635,56 @@ performing this transformation here instead of in the \texttt{Desugar}
 module. The selector functions are defined in a local declaration on
 the right hand side of a projection declaration so that there is
 exactly one declaration for each used variable.
+
+Note that case matching has transformed pattern declarations of the
+form $t$~\texttt{=}~$e$ into a (pseudo-)\discretionary{}{}{} flattened
+form $t$~\texttt{=} \texttt{fcase}~$e$~\texttt{of}
+\texttt{\char`\{}~$\dots{}\rightarrow t$~\texttt{\char`\}}, where the
+\texttt{fcase} expression on the right hand side contains only flat
+patterns.
 \begin{verbatim}
 
 > sharePatternRhs :: ModuleIdent -> Decl Type -> SimplifyState [Decl Type]
 > sharePatternRhs m (PatternDecl p t rhs) =
->   case t of
->     VariablePattern _ _ -> return [PatternDecl p t rhs]
->     _ -> 
+>   case (t,rhs) of
+>     (VariablePattern _ _,_) -> return [PatternDecl p t rhs]
+>     (_,SimpleRhs p' (Fcase e as) _) ->
 >       do
 >         (ty,v) <- freshVar m patternId t
->         return [PatternDecl p t (SimpleRhs p (mkVar ty v) []),
->                 PatternDecl p (VariablePattern ty v) rhs]
+>         return [PatternDecl p t (SimpleRhs p' (Fcase (mkVar ty v) as) []),
+>                 PatternDecl p (VariablePattern ty v) (SimpleRhs p e [])]
 >   where patternId n = mkIdent ("_#pat" ++ show n)
 > sharePatternRhs _ d = return [d]
 
 > expandPatternBindings :: ModuleIdent -> [Ident] -> Decl Type
 >                       -> SimplifyState [Decl Type]
-> expandPatternBindings m fvs (PatternDecl p t (SimpleRhs p' e _)) =
->   case t of
->     VariablePattern _ _ -> return [PatternDecl p t (SimpleRhs p' e [])]
->     _ ->
->       do
->         fs <- mapM (freshIdent m selectorId n . polyType) selectorTys
->         return (zipWith3 (projectionDecl p t e) selectorTys fs (shuffle vs))
->       where n = length vs
->             vs = filter ((`elem` fvs) . snd) (vars t)
->             selectorTys = map (selectorType (typeOf t)) (shuffle (map fst vs))
->             selectorType ty0 (ty:tys) = foldr TypeArrow ty (ty0:tys)
->             selectorDecl p f t (v:vs) =
->               funDecl p f (t:map (uncurry VariablePattern) vs)
->                       (uncurry mkVar v)
->             projectionDecl p t e ty f (v:vs) =
->               uncurry (varDecl p) v
->                       (Let [selectorDecl p f t (v:vs)]
->                            (apply (mkVar ty f) (e : map (uncurry mkVar) vs)))
+> expandPatternBindings m fvs (PatternDecl p t rhs) =
+>   case (t,rhs) of
+>     (VariablePattern _ _,_) -> return [PatternDecl p t rhs]
+>     (_,SimpleRhs _ e@(Fcase (Variable ty v) _) _) ->
+>       mapM (projectionDecl m p v0 e) (shuffle vs)
+>       where vs = filter ((`elem` fvs) . snd) (vars t)
+>             v0 = (ty,unqualify v)
 > expandPatternBindings _ _ d = return [d]
+
+> projectionDecl :: ModuleIdent -> Position -> (Type,Ident) -> Expression Type
+>                -> [(Type,Ident)] -> SimplifyState (Decl Type)
+> projectionDecl m p v0 (Fcase _ as) (v:vs) =
+>   do
+>     f <- freshIdent m selectorId (length vs') (polyType ty)
+>     return (uncurry (varDecl p) v $
+>             Let [funDecl p f ts (project e' (uncurry mkVar v))]
+>                 (apply (mkVar ty f) es))
+>   where vs' = v0:vs
+>         ty = foldr TypeArrow (fst v) (map fst vs')
+>         v0' = head ([(fst v0,v) | Alt _ (AsPattern v _) _ <- as] ++ [v0])
+>         ts = map (uncurry VariablePattern) (v0':vs)
+>         e' = Fcase (uncurry mkVar v0') as
+>         es = map (uncurry mkVar) vs'
+>         project (Variable _ _) e = e
+>         project (Apply _ _) e = e
+>         project (Fcase e [Alt p t (SimpleRhs p' e' _)]) e'' =
+>           Fcase e [Alt p t (SimpleRhs p' (project e' e'') [])]
 
 \end{verbatim}
 Auxiliary functions

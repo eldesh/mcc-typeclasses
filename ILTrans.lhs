@@ -1,16 +1,13 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2714 2008-05-20 22:56:04Z wlux $
+% $Id: ILTrans.lhs 2778 2009-03-28 09:10:58Z wlux $
 %
-% Copyright (c) 1999-2008, Wolfgang Lux
+% Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ILTrans.lhs}
 \section{Translating Curry into the Intermediate Language}\label{sec:il-trans}
 After desugaring and lifting have been performed, the source code is
-translated into the intermediate language. Besides translating from
-source terms and expressions into intermediate language terms and
-expressions, this phase in particular implements the pattern matching
-algorithm for equations.
+translated into the intermediate language.
 
 Because of name conflicts between the source and intermediate language
 representations, we can only use a qualified import of the \texttt{IL}
@@ -25,11 +22,9 @@ module.
 > import qualified IL
 > import List
 > import Maybe
-> import PredefIdent
 > import PredefTypes
 > import Set
 > import Types
-> import TypeTrans
 > import Utils
 > import ValueInfo
 
@@ -60,7 +55,7 @@ synonyms in place of newtype declarations (see Sect.~\ref{sec:IL}).
 > translTopDecl m tyEnv (BlockDecl d) = translDecl m tyEnv d
 
 > translDecl :: ModuleIdent -> ValueEnv -> Decl Type -> [IL.Decl]
-> translDecl m tyEnv (FunctionDecl _ f eqs) = [translFunction m tyEnv f eqs]
+> translDecl m tyEnv (FunctionDecl _ _ eqs) = map (translFunction m tyEnv) eqs
 > translDecl m tyEnv (ForeignDecl _ cc _ ie f _) =
 >   [translForeign m tyEnv f cc (fromJust ie)]
 > translDecl _ _ _ = []
@@ -77,7 +72,7 @@ synonyms in place of newtype declarations (see Sect.~\ref{sec:IL}).
 >   [IL.TypeDecl (qualifyWith m tc) (length tvs) (translType (argType ty)),
 >    IL.FunctionDecl f [v] (translType ty) (IL.Variable v)]
 >   where f = qualifyWith m (nconstr nc)
->         v = head (argNames (mkIdent ""))
+>         v = mkIdent "_1"
 >         ty = rawType (thd3 (conType f tyEnv))
 >         argType (TypeArrow ty _) = ty
 
@@ -123,88 +118,29 @@ fresh type constructors.
 \end{verbatim}
 \paragraph{Functions}
 Every function in the program is translated into a function of the
-intermediate language. The arguments of the function are renamed such
-that all variables occurring in the same position (in different
-equations) have the same name. This is necessary in order to
-facilitate the translation of pattern matching into \texttt{case}
-expressions. We use the following simple convention here: The
-outermost arguments of the function are named \texttt{\_1},
-\texttt{\_2}, and so on from left to right. The names of inner
-arguments are constructed by appending \texttt{\_1}, \texttt{\_2},
-etc. from left to right to the name that would be assigned to a
-variable occurring at the position of the constructor term.
-
-Some special care is necessary for the selector functions introduced
-by the compiler in place of pattern bindings. In order to generate the
-code for updating all pattern variables, the equality of names between
-the pattern variables in the first argument of the selector function
-and their repeated occurrences in the remaining arguments must be
-preserved. This means that the second and following arguments of a
-selector function have to be renamed according to the name mapping
-computed for its first argument.
+intermediate language. Recall that every function has only a single
+equation and all arguments are variables at this point.
 \begin{verbatim}
 
-> type RenameEnv = Env Ident Ident
-
-> translFunction :: ModuleIdent -> ValueEnv -> Ident -> [Equation Type]
->                -> IL.Decl
-> translFunction m tyEnv f eqs =
+> translFunction :: ModuleIdent -> ValueEnv -> Equation Type -> IL.Decl
+> translFunction m tyEnv (Equation _ (FunLhs f ts) rhs) =
 >   IL.FunctionDecl (qualifyWith m f) vs (translType ty)
->                   (match IL.Flex vs (map (translEquation tyEnv vs vs'') eqs))
->   where ty = rawType (varType f tyEnv)
->         vs = if isSelectorId f then translArgs eqs vs' else vs'
->         (vs',vs'') = splitAt (arity eqs) (argNames (mkIdent ""))
->         arity (Equation _ (FunLhs _ ts) _ : _) = length ts
+>                   (translRhs tyEnv vs rhs)
+>   where vs = [v | VariablePattern _ v <- ts]
+>         ty = rawType (varType f tyEnv)
 
-> translArgs :: [Equation a] -> [Ident] -> [Ident]
-> translArgs [Equation _ (FunLhs _ (t:ts)) _] (v:_) =
->   v : map (translArg (bindRenameEnv v t emptyEnv)) ts
->   where translArg env (VariablePattern _ v) = fromJust (lookupEnv v env)
-
-> translEquation :: ValueEnv -> [Ident] -> [Ident] -> Equation Type
->                -> ([NestedTerm],IL.Expression)
-> translEquation tyEnv vs vs' (Equation _ (FunLhs _ ts) rhs) =
->   (zipWith translTerm vs ts,
->    translRhs tyEnv vs' (foldr2 bindRenameEnv emptyEnv vs ts) rhs)
-
-> translRhs :: ValueEnv -> [Ident] -> RenameEnv -> Rhs Type -> IL.Expression
-> translRhs tyEnv vs env (SimpleRhs p e _) =
->   IL.SrcLoc (show p) (translExpr tyEnv vs env e)
+> translRhs :: ValueEnv -> [Ident] -> Rhs Type -> IL.Expression
+> translRhs tyEnv vs (SimpleRhs p e _) =
+>   IL.SrcLoc (show p) (translExpr tyEnv vs e)
 
 \end{verbatim}
-\paragraph{Pattern Matching}
-The pattern matching code searches for the leftmost inductive
-argument position in the left hand sides of all rules defining an
-equation. An inductive position is a position where all rules have a
-constructor rooted term. If such a position is found, a \texttt{case}
-expression is generated for the argument at that position. The
-matching code is then computed recursively for all of the alternatives
-independently. If no inductive position is found, the algorithm looks
-for the leftmost demanded argument position, i.e., a position where
-at least one of the rules has a constructor rooted term. If such a
-position is found, an \texttt{or} expression is generated with those
-cases that have a variable at the argument position in one branch and
-all other rules in the other branch. If there is no demanded position,
-the pattern matching is finished and the compiler translates the right
-hand sides of the remaining rules, eventually combining them using
-\texttt{or} expressions.
-
-Actually, the algorithm below combines the search for inductive and
-demanded positions. The function \texttt{match} scans the argument
-lists for the leftmost demanded position. If this turns out to be
-also an inductive position, the function \texttt{matchInductive} is
-called in order to generate a \texttt{case} expression. Otherwise, the
-function \texttt{optMatch} is called that tries to find an inductive
-position among the remaining arguments. If one is found,
-\texttt{matchInductive} is called, otherwise the function
-\texttt{optMatch} uses the demanded argument position found by
-\texttt{match}.
+\paragraph{Patterns}
+Since pattern matching has been transformed already, patterns can be
+translated almost directly into the intermediate language. The only
+complication arises from as-patterns, which are not supported in the
+intermediate language. Therefore, we return the respective variables
+along with the transformed patterns.
 \begin{verbatim}
-
-> data NestedTerm = NestedTerm IL.ConstrTerm [NestedTerm] deriving Show
-
-> pattern (NestedTerm t _) = t
-> arguments (NestedTerm _ ts) = ts
 
 > translLiteral :: Type -> Literal -> IL.Literal
 > translLiteral _ (Char c) = IL.Char c
@@ -219,97 +155,29 @@ position among the remaining arguments. If one is found,
 >         translRat ty
 >           | ty == floatType = IL.Float . fromRational
 >           | otherwise = internalError ("translLiteral(Rational): " ++ show ty)
-> translLiteral _ _ = internalError "translLiteral"
 
-> translTerm :: Ident -> ConstrTerm Type -> NestedTerm
-> translTerm _ (LiteralPattern ty l) =
->   NestedTerm (IL.LiteralPattern (translLiteral ty l)) []
-> translTerm v (VariablePattern _ _) = NestedTerm (IL.VariablePattern v) []
-> translTerm v (ConstructorPattern _ c ts) =
->   NestedTerm (IL.ConstructorPattern c (zipWith const vs ts))
->              (zipWith translTerm vs ts)
->   where vs = argNames v
-> translTerm v (AsPattern _ t) = translTerm v t
-> translTerm _ _ = internalError "translTerm"
-
-> bindRenameEnv :: Ident -> ConstrTerm a -> RenameEnv -> RenameEnv
-> bindRenameEnv _ (LiteralPattern _ _) env = env
-> bindRenameEnv v (VariablePattern _ v') env = bindEnv v' v env
-> bindRenameEnv v (ConstructorPattern _ _ ts) env =
->   foldr2 bindRenameEnv env (argNames v) ts
-> bindRenameEnv v (AsPattern v' t) env = bindEnv v' v (bindRenameEnv v t env)
-> bindRenameEnv _ _ env = internalError "bindRenameEnv"
-
-> argNames :: Ident -> [Ident]
-> argNames v = [mkIdent (prefix ++ show i) | i <- [1..]]
->   where prefix = name v ++ "_"
-
-> type Match = ([NestedTerm],IL.Expression)
-> type Match' = ([NestedTerm] -> [NestedTerm],[NestedTerm],IL.Expression)
-
-> isDefaultPattern :: IL.ConstrTerm -> Bool
-> isDefaultPattern (IL.VariablePattern _) = True
-> isDefaultPattern _ = False
-
-> isDefaultMatch :: (IL.ConstrTerm,a) -> Bool
-> isDefaultMatch = isDefaultPattern . fst
-
-> match :: IL.Eval -> [Ident] -> [Match] -> IL.Expression
-> match _  []     alts = foldl1 IL.Or (map snd alts)
-> match ev (v:vs) alts
->   | null vars = e1
->   | null nonVars = e2
->   | otherwise = optMatch ev (IL.Or e1 e2) (v:) vs (map skipArg alts)
->   where (vars,nonVars) = partition isDefaultMatch (map tagAlt alts)
->         e1 = matchInductive ev id v vs nonVars
->         e2 = match ev vs (map snd vars)
->         tagAlt (t:ts,e) = (pattern t,(arguments t ++ ts,e))
->         skipArg (t:ts,e) = ((t:),ts,e)
-
-> optMatch :: IL.Eval -> IL.Expression -> ([Ident] -> [Ident]) -> [Ident]
->          -> [Match'] -> IL.Expression
-> optMatch _  e _      []     _ = e
-> optMatch ev e prefix (v:vs) alts
->   | null vars = matchInductive ev prefix v vs nonVars
->   | otherwise = optMatch ev e (prefix . (v:)) vs (map skipArg alts)
->   where (vars,nonVars) = partition isDefaultMatch (map tagAlt alts)
->         tagAlt (prefix,t:ts,e) = (pattern t,(prefix (arguments t ++ ts),e))
->         skipArg (prefix,t:ts,e) = (prefix . (t:),ts,e)
-
-> matchInductive :: IL.Eval -> ([Ident] -> [Ident]) -> Ident -> [Ident]
->                -> [(IL.ConstrTerm,Match)] -> IL.Expression
-> matchInductive ev prefix v vs alts =
->   IL.Case ev (IL.Variable v) (matchAlts ev prefix vs alts)
-
-> matchAlts :: IL.Eval -> ([Ident] -> [Ident]) -> [Ident]
->           -> [(IL.ConstrTerm,Match)] -> [IL.Alt]
-> matchAlts _  _      _  [] = []
-> matchAlts ev prefix vs ((t,alt):alts) =
->   IL.Alt t (match ev (prefix (vars t ++ vs)) (alt : map snd same)) :
->   matchAlts ev prefix vs others
->   where (same,others) = partition ((t ==) . fst) alts 
->         vars (IL.ConstructorPattern _ vs) = vs
->         vars _ = []
+> translTerm :: ConstrTerm Type -> ([Ident],IL.ConstrTerm)
+> translTerm (LiteralPattern ty l) = ([],IL.LiteralPattern (translLiteral ty l))
+> translTerm (VariablePattern _ v) = ([],IL.VariablePattern v)
+> translTerm (ConstructorPattern _ c ts) =
+>   ([],IL.ConstructorPattern c [v | VariablePattern _ v <- ts])
+> translTerm (AsPattern v t) = (v:vs,t')
+>   where (vs,t') = translTerm t
 
 \end{verbatim}
-Note that pattern matching of rigid case expressions has been
-performed in the \texttt{Desugar} module already, where case
-expressions with nested patterns were transformed into nested case
-expressions with flat patterns.
-
 \paragraph{Expressions}
-The translation of expressions from desugared Curry source code into
-the intermediate language is very straightforward. A minor
-complication arises for the translation of as-patterns, which are not
-supported in the intermediate language. They are transformed into an
-outer, flexible case expression that evaluates the scrutinized
-expression and binds the as-pattern variable,\footnote{Recall that
-  case expressions in the intermediate language always evaluate the
-  scrutinized expression.} and an inner case expression that matches
-this variable against the actual pattern. We always use a flexible
-match for the outer case expression because the compiler would
-generate a redundant switch statement during the translation of the
-intermediate language into abstract machine code otherwise.
+The translation of expressions from lifted Curry source code into the
+intermediate language is also almost straightforward. The only
+exception are case expressions with alternatives using as-patterns.
+Such expressions are transformed into an outer, flexible case
+expression that evaluates the scrutinized expression and binds the
+as-pattern variable,\footnote{Recall that case expressions in the
+intermediate language always evaluate the scrutinized expression.}
+and an inner case expression that matches this variable against the
+actual pattern. We always use a flexible match for the outer case
+expression because the compiler would generate a redundant switch
+statement during the translation of the intermediate language into
+abstract machine code otherwise.
 
 We also replace applications of newtype constructors by their
 arguments. This transformation was performed already during
@@ -317,62 +185,57 @@ desugaring, but $\eta$-expansion and optimization may introduce
 further possibilities to apply this transformation.
 \begin{verbatim}
 
-> translExpr :: ValueEnv -> [Ident] -> RenameEnv -> Expression Type
->            -> IL.Expression
-> translExpr _ _ _ (Literal ty l) = IL.Literal (translLiteral ty l)
-> translExpr tyEnv _ env (Variable _ v) =
->   case lookupVar v env of
->     Just v' -> IL.Variable v'
->     Nothing -> IL.Function v (arity v tyEnv)
->   where lookupVar v env
->           | isQualified v = Nothing
->           | otherwise = lookupEnv (unqualify v) env
-> translExpr tyEnv _ _ (Constructor _ c)
+> translExpr :: ValueEnv -> [Ident] -> Expression Type -> IL.Expression
+> translExpr _ _ (Literal ty l) = IL.Literal (translLiteral ty l)
+> translExpr tyEnv vs (Variable _ v)
+>   | not (isQualified v) && v' `elem` vs = IL.Variable v'
+>   | otherwise = IL.Function v (arity v tyEnv)
+>   where v' = unqualify v
+> translExpr tyEnv _ (Constructor _ c)
 >   | isNewtypeConstr tyEnv c = IL.Function c 1
 >   | otherwise = IL.Constructor c (arity c tyEnv)
-> translExpr tyEnv vs env (Apply e1 e2) =
+> translExpr tyEnv vs (Apply e1 e2) =
 >   case e1 of
->     Constructor _ c | isNewtypeConstr tyEnv c -> translExpr tyEnv vs env e2
->     _ -> IL.Apply (translExpr tyEnv vs env e1) (translExpr tyEnv vs env e2)
-> translExpr tyEnv vs env (Let ds e) =
+>     Constructor _ c | isNewtypeConstr tyEnv c -> translExpr tyEnv vs e2
+>     _ -> IL.Apply (translExpr tyEnv vs e1) (translExpr tyEnv vs e2)
+> translExpr tyEnv vs (Let ds e) =
 >   case ds of
->     [FreeDecl _ vs] -> foldr IL.Exist e' vs
+>     [FreeDecl _ vs'] -> foldr IL.Exist e' vs'
 >     [d] | all (`notElem` bv d) (qfv (mkMIdent []) d) ->
->       IL.Let (translBinding env' d) e'
->     _ -> IL.Letrec (map (translBinding env') ds) e'
->   where e' = translExpr tyEnv vs env' e
->         env' = foldr2 bindEnv env bvs bvs
->         bvs = bv ds
->         translBinding env (PatternDecl _ (VariablePattern _ v) rhs) =
->           IL.Binding v (translRhs tyEnv vs env rhs)
-> translExpr tyEnv (v:vs) env (Case e alts) =
->   caseExpr (translExpr tyEnv vs env e)
->            (map (uncurry (IL.Alt . pattern) . translAlt tyEnv vs env v) alts)
->   where caseExpr e alts
->           | v `elem` fv alts =
->               IL.Case IL.Flex e
->                       [IL.Alt (IL.VariablePattern v)
->                               (IL.Case IL.Rigid (IL.Variable v) alts)]
->           | otherwise = IL.Case IL.Rigid e alts
-> translExpr tyEnv (v:vs) env (Fcase e alts) =
->   caseExpr (translExpr tyEnv vs env e)
->            (match IL.Flex [v]
->                   (map (apFst return . translAlt tyEnv vs env v) alts))
->   where caseExpr e0 e1@(IL.Case _ _ alts)
->           | v `elem` fv alts =
->               IL.Case IL.Flex e0 [IL.Alt (IL.VariablePattern v) e1]
->           | otherwise = IL.Case IL.Flex e0 alts
->         caseExpr e0 (IL.Or e1 e2) = IL.Or (caseExpr e0 e1) (caseExpr e0 e2)
->         caseExpr e0 e1@(IL.SrcLoc _ _)
->           | v `elem` fv e1 = IL.Let (IL.Binding v e0) e1
->           | otherwise = e1
->         caseExpr _ _ = internalError "caseExpr"
-> translExpr _ _ _ _ = internalError "translExpr"
+>       IL.Let (translBinding vs' d) e'
+>     _ -> IL.Letrec (map (translBinding vs') ds) e'
+>   where e' = translExpr tyEnv vs' e
+>         vs' = vs ++ bv ds
+>         translBinding vs (PatternDecl _ (VariablePattern _ v) rhs) =
+>           IL.Binding v (translRhs tyEnv vs rhs)
+> translExpr tyEnv vs (Case e as) =
+>   caseExpr IL.Rigid (translExpr tyEnv vs e) (nub (concat vss')) as'
+>   where (vss',as') = unzip (map (translAlt tyEnv vs) as)
+> translExpr tyEnv vs (Fcase e as) =
+>   case e of
+>     Let [FreeDecl _ [v]] (Variable _ v')
+>       | qualify v == v' && all isChoice as ->
+>           foldl1 IL.Or [translRhs tyEnv vs rhs | Alt _ _ rhs <- as]
+>     _ -> caseExpr IL.Flex (translExpr tyEnv vs e) (nub (concat vss')) as'
+>   where (vss',as') = unzip (map (translAlt tyEnv vs) as)
+>         isChoice (Alt _ t rhs) = all (`notElem` qfv (mkMIdent []) rhs) (bv t)
 
-> translAlt :: ValueEnv -> [Ident] -> RenameEnv -> Ident -> Alt Type
->           -> (NestedTerm,IL.Expression)
-> translAlt tyEnv vs env v (Alt _ t rhs) =
->   (translTerm v t,translRhs tyEnv vs (bindRenameEnv v t env) rhs)
+> translAlt :: ValueEnv -> [Ident] -> Alt Type -> ([Ident],IL.Alt)
+> translAlt tyEnv vs (Alt _ t rhs) = (filter (`elem` fv e') vs',IL.Alt t' e')
+>   where (vs',t') = translTerm t
+>         e' = translRhs tyEnv (vs ++ bv t) rhs
+
+> caseExpr :: IL.Eval -> IL.Expression -> [Ident] -> [IL.Alt] -> IL.Expression
+> caseExpr ev e vs as =
+>   case (e,vs) of
+>     (IL.Variable v,_) ->
+>       foldr (bindVar v) (IL.Case ev (IL.Variable v) as) (filter (v /=) vs)
+>     (_,[]) -> IL.Case ev e as
+>     (_,v:vs) ->
+>       IL.Case IL.Flex e
+>               [IL.Alt (IL.VariablePattern v)
+>                       (foldr (bindVar v) (IL.Case ev (IL.Variable v) as) vs)]
+>   where bindVar v v' = IL.Let (IL.Binding v' (IL.Variable v))
 
 > instance QuantExpr IL.ConstrTerm where
 >   bv (IL.LiteralPattern _) = []

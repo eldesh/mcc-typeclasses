@@ -1,23 +1,24 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 2777 2009-03-26 21:29:00Z wlux $
+% $Id: CaseMatch.lhs 2778 2009-03-28 09:10:58Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CaseMatch.lhs}
-\section{Flattening Case Patterns}\label{sec:flatcase}
+\section{Flattening Patterns}\label{sec:flatcase}
 After desugaring source code, the compiler makes pattern matching in
-(rigid) case expressions fully explicit by flattening case patterns,
-i.e., it transforms case expressions in such way that all patterns are
-of the form $l$, $v$, $C\,v_1\dots v_n$, or $v\texttt{@}(C\,v_1\dots
-v_n)$ where $l$ is a literal, $v$ and $v_1, \dots, v_n$ are variables,
-and $C$ is a data constructor.\footnote{Recall that desugaring has
-  removed all newtype constructors.} During this transformation, the
-compiler also replaces (boolean) guards by if-then-else cascades and
-changes if-then-else expressions into equivalent case expressions.
-
-\ToDo{Apply the same transformation to flexible case expressions and
-  function equations.}
+equations, lambda abstractions, and $($f$)$case expressions fully
+explicit by restricting pattern matching to $($f$)$case expressions
+with only flat patterns. This means that the compiler transforms the
+code in such way that all functions have only a single equation,
+equations and lambda abstractions have only variable arguments,xs and
+all patterns in $($f$)$case expressions are of the form $l$, $v$,
+$C\,v_1\dots v_n$, or $v\texttt{@}(C\,v_1\dots v_n)$ where $l$ is a
+literal, $v$ and $v_1, \dots, v_n$ are variables, and $C$ is a data
+constructor.\footnote{Recall that desugaring has removed all newtype
+  constructors.} During this transformation, the compiler also
+replaces (boolean) guards by if-then-else cascades and changes
+if-then-else expressions into equivalent case expressions.
 \begin{verbatim}
 
 > module CaseMatch(caseMatch) where
@@ -51,6 +52,18 @@ variables.
 \end{verbatim}
 The case flattening phase is applied recursively to all declarations
 and expressions of the desugared source code.
+
+A special case is made for pattern declarations. Since we cannot
+flatten the left hand side of pattern declarations, a pattern
+declaration $t$~\texttt{=}~$e$, where $t$ is not a variable pattern,
+is effectively transformed into $t$~\texttt{=} \texttt{fcase}~$e$
+\texttt{of} \texttt{\char`\{}~$t \rightarrow t$~\texttt{\char`\}}.
+That way, the pattern $t$ in the \texttt{fcase} expression can be
+flattened. Later the compiler will replace the pattern declaration by
+individual declarations for the used variables of pattern $t$. This is
+done at the end of simplification in order to allow for a space-leak
+avoiding transformation of pattern bindings (cf.\ 
+p.~\pageref{pattern-binding} in Sect.~\ref{pattern-binding}).
 \begin{verbatim}
 
 > caseMatch :: TCEnv -> ValueEnv -> Module Type -> (Module Type,ValueEnv)
@@ -86,14 +99,32 @@ and expressions of the desugared source code.
 >   match _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
 >   match _ _ (TypeSig p fs ty) = return (TypeSig p fs ty)
 >   match m _ (FunctionDecl p f eqs) =
->     liftM (FunctionDecl p f) (mapM (match m p) eqs)
+>     do
+>       vs <- matchVars m (map snd3 as)
+>       e <- flexMatch m p vs as
+>       return (funDecl p f (map (uncurry VariablePattern) vs) e)
+>     where as = [(p,ts,rhs) | Equation p (FunLhs _ ts) rhs <- eqs]
 >   match _ _ (ForeignDecl p cc s ie f ty) = return (ForeignDecl p cc s ie f ty)
->   match m _ (PatternDecl p t rhs) = liftM (PatternDecl p t) (match m p rhs)
+>   match m _ (PatternDecl p t rhs) =
+>     match m p rhs >>= liftM (PatternDecl p t) . matchLhs m t
 >   match _ _ (FreeDecl p vs) = return (FreeDecl p vs)
 >   match _ _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
 
-> instance CaseMatch Equation where
->   match m _ (Equation p lhs rhs) = liftM (Equation p lhs) (match m p rhs)
+> matchLhs :: ModuleIdent -> ConstrTerm Type -> Rhs Type
+>          -> CaseMatchState (Rhs Type)
+> matchLhs m t (SimpleRhs p e _)
+>   | isVarPattern t = return (mkRhs p e)
+>   | otherwise =
+>       do
+>         [v] <- matchVars m [[t]]
+>         Fcase _ as' <- flexMatch m p [v] [(p,[t],mkRhs p (expr t))]
+>         return (mkRhs p (Fcase e as'))
+>   where expr (LiteralPattern ty l) = Literal ty l
+>         expr (VariablePattern ty v) = mkVar ty v
+>         expr (ConstructorPattern ty c ts) =
+>           apply (Constructor ty' c) (map expr ts)
+>           where ty' = foldr (TypeArrow . typeOf) ty ts
+>         expr (AsPattern v t) = mkVar (typeOf t) v
 
 \end{verbatim}
 A list of boolean guards is expanded into a nested if-then-else
@@ -131,7 +162,11 @@ if it is not restricted by the guard expression.
 >   match _ _ (Variable ty v) = return (Variable ty v)
 >   match _ _ (Constructor ty c) = return (Constructor ty c)
 >   match m p (Apply e1 e2) = liftM2 Apply (match m p e1) (match m p e2)
->   match m _ (Lambda p ts e) = liftM (Lambda p ts) (match m p e)
+>   match m _ (Lambda p ts e) =
+>     do
+>       vs <- matchVars m [ts]
+>       e' <- flexMatch m p vs [(p,ts,mkRhs p e)]
+>       return (Lambda p (map (uncurry VariablePattern) vs) e')
 >   match m p (Let ds e) = liftM2 Let (mapM (match m p) ds) (match m p e)
 >   match m p (IfThenElse e1 e2 e3) =
 >     liftM3 mkCase (match m p e1) (match m p e2) (match m p e3)
@@ -139,33 +174,193 @@ if it is not restricted by the guard expression.
 >             Case e1 [caseAlt p truePattern e2,caseAlt p falsePattern e3]
 >   match m p (Case e as) =
 >     do
->       v <- freshVar m "_#case" e
->       liftM2 (mkCase m v)
->              (match m p e)
->              (matchCase m (typeOf (Case e as)) id [v] (map fromAlt as))
->     where fromAlt (Alt p t rhs) = (p,id,[t],rhs)
->           mkCase m (_,v) e (Case e' as)
->             | mkVar (typeOf e') v == e' && v `notElem` qfv m as = Case e as
->           mkCase _ (ty,v) e e' = Let [varDecl p ty v e] e'
->   match m p (Fcase e as) = liftM2 Fcase (match m p e) (mapM (match m p) as)
+>       e' <- match m p e
+>       [v] <- matchVars m [ts | (_,_,ts,_) <- as']
+>       liftM (mkCase m p v e') (rigidMatch m (typeOf (Case e as)) id [v] as')
+>     where as' = [(p,id,[t],rhs) | Alt p t rhs <- as]
+>   match m p (Fcase e as) =
+>     do
+>       e' <- match m p e
+>       [v] <- matchVars m (map snd3 as')
+>       liftM (mkCase m p v e') (flexMatch m p [v] as')
+>     where as' = [(p,[t],rhs) | Alt p t rhs <- as]
 
 > instance CaseMatch Alt where
 >   match m _ (Alt p t rhs) = liftM (Alt p t) (match m p rhs)
 
 \end{verbatim}
-Rigid case expressions, but not flexible fcase expressions, with
-nested patterns are transformed into nested case expressions where
-each expression uses only flat patterns. The algorithm used here is a
-variant of the algorithm used for transforming pattern matching of
-function heads and flexible case expressions into intermediate
-language case expressions (see Sect.~\ref{sec:il-trans}). In contrast
-to the algorithm presented in Sect.~5 of~\cite{PeytonJones87:Book},
-the code generated by our algorithm will not perform redundant
-matches. Furthermore, we do not need a special pattern match failure
-primitive and fatbar expressions in order to catch such failures. On
-the other hand, our algorithm can cause code duplication. We do not
-care about that because most pattern matching in Curry programs occurs
-in function heads and not in case expressions.
+Our pattern matching algorithm is based on the notions of demanded and
+inductive positions defined in Sect.~D.5 of the Curry
+report~\cite{Hanus:Report}. Given a list of terms, a demanded position
+is a position where a constructor rooted term occurs in at least one
+of the terms. An inductive position is a position where a constructor
+rooted term occurs in each of the terms. Obviously, every inductive
+position is also a demanded position. For the purpose of pattern
+matching we treat literal terms as constructor rooted terms.
+
+The algorithm looks for the leftmost outermost inductive argument
+position in the left hand sides of all rules defining an equation. If
+such a position is found, a fcase expression is generated for the
+argument at that position. The matching algorithm is then applied
+recursively to each of the alternatives at that position. If no
+inductive position is found, the algorithm looks for the leftmost
+outermost demanded argument position. If such a position is found, a
+choice expression with two alternatives is generated, one for rules
+with a variable at the demanded position, and one for the rules with a
+constructor rooted term at that position. If there is no demanded
+position either, pattern matching is complete and the compiler
+translates the right hand sides of the remaining rules, eventually
+combining them into a non-deterministic choice.
+
+In fact, the algorithm combines the search for inductive and demanded
+positions. The function \texttt{flexMatch} scans the argument lists for
+the leftmost demanded position. If this turns out to be also an
+inductive position, the function \texttt{matchInductive} is called in
+order to generate a \texttt{fcase} expression. Otherwise, the function
+\texttt{optMatch} is called that looks for an inductive position among
+the remaining arguments. If one is found, \texttt{matchInductive} is
+called for that position, otherwise the function \texttt{optMatch}
+uses the demanded argument position found by \texttt{flexMatch}.
+
+Since our Curry representation does not include non-deterministic
+choice expressions, we encode them as flexible case expressions
+matching an auxiliary free variable~\cite{AntoyHanus06:Overlapping}.
+For instance, an expression equivalent to \texttt{$e_1$ ? $e_2$} is
+represented as
+\begin{quote}\tt
+  fcase (let x free in x) of \char`\{\ 1 -> $e_1$; 2 -> $e_2$ \char`\}
+\end{quote}
+
+Note that the function \texttt{matchVars} attempts to avoid
+introducing fresh variables for variable patterns already present in
+the source code when there is only a single alternative in order to
+make the result of the transformation easier to check and more
+comprehensible.
+\begin{verbatim}
+
+> type Match a = (Position,[ConstrTerm a],Rhs a)
+> type Match' a =
+>   (Position,[ConstrTerm a] -> [ConstrTerm a],[ConstrTerm a],Rhs a)
+
+> pattern :: ConstrTerm a -> ConstrTerm ()
+> pattern (LiteralPattern _ l) = LiteralPattern () l
+> pattern (VariablePattern _ _) = VariablePattern () anonId
+> pattern (ConstructorPattern _ c ts) =
+>   ConstructorPattern () c (map (const (VariablePattern () anonId)) ts)
+> pattern (AsPattern _ t) = pattern t
+
+> arguments :: ConstrTerm a -> [ConstrTerm a]
+> arguments (LiteralPattern _ _) = []
+> arguments (VariablePattern _ _) = []
+> arguments (ConstructorPattern _ _ ts) = ts
+> arguments (AsPattern _ t) = arguments t
+
+> bindVars :: Position -> Ident -> ConstrTerm Type -> Rhs Type -> Rhs Type
+> bindVars _ _ (LiteralPattern _ _) = id
+> bindVars p v' (VariablePattern ty v) = bindVar p ty v v'
+> bindVars _ _ (ConstructorPattern _ _ _) = id
+> bindVars p v' (AsPattern v t) = bindVar p (typeOf t) v v' . bindVars p v' t
+
+> bindVar :: Position -> a -> Ident -> Ident -> Rhs a -> Rhs a
+> bindVar p ty v v'
+>   | v /= v' = addDecl (varDecl p ty v (mkVar ty v'))
+>   | otherwise = id
+
+> flexMatch :: ModuleIdent -> Position -> [(Type,Ident)] -> [Match Type]
+>           -> CaseMatchState (Expression Type)
+> flexMatch m p []     as = mapM (match m p . thd3) as >>= matchChoice m p
+> flexMatch m p (v:vs) as
+>   | null vars = e1
+>   | null nonVars = e2
+>   | otherwise =
+>       optMatch m (join (liftM2 (matchOr m p) e1 e2)) (v:) vs (map skipArg as)
+>   where (vars,nonVars) = partition (isVarPattern . fst) (map tagAlt as)
+>         e1 = matchInductive m id v vs nonVars
+>         e2 = flexMatch m p vs (map (matchVar . snd) vars)
+>         tagAlt (p,t:ts,rhs) = (pattern t,(p,id,t:ts,rhs))
+>         skipArg (p,t:ts,rhs) = (p,(t:),ts,rhs)
+>         matchVar (p,_,t:ts,rhs) = (p,ts,bindVars p (snd v) t rhs)
+
+> optMatch :: ModuleIdent -> CaseMatchState (Expression Type)
+>          -> ([(Type,Ident)] -> [(Type,Ident)]) -> [(Type,Ident)]
+>          -> [Match' Type] -> CaseMatchState (Expression Type)
+> optMatch _ e _      []     _ = e
+> optMatch m e prefix (v:vs) as
+>   | null vars = matchInductive m prefix v vs nonVars
+>   | otherwise = optMatch m e (prefix . (v:)) vs (map skipArg as)
+>   where (vars,nonVars) = partition (isVarPattern . fst) (map tagAlt as)
+>         tagAlt (p,prefix,t:ts,rhs) = (pattern t,(p,prefix,t:ts,rhs))
+>         skipArg (p,prefix,t:ts,rhs) = (p,prefix . (t:),ts,rhs)
+
+> matchInductive :: ModuleIdent -> ([(Type,Ident)] -> [(Type,Ident)])
+>                -> (Type,Ident) -> [(Type,Ident)]
+>                -> [(ConstrTerm (),Match' Type)]
+>                -> CaseMatchState (Expression Type)
+> matchInductive m prefix v vs as =
+>   liftM (Fcase (uncurry mkVar v)) (matchAlts m prefix v vs as)
+
+> matchChoice :: ModuleIdent -> Position -> [Rhs Type]
+>             -> CaseMatchState (Expression Type)
+> matchChoice m p (rhs:rhss)
+>   | null rhss = return (expr rhs)
+>   | otherwise =
+>       do
+>         v <- freshVar m "_#choice" (head ts)
+>         return (Fcase (freeVar p v) (zipWith (Alt p) ts (rhs:rhss)))
+>   where ts = map (LiteralPattern intType . Integer) [0..]
+>         freeVar p v = Let [FreeDecl p [snd v]] (uncurry mkVar v)
+>         expr (SimpleRhs _ e _) = e
+
+> matchOr :: ModuleIdent -> Position -> Expression Type -> Expression Type
+>         -> CaseMatchState (Expression Type)
+> matchOr m p e1 e2 = matchChoice m p [mkRhs p e1,mkRhs p e2]
+
+> matchAlts :: ModuleIdent -> ([(Type,Ident)] -> [(Type,Ident)]) -> (Type,Ident)
+>           -> [(Type,Ident)] -> [(ConstrTerm (),Match' Type)]
+>           -> CaseMatchState [Alt Type]
+> matchAlts _ _      _ _  [] = return []
+> matchAlts m prefix v vs ((t,a):as) =
+>   do
+>     a' <- matchAlt m prefix v vs (a : map snd same) 
+>     as' <- matchAlts m prefix v vs others
+>     return (a' : as')
+>   where (same,others) = partition ((t ==) . fst) as
+
+> matchAlt :: ModuleIdent -> ([(Type,Ident)] -> [(Type,Ident)]) -> (Type,Ident)
+>          -> [(Type,Ident)] -> [Match' Type] -> CaseMatchState (Alt Type)
+> matchAlt m prefix v vs as@((p,_,t:_,_) : _) =
+>   do
+>     vs' <- matchVars m [arguments t | (_,_,t:_,_) <- as]
+>     e' <- flexMatch m p (prefix (vs' ++ vs)) (map expandArg as)
+>     return (caseAlt p (renameArgs (snd v) vs' t) e')
+>   where expandArg (p,prefix,t:ts,rhs) =
+>           (p,prefix (arguments t ++ ts),bindVars p (snd v) t rhs)
+
+> matchVars :: ModuleIdent -> [[ConstrTerm Type]]
+>           -> CaseMatchState [(Type,Ident)]
+> matchVars m tss = mapM argName (transpose tss)
+>   where argName [VariablePattern ty v] = return (ty,v)
+>         argName [AsPattern v t] = return (typeOf t,v)
+>         argName (t:_) = freshVar m "_#case" t
+
+> renameArgs :: Ident -> [(a,Ident)] -> ConstrTerm a -> ConstrTerm a
+> renameArgs v _ (LiteralPattern ty l) = AsPattern v (LiteralPattern ty l)
+> renameArgs v _ (VariablePattern ty _) = VariablePattern ty v
+> renameArgs v vs (ConstructorPattern ty c _) =
+>   AsPattern v (ConstructorPattern ty c (map (uncurry VariablePattern) vs))
+> renameArgs v vs (AsPattern _ t) = renameArgs v vs t
+
+\end{verbatim}
+The algorithm used for rigid case expressions is a variant of the
+algorithm used above for transforming pattern matching of function
+heads and flexible case expressions. In contrast to the algorithm
+presented in Sect.~5 of~\cite{PeytonJones87:Book}, the code generated
+by our algorithm will not perform redundant matches. Furthermore, we
+do not need a special pattern match failure primitive and fatbar
+expressions in order to catch such failures. On the other hand, our
+algorithm can cause code duplication. We do not care about that
+because most pattern matching in Curry programs occurs in function
+heads and not in case expressions.
 
 The essential difference between pattern matching in rigid case
 expressions on one hand and function heads and flexible fcase
@@ -311,22 +506,6 @@ alternatives. Thus, the example is effectively transformed into
 where the default alternative is redundant.
 \begin{verbatim}
 
-> type Match a =
->   (Position,[ConstrTerm a] -> [ConstrTerm a],[ConstrTerm a],Rhs a)
-
-> pattern :: ConstrTerm a -> ConstrTerm ()
-> pattern (LiteralPattern _ l) = LiteralPattern () l
-> pattern (VariablePattern _ _) = VariablePattern () anonId
-> pattern (ConstructorPattern _ c ts) =
->   ConstructorPattern () c (map (const (VariablePattern () anonId)) ts)
-> pattern (AsPattern _ t) = pattern t
-
-> arguments :: ConstrTerm a -> [ConstrTerm a]
-> arguments (LiteralPattern _ _) = []
-> arguments (VariablePattern _ _) = []
-> arguments (ConstructorPattern _ _ ts) = ts
-> arguments (AsPattern _ t) = arguments t
-
 > asLiteral :: (a,Ident) -> ConstrTerm a -> ConstrTerm a
 > asLiteral _ t@(LiteralPattern _ _) = t
 > asLiteral v (VariablePattern _ _) = uncurry VariablePattern v
@@ -339,33 +518,22 @@ where the default alternative is redundant.
 > asConstrApp _ t@(ConstructorPattern _ _ _) = t
 > asConstrApp v (AsPattern v' t) = AsPattern v' (asConstrApp v t)
 
-> bindVars :: Position -> Ident -> ConstrTerm Type -> Rhs Type -> Rhs Type
-> bindVars _ _ (LiteralPattern _ _) = id
-> bindVars p v' (VariablePattern ty v) = bindVar p ty v v'
-> bindVars _ _ (ConstructorPattern _ _ _) = id
-> bindVars p v' (AsPattern v t) = bindVar p (typeOf t) v v' . bindVars p v' t
-
-> bindVar :: Position -> a -> Ident -> Ident -> Rhs a -> Rhs a
-> bindVar p ty v v'
->   | v /= v' = addDecl (varDecl p ty v (mkVar ty v'))
->   | otherwise = id
-
-> matchCase :: ModuleIdent -> Type -> ([(Type,Ident)] -> [(Type,Ident)])
->           -> [(Type,Ident)] -> [Match Type]
->           -> CaseMatchState (Expression Type)
-> matchCase _ ty _      _  []     = return (prelFailed ty)
-> matchCase m ty prefix [] (a:as) =
->   matchCase m ty id vs (map resetArgs as) >>= toAlt vs a
+> rigidMatch :: ModuleIdent -> Type -> ([(Type,Ident)] -> [(Type,Ident)])
+>            -> [(Type,Ident)] -> [Match' Type]
+>            -> CaseMatchState (Expression Type)
+> rigidMatch _ ty _      _  []     = return (prelFailed ty)
+> rigidMatch m ty prefix [] (a:as) =
+>   rigidMatch m ty id vs (map resetArgs as) >>= toAlt vs a
 >   where vs = prefix []
 >         resetArgs (p,prefix,ts,rhs) = (p,id,prefix ts,rhs)
 >         toAlt vs (p,prefix,_,rhs) =
 >           matchRhs m p (foldr2 (bindVars p . snd) rhs vs (prefix []))
-> matchCase m ty prefix (v:vs) as =
+> rigidMatch m ty prefix (v:vs) as =
 >   case fst (head as') of
 >     VariablePattern _ _
 >       | all (isVarPattern . fst) (tail as') ->
->           matchCase m ty prefix vs (map dropArg as)
->       | otherwise -> matchCase m ty (prefix . (v:)) vs (map skipArg as)
+>           rigidMatch m ty prefix vs (map matchVar as)
+>       | otherwise -> rigidMatch m ty (prefix . (v:)) vs (map skipArg as)
 >     t'@(LiteralPattern _ l')
 >       | fst v `elem` (charType:numTypes) ->
 >           liftM (Case (uncurry mkVar v))
@@ -382,12 +550,12 @@ where the default alternative is redundant.
 >                   (mapM (matchCaseAlt m ty prefix v vs as')
 >                         (cts ++ if allCases tcEnv v cts then [] else vts))
 >       | otherwise ->
->           matchCase m ty (prefix . (v:)) (v:vs) (map dupArg as)
+>           rigidMatch m ty (prefix . (v:)) (v:vs) (map dupArg as)
 >   where as' = map tagAlt as
 >         (lts,cts,vts) = partitionPatterns (nub (map fst as'))
 >         tagAlt (p,prefix,t:ts,rhs) = (pattern t,(p,prefix,t:ts,rhs))
 >         skipArg (p,prefix,t:ts,rhs) = (p,prefix . (t:),ts,rhs)
->         dropArg (p,prefix,t:ts,rhs) = (p,prefix,ts,bindVars p (snd v) t rhs)
+>         matchVar (p,prefix,t:ts,rhs) = (p,prefix,ts,bindVars p (snd v) t rhs)
 >         dupArg (p,prefix,t:ts,rhs) =
 >           (p,prefix . (asLiteral v t :),asConstrApp v t:ts,rhs)
 >         eqNum ty v l = apply (prelEq ty) [uncurry mkVar v,numLit ty l]
@@ -407,13 +575,14 @@ where the default alternative is redundant.
 >           (lts,t:cts,vts)
 
 > matchCaseAlt :: ModuleIdent -> Type -> ([(Type,Ident)] -> [(Type,Ident)])
->              -> (Type,Ident) -> [(Type,Ident)] -> [(ConstrTerm (),Match Type)]
->              -> ConstrTerm () -> CaseMatchState (Alt Type)
+>              -> (Type,Ident) -> [(Type,Ident)]
+>              -> [(ConstrTerm (),Match' Type)] -> ConstrTerm ()
+>              -> CaseMatchState (Alt Type)
 > matchCaseAlt m ty prefix v vs as t =
 >   do
->     vs' <- freshVars m (map arguments ts)
+>     vs' <- matchVars m (map arguments ts)
 >     let ts' = map (uncurry VariablePattern) vs'
->     e' <- matchCase m ty id (prefix (vs' ++ vs)) (map (expandArg ts') as')
+>     e' <- rigidMatch m ty id (prefix (vs' ++ vs)) (map (expandArg ts') as')
 >     return (caseAlt (pos (head as')) (renameArgs (snd v) vs' t') e')
 >   where t'
 >           | isVarPattern t = uncurry VariablePattern v
@@ -427,11 +596,11 @@ where the default alternative is redundant.
 
 > matchLitAlt :: Bool -> ModuleIdent -> Type
 >             -> ([(Type,Ident)] -> [(Type,Ident)]) -> (Type,Ident)
->             -> [(Type,Ident)] -> [(ConstrTerm (),Match Type)]
+>             -> [(Type,Ident)] -> [(ConstrTerm (),Match' Type)]
 >             -> ConstrTerm () -> CaseMatchState (Alt Type)
 > matchLitAlt eq m ty prefix v vs as t =
 >   liftM (caseAlt (pos (head as')) t')
->         (matchCase m ty id (prefix (v:vs)) (map resetArgs as'))
+>         (rigidMatch m ty id (prefix (v:vs)) (map resetArgs as'))
 >   where t' = if eq then truePattern else falsePattern
 >         as'
 >           | eq = [if t == t' then matchArg v a else a | (t',a) <- as]
@@ -439,20 +608,6 @@ where the default alternative is redundant.
 >         pos (p,_,_,_) = p
 >         matchArg v (p,prefix,t:ts,rhs) = (p,prefix,asConstrApp v t:ts,rhs)
 >         resetArgs (p,prefix,ts,rhs) = (p,id,prefix ts,rhs)
-
-> freshVars :: ModuleIdent -> [[ConstrTerm Type]]
->           -> CaseMatchState [(Type,Ident)]
-> freshVars m tss = mapM argName (transpose tss)
->   where argName [VariablePattern ty v] = return (ty,v)
->         argName [AsPattern v t] = return (typeOf t,v)
->         argName (t:_) = freshVar m "_#case" t
-
-> renameArgs :: Ident -> [(a,Ident)] -> ConstrTerm a -> ConstrTerm a
-> renameArgs v _ (LiteralPattern ty l) = AsPattern v (LiteralPattern ty l)
-> renameArgs v _ (VariablePattern ty _) = VariablePattern ty v
-> renameArgs v vs (ConstructorPattern ty c _) =
->   AsPattern v (ConstructorPattern ty c (map (uncurry VariablePattern) vs))
-> renameArgs v vs (AsPattern _ t) = renameArgs v vs t
 
 \end{verbatim}
 Generation of fresh names
@@ -502,6 +657,14 @@ Auxiliary definitions
 
 > mkRhs :: Position -> Expression a -> Rhs a
 > mkRhs p e = SimpleRhs p e []
+
+> mkCase :: ModuleIdent -> Position -> (a,Ident) -> Expression a -> Expression a
+>        -> Expression a
+> mkCase m _ (_,v) e (Case (Variable _ v') as)
+>   | qualify v == v' && v `notElem` qfv m as = Case e as
+> mkCase m _ (_,v) e (Fcase (Variable _ v') as)
+>   | qualify v == v' && v `notElem` qfv m as = Fcase e as
+> mkCase _ p (ty,v) e e' = Let [varDecl p ty v e] e'
 
 > addDecl :: Decl a -> Rhs a -> Rhs a
 > addDecl d (SimpleRhs p e ds) = SimpleRhs p e (d : ds)

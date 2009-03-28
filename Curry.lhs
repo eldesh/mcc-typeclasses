@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Curry.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: Curry.lhs 2780 2009-03-28 16:25:54Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -54,8 +54,8 @@ associating types with patterns and expressions after type inference.
 \begin{verbatim}
 
 > data TopDecl a =
->     DataDecl Position [ClassAssert] Ident [Ident] [ConstrDecl] [QualIdent]
->   | NewtypeDecl Position [ClassAssert] Ident [Ident] NewConstrDecl [QualIdent]
+>     DataDecl Position [ClassAssert] Ident [Ident] [ConstrDecl] [DClass]
+>   | NewtypeDecl Position [ClassAssert] Ident [Ident] NewConstrDecl [DClass]
 >   | TypeDecl Position Ident [Ident] TypeExpr
 >   | ClassDecl Position [ClassAssert] Ident Ident [Decl a]
 >   | InstanceDecl Position [ClassAssert] QualIdent TypeExpr [Decl a]
@@ -63,6 +63,8 @@ associating types with patterns and expressions after type inference.
 >   | BlockDecl (Decl a)
 >   | SplitAnnot Position
 >   deriving (Eq,Show)
+
+> data DClass = DClass Position QualIdent deriving (Eq,Show)
 
 > data ConstrDecl =
 >     ConstrDecl Position [Ident] [ClassAssert] Ident [TypeExpr]

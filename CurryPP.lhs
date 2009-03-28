@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: CurryPP.lhs 2780 2009-03-28 16:25:54Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -109,10 +109,13 @@ Declarations
 > ppNewConstr (NewRecordDecl p c l ty) =
 >   ppIdent c <+> braces (ppDecl (TypeSig p [l] (QualTypeExpr [] ty)))
 
-> ppDeriving :: [QualIdent] -> Doc
+> ppDeriving :: [DClass] -> Doc
 > ppDeriving [] = empty
-> ppDeriving [cls] = text "deriving" <+> ppQIdent cls
-> ppDeriving clss = text "deriving" <+> parenList (map ppQIdent clss)
+> ppDeriving [cls] = text "deriving" <+> ppDClass cls
+> ppDeriving clss = text "deriving" <+> parenList (map ppDClass clss)
+
+> ppDClass :: DClass -> Doc
+> ppDClass (DClass _ cls) = ppQIdent cls
 
 > ppClassHead :: [ClassAssert] -> Doc -> Ident -> Doc
 > ppClassHead cx cls tv = text "class" <+> sep [ppContext cx,cls <+> ppIdent tv]

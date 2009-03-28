@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: Modules.lhs 2780 2009-03-28 16:25:54Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -127,7 +127,7 @@ declaration to the module.
 >     (tEnv,vEnv,m') <- okM $ checkModuleSyntax mEnv' (Module m es is' ds)
 >     liftErr $ mapM_ putErrLn $ warnModuleSyntax caseMode warn m'
 >     (pEnv,tcEnv,iEnv,tyEnv,m'') <-
->       okM $ checkModule mEnv' tEnv vEnv (autoSplitModule autoSplit m')
+>       okM $ checkModule autoSplit mEnv' tEnv vEnv m'
 >     liftErr $ mapM_ putErrLn $ warnModule warn tyEnv m''
 >     return (pEnv,tcEnv,iEnv,tyEnv,m'')
 >   where modules is = [P p m | ImportDecl p m _ _ _ <- is]
@@ -145,18 +145,19 @@ declaration to the module.
 >     es' <- checkExports m is' tEnv' vEnv' es
 >     return (tEnv',vEnv',Module m (Just es') is' ds'')
 
-> checkModule :: ModuleEnv -> TypeEnv -> FunEnv -> Module ()
+> checkModule :: Bool -> ModuleEnv -> TypeEnv -> FunEnv -> Module ()
 >             -> Error (PEnv,TCEnv,InstEnv,ValueEnv,Module Type)
-> checkModule mEnv tEnv vEnv (Module m es is ds) =
+> checkModule autoSplit mEnv tEnv vEnv (Module m es is ds) =
 >   do
->     let (k1,ds') = rename k0 ds
+>     let (k1,ds') = rename k0 (autoSplitDecls autoSplit ds)
 >     let (pEnv,tcEnv,iEnv,tyEnv) = importModules mEnv is
 >     let (pEnv',tcEnv',tyEnv') = qualifyEnv1 mEnv is pEnv tcEnv tyEnv
 >     (pEnv'',ds'') <- precCheck m tcEnv' pEnv' (qual1 tEnv vEnv ds')
 >     tcEnv'' <- kindCheck m tcEnv' ds''
 >     iEnv' <- instCheck m tcEnv'' iEnv ds''
 >     (k2,deriv) <- liftM (rename k1) (derive m pEnv'' tcEnv'' iEnv' ds'')
->     (tyEnv'',ds''') <- typeCheck m tcEnv'' iEnv' tyEnv' (ds'' ++ deriv)
+>     let deriv' = autoSplitDecls autoSplit deriv
+>     (tyEnv'',ds''') <- typeCheck m tcEnv'' iEnv' tyEnv' (ds'' ++ deriv')
 >     let (pEnv''',tcEnv''',tyEnv''') =
 >           qualifyEnv2 mEnv m pEnv'' tcEnv'' tyEnv''
 >     return (pEnv''',tcEnv''',iEnv',tyEnv''',
@@ -169,11 +170,10 @@ declaration to the module.
 > warnModule :: [Warn] -> ValueEnv -> Module a -> [String]
 > warnModule warn tyEnv m = overlapCheck warn tyEnv m
 
-> autoSplitModule :: Bool -> Module a -> Module a
-> autoSplitModule True (Module m es is ds) =
->   Module m es is (foldr addSplitAnnot [] ds)
+> autoSplitDecls :: Bool -> [TopDecl a] -> [TopDecl a]
+> autoSplitDecls True ds = foldr addSplitAnnot [] ds
 >   where addSplitAnnot d ds = SplitAnnot (pos d) : d : ds
-> autoSplitModule False m = m
+> autoSplitDecls False ds = ds
 
 > transModule :: Bool -> Trust -> TCEnv -> ValueEnv -> Module Type
 >             -> (ValueEnv,TrustEnv,Module Type,[(Dump,Doc)])

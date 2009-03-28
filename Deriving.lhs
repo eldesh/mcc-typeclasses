@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2723 2008-06-14 15:56:40Z wlux $
+% $Id: Deriving.lhs 2780 2009-03-28 16:25:54Z wlux $
 %
-% Copyright (c) 2006-2008, Wolfgang Lux
+% Copyright (c) 2006-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Deriving.lhs}
@@ -32,10 +32,10 @@ This module implements the code generating derived instance declarations.
 
 > deriveInstances :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> TopDecl ()
 >                 -> Error [TopDecl ()]
-> deriveInstances m pEnv tcEnv iEnv (DataDecl p _ tc tvs cs clss) =
->   mapE (deriveInstance m pEnv tcEnv iEnv p tc tvs cs) clss
-> deriveInstances m pEnv tcEnv iEnv (NewtypeDecl p _ tc tvs nc clss) =
->   mapE (deriveInstance m pEnv tcEnv iEnv p tc tvs [constrDecl nc]) clss
+> deriveInstances m pEnv tcEnv iEnv (DataDecl _ _ tc tvs cs clss) =
+>   mapE (deriveInstance m pEnv tcEnv iEnv tc tvs cs) clss
+> deriveInstances m pEnv tcEnv iEnv (NewtypeDecl _ _ tc tvs nc clss) =
+>   mapE (deriveInstance m pEnv tcEnv iEnv tc tvs [constrDecl nc]) clss
 >   where constrDecl (NewConstrDecl p c ty) = ConstrDecl p [] [] c [ty]
 >         constrDecl (NewRecordDecl p c l ty) =
 >           RecordDecl p [] [] c [FieldDecl p [l] ty]
@@ -49,10 +49,9 @@ derived.
 
 > type Constr = (QualIdent,Int,Maybe [Ident])
 
-> deriveInstance :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> Position
->                -> Ident -> [Ident] -> [ConstrDecl] -> QualIdent
->                -> Error (TopDecl ())
-> deriveInstance m pEnv tcEnv iEnv p tc tvs cs cls =
+> deriveInstance :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> Ident -> [Ident]
+>                -> [ConstrDecl] -> DClass -> Error (TopDecl ())
+> deriveInstance m pEnv tcEnv iEnv tc tvs cs (DClass p cls) =
 >   liftE (InstanceDecl p cx' cls ty' . trustAll p)
 >         (deriveMethods pEnv tcEnv p (map constr cs) cls)
 >   where cx = snd (fromJust (lookupEnv (CT cls' tc') iEnv))

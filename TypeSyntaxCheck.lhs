@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2780 2009-03-28 16:25:54Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -85,7 +85,7 @@ signatures.
 >     checkClosedContext p cx' tvs
 >     cs' <-
 >       liftE const (mapE (checkConstrDecl env tvs) cs) &&&
->       mapE_ (checkClass env p) clss
+>       mapE_ (checkDClass env) clss
 >     return (DataDecl p cx' tc tvs cs' clss)
 > checkTopDecl env (NewtypeDecl p cx tc tvs nc clss) =
 >   do
@@ -93,7 +93,7 @@ signatures.
 >     checkClosedContext p cx' tvs
 >     nc' <-
 >       liftE const (checkNewConstrDecl env tvs nc) &&&
->       mapE_ (checkClass env p) clss
+>       mapE_ (checkDClass env) clss
 >     return (NewtypeDecl p cx' tc tvs nc' clss)
 > checkTopDecl env (TypeDecl p tc tvs ty) =
 >   do
@@ -122,6 +122,9 @@ signatures.
 >   liftE (DefaultDecl p) (mapE (checkType env p) tys)
 > checkTopDecl env (BlockDecl d) = liftE BlockDecl (checkDecl env d)
 > checkTopDecl _ (SplitAnnot p) = return (SplitAnnot p)
+
+> checkDClass :: TypeEnv -> DClass -> Error ()
+> checkDClass env (DClass p cls) = checkClass env p cls
 
 > checkGoal :: TypeEnv -> Goal a -> Error (Goal a)
 > checkGoal env (Goal p e ds) =
@@ -418,10 +421,10 @@ Auxiliary definitions.
 > tident (SplitAnnot _) = internalError "tident"
 
 > instances :: TopDecl a -> [P CT]
-> instances (DataDecl p _ tc _ _ clss) =
->   [P p (CT cls (qualify tc)) | cls <- clss]
-> instances (NewtypeDecl p _ tc _ _ clss) =
->   [P p (CT cls (qualify tc)) | cls <- clss]
+> instances (DataDecl _ _ tc _ _ clss) =
+>   [P p (CT cls (qualify tc)) | DClass p cls <- clss]
+> instances (NewtypeDecl _ _ tc _ _ clss) =
+>   [P p (CT cls (qualify tc)) | DClass p cls <- clss]
 > instances (TypeDecl _ _ _ _) = []
 > instances (ClassDecl _ _ _ _ _) = []
 > instances (InstanceDecl p _ cls ty _) = [P p (CT cls (typeConstr ty))]

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: CurryParser.lhs 2780 2009-03-28 16:25:54Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -220,11 +220,12 @@ directory path to the module is ignored.
 > newFieldDecl :: Parser Token (Ident,TypeExpr) a
 > newFieldDecl = (,) <$> fun <*-> token DoubleColon <*> type0
 
-> deriv :: Parser Token [QualIdent] a
+> deriv :: Parser Token [DClass] a
 > deriv = token KW_deriving <-*> classes
 >   `opt` []
->   where classes = return <$> qtycls
->               <|> parens (qtycls `sepBy` comma)
+>   where classes = return <$> dclass
+>               <|> parens (dclass `sepBy` comma)
+>         dclass = DClass <$> position <*> qtycls
 
 > classDecl :: Parser Token (TopDecl ()) a
 > classDecl = classInstDecl ClassDecl KW_class tycls tyvar methodDecl

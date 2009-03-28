@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: Qual.lhs 2780 2009-03-28 16:25:54Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -48,11 +48,10 @@ order to compile this module with hbc.
 > instance Qual (TopDecl a) where
 >   qual phase tEnv vEnv (DataDecl p cx tc tvs cs clss) =
 >     DataDecl p (qual phase tEnv vEnv cx) tc tvs (qual phase tEnv vEnv cs)
->              (map (qualIdent phase tEnv) clss)
+>              (qual phase tEnv vEnv clss)
 >   qual phase tEnv vEnv (NewtypeDecl p cx tc tvs nc clss) =
->     NewtypeDecl p (qual phase tEnv vEnv cx) tc tvs
->                 (qual phase tEnv vEnv nc)
->                 (map (qualIdent phase tEnv) clss)
+>     NewtypeDecl p (qual phase tEnv vEnv cx) tc tvs (qual phase tEnv vEnv nc)
+>                 (qual phase tEnv vEnv clss)
 >   qual phase tEnv vEnv (TypeDecl p tc tvs ty) =
 >     TypeDecl p tc tvs (qual phase tEnv vEnv ty)
 >   qual phase tEnv vEnv (ClassDecl p cx cls tv ds) =
@@ -66,6 +65,9 @@ order to compile this module with hbc.
 >     DefaultDecl p (qual phase tEnv vEnv tys)
 >   qual phase tEnv vEnv (BlockDecl d) = BlockDecl (qual phase tEnv vEnv d)
 >   qual _ _ _ (SplitAnnot p) = SplitAnnot p
+
+> instance Qual DClass where
+>   qual phase tEnv _ (DClass p cls) = DClass p (qualIdent phase tEnv cls)
 
 > instance Qual ConstrDecl where
 >   qual phase tEnv vEnv (ConstrDecl p evs cx c tys) =

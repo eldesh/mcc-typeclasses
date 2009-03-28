@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: InstCheck.lhs 2780 2009-03-28 16:25:54Z wlux $
 %
 % Copyright (c) 2006-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -142,10 +142,11 @@ their super classes.
 >         nconstrType (NewRecordDecl _ _ _ ty) = ty
 
 > mkDeriving :: ModuleIdent -> TCEnv -> Position -> [ClassAssert] -> Ident
->            -> [Ident] -> [TypeExpr] -> [QualIdent] -> Deriving
-> mkDeriving m tcEnv p cx tc tvs tys clss =
+>            -> [Ident] -> [TypeExpr] -> [DClass] -> Deriving
+> mkDeriving m tcEnv p cx tc tvs tys dclss =
 >   Deriving p tc' (QualType cx' ty'') tys' (sortClasses tcEnv clss)
 >   where tc' = qualifyWith m tc
+>         clss = [cls | DClass _ cls <- dclss]
 >         (tys',ty'') = arrowUnapply ty'
 >         QualType cx' ty' = snd (expandConstrType tcEnv cx tc' tvs [] tys)
 

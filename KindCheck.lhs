@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: KindCheck.lhs 2780 2009-03-28 16:25:54Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -110,6 +110,9 @@ declarations.
 >   fts m (DefaultDecl _ tys) = fts m tys
 >   fts m (BlockDecl d) = fts m d
 >   fts _ (SplitAnnot _) = id
+
+> instance HasType DClass where
+>   fts m (DClass _ cls) = fts m cls
 
 > instance HasType ConstrDecl where
 >   fts m (ConstrDecl _ _ cx _ tys) = fts m cx . fts m tys

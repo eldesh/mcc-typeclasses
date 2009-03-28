@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: DTransform.lhs 2781 2009-03-28 16:28:17Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2009, Wolfgang Lux
@@ -91,7 +91,8 @@ all.
 >         ty0 = TypeConstructor tc (map TypeVariable [0..n-1])
 > debugDecl _ (TypeDecl tc n ty) = [TypeDecl tc n (transformType ty)]
 > debugDecl trusted (FunctionDecl f vs ty e)
->   | isQSelectorId f = [FunctionDecl f vs ty e]
+>   | isQSelectorId f =
+>       [FunctionDecl f vs (transformFunType (length vs + 1) ty) e]
 >   | otherwise =
 >       generateAuxFuncs (f,IsFunction,length vs,ty) ++
 >       [debugFunction trusted f vs ty e]

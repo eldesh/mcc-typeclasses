@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2780 2009-03-28 16:25:54Z wlux $
+% $Id: Modules.lhs 2784 2009-04-09 22:28:14Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -11,7 +11,7 @@ This module controls the compilation of modules.
 
 > module Modules(compileModule,compileGoal,typeGoal) where
 > import Unlit(unlit)
-> import CurryParser(parseSource,parseInterface,parseGoal)
+> import CurryParser(parseSource,parseGoal)
 > import ImportSyntaxCheck(checkImports)
 > import TypeSyntaxCheck(typeSyntaxCheck,typeSyntaxCheckGoal)
 > import SyntaxCheck(syntaxCheck,syntaxCheckGoal)
@@ -26,10 +26,6 @@ This module controls the compilation of modules.
 > import UnusedCheck(unusedCheck,unusedCheckGoal)
 > import ShadowCheck(shadowCheck,shadowCheckGoal)
 > import OverlapCheck(overlapCheck,overlapCheckGoal)
-> import IntfSyntaxCheck(intfSyntaxCheck)
-> import IntfQual(qualIntf,unqualIntf)
-> import IntfCheck(intfCheck)
-> import IntfEquiv(fixInterface,intfEquiv)
 > import Imports(importIdents,importInterface,importInterfaceIntf,
 >                importUnifyData)
 > import Exports(exportInterface)
@@ -55,11 +51,10 @@ This module controls the compilation of modules.
 > import qualified ILPP(ppModule)
 > import Options(Options(..),CaseMode(..),Warn(..),Dump(..))
 > import Base
+> import Combined
 > import Curry
 > import CurryUtils
 > import Env
-> import TopEnv
-> import Combined
 > import Error
 > import IdentInfo
 > import InstInfo
@@ -73,6 +68,7 @@ This module controls the compilation of modules.
 > import PrecInfo
 > import PredefIdent
 > import Pretty
+> import TopEnv
 > import TrustInfo
 > import Types
 > import TypeInfo
@@ -121,13 +117,11 @@ declaration to the module.
 >   do
 >     Module m es is ds <- liftErr (readFile fn) >>= okM . parseModule fn
 >     let is' = importPrelude debug fn m is
->     mEnv <- loadInterfaces paths emptyEnv m (modules is')
->     okM $ checkInterfaces mEnv
->     let mEnv' = sanitizeInterfaces m mEnv
->     (tEnv,vEnv,m') <- okM $ checkModuleSyntax mEnv' (Module m es is' ds)
+>     mEnv <- loadInterfaces paths m (modules is')
+>     (tEnv,vEnv,m') <- okM $ checkModuleSyntax mEnv (Module m es is' ds)
 >     liftErr $ mapM_ putErrLn $ warnModuleSyntax caseMode warn m'
 >     (pEnv,tcEnv,iEnv,tyEnv,m'') <-
->       okM $ checkModule autoSplit mEnv' tEnv vEnv m'
+>       okM $ checkModule autoSplit mEnv tEnv vEnv m'
 >     liftErr $ mapM_ putErrLn $ warnModule warn tyEnv m''
 >     return (pEnv,tcEnv,iEnv,tyEnv,m'')
 >   where modules is = [P p m | ImportDecl p m _ _ _ <- is]
@@ -332,10 +326,9 @@ interfaces are in scope with their qualified names.
 >          -> ErrorT IO (TCEnv,InstEnv,ValueEnv,Context,Goal Type)
 > loadGoal task paths debug caseMode warn m g fns =
 >   do
->     (mEnv,m') <- loadGoalModules paths debug fns
->     let ms = nub [m',preludeMIdent]
+>     (mEnv,ms) <- loadGoalModules paths debug fns
 >     (tEnv,vEnv,g') <-
->       okM $ maybe (return (mainGoal m')) parseGoal g >>=
+>       okM $ maybe (return (mainGoal (last ms))) parseGoal g >>=
 >             checkGoalSyntax mEnv ms
 >     liftErr $ mapM_ putErrLn $ warnGoalSyntax caseMode warn m g'
 >     (tcEnv,iEnv,tyEnv,cx,g'') <-
@@ -345,31 +338,12 @@ interfaces are in scope with their qualified names.
 >   where mainGoal m = Goal (first "") (Variable () (qualifyWith m mainId)) []
 
 > loadGoalModules :: [FilePath] -> Bool -> [FilePath]
->                 -> ErrorT IO (ModuleEnv,ModuleIdent)
+>                 -> ErrorT IO (ModuleEnv,[ModuleIdent])
 > loadGoalModules paths debug fns =
 >   do
->     mEnv <- foldM (loadInterface paths) emptyEnv ms
->     (mEnv',ms') <- mapAccumM (loadGoalInterface paths) mEnv fns
->     okM $ checkInterfaces mEnv'
->     return (mEnv',last (preludeMIdent:ms'))
+>     (mEnv,ms') <- loadGoalInterfaces paths ms fns
+>     return (mEnv,preludeMIdent : if null fns then [] else [last ms'])
 >   where ms = map (P (first "")) (preludeMIdent : [debugPreludeMIdent | debug])
-
-> loadGoalInterface :: [FilePath] -> ModuleEnv -> FilePath
->                   -> ErrorT IO (ModuleEnv,ModuleIdent)
-> loadGoalInterface paths mEnv fn
->   | extension fn `elem` [srcExt,litExt,intfExt] || pathSep `elem` fn =
->       do
->         (m,i) <- compileInterface (interfaceName fn)
->         return (bindModule i mEnv,m)
->   | otherwise =
->       do
->         mEnv' <- loadInterface paths mEnv (P (first "") m)
->         return (mEnv',m)
->   where m = mkMIdent (components ('.':fn))
->         components [] = []
->         components (_:cs) =
->           case break ('.' ==) cs of
->             (cs',cs'') -> cs' : components cs''
 
 > checkGoalSyntax :: ModuleEnv -> [ModuleIdent] -> Goal a
 >                 -> Error (TypeEnv,FunEnv,Goal a)
@@ -444,16 +418,6 @@ current module.
 >         importModule envs (ImportDecl _ m q asM is) =
 >           importInterface (fromMaybe m asM) q is envs (moduleInterface m mEnv)
 
-> moduleInterface :: ModuleIdent -> ModuleEnv -> Interface
-> moduleInterface m mEnv =
->   fromMaybe (internalError "moduleInterface") (lookupEnv m mEnv)
-
-> initIdentEnvs :: (TypeEnv,InstSet,FunEnv)
-> initIdentEnvs = (initTEnv,initISet,initVEnv)
-
-> initEnvs :: (PEnv,TCEnv,InstEnv,ValueEnv)
-> initEnvs = (initPEnv,initTCEnv,initIEnv,initDCEnv)
-
 \end{verbatim}
 The functions \texttt{importInterfaceIdents} and
 \texttt{importInterfaces} bring the declarations of all loaded modules
@@ -474,21 +438,6 @@ unqualified names, too.
 >   where (pEnv,tcEnv,iEnv,tyEnv) =
 >           foldl (uncurry . importModule) initEnvs (envToList mEnv)
 >         importModule envs m = importInterface m (m `notElem` ms) Nothing envs
-
-\end{verbatim}
-When mutually recursive modules are compiled, it may be possible that
-the imported interfaces include entities that are supposed to be
-defined in the current module. These entities must not be imported
-into the current module in any way because they might be in conflict
-with the actual definitions in the current module.
-\begin{verbatim}
-
-> sanitizeInterfaces :: ModuleIdent -> ModuleEnv -> ModuleEnv
-> sanitizeInterfaces m mEnv = fmap (sanitizeInterface m) (unbindModule m mEnv)
-
-> sanitizeInterface :: ModuleIdent -> Interface -> Interface
-> sanitizeInterface m (Interface m' is' ds') =
->   Interface m' is' (filter ((Just m /=) . fst . splitQualIdent . entity) ds')
 
 \end{verbatim}
 The Prelude is imported implicitly into every module other than the
@@ -515,112 +464,6 @@ intermediate language.
 > importDecl p m all =
 >   ImportDecl p m False Nothing
 >              (if all then Nothing else Just (Importing p []))
-
-\end{verbatim}
-The compiler loads the interfaces of all modules imported by the
-compiled module or specified on the command line when compiling a
-goal. Since interfaces are closed, it is not necessary to load the
-interfaces of other modules whose entities are reexported by the
-imported modules.
-\begin{verbatim}
-
-> loadInterfaces :: [FilePath] -> ModuleEnv -> ModuleIdent -> [P ModuleIdent]
->                -> ErrorT IO ModuleEnv
-> loadInterfaces paths mEnv m ms =
->   do
->     okM $ sequenceE_ [errorAt p (cyclicImport m) | P p m' <- ms, m == m']
->     foldM (loadInterface paths) mEnv ms
-
-> loadInterface :: [FilePath] -> ModuleEnv -> P ModuleIdent
->               -> ErrorT IO ModuleEnv
-> loadInterface paths mEnv (P p m) =
->   case lookupEnv m mEnv of
->     Just _ -> return mEnv
->     Nothing ->
->       liftErr (lookupInterface paths m) >>=
->       maybe (errorAt p (interfaceNotFound m))
->             (compileModuleInterface mEnv m)
-
-> compileModuleInterface :: ModuleEnv -> ModuleIdent -> FilePath
->                        -> ErrorT IO ModuleEnv
-> compileModuleInterface mEnv m fn =
->   do
->     (m',i) <- compileInterface fn
->     unless (m == m') (errorAt (first fn) (wrongInterface m m'))
->     return (bindModule i mEnv)
-
-\end{verbatim}
-After parsing an interface, the compiler applies syntax checking to
-the interface. This is possible because interface files are
-self-contained.
-\begin{verbatim}
-
-> compileInterface :: FilePath -> ErrorT IO (ModuleIdent,Interface)
-> compileInterface fn =
->   do
->     Interface m is ds <- liftErr (readFile fn) >>= okM . parseInterface fn
->     ds' <- okM $ intfSyntaxCheck ds
->     return (m,Interface m is (qualIntf m ds'))
-
-\end{verbatim}
-After all interface files have been loaded, the compiler checks that
-reexported definitions in the interfaces are consistent and compatible
-with their original definitions where the latter are available.
-\begin{verbatim}
-
-> checkInterfaces :: ModuleEnv -> Error ()
-> checkInterfaces mEnv = mapE_ checkInterface is
->   where (ms,is) = unzip (envToList mEnv)
->         (pEnv,tcEnv,iEnv,tyEnv) = foldl (importInterfaceIntf ms) initEnvs is
->         checkInterface (Interface m _ ds) =
->           intfCheck m pEnv tcEnv iEnv tyEnv ds
-
-\end{verbatim}
-After checking a module successfully, the compiler may need to update
-the module's interface file. The file will be updated only if the
-interface has been changed or the file did not exist before.
-
-The code below is a little bit tricky because we must make sure that the
-interface file is closed before rewriting the interface -- even if it
-has not been read completely. On the other hand, we must not apply
-\texttt{hClose} too early. Note that there is no need to close the
-interface explicitly if the interface check succeeds because the whole
-file must have been read in this case. In addition, we do not update
-the interface file in this case and therefore it doesn't matter when
-the file is closed.
-\begin{verbatim}
-
-> updateInterface :: FilePath -> Interface -> IO ()
-> updateInterface sfn i =
->   do
->     eq <- catch (matchInterface ifn i) (const (return False))
->     unless eq (writeInterface ifn i)
->   where ifn = interfaceName sfn
-
-> matchInterface :: FilePath -> Interface -> IO Bool
-> matchInterface ifn i =
->   do
->     h <- openFile ifn ReadMode
->     s <- hGetContents h
->     case parseInterface ifn s of
->       Ok i' | i `intfEquiv` fixInterface i' -> return True
->       _ -> hClose h >> return False
-
-> writeInterface :: FilePath -> Interface -> IO ()
-> writeInterface ifn = writeFile ifn . showln . ppInterface
-
-> interfaceName :: FilePath -> FilePath
-> interfaceName fn = rootname fn ++ intfExt
-
-\end{verbatim}
-The compiler searches for interface files in the import search path
-using the extension \texttt{".icurry"}. Note that the current
-directory is always searched first.
-\begin{verbatim}
-
-> lookupInterface :: [FilePath] -> ModuleIdent -> IO (Maybe FilePath)
-> lookupInterface paths m = lookupFile (ifn : [catPath p ifn | p <- paths])
->   where ifn = foldr1 catPath (moduleQualifiers m) ++ intfExt
 
 \end{verbatim}
 Literate source files use the extension \texttt{".lcurry"}.
@@ -681,9 +524,7 @@ Various file name extensions.
 \begin{verbatim}
 
 > cExt = ".c"
-> srcExt = ".curry"
 > litExt = ".lcurry"
-> intfExt = ".icurry"
 
 \end{verbatim}
 Auxiliary functions. Unfortunately, hbc's \texttt{IO} module lacks a
@@ -695,19 +536,5 @@ definition of \texttt{hPutStrLn}.
 
 > putErrLn :: String -> IO ()
 > putErrLn s = putErr (unlines [s])
-
-\end{verbatim}
-Error messages.
-\begin{verbatim}
-
-> interfaceNotFound :: ModuleIdent -> String
-> interfaceNotFound m = "Interface for module " ++ moduleName m ++ " not found"
-
-> cyclicImport :: ModuleIdent -> String
-> cyclicImport m = "Module " ++ moduleName m ++ " imports itself"
-
-> wrongInterface :: ModuleIdent -> ModuleIdent -> String
-> wrongInterface m m' =
->   "Expected interface for " ++ show m ++ " but found " ++ show m'
 
 \end{verbatim}

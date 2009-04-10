@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: Desugar.lhs 2785 2009-04-10 09:58:03Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -49,7 +49,7 @@ expressions; the case matching phase will take care of that, too.
 all names must be properly qualified before calling this module.}
 \begin{verbatim}
 
-> module Desugar(desugar,goalModule) where
+> module Desugar(desugar) where
 > import Base
 > import Combined
 > import Curry
@@ -103,69 +103,6 @@ of a module.
 >     tyEnv' <- fetchSt
 >     return (concat dss' ++ map BlockDecl vds',tyEnv')
 >   where (vds,tds) = partition isBlockDecl ds
-
-\end{verbatim}
-Goals are desugared by converting them into a module containing just a
-single function declaration and desugaring the resulting module.
-Goals with type \texttt{IO \_} are executed directly by the runtime
-system. All other goals are evaluated under control of an interactive
-top-level, which displays the solutions of the goal and in particular
-the bindings of the free variables. For this reason, the free
-variables declared in the \texttt{where} clause of a goal are
-translated into free variables of the goal. In addition, the goal is
-transformed into a first order expression by performing a unification
-with another variable. Thus, a goal
-\begin{quote}
- \emph{expr}
- \texttt{where} $v_1$,\dots,$v_n$ \texttt{free}; \emph{decls}
-\end{quote}
-where no free variable declarations occur in \emph{decls} is
-translated into the function
-\begin{quote}
-  \emph{f} $v_1$ \dots{} $v_n$ $v_{n+1}$ \texttt{=}
-    $v_{n+1}$ \texttt{=:=} \emph{expr}
-    \texttt{where} \emph{decls}
-\end{quote}
-where $v_{n+1}$ is a fresh variable. No variables are lifted at
-present when generating code for the declarative debugger, since the
-debugger evaluates the goal within an encapsulated search and we
-cannot pass functions with arbitrary arity to the encapsulated search
-primitive. In addition, the debugger currently lacks support for
-showing the bindings of the goal's free variables.
-\begin{verbatim}
-
-> goalModule :: Bool -> ValueEnv -> ModuleIdent -> Ident -> Goal Type
->            -> (Maybe [Ident],Module Type,ValueEnv)
-> goalModule debug tyEnv m g (Goal p e ds)
->   | isIO ty =
->       (Nothing,
->        mkModule m p g [] (mkLet ds e),
->        bindFun m g 0 (polyType ty) tyEnv)
->   | otherwise =
->       (if debug then Nothing else Just vs,
->        mkModule m p g (zip tys vs ++ [(ty,v)])
->                 (apply (prelUnif ty) [mkVar ty v,e']),
->        bindFun m v 0 (monoType ty) (bindFun m g n (polyType ty') tyEnv))
->   where ty = typeOf e
->         v = anonId
->         (vs,e') = liftGoalVars debug (mkLet ds e)
->         tys = [rawType (varType v tyEnv) | v <- vs]
->         ty' = foldr TypeArrow (TypeArrow ty successType) tys
->         n = length vs + 1
->         isIO (TypeApply (TypeConstructor tc) _) = tc == qIOId
->         isIO _ = False
-
-> mkModule :: ModuleIdent -> Position -> Ident -> [(a,Ident)] -> Expression a
->          -> Module a
-> mkModule m p g vs e =
->    Module m Nothing []
->           [BlockDecl (funDecl p g (map (uncurry VariablePattern) vs) e)]
-
-> liftGoalVars :: Bool -> Expression a -> ([Ident],Expression a)
-> liftGoalVars debug (Let ds e)
->   | not debug = (concat [vs | FreeDecl _ vs <- vds],mkLet ds' e)
->   where (vds,ds') = partition isFreeDecl ds
-> liftGoalVars _ e = ([],e)
 
 \end{verbatim}
 At the top-level of a module, we introduce the selector function of
@@ -627,7 +564,6 @@ Prelude entities
 \begin{verbatim}
 
 > prelUndefined a = preludeFun [] a "undefined"
-> prelUnif a = preludeFun [a,a] successType "=:="
 > prelFromInteger a = preludeFun [integerType] a "fromInteger"
 > prelFromRational a = preludeFun [rationalType] a "fromRational"
 > prelBind ma a mb = preludeFun [ma,a `TypeArrow` mb] mb ">>="

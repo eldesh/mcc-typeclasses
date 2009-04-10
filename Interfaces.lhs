@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Interfaces.lhs 2784 2009-04-09 22:28:14Z wlux $
+% $Id: Interfaces.lhs 2785 2009-04-10 09:58:03Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -11,8 +11,10 @@ goal.
 \begin{verbatim}
 
 > module Interfaces(ModuleEnv,moduleInterface,
->                   loadInterfaces,loadGoalInterfaces,updateInterface,
->                   initIdentEnvs,initEnvs) where
+>                   loadInterfaces,loadGoalInterfaces,
+>                   importModuleIdents,importModules,
+>                   importInterfaceIdents,importInterfaces,
+>                   qualifyEnv1,qualifyEnv2,updateInterface) where
 > import Base
 > import Combined
 > import Curry
@@ -29,11 +31,13 @@ goal.
 > import IntfSyntaxCheck
 > import InstInfo
 > import IO
+> import List
 > import Maybe
 > import Monad
 > import PathUtils
 > import Position
 > import PrecInfo
+> import TopEnv
 > import TypeInfo
 > import Utils
 > import ValueInfo
@@ -172,6 +176,79 @@ current module.
 >   Interface m' is' (filter ((Just m /=) . fst . splitQualIdent . entity) ds')
 
 \end{verbatim}
+The functions \texttt{importModuleIdents} and \texttt{importModules}
+bring the declarations of all imported modules into scope in the
+current module.
+\begin{verbatim}
+
+> importModuleIdents :: ModuleEnv -> [ImportDecl] -> (TypeEnv,InstSet,FunEnv)
+> importModuleIdents mEnv ds = (importUnifyData tEnv,iSet,importUnifyData vEnv)
+>   where (tEnv,iSet,vEnv) = foldl importModule initIdentEnvs ds
+>         importModule envs (ImportDecl _ m q asM is) =
+>           importIdents (fromMaybe m asM) q is envs (moduleInterface m mEnv)
+
+> importModules :: ModuleEnv -> [ImportDecl] -> (PEnv,TCEnv,InstEnv,ValueEnv)
+> importModules mEnv ds = (pEnv,tcEnv,iEnv,tyEnv)
+>   where (pEnv,tcEnv,iEnv,tyEnv) = foldl importModule initEnvs ds
+>         importModule envs (ImportDecl _ m q asM is) =
+>           importInterface (fromMaybe m asM) q is envs (moduleInterface m mEnv)
+
+\end{verbatim}
+The functions \texttt{importInterfaceIdents} and
+\texttt{importInterfaces} bring the declarations of all loaded modules
+into scope with their qualified names and in addition bring the
+declarations of the specified modules into scope with their
+unqualified names, too.
+\begin{verbatim}
+
+> importInterfaceIdents :: ModuleEnv -> [ModuleIdent] -> (TypeEnv,FunEnv)
+> importInterfaceIdents mEnv ms = (importUnifyData tEnv,importUnifyData vEnv)
+>   where (tEnv,_,vEnv) =
+>           foldl (uncurry . importModule) initIdentEnvs (envToList mEnv)
+>         importModule envs m = importIdents m (m `notElem` ms) Nothing envs
+
+> importInterfaces :: ModuleEnv -> [ModuleIdent]
+>                  -> (PEnv,TCEnv,InstEnv,ValueEnv)
+> importInterfaces mEnv ms = (pEnv,tcEnv,iEnv,tyEnv)
+>   where (pEnv,tcEnv,iEnv,tyEnv) =
+>           foldl (uncurry . importModule) initEnvs (envToList mEnv)
+>         importModule envs m = importInterface m (m `notElem` ms) Nothing envs
+
+\end{verbatim}
+The function \texttt{qualifyEnv1} brings the declarations of all
+loaded modules into scope with qualified names and in addition brings
+those entities into scope with unqualified names for which an
+unqualified import is present. The function \texttt{qualifyEnv2}
+brings the declarations of all loaded modules with their qualified
+names into scope and in additions adds all local entities into scope
+with their qualified names. Note that \texttt{qualifyEnv1} respects
+local module aliases for qualified imports whereas
+\texttt{qualifyEnv2} ignores them.
+\begin{verbatim}
+
+> qualifyEnv1 :: ModuleEnv -> [ImportDecl] -> PEnv -> TCEnv -> ValueEnv
+>             -> (PEnv,TCEnv,ValueEnv)
+> qualifyEnv1 mEnv is pEnv tcEnv tyEnv =
+>   (foldr (importEntities pEnv) pEnv' ms,
+>    foldr (importEntities tcEnv) tcEnv' ms,
+>    foldr (importEntities tyEnv) tyEnv' ms)
+>   where ms = nub [(m,asM) | ImportDecl _ m False asM _ <- is]
+>         (ms',is') = unzip (envToList mEnv)
+>         (pEnv',tcEnv',_,tyEnv') = foldl (importInterfaceIntf ms') initEnvs is'
+>         importEntities env (m,asM) env' =
+>           foldr (uncurry (importTopEnv False m)) env'
+>                 (moduleImports (fromMaybe m asM) env)
+
+> qualifyEnv2 :: ModuleEnv -> ModuleIdent -> PEnv -> TCEnv -> ValueEnv
+>            -> (PEnv,TCEnv,ValueEnv)
+> qualifyEnv2 mEnv m pEnv tcEnv tyEnv =
+>   (foldr (uncurry (globalBindTopEnv m)) pEnv' (localBindings pEnv),
+>    foldr (uncurry (globalBindTopEnv m)) tcEnv' (localBindings tcEnv),
+>    foldr (uncurry (bindTopEnv m)) tyEnv' (localBindings tyEnv))
+>   where (ms,is) = unzip (envToList mEnv)
+>         (pEnv',tcEnv',_,tyEnv') = foldl (importInterfaceIntf ms) initEnvs is
+
+\end{verbatim}
 After successfully checking a module, the compiler may need to update
 the module's interface file. The file will be updated only if the
 interface has been changed or the file did not exist before.
@@ -203,8 +280,7 @@ this case and therefore it doesn't matter when the file is closed.
 >       _ -> hClose h >> return False
 
 > writeInterface :: FilePath -> Interface -> IO ()
-> writeInterface ifn = writeFile ifn . showln . ppInterface
->   where showln x = unlines [show x]
+> writeInterface ifn = writeFile ifn . showLn . ppInterface
 
 > interfaceName :: FilePath -> FilePath
 > interfaceName fn = rootname fn ++ intfExt

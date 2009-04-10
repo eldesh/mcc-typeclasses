@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2784 2009-04-09 22:28:14Z wlux $
+% $Id: Modules.lhs 2785 2009-04-10 09:58:03Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -9,72 +9,42 @@
 This module controls the compilation of modules.
 \begin{verbatim}
 
-> module Modules(compileModule,compileGoal,typeGoal) where
-> import Unlit(unlit)
-> import CurryParser(parseSource,parseGoal)
-> import ImportSyntaxCheck(checkImports)
-> import TypeSyntaxCheck(typeSyntaxCheck,typeSyntaxCheckGoal)
-> import SyntaxCheck(syntaxCheck,syntaxCheckGoal)
-> import ExportSyntaxCheck(checkExports)
-> import Renaming(k0,rename,renameGoal)
-> import PrecCheck(precCheck,precCheckGoal)
-> import KindCheck(kindCheck,kindCheckGoal)
-> import InstCheck(instCheck)
-> import Deriving(derive)
-> import TypeCheck(typeCheck,typeCheckGoal)
-> import CaseCheck(caseCheck,caseCheckGoal)
-> import UnusedCheck(unusedCheck,unusedCheckGoal)
-> import ShadowCheck(shadowCheck,shadowCheckGoal)
-> import OverlapCheck(overlapCheck,overlapCheckGoal)
-> import Imports(importIdents,importInterface,importInterfaceIntf,
->                importUnifyData)
-> import Exports(exportInterface)
-> import Trust(trustEnv)
-> import Qual(qual1,qual2)
-> import Desugar(desugar,goalModule)
-> import CaseMatch(caseMatch)
-> import Simplify(simplify)
-> import Unlambda(unlambda)
-> import DictTrans(dictTransModule,dictSpecializeModule)
-> import Lift(lift)
-> import qualified IL
-> import ILTrans(ilTrans)
-> import ILLift(liftProg)
-> import DTransform(dTransform,dAddMain)
-> import ILCompile(camCompile,con,fun)
-> import qualified Cam
-> import qualified CamPP(ppModule)
-> import CGen(genMain,genModule)
-> import CCode(CFile,mergeCFile)
-> import CPretty(ppCFile)
-> import CurryPP(ppModule,ppInterface,ppIdent)
-> import qualified ILPP(ppModule)
-> import Options(Options(..),CaseMode(..),Warn(..),Dump(..))
-> import Base
+> module Modules(compileModule) where
+> import CaseCheck
 > import Combined
+> import Common
 > import Curry
+> import CurryParser
 > import CurryUtils
-> import Env
+> import Deriving
 > import Error
+> import ExportSyntaxCheck
+> import Exports
 > import IdentInfo
+> import ImportSyntaxCheck
+> import InstCheck
 > import InstInfo
 > import Interfaces
 > import IO
+> import KindCheck
 > import List
-> import Maybe
 > import Monad
-> import PathUtils
+> import Options
+> import OverlapCheck
 > import Position
+> import PrecCheck
 > import PrecInfo
 > import PredefIdent
-> import Pretty
-> import TopEnv
-> import TrustInfo
+> import Qual
+> import Renaming
+> import ShadowCheck
+> import SyntaxCheck
 > import Types
+> import TypeCheck
 > import TypeInfo
-> import TypeTrans
-> import Typing
-> import Utils
+> import TypeSyntaxCheck
+> import Unlit
+> import UnusedCheck
 > import ValueInfo
 
 \end{verbatim}
@@ -98,7 +68,7 @@ declaration to the module.
 >     liftErr $ unless (noInterface opts) (updateInterface fn intf)
 >     let (tcEnv',tyEnv'',m'',dumps) = dictTrans tcEnv iEnv tyEnv' m'
 >     liftErr $ mapM_ (doDump opts) dumps
->     let (il,dumps) = ilTransModule id dbg tyEnv'' trEnv m''
+>     let (il,dumps) = ilTransModule dbg tyEnv'' trEnv Nothing m''
 >     liftErr $ mapM_ (doDump opts) dumps
 >     let (ccode,dumps) = genCodeModule split tcEnv' il
 >     liftErr $ mapM_ (doDump opts) dumps >>
@@ -157,6 +127,12 @@ declaration to the module.
 >     return (pEnv''',tcEnv''',iEnv',tyEnv''',
 >             Module m es is (qual2 tEnv vEnv ds'''))
 
+> importSyntaxCheck :: ModuleEnv -> [ImportDecl] -> Error [ImportDecl]
+> importSyntaxCheck mEnv ds = mapE checkImportDecl ds
+>   where checkImportDecl (ImportDecl p m q asM is) =
+>           liftE (ImportDecl p m q asM)
+>                 (checkImports (moduleInterface m mEnv) is)
+
 > warnModuleSyntax :: CaseMode -> [Warn] -> Module a -> [String]
 > warnModuleSyntax caseMode warn m =
 >   caseCheck caseMode m ++ unusedCheck warn m ++ shadowCheck warn m
@@ -168,276 +144,6 @@ declaration to the module.
 > autoSplitDecls True ds = foldr addSplitAnnot [] ds
 >   where addSplitAnnot d ds = SplitAnnot (pos d) : d : ds
 > autoSplitDecls False ds = ds
-
-> transModule :: Bool -> Trust -> TCEnv -> ValueEnv -> Module Type
->             -> (ValueEnv,TrustEnv,Module Type,[(Dump,Doc)])
-> transModule debug tr tcEnv tyEnv m = (tyEnv'''',trEnv,nolambda,dumps)
->   where trEnv = if debug then trustEnv tr m else emptyEnv
->         (desugared,tyEnv') = desugar tcEnv tyEnv m
->         (flatCase,tyEnv'') = caseMatch tcEnv tyEnv' desugared
->         (simplified,tyEnv''') = simplify tyEnv'' trEnv flatCase
->         (nolambda,tyEnv'''') = unlambda tyEnv''' simplified
->         dumps =
->           [(DumpRenamed,ppModule m),
->            (DumpTypes,ppTypes tcEnv (localBindings tyEnv)),
->            (DumpDesugared,ppModule desugared),
->            (DumpFlatCase,ppModule flatCase),
->            (DumpSimplified,ppModule simplified),
->            (DumpUnlambda,ppModule nolambda)]
-
-> dictTrans :: TCEnv -> InstEnv -> ValueEnv -> Module Type
->           -> (TCEnv,ValueEnv,Module Type,[(Dump,Doc)])
-> dictTrans tcEnv iEnv tyEnv m = (tcEnv',tyEnv',spec,dumps)
->   where (tcEnv',tyEnv',dict) = dictTransModule tcEnv iEnv tyEnv m
->         spec = dictSpecializeModule tcEnv' dict
->         dumps =
->           [(DumpDict,ppModule dict),
->            (DumpSpecialize,ppModule spec)]
-
-> ilTransModule :: (IL.Module -> IL.Module) -> Bool -> ValueEnv -> TrustEnv
->               -> Module Type -> (IL.Module,[(Dump,Doc)])
-> ilTransModule debugAddMain debug tyEnv trEnv m = (ilDbg,dumps)
->   where (lifted,tyEnv',trEnv') = lift tyEnv trEnv m
->         il = ilTrans tyEnv' lifted
->         ilDbg
->           | debug = debugAddMain (dTransform (trustedFun trEnv') il)
->           | otherwise = il
->         dumps =
->           [(DumpLifted,ppModule lifted),
->            (DumpIL,ILPP.ppModule il)] ++
->           [(DumpTransformed,ILPP.ppModule ilDbg) | debug]
-
-> genCodeModule :: Bool -> TCEnv -> IL.Module
->               -> (Either CFile [CFile],[(Dump,Doc)])
-> genCodeModule False tcEnv il = (Left ccode,dumps)
->   where (ccode,dumps) = genCode (dataTypes tcEnv) il
-> genCodeModule True tcEnv il = (Right ccode,concat (transpose dumps))
->   where (ccode,dumps) =
->           unzip $ map (genCode (dataTypes tcEnv)) (splitModule il)
-
-> genCode :: [(Cam.Name,[Cam.Name])] -> IL.Module -> (CFile,[(Dump,Doc)])
-> genCode ts il = (ccode,dumps)
->   where ilNormal = liftProg il
->         cam = camCompile ilNormal
->         ccode = genModule ts cam
->         dumps =
->           [(DumpNormalized,ILPP.ppModule ilNormal),
->            (DumpCam,CamPP.ppModule cam)]
-
-> qualifyEnv1 :: ModuleEnv -> [ImportDecl] -> PEnv -> TCEnv -> ValueEnv
->             -> (PEnv,TCEnv,ValueEnv)
-> qualifyEnv1 mEnv is pEnv tcEnv tyEnv =
->   (foldr (importEntities pEnv) pEnv' ms,
->    foldr (importEntities tcEnv) tcEnv' ms,
->    foldr (importEntities tyEnv) tyEnv' ms)
->   where ms = nub [(m,asM) | ImportDecl _ m False asM _ <- is]
->         (ms',is') = unzip (envToList mEnv)
->         (pEnv',tcEnv',_,tyEnv') = foldl (importInterfaceIntf ms') initEnvs is'
->         importEntities env (m,asM) env' =
->           foldr (uncurry (importTopEnv False m)) env'
->                 (moduleImports (fromMaybe m asM) env)
-
-> qualifyEnv2 :: ModuleEnv -> ModuleIdent -> PEnv -> TCEnv -> ValueEnv
->            -> (PEnv,TCEnv,ValueEnv)
-> qualifyEnv2 mEnv m pEnv tcEnv tyEnv =
->   (foldr (uncurry (globalBindTopEnv m)) pEnv' (localBindings pEnv),
->    foldr (uncurry (globalBindTopEnv m)) tcEnv' (localBindings tcEnv),
->    foldr (uncurry (bindTopEnv m)) tyEnv' (localBindings tyEnv))
->   where (ms,is) = unzip (envToList mEnv)
->         (pEnv',tcEnv',_,tyEnv') = foldl (importInterfaceIntf ms) initEnvs is
-
-> splitModule :: IL.Module -> [IL.Module]
-> splitModule (IL.Module m is ds) =
->   map (IL.Module m is)
->       (filter (any isCodeDecl) (wordsBy (IL.SplitAnnot ==) ds))
->   where isCodeDecl (IL.DataDecl _ _ cs) = not (null cs)
->         isCodeDecl (IL.TypeDecl _ _ _) = True
->         isCodeDecl (IL.FunctionDecl _ _ _ _) = True
->         isCodeDecl (IL.ForeignDecl _ _ _ _) = True
-
-> trustedFun :: TrustEnv -> QualIdent -> Bool
-> trustedFun trEnv f = maybe True (Trust ==) (lookupEnv (unqualify f) trEnv)
-
-> dataTypes :: TCEnv -> [(Cam.Name,[Cam.Name])]
-> dataTypes tcEnv = [dataType tc cs | DataType tc _ cs <- allEntities tcEnv]
->   where dataType tc cs = (con tc,map (con . qualifyLike tc) cs)
-
-> writeCode :: Maybe FilePath -> FilePath -> Either CFile [CFile] -> IO ()
-> writeCode tfn sfn (Left cfile) = writeCCode ofn cfile
->   where ofn = fromMaybe (rootname sfn ++ cExt) tfn
-> writeCode tfn sfn (Right cfiles) = zipWithM_ (writeCCode . mkFn) [1..] cfiles
->   where prefix = fromMaybe (rootname sfn) tfn
->         mkFn i = prefix ++ show i ++ cExt
-
-> writeGoalCode :: Maybe FilePath -> CFile -> IO ()
-> writeGoalCode tfn = writeCCode ofn
->   where ofn = fromMaybe (internalError "No filename for startup code") tfn
-
-> writeCCode :: FilePath -> CFile -> IO ()
-> writeCCode fn = writeFile fn . showln . ppCFile
-
-> showln :: Show a => a -> String
-> showln x = shows x "\n"
-
-\end{verbatim}
-A goal is compiled with respect to the interface of a given module. If
-no module is specified, the Curry Prelude is used. All entities
-exported from the main module and the Prelude are in scope with their
-unqualified names. In addition, the entities exported from all loaded
-interfaces are in scope with their qualified names.
-\begin{verbatim}
-
-> data Task = Eval | Type deriving Eq
-
-> compileGoal :: Options -> Maybe String -> [FilePath] -> ErrorT IO ()
-> compileGoal opts g fns =
->   do
->     (tcEnv,iEnv,tyEnv,_,g') <- loadGoal Eval paths dbg cm ws m g fns
->     let (vs,m',tyEnv') = goalModule dbg tyEnv m mainId g'
->     let (tyEnv'',trEnv,m'',dumps) = transModule dbg tr tcEnv tyEnv' m'
->     liftErr $ mapM_ (doDump opts) dumps
->     let (tcEnv',tyEnv''',m''',dumps) = dictTrans tcEnv iEnv tyEnv'' m''
->     liftErr $ mapM_ (doDump opts) dumps
->     let (il,dumps) = ilTransModule (dAddMain mainId) dbg tyEnv''' trEnv m'''
->     liftErr $ mapM_ (doDump opts) dumps
->     let (ccode,dumps) = genCodeGoal tcEnv' (qualifyWith m mainId) vs il
->     liftErr $ mapM_ (doDump opts) dumps >>
->               writeGoalCode (output opts) ccode
->   where m = mkMIdent []
->         paths = importPath opts
->         dbg = debug opts
->         tr = if trusted opts then Trust else Suspect
->         cm = caseMode opts
->         ws = warn opts
-
-> typeGoal :: Options -> String -> [FilePath] -> ErrorT IO ()
-> typeGoal opts g fns =
->   do
->     (tcEnv,_,_,cx,Goal _ e _) <-
->       loadGoal Type paths False cm ws (mkMIdent []) (Just g) fns
->     liftErr $ maybe putStr writeFile (output opts)
->             $ showln (ppQualType tcEnv (QualType cx (typeOf e)))
->   where paths = importPath opts
->         cm = caseMode opts
->         ws = warn opts
-
-> loadGoal :: Task -> [FilePath] -> Bool -> CaseMode -> [Warn]
->          -> ModuleIdent -> Maybe String -> [FilePath]
->          -> ErrorT IO (TCEnv,InstEnv,ValueEnv,Context,Goal Type)
-> loadGoal task paths debug caseMode warn m g fns =
->   do
->     (mEnv,ms) <- loadGoalModules paths debug fns
->     (tEnv,vEnv,g') <-
->       okM $ maybe (return (mainGoal (last ms))) parseGoal g >>=
->             checkGoalSyntax mEnv ms
->     liftErr $ mapM_ putErrLn $ warnGoalSyntax caseMode warn m g'
->     (tcEnv,iEnv,tyEnv,cx,g'') <-
->       okM $ checkGoal task mEnv m ms tEnv vEnv g'
->     liftErr $ mapM_ putErrLn $ warnGoal warn tyEnv m g''
->     return (tcEnv,iEnv,tyEnv,cx,g'')
->   where mainGoal m = Goal (first "") (Variable () (qualifyWith m mainId)) []
-
-> loadGoalModules :: [FilePath] -> Bool -> [FilePath]
->                 -> ErrorT IO (ModuleEnv,[ModuleIdent])
-> loadGoalModules paths debug fns =
->   do
->     (mEnv,ms') <- loadGoalInterfaces paths ms fns
->     return (mEnv,preludeMIdent : if null fns then [] else [last ms'])
->   where ms = map (P (first "")) (preludeMIdent : [debugPreludeMIdent | debug])
-
-> checkGoalSyntax :: ModuleEnv -> [ModuleIdent] -> Goal a
->                 -> Error (TypeEnv,FunEnv,Goal a)
-> checkGoalSyntax mEnv ms g =
->   do
->     g' <- typeSyntaxCheckGoal tEnv g >>= syntaxCheckGoal vEnv
->     return (tEnv,vEnv,g')
->   where (tEnv,vEnv) = importInterfaceIdents mEnv ms
-
-> checkGoal :: Task -> ModuleEnv -> ModuleIdent -> [ModuleIdent]
->           -> TypeEnv -> FunEnv -> Goal a
->           -> Error (TCEnv,InstEnv,ValueEnv,Context,Goal Type)
-> checkGoal task mEnv m ms tEnv vEnv g =
->   do
->     let (k1,g') = renameGoal k0 g
->     let (pEnv,tcEnv,iEnv,tyEnv) = importInterfaces mEnv ms
->     let (pEnv',tcEnv',tyEnv') =
->           qualifyEnv1 mEnv (map importModule ms) pEnv tcEnv tyEnv
->     g'' <- precCheckGoal m pEnv' (qual1 tEnv vEnv g')
->     (tyEnv'',cx,g''') <-
->       kindCheckGoal tcEnv' g'' >>
->       typeCheckGoal (task == Eval) m tcEnv' iEnv tyEnv' g''
->     let (_,tcEnv'',tyEnv''') = qualifyGoalEnv task mEnv m pEnv' tcEnv' tyEnv''
->     return (tcEnv'',iEnv,tyEnv''',cx,qualifyGoal task tEnv vEnv g''')
->   where importModule m = importDecl (first "") m True
-
-> qualifyGoalEnv :: Task -> ModuleEnv -> ModuleIdent
->                -> PEnv -> TCEnv -> ValueEnv -> (PEnv,TCEnv,ValueEnv)
-> qualifyGoalEnv Eval mEnv m pEnv tcEnv tyEnv =
->   qualifyEnv2 mEnv m pEnv tcEnv tyEnv
-> qualifyGoalEnv Type _ _ pEnv tcEnv tyEnv = (pEnv,tcEnv,tyEnv)
-
-> qualifyGoal :: Task -> TypeEnv -> FunEnv -> Goal a -> Goal a
-> qualifyGoal Eval tEnv vEnv = qual2 tEnv vEnv
-> qualifyGoal Type _ _ = id
-
-> warnGoalSyntax :: CaseMode -> [Warn] -> ModuleIdent -> Goal a -> [String]
-> warnGoalSyntax caseMode warn m g =
->   caseCheckGoal caseMode g ++ unusedCheckGoal warn m g ++
->   shadowCheckGoal warn g
-
-> warnGoal :: [Warn] -> ValueEnv -> ModuleIdent -> Goal a -> [String]
-> warnGoal warn tyEnv m g = overlapCheckGoal warn tyEnv g
-
-> genCodeGoal :: TCEnv -> QualIdent -> Maybe [Ident] -> IL.Module
->             -> (CFile,[(Dump,Doc)])
-> genCodeGoal tcEnv qGoalId vs il = (mergeCFile ccode ccode',dumps)
->   where (ccode,dumps) = genCode (dataTypes tcEnv) il
->         ccode' = genMain (fun qGoalId) (fmap (map name) vs)
-
-\end{verbatim}
-The functions \texttt{importModuleIdents} and \texttt{importModules}
-bring the declarations of all imported modules into scope in the
-current module.
-\begin{verbatim}
-
-> importSyntaxCheck :: ModuleEnv -> [ImportDecl] -> Error [ImportDecl]
-> importSyntaxCheck mEnv ds = mapE checkImportDecl ds
->   where checkImportDecl (ImportDecl p m q asM is) =
->           liftE (ImportDecl p m q asM)
->                 (checkImports (moduleInterface m mEnv) is)
-
-> importModuleIdents :: ModuleEnv -> [ImportDecl] -> (TypeEnv,InstSet,FunEnv)
-> importModuleIdents mEnv ds = (importUnifyData tEnv,iSet,importUnifyData vEnv)
->   where (tEnv,iSet,vEnv) = foldl importModule initIdentEnvs ds
->         importModule envs (ImportDecl _ m q asM is) =
->           importIdents (fromMaybe m asM) q is envs (moduleInterface m mEnv)
-
-> importModules :: ModuleEnv -> [ImportDecl] -> (PEnv,TCEnv,InstEnv,ValueEnv)
-> importModules mEnv ds = (pEnv,tcEnv,iEnv,tyEnv)
->   where (pEnv,tcEnv,iEnv,tyEnv) = foldl importModule initEnvs ds
->         importModule envs (ImportDecl _ m q asM is) =
->           importInterface (fromMaybe m asM) q is envs (moduleInterface m mEnv)
-
-\end{verbatim}
-The functions \texttt{importInterfaceIdents} and
-\texttt{importInterfaces} bring the declarations of all loaded modules
-into scope with their qualified names and in addition bring the
-declarations of the specified modules into scope with their
-unqualified names, too.
-\begin{verbatim}
-
-> importInterfaceIdents :: ModuleEnv -> [ModuleIdent] -> (TypeEnv,FunEnv)
-> importInterfaceIdents mEnv ms = (importUnifyData tEnv,importUnifyData vEnv)
->   where (tEnv,_,vEnv) =
->           foldl (uncurry . importModule) initIdentEnvs (envToList mEnv)
->         importModule envs m = importIdents m (m `notElem` ms) Nothing envs
-
-> importInterfaces :: ModuleEnv -> [ModuleIdent]
->                  -> (PEnv,TCEnv,InstEnv,ValueEnv)
-> importInterfaces mEnv ms = (pEnv,tcEnv,iEnv,tyEnv)
->   where (pEnv,tcEnv,iEnv,tyEnv) =
->           foldl (uncurry . importModule) initEnvs (envToList mEnv)
->         importModule envs m = importInterface m (m `notElem` ms) Nothing envs
 
 \end{verbatim}
 The Prelude is imported implicitly into every module other than the
@@ -477,54 +183,7 @@ Literate source files use the extension \texttt{".lcurry"}.
 >   where (es,s') = unlit fn s
 
 > isLiterateSource :: FilePath -> Bool
-> isLiterateSource fn = litExt `isSuffixOf` fn
-
-\end{verbatim}
-The \texttt{doDump} function writes the selected information to the
-standard output.
-\begin{verbatim}
-
-> doDump :: Options -> (Dump,Doc) -> IO ()
-> doDump opts (d,x) =
->   when (d `elem` dump opts)
->        (print (text hd $$ text (replicate (length hd) '=') $$ x))
->   where hd = dumpHeader d
-
-> dumpHeader :: Dump -> String
-> dumpHeader DumpRenamed = "Module after renaming"
-> dumpHeader DumpTypes = "Types"
-> dumpHeader DumpDesugared = "Source code after desugaring"
-> dumpHeader DumpFlatCase = "Source code after case flattening"
-> dumpHeader DumpSimplified = "Source code after simplification"
-> dumpHeader DumpUnlambda = "Source code after naming lambdas"
-> dumpHeader DumpDict = "Source code with dictionaries"
-> dumpHeader DumpSpecialize = "Source code after specialization"
-> dumpHeader DumpLifted = "Source code after lifting"
-> dumpHeader DumpIL = "Intermediate code"
-> dumpHeader DumpTransformed = "Transformed code" 
-> dumpHeader DumpNormalized = "Intermediate code after normalization"
-> dumpHeader DumpCam = "Abstract machine code"
-
-\end{verbatim}
-The function \texttt{ppTypes} is used for pretty-printing the types
-from the type environment.
-\begin{verbatim}
-
-> ppTypes :: TCEnv -> [(Ident,ValueInfo)] -> Doc
-> ppTypes tcEnv = vcat . map ppInfo
->   where ppInfo (c,DataConstructor _ _ _ ty) =
->           ppType c ty <+> text "-- data constructor"
->         ppInfo (c,NewtypeConstructor _ _ ty) =
->           ppType c ty <+> text "-- newtype constructor"
->         ppInfo (x,Value _ _ ty) = ppType x ty
->         ppType f ty = ppIdent f <+> text "::" <+> ppTypeScheme tcEnv ty
-
-\end{verbatim}
-Various file name extensions.
-\begin{verbatim}
-
-> cExt = ".c"
-> litExt = ".lcurry"
+> isLiterateSource fn = ".lcurry" `isSuffixOf` fn
 
 \end{verbatim}
 Auxiliary functions. Unfortunately, hbc's \texttt{IO} module lacks a

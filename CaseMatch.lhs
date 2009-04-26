@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 2803 2009-04-26 17:14:20Z wlux $
+% $Id: CaseMatch.lhs 2804 2009-04-26 17:22:55Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -15,8 +15,8 @@ equations and lambda abstractions have only variable arguments,xs and
 all patterns in $($f$)$case expressions are of the form $l$, $v$,
 $C\,v_1\dots v_n$, or $v\texttt{@}(C\,v_1\dots v_n)$ where $l$ is a
 literal, $v$ and $v_1, \dots, v_n$ are variables, and $C$ is a data
-constructor.\footnote{Recall that desugaring has removed all newtype
-  constructors.} During this transformation, the compiler also
+constructor.\footnote{Recall that all newtype constructors have been
+  removed previously.} During this transformation, the compiler also
 replaces (boolean) guards by if-then-else cascades and changes
 if-then-else expressions into equivalent case expressions.
 \begin{verbatim}
@@ -51,19 +51,29 @@ variables.
 
 \end{verbatim}
 The case flattening phase is applied recursively to all declarations
-and expressions of the desugared source code.
-
-A special case is made for pattern declarations. Since we cannot
-flatten the left hand side of pattern declarations, a pattern
-declaration $t$~\texttt{=}~$e$, where $t$ is not a variable pattern,
-is effectively transformed into $t$~\texttt{=} \texttt{fcase}~$e$
-\texttt{of} \texttt{\char`\{}~$t \rightarrow t$~\texttt{\char`\}}.
-That way, the pattern $t$ in the \texttt{fcase} expression can be
-flattened. Later the compiler will replace the pattern declaration by
-individual declarations for the used variables of pattern $t$. This is
-done after simplification in order to allow for a space-leak avoiding
-transformation of pattern bindings (cf.\ 
+and expressions of the desugared source code. A special case is made
+for pattern declarations. Since we cannot flatten the left hand side
+of a pattern declaration $t$~\texttt{=}~$e$, where $t$ is not a
+variable pattern, it is first transformed into the form
+$(v_1,\dots,v_n)$~\texttt{=} \texttt{fcase}~$e$ \texttt{of}
+\texttt{\lb}~$t \rightarrow (v_1,\dots,v_n)$~\texttt{\rb}, where
+$v_1,\dots,v_n$ are the variables occurring in $t$. Now $t$ can be
+flattened on the right hand side of the declaration. After
+simplification, the compiler will replace the transformed pattern
+declaration by individual declarations for those variables from
+$\{v_1,\dots,v_n\}$ that are used in the scope of the declaration
+using a space-leak avoiding transformation of pattern bindings (cf.\ 
 Sect.~\ref{sec:pattern-bindings}).
+
+Note that we make deliberate use of the tuple syntax for the pattern
+on the left hand side of the transformed declaration and the body of
+the fcase expression on its right hand side. This makes it easier to
+determine the variables of the pattern and to handle optimizations on
+the right hand side of the declaration during later phases of the
+compiler. Also note that pattern declarations with only a single
+variable automatically degenerate into normal variable declarations.
+For instance, \texttt{Just x = unknown} becomes \texttt{x = fcase
+  unknown of \lb{} Just x -> x \rb{}}.
 \begin{verbatim}
 
 > caseMatch :: TCEnv -> ValueEnv -> Module Type -> (Module Type,ValueEnv)
@@ -107,25 +117,20 @@ Sect.~\ref{sec:pattern-bindings}).
 >     where as = [(p,ts,rhs) | Equation p (FunLhs _ ts) rhs <- eqs]
 >   match _ _ (ForeignDecl p cc s ie f ty) = return (ForeignDecl p cc s ie f ty)
 >   match m _ (PatternDecl p t rhs) =
->     match m p rhs >>= liftM (PatternDecl p t) . matchLhs m t
+>     match m p rhs >>= liftM (uncurry (PatternDecl p)) . matchLhs m t
 >   match _ _ (FreeDecl p vs) = return (FreeDecl p vs)
 >   match _ _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
 
 > matchLhs :: ModuleIdent -> ConstrTerm Type -> Rhs Type
->          -> CaseMatchState (Rhs Type)
+>          -> CaseMatchState (ConstrTerm Type,Rhs Type)
 > matchLhs m t (SimpleRhs p e _)
->   | isVarPattern t = return (mkRhs p e)
+>   | isVarPattern t = return (t,mkRhs p e)
 >   | otherwise =
 >       do
 >         [v] <- matchVars m [[t]]
->         Fcase _ as' <- flexMatch m p [v] [(p,[t],mkRhs p (expr t))]
->         return (mkRhs p (Fcase e as'))
->   where expr (LiteralPattern ty l) = Literal ty l
->         expr (VariablePattern ty v) = mkVar ty v
->         expr (ConstructorPattern ty c ts) =
->           apply (Constructor ty' c) (map expr ts)
->           where ty' = foldr (TypeArrow . typeOf) ty ts
->         expr (AsPattern v t) = mkVar (typeOf t) v
+>         Fcase _ as' <- flexMatch m p [v] [(p,[t],mkRhs p (tupleExpr vs))]
+>         return (tuplePattern vs,mkRhs p (Fcase e as'))
+>   where vs = vars t
 
 \end{verbatim}
 A list of boolean guards is expanded into a nested if-then-else
@@ -162,6 +167,7 @@ if it is not restricted by the guard expression.
 >   match _ _ (Literal ty l) = return (Literal ty l)
 >   match _ _ (Variable ty v) = return (Variable ty v)
 >   match _ _ (Constructor ty c) = return (Constructor ty c)
+>   match _ _ (Tuple vs) = return (Tuple vs)
 >   match m p (Apply e1 e2) = liftM2 Apply (match m p e1) (match m p e2)
 >   match m _ (Lambda p ts e) =
 >     do
@@ -226,10 +232,10 @@ uses the demanded argument position found by \texttt{flexMatch}.
 Since our Curry representation does not include non-deterministic
 choice expressions, we encode them as flexible case expressions
 matching an auxiliary free variable~\cite{AntoyHanus06:Overlapping}.
-For instance, an expression equivalent to \texttt{$e_1$ ? $e_2$} is
+For instance, an expression equivalent to $e_1$~\texttt{?}~$e_2$ is
 represented as
 \begin{quote}\tt
-  fcase (let x free in x) of \char`\{\ 1 -> $e_1$; 2 -> $e_2$ \char`\}
+  fcase (let x free in x) of \lb{} 1 -> $e_1$; 2 -> $e_2$ \rb{}
 \end{quote}
 
 Note that the function \texttt{matchVars} attempts to avoid
@@ -670,5 +676,25 @@ Auxiliary definitions
 > addDecl :: Decl a -> Rhs a -> Rhs a
 > addDecl d (SimpleRhs p e ds) = SimpleRhs p e (d : ds)
 > addDecl d (GuardedRhs es ds) = GuardedRhs es (d : ds)
+
+> vars :: ConstrTerm Type -> [(Type,Ident)]
+> vars (LiteralPattern _ _) = []
+> vars (VariablePattern ty v) = [(ty,v) | unRenameIdent v /= anonId]
+> vars (ConstructorPattern _ _ ts) = concatMap vars ts
+> vars (AsPattern v t) = (typeOf t,v) : vars t
+
+> tuplePattern :: [(Type,Ident)] -> ConstrTerm Type
+> tuplePattern vs =
+>   case vs of
+>     [] -> ConstructorPattern unitType qUnitId []
+>     [v] -> uncurry VariablePattern v
+>     _ -> TuplePattern (map (uncurry VariablePattern) vs)
+
+> tupleExpr :: [(Type,Ident)] -> Expression Type
+> tupleExpr vs =
+>   case vs of
+>     [] -> Constructor unitType qUnitId
+>     [v] -> uncurry mkVar v
+>     _ -> Tuple (map (uncurry mkVar) vs)
 
 \end{verbatim}

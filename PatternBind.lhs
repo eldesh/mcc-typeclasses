@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PatternBind.lhs 2803 2009-04-26 17:14:20Z wlux $
+% $Id: PatternBind.lhs 2804 2009-04-26 17:22:55Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -94,6 +94,7 @@ evaluated.\footnote{We do not attempt to fix the space leak with the
 >   pbt _ (Literal ty l) = return (Literal ty l)
 >   pbt _ (Variable ty v) = return (Variable ty v)
 >   pbt _ (Constructor ty c) = return (Constructor ty c)
+>   pbt m (Tuple es) = liftM Tuple (mapM (pbt m) es)
 >   pbt m (Apply e1 e2) = liftM2 Apply (pbt m e1) (pbt m e2)
 >   pbt m (Lambda p ts e) = liftM (Lambda p ts) (pbt m e)
 >   pbt m (Let ds e) = liftM2 (Let . concat) (mapM (pbtDecl m) ds) (pbt m e)
@@ -110,27 +111,40 @@ In order to update all pattern variables when one of the selector
 functions for a pattern binding has been evaluated, we pass all
 pattern variables except for the matched one as additional arguments
 to each selector function. Recall that case matching transforms
-pattern declarations of the form $t$~\texttt{=}~$e$ into a
-(pseudo-)\discretionary{}{}{}flattened form $t$~\texttt{=}
-\texttt{fcase}~$e$~\texttt{of} \texttt{\char`\{}~$\dots{}\rightarrow
-t$~\texttt{\char`\}}, where the nested \texttt{fcase} expressions on
-the right hand side contain only flat patterns. The transformation
-into abstract machine code (see Sect.~\ref{sec:il-compile}) transforms
-selector functions, which are identified by their distinguished names,
-specially, inserting code that updates each of the additional
-arguments from the pattern variable with the same name once the
-pattern has been matched successfully in the body of the fcase
-expression.
+each pattern declaration of the form $t$~\texttt{=}~$e$, where $t$ is
+not a variable pattern, into an equation
+\begin{center}
+  \begin{tabular}{l}
+    \texttt{$(v_1,\dots,v_n)$ = fcase $e$ of \lb{} $t'_1$ -> $\dots$
+      fcase $u_k$ of \lb{} $t'_k$ -> $(v_1,\dots,v_n)$ \rb{}$\dots$\rb{}},
+  \end{tabular}
+\end{center}
+where $v_1,\dots,v_n$ are the free variables of $t$, $t'_1,\dots,t'_k$
+are flat patterns, and $u_2,\dots,u_k$ are variables occurring in
+these patterns such that the right hand side of the equation matches
+the same pattern as $t$. Also recall that the simplifier reduces the
+tuples $(v_1,\dots,v_n)$ to those variables which are actually used in
+the scope of the declaration. For each variable $v_i$ of such an
+equation, \texttt{expandPatternBindings} now generates an equation of
+the form
+\begin{center}
+  \begin{tabular}{l}
+    \texttt{$v_i$ = (\bs{}$v_0$ $\overline{v_{n/i}}$ -> fcase $v_0$ of
+      \lb{} $t'_1$ -> $\dots$ $v_i$ \rb{}) $e$ $\overline{v_{n/i}}$}
+  \end{tabular}
+\end{center}
+where $v_0$ is a fresh variable and $\overline{v_{n/i}}$ stands for
+the sequence of variables $v_1$ $\dots$ $v_{i-1}$ $v_{i+1}$ $\dots$
+$v_n$.  A special case in the transformation into abstract machine
+code (see Sect.~\ref{sec:il-compile}) inserts code that updates each
+of the additional arguments $\overline{v_{n/i}}$ from the pattern
+variable with the same name once the pattern has been matched
+successfully in the body of the fcase expression. This special
+transformation is triggered by using a distinguished name for the
+selector functions.
 
 \ToDo{Get rid of the obscure dependence on name equivalence between
   the auxiliary arguments and the corresponding pattern variables.}
-
-Note that we introduce only selector functions for those pattern
-variables which are actually used in the code. This reduces the number
-of auxiliary variables and prevents the introduction of a recursive
-binding group when only a single variable is used. This is the reason
-for performing this transformation after simplification instead of
-during case matching.
 \begin{verbatim}
 
 > expandPatternBindings :: ModuleIdent -> [Ident] -> Decl Type
@@ -138,9 +152,9 @@ during case matching.
 > expandPatternBindings m fvs (PatternDecl p t rhs) =
 >   case (t,rhs) of
 >     (VariablePattern _ _,_) -> return [PatternDecl p t rhs]
->     (_,SimpleRhs _ e@(Fcase (Variable ty v) _) _) ->
+>     (TuplePattern ts,SimpleRhs _ e@(Fcase (Variable ty v) _) _) ->
 >       mapM (projectionDecl m p v0 e) (shuffle vs)
->       where vs = filter ((`elem` fvs) . snd) (vars t)
+>       where vs = [(ty,v) | VariablePattern ty v <- ts]
 >             v0 = (ty,unqualify v)
 > expandPatternBindings _ _ d = return [d]
 
@@ -158,8 +172,7 @@ during case matching.
 >         ts = map (uncurry VariablePattern) (v0':vs)
 >         e' = Fcase (uncurry mkVar v0') as
 >         es = map (uncurry mkVar) vs'
->         project (Variable _ _) e = e
->         project (Apply _ _) e = e
+>         project (Tuple _) e = e
 >         project (Fcase e [Alt p t (SimpleRhs p' e' _)]) e'' =
 >           Fcase e [Alt p t (SimpleRhs p' (project e' e'') [])]
 
@@ -186,12 +199,6 @@ Generation of fresh names.
 \end{verbatim}
 Auxiliary functions.
 \begin{verbatim}
-
-> vars :: ConstrTerm Type -> [(Type,Ident)]
-> vars (LiteralPattern _ _) = []
-> vars (VariablePattern ty v) = [(ty,v)]
-> vars (ConstructorPattern _ _ ts) = concatMap vars ts
-> vars (AsPattern v t) = (typeOf t,v) : vars t
 
 > shuffle :: [a] -> [[a]]
 > shuffle xs = shuffle id xs

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Unlambda.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: Unlambda.lhs 2805 2009-04-26 17:26:16Z wlux $
 %
 % Copyright (c) 2007-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -26,10 +26,10 @@ lambda abstraction is recorded in the type environment.
 > import Typing
 > import ValueInfo
 
-> type UnlambdaState a = StateT ValueEnv Id a
+> type UnlambdaState a = StateT ValueEnv (StateT Int Id) a
 
 > unlambda :: ValueEnv -> Module Type -> (Module Type,ValueEnv)
-> unlambda tyEnv (Module m es is ds) = runSt doUnlambda tyEnv
+> unlambda tyEnv (Module m es is ds) = runSt (callSt doUnlambda tyEnv) 1
 >   where doUnlambda =
 >           do
 >             ds' <- mapM (nameLambdas m) ds
@@ -79,10 +79,10 @@ lambda abstraction is recorded in the type environment.
 >     liftM2 Apply (nameLambdas m e1) (nameLambdas m e2)
 >   nameLambdas m (Lambda p ts e) =
 >     do
+>       f <- liftM (renameIdent (lambdaId p)) (liftSt (updateSt (1 +)))
 >       updateSt_ (bindLambda m f (length ts) ty)
 >       nameLambdas m (Let [funDecl p f ts e] (mkVar ty f))
->     where f = lambdaId p
->           ty = typeOf (Lambda p ts e)
+>     where ty = typeOf (Lambda p ts e)
 >           bindLambda m f n ty tyEnv
 >             | null (lookupTopEnv f tyEnv) = bindFun m f n (polyType ty) tyEnv
 >             | otherwise = tyEnv

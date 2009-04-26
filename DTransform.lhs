@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2803 2009-04-26 17:14:20Z wlux $
+% $Id: DTransform.lhs 2805 2009-04-26 17:26:16Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2009, Wolfgang Lux
@@ -73,10 +73,6 @@ suitable computation tree is introduced for each foreign function.
 Auxiliary functions for partial applications of the foreign functions
 are provided as well.
 
-A special case handles the selector functions introduced by the
-pattern binding update strategy (see Sect.~\ref{sec:pattern-bindings}).
-These functions are not transformed at all.
-
 \begin{verbatim}
 
 > data SymbolType = IsFunction | IsConstructor deriving (Eq,Show)
@@ -89,12 +85,9 @@ These functions are not transformed at all.
 >   where (cs',ds') = unzip (map (debugConstrDecl ty0) cs)
 >         ty0 = TypeConstructor tc (map TypeVariable [0..n-1])
 > debugDecl _ (TypeDecl tc n ty) = [TypeDecl tc n (transformType ty)]
-> debugDecl trusted (FunctionDecl f vs ty e)
->   | isQSelectorId f =
->       [FunctionDecl f vs (transformFunType (length vs + 1) ty) e]
->   | otherwise =
->       generateAuxFuncs (f,IsFunction,length vs,ty) ++
->       [debugFunction trusted f vs ty e]
+> debugDecl trusted (FunctionDecl f vs ty e) =
+>   generateAuxFuncs (f,IsFunction,length vs,ty) ++
+>   [debugFunction trusted f vs ty e]
 > debugDecl _ (ForeignDecl f cc s ty) =
 >   generateAuxFuncs (f,IsFunction,n',ty) ++
 >   generateForeign f cc s n' ty
@@ -507,7 +500,6 @@ function and partial constructor applications.
 >   firstPhase _ (Literal l) = Literal l
 >   firstPhase _ (Variable v) = Variable v
 >   firstPhase d (Function f n)
->     | isQSelectorId f = Function f n
 >     | d < n-1         = Function (qidAuxiliaryFunction f d) (d+1)
 >     | otherwise       = Function (changeFunctionqId f) n
 >   firstPhase d (Constructor c n)
@@ -725,7 +717,6 @@ local declarations of \texttt{aux$N$}, \texttt{result$N$}, and
 > extractBindingsApply n e@(Constructor _ _) args = (n,[],id,createApply e args)
 > extractBindingsApply n f@(Function qId arity) args
 >   | length args == arity-1 = (n,[],id,partialApp)
->   | isQSelectorId qId = extractBindingsApply n app extraArgs
 >   | otherwise = (n2,cts1++cts2,lets1 . lets2,e)
 >   where (nArgs,extraArgs) = splitAt arity args
 >         app = createApply f nArgs

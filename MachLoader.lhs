@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: MachLoader.lhs 2691 2008-05-01 22:08:36Z wlux $
+% $Id: MachLoader.lhs 2805 2009-04-26 17:26:16Z wlux $
 %
-% Copyright (c) 1998-2008, Wolfgang Lux
+% Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{MachLoader.lhs}
@@ -254,6 +254,7 @@ names to node tags and function names to function triples.
 >       ordFunction,chrFunction,
 >       addFloatFunction,subFloatFunction,multFloatFunction,divFloatFunction,
 >       floatFromIntFunction,roundFloatFunction,truncateFloatFunction,
+>       pbUpdateFunction,pbReturnFunction,
 >       doneFunction,returnFunction,bind'Function,bindFunction,
 >       getCharFunction,getLineFunction,putCharFunction,putStrFunction,
 >       unsafePerformFunction,curryExitFunction

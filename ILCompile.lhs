@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 2803 2009-04-26 17:14:20Z wlux $
+% $Id: ILCompile.lhs 2805 2009-04-26 17:26:16Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -54,8 +54,7 @@ language into abstract machine code.
 > compileFun :: QualIdent -> [Ident] -> Expression -> Cam.Decl
 > compileFun f vs e =
 >   runSt (compile (Cam.FunctionDecl (fun f)) vs e) (nameSupply "_")
->   where compile = if isQSelectorId f then compileSelector else compileFunction
->         compileFunction f vs e =
+>   where compile f vs e =
 >           liftM (f (map var vs) . unalias) (compileStrict [] e [])
 
 \end{verbatim}
@@ -188,51 +187,6 @@ world.
 > cRetType RawCall (TypeConstructor tc [])
 >   | tc == qUnitId = Nothing
 > cRetType RawCall _ = Just Cam.TypeNodePtr
-
-\end{verbatim}
-The selector functions, which are introduced by the compiler in order
-to avoid a space leak with lazy pattern bindings (see
-Sect.~\ref{sec:pattern-bindings}), have to be treated specially. The
-first argument of a selector function is the pattern to be matched and
-the remaining arguments are references to the free variables of the
-pattern excluding the variable that is returned by the selector. When
-a selector is evaluated, it updates the additional arguments with
-queue-me nodes first so as to prevent concurrent computations from
-evaluating the corresponding selectors. After matching is complete,
-these queue-me nodes are updated with pointers to the matched
-arguments from the pattern.
-
-The compiler uses the convention that the additional arguments use the
-same names as the corresponding variables in the pattern. However, in
-the abstract machine code these variables have to use different names.
-The function \texttt{compileSelector} takes care of this renaming and
-inserts the necessary \texttt{Lock} and \texttt{Update} statements. It
-makes use of the fact that the body of a selector is a nested case
-expression whose innermost expression is the matched variable.
-\begin{verbatim}
-
-> compileSelector :: ([Cam.Name] -> Cam.Stmt -> Cam.Decl)
->                 -> [Ident] -> Expression -> CompState Cam.Decl
-> compileSelector f (v:vs) e =
->   do
->     vs' <- mapM (const freshName) vs
->     st <- compileSelectorExpr (zip vs vs') e
->     return (f (var v : vs') (foldr lock st vs'))
->   where lock v = Cam.Seq (Cam.Lock v)
-
-> compileSelectorExpr :: [(Ident,Cam.Name)] -> Expression -> CompState Cam.Stmt
-> compileSelectorExpr vs (Case ev (Variable v) [Alt t e]) =
->   do
->     v' <- freshName
->     st <- compileSelectorExpr vs e
->     return (Cam.Seq (v' Cam.:<- Cam.Enter (var v))
->                     (Cam.Switch (rf ev) v' [caseTag noVar t st]))
->   where noVar = internalError "invalid selector pattern"
-> compileSelectorExpr vs (Variable v) =
->   return (foldr update (Cam.Enter (var v)) vs)
->   where update (v,v') = Cam.Seq (Cam.Update v' (var v))
-> compileSelectorExpr vs (SrcLoc _ e) = compileSelectorExpr vs e
-> compileSelectorExpr _ _ = internalError "invalid selector function"
 
 \end{verbatim}
 The compilation of expressions is straightforward. The compiler

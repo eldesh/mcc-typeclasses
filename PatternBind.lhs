@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PatternBind.lhs 2804 2009-04-26 17:22:55Z wlux $
+% $Id: PatternBind.lhs 2805 2009-04-26 17:26:16Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -34,7 +34,12 @@ evaluated.\footnote{We do not attempt to fix the space leak with the
   to be undone when executed in non-deterministic code. Detecting when
   recording an update is necessary, and in particular where to record
   it, is quite difficult for the garbage collector due to the presence
-  of encapsulated search in Curry.}
+  of encapsulated search in Curry.} Our transformation, which is
+explained below, uses two new primitives \texttt{pbUpdate} and
+\texttt{pbReturn} and foreign function declarations for them are added
+to the program when necessary. In order to detect when adding these
+declarations is necessary, we simply check whether any fresh variables
+were introduced in the code by the transformation.
 \begin{verbatim}
 
 > module PatternBind(pbTrans) where
@@ -44,8 +49,11 @@ evaluated.\footnote{We do not attempt to fix the space leak with the
 > import CurryUtils
 > import List
 > import Monad
+> import Position
 > import PredefIdent
+> import PredefTypes
 > import Types
+> import TypeTrans
 > import Typing
 > import ValueInfo
 
@@ -57,9 +65,19 @@ evaluated.\footnote{We do not attempt to fix the space leak with the
 > pbtModule :: Module Type -> PatternBindState (Module Type,ValueEnv)
 > pbtModule (Module m es is ds) =
 >   do
+>     n <- liftSt fetchSt
 >     ds' <- mapM (pbt m) ds
 >     tyEnv <- fetchSt
->     return (Module m es is ds',tyEnv)
+>     n' <- liftSt fetchSt
+>     let ap = if n == n' then const id else ($)
+>     return (Module m es is (ap (prims ++) ds'),ap bindPrims tyEnv)
+>   where p0 = first (file (head (map pos ds)))
+>         Variable tyUpd pbUpd = pbUpdate m (TypeVariable 0)
+>         Variable tyRet pbRet = pbReturn m (TypeVariable 0)
+>         bindPrims = bindForeign pbUpd tyUpd . bindForeign pbRet tyRet
+>         prims =
+>           [BlockDecl (foreignDecl p0 "pbUpdate" pbUpd tyUpd),
+>            BlockDecl (foreignDecl p0 "pbReturn" pbRet tyRet)]
 
 > class SyntaxTree a where
 >   pbt :: ModuleIdent -> a Type -> PatternBindState (a Type)
@@ -108,11 +126,14 @@ evaluated.\footnote{We do not attempt to fix the space leak with the
 
 \end{verbatim}
 In order to update all pattern variables when one of the selector
-functions for a pattern binding has been evaluated, we pass all
-pattern variables except for the matched one as additional arguments
-to each selector function. Recall that case matching transforms
-each pattern declaration of the form $t$~\texttt{=}~$e$, where $t$ is
-not a variable pattern, into an equation
+functions for a pattern binding has been evaluated, we introduce an
+auxiliary constraint function that matches the pattern with the right
+hand side expression of the declaration and then updates \emph{all}
+pattern variables. The selector function for each pattern variable
+first evaluates the shared constraint and then returns the respective
+pattern component. Recall that case matching transforms each pattern
+declaration of the form $t$~\texttt{=}~$e$, where $t$ is not a
+variable pattern, into an equation
 \begin{center}
   \begin{tabular}{l}
     \texttt{$(v_1,\dots,v_n)$ = fcase $e$ of \lb{} $t'_1$ -> $\dots$
@@ -124,27 +145,36 @@ are flat patterns, and $u_2,\dots,u_k$ are variables occurring in
 these patterns such that the right hand side of the equation matches
 the same pattern as $t$. Also recall that the simplifier reduces the
 tuples $(v_1,\dots,v_n)$ to those variables which are actually used in
-the scope of the declaration. For each variable $v_i$ of such an
-equation, \texttt{expandPatternBindings} now generates an equation of
-the form
-\begin{center}
-  \begin{tabular}{l}
-    \texttt{$v_i$ = (\bs{}$v_0$ $\overline{v_{n/i}}$ -> fcase $v_0$ of
-      \lb{} $t'_1$ -> $\dots$ $v_i$ \rb{}) $e$ $\overline{v_{n/i}}$}
+the scope of the declaration. Each such equation is now transformed by
+\texttt{expandPatternBindings} into a list of equations
+\begin{center}\tt
+  \begin{tabular}{rcl}
+    $v_0$ & = & (\bs{}$v'_1$ $\dots$ $v'_n$ ->
+                 fcase $e$ of \lb{} $t'_1$ -> $\dots$ $e'$ \rb{})
+                $v_1$ $\dots$ $v_n$ \\
+          &   & \textrm{where $e' =$
+                        \texttt{pbUpdate $v'_1$ $v_1$ \&> $\dots$ \&>
+                                pbUpdate $v'_n$ $v_n$}} \\
+    $v_1$ & = & pbReturn $v_0$ $v_1$ \\
+    \multicolumn{3}{l}{\dots} \\
+    $v_n$ & = & pbReturn $v_0$ $v_n$ \\
   \end{tabular}
 \end{center}
-where $v_0$ is a fresh variable and $\overline{v_{n/i}}$ stands for
-the sequence of variables $v_1$ $\dots$ $v_{i-1}$ $v_{i+1}$ $\dots$
-$v_n$.  A special case in the transformation into abstract machine
-code (see Sect.~\ref{sec:il-compile}) inserts code that updates each
-of the additional arguments $\overline{v_{n/i}}$ from the pattern
-variable with the same name once the pattern has been matched
-successfully in the body of the fcase expression. This special
-transformation is triggered by using a distinguished name for the
-selector functions.
+where $v_0,v'_1,\dots,v'_n$ are fresh variables. Each application
+\texttt{pbUpdate $v'_i$ $v_i$} updates the lazy application node bound
+to $v'_i$ with the pattern component bound to $v_i$. An application
+\texttt{pbReturn $v_0$ $v_i$} is evaluated similar to \texttt{$v_0$
+  \&> $v_i$}, but \texttt{pbReturn} is prepared to handle the fact
+that the lazy application bound to $v_i$ is already updated by the
+constraint $v_0$.
 
-\ToDo{Get rid of the obscure dependence on name equivalence between
-  the auxiliary arguments and the corresponding pattern variables.}
+The somewhat unusual definition of $v_0$ with a saturated application
+of a lambda abstraction is necessary because case matching does not
+$\alpha$-convert transformed pattern declarations, i.e., it uses the
+same variable names in the transformed right hand sides as in the
+original pattern on the corresponding left hand sides. On the other
+hand, this policy saves computing a renaming substitution between the
+left and right hand side patterns here.
 \begin{verbatim}
 
 > expandPatternBindings :: ModuleIdent -> [Ident] -> Decl Type
@@ -152,57 +182,75 @@ selector functions.
 > expandPatternBindings m fvs (PatternDecl p t rhs) =
 >   case (t,rhs) of
 >     (VariablePattern _ _,_) -> return [PatternDecl p t rhs]
->     (TuplePattern ts,SimpleRhs _ e@(Fcase (Variable ty v) _) _) ->
->       mapM (projectionDecl m p v0 e) (shuffle vs)
+>     (TuplePattern ts,SimpleRhs _ e _) ->
+>       do
+>         v0 <- freshVar m "_#pbt" successType
+>         d <- updateDecl m p v0 vs e
+>         return (d : map (selectorDecl m p (uncurry mkVar v0)) vs)
 >       where vs = [(ty,v) | VariablePattern ty v <- ts]
->             v0 = (ty,unqualify v)
 > expandPatternBindings _ _ d = return [d]
 
-> projectionDecl :: ModuleIdent -> Position -> (Type,Ident) -> Expression Type
->                -> [(Type,Ident)] -> PatternBindState (Decl Type)
-> projectionDecl m p v0 (Fcase _ as) (v:vs) =
+> updateDecl :: ModuleIdent -> Position -> (Type,Ident) -> [(Type,Ident)]
+>            -> Expression Type -> PatternBindState (Decl Type)
+> updateDecl m p v0 vs e =
 >   do
->     f <- freshIdent m selectorId (length vs') (polyType ty)
->     return (uncurry (varDecl p) v $
->             Let [funDecl p f ts (project e' (uncurry mkVar v))]
->                 (apply (mkVar ty f) es))
->   where vs' = v0:vs
->         ty = foldr TypeArrow (fst v) (map fst vs')
->         v0' = head ([(fst v0,v) | Alt _ (AsPattern v _) _ <- as] ++ [v0])
->         ts = map (uncurry VariablePattern) (v0':vs)
->         e' = Fcase (uncurry mkVar v0') as
->         es = map (uncurry mkVar) vs'
->         project (Tuple _) e = e
->         project (Fcase e [Alt p t (SimpleRhs p' e' _)]) e'' =
->           Fcase e [Alt p t (SimpleRhs p' (project e' e'') [])]
+>     vs' <- mapM (freshVar m "_#pbt" . fst) vs
+>     let upd = Lambda p (map (uncurry VariablePattern) vs') (fixBody vs' e)
+>     return (uncurry (varDecl p) v0 (apply upd (map (uncurry mkVar) vs)))
+>   where fixBody vs (Tuple es) = foldr1 (cond p) (zipWith (update m) vs es)
+>         fixBody vs (Let ds e) = Let ds (fixBody vs e)
+>         fixBody vs (Fcase e [Alt p t rhs]) = Fcase e [Alt p t (fixRhs vs rhs)]
+>         fixRhs vs (SimpleRhs p e _) = SimpleRhs p (fixBody vs e) []
+
+> cond :: Position -> Expression Type -> Expression Type -> Expression Type
+> cond p c e = Case c [caseAlt p successPattern e]
+>   where successPattern = ConstructorPattern successType qSuccessId []
+
+> update :: ModuleIdent -> (Type,Ident) -> Expression Type -> Expression Type
+> update m v = Apply (Apply (pbUpdate m (fst v)) (uncurry mkVar v))
+
+> selectorDecl :: ModuleIdent -> Position -> Expression Type -> (Type,Ident)
+>              -> Decl Type
+> selectorDecl m p e v = uncurry (varDecl p) v (ret m e v)
+
+> ret :: ModuleIdent -> Expression Type -> (Type,Ident) -> Expression Type
+> ret m e v = apply (pbReturn m (fst v)) [e,uncurry mkVar v]
+
+\end{verbatim}
+Pattern binding primitives.
+\begin{verbatim}
+
+> pbUpdate, pbReturn :: ModuleIdent -> Type -> Expression Type
+> pbUpdate m ty = pbFun m [ty,ty] successType "_#update"
+> pbReturn m ty = pbFun m [successType,ty] ty "_#return"
+
+> pbFun :: ModuleIdent -> [Type] -> Type -> String -> Expression Type
+> pbFun m tys ty f =
+>   Variable (foldr TypeArrow ty tys) (qualifyWith m (mkIdent f))
 
 \end{verbatim}
 Generation of fresh names.
 \begin{verbatim}
 
-> freshIdent :: ModuleIdent -> (Int -> Ident) -> Int -> TypeScheme
->            -> PatternBindState Ident
-> freshIdent m f n ty =
+> freshVar :: ModuleIdent -> String -> Type -> PatternBindState (Type,Ident)
+> freshVar m prefix ty =
 >   do
->     x <- liftM f (liftSt (updateSt (1 +)))
->     updateSt_ (bindFun m x n ty)
->     return x
-
-> freshVar :: Typeable a => ModuleIdent -> (Int -> Ident) -> a
->          -> PatternBindState (Type,Ident)
-> freshVar m f x =
->   do
->     v <- freshIdent m f 0 (monoType ty)
+>     v <- liftM mkName (liftSt (updateSt (1 +)))
+>     updateSt_ (bindFun m v 0 (monoType ty))
 >     return (ty,v)
->   where ty = typeOf x
+>   where mkName n = mkIdent (prefix ++ show n)
 
 \end{verbatim}
 Auxiliary functions.
 \begin{verbatim}
 
-> shuffle :: [a] -> [[a]]
-> shuffle xs = shuffle id xs
->   where shuffle _ [] = []
->         shuffle f (x:xs) = (x : f xs) : shuffle (f . (x:)) xs
+> foreignDecl :: Position -> String -> QualIdent -> Type -> Decl a
+> foreignDecl p ie f ty =
+>   ForeignDecl p CallConvPrimitive (Just Safe) (Just ie) (unqualify f)
+>               (fromType nameSupply ty)
+
+> bindForeign :: QualIdent -> Type -> ValueEnv -> ValueEnv
+> bindForeign f ty = bindFun m f' (arrowArity ty) (polyType ty)
+>   where (Just m,f') = splitQualIdent f
 
 \end{verbatim}

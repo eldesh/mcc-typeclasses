@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2803 2009-04-26 17:14:20Z wlux $
+% $Id: eval.nw 2805 2009-04-26 17:26:16Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -79,7 +79,7 @@ FUNCTION(eval_indir)
     Node *node;
  ENTRY_LABEL(extern, eval_indir)
     node = regs.r[0];
-    ASSERT(is_tagged_ptr(node) && is_indir_node(node));
+    assert(is_tagged_ptr(node) && is_indir_node(node));
 
     /* dereference the indirection */
     do
@@ -157,20 +157,13 @@ FUNCTION(eval_queueMe)
 }
 
 @ 
-When a thread, which has been suspended because of entering a queue-me
-node, is continued the node on the top of the stack has to be
+When a thread is continued, which has been suspended because of
+entering a queue-me node, the node on the top of the stack has to be
 dereferenced and evaluated before actually returning. The [[resume]]
 code performs this task. In general, the node on the top of the stack
-is in head normal form when [[resume]] is entered. However, the
-pattern binding update projection functions (cf.\ 
-Sect.~\ref{sec:pattern-bindings}) may create indirection nodes that
-point to an unevaluated application. Consider, e.g., the pattern
-declaration
-\begin{verbatim}
-  (xs,ys) = splitAt 5 (replicate 10 'a') in
-\end{verbatim}
-where \texttt{ys} is bound to the unevaluated application
-\texttt{replicate 5 'a'} when \texttt{xs} is evaluated.
+is in head normal form when [[resume]] is entered. However, pattern
+binding updates may result in a thread being woken when this is not
+the case. See [[pbUpdate]] below for a more detailed discussion.
 
 <<eval.h>>=
 DECLARE_LABEL(extern, resume);
@@ -216,7 +209,7 @@ FUNCTION(update)
  ENTRY_LABEL(extern, update)
     result = regs.r[0];
     susp   = regs.sp[0];
-    ASSERT(is_tagged_ptr(susp) && is_queueMe_node(susp) &&
+    assert(is_tagged_ptr(susp) && is_queueMe_node(susp) &&
 	   is_local_space(susp->q.spc));
 
     /* update the suspended application */
@@ -236,6 +229,152 @@ FUNCTION(update)
 
     /* return to the caller */
     RETURN(regs.r[0], 1);
+}
+
+@ 
+The implementation of pattern binding updates\footnote{See
+  Sect.~\ref{sec:pattern-bindings}.} is based on two primitives. The
+first, [[pbUpdate]], is a variant of [[update]] that expects two
+arguments, a lazy application node that returns a component of the
+pattern and the value of that component. Like [[update]], [[pbUpdate]]
+overwrites the lazy application node with its result. However, it
+returns [[Success]] and not the value of the component.
+
+As the raison d'\^etre for the pattern binding update strategy is to %'
+fix a space leak by updating all components of a pattern immediately
+when one component is evaluated, [[pbUpdate]] must be prepared to
+update queue-me nodes as well as unevaluated lazy application nodes.
+Note that a queue-me node might be referenced via an indirection chain
+due to the optimization that avoids stacking update frames (cf.\ 
+[[eval_queueMe]] above).
+
+Another difference with respect to normal updates is that pattern
+variables may be bound to a value that is not in head normal form.
+E.g., given the declaration
+\begin{verbatim}
+  (xs,ys) = splitAt 5 (replicate 10 'a')
+\end{verbatim}
+the pattern variable \texttt{ys} is bound to the unevaluated
+application \texttt{replicate 5 'a'} when \texttt{xs} or \texttt{ys}
+is evaluated. For more complicated examples where other threads can
+attempt to evaluate one of the pattern variables concurrently while
+the right hand side of the pattern binding is evaluated, we may
+overwrite a queue-me node with (an indirection to) an unevaluated
+application. We would like to avoid waking any threads blocked by the
+queue-me node in that case, but, unfortunately, this is not possible
+since there is no place to save the list of blocked threads.
+Therefore, the [[resume]] code must be prepared to handle being woken
+with a non-head normal form on the top of the stack. We can avoid
+waking threads prematurely, though, when the pattern variable is bound
+to a queue-me node, i.e., an expression that is already being
+evaluated by some thread. In this case, it is sufficient to merge the
+wait queues of both queue-me nodes. Note that it is important to
+change the queue-me node belonging to the evaluation of the pattern
+variable into an indirection to the other queue-me node and not vice
+versa so that the thread which evaluates the other expression returns
+into a valid update frame.
+
+<<eval.h>>=
+DECLARE_LABEL(extern, __pbUpdate);
+
+@
+<<eval.c>>=
+FUNCTION(__pbUpdate)
+{
+    Node	*susp, *result;
+    ThreadQueue wq;
+ ENTRY_LABEL(extern, __pbUpdate)
+    susp   = regs.r[0];
+    result = regs.r[1];
+
+    TRACE(("%I %N = %N\n", susp, result));
+    switch (node_kind(susp))
+    {
+    case SUSPEND_KIND:
+	assert(is_local_space(susp->s.spc));
+#if !COPY_SEARCH_SPACE
+	if ( (word *)susp < regs.hlim )
+	{
+	    DO_SAVE(susp, n.node);
+	    susp->info += 2;
+	}
+	else
+#endif
+	    susp->info = &indir_info;
+	susp->n.node   = result;
+	break;
+
+    case INDIR_KIND:
+	do
+	    susp = susp->n.node;
+	while ( is_indir_node(susp) );
+	assert(is_queueMe_node(susp));
+	/* FALL THROUGH!!! */
+    case QUEUEME_KIND:
+	assert(is_local_space(susp->q.spc));
+	wq = susp->q.wq;
+#if !COPY_SEARCH_SPACE
+	SAVE(susp, q.wq);
+	susp->info++;
+#else
+	susp->info   = &indir_info;
+#endif
+	susp->n.node = result;
+
+	/* eventually wake the suspended threads */
+	if ( wq )
+	{
+	    if ( is_tagged_ptr(result) && is_queueMe_node(result)
+		 && is_local_space(result->q.spc) )
+		SET_FIELD(result, q.wq, join_queues(wq, result->q.wq));
+	    else
+		wake_threads(wq);
+	}
+	break;
+
+    default:
+	invalid_arg("pbUpdate", node_kind(susp));
+    }
+    RET(Success);
+}
+
+@ 
+The other primitive for the implementation of pattern binding updates
+is [[pbReturn]]. This primitive also has two arguments. The first is
+assumed to be an expression that evaluates the pattern's value, binds %'
+all of its components via [[pbUpdate]], and then returns [[Success]].
+The second argument is a reference to the component of the pattern
+being returned. When a lazy application of [[pbReturn]] is evaluated
+it expects to find an update frame for its second argument on the
+stack. Because that node is supposed to be updated already during
+evaluation of the first argument, the update frame is discarded and
+[[pbReturn]] arranges to evaluate the extracted component to head
+normal form by returning through the [[resume]] code.
+
+\ToDo{Apparently, [[pbReturn]]'s second argument is redundant. Change
+  [[pbReturn]] into a unary function.} %'
+
+<<eval.h>>=
+DECLARE_LABEL(extern, __pbReturn);
+
+@ 
+<<eval.c>>=
+FUNCTION(__pbReturn)
+{
+ ENTRY_LABEL(extern, __pbReturn)
+    /* make sure this function is called from the correct update frame */
+    assert(regs.ret == update);
+#ifndef NDEBUG
+    while ( regs.sp[0] != regs.r[1] )
+    {
+	assert(is_tagged_ptr(regs.r[1]) && is_indir_node(regs.r[1]) &&
+	       is_local_space(regs.r[1]->n.spc));
+	regs.r[1] = regs.r[1]->n.node;
+    }
+#endif
+
+    /* start evaluation of the pattern */
+    EVAL_NODE(resume);
 }
 
 @ 
@@ -458,7 +597,7 @@ FUNCTION(__ensureGround_1)
 		*argp = susp;
 	    }
 
-	    ASSERT((Node *)regs.hp == node);
+	    assert((Node *)regs.hp == node);
 	    regs.hp += sz;
 	}
     }

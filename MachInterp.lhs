@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: MachInterp.lhs 2691 2008-05-01 22:08:36Z wlux $
+% $Id: MachInterp.lhs 2805 2009-04-26 17:26:16Z wlux $
 %
-% Copyright (c) 1998-2008, Wolfgang Lux
+% Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{MachInterp.lhs}
@@ -1241,6 +1241,59 @@ for the disequality \texttt{(0:xs) =/= [0]}.}
 
 > diseqSuccess :: Instruction
 > diseqSuccess = successCode
+
+\end{verbatim}
+\subsubsection{Pattern Binding Updates}
+Two primitive functions support the implementation of pattern bindings
+(cf.\ Sect.~\ref{sec:pattern-bindings}). The function
+\texttt{pbUpdate} overwrites a lazy application node with the
+application result and the function \texttt{pbReturn} returns a
+particular component of a pattern. In contrast to normal updates,
+\texttt{pbUpdate} must be prepared to update unevaluated applications
+as well as queue-me nodes. The semantics of the function
+\texttt{pbReturn} is similar to that of \texttt{(Prelude.\&>)} in that
+the first argument is a constraint and \texttt{pbReturn} returns the
+second argument when the constraint is satisfied. However, since the
+constraint is supposed to update the lazy application node that
+evaluates the \texttt{pbReturn} application, it discards its own
+update frame.
+\begin{verbatim}
+
+> pbUpdateFunction, pbReturnFunction :: Function
+> pbUpdateFunction = ("pbUpdate",pbUpdateCode,2)
+> pbReturnFunction = ("pbReturn",pbReturnCode,2)
+
+> pbUpdateCode :: Instruction
+> pbUpdateCode = read'updateState popNodes2 >>= uncurry update
+>   where update lptr ptr = deref lptr >>= updateLazy lptr ptr
+>         updateLazy lptr ptr lazy@(LazyNode _ _ _ _ space) =
+>           readState (isALocalSpace space) >>= \so ->
+>           if so then
+>             do
+>               updateState (saveBinding lptr lazy)
+>               updateNode lptr (IndirNode ptr)
+>               success >>= retNode
+>           else
+>             fail "Attempt to update non-local lazy application node"
+>         updateLazy lptr ptr lazy@(QueueMeNode wq space) =
+>           readState (isALocalSpace space) >>= \so ->
+>           if so then
+>             do
+>               updateState (saveBinding lptr lazy)
+>               updateNode lptr (IndirNode ptr)
+>               updateState (wakeThreads wq)
+>               success >>= retNode
+>           else
+>             fail "Attempt to update non-local lazy application node"
+>         updateLazy _ ptr lazy@(IndirNode lptr) = update lptr ptr
+>         updateLazy _ _ _ = fail "Invalid pattern binding update"
+
+> pbReturnCode :: Instruction
+> pbReturnCode =
+>   read'updateState popCont >>= \_ ->
+>   entry ["p","v"] $ seqStmts "_p" (enter "p")
+>                   $ switchRigid "_p" [(successTag,const (enter "v"))]
+>                   $ const (fail "Type error in pattern binding update")
 
 \end{verbatim}
 \subsubsection{Encapsulated Search}

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2798 2009-04-26 15:29:05Z wlux $
+% $Id: Simplify.lhs 2802 2009-04-26 17:02:50Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -73,7 +73,7 @@ Currently, the following optimizations are implemented:
 >              -> SimplifyState (Decl Type)
 > simplifyDecl _ _ (TypeSig p fs ty) = return (TypeSig p fs ty)
 > simplifyDecl m env (FunctionDecl p f eqs) =
->   liftM (FunctionDecl p f) (mapM (simplifyEquation m env) eqs >>= etaExpand m)
+>   liftM (FunctionDecl p f) (mapM (simplifyEquation m env) eqs)
 > simplifyDecl _ _ (ForeignDecl p cc s ie f ty) =
 >   return (ForeignDecl p cc s ie f ty)
 > simplifyDecl m env (PatternDecl p t rhs) =
@@ -91,7 +91,7 @@ Currently, the following optimizations are implemented:
 > simplifyEquation :: ModuleIdent -> InlineEnv -> Equation Type
 >                  -> SimplifyState (Equation Type)
 > simplifyEquation m env (Equation p lhs rhs) =
->   liftM (Equation p lhs) (simplifyRhs m env rhs)
+>   simplifyRhs m env rhs >>= etaExpand m . Equation p lhs
 
 > simplifyRhs :: ModuleIdent -> InlineEnv -> Rhs Type
 >             -> SimplifyState (Rhs Type)
@@ -102,11 +102,13 @@ Currently, the following optimizations are implemented:
 
 \end{verbatim}
 \label{eta-expansion}
-After transforming the bodies of each equation defining a function,
-the compiler tries to $\eta$-expand the definition. Using
-$\eta$-expanded definitions has the advantage that the compiler can
-avoid intermediate lazy applications. For instance, if the
-\texttt{map} function were defined as follows
+After transforming the body of an equation defining a
+function\footnote{Recall that after making pattern matching explicit
+  each function is defined by exactly one equation.}, the compiler
+tries to $\eta$-expand the definition. Using $\eta$-expanded
+definitions has the advantage that the compiler can avoid intermediate
+lazy applications. For instance, if the \texttt{map} function were
+defined as follows
 \begin{verbatim}
   map f = foldr (\x -> (f x :)) []
 \end{verbatim}
@@ -159,25 +161,18 @@ either
   variable declarations of the form \texttt{$x$=$e$} where $e$ is a
   non-expansive expression.
 \end{itemize}
-A function definition then can be $\eta$-expanded safely if it has
-only a single equation whose body is a non-expansive expression.
+A function definition can be $\eta$-expanded safely if its body is a
+non-expansive expression.
 \begin{verbatim}
 
-> etaExpand :: ModuleIdent -> [Equation Type] -> SimplifyState [Equation Type]
-> etaExpand m [eq] =
+> etaExpand :: ModuleIdent -> Equation Type -> SimplifyState (Equation Type)
+> etaExpand m (Equation p1 (FunLhs f ts) (SimpleRhs p2 e _)) =
 >   do
 >     tyEnv <- fetchSt
 >     tcEnv <- liftSt envRt
->     etaEquation m tcEnv tyEnv eq
-> etaExpand _ eqs = return eqs
-
-> etaEquation :: ModuleIdent -> TCEnv -> ValueEnv -> Equation Type
->             -> SimplifyState [Equation Type]
-> etaEquation m tcEnv tyEnv (Equation p1 (FunLhs f ts) (SimpleRhs p2 e _)) =
->   do
 >     (ts',e') <- etaExpr m tcEnv tyEnv e
 >     unless (null ts') (updateSt_ (changeArity m f (length ts + length ts')))
->     return [Equation p1 (FunLhs f (ts ++ ts')) (SimpleRhs p2 e' [])]
+>     return (Equation p1 (FunLhs f (ts ++ ts')) (SimpleRhs p2 e' []))
 
 > etaExpr :: ModuleIdent -> TCEnv -> ValueEnv -> Expression Type
 >         -> SimplifyState ([ConstrTerm Type],Expression Type)
@@ -231,25 +226,26 @@ only a single equation whose body is a non-expansive expression.
 > exprArity _ (Fcase _ _) = 0
 
 \end{verbatim}
-We perform $\eta$-expansion even across newtypes, so that, for
-instance, \texttt{doneST} and \texttt{returnST} in the program
-fragment 
+Since newtype constructors have been removed already, the compiler may
+perform $\eta$-expansion even across newtypes. For instance, given the
+source definitions
 \begin{verbatim}
   newtype ST s a = ST (s -> (a,s))
   doneST     = returnST ()
   returnST x = ST (\s -> (x,s))
 \end{verbatim}
-are expanded into functions with arity one and two, respectively. In
-order to determine the types of the variables added by
-$\eta$-expansion in such cases, the compiler must expand the type
-annotations as well. In the example above, the type annotation of
-function \texttt{returnST} in the definition of \texttt{doneST} would
-be changed from $() \rightarrow \texttt{ST}\,\alpha_1\,()$ to $()
-\rightarrow \alpha_1 \rightarrow ((),\alpha_1)$. This is implemented
-in function \texttt{expandTypeAnnot}, which tries to expand the type
-annotations of $e$'s root such that the expression has (at least)
-arity $n$. Note that this may fail when the newtype's definition is
-not visible in the current module.
+the functions \texttt{doneST} and \texttt{returnST} are expanded into
+functions with arity one and two, respectively. In order to determine
+the types of the variables added by $\eta$-expansion in such cases,
+the compiler must expand the type annotations as well. In the example,
+the type annotation of function \texttt{returnST} in the definition of
+\texttt{doneST} is changed from $() \rightarrow
+\texttt{ST}\,\alpha_1\,()$ to $() \rightarrow \alpha_1 \rightarrow
+((),\alpha_1)$. This is implemented in function
+\texttt{expandTypeAnnot}, which tries to expand the type annotations
+of $e$'s root such that the expression has (at least) arity $n$. Note
+that this may fail when the newtype's definition is not visible in the
+current module.
 \begin{verbatim}
 
 > expandTypeAnnot :: TCEnv -> Int -> Expression Type -> (Type,Expression Type)
@@ -501,7 +497,7 @@ functions to access the pattern variables.
 >   | otherwise = Let ds e
 
 \end{verbatim}
-When the scrutinized expression in a $($f$)$case expression is a
+When the scrutinized expression of a $($f$)$case expression is a
 literal or a constructor application, the compiler can perform the
 pattern matching already at compile time and simplify the case
 expression to the right hand side of the matching alternative or to
@@ -526,7 +522,7 @@ binding them to the scrutinized expression. The risk of code
 duplication is also the reason why the compiler currently does not
 inline variables bound to constructor applications. This would be safe
 in general only when the program were transformed into a normalized
-form where all arguments of applications are variables.
+form where the arguments of all applications would be variables.
 \begin{verbatim}
 
 > simplifyMatch :: Expression Type -> [Alt Type] -> Maybe (Expression Type)
@@ -570,7 +566,7 @@ form where all arguments of applications are variables.
 >             -> ConstrTerm Type -> Expression Type -> Expression Type
 > bindPattern _ (Left _) (LiteralPattern _ _) e' = e'
 > bindPattern p (Right (_,_,es)) (ConstructorPattern _ _ ts) e' =
->   foldr Let e' [zipWith (\(VariablePattern ty v) e -> varDecl p ty v e) ts es]
+>   foldr Let e' [zipWith (patDecl p) ts es]
 > bindPattern p e (VariablePattern ty v) e' =
 >   Let [varDecl p ty v (matchExpr e)] e'
 > bindPattern p e (AsPattern v t) e' = bindPattern p e t (Let [bindAs p v t] e')
@@ -688,7 +684,7 @@ patterns.
 >           Fcase e [Alt p t (SimpleRhs p' (project e' e'') [])]
 
 \end{verbatim}
-Auxiliary functions
+Auxiliary functions.
 \begin{verbatim}
 
 > trustedFun :: TrustEnv -> Ident -> Bool

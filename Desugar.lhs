@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2800 2009-04-26 16:54:22Z wlux $
+% $Id: Desugar.lhs 2801 2009-04-26 17:00:29Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -289,9 +289,9 @@ not be replaced.
 >   liftM (foldr cons nil) (mapM (desugarExpr m p) es)
 >   where nil = Constructor ty qNilId
 >         cons = Apply . Apply (Constructor (consType (elemType ty)) qConsId)
-> desugarExpr m p (ListCompr e []) =
->   desugarExpr m p (List (listType (typeOf e)) [e])
-> desugarExpr m p (ListCompr e (q:qs)) = desugarQual m p q (ListCompr e qs)
+> desugarExpr m p (ListCompr e qs) =
+>   desugarListCompr m e qs z >>= desugarExpr m p
+>   where z = List (typeOf (ListCompr e qs)) []
 > desugarExpr m p (EnumFrom e) =
 >   liftM (Apply (prelEnumFrom (typeOf e))) (desugarExpr m p e)
 > desugarExpr m p (EnumFromThen e1 e2) =
@@ -352,61 +352,60 @@ not be replaced.
 > desugarField desugar (Field l e) = liftM (Field l) (desugar e)
 
 \end{verbatim}
-In general, a list comprehension of the form
-\texttt{[}$e$~\texttt{|}~$t$~\texttt{<-}~$l$\texttt{,}~\emph{qs}\texttt{]}
-is transformed into an expression \texttt{foldr}~$f$~\texttt{[]}~$l$ where $f$
-is a new function defined as
-\begin{quote}
-  \begin{tabbing}
-    $f$ $x$ \emph{xs} \texttt{=} \\
-    \quad \= \texttt{case} $x$ \texttt{of} \\
-          \> \quad \= $t$ \texttt{->} \texttt{[}$e$ \texttt{|} \emph{qs}\texttt{]} \texttt{++} \emph{xs} \\
-          \>       \> \texttt{\_} \texttt{->} \emph{xs}
-  \end{tabbing}
-\end{quote}
-Note that this translation evaluates the elements of $l$ rigidly,
-whereas the translation given in the Curry report is flexible.
-However, it does not seem very useful to have the comprehension
-generate instances of $t$ which do not contribute to the list.
-
-Actually, we generate slightly better code in a few special cases.
-When $t$ is a plain variable, the \texttt{case} expression degenerates
-into a let-binding and the auxiliary function thus becomes an alias
-for \texttt{(++)}. Instead of \texttt{foldr~(++)} we use the
-equivalent Prelude function \texttt{concatMap}. In addition, if the
-remaining list comprehension in the body of the auxiliary function has
-no qualifiers -- i.e., if it is equivalent to \texttt{[$e$]} -- we
-avoid the construction of the singleton list by calling \texttt{(:)}
-instead of \texttt{(++)} and \texttt{map} in place of
-\texttt{concatMap}, respectively.
+List comprehensions are desugared with the following optimized
+translation scheme, which constructs the denoted list with (nested)
+foldr applications.
+\begin{displaymath}
+  \newcommand{\semant}[2]{\mathcal{#1}[\![#2]\!]}
+  \renewcommand{\arraystretch}{1.2}
+  \begin{array}{r@{\;}c@{\;}l}
+    \semant{D}{\texttt{[$e$|$qs$]}} &=&
+      \semant{L}{\texttt{[$e$|$qs$]}}(\texttt{[]}) \\
+    \semant{L}{\texttt{[$e$|]}}(z) &=& \texttt{$e$:$z$} \\
+    \semant{L}{\texttt{[$e$|$b$,$qs$]}}(z) &=&
+      \texttt{if $b$ then $\semant{L}{\texttt{[$e$|$qs$]}}(z)$ else $z$} \\
+    \semant{L}{\texttt{[$e$|$t$<-$l$,$qs$]}}(z) &=& \\
+    \texttt{foldr} & \multicolumn{2}{l}{\texttt{(\char`\\$x$ $y$ -> case $x$ of \char`\{\
+          $t$ -> $\semant{L}{\texttt{[$e$|$qs$]}}(y)$; \_ -> $y$ \char`\}) $z$ $l$}}\\
+     \textrm{where} & \multicolumn{2}{@{}l}{\textrm{$x$, $y$ are fresh identifiers}} \\
+    \semant{L}{\texttt{[$e$|let $ds$,$qs$]}}(z) &=&
+      \texttt{let $ds$ in $\semant{L}{\texttt{[$e$|$qs$]}}(z)$} \\
+  \end{array}
+\end{displaymath}
+Note that the transformation scheme uses a rigid case expression to
+match the pattern of a \texttt{$t$<-$l$} qualifier, which differs from
+the Curry report (cf.\ Sect.~5.2 in~\cite{Hanus:Report}). We use a
+rigid match here because it makes the translation scheme simpler,
+since we do not need to compute the set of patterns that are
+incompatible with $t$ and we do not need a special case for literal
+patterns. In addition, it looks dubious to have list comprehension
+qualifiers generate fresh instances of $t$ that do not contribute to
+the list at all.
 \begin{verbatim}
 
-> desugarQual :: ModuleIdent -> Position -> Statement Type -> Expression Type
->             -> DesugarState (Expression Type)
-> desugarQual m p (StmtExpr b) e =
->   desugarExpr m p (IfThenElse b e (List (typeOf e) []))
-> desugarQual m _ (StmtBind p t l) e
->   | isVarPattern t = desugarExpr m p (qualExpr t e l)
->   | otherwise =
->       do
->         (ty,v) <- freshVar m "_#var" (typeOf t)
->         (ty',l') <- freshVar m "_#var" (typeOf e)
->         desugarExpr m p
->           (apply (prelFoldr ty ty') [foldFunct ty v ty' l' e,List ty' [],l])
->   where qualExpr v (ListCompr e []) l =
->           apply (prelMap (typeOf v) (typeOf e)) [Lambda p [v] e,l]
->         qualExpr v e l =
->           apply (prelConcatMap (typeOf v) (elemType (typeOf e)))
->                 [Lambda p [v] e,l]
->         foldFunct ty v ty' l e =
->           Lambda p [VariablePattern ty v,VariablePattern ty' l]
->             (Case (mkVar ty v)
->                   [caseAlt p t (append (elemType ty') e (mkVar ty' l)),
->                    caseAlt p (VariablePattern ty v) (mkVar ty' l)])
->         append ty (ListCompr e []) l =
->           apply (Constructor (consType ty) qConsId) [e,l]
->         append ty e l = apply (prelAppend ty) [e,l]
-> desugarQual m p (StmtDecl ds) e = desugarExpr m p (mkLet ds e)
+> desugarListCompr :: ModuleIdent -> Expression Type -> [Statement Type]
+>                  -> Expression Type -> DesugarState (Expression Type)
+> desugarListCompr _ e [] z =
+>   return (apply (Constructor (consType (typeOf e)) qConsId) [e,z])
+> desugarListCompr m e (q:qs) z =
+>   desugarQual m q z >>= \(y,f) -> desugarListCompr m e qs y >>= return . f
+
+> desugarQual :: ModuleIdent -> Statement Type -> Expression Type
+>             -> DesugarState (Expression Type,
+>                              Expression Type -> Expression Type)
+> desugarQual _ (StmtExpr b) z = return (z,\e -> IfThenElse b e z)
+> desugarQual m (StmtBind p t l) z =
+>   do
+>     v <- freshVar m "_#var" (typeOf t)
+>     y <- freshVar m "_#var" (typeOf z)
+>     return (uncurry mkVar y,
+>             \e -> apply (prelFoldr (fst v) (fst y)) [foldFunct v y e,z,l])
+>   where foldFunct v l e =
+>           Lambda p [uncurry VariablePattern v,uncurry VariablePattern l]
+>             (Case (uncurry mkVar v)
+>                   [caseAlt p t e,
+>                    caseAlt p (uncurry VariablePattern v) (uncurry mkVar l)])
+> desugarQual _ (StmtDecl ds) z = return (z,Let ds)
 
 \end{verbatim}
 Generation of fresh names.
@@ -433,12 +432,8 @@ Prelude entities.
 > prelEnumFromTo a = preludeFun [a,a] (listType a) "enumFromTo"
 > prelEnumFromThen a = preludeFun [a,a] (listType a) "enumFromThen"
 > prelEnumFromThenTo a = preludeFun [a,a,a] (listType a) "enumFromThenTo"
-> prelMap a b = preludeFun [a `TypeArrow` b,listType a] (listType b) "map"
 > prelFoldr a b =
 >   preludeFun [a `TypeArrow` (b `TypeArrow` b),b,listType a] b "foldr"
-> prelAppend a = preludeFun [listType a,listType a] (listType a) "++"
-> prelConcatMap a b =
->   preludeFun [a `TypeArrow` listType b,listType a] (listType b) "concatMap"
 > prelNegate a = preludeFun [a] a "negate"
 
 > preludeFun :: [Type] -> Type -> String -> Expression Type

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2773 2009-03-26 10:38:21Z wlux $
+% $Id: eval.nw 2803 2009-04-26 17:14:20Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -163,8 +163,8 @@ dereferenced and evaluated before actually returning. The [[resume]]
 code performs this task. In general, the node on the top of the stack
 is in head normal form when [[resume]] is entered. However, the
 pattern binding update projection functions (cf.\ 
-Sect.~\ref{pattern-binding}) may create indirection nodes that point
-to an unevaluated application. Consider, e.g., the pattern
+Sect.~\ref{sec:pattern-bindings}) may create indirection nodes that
+point to an unevaluated application. Consider, e.g., the pattern
 declaration
 \begin{verbatim}
   (xs,ys) = splitAt 5 (replicate 10 'a') in

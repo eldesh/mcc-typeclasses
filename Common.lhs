@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Common.lhs 2800 2009-04-26 16:54:22Z wlux $
+% $Id: Common.lhs 2803 2009-04-26 17:14:20Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -39,6 +39,7 @@ well as goals.
 > import Newtype
 > import Options
 > import PathUtils
+> import PatternBind
 > import Pretty
 > import Records
 > import Simplify
@@ -62,7 +63,7 @@ eventually update the module's interface.
 > transModule :: Bool -> Trust -> TCEnv -> ValueEnv -> Module Type
 >             -> (TCEnv,ValueEnv,TrustEnv,Module Type,[(Dump,Doc)])
 > transModule debug tr tcEnv tyEnv m =
->   (tcEnv',tyEnv''''''',trEnv,nolambda,dumps)
+>   (tcEnv',tyEnv'''''''',trEnv,nolambda,dumps)
 >   where trEnv = if debug then trustEnv tr m else emptyEnv
 >         (desugared,tyEnv') = desugar tyEnv m
 >         (unlabeled,tyEnv'') = unlabel tcEnv tyEnv' desugared
@@ -70,7 +71,8 @@ eventually update the module's interface.
 >         (nolazy,tyEnv'''') = unlazy tyEnv''' nonewtype
 >         (flatCase,tyEnv''''') = caseMatch tcEnv' tyEnv'''' nolazy
 >         (simplified,tyEnv'''''') = simplify tcEnv' tyEnv''''' trEnv flatCase
->         (nolambda,tyEnv''''''') = unlambda tyEnv'''''' simplified
+>         (pbu,tyEnv''''''') = pbTrans tyEnv'''''' simplified
+>         (nolambda,tyEnv'''''''') = unlambda tyEnv''''''' pbu
 >         dumps =
 >           [(DumpRenamed,ppModule m),
 >            (DumpTypes,ppTypes tcEnv (localBindings tyEnv)),
@@ -80,6 +82,7 @@ eventually update the module's interface.
 >            (DumpUnlazy,ppModule nolazy),
 >            (DumpFlatCase,ppModule flatCase),
 >            (DumpSimplified,ppModule simplified),
+>            (DumpPBU,ppModule pbu),
 >            (DumpUnlambda,ppModule nolambda)]
 
 \end{verbatim}
@@ -200,6 +203,7 @@ standard output.
 > dumpHeader DumpUnlazy = "Source code after lifting lazy patterns"
 > dumpHeader DumpFlatCase = "Source code after case flattening"
 > dumpHeader DumpSimplified = "Source code after simplification"
+> dumpHeader DumpPBU = "Source code with pattern binding updates"
 > dumpHeader DumpUnlambda = "Source code after naming lambdas"
 > dumpHeader DumpDict = "Source code with dictionaries"
 > dumpHeader DumpSpecialize = "Source code after specialization"

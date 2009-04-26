@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: PredefIdent.lhs 2692 2008-05-02 13:22:41Z wlux $
+% $Id: PredefIdent.lhs 2803 2009-04-26 17:14:20Z wlux $
 %
-% Copyright (c) 1999-2008, Wolfgang Lux
+% Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{PredefIdent.lhs}
@@ -13,8 +13,7 @@ The function \texttt{lambdaId} returns the canonical name of a lambda
 abstraction, which is based on its position in the source code. The
 function \texttt{selectorId} returns the name of an auxiliary function
 that is used to extract components of a pattern in a pattern
-declaration (see p.~\pageref{pattern-binding} in
-Sect.~\ref{sec:simplify}).
+declaration (see Sect.~\ref{sec:pattern-bindings}).
 \begin{verbatim}
 
 > module PredefIdent where

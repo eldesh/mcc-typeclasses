@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: ILCompile.lhs 2803 2009-04-26 17:14:20Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -192,15 +192,15 @@ world.
 \end{verbatim}
 The selector functions, which are introduced by the compiler in order
 to avoid a space leak with lazy pattern bindings (see
-p.~\pageref{pattern-binding} in Sect.~\ref{sec:simplify}), have to be
-treated specially. The first argument of a selector function is the
-pattern to be matched and the remaining arguments are references to
-the free variables of the pattern excluding the variable that is
-returned by the selector. When a selector is evaluated, it updates the
-additional arguments with queue-me nodes first so as to prevent
-concurrent computations from evaluating the corresponding selectors.
-After matching is complete, these queue-me nodes are updated with
-pointers to the matched arguments from the pattern.
+Sect.~\ref{sec:pattern-bindings}), have to be treated specially. The
+first argument of a selector function is the pattern to be matched and
+the remaining arguments are references to the free variables of the
+pattern excluding the variable that is returned by the selector. When
+a selector is evaluated, it updates the additional arguments with
+queue-me nodes first so as to prevent concurrent computations from
+evaluating the corresponding selectors. After matching is complete,
+these queue-me nodes are updated with pointers to the matched
+arguments from the pattern.
 
 The compiler uses the convention that the additional arguments use the
 same names as the corresponding variables in the pattern. However, in

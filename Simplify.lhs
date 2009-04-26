@@ -1,16 +1,14 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2802 2009-04-26 17:02:50Z wlux $
+% $Id: Simplify.lhs 2803 2009-04-26 17:14:20Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Simplify.lhs}
 \section{Optimizing the Desugared Code}\label{sec:simplify}
-After desugaring the source code, but before lifting local
-declarations, the compiler performs a few simple optimizations to
-improve efficiency of the generated code. In addition, the optimizer
-replaces pattern bindings with simple variable bindings and selector
-functions.
+After desugaring source code and making pattern matching explicit, but
+before lifting local declarations, the compiler performs a few simple
+optimizations to improve efficiency of the generated code.
 
 Currently, the following optimizations are implemented:
 \begin{itemize}
@@ -180,14 +178,13 @@ non-expansive expression.
 > etaExpr m tcEnv tyEnv e
 >   | isNonExpansive tyEnv 0 e && not (null tys) =
 >       do
->         vs <- mapM (freshVar m etaId) tys
+>         vs <- mapM (freshVar m "_#eta") tys
 >         return (map (uncurry VariablePattern) vs,
 >                 etaApply e' (map (uncurry mkVar) vs))
 >   | otherwise = return ([],e)
 >   where n = exprArity tyEnv e
 >         (ty',e') = expandTypeAnnot tcEnv n e
 >         tys = take n (arrowArgs ty')
->         etaId n = mkIdent ("_#eta" ++ show n)
 >         etaApply e es =
 >           case e of
 >             Let ds e -> Let ds (etaApply e es)
@@ -314,11 +311,10 @@ these values and the let declarations will be removed.
 >   | length as == 1 = return (f (map (applyToAlt es) as))
 >   | otherwise =
 >       do
->         vs <- mapM (freshVar m argId) es
+>         vs <- mapM (freshVar m "_#arg" . typeOf) es
 >         let es' = map (uncurry mkVar) vs
 >         return (foldr2 mkLet (f (map (applyToAlt es') as)) vs es)
->   where argId n = mkIdent ("_#arg" ++ show n)
->         applyToAlt es (Alt p t rhs) = Alt p t (applyToRhs es rhs)
+>   where applyToAlt es (Alt p t rhs) = Alt p t (applyToRhs es rhs)
 >         applyToRhs es (SimpleRhs p e _) = SimpleRhs p (apply e es) []
 >         mkLet (ty,v) e1 e2 = Let [varDecl p ty v e1] e2
 
@@ -404,6 +400,17 @@ functions in later phases of the compiler.
 >   foldr hoistDecls ds' (PatternDecl p t (SimpleRhs p' e []) : ds)
 > hoistDecls d ds = d : ds
 
+> sharePatternRhs :: ModuleIdent -> Decl Type -> SimplifyState [Decl Type]
+> sharePatternRhs m (PatternDecl p t rhs) =
+>   case (t,rhs) of
+>     (VariablePattern _ _,_) -> return [PatternDecl p t rhs]
+>     (_,SimpleRhs p' (Fcase e as) _) ->
+>       do
+>         (ty,v) <- freshVar m "_#pat" (typeOf t)
+>         return [PatternDecl p t (SimpleRhs p' (Fcase (mkVar ty v) as) []),
+>                 PatternDecl p (VariablePattern ty v) (SimpleRhs p e [])]
+> sharePatternRhs _ d = return [d]
+
 \end{verbatim}
 The declaration groups of a let expression are first processed from
 outside to inside, simplifying the right hand sides and collecting
@@ -428,9 +435,7 @@ in recursive binding groups.
 With the list of inlineable expressions, the body of the let is
 simplified and then the declaration groups are processed from inside
 to outside to construct the simplified, nested let expression. In
-doing so unused bindings are discarded. In addition, all pattern
-bindings are replaced by simple variable declarations using selector
-functions to access the pattern variables.
+doing so unused bindings are discarded.
 \begin{verbatim}
 
 > simplifyLet :: ModuleIdent -> InlineEnv -> [[Decl Type]] -> Expression Type
@@ -443,8 +448,7 @@ functions to access the pattern variables.
 >     tcEnv <- liftSt envRt
 >     trEnv <- liftSt (liftRt envRt)
 >     e' <- simplifyLet m (inlineVars m tyEnv trEnv ds' env) dss e
->     dss'' <- mapM (expandPatternBindings m (qfv m ds' ++ qfv m e')) ds'
->     return (mkSimplLet m tcEnv (concat dss'') e')
+>     return (mkSimplLet m tcEnv ds' e')
 
 > inlineVars :: ModuleIdent -> ValueEnv -> TrustEnv -> [Decl Type] -> InlineEnv
 >            -> InlineEnv
@@ -584,137 +588,18 @@ form where the arguments of all applications would be variables.
 > prelFailed ty = Variable ty (qualifyWith preludeMIdent (mkIdent "failed"))
 
 \end{verbatim}
-\label{pattern-binding}
-In order to implement lazy pattern matching in local declarations,
-pattern declarations $t$~\texttt{=}~$e$ where $t$ is not a variable
-are transformed into a list of declarations
-$v_0$~\texttt{=}~$e$\texttt{;} $v_1$~\texttt{=}~$f_1$~$v_0$\texttt{;}
-\dots{} \texttt{;} $v_n$~\texttt{=}~$f_n$~$v_0$ where $v_0$ is a fresh
-variable, $v_1,\dots,v_n$ are the variables occurring in $t$ and the
-auxiliary functions $f_i$ are defined by $f_i$~$t$~\texttt{=}~$v_i$
-(see also appendix D.8 of the Curry report~\cite{Hanus:Report}). The
-binding $v_0$~\texttt{=}~$e$ is introduced before splitting the
-declaration groups of the enclosing let expression (cf.\ the
-\texttt{Let} case in \texttt{simplifyExpr} above) so that they are
-placed in their own declaration group whenever possible. In
-particular, this ensures that the new binding is discarded when the
-expression $e$ is a variable itself.
-
-Unfortunately, this transformation introduces a well-known space
-leak~\cite{Wadler87:Leaks,Sparud93:Leaks} because the matched
-expression cannot be garbage collected until all of the matched
-variables have been evaluated. Consider the following function:
-\begin{verbatim}
-  f x | all (' ' ==) cs = c where (c:cs) = x
-\end{verbatim}
-One might expect the call \verb|f (replicate 10000 ' ')| to execute in
-constant space because (the tail of) the long list of blanks is
-consumed and discarded immediately by \texttt{all}. However, the
-application of the selector function that extracts the head of the
-list is not evaluated until after the guard has succeeded and thus
-prevents the list from being garbage collected.
-
-In order to avoid this space leak we use the approach
-from~\cite{Sparud93:Leaks} and update all pattern variables when one
-of the selector functions has been evaluated. Therefore all pattern
-variables except for the matched one are passed as additional
-arguments to each of the selector functions. Thus, each of these
-variables occurs twice in the argument list of a selector function,
-once in the first argument and also as one of the remaining arguments.
-This duplication of names is used by the compiler to insert the code
-that updates the variables when generating abstract machine code.
-
-We will add only those pattern variables as additional arguments which
-are actually used in the code. This reduces the number of auxiliary
-variables and can prevent the introduction of a recursive binding
-group when only a single variable is used. It is also the reason for
-performing this transformation here instead of in the \texttt{Desugar}
-module. The selector functions are defined in a local declaration on
-the right hand side of a projection declaration so that there is
-exactly one declaration for each used variable.
-
-Note that case matching has transformed pattern declarations of the
-form $t$~\texttt{=}~$e$ into a (pseudo-)\discretionary{}{}{} flattened
-form $t$~\texttt{=} \texttt{fcase}~$e$~\texttt{of}
-\texttt{\char`\{}~$\dots{}\rightarrow t$~\texttt{\char`\}}, where the
-\texttt{fcase} expression on the right hand side contains only flat
-patterns.
-\begin{verbatim}
-
-> sharePatternRhs :: ModuleIdent -> Decl Type -> SimplifyState [Decl Type]
-> sharePatternRhs m (PatternDecl p t rhs) =
->   case (t,rhs) of
->     (VariablePattern _ _,_) -> return [PatternDecl p t rhs]
->     (_,SimpleRhs p' (Fcase e as) _) ->
->       do
->         (ty,v) <- freshVar m patternId t
->         return [PatternDecl p t (SimpleRhs p' (Fcase (mkVar ty v) as) []),
->                 PatternDecl p (VariablePattern ty v) (SimpleRhs p e [])]
->   where patternId n = mkIdent ("_#pat" ++ show n)
-> sharePatternRhs _ d = return [d]
-
-> expandPatternBindings :: ModuleIdent -> [Ident] -> Decl Type
->                       -> SimplifyState [Decl Type]
-> expandPatternBindings m fvs (PatternDecl p t rhs) =
->   case (t,rhs) of
->     (VariablePattern _ _,_) -> return [PatternDecl p t rhs]
->     (_,SimpleRhs _ e@(Fcase (Variable ty v) _) _) ->
->       mapM (projectionDecl m p v0 e) (shuffle vs)
->       where vs = filter ((`elem` fvs) . snd) (vars t)
->             v0 = (ty,unqualify v)
-> expandPatternBindings _ _ d = return [d]
-
-> projectionDecl :: ModuleIdent -> Position -> (Type,Ident) -> Expression Type
->                -> [(Type,Ident)] -> SimplifyState (Decl Type)
-> projectionDecl m p v0 (Fcase _ as) (v:vs) =
->   do
->     f <- freshIdent m selectorId (length vs') (polyType ty)
->     return (uncurry (varDecl p) v $
->             Let [funDecl p f ts (project e' (uncurry mkVar v))]
->                 (apply (mkVar ty f) es))
->   where vs' = v0:vs
->         ty = foldr TypeArrow (fst v) (map fst vs')
->         v0' = head ([(fst v0,v) | Alt _ (AsPattern v _) _ <- as] ++ [v0])
->         ts = map (uncurry VariablePattern) (v0':vs)
->         e' = Fcase (uncurry mkVar v0') as
->         es = map (uncurry mkVar) vs'
->         project (Variable _ _) e = e
->         project (Apply _ _) e = e
->         project (Fcase e [Alt p t (SimpleRhs p' e' _)]) e'' =
->           Fcase e [Alt p t (SimpleRhs p' (project e' e'') [])]
-
-\end{verbatim}
 Auxiliary functions.
 \begin{verbatim}
 
 > trustedFun :: TrustEnv -> Ident -> Bool
 > trustedFun trEnv f = maybe True (Trust ==) (lookupEnv f trEnv)
 
-> freshIdent :: ModuleIdent -> (Int -> Ident) -> Int -> TypeScheme
->            -> SimplifyState Ident
-> freshIdent m f n ty =
+> freshVar :: ModuleIdent -> String -> Type -> SimplifyState (Type,Ident)
+> freshVar m prefix ty =
 >   do
->     x <- liftM f (liftSt (liftRt (liftRt (updateSt (1 +)))))
->     updateSt_ (bindFun m x n ty)
->     return x
-
-> freshVar :: Typeable a => ModuleIdent -> (Int -> Ident) -> a
->          -> SimplifyState (Type,Ident)
-> freshVar m f x =
->   do
->     v <- freshIdent m f 0 (monoType ty)
+>     v <- liftM mkName (liftSt (liftRt (liftRt (updateSt (1 +)))))
+>     updateSt_ (bindFun m v 0 (monoType ty))
 >     return (ty,v)
->   where ty = typeOf x
-
-> vars :: ConstrTerm Type -> [(Type,Ident)]
-> vars (LiteralPattern _ _) = []
-> vars (VariablePattern ty v) = [(ty,v)]
-> vars (ConstructorPattern _ _ ts) = concatMap vars ts
-> vars (AsPattern v t) = (typeOf t,v) : vars t
-
-> shuffle :: [a] -> [[a]]
-> shuffle xs = shuffle id xs
->   where shuffle _ [] = []
->         shuffle f (x:xs) = (x : f xs) : shuffle (f . (x:)) xs
+>   where mkName n = mkIdent (prefix ++ show n)
 
 \end{verbatim}

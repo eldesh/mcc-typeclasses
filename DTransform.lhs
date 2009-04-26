@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2781 2009-03-28 16:28:17Z wlux $
+% $Id: DTransform.lhs 2803 2009-04-26 17:14:20Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2009, Wolfgang Lux
@@ -74,9 +74,8 @@ Auxiliary functions for partial applications of the foreign functions
 are provided as well.
 
 A special case handles the selector functions introduced by the
-pattern binding update strategy (see p.~\pageref{pattern-binding} in
-Sect.~\ref{pattern-binding}). These functions are not transformed at
-all.
+pattern binding update strategy (see Sect.~\ref{sec:pattern-bindings}).
+These functions are not transformed at all.
 
 \begin{verbatim}
 

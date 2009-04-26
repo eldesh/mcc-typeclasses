@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachInterp.lhs 2805 2009-04-26 17:26:16Z wlux $
+% $Id: MachInterp.lhs 2806 2009-04-26 17:30:18Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -268,53 +268,6 @@ Sect.~\ref{sec:mach-arithmetic}).
 > prim2 :: Monad m => (NodePtr -> NodePtr -> m a) -> [NodePtr] -> m a
 > prim2 code [ptr1,ptr2] = code ptr1 ptr2
 > prim2 _ _ = fail "Wrong number of arguments in CCall"
-
-\end{verbatim}
-\subsubsection{Pattern Binding Updates}
-In order to avoid a space leak with lazy matching of pattern bindings,
-the compiler generates specially crafted selector functions that
-update all variables of a pattern when one of its selector functions
-is evaluated. To this end, the corresponding lazy application nodes
-are overwritten with queue-me nodes when the selector is entered --
-this prevents any of the other selectors from being evaluated
-concurrently -- and updated with the nodes from the pattern when
-pattern matching in the selector function succeeds. The former task is
-handled by \texttt{lock} statements, the latter by the \texttt{update}
-statements. Note that a selector function is entered only when the
-corresponding lazy application node is local to the current search
-space. As the applications for the other pattern variables are
-obviously created in the same space, neither \texttt{lock} nor
-\texttt{update} need to handle non-local nodes.
-\begin{verbatim}
-
-> lock :: String -> Instruction -> Instruction
-> lock v next = readState (getVar v) >>= lock
->   where lock ptr = deref ptr >>= lockNode ptr
->         lockNode ptr lazy@(LazyNode _ _ _ _ space) =
->           readState (isALocalSpace space) >>= \so ->
->           if so then
->             do
->               updateState (saveBinding ptr lazy)
->               updateNode ptr (QueueMeNode [] space)
->               next
->           else
->             fail "Attempt to lock a non-local lazy application"
->         lockNode _ _ = fail "No lazy application in lock"
-
-> update :: String -> String -> Instruction -> Instruction
-> update v1 v2 next = readState (getVar v1) >>= update
->   where update ptr = deref ptr >>= updateLazy ptr
->         updateLazy ptr lazy@(QueueMeNode wq space) =
->           readState (isALocalSpace space) >>= \so ->
->           if so then
->             do
->               updateState (saveBinding ptr lazy)
->               readState (getVar v2) >>= updateNode ptr . IndirNode
->               updateState (wakeThreads wq)
->               next
->           else
->             fail "Attempt to update non-local lazy application node"
->         updateLazy _ _ = fail "No lazy application in update"
 
 \end{verbatim}
 \subsubsection{Case Selection}

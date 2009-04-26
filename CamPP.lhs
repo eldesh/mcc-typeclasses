@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CamPP.lhs 2621 2008-02-08 14:42:02Z wlux $
+% $Id: CamPP.lhs 2806 2009-04-26 17:30:18Z wlux $
 %
-% Copyright (c) 2002-2008, Wolfgang Lux
+% Copyright (c) 2002-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \subsection{Pretty-printing Abstract Machine Code}
@@ -57,8 +57,6 @@
 > ppStmt (Choices alts) = ppBlock (ppKW "choices") (ppAlts ppAlt alts)
 
 > ppStmt0 :: Stmt0 -> Doc
-> ppStmt0 (Lock v) = ppKW "lock" <+> ppName v
-> ppStmt0 (Update v1 v2) = ppKW "update" <+> ppName v1 <+> ppName v2
 > ppStmt0 (v :<- st) =
 >   case st of
 >     Seq _ _ -> ppBlock prefix (ppStmt st)

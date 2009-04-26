@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2805 2009-04-26 17:26:16Z wlux $
+% $Id: CGen.lhs 2806 2009-04-26 17:30:18Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -956,8 +956,6 @@ translation function.
 > cCode f _ vs0 (CPSChoices v ks) ks' = choices f vs0 v ks ks'
 
 > cCode0 :: FM Name CExpr -> Stmt0 -> [CStmt]
-> cCode0 _ (Lock v) = lock v
-> cCode0 _ (Update v1 v2) = update v1 v2
 > cCode0 consts (v :<- Return e) = freshNode consts v e
 > cCode0 consts (v :<- CCall _ ty cc) = cCall ty v cc
 > cCode0 consts (v :<- Seq st1 st2) =
@@ -1013,18 +1011,6 @@ translation function.
 >           [setField v "info" (CExpr "queueMe_info_table")]]
 >      [setField v "info" (CExpr "queueMe_info_table")],
 >    setField v "q.wq" CNull]
-
-> update :: Name -> Name -> [CStmt]
-> update v1 v2 =
->   [assertLazyNode v1 "QUEUEME_KIND" "q.spc",
->    CLocalVar (CType "ThreadQueue") wq (Just (field v1 "q.wq")),
->    CppCondStmts "!COPY_SEARCH_SPACE"
->      [CProcCall "SAVE" [var v1,CExpr "q.wq"],
->       CIncrBy (lfield v1 "info") (CInt 1)]
->      [setField v1 "info" (addr "indir_info")],
->    setField v1 "n.node" (var v2),
->    CIf (CExpr wq) [procCall "wake_threads" [wq]] []]
->   where wq = "wq"
 
 > lockIndir :: Name -> Name -> [CStmt]
 > lockIndir v1 v2 =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 2805 2009-04-26 17:26:16Z wlux $
+% $Id: ILCompile.lhs 2806 2009-04-26 17:30:18Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -447,11 +447,6 @@ equivalences.
 >   Cam.Choices (map (unaliasStmt aliases) alts)
 
 > unaliasStmt0 :: AliasMap -> Cam.Stmt0 -> (AliasMap,Cam.Stmt -> Cam.Stmt)
-> unaliasStmt0 aliases (Cam.Lock v) =
->   (aliases,Cam.Seq (Cam.Lock (unaliasVar aliases v)))
-> unaliasStmt0 aliases (Cam.Update v1 v2) =
->   (aliases,
->    Cam.Seq (Cam.Update (unaliasVar aliases v1) (unaliasVar aliases v2)))
 > unaliasStmt0 aliases (v Cam.:<- st) =
 >   case unaliasStmt aliases st of
 >     Cam.Return (Cam.Var v') -> (addToFM v v' aliases,id)

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachLoader.lhs 2805 2009-04-26 17:26:16Z wlux $
+% $Id: MachLoader.lhs 2806 2009-04-26 17:30:18Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -77,8 +77,6 @@ in order to allow mutual recursion between functions.
 >           where switch Rigid = switchRigid
 >                 switch Flex = switchFlex
 >         translStmt (Choices alts) = choices (map transl alts)
->         translStmt0 (Lock v) = lock (show v)
->         translStmt0 (Update v1 v2) = update (show v1) (show v2)
 >         translStmt0 (v :<- st) = seqStmts (show v) (transl st)
 >         translStmt0 (Let bds) =
 >           letNodes [(show v,translExpr n) | Bind v n <- bds]

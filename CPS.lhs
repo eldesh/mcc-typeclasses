@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CPS.lhs 2766 2009-03-26 08:59:48Z wlux $
+% $Id: CPS.lhs 2806 2009-04-26 17:30:18Z wlux $
 %
-% Copyright (c) 2003-2008, Wolfgang Lux
+% Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CPS.lhs}
@@ -177,10 +177,6 @@ when transforming a CPS graph into a linear sequence of CPS functions.
 > cpsStmt _ _ k n (CCall _ ty cc) = (n,maybe id CPSWithCont k (CPSCCall ty cc))
 > cpsStmt f k0 k n (Seq st1 st2) =
 >   case st1 of
->     Lock _ -> (n',CPSSeq st1 st2')
->       where (n',st2') = cpsStmt f Nothing k n st2
->     Update _ _ -> (n',CPSSeq st1 st2')
->       where (n',st2') = cpsStmt f Nothing k n st2
 >     v :<- Seq st1' st2' -> cpsStmt f k0 k n (Seq st1' (Seq (v :<- st2') st2))
 >     v :<- Return e -> (n',CPSSeq st1 st2')
 >       where (n',st2') = cpsStmt f Nothing k n st2
@@ -259,8 +255,6 @@ when transforming a CPS graph into a linear sequence of CPS functions.
 > stmtVars (Choices alts) vs = concatMap (flip stmtVars vs) alts
 
 > stmt0Vars :: Stmt0 -> [Name] -> [Name]
-> stmt0Vars (Lock v) vs = v : vs
-> stmt0Vars (Update v1 v2) vs = v1 : v2 : vs
 > stmt0Vars (v :<- st) vs = stmtVars st (filter (v /=) vs)
 > stmt0Vars (Let ds) vs = filter (`notElemSet` bvs) (fvs ++ vs)
 >   where bvs = fromListSet [v | Bind v _ <- ds]

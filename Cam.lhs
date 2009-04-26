@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Cam.lhs 2621 2008-02-08 14:42:02Z wlux $
+% $Id: Cam.lhs 2806 2009-04-26 17:30:18Z wlux $
 %
-% Copyright (c) 1998-2008, Wolfgang Lux
+% Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Cam.lhs}
@@ -114,14 +114,6 @@ recursive bindings is the only raison d'\^etre for \texttt{let}
 statements. Non-recursive \texttt{let} bindings can be removed using
 \texttt{let} \texttt{\lb}~$x$ \texttt{=} $e$~\texttt{\rb}
 $\null\equiv\null$ $x$ \texttt{<-} \texttt{return} $e$.
-
-The statements \texttt{lock}~$x$ and \texttt{update}~$x$~$y$ are used
-for implementing the pattern binding update strategy.
-\texttt{Lock}~$x$ overwrites the node bound to $x$ with a queue-me
-node, and \texttt{update}~$x$~$y$ overwrites the node bound to $x$
-with a pointer to $y$. The variable $x$ must be bound to a local,
-unevaluated suspension node when \texttt{lock} is executed, and to a
-local queue-me node when \texttt{update} is executed.
 \begin{verbatim}
 
 > data Stmt =
@@ -134,9 +126,7 @@ local queue-me node when \texttt{update} is executed.
 >   | Choices [Alt]
 >   deriving (Eq,Show)
 > data Stmt0 =
->     Lock Name
->   | Update Name Name
->   | Name :<- Stmt
+>     Name :<- Stmt
 >   | Let [Bind]
 >   deriving (Eq,Show)
 

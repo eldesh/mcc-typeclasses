@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CamParser.lhs 2631 2008-02-20 17:56:34Z wlux $
+% $Id: CamParser.lhs 2806 2009-04-26 17:30:18Z wlux $
 %
-% Copyright (c) 1999-2008, Wolfgang Lux
+% Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CamParser.lhs}
@@ -84,7 +84,6 @@ in appendix~\ref{sec:ll-parsecomb}.
 >   | KW_integer
 >   | KW_lazy
 >   | KW_let
->   | KW_lock
 >   | KW_papp
 >   | KW_pointer
 >   | KW_return
@@ -92,7 +91,6 @@ in appendix~\ref{sec:ll-parsecomb}.
 >   | KW_stable
 >   | KW_switch
 >   | KW_unit
->   | KW_update
 >   deriving (Eq,Ord)
 
 > instance Show Attributes where
@@ -141,7 +139,6 @@ in appendix~\ref{sec:ll-parsecomb}.
 >   showsPrec _ KW_integer = showKeyword "integer"
 >   showsPrec _ KW_lazy = showKeyword "lazy"
 >   showsPrec _ KW_let = showKeyword "let"
->   showsPrec _ KW_lock = showKeyword "lock"
 >   showsPrec _ KW_papp = showKeyword "papp"
 >   showsPrec _ KW_pointer = showKeyword "pointer"
 >   showsPrec _ KW_return = showKeyword "return"
@@ -149,7 +146,6 @@ in appendix~\ref{sec:ll-parsecomb}.
 >   showsPrec _ KW_stable = showKeyword "stable"
 >   showsPrec _ KW_switch = showKeyword "switch"
 >   showsPrec _ KW_unit = showKeyword "unit"
->   showsPrec _ KW_update = showKeyword "update"
 
 > showKeyword :: String -> ShowS
 > showKeyword kw = showChar '.' . showString kw
@@ -179,15 +175,13 @@ in appendix~\ref{sec:ll-parsecomb}.
 >     ("integer",  KW_integer),
 >     ("lazy",     KW_lazy),
 >     ("let",      KW_let),
->     ("lock",     KW_lock),
 >     ("papp",     KW_papp),
 >     ("pointer",  KW_pointer),
 >     ("return",   KW_return),
 >     ("rigid",    KW_rigid),
 >     ("stable",   KW_stable),
 >     ("switch",   KW_switch),
->     ("unit",     KW_unit),
->     ("update",   KW_update)
+>     ("unit",     KW_unit)
 >   ]
 
 > type SuccessL a = Position -> Token -> L a
@@ -345,9 +339,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 >    where rf = Rigid <$-> keyword KW_rigid <|> Flex <$-> keyword KW_flex
 
 > stmt0 :: Parser Token Stmt0 a
-> stmt0 = Lock <$-> keyword KW_lock <*> checkName
->     <|> Update <$-> keyword KW_update <*> checkName <*> checkName
->     <|> (:<-) <$> name <*-> checkLeftArrow <*> stmt <\> stmt0
+> stmt0 = (:<-) <$> name <*-> checkLeftArrow <*> stmt <\> stmt0
 >     <|> Let <$-> keyword KW_let <*> braces (binding `sepBy1` semi)
 
 > binding :: Parser Token Bind a

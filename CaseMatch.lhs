@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 2804 2009-04-26 17:22:55Z wlux $
+% $Id: CaseMatch.lhs 2807 2009-04-26 17:36:12Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -56,8 +56,10 @@ for pattern declarations. Since we cannot flatten the left hand side
 of a pattern declaration $t$~\texttt{=}~$e$, where $t$ is not a
 variable pattern, it is first transformed into the form
 $(v_1,\dots,v_n)$~\texttt{=} \texttt{fcase}~$e$ \texttt{of}
-\texttt{\lb}~$t \rightarrow (v_1,\dots,v_n)$~\texttt{\rb}, where
-$v_1,\dots,v_n$ are the variables occurring in $t$. Now $t$ can be
+\texttt{\lb}~$\sigma(t) \rightarrow (v'_1,\dots,v'_n)$~\texttt{\rb},
+where $v_1,\dots,v_n$ are the variables occurring in $t$,
+$v'_1,\dots,v'_n$ are fresh variables, and the substitution $\sigma =
+\{ v_1 \mapsto v'_1, \dots, v_n \mapsto v'_n \}$. Now $t$ can be
 flattened on the right hand side of the declaration. After
 simplification, the compiler will replace the transformed pattern
 declaration by individual declarations for those variables from
@@ -73,7 +75,7 @@ the right hand side of the declaration during later phases of the
 compiler. Also note that pattern declarations with only a single
 variable automatically degenerate into normal variable declarations.
 For instance, \texttt{Just x = unknown} becomes \texttt{x = fcase
-  unknown of \lb{} Just x -> x \rb{}}.
+  unknown of \lb{} Just a1 -> a1 \rb{}}.
 \begin{verbatim}
 
 > caseMatch :: TCEnv -> ValueEnv -> Module Type -> (Module Type,ValueEnv)
@@ -127,10 +129,18 @@ For instance, \texttt{Just x = unknown} becomes \texttt{x = fcase
 >   | isVarPattern t = return (t,mkRhs p e)
 >   | otherwise =
 >       do
->         [v] <- matchVars m [[t]]
->         Fcase _ as' <- flexMatch m p [v] [(p,[t],mkRhs p (tupleExpr vs))]
+>         vs' <- mapM (freshVar m "_#case" . fst) vs
+>         let t' = rename (zip (map snd vs) (map snd vs')) t
+>         [v] <- matchVars m [[t']]
+>         Fcase _ as' <- flexMatch m p [v] [(p,[t'],mkRhs p (tupleExpr vs'))]
 >         return (tuplePattern vs,mkRhs p (Fcase e as'))
 >   where vs = vars t
+>         rename _ (LiteralPattern ty l) = LiteralPattern ty l
+>         rename vs (VariablePattern ty v) = VariablePattern ty (renameVar vs v)
+>         rename vs (ConstructorPattern ty c ts) =
+>           ConstructorPattern ty c (map (rename vs) ts)
+>         rename vs (AsPattern v t) = AsPattern (renameVar vs v) (rename vs t)
+>         renameVar vs v = maybe v id (lookup v vs)
 
 \end{verbatim}
 A list of boolean guards is expanded into a nested if-then-else

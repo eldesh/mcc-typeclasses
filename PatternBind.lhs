@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PatternBind.lhs 2805 2009-04-26 17:26:16Z wlux $
+% $Id: PatternBind.lhs 2807 2009-04-26 17:36:12Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -140,41 +140,35 @@ variable pattern, into an equation
       fcase $u_k$ of \lb{} $t'_k$ -> $(v_1,\dots,v_n)$ \rb{}$\dots$\rb{}},
   \end{tabular}
 \end{center}
-where $v_1,\dots,v_n$ are the free variables of $t$, $t'_1,\dots,t'_k$
-are flat patterns, and $u_2,\dots,u_k$ are variables occurring in
-these patterns such that the right hand side of the equation matches
-the same pattern as $t$. Also recall that the simplifier reduces the
-tuples $(v_1,\dots,v_n)$ to those variables which are actually used in
-the scope of the declaration. Each such equation is now transformed by
+where $v_1,\dots,v_n$ are the free variables of $t$, the patterns
+$t'_1,\dots,t'_k$ are flat patterns using fresh variables, and
+$u_2,\dots,u_k$ are variables occurring in these patterns such that
+the right hand side of the equation matches the same pattern as $t$.
+Also recall that the simplifier reduces the tuples $(v_1,\dots,v_n)$
+to those variables which are actually used in the scope of the
+declaration. Each such equation is now transformed by
 \texttt{expandPatternBindings} into a list of equations
 \begin{center}\tt
   \begin{tabular}{rcl}
-    $v_0$ & = & (\bs{}$v'_1$ $\dots$ $v'_n$ ->
-                 fcase $e$ of \lb{} $t'_1$ -> $\dots$ $e'$ \rb{})
-                $v_1$ $\dots$ $v_n$ \\
+    $v_0$ & = & fcase $e$ of \lb{} $t'_1$ -> $\dots$
+      fcase $u_k$ of \lb{} $t'_k$ -> $e'$ \rb{}$\dots$\rb{} \\
           &   & \textrm{where $e' =$
-                        \texttt{pbUpdate $v'_1$ $v_1$ \&> $\dots$ \&>
-                                pbUpdate $v'_n$ $v_n$}} \\
+                        \texttt{pbUpdate $v_1$ $v'_1$ \&> $\dots$ \&>
+                                pbUpdate $v_n$ $v'_n$}} \\
     $v_1$ & = & pbReturn $v_0$ $v_1$ \\
     \multicolumn{3}{l}{\dots} \\
     $v_n$ & = & pbReturn $v_0$ $v_n$ \\
   \end{tabular}
 \end{center}
-where $v_0,v'_1,\dots,v'_n$ are fresh variables. Each application
-\texttt{pbUpdate $v'_i$ $v_i$} updates the lazy application node bound
-to $v'_i$ with the pattern component bound to $v_i$. An application
+where $v_0$ is a fresh variable and $v'_1,\dots,v'_n$ are variables
+from $t'_1,\dots,t'_k$ that match the same components as
+$v_1,\dots,v_n$, respectively, in $t$. Each application
+\texttt{pbUpdate $v_i$ $v'_i$} updates the lazy application node bound
+to $v_i$ with the pattern component bound to $v'_i$. An application
 \texttt{pbReturn $v_0$ $v_i$} is evaluated similar to \texttt{$v_0$
   \&> $v_i$}, but \texttt{pbReturn} is prepared to handle the fact
 that the lazy application bound to $v_i$ is already updated by the
 constraint $v_0$.
-
-The somewhat unusual definition of $v_0$ with a saturated application
-of a lambda abstraction is necessary because case matching does not
-$\alpha$-convert transformed pattern declarations, i.e., it uses the
-same variable names in the transformed right hand sides as in the
-original pattern on the corresponding left hand sides. On the other
-hand, this policy saves computing a renaming substitution between the
-left and right hand side patterns here.
 \begin{verbatim}
 
 > expandPatternBindings :: ModuleIdent -> [Ident] -> Decl Type
@@ -185,18 +179,14 @@ left and right hand side patterns here.
 >     (TuplePattern ts,SimpleRhs _ e _) ->
 >       do
 >         v0 <- freshVar m "_#pbt" successType
->         d <- updateDecl m p v0 vs e
->         return (d : map (selectorDecl m p (uncurry mkVar v0)) vs)
+>         return (updateDecl m p v0 vs e :
+>                 map (selectorDecl m p (uncurry mkVar v0)) vs)
 >       where vs = [(ty,v) | VariablePattern ty v <- ts]
 > expandPatternBindings _ _ d = return [d]
 
 > updateDecl :: ModuleIdent -> Position -> (Type,Ident) -> [(Type,Ident)]
->            -> Expression Type -> PatternBindState (Decl Type)
-> updateDecl m p v0 vs e =
->   do
->     vs' <- mapM (freshVar m "_#pbt" . fst) vs
->     let upd = Lambda p (map (uncurry VariablePattern) vs') (fixBody vs' e)
->     return (uncurry (varDecl p) v0 (apply upd (map (uncurry mkVar) vs)))
+>            -> Expression Type -> Decl Type
+> updateDecl m p v0 vs e = uncurry (varDecl p) v0 (fixBody vs e)
 >   where fixBody vs (Tuple es) = foldr1 (cond p) (zipWith (update m) vs es)
 >         fixBody vs (Let ds e) = Let ds (fixBody vs e)
 >         fixBody vs (Fcase e [Alt p t rhs]) = Fcase e [Alt p t (fixRhs vs rhs)]

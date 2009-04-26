@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2804 2009-04-26 17:22:55Z wlux $
+% $Id: Simplify.lhs 2807 2009-04-26 17:36:12Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -50,44 +50,50 @@ Currently, the following optimizations are implemented:
 > simplifyModule :: Module Type -> SimplifyState (Module Type,ValueEnv)
 > simplifyModule (Module m es is ds) =
 >   do
->     ds' <- mapM (simplifyTopDecl m) ds
+>     dss' <- mapM (simplifyTopDecl m) ds
 >     tyEnv <- fetchSt
->     return (Module m es is ds',tyEnv)
+>     return (Module m es is (concat dss'),tyEnv)
 
-> simplifyTopDecl :: ModuleIdent -> TopDecl Type -> SimplifyState (TopDecl Type)
+> simplifyTopDecl :: ModuleIdent -> TopDecl Type -> SimplifyState [TopDecl Type]
 > simplifyTopDecl _ (DataDecl p cx tc tvs cs clss) =
->   return (DataDecl p cx tc tvs cs clss)
+>   return [DataDecl p cx tc tvs cs clss]
 > simplifyTopDecl _ (NewtypeDecl p cx tc tvs nc clss) =
->   return (NewtypeDecl p cx tc tvs nc clss)
-> simplifyTopDecl _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
+>   return [NewtypeDecl p cx tc tvs nc clss]
+> simplifyTopDecl _ (TypeDecl p tc tvs ty) = return [TypeDecl p tc tvs ty]
 > simplifyTopDecl m (ClassDecl p cx cls tv ds) =
->   liftM (ClassDecl p cx cls tv . (tds ++))
+>   liftM (return . ClassDecl p cx cls tv . (tds ++) . concat)
 >         (mapM (simplifyDecl m emptyEnv) vds)
 >   where (tds,vds) = partition isTypeSig ds
 > simplifyTopDecl m (InstanceDecl p cx cls ty ds) =
->   liftM (InstanceDecl p cx cls ty) (mapM (simplifyDecl m emptyEnv) ds)
-> simplifyTopDecl _ (DefaultDecl p tys) = return (DefaultDecl p tys)
+>   liftM (return . InstanceDecl p cx cls ty . concat)
+>         (mapM (simplifyDecl m emptyEnv) ds)
+> simplifyTopDecl _ (DefaultDecl p tys) = return [DefaultDecl p tys]
 > simplifyTopDecl m (BlockDecl d) =
->   liftM BlockDecl (simplifyDecl m emptyEnv d)
-> simplifyTopDecl _ (SplitAnnot p) = return (SplitAnnot p)
+>   liftM (map BlockDecl) (simplifyDecl m emptyEnv d)
+> simplifyTopDecl _ (SplitAnnot p) = return [SplitAnnot p]
 
 > simplifyDecl :: ModuleIdent -> InlineEnv -> Decl Type
->              -> SimplifyState (Decl Type)
+>              -> SimplifyState [Decl Type]
 > simplifyDecl m env (FunctionDecl p f eqs) =
->   liftM (FunctionDecl p f) (mapM (simplifyEquation m env) eqs)
+>   liftM (return . FunctionDecl p f) (mapM (simplifyEquation m env) eqs)
 > simplifyDecl _ _ (ForeignDecl p cc s ie f ty) =
->   return (ForeignDecl p cc s ie f ty)
+>   return [ForeignDecl p cc s ie f ty]
 > simplifyDecl m env (PatternDecl p t rhs) =
 >   do
 >     rhs' <- simplifyRhs m env rhs
->     case rhs' of
->       SimpleRhs _ (Lambda _ ts e) _ ->
+>     case (t,rhs') of
+>       (VariablePattern _ f,SimpleRhs _ (Lambda _ ts e) _) ->
 >         do
 >           updateSt_ (changeArity m f (length ts))
->           return (funDecl p f ts e)
->         where VariablePattern _ f = t
->       _ -> return (PatternDecl p t rhs')
-> simplifyDecl _ _ (FreeDecl p vs) = return (FreeDecl p vs)
+>           return [funDecl p f ts e]
+>       (TuplePattern ts,SimpleRhs p' e _) -> return (match p' e)
+>         where match _ (Variable _ v) =
+>                 [patDecl p t (Variable (typeOf t) v) | t <- ts]
+>               match _ (Tuple es) = zipWith (patDecl p) ts es
+>               match p' (Let ds e) = ds ++ match p' e
+>               match p' e@(Fcase _ _) = [PatternDecl p t (SimpleRhs p' e [])]
+>       _ -> return [PatternDecl p t rhs']
+> simplifyDecl _ _ (FreeDecl p vs) = return [FreeDecl p vs]
 
 > simplifyEquation :: ModuleIdent -> InlineEnv -> Equation Type
 >                  -> SimplifyState (Equation Type)
@@ -384,9 +390,7 @@ functions in later phases of the compiler.
 >     (ts',e'') <- etaExpr m tcEnv tyEnv e'
 >     return (etaReduce m tyEnv p (ts ++ ts') e'')
 > simplifyExpr m env (Let ds e) =
->   do
->     dss' <- mapM (sharePatternRhs m) (foldr hoistDecls [] ds)
->     simplifyLet m env (scc bv (qfv m) (concat dss')) e
+>   simplifyLet m env (scc bv (qfv m) (foldr hoistDecls [] ds)) e
 > simplifyExpr m env (Case e as) =
 >   do
 >     e' <- simplifyExpr m env e
@@ -408,17 +412,6 @@ functions in later phases of the compiler.
 > hoistDecls (PatternDecl p t (SimpleRhs p' (Let ds e) _)) ds' =
 >   foldr hoistDecls ds' (PatternDecl p t (SimpleRhs p' e []) : ds)
 > hoistDecls d ds = d : ds
-
-> sharePatternRhs :: ModuleIdent -> Decl Type -> SimplifyState [Decl Type]
-> sharePatternRhs m (PatternDecl p t rhs) =
->   case (t,rhs) of
->     (VariablePattern _ _,_) -> return [PatternDecl p t rhs]
->     (_,SimpleRhs p' (Fcase e as) _) ->
->       do
->         (ty,v) <- freshVar m "_#pat" (typeOf e)
->         return [PatternDecl p t (SimpleRhs p' (Fcase (mkVar ty v) as) []),
->                 PatternDecl p (VariablePattern ty v) (SimpleRhs p e [])]
-> sharePatternRhs _ d = return [d]
 
 \end{verbatim}
 The declaration groups of a let expression are first processed from
@@ -446,14 +439,9 @@ simplified and then the declaration groups are processed from inside
 to outside to construct the simplified, nested let expression. In
 doing so unused bindings are discarded and pattern bindings are
 restricted to those variables actually used in the scope of the
-declaration. In the special case where the pattern binding can be
-resolved at compile time, e.g., \texttt{c:cs = "abc"}, the pattern
-declaration is replaced by individual variable declarations, i.e.,
-\texttt{c = 'a'; cs = "bc"} in the example.
-
-\ToDo{If a pattern binding is resolved at compile time, the resulting
-  declaration group is always considered recursive, even if the
-  declarations are non-recursive as in the given example.}
+declaration. In addition, minimal binding groups are recomputed in
+case compile time matching of pattern bindings did introduce new
+variable declarations (see \texttt{simplifyDecl} above).
 \begin{verbatim}
 
 > simplifyLet :: ModuleIdent -> InlineEnv -> [[Decl Type]] -> Expression Type
@@ -461,13 +449,13 @@ declaration is replaced by individual variable declarations, i.e.,
 > simplifyLet m env [] e = simplifyExpr m env e
 > simplifyLet m env (ds:dss) e =
 >   do
->     ds' <- mapM (simplifyDecl m env) ds
+>     dss' <- mapM (simplifyDecl m env) ds
 >     tyEnv <- fetchSt
 >     tcEnv <- liftSt envRt
 >     trEnv <- liftSt (liftRt envRt)
->     e' <- simplifyLet m (inlineVars m tyEnv trEnv ds' env) dss e
->     let dss'' = map (simplifyPatternDecl (qfv m ds' ++ qfv m e')) ds'
->     return (mkSimplLet m tcEnv (concat dss'') e')
+>     let dss'' = scc bv (qfv m) (concat dss')
+>     e' <- simplifyLet m (foldr (inlineVars m tyEnv trEnv) env dss'') dss e
+>     return (snd (foldr (mkSimplLet m tcEnv) (qfv m e',e') dss''))
 
 > inlineVars :: ModuleIdent -> ValueEnv -> TrustEnv -> [Decl Type] -> InlineEnv
 >            -> InlineEnv
@@ -506,13 +494,27 @@ declaration is replaced by individual variable declarations, i.e.,
 > canInline tyEnv (Variable _ v) = not (isQualified v) || arity v tyEnv > 0
 > canInline _ _ = False
 
-> simplifyPatternDecl :: [Ident] -> Decl Type -> [Decl Type]
+> mkSimplLet :: ModuleIdent -> TCEnv -> [Decl Type] -> ([Ident],Expression Type)
+>            -> ([Ident],Expression Type)
+> mkSimplLet m _ [FreeDecl p vs] (fvs,e)
+>   | null vs' = (fvs,e)
+>   | otherwise = (fvs',Let [FreeDecl p vs'] e)
+>   where (vs',fvs') = partition (`elem` vs) fvs
+> mkSimplLet m tcEnv [PatternDecl _ (VariablePattern _ v) (SimpleRhs _ e _)]
+>       (_,Variable ty' v')
+>   | v' == qualify v && v `notElem` fvs = (fvs,withType tcEnv ty' e)
+>   where fvs = qfv m e
+> mkSimplLet m _ ds (fvs,e)
+>   | null (filter (`elem` fvs) bvs) = (fvs,e)
+>   | otherwise =
+>       (filter (`notElem` bvs) fvs',Let (map (simplifyPatternDecl fvs') ds) e)
+>   where fvs' = qfv m ds ++ fvs
+>         bvs = bv ds
+
+> simplifyPatternDecl :: [Ident] -> Decl Type -> Decl Type
 > simplifyPatternDecl fvs (PatternDecl p (TuplePattern ts) rhs) =
->   case filterRhs rhs of
->     SimpleRhs _ (Tuple es') _ -> zipWith (patDecl p) ts' es'
->     rhs' -> [PatternDecl p (tuplePattern ts') rhs']
+>   PatternDecl p (tuplePattern (filterUsed ts)) (filterRhs rhs)
 >   where bs = [v `elem` fvs | VariablePattern ty v <- ts]
->         ts' = filterUsed ts
 >         filterUsed xs = [x | (b,x) <- zip bs xs, b]
 >         filterRhs (SimpleRhs p e _) = SimpleRhs p (filterBody e) []
 >         filterBody (Variable _ v) =
@@ -521,20 +523,7 @@ declaration is replaced by individual variable declarations, i.e.,
 >         filterBody (Fcase e [Alt p t rhs]) =
 >           Fcase e [Alt p t (filterRhs rhs)]
 >         filterBody (Let ds e) = Let ds (filterBody e)
-> simplifyPatternDecl _ d = [d]
-
-> mkSimplLet :: ModuleIdent -> TCEnv -> [Decl Type] -> Expression Type
->            -> Expression Type
-> mkSimplLet m _ [FreeDecl p vs] e
->   | null vs' = e
->   | otherwise = Let [FreeDecl p vs'] e
->   where vs' = filter (`elem` qfv m e) vs
-> mkSimplLet m tcEnv [PatternDecl _ (VariablePattern _ v) (SimpleRhs _ e _)]
->       (Variable ty' v')
->   | v' == qualify v && v `notElem` qfv m e = withType tcEnv ty' e
-> mkSimplLet m _ ds e
->   | null (filter (`elem` qfv m e) (bv ds)) = e
->   | otherwise = Let ds e
+> simplifyPatternDecl _ d = d
 
 \end{verbatim}
 When the scrutinized expression of a $($f$)$case expression is a

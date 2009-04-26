@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Common.lhs 2799 2009-04-26 16:24:46Z wlux $
+% $Id: Common.lhs 2800 2009-04-26 16:54:22Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -31,6 +31,7 @@ well as goals.
 > import qualified ILPP
 > import ILTrans
 > import InstInfo
+> import LazyPatterns
 > import Lift
 > import List
 > import Maybe
@@ -60,20 +61,23 @@ eventually update the module's interface.
 
 > transModule :: Bool -> Trust -> TCEnv -> ValueEnv -> Module Type
 >             -> (TCEnv,ValueEnv,TrustEnv,Module Type,[(Dump,Doc)])
-> transModule debug tr tcEnv tyEnv m = (tcEnv',tyEnv'''''',trEnv,nolambda,dumps)
+> transModule debug tr tcEnv tyEnv m =
+>   (tcEnv',tyEnv''''''',trEnv,nolambda,dumps)
 >   where trEnv = if debug then trustEnv tr m else emptyEnv
 >         (desugared,tyEnv') = desugar tyEnv m
 >         (unlabeled,tyEnv'') = unlabel tcEnv tyEnv' desugared
 >         (nonewtype,tcEnv',tyEnv''') = transNewtype tcEnv tyEnv'' unlabeled
->         (flatCase,tyEnv'''') = caseMatch tcEnv' tyEnv''' nonewtype
->         (simplified,tyEnv''''') = simplify tcEnv' tyEnv'''' trEnv flatCase
->         (nolambda,tyEnv'''''') = unlambda tyEnv''''' simplified
+>         (nolazy,tyEnv'''') = unlazy tyEnv''' nonewtype
+>         (flatCase,tyEnv''''') = caseMatch tcEnv' tyEnv'''' nolazy
+>         (simplified,tyEnv'''''') = simplify tcEnv' tyEnv''''' trEnv flatCase
+>         (nolambda,tyEnv''''''') = unlambda tyEnv'''''' simplified
 >         dumps =
 >           [(DumpRenamed,ppModule m),
 >            (DumpTypes,ppTypes tcEnv (localBindings tyEnv)),
 >            (DumpDesugared,ppModule desugared),
 >            (DumpUnlabeled,ppModule unlabeled),
 >            (DumpNewtype,ppModule nonewtype),
+>            (DumpUnlazy,ppModule nolazy),
 >            (DumpFlatCase,ppModule flatCase),
 >            (DumpSimplified,ppModule simplified),
 >            (DumpUnlambda,ppModule nolambda)]
@@ -193,6 +197,7 @@ standard output.
 > dumpHeader DumpDesugared = "Source code after desugaring"
 > dumpHeader DumpUnlabeled = "Source code after removing field labels"
 > dumpHeader DumpNewtype = "Source code after removing newtypes"
+> dumpHeader DumpUnlazy = "Source code after lifting lazy patterns"
 > dumpHeader DumpFlatCase = "Source code after case flattening"
 > dumpHeader DumpSimplified = "Source code after simplification"
 > dumpHeader DumpUnlambda = "Source code after naming lambdas"

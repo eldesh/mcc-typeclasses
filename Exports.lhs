@@ -1,11 +1,11 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2777 2009-03-26 21:29:00Z wlux $
+% $Id: Exports.lhs 2797 2009-04-26 14:12:48Z wlux $
 %
-% Copyright (c) 2000-2008, Wolfgang Lux
+% Copyright (c) 2000-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Exports.lhs}
-\section{Creating Interfaces}
+\section{Creating Interfaces}\label{sec:exports}
 After checking a module, the compiler generates the interface's
 declarations from the list of exported types and values. If an entity
 is imported from another module, its name is qualified with the name
@@ -26,6 +26,12 @@ flattening guard expressions (cf.\ Sect.~\ref{sec:flatcase}),
 the interface. For a similar reason, the compiler also forces the
 \verb|:%| constructor of type \texttt{Ratio.Ratio} to appear in
 interfaces.
+
+\textbf{Attention:} The compiler assumes that the environments passed
+to \texttt{exportInterface} reflect the types of the module's entities
+after type inference. However, the source code module passed to
+\texttt{exportInterface} must reflect the module's code \emph{after}
+applying all source code transformations to the program.
 \begin{verbatim}
 
 > module Exports(exportInterface) where
@@ -51,15 +57,16 @@ interfaces.
 
 > exportInterface :: Module a -> PEnv -> TCEnv -> InstEnv -> ValueEnv
 >                 -> Interface
-> exportInterface (Module m (Just (Exporting _ es)) _ _) pEnv tcEnv iEnv tyEnv =
->   Interface m imports (unqualIntf m (precs ++ ds))
->   where tvs = nameSupply
->         imports = map (IImportDecl noPos) (filter (m /=) (usedModules ds))
+> exportInterface (Module m (Just (Exporting _ es)) _ ds) pEnv tcEnv iEnv tyEnv =
+>   Interface m imports (unqualIntf m (precs ++ ds'))
+>   where aEnv = bindArities m ds
+>         tvs = nameSupply
+>         imports = map (IImportDecl noPos) (filter (m /=) (usedModules ds'))
 >         precs = foldr (infixDecl pEnv) [] es
->         ds =
+>         ds' =
 >           closeInterface m tcEnv iEnv tvs zeroSet (types ++ values ++ insts)
 >         types = foldr (typeDecl tcEnv tyEnv tvs) [] es
->         values = foldr (valueDecl tyEnv tvs) [] es
+>         values = foldr (valueDecl aEnv tyEnv tvs) [] es
 >         insts = foldr (uncurry (instDecl tcEnv tvs)) [] (envToList iEnv)
 
 > infixDecl :: PEnv -> Export -> [IDecl] -> [IDecl]
@@ -142,15 +149,15 @@ interfaces.
 >   IMethodDecl noPos f (fromQualType tvs (contextMap tail ty))
 >   where ForAll _ ty = funType (qualifyLike cls f) tyEnv
 
-> valueDecl :: ValueEnv -> [Ident] -> Export -> [IDecl] -> [IDecl]
-> valueDecl tyEnv tvs (Export f) ds =
+> valueDecl :: ArityEnv -> ValueEnv -> [Ident] -> Export -> [IDecl] -> [IDecl]
+> valueDecl aEnv tyEnv tvs (Export f) ds =
 >   IFunctionDecl noPos f n' (fromQualType tvs ty) : ds
->   where n = arity f tyEnv
+>   where n = fromMaybe (arity f tyEnv) (lookupEnv f aEnv)
 >         n'
 >           | arrowArity (unqualType ty) == n = Nothing
 >           | otherwise = Just (toInteger n)
 >         ForAll _ ty = funType f tyEnv
-> valueDecl _ _ (ExportTypeWith _ _) ds = ds
+> valueDecl _ _ _ (ExportTypeWith _ _) ds = ds
 
 > instDecl :: TCEnv -> [Ident] -> CT -> (ModuleIdent,Context) -> [IDecl]
 >          -> [IDecl]
@@ -166,6 +173,24 @@ interfaces.
 >           fromQualType tvs (QualType cx (applyType (TypeConstructor tc) tvs'))
 >         n = kindArity (constrKind tc tcEnv) - kindArity (classKind cls tcEnv)
 >         tvs' = take n (map TypeVariable [0..])
+
+\end{verbatim}
+Simplification can change the arity of an exported function defined in
+the current module via $\eta$-expansion (cf.\ 
+Sect.~\ref{eta-expansion}). In order to generate correct arity
+annotations, the compiler collects the arities of all user defined
+functions at the top-level of the transformed code in an auxiliary
+environment. Note that we ignore foreign function declarations here
+because their arities are fixed and cannot be changed by program
+transformations.
+\begin{verbatim}
+
+> type ArityEnv = Env QualIdent Int
+
+> bindArities :: ModuleIdent -> [TopDecl a] -> ArityEnv
+> bindArities m ds =
+>   foldr bindArity emptyEnv [(f,eqs) | BlockDecl (FunctionDecl _ f eqs) <- ds]
+>   where bindArity (f,eqs) = bindEnv (qualifyWith m f) (eqnArity (head eqs))
 
 \end{verbatim}
 The compiler determines the list of imported modules from the set of

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2798 2009-04-26 15:29:05Z wlux $
+% $Id: DictTrans.lhs 2799 2009-04-26 16:24:46Z wlux $
 %
 % Copyright (c) 2006-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -536,16 +536,10 @@ the implicit dictionary arguments to the declaration.
 >   dictTrans _ tcEnv iEnv tyEnv dictEnv (DataDecl p cxL tc tvs cs clss) =
 >     return (DataDecl p [] tc tvs (map dictTransConstrDecl cs) clss)
 >     where dictTransConstrDecl (ConstrDecl p evs cxR c tys) =
->             dictTransConstrDecl' p evs cxR c tys
->           dictTransConstrDecl (ConOpDecl p evs cxR ty1 op ty2) =
->             dictTransConstrDecl' p evs cxR op [ty1,ty2]
->           dictTransConstrDecl (RecordDecl p evs cxR c fs) =
->             dictTransConstrDecl' p evs cxR c tys
->             where tys = [ty | FieldDecl _ ls ty <- fs, l <- ls]
->           dictTransConstrDecl' p evs cxR c tys = ConstrDecl p evs [] c tys'
->             where tys' = map (fromType (tvs ++ evs)) . arrowArgs $
->                          uncurry (transformConstrType tcEnv) $
->                          expandConstrType tcEnv cxL (qualify tc) tvs cxR tys
+>             ConstrDecl p evs [] c $
+>             map (fromType (tvs ++ evs)) . arrowArgs $
+>             uncurry (transformConstrType tcEnv) $
+>             expandConstrType tcEnv cxL (qualify tc) tvs cxR tys
 >   dictTrans _ _ _ _ _ (NewtypeDecl p cx tc tvs nc clss) =
 >     return (NewtypeDecl p [] tc tvs nc clss)
 >   dictTrans m tcEnv iEnv tyEnv dictEnv (BlockDecl d) =

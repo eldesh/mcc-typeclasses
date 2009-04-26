@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Options.lhs 2798 2009-04-26 15:29:05Z wlux $
+% $Id: Options.lhs 2799 2009-04-26 16:24:46Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -69,6 +69,7 @@ all compiler options.
 >     DumpRenamed                       -- dump source after renaming
 >   | DumpTypes                         -- dump types after typechecking
 >   | DumpDesugared                     -- dump source after desugaring
+>   | DumpUnlabeled                     -- dump source after removing labels
 >   | DumpNewtype                       -- dump source after removing newtypes
 >   | DumpFlatCase                      -- dump source after case flattening
 >   | DumpSimplified                    -- dump source after simplification
@@ -148,6 +149,8 @@ recognized by the compiler.
 >            "dump types after type-checking",
 >     Option "" ["dump-desugared"] (NoArg (Dump [DumpDesugared]))
 >            "dump source code after desugaring",
+>     Option "" ["dump-unlabeled"] (NoArg (Dump [DumpUnlabeled]))
+>            "dump source code after removing field labels",
 >     Option "" ["dump-newremoved"] (NoArg (Dump [DumpNewtype]))
 >            "dump source code after removing newtypes",
 >     Option "" ["dump-flattened"] (NoArg (Dump [DumpFlatCase]))

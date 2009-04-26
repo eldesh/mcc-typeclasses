@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2785 2009-04-10 09:58:03Z wlux $
+% $Id: Desugar.lhs 2798 2009-04-26 15:29:05Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -28,13 +28,6 @@ properties.
   \item if-then-else expressions, and
   \item (f)case expressions.
   \end{itemize}
-\item Applications $N\:x$ in patterns and expressions, where $N$ is a
-  newtype constructor, are replaced by a $x$. Note that neither the
-  newtype declarations themselves nor partial applications of newtype
-  constructors are changed.\footnote{It would be possible to replace
-  partial applications of a newtype constructor by \texttt{Prelude.id}.
-  However, our solution yields a more accurate output when the result
-  of a computation includes partial applications.}
 \end{itemize}
 Note that some syntactic sugar remains. In particular, we do not
 replace boolean guards by if-then-else cascades and we do not
@@ -161,10 +154,11 @@ declaration.
 > newSelectorDecl m tyEnv p c
 >   | l /= anonId =
 >       do
->         v <- freshVar m "_#rec" (head (arrowArgs (rawType ty)))
->         return [funDecl p l [uncurry VariablePattern v] (uncurry mkVar v)]
+>         v <- freshVar m "_#rec" (head tys)
+>         return [funDecl p l [constrPattern ty0 c [v]] (uncurry mkVar v)]
 >   | otherwise = return []
 >   where (l:_,_,ty) = conType c tyEnv
+>         (tys,ty0) = arrowUnapply (rawType ty)
 
 \end{verbatim}
 Within a local declaration group, all fixity declarations, type
@@ -262,12 +256,6 @@ conjunction with a local declaration for $v$.
 >         negateLiteral (Rational r) = Rational (-r)
 >         negateLiteral _ = internalError "negateLiteral"
 > desugarTerm _ _ ds (VariablePattern ty v) = return (ds,VariablePattern ty v)
-> desugarTerm m p ds (ConstructorPattern ty c [t]) =
->   do
->     tyEnv <- fetchSt
->     liftM (if isNewtypeConstr tyEnv c then id else apSnd (constrPat ty c))
->           (desugarTerm m p ds t)
->   where constrPat ty c t = ConstructorPattern ty c [t]
 > desugarTerm m p ds (ConstructorPattern ty c ts) =
 >   liftM (apSnd (ConstructorPattern ty c)) (mapAccumM (desugarTerm m p) ds ts)
 > desugarTerm m p ds (InfixPattern ty t1 op t2) =
@@ -275,7 +263,8 @@ conjunction with a local declaration for $v$.
 > desugarTerm m p ds (ParenPattern t) = desugarTerm m p ds t
 > desugarTerm m p ds (RecordPattern ty c fs) =
 >   do
->     (ls,tys) <- liftM (argumentTypes ty c) fetchSt
+>     tcEnv <- liftSt envRt
+>     (ls,tys) <- liftM (argumentTypes tcEnv ty c) fetchSt
 >     ts <- zipWithM argument tys (orderFields fs ls)
 >     desugarTerm m p ds (ConstructorPattern ty c ts)
 >   where argument ty = maybe (fresh ty) return
@@ -373,29 +362,31 @@ conjunction with a local declaration for $v$.
 > desugarExpr m p (Typed e _) = desugarExpr m p e
 > desugarExpr m p (Record ty c fs) =
 >   do
->     (ls,tys) <- liftM (argumentTypes ty c) fetchSt
+>     tcEnv <- liftSt envRt
+>     (ls,tys) <- liftM (argumentTypes tcEnv ty c) fetchSt
 >     let es = zipWith argument tys (orderFields fs ls)
 >     desugarExpr m p (applyConstr ty c tys es)
 >   where argument ty = maybe (prelUndefined ty) id
 > desugarExpr m p (RecordUpdate e fs) =
 >   do
 >     tyEnv <- fetchSt
+>     tcEnv <- liftSt envRt
 >     f <- freshIdent m "_#upd" 1 (polyType ty')
->     cs <- liftM (constructors tc) (liftSt envRt)
->     eqs <- mapM (updateEqn m tyEnv . qualifyLike tc) cs
+>     eqs <-
+>       mapM (updateEqn m tcEnv tyEnv . qualifyLike tc) (constructors tc tcEnv)
 >     desugarExpr m p (Let [matchDecl p f (concat eqs)] (Apply (mkVar ty' f) e))
 >   where ty = typeOf e
 >         ty' = TypeArrow ty ty
 >         tc = rootOfType (arrowBase ty)
 >         ls = [unqualify l | Field l _ <- fs]
->         updateEqn m tyEnv c
+>         updateEqn m tcEnv tyEnv c
 >           | all (`elem` ls') ls =
 >               do
 >                 vs <- mapM (freshVar m "_#rec") tys
 >                 let es = zipWith argument vs (orderFields fs ls')
 >                 return [(constrPattern ty c vs,applyConstr ty c tys es)]
 >           | otherwise = return []
->           where (ls',tys) = argumentTypes ty c tyEnv
+>           where (ls',tys) = argumentTypes tcEnv ty c tyEnv
 >         argument v = maybe (uncurry mkVar v) id
 > desugarExpr m p (Tuple es) =
 >   liftM (apply (Constructor (foldr TypeArrow (tupleType tys) tys)
@@ -421,16 +412,8 @@ conjunction with a local declaration for $v$.
 >         (mapM (desugarExpr m p) [e1,e2,e3])
 > desugarExpr m p (UnaryMinus e) =
 >   liftM (Apply (prelNegate (typeOf e))) (desugarExpr m p e)
-> desugarExpr m p (Apply (Constructor ty c) e) =
->   do
->     tyEnv <- fetchSt
->     liftM (if isNewtypeConstr tyEnv c then id else (Apply (Constructor ty c)))
->           (desugarExpr m p e)
 > desugarExpr m p (Apply e1 e2) =
->   do
->     e1' <- desugarExpr m p e1
->     e2' <- desugarExpr m p e2
->     return (Apply e1' e2')
+>   liftM2 Apply (desugarExpr m p e1) (desugarExpr m p e2)
 > desugarExpr m p (InfixApply e1 op e2) =
 >   do
 >     op' <- desugarExpr m p (infixOp op)

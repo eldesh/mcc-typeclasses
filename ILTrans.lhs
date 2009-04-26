@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: ILTrans.lhs 2798 2009-04-26 15:29:05Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -24,7 +24,9 @@ module.
 > import Maybe
 > import PredefTypes
 > import Set
+> import TopEnv
 > import Types
+> import TypeInfo
 > import Utils
 > import ValueInfo
 
@@ -42,21 +44,16 @@ according to their textual order in order to ensure that split
 annotations are inserted in IL code at the correct places.
 \begin{verbatim}
 
-> ilTrans :: ValueEnv -> Module Type -> IL.Module
-> ilTrans tyEnv (Module m _ _ ds) = IL.Module m (imports m ds') ds'
->   where ds' = concatMap (translTopDecl m tyEnv) (sortDecls ds)
+> ilTrans :: TCEnv -> ValueEnv -> Module Type -> IL.Module
+> ilTrans tcEnv tyEnv (Module m _ _ ds) = IL.Module m (imports m ds') ds'
+>   where ds' = concatMap (translTopDecl m tcEnv tyEnv) (sortDecls ds)
 
-> translTopDecl :: ModuleIdent -> ValueEnv -> TopDecl Type -> [IL.Decl]
-> translTopDecl m tyEnv (DataDecl _ _ tc tvs cs _) =
+> translTopDecl :: ModuleIdent -> TCEnv -> ValueEnv -> TopDecl Type -> [IL.Decl]
+> translTopDecl m _ tyEnv (DataDecl _ _ tc tvs cs _) =
 >   [translData m tyEnv tc tvs cs]
-> translTopDecl m tyEnv (NewtypeDecl _ _ tc tvs nc _) =
->   translNewtype m tyEnv tc tvs nc
-> translTopDecl _ _ (TypeDecl _ _ _ _) = []
-> translTopDecl _ _ (ClassDecl _ _ _ _ _) = []
-> translTopDecl _ _ (InstanceDecl _ _ _ _ _) = []
-> translTopDecl _ _ (DefaultDecl _ _) = []
-> translTopDecl m tyEnv (BlockDecl d) = translDecl m tyEnv d
-> translTopDecl _ _ (SplitAnnot _) = [IL.SplitAnnot]
+> translTopDecl m tcEnv _ (TypeDecl _ tc _ _) = [translAlias m tcEnv tc]
+> translTopDecl m _ tyEnv (BlockDecl d) = translDecl m tyEnv d
+> translTopDecl _ _ _ (SplitAnnot _) = [IL.SplitAnnot]
 
 > translDecl :: ModuleIdent -> ValueEnv -> Decl Type -> [IL.Decl]
 > translDecl m tyEnv (FunctionDecl _ _ eqs) = map (translFunction m tyEnv) eqs
@@ -70,15 +67,9 @@ annotations are inserted in IL code at the correct places.
 >   IL.DataDecl (qualifyWith m tc) (length tvs)
 >               (map (translConstrDecl m tyEnv) cs)
 
-> translNewtype :: ModuleIdent -> ValueEnv -> Ident -> [Ident] -> NewConstrDecl
->               -> [IL.Decl]
-> translNewtype m tyEnv tc tvs nc =
->   [IL.TypeDecl (qualifyWith m tc) (length tvs) (translType (argType ty)),
->    IL.FunctionDecl f [v] (translType ty) (IL.Variable v)]
->   where f = qualifyWith m (nconstr nc)
->         v = mkIdent "_1"
->         ty = rawType (thd3 (conType f tyEnv))
->         argType (TypeArrow ty _) = ty
+> translAlias :: ModuleIdent -> TCEnv -> Ident -> IL.Decl
+> translAlias m tcEnv tc = IL.TypeDecl tc' n (translType ty)
+>   where [AliasType tc' n _ ty] = qualLookupTopEnv (qualifyWith m tc) tcEnv
 
 > translConstrDecl :: ModuleIdent -> ValueEnv -> ConstrDecl -> IL.ConstrDecl
 > translConstrDecl m tyEnv d = IL.ConstrDecl c (map translType (arrowArgs ty))
@@ -113,7 +104,7 @@ fresh type constructors.
 >         fromType (TypeConstrained tys _) = fromType (head tys)
 >         fromType (TypeSkolem k) =
 >           foldl appType
->                 (IL.TypeConstructor (qualify (mkIdent ("_" ++ show k))) []) 
+>                 (IL.TypeConstructor (qualify (mkIdent ("_" ++ show k))) [])
 >         fromType (TypeApply ty1 ty2) = fromType ty1 . (translType ty2 :)
 >         fromType (TypeArrow ty1 ty2) =
 >           foldl appType (IL.TypeArrow (translType ty1) (translType ty2))
@@ -195,13 +186,9 @@ further possibilities to apply this transformation.
 >   | not (isQualified v) && v' `elem` vs = IL.Variable v'
 >   | otherwise = IL.Function v (arity v tyEnv)
 >   where v' = unqualify v
-> translExpr tyEnv _ (Constructor _ c)
->   | isNewtypeConstr tyEnv c = IL.Function c 1
->   | otherwise = IL.Constructor c (arity c tyEnv)
+> translExpr tyEnv _ (Constructor _ c) = IL.Constructor c (arity c tyEnv)
 > translExpr tyEnv vs (Apply e1 e2) =
->   case e1 of
->     Constructor _ c | isNewtypeConstr tyEnv c -> translExpr tyEnv vs e2
->     _ -> IL.Apply (translExpr tyEnv vs e1) (translExpr tyEnv vs e2)
+>   IL.Apply (translExpr tyEnv vs e1) (translExpr tyEnv vs e2)
 > translExpr tyEnv vs (Let ds e) =
 >   case ds of
 >     [FreeDecl _ vs'] -> foldr IL.Exist e' vs'

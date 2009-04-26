@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Common.lhs 2785 2009-04-10 09:58:03Z wlux $
+% $Id: Common.lhs 2798 2009-04-26 15:29:05Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -35,6 +35,7 @@ well as goals.
 > import List
 > import Maybe
 > import Monad
+> import Newtype
 > import Options
 > import PathUtils
 > import Pretty
@@ -57,17 +58,19 @@ eventually update the module's interface.
 \begin{verbatim}
 
 > transModule :: Bool -> Trust -> TCEnv -> ValueEnv -> Module Type
->             -> (ValueEnv,TrustEnv,Module Type,[(Dump,Doc)])
-> transModule debug tr tcEnv tyEnv m = (tyEnv'''',trEnv,nolambda,dumps)
+>             -> (TCEnv,ValueEnv,TrustEnv,Module Type,[(Dump,Doc)])
+> transModule debug tr tcEnv tyEnv m = (tcEnv',tyEnv''''',trEnv,nolambda,dumps)
 >   where trEnv = if debug then trustEnv tr m else emptyEnv
 >         (desugared,tyEnv') = desugar tcEnv tyEnv m
->         (flatCase,tyEnv'') = caseMatch tcEnv tyEnv' desugared
->         (simplified,tyEnv''') = simplify tyEnv'' trEnv flatCase
->         (nolambda,tyEnv'''') = unlambda tyEnv''' simplified
+>         (nonewtype,tcEnv',tyEnv'') = transNewtype tcEnv tyEnv' desugared
+>         (flatCase,tyEnv''') = caseMatch tcEnv' tyEnv'' nonewtype
+>         (simplified,tyEnv'''') = simplify tcEnv' tyEnv''' trEnv flatCase
+>         (nolambda,tyEnv''''') = unlambda tyEnv'''' simplified
 >         dumps =
 >           [(DumpRenamed,ppModule m),
 >            (DumpTypes,ppTypes tcEnv (localBindings tyEnv)),
 >            (DumpDesugared,ppModule desugared),
+>            (DumpNewtype,ppModule nonewtype),
 >            (DumpFlatCase,ppModule flatCase),
 >            (DumpSimplified,ppModule simplified),
 >            (DumpUnlambda,ppModule nolambda)]
@@ -92,11 +95,11 @@ intermediate language and eventually applies the debugging
 transformation.
 \begin{verbatim}
 
-> ilTransModule :: Bool -> ValueEnv -> TrustEnv -> Maybe Ident -> Module Type
->               -> (IL.Module,[(Dump,Doc)])
-> ilTransModule debug tyEnv trEnv g m = (ilDbg,dumps)
+> ilTransModule :: Bool -> TCEnv -> ValueEnv -> TrustEnv -> Maybe Ident
+>               -> Module Type -> (IL.Module,[(Dump,Doc)])
+> ilTransModule debug tcEnv tyEnv trEnv g m = (ilDbg,dumps)
 >   where (lifted,tyEnv',trEnv') = lift tyEnv trEnv m
->         il = ilTrans tyEnv' lifted
+>         il = ilTrans tcEnv tyEnv' lifted
 >         ilDbg
 >           | debug = debugAddMain (dTransform (trustedFun trEnv') il)
 >           | otherwise = il
@@ -142,7 +145,7 @@ code.
 >   map (IL.Module m is)
 >       (filter (any isCodeDecl) (wordsBy (IL.SplitAnnot ==) ds))
 >   where isCodeDecl (IL.DataDecl _ _ cs) = not (null cs)
->         isCodeDecl (IL.TypeDecl _ _ _) = True
+>         isCodeDecl (IL.TypeDecl _ _ _) = False
 >         isCodeDecl (IL.FunctionDecl _ _ _ _) = True
 >         isCodeDecl (IL.ForeignDecl _ _ _ _) = True
 
@@ -185,6 +188,7 @@ standard output.
 > dumpHeader DumpRenamed = "Module after renaming"
 > dumpHeader DumpTypes = "Types"
 > dumpHeader DumpDesugared = "Source code after desugaring"
+> dumpHeader DumpNewtype = "Source code after removing newtypes"
 > dumpHeader DumpFlatCase = "Source code after case flattening"
 > dumpHeader DumpSimplified = "Source code after simplification"
 > dumpHeader DumpUnlambda = "Source code after naming lambdas"

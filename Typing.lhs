@@ -1,15 +1,14 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 2696 2008-05-09 19:05:03Z wlux $
+% $Id: Typing.lhs 2798 2009-04-26 15:29:05Z wlux $
 %
-% Copyright (c) 2003-2008, Wolfgang Lux
+% Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Typing.lhs}
 \section{Computing the Type of Curry Expressions}
 \begin{verbatim}
 
-> module Typing(Typeable(..), NewtypeEnv, newtypeEnv, etaType,
->               withType, matchType, argumentTypes) where
+> module Typing(Typeable(..), etaType, withType, matchType, argumentTypes) where
 > import Base
 > import Curry
 > import CurryUtils
@@ -19,6 +18,7 @@
 > import PredefTypes
 > import TopEnv
 > import Types
+> import TypeInfo
 > import TypeSubst
 > import ValueInfo
 
@@ -93,50 +93,36 @@ perform any (non-trivial) unifications.
 >   typeOf (GuardedRhs es _) = head [typeOf e | CondExpr _ _ e <- es]
 
 \end{verbatim}
-During desugaring, the compiler will remove newtype constructors and
-renaming types effectively become type synonyms. Therefore, given a
-definition \texttt{newtype $T\,u_1\dots,u_n$ = $N\,\tau$}, the types
-$T\,\tau_1\dots\tau_n$ and $\tau[u_1/\tau_1,\dots,u_n/\tau_n]$ are
-considered equal. However, in contrast to type synonyms renaming types
-can be recursive. Therefore, we expand renaming types lazily when
-necessary with the help of an auxiliary environment that maps each
-newtype type constructor $T$ onto the pair $(n,\tau)$. This
-environment is initialized trivially from the value type environment and
-Note that it always contains an entry for type \texttt{IO}, which is
-assumed to be defined implicitly as
+After desugaring, the compiler removes newtype constructors and
+changes renaming types into type synonyms. However, in contrast to
+type synonyms, renaming types can be recursive. Therefore, we expand
+type synonyms only lazily during program transformations. This may be
+necessary, e.g., when a function is $\eta$-expanded and its result
+type is a renaming type whose representation type is a function type:
 \begin{verbatim}
-  newtype IO a = IO (World -> (a,World))
+  newtype ST s a = ST (\s -> (a,s))
+  returnST x = ST (\s -> (x,s))
 \end{verbatim}
-for some abstract type \texttt{World} representing the state of the
-external world.
+Here \texttt{returnST} can be $\eta$-expanded after removing the
+newtype constructor \texttt{ST} and its type must be changed from
+\texttt{a -> ST s a} into \texttt{a -> s -> (a,s)}.
 \begin{verbatim}
 
-> type NewtypeEnv = Env QualIdent (Int,Type)
-
-> newtypeEnv :: ValueEnv -> NewtypeEnv
-> newtypeEnv tyEnv = foldr bindNewtype initNewtypeEnv (allEntities tyEnv)
->   where initNewtypeEnv = bindEnv qIOId (1,ioType') emptyEnv
->         ioType' = TypeArrow worldType (tupleType [TypeVariable 0,worldType])
->         worldType = TypeConstructor (qualify (mkIdent "World"))
->         bindNewtype (DataConstructor _ _ _ _) = id
->         bindNewtype (NewtypeConstructor _ _ ty) = bindEnv tc (length tvs,ty1)
->           where TypeArrow ty1 ty2 = rawType ty
->                 (TypeConstructor tc,tvs) = unapplyType True ty2
->         bindNewtype (Value _ _ _) = id
-
-> etaType :: NewtypeEnv -> Int -> Type -> Type
+> etaType :: TCEnv -> Int -> Type -> Type
 > etaType _ 0 ty = ty
-> etaType nEnv n (TypeArrow ty1 ty2) = TypeArrow ty1 (etaType nEnv (n - 1) ty2)
-> etaType nEnv n ty =
+> etaType tcEnv n (TypeArrow ty1 ty2) =
+>   TypeArrow ty1 (etaType tcEnv (n - 1) ty2)
+> etaType tcEnv n ty =
 >   case unapplyType True ty of
 >     (TypeConstructor tc,tys) ->
->       case lookupEnv tc nEnv of
->         Just (n,ty)
+>       case qualLookupTopEnv tc tcEnv of
+>         [AliasType _ n _ ty]
 >           | n > n' -> ty
->           | n == n' -> etaType nEnv n (expandAliasType tys ty)
+>           | n == n' -> etaType tcEnv n (expandAliasType tys ty)
 >           | otherwise -> internalError "etaType"
 >           where n' = length tys
->         Nothing -> ty
+>         [_] -> ty
+>         _ -> internalError "etaType"
 >     _ -> ty
 
 \end{verbatim}
@@ -147,29 +133,29 @@ the inlined expression must be unified. Since the program is type
 correct, this unification is just a simple one way matching where we
 only need to match the type variables in the inlined expression's type
 with the corresponding types in the variable or function's annotated
-type. However, we may need to expand renaming types since these
-effectively become type synonyms after desugaring.
+type. However, we may need to expand type synonyms stemming from
+removed newtypes.
 
 \ToDo{We would like to use the more general type signature
-  \texttt{(Functor f,Typeable (f Type)) => NewtypeEnv -> Type -> f
-    Type -> f Type} for \texttt{withType}. Unfortunately, nhc98 at
-  present supports only simple class constraints, i.e., constraints
-  where the constrained type is a type variable.}
+  \texttt{(Functor f,Typeable (f Type)) => TCEnv -> Type -> f Type ->
+    f Type} for \texttt{withType}. Unfortunately, nhc98 at present
+  supports only simple class constraints, i.e., constraints where the
+  constrained type is a type variable.}
 \begin{verbatim}
 
-> withType :: NewtypeEnv -> Type -> Expression Type -> Expression Type
-> withType nEnv ty x = fmap (subst (matchType nEnv (typeOf x) ty idSubst)) x
+> withType :: TCEnv -> Type -> Expression Type -> Expression Type
+> withType tcEnv ty x = fmap (subst (matchType tcEnv (typeOf x) ty idSubst)) x
 
-> matchType :: NewtypeEnv -> Type -> Type -> TypeSubst -> TypeSubst
-> matchType nEnv ty1 ty2 =
+> matchType :: TCEnv -> Type -> Type -> TypeSubst -> TypeSubst
+> matchType tcEnv ty1 ty2 =
 >   foldr (flip fromMaybe) (noMatch ty1 ty2)
->         [matchTypeApp nEnv ty1 ty2 | ty1 <- tys1, ty2 <- tys2]
->   where tys1 = expand nEnv ty1
->         tys2 = expand nEnv ty2
+>         [matchTypeApp tcEnv ty1 ty2 | ty1 <- tys1, ty2 <- tys2]
+>   where tys1 = expand tcEnv ty1
+>         tys2 = expand tcEnv ty2
 >         noMatch ty1 ty2 = internalError $
 >           "matchType " ++ showsPrec 11 ty1 " " ++ showsPrec 11 ty2 ""
 
-> matchTypeApp :: NewtypeEnv -> Type -> Type -> Maybe (TypeSubst -> TypeSubst)
+> matchTypeApp :: TCEnv -> Type -> Type -> Maybe (TypeSubst -> TypeSubst)
 > matchTypeApp _ (TypeVariable tv) ty
 >   | ty == TypeVariable tv = Just id
 >   | otherwise = Just (bindSubst tv ty)
@@ -179,28 +165,29 @@ effectively become type synonyms after desugaring.
 >   | tv1 == tv2 = Just id
 > matchTypeApp _ (TypeSkolem k1) (TypeSkolem k2)
 >   | k1 == k2 = Just id
-> matchTypeApp nEnv (TypeApply ty11 ty12) (TypeApply ty21 ty22) =
->   fmap (. matchType nEnv ty12 ty22) (matchTypeApp nEnv ty11 ty21)
-> matchTypeApp nEnv (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) =
->   Just (matchType nEnv ty11 ty21 . matchType nEnv ty12 ty22)
-> matchTypeApp nEnv (TypeApply ty11 ty12) (TypeArrow ty21 ty22) =
->   fmap (. matchType nEnv ty12 ty22)
->        (matchTypeApp nEnv ty11 (TypeApply (TypeConstructor qArrowId) ty21))
-> matchTypeApp nEnv (TypeArrow ty11 ty12) (TypeApply ty21 ty22) =
->   fmap (. matchType nEnv ty12 ty22)
->        (matchTypeApp nEnv (TypeApply (TypeConstructor qArrowId) ty11) ty21)
+> matchTypeApp tcEnv (TypeApply ty11 ty12) (TypeApply ty21 ty22) =
+>   fmap (. matchType tcEnv ty12 ty22) (matchTypeApp tcEnv ty11 ty21)
+> matchTypeApp tcEnv (TypeArrow ty11 ty12) (TypeArrow ty21 ty22) =
+>   Just (matchType tcEnv ty11 ty21 . matchType tcEnv ty12 ty22)
+> matchTypeApp tcEnv (TypeApply ty11 ty12) (TypeArrow ty21 ty22) =
+>   fmap (. matchType tcEnv ty12 ty22)
+>        (matchTypeApp tcEnv ty11 (TypeApply (TypeConstructor qArrowId) ty21))
+> matchTypeApp tcEnv (TypeArrow ty11 ty12) (TypeApply ty21 ty22) =
+>   fmap (. matchType tcEnv ty12 ty22)
+>        (matchTypeApp tcEnv (TypeApply (TypeConstructor qArrowId) ty11) ty21)
 > matchTypeApp _ _ _ = Nothing
 
-> expand :: NewtypeEnv -> Type -> [Type]
-> expand nEnv ty = ty : uncurry (expandType nEnv) (unapplyType False ty)
->   where expandType nEnv (TypeConstructor tc) tys =
->           case lookupEnv tc nEnv of
->             Just (n,ty)
+> expand :: TCEnv -> Type -> [Type]
+> expand tcEnv ty = ty : uncurry (expandType tcEnv) (unapplyType False ty)
+>   where expandType tcEnv (TypeConstructor tc) tys =
+>           case qualLookupTopEnv tc tcEnv of
+>             [AliasType _ n _ ty]
 >               | n > n' -> []
->               | n == n' -> expand (unbindEnv tc nEnv) (expandAliasType tys ty)
+>               | n == n' -> expand tcEnv (expandAliasType tys ty)
 >               | otherwise -> internalError "expand"
 >               where n' = length tys
->             Nothing -> []
+>             [_] -> []
+>             _ -> internalError "expand"
 >         expandType _ _ _ = []
 
 \end{verbatim}
@@ -214,14 +201,12 @@ instance type is unified with the constructor's result type and the
 resulting substitution is applied to all argument types. Note that
 this is sound because record fields cannot have existentially
 quantified types and therefore all type variables appearing in their
-types occur in the constructor's result type as well. We assume that
-newtype constructors have not yet been replaced when this function is
-used.
+types occur in the constructor's result type as well.
 \begin{verbatim}
 
-> argumentTypes :: Type -> QualIdent -> ValueEnv -> ([Ident],[Type])
-> argumentTypes ty c tyEnv =
->   (ls,map (subst (matchType (newtypeEnv tyEnv) ty0 ty idSubst)) tys)
+> argumentTypes :: TCEnv -> Type -> QualIdent -> ValueEnv -> ([Ident],[Type])
+> argumentTypes tcEnv ty c tyEnv =
+>   (ls,map (subst (matchType tcEnv ty0 ty idSubst)) tys)
 >   where (ls,_,ty') = conType c tyEnv
 >         (tys,ty0) = arrowUnapply (rawType ty')
 

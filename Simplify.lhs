@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: Simplify.lhs 2798 2009-04-26 15:29:05Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -33,18 +33,19 @@ Currently, the following optimizations are implemented:
 > import SCC
 > import TrustInfo
 > import Types
+> import TypeInfo
 > import Typing
 > import Utils
 > import ValueInfo
 
 > type SimplifyState a =
->   StateT ValueEnv (ReaderT NewtypeEnv (ReaderT TrustEnv (StateT Int Id))) a
+>   StateT ValueEnv (ReaderT TCEnv (ReaderT TrustEnv (StateT Int Id))) a
 > type InlineEnv = Env Ident (Expression Type)
 
-> simplify :: ValueEnv -> TrustEnv -> Module Type -> (Module Type,ValueEnv)
-> simplify tyEnv trEnv m =
->   runSt (callRt (callRt (callSt (simplifyModule m) tyEnv) nEnv) trEnv) 1
->   where nEnv = newtypeEnv tyEnv
+> simplify :: TCEnv -> ValueEnv -> TrustEnv -> Module Type
+>          -> (Module Type,ValueEnv)
+> simplify tcEnv tyEnv trEnv m =
+>   runSt (callRt (callRt (callSt (simplifyModule m) tyEnv) tcEnv) trEnv) 1
 
 > simplifyModule :: Module Type -> SimplifyState (Module Type,ValueEnv)
 > simplifyModule (Module m es is ds) =
@@ -166,22 +167,22 @@ only a single equation whose body is a non-expansive expression.
 > etaExpand m [eq] =
 >   do
 >     tyEnv <- fetchSt
->     nEnv <- liftSt envRt
->     etaEquation m tyEnv nEnv eq
+>     tcEnv <- liftSt envRt
+>     etaEquation m tcEnv tyEnv eq
 > etaExpand _ eqs = return eqs
 
-> etaEquation :: ModuleIdent -> ValueEnv -> NewtypeEnv -> Equation Type
+> etaEquation :: ModuleIdent -> TCEnv -> ValueEnv -> Equation Type
 >             -> SimplifyState [Equation Type]
-> etaEquation m tyEnv nEnv (Equation p1 (FunLhs f ts) (SimpleRhs p2 e _)) =
+> etaEquation m tcEnv tyEnv (Equation p1 (FunLhs f ts) (SimpleRhs p2 e _)) =
 >   do
->     (ts',e') <- etaExpr m tyEnv nEnv e
+>     (ts',e') <- etaExpr m tcEnv tyEnv e
 >     unless (null ts') (updateSt_ (changeArity m f (length ts + length ts')))
 >     return [Equation p1 (FunLhs f (ts ++ ts')) (SimpleRhs p2 e' [])]
 
-> etaExpr :: ModuleIdent -> ValueEnv -> NewtypeEnv -> Expression Type
+> etaExpr :: ModuleIdent -> TCEnv -> ValueEnv -> Expression Type
 >         -> SimplifyState ([ConstrTerm Type],Expression Type)
 > etaExpr _ _ _ (Lambda _ ts e) = return (ts,e)
-> etaExpr m tyEnv nEnv e
+> etaExpr m tcEnv tyEnv e
 >   | isNonExpansive tyEnv 0 e && not (null tys) =
 >       do
 >         vs <- mapM (freshVar m etaId) tys
@@ -189,7 +190,7 @@ only a single equation whose body is a non-expansive expression.
 >                 etaApply e' (map (uncurry mkVar) vs))
 >   | otherwise = return ([],e)
 >   where n = exprArity tyEnv e
->         (ty',e') = expandTypeAnnot nEnv n e
+>         (ty',e') = expandTypeAnnot tcEnv n e
 >         tys = take n (arrowArgs ty')
 >         etaId n = mkIdent ("_#eta" ++ show n)
 >         etaApply e es =
@@ -251,13 +252,12 @@ arity $n$. Note that this may fail when the newtype's definition is
 not visible in the current module.
 \begin{verbatim}
 
-> expandTypeAnnot :: NewtypeEnv -> Int -> Expression Type
->                 -> (Type,Expression Type)
-> expandTypeAnnot nEnv n e
+> expandTypeAnnot :: TCEnv -> Int -> Expression Type -> (Type,Expression Type)
+> expandTypeAnnot tcEnv n e
 >   | n <= arrowArity ty = (ty,e)
 >   | otherwise = (ty',fixType ty' e)
 >   where ty = typeOf e
->         ty' = etaType nEnv n ty
+>         ty' = etaType tcEnv n ty
 
 > fixType :: Type -> Expression Type -> Expression Type
 > fixType ty (Literal _ l) = Literal ty l
@@ -363,12 +363,12 @@ functions in later phases of the compiler.
 >   | isQualified v = return (Variable ty v)
 >   | otherwise =
 >       do
->         nEnv <- liftSt envRt
+>         tcEnv <- liftSt envRt
 >         maybe (return (Variable ty v))
->               (simplifyExpr m env . substExpr nEnv ty)
+>               (simplifyExpr m env . substExpr tcEnv ty)
 >               (lookupEnv (unqualify v) env)
->   where substExpr nEnv ty =
->           snd . expandTypeAnnot nEnv (arrowArity ty) . withType nEnv ty
+>   where substExpr tcEnv ty =
+>           snd . expandTypeAnnot tcEnv (arrowArity ty) . withType tcEnv ty
 > simplifyExpr _ _ (Constructor ty c) = return (Constructor ty c)
 > simplifyExpr m env (Apply e1 e2) =
 >   do
@@ -379,8 +379,8 @@ functions in later phases of the compiler.
 >   do
 >     e' <- simplifyApp m p e [] >>= simplifyExpr m env
 >     tyEnv <- fetchSt
->     nEnv <- liftSt envRt
->     (ts',e'') <- etaExpr m tyEnv nEnv e'
+>     tcEnv <- liftSt envRt
+>     (ts',e'') <- etaExpr m tcEnv tyEnv e'
 >     return (etaReduce m tyEnv p (ts ++ ts') e'')
 > simplifyExpr m env (Let ds e) =
 >   do
@@ -444,11 +444,11 @@ functions to access the pattern variables.
 >   do
 >     ds' <- mapM (simplifyDecl m env) ds
 >     tyEnv <- fetchSt
->     nEnv <- liftSt envRt
+>     tcEnv <- liftSt envRt
 >     trEnv <- liftSt (liftRt envRt)
 >     e' <- simplifyLet m (inlineVars m tyEnv trEnv ds' env) dss e
 >     dss'' <- mapM (expandPatternBindings m (qfv m ds' ++ qfv m e')) ds'
->     return (mkSimplLet m nEnv (concat dss'') e')
+>     return (mkSimplLet m tcEnv (concat dss'') e')
 
 > inlineVars :: ModuleIdent -> ValueEnv -> TrustEnv -> [Decl Type] -> InlineEnv
 >            -> InlineEnv
@@ -487,15 +487,15 @@ functions to access the pattern variables.
 > canInline tyEnv (Variable _ v) = not (isQualified v) || arity v tyEnv > 0
 > canInline _ _ = False
 
-> mkSimplLet :: ModuleIdent -> NewtypeEnv -> [Decl Type] -> Expression Type
+> mkSimplLet :: ModuleIdent -> TCEnv -> [Decl Type] -> Expression Type
 >            -> Expression Type
 > mkSimplLet m _ [FreeDecl p vs] e
 >   | null vs' = e
 >   | otherwise = Let [FreeDecl p vs'] e
 >   where vs' = filter (`elem` qfv m e) vs
-> mkSimplLet m nEnv [PatternDecl _ (VariablePattern _ v) (SimpleRhs _ e _)]
+> mkSimplLet m tcEnv [PatternDecl _ (VariablePattern _ v) (SimpleRhs _ e _)]
 >       (Variable ty' v')
->   | v' == qualify v && v `notElem` qfv m e = withType nEnv ty' e
+>   | v' == qualify v && v `notElem` qfv m e = withType tcEnv ty' e
 > mkSimplLet m _ ds e
 >   | null (filter (`elem` qfv m e) (bv ds)) = e
 >   | otherwise = Let ds e

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILLift.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: ILLift.lhs 2811 2009-04-29 15:10:27Z wlux $
 %
 % Copyright (c) 2000-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -28,8 +28,10 @@ positions are lifted into global functions.
 > liftDecl (TypeDecl tc n ty) = [TypeDecl tc n ty]
 > liftDecl (FunctionDecl f vs ty e) = FunctionDecl f vs ty e' : ds'
 >   where (e',ds') = runSt (liftExpr e) nameSupply
->         nameSupply = map (qualifyLike f . appIdent (name (unqualify f))) [1..]
->         appIdent f i = mkIdent (f ++ "._#app" ++ show i)
+>         nameSupply = map (qual m . appIdent (name f') (uniqueId f')) [1..]
+>           where (m,f') = splitQualIdent f
+>         qual m = maybe qualify qualifyWith m
+>         appIdent f i n = renameIdent (mkIdent (f ++ "._#app" ++ show i)) n
 > liftDecl (ForeignDecl f cc ie ty) = [ForeignDecl f cc ie ty]
 > liftDecl SplitAnnot = [SplitAnnot]
 

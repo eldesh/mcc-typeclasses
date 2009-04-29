@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: TypeCheck.lhs 2812 2009-04-29 15:27:39Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -797,7 +797,7 @@ case of \texttt{tcTopDecl}.
 >         (vds,ods) = partition isValueDecl ds
 > tcTopDecl _ _ (DefaultDecl p tys) = return (DefaultDecl p tys)
 > tcTopDecl _ _ (BlockDecl _) = internalError "tcTopDecl"
-> tcTopDecl _ _ (SplitAnnot p) =  return (SplitAnnot p)
+> tcTopDecl _ _ (SplitAnnot p) = return (SplitAnnot p)
 
 > tcClassMethodDecl :: ModuleIdent -> TCEnv -> QualIdent -> Ident -> SigEnv
 >                   -> Decl a -> TcState (Decl Type)
@@ -1294,22 +1294,22 @@ in \texttt{tcFunctionDecl} above.
 >   do
 >     (cx,tyLhs,e') <- tcExpr m tcEnv p e
 >     tyRhs <- freshTypeVar
->     (cxs,as') <- liftM unzip $ mapM (tcAlt m tcEnv tyLhs tyRhs) as
+>     (cxs,as') <- liftM unzip $ mapM (tcAlt True m tcEnv tyLhs tyRhs) as
 >     return (cx ++ concat cxs,tyRhs,Case e' as')
 > tcExpr m tcEnv p (Fcase e as) =
 >   do
 >     (cx,tyLhs,e') <- tcExpr m tcEnv p e
 >     tyRhs <- freshTypeVar
->     (cxs,as') <- liftM unzip $ mapM (tcAlt m tcEnv tyLhs tyRhs) as
+>     (cxs,as') <- liftM unzip $ mapM (tcAlt False m tcEnv tyLhs tyRhs) as
 >     return (cx ++ concat cxs,tyRhs,Fcase e' as')
 
-> tcAlt :: ModuleIdent -> TCEnv -> Type -> Type -> Alt a
+> tcAlt :: Bool -> ModuleIdent -> TCEnv -> Type -> Type -> Alt a
 >       -> TcState (Context,Alt Type)
-> tcAlt m tcEnv tyLhs tyRhs a@(Alt p t rhs) =
+> tcAlt poly m tcEnv tyLhs tyRhs a@(Alt p t rhs) =
 >   do
 >     bindLambdaVars m t
 >     (cx,t') <-
->       tcConstrTerm True tcEnv p t >>-
+>       tcConstrTerm poly tcEnv p t >>-
 >       unify p "case pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t)
 >             tcEnv tyLhs
 >     (cx',rhs') <- tcRhs m tcEnv rhs >>- unify p "case branch" doc tcEnv tyRhs

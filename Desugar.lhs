@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2801 2009-04-26 17:00:29Z wlux $
+% $Id: Desugar.lhs 2809 2009-04-29 13:11:20Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -27,8 +27,7 @@ properties.
   \item record constructions and updates,
   \item (binary) applications,
   \item lambda abstractions,
-  \item let expressions,
-  \item if-then-else expressions, and
+  \item let expressions, and
   \item (f)case expressions.
   \end{itemize}
 \end{itemize}
@@ -38,10 +37,9 @@ transform where clauses into let expressions. Both will happen only
 after flattening patterns in case expressions, as this allows us to
 handle the fall through behavior of boolean guards in case expressions
 without introducing a special pattern match failure primitive (see
-Sect.~\ref{sec:flatcase}). We also do not desugar if-then-else
-expressions, lazy patterns, and the record syntax here. The former is
-taken care of by the case matching phase, too, and lazy patterns and
-the records are desugared by ensuing compiler phases.
+Sect.~\ref{sec:flatcase}). We also do not desugar lazy patterns and
+the record syntax here. These are taken care of by ensuing compiler
+phases.
 
 \textbf{As we are going to insert references to real Prelude entities,
 all names must be properly qualified before calling this module.}
@@ -335,10 +333,9 @@ not be replaced.
 >                 [e,Lambda p [t] e']
 >         desugarStmt (StmtDecl ds) e' = mkLet ds e'
 > desugarExpr m p (IfThenElse e1 e2 e3) =
->   liftM3 IfThenElse
->          (desugarExpr m p e1)
->          (desugarExpr m p e2)
->          (desugarExpr m p e3)
+>   liftM3 mkCase (desugarExpr m p e1) (desugarExpr m p e2) (desugarExpr m p e3)
+>   where mkCase e1 e2 e3 =
+>           Case e1 [caseAlt p truePattern e2,caseAlt p falsePattern e3]
 > desugarExpr m p (Case e as) =
 >   liftM2 Case (desugarExpr m p e) (mapM (desugarAlt m) as)
 > desugarExpr m p (Fcase e as) =
@@ -444,6 +441,10 @@ Prelude entities.
 > ratioConstr a =
 >   Constructor (TypeArrow a (TypeArrow a (ratioType a)))
 >               (qualifyWith ratioMIdent (mkIdent ":%"))
+
+> truePattern, falsePattern :: ConstrTerm Type
+> truePattern = ConstructorPattern boolType qTrueId []
+> falsePattern = ConstructorPattern boolType qFalseId []
 
 \end{verbatim}
 Auxiliary definitions.

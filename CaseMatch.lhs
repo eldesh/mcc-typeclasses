@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 2807 2009-04-26 17:36:12Z wlux $
+% $Id: CaseMatch.lhs 2809 2009-04-29 13:11:20Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -152,26 +152,33 @@ if it is not restricted by the guard expression.
 \begin{verbatim}
 
 > instance CaseMatch Rhs where
->   match m p rhs = liftM (mkRhs p) (matchRhs m p rhs (prelFailed (typeOf rhs)))
+>   match m p rhs =
+>     liftM (mkRhs p) (matchRhs m p rhs (return (prelFailed (typeOf rhs))))
 
-> matchRhs :: ModuleIdent -> Position -> Rhs Type -> Expression Type
+> matchRhs :: ModuleIdent -> Position -> Rhs Type
 >          -> CaseMatchState (Expression Type)
-> matchRhs m p rhs e0 = match m p (expandRhs e0 rhs)
+>          -> CaseMatchState (Expression Type)
+> matchRhs m _ (SimpleRhs p e ds) _ = match m p (mkLet ds e)
+> matchRhs m p (GuardedRhs es ds) e0 =
+>   liftM2 mkLet (mapM (match m p) ds) (expandRhs m p es e0)
 
-> expandRhs :: Expression Type -> Rhs Type -> Expression Type
-> expandRhs _ (SimpleRhs _ e ds) = mkLet ds e
-> expandRhs e0 (GuardedRhs es ds) = mkLet ds (expandGuards e0 es)
-
-> expandGuards :: Expression Type -> [CondExpr Type] -> Expression Type
-> expandGuards e0 es
->   | booleanGuards es = foldr mkIfThenElse e0 es
->   | otherwise = mkCase es
->   where mkIfThenElse (CondExpr _ g e) = IfThenElse g e
->         mkCase [CondExpr p g e] = Case g [caseAlt p successPattern e]
+> expandRhs :: ModuleIdent -> Position -> [CondExpr Type]
+>           -> CaseMatchState (Expression Type)
+>           -> CaseMatchState (Expression Type)
+> expandRhs m p es e0
+>   | booleanGuards es =
+>       liftM2 (flip (foldr mkIfThenElse)) (mapM (match m p) es) e0
+>   | otherwise = liftM mkCond (mapM (match m p) es)
+>   where mkIfThenElse (CondExpr p g e1) e2 =
+>           Case g [caseAlt p truePattern e1,caseAlt p falsePattern e2]
+>         mkCond [CondExpr p g e] = Case g [caseAlt p successPattern e]
 
 > booleanGuards :: [CondExpr Type] -> Bool
 > booleanGuards [] = False
 > booleanGuards (CondExpr _ g _ : es) = not (null es) || typeOf g == boolType
+
+> instance CaseMatch CondExpr where
+>   match m _ (CondExpr p g e) = liftM2 (CondExpr p) (match m p g) (match m p e)
 
 > instance CaseMatch Expression where
 >   match _ _ (Literal ty l) = return (Literal ty l)
@@ -185,10 +192,6 @@ if it is not restricted by the guard expression.
 >       e' <- flexMatch m p vs [(p,ts,mkRhs p e)]
 >       return (Lambda p (map (uncurry VariablePattern) vs) e')
 >   match m p (Let ds e) = liftM2 Let (mapM (match m p) ds) (match m p e)
->   match m p (IfThenElse e1 e2 e3) =
->     liftM3 mkCase (match m p e1) (match m p e2) (match m p e3)
->     where mkCase e1 e2 e3 =
->             Case e1 [caseAlt p truePattern e2,caseAlt p falsePattern e3]
 >   match m p (Case e as) =
 >     do
 >       e' <- match m p e
@@ -201,9 +204,6 @@ if it is not restricted by the guard expression.
 >       [v] <- matchVars m (map snd3 as')
 >       liftM (mkCase m p v e') (flexMatch m p [v] as')
 >     where as' = [(p,[t],rhs) | Alt p t rhs <- as]
-
-> instance CaseMatch Alt where
->   match m _ (Alt p t rhs) = liftM (Alt p t) (match m p rhs)
 
 \end{verbatim}
 Our pattern matching algorithm is based on the notions of demanded and
@@ -322,7 +322,7 @@ comprehensible.
 >   | null rhss = return (expr rhs)
 >   | otherwise =
 >       do
->         v <- freshVar m "_#choice" (head ts)
+>         v <- freshVar m "_#choice" (typeOf (head ts))
 >         return (Fcase (freeVar p v) (zipWith (Alt p) ts (rhs:rhss)))
 >   where ts = map (LiteralPattern intType . Integer) [0..]
 >         freeVar p v = Let [FreeDecl p [snd v]] (uncurry mkVar v)
@@ -358,7 +358,7 @@ comprehensible.
 > matchVars m tss = mapM argName (transpose tss)
 >   where argName [VariablePattern ty v] = return (ty,v)
 >         argName [AsPattern v t] = return (typeOf t,v)
->         argName (t:_) = freshVar m "_#case" t
+>         argName (t:_) = freshVar m "_#case" (typeOf t)
 
 > renameArgs :: Ident -> [(a,Ident)] -> ConstrTerm a -> ConstrTerm a
 > renameArgs v _ (LiteralPattern ty l) = AsPattern v (LiteralPattern ty l)
@@ -540,10 +540,10 @@ where the default alternative is redundant.
 >            -> CaseMatchState (Expression Type)
 > rigidMatch _ ty _      _  []     = return (prelFailed ty)
 > rigidMatch m ty prefix [] (a:as) =
->   rigidMatch m ty id vs (map resetArgs as) >>= toAlt vs a
+>   matchAlt vs a (rigidMatch m ty id vs (map resetArgs as))
 >   where vs = prefix []
 >         resetArgs (p,prefix,ts,rhs) = (p,id,prefix ts,rhs)
->         toAlt vs (p,prefix,_,rhs) =
+>         matchAlt vs (p,prefix,_,rhs) =
 >           matchRhs m p (foldr2 (bindVars p . snd) rhs vs (prefix []))
 > rigidMatch m ty prefix (v:vs) as =
 >   case fst (head as') of
@@ -630,22 +630,13 @@ where the default alternative is redundant.
 Generation of fresh names
 \begin{verbatim}
 
-> freshIdent :: ModuleIdent -> String -> Int -> TypeScheme
->            -> CaseMatchState Ident
-> freshIdent m prefix n ty =
+> freshVar :: ModuleIdent -> String -> Type -> CaseMatchState (Type,Ident)
+> freshVar m prefix ty =
 >   do
->     x <- liftM (mkName prefix) (liftSt (liftRt (updateSt (1 +))))
->     updateSt_ (bindFun m x n ty)
->     return x
->   where mkName pre n = mkIdent (pre ++ show n)
-
-> freshVar :: Typeable a => ModuleIdent -> String -> a
->          -> CaseMatchState (Type,Ident)
-> freshVar m prefix x =
->   do
->     v <- freshIdent m prefix 0 (monoType ty)
+>     v <- liftM (mkName prefix) (liftSt (liftRt (updateSt (1 +))))
+>     updateSt_ (bindFun m v 0 (monoType ty))
 >     return (ty,v)
->   where ty = typeOf x
+>   where mkName pre n = mkIdent (pre ++ show n)
 
 \end{verbatim}
 Prelude entities

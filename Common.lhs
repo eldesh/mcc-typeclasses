@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Common.lhs 2803 2009-04-26 17:14:20Z wlux $
+% $Id: Common.lhs 2814 2009-05-03 18:48:18Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -94,7 +94,7 @@ explicit dictionary arguments for overloaded functions and methods.
 >           -> (TCEnv,ValueEnv,Module Type,[(Dump,Doc)])
 > dictTrans tcEnv iEnv tyEnv m = (tcEnv',tyEnv',spec,dumps)
 >   where (tcEnv',tyEnv',dict) = dictTransModule tcEnv iEnv tyEnv m
->         spec = dictSpecializeModule tcEnv' dict
+>         spec = dictSpecializeModule tcEnv' iEnv dict
 >         dumps =
 >           [(DumpDict,ppModule dict),
 >            (DumpSpecialize,ppModule spec)]

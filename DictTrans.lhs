@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2813 2009-05-03 18:09:48Z wlux $
+% $Id: DictTrans.lhs 2814 2009-05-03 18:48:18Z wlux $
 %
 % Copyright (c) 2006-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -8,13 +8,9 @@
 \section{Introducing Dictionaries}\label{sec:dict-trans}
 For the implementation of type classes, we follow the common approach
 to use dictionaries~\cite{PetersonJones93:TypeClasses}. For every type
-predicate in the context of a function's type we introduce an implicit
-dictionary argument. For the purpose of introducing dictionaries, the
-compiler expands contexts by adding all implied type predicates. Thus,
-dictionaries for all classes and their super classes are immediately
-available as function arguments in the transformed code. The
-dictionaries themselves are derived from the type class and instance
-declarations in the module.
+predicate in the (reduced) context of a function's type we introduce
+an implicit dictionary argument. The dictionaries themselves are
+derived from the type class and instance declarations in the module.
 \begin{verbatim}
 
 > module DictTrans(dictTransModule, dictSpecializeModule) where
@@ -69,8 +65,10 @@ functions and methods in expressions into applications to the
 appropriate dictionary arguments.
 
 In addition, the compiler introduces a method stub function for each
-type class method that extracts the corresponding method implementation
-from a dictionary.
+type class method that extracts the corresponding method
+implementation from the type class's dictionary, and a function for
+each super class of a type class that extract the super class's
+dictionary from that of its subclass.
 
 In the final phase, the compiler optimizes method calls at known types
 by calling the appropriate instance methods directly. For instance,
@@ -102,12 +100,12 @@ type variables (cf.\ Sect.~4.3.2 of~\cite{PeytonJones03:Haskell}).
 >                 -> (TCEnv,ValueEnv,Module Type)
 > dictTransModule tcEnv iEnv tyEnv (Module m es is ds) =
 >   run (do
->          ds' <- mapM (dictTrans m tcEnv' iEnv tyEnv' emptyEnv)
+>          ds' <- mapM (dictTrans m tcEnv' iEnv tyEnv' [])
 >                      (concatMap (liftDecls m tcEnv tyEnv) ds)
 >          dss <- mapM (methodStubs m tcEnv tyEnv) ds
 >          tyEnv'' <- fetchSt
 >          return (tcEnv',tyEnv'',Module m es is (ds' ++ concat dss)))
->       (dictTransValues tcEnv' tyEnv')
+>       (dictTransValues tyEnv')
 >   where tcEnv' = bindDictTypes m tcEnv
 >         tyEnv' = bindClassDecls m tcEnv (bindInstDecls m tcEnv iEnv tyEnv)
 
@@ -129,25 +127,28 @@ type variables (cf.\ Sect.~4.3.2 of~\cite{PeytonJones03:Haskell}).
 \end{verbatim}
 \paragraph{Class Declarations}
 For every type class declaration
-\begin{displaymath}
-  \mbox{\texttt{class} $C$ $a$ \texttt{where} \texttt{\lb} $f_1$
-    \texttt{::} $\tau_1$\texttt{;} \dots\texttt{;} $f_n$ \texttt{::}
-    $\tau_n$ \texttt{\rb}}
-\end{displaymath}
+\begin{quote}
+  \texttt{class} \texttt{(}$C_1$ $a$, \dots, $C_m$ $a$\texttt{)}
+  \texttt{=>} $C$ $a$ \texttt{where} \texttt{\lb} $f_1$ \texttt{::}
+  $\tau_1$\texttt{;} \dots\texttt{;} $f_n$ \texttt{::} $\tau_n$
+  \texttt{\rb}
+\end{quote}
 a dictionary type declaration
-\begin{displaymath}
-  \mbox{\texttt{data} $T$ $a$ \texttt{=} $C'$ $\tau_1$ $\dots\;\tau_n$},
-\end{displaymath}
-where $T=\emph{dictTypeId}(C)$ and $C'=\emph{dictConstrId}(C)$, is
-added to the source code and the type constructor and value type
-environments are updated accordingly.
+\begin{quote}
+  \texttt{data} $T$ $a$ \texttt{=} $C'$ \texttt{(}$T_1$
+  $a$\texttt{)} \dots{} \texttt{(}$T_m$ $a$\texttt{)}  $\tau_1$
+  $\dots\;\tau_n$,
+\end{quote}
+where $T=\emph{dictTypeId}(C)$, $T_i=\emph{dictTypeId}(C_i)$, and
+$C'=\emph{dictConstrId}(C)$, is added to the source code and the type
+constructor and value type environments are updated accordingly.
 
-In case of polymorphic methods, we have to cheat a little bit, since
-our type representation does not support polymorphic components. We
-simply use the method types recorded in the type environment when
-computing the type of a dictionary constructor. This means that the
-methods' polymorphic type variables -- i.e., all type variables other
-than the class' type variable -- are assigned indices greater than 0
+For polymorphic methods we have to cheat a little bit, since our type
+representation does not support polymorphic components. We simply use
+the method types recorded in the type environment when computing the
+type of a dictionary constructor. This means that the methods'
+polymorphic type variables -- i.e., all type variables other than the
+class' type variable -- are assigned indices greater than 0
 independently in each argument of the dictionary constructor. Explicit
 dictionary arguments are added to the methods' types in place of the
 constraints on their polymorphic type variables using
@@ -184,15 +185,18 @@ uses a default implementation that is equivalent to
 >   foldr (bindClassEntities m tcEnv) tyEnv (allEntities tcEnv)
 
 > bindClassEntities :: ModuleIdent -> TCEnv -> TypeInfo -> ValueEnv -> ValueEnv
-> bindClassEntities m tcEnv (TypeClass cls _ _ fs) tyEnv =
+> bindClassEntities m tcEnv (TypeClass cls _ clss fs) tyEnv =
 >   bindClassDict m (qDictConstrId cls) (classDictType tcEnv tyEnv cls fs) $
->   foldr (bindDefaultMethod m tyEnv cls) tyEnv fs
+>   foldr (bindSuperClass m cls)
+>         (foldr (bindDefaultMethod m tyEnv cls) tyEnv fs)
+>         clss
 > bindClassEntities _ _ _ tyEnv = tyEnv
 
-> bindClassDict :: ModuleIdent -> QualIdent -> Type -> ValueEnv -> ValueEnv
-> bindClassDict m c ty =
->   bindEntity m c (DataConstructor c ls stdConstrInfo (polyType ty))
->   where ls = replicate (arrowArity ty) anonId
+> bindClassDict :: ModuleIdent -> QualIdent -> QualType -> ValueEnv -> ValueEnv
+> bindClassDict m c (QualType cx ty) =
+>   bindEntity m c (DataConstructor c ls ci (typeScheme (QualType cx ty)))
+>   where ci = ConstrInfo 0 cx
+>         ls = replicate (arrowArity ty) anonId
 
 > bindDefaultMethod :: ModuleIdent -> ValueEnv -> QualIdent -> Ident
 >                   -> ValueEnv -> ValueEnv
@@ -210,8 +214,10 @@ uses a default implementation that is equivalent to
 > dictDataDecl :: TCEnv -> Position -> QualIdent -> Ident -> [Decl a]
 >              -> TopDecl a
 > dictDataDecl tcEnv p cls tv ds =
->   DataDecl p [] (dictTypeId cls) [tv] [dictConstrDecl tcEnv p cls tv tys] []
->   where tys = map (expandMethodType tcEnv cls tv)
+>   DataDecl p [] (dictTypeId cls) [tv] [dictConstrDecl p cls tv clss tys] []
+>   where clss = superClasses cls tcEnv
+>         ty = VariableType tv
+>         tys = map (expandMethodType tcEnv cls tv)
 >                   [ty | TypeSig _ fs ty <- ds, _ <- fs]
 
 > defaultMethodDecl :: ValueEnv -> QualIdent -> [(Ident,Decl Type)] -> Position
@@ -220,32 +226,34 @@ uses a default implementation that is equivalent to
 >   methodDecl qUndefinedId p (defaultMethodId cls f) ty (lookup f ds)
 >   where ty = rawType (varType f tyEnv)
 
-> classDictType :: TCEnv -> ValueEnv -> QualIdent -> [Ident] -> Type
+> classDictType :: TCEnv -> ValueEnv -> QualIdent -> [Ident] -> QualType
 > classDictType tcEnv tyEnv cls =
->   foldr (TypeArrow . transformMethodType tcEnv . classMethodType tyEnv cls) ty
+>   QualType [TypePred cls (TypeVariable 0) | cls <- superClasses cls tcEnv] .
+>   foldr (TypeArrow . transformMethodType . classMethodType tyEnv cls) ty
 >   where ty = dictType (TypePred cls (TypeVariable 0))
 
 > classMethodType :: ValueEnv -> QualIdent -> Ident -> QualType
 > classMethodType tyEnv cls f = ty
 >   where ForAll _ ty = funType (qualifyLike cls f) tyEnv
 
-> dictConstrDecl :: TCEnv -> Position -> QualIdent -> Ident -> [QualType]
+> dictConstrDecl :: Position -> QualIdent -> Ident -> [QualIdent] -> [QualType]
 >                -> ConstrDecl
-> dictConstrDecl tcEnv p cls tv tys =
->   ConstrDecl p (filter (tv /=) (nub (fv tys'))) [] (dictConstrId cls) tys'
+> dictConstrDecl p cls tv clss tys =
+>   ConstrDecl p (filter (tv /=) (nub (fv tys'))) cx (dictConstrId cls) tys'
 >   where tvs = tv : filter (unRenameIdent tv /=) nameSupply
->         tys' = map (fromType tvs . transformMethodType tcEnv) tys
+>         cx = [ClassAssert cls (VariableType tv) | cls <- clss]
+>         tys' = map (fromType tvs . transformMethodType) tys
 
-> transformMethodType :: TCEnv -> QualType -> Type
-> transformMethodType tcEnv =
->   transformType . contextMap (maxContext tcEnv . tail)
+> transformMethodType :: QualType -> Type
+> transformMethodType = transformType . contextMap tail
 
 \end{verbatim}
-\paragraph{Method Stubs}
-For every type class method, a new global function is introduced.
-These stub functions take a dictionary as first argument and return
-the appropriate member function from the dictionary. For instance,
-given the class declaration
+\paragraph{Super Class Dictionaries and Method Stubs}
+For each super class and each method of a type class, a new global
+function is introduced. These stub functions take a dictionary as
+first argument and return the corresponding super class's dictionary
+and the appropriate member function, respectively, from the
+dictionary. For instance, given the class declaration
 \begin{verbatim}
   class Eq a where
     (==) :: a -> a -> Bool
@@ -253,29 +261,10 @@ given the class declaration
 \end{verbatim}
 two functions similar to
 \begin{verbatim}
-  (==) dict_Eq = case dict of { _Dict_Eq eq _ -> eq }
-  (/=) dict_Eq = case dict of { _Dict_Eq _ neq -> neq }
+  (==) dict_Eq = case dict_Eq of { _Dict_Eq eq _ -> eq }
+  (/=) dict_Eq = case dict_Eq of { _Dict_Eq _ neq -> neq }
 \end{verbatim}
-are introduced. When a class has super classes, additional arguments
-are added for each of the direct and indirect super classes of the
-class so that the stubs can be called like other overloaded functions.
-For instance, given the class declarations
-\begin{verbatim}
-  class Eq a
-  class Show a
-  class (Eq a, Show a) => Num a where
-    fromInteger :: Integer -> a
-\end{verbatim}
-a stub function similar to
-\begin{verbatim}
-  fromInteger dict_Eq dict_Num dict_Show =
-    case dict_Num of { _Dict_Num fromInt -> fromInt }
-\end{verbatim}
-is defined. Recall that the compiler uses expanded contexts for the
-dictionary transformation and therefore the stub function has three
-arguments rather than one. This is necessary because the compiler may
-not always be able to distinguish class methods from overloaded
-functions.
+are introduced.
 
 Polymorphic methods with type class constraints add a little
 complication. For instance, consider the class
@@ -299,42 +288,59 @@ declaration. On the other hand, the dictionary arguments for the
 method's class can be shared among all method stubs of that class.
 \begin{verbatim}
 
+> bindSuperClass :: ModuleIdent -> QualIdent -> QualIdent -> ValueEnv
+>                -> ValueEnv
+> bindSuperClass m cls super = bindEntity m f (Value f 1 (polyType ty))
+>   where f = qSuperDictId cls super
+>         ty = superDictType cls super (TypeVariable 0)
+
+> superDictType :: QualIdent -> QualIdent -> Type -> Type
+> superDictType cls super ty =
+>   TypeArrow (dictType (TypePred cls ty)) (dictType (TypePred super ty))
+
 > methodStubs :: ModuleIdent -> TCEnv -> ValueEnv -> TopDecl a
 >             -> DictState [TopDecl Type]
-> methodStubs m tcEnv tyEnv (ClassDecl _ _ cls tv ds) =
+> methodStubs m tcEnv tyEnv (ClassDecl p _ cls tv ds) =
 >   do
->     us <- mapM (freshVar m "_#dict" . dictType) cx
+>     u <- freshVar m "_#dict" (dictType (TypePred cls' (TypeVariable 0)))
 >     uss <- mapM (mapM (freshVar m "_#dict")) tyss
->     vs <- mapM (freshVar m "_#method") tys
->     let t = dictPattern ty cls' vs
->         ts = map (uncurry VariablePattern) us
->         tss = map ((ts ++) . map (uncurry VariablePattern)) uss
->         es = zipWith3 (methodStubExpr (us!!i) t) ps vs uss
->     return (zipWith4 functDecl ps fs tss es)
->   where (tys,ty) = arrowUnapply (classDictType tcEnv tyEnv cls' fs)
->         tyss = zipWith (methodDictTypes tyEnv) fs tys
->         cls' = qualifyWith m cls
->         (i,cx) = methodStubContext tcEnv cls'
+>     vsD <- mapM (freshVar m "_#dict") tysD
+>     vsM <- mapM (freshVar m "_#meth") tysM
+>     let t = dictPattern ty' cls' (vsD ++ vsM)
+>     return (zipWith (superDictDecl u t p cls') clss vsD ++
+>             zipWith4 (methodStubDecl u t) ps fs vsM uss)
+>   where cls' = qualifyWith m cls
+>         QualType cx ty = classDictType tcEnv tyEnv cls' fs
+>         (tys,ty') = arrowUnapply (transformType (QualType cx ty))
+>         (tysD,tysM) = splitAt (length cx) tys
+>         clss = [cls | TypePred cls _ <- cx]
+>         tyss = zipWith (methodDictTypes tyEnv) fs tysM
 >         (ps,fs) = unzip [(p,f) | TypeSig p fs _ <- ds, f <- fs]
 > methodStubs _ _ _ _ = return []
 
-> methodStubContext :: TCEnv -> QualIdent -> (Int,Context)
-> methodStubContext tcEnv cls = (i,cx)
->   where tp = TypePred cls (TypeVariable 0)
->         cx = maxContext tcEnv [tp]
->         i = fromJust (elemIndex tp cx)
+> superDictDecl :: (a,Ident) -> ConstrTerm a -> Position -> QualIdent
+>               -> QualIdent -> (a,Ident) -> TopDecl a
+> superDictDecl u t p cls super v =
+>   functDecl p (superDictId cls super) [uncurry VariablePattern u]
+>             (methodStubExpr u t p v [])
+
+> methodStubDecl :: (a,Ident) -> ConstrTerm a -> Position -> Ident -> (a,Ident)
+>                -> [(a,Ident)] -> TopDecl a
+> methodStubDecl u t p f v us =
+>   functDecl p f (map (uncurry VariablePattern) (u:us))
+>             (methodStubExpr u t p v us)
 
 > methodDictTypes :: ValueEnv -> Ident -> Type -> [Type]
 > methodDictTypes tyEnv f ty =
 >   take (length tys - arrowArity (rawType (varType f tyEnv))) tys
 >   where tys = arrowArgs ty
 
-> dictPattern :: Type -> QualIdent -> [(Type,Ident)] -> ConstrTerm Type
+> dictPattern :: a -> QualIdent -> [(a,Ident)] -> ConstrTerm a
 > dictPattern ty cls vs =
 >   ConstructorPattern ty (qDictConstrId cls) (map (uncurry VariablePattern) vs)
 
-> methodStubExpr :: (Type,Ident) -> ConstrTerm Type -> Position -> (Type,Ident)
->                -> [(Type,Ident)] -> Expression Type
+> methodStubExpr :: (a,Ident) -> ConstrTerm a -> Position -> (a,Ident)
+>                -> [(a,Ident)] -> Expression a
 > methodStubExpr u t p v us =
 >   Case (uncurry mkVar u)
 >        [caseAlt p t (apply (uncurry mkVar v) (map (uncurry mkVar) us))]
@@ -344,14 +350,14 @@ method's class can be shared among all method stubs of that class.
 For every instance declaration
 \begin{displaymath}
   \mbox{\texttt{instance} \texttt{(}$C_1\,u_{i_1}$\texttt{,}
-    \dots\texttt{,} $C_l\,u_{i_o}$\texttt{)} \texttt{=>}
+    \dots\texttt{,} $C_l\,u_{i_l}$\texttt{)} \texttt{=>}
     $C$ \texttt{($T\,u_1\dots\,u_l$)} \texttt{where} \texttt{\lb}
     $h_{i_1}$ \texttt{=} $e_{i_1}$\texttt{;} \dots\texttt{;}
     $h_{i_m}$ \texttt{=} $e_{i_m}$ \texttt{\rb}},
 \end{displaymath}
-where the instance methods $h_{i_1}, \dots, h_{i_m}$ are
-a subset of the methods $f_1, \dots, f_n$ declared for class $C$, a
-global function
+where the instance methods $h_{i_1}, \dots, h_{i_m}$ are a subset of
+the methods $f_1, \dots, f_n$ declared for class $C$, a global
+function
 \begin{displaymath}
   \mbox{$f$ $d_1$ $\dots\;d_o$ \texttt{=} $C'$ $f'_1$ $\dots\;f'_n$},
 \end{displaymath}
@@ -382,7 +388,7 @@ of method $f_i$ in class $C$.
 > bindInstFuns :: ModuleIdent -> TCEnv -> (CT,(ModuleIdent,Context))
 >              -> ValueEnv -> ValueEnv
 > bindInstFuns m tcEnv (CT cls tc,(m',cx)) tyEnv =
->   bindInstDict m (TypePred cls ty) m' (maxContext tcEnv cx) $
+>   bindInstDict m (TypePred cls ty) m' cx $
 >   foldr (bindInstMethod m tyEnv cls ty m' cx) tyEnv (classMethods cls tcEnv)
 >   where ty = applyType (TypeConstructor tc) (take n (map TypeVariable [0..]))
 >         n = kindArity (constrKind tc tcEnv) - kindArity (classKind cls tcEnv)
@@ -429,7 +435,7 @@ of method $f_i$ in class $C$.
 >   Let [FunctionDecl p f eqs] (mkVar ty f)
 > methodExpr f0 ty Nothing = Variable ty f0
 
-> instDictType :: TCEnv -> ValueEnv -> QualIdent -> Type -> [Ident] -> Type
+> instDictType :: TCEnv -> ValueEnv -> QualIdent -> Type -> [Ident] -> QualType
 > instDictType tcEnv tyEnv cls ty fs =
 >   instanceType ty (classDictType tcEnv tyEnv cls fs)
 
@@ -441,9 +447,8 @@ of method $f_i$ in class $C$.
 > dictExpr :: ModuleIdent -> TCEnv -> ValueEnv -> TypePred -> [Ident]
 >          -> Expression Type
 > dictExpr m tcEnv tyEnv (TypePred cls ty) fs =
->   dictApp ty' (qDictConstrId cls) fs'
->   where fs' = map (qInstMethodId m cls ty) fs
->         ty' = instDictType tcEnv tyEnv cls ty fs
+>   dictApp ty' (qDictConstrId cls) (map (qInstMethodId m cls ty) fs)
+>   where ty' = unqualType (instDictType tcEnv tyEnv cls ty fs)
 
 > dictApp :: Type -> QualIdent -> [QualIdent] -> Expression Type
 > dictApp ty c fs =
@@ -459,10 +464,15 @@ Given a function $f$ with type $(C_1\,u_1, \dots, C_n\,u_n)
 to the function's declaration thereby changing $f$'s type into
 $T_1\,u_1 \rightarrow \dots \rightarrow T_n\,u_n \rightarrow \tau$,
 where $T_i=\emph{dictTypeId}(C_i)$. The types of these variables are
-recorded in the type environment and an environment mapping the
-constraints $C_i\,u_i$ onto their corresponding dictionary arguments
-is computed as well. This environment is used when transforming
-function applications in $f$'s body.
+recorded in the type environment. Furthermore, an association list is
+computed that maps the constraints $C_i\,u_i$ and the corresponding
+super class constraints onto the respective dictionary arguments and
+expressions that return the super class dictionaries for them. This
+association list is used when transforming function applications in
+$f$'s body. Note that the list is carefully ordered so as to minimize
+the number of applications required to compute the dictionary of a
+class $C'$ that is a super class of two or more of the classes $C_1,
+\dots, C_n$.
 
 A data constructor definition
 \begin{displaymath}
@@ -492,27 +502,23 @@ function declarations. This is necessary so that the compiler can add
 the implicit dictionary arguments to the declaration.
 \begin{verbatim}
 
-> type DictEnv = Env TypePred (Expression Type)
+> type DictEnv = [(TypePred,Expression Type)]
 
-> dictTransValues :: TCEnv -> ValueEnv -> ValueEnv
-> dictTransValues tcEnv = fmap transInfo
+> dictTransValues :: ValueEnv -> ValueEnv
+> dictTransValues = fmap transInfo
 >   where transInfo (DataConstructor c ls ci (ForAll n ty)) =
 >           DataConstructor c ls' (constrInfo ci) (ForAll n (qualType ty'))
->           where ty' = transformConstrType tcEnv ci ty
+>           where ty' = transformConstrType ci ty
 >                 ls' = replicate (arrowArity ty' - length ls) anonId ++ ls
 >                 constrInfo (ConstrInfo n _) = ConstrInfo n []
 >         transInfo (NewtypeConstructor c l ty) =
 >           NewtypeConstructor c l (tmap (qualType . unqualType) ty)
 >         transInfo (Value f n ty) = Value f n' ty'
 >           where n' = n + arrowArity (rawType ty') - arrowArity (rawType ty)
->                 ty' = tmap (qualType . transformQualType tcEnv) ty
+>                 ty' = tmap (qualType . transformType) ty
 
-> transformConstrType :: TCEnv -> ConstrInfo -> QualType -> Type
-> transformConstrType tcEnv ci ty =
->   transformQualType tcEnv (constrTypeRhs ci ty)
-
-> transformQualType :: TCEnv -> QualType -> Type
-> transformQualType tcEnv = transformType . contextMap (maxContext tcEnv)
+> transformConstrType :: ConstrInfo -> QualType -> Type
+> transformConstrType ci ty = transformType (constrTypeRhs ci ty)
 
 > class DictTrans a where
 >   dictTrans :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv -> DictEnv
@@ -524,7 +530,7 @@ the implicit dictionary arguments to the declaration.
 >     where dictTransConstrDecl (ConstrDecl p evs cxR c tys) =
 >             ConstrDecl p evs [] c $
 >             map (fromType (tvs ++ evs)) . arrowArgs $
->             uncurry (transformConstrType tcEnv) $
+>             uncurry transformConstrType $
 >             expandConstrType tcEnv cxL (qualify tc) tvs cxR tys
 >   dictTrans _ _ _ _ _ (NewtypeDecl p cx tc tvs nc clss) =
 >     return (NewtypeDecl p [] tc tvs nc clss)
@@ -570,10 +576,18 @@ the implicit dictionary arguments to the declaration.
 > addDictArgs m tcEnv tyEnv dictEnv cx ts =
 >   do
 >     xs <- mapM (freshVar m "_#dict" . dictType) cx
->     let dictEnv' = foldr bindDict dictEnv (zip cx xs)
+>     let dictEnv' = dicts (zip cx (map (uncurry mkVar) xs)) ++ dictEnv
 >     (dictEnv'',ts') <- mapAccumM (dictTransTerm m tcEnv tyEnv) dictEnv' ts
 >     return (dictEnv'',map (uncurry VariablePattern) xs ++ ts')
->   where bindDict (tp,x) = bindEnv tp (uncurry mkVar x)
+>   where dicts ds
+>           | null ds = ds
+>           | otherwise = ds ++ dicts (concatMap superDicts ds)
+>         superDicts (TypePred cls ty,e) =
+>           map (superDict cls ty e) (superClasses cls tcEnv)
+>         superDict cls ty e cls' =
+>           (TypePred cls' ty,Apply (superDictExpr cls cls' ty) e)
+>         superDictExpr cls super ty =
+>           Variable (superDictType cls super ty) (qSuperDictId cls super)
 
 \end{verbatim}
 An application of an overloaded function $f$ with type $(C_1\,u_1,
@@ -588,13 +602,13 @@ similarly.
 
 > instance DictTrans Expression where
 >   dictTrans _ _ _ _ _ (Literal ty l) = return (Literal ty l)
->   dictTrans m tcEnv iEnv tyEnv dictEnv (Variable ty v) =
+>   dictTrans _ tcEnv iEnv tyEnv dictEnv (Variable ty v) =
 >     return (apply (Variable (foldr (TypeArrow . typeOf) ty xs) v) xs)
->     where xs = map (dictArg tcEnv iEnv dictEnv) cx
+>     where xs = map (dictArg iEnv dictEnv) cx
 >           cx = matchContext tcEnv (funType v tyEnv) ty
->   dictTrans m tcEnv iEnv tyEnv dictEnv (Constructor ty c) =
+>   dictTrans _ tcEnv iEnv tyEnv dictEnv (Constructor ty c) =
 >     return (apply (Constructor (foldr (TypeArrow . typeOf) ty xs) c) xs)
->     where xs = map (dictArg tcEnv iEnv dictEnv) cx
+>     where xs = map (dictArg iEnv dictEnv) cx
 >           cx = matchContext tcEnv (conTypeRhs c tyEnv) ty
 >   dictTrans m tcEnv iEnv tyEnv dictEnv (Apply e1 e2) =
 >     liftM2 Apply
@@ -656,26 +670,25 @@ computed for the context instantiated at the appropriate types.
   \texttt{elem (x::Int) xs \&\& elem x ys}.}
 \begin{verbatim}
 
-> dictArg :: TCEnv -> InstEnv -> DictEnv -> TypePred -> Expression Type
-> dictArg tcEnv iEnv dictEnv tp =
->   fromMaybe (instDict tcEnv iEnv dictEnv tp) (lookupEnv tp dictEnv)
+> dictArg :: InstEnv -> DictEnv -> TypePred -> Expression Type
+> dictArg iEnv dictEnv tp =
+>   fromMaybe (instDict iEnv dictEnv tp) (lookup tp dictEnv)
 
-> instDict :: TCEnv -> InstEnv -> DictEnv -> TypePred -> Expression Type
-> instDict tcEnv iEnv dictEnv tp =
->   instFunApp tcEnv iEnv dictEnv (instContext tcEnv iEnv tp) tp
+> instDict :: InstEnv -> DictEnv -> TypePred -> Expression Type
+> instDict iEnv dictEnv tp = instFunApp iEnv dictEnv (instContext iEnv tp) tp
 
-> instFunApp :: TCEnv -> InstEnv -> DictEnv -> (ModuleIdent,Context) -> TypePred
+> instFunApp :: InstEnv -> DictEnv -> (ModuleIdent,Context) -> TypePred
 >            -> Expression Type
-> instFunApp tcEnv iEnv dictEnv (m,cx) tp =
+> instFunApp iEnv dictEnv (m,cx) tp =
 >   apply (Variable (transformType (qualDictType cx tp)) (qInstFunId m tp))
->         (map (dictArg tcEnv iEnv dictEnv) cx)
+>         (map (dictArg iEnv dictEnv) cx)
 
-> instContext :: TCEnv -> InstEnv -> TypePred -> (ModuleIdent,Context)
-> instContext tcEnv iEnv (TypePred cls ty) =
+> instContext :: InstEnv -> TypePred -> (ModuleIdent,Context)
+> instContext iEnv (TypePred cls ty) =
 >   case unapplyType True ty of
 >     (TypeConstructor tc,tys) ->
 >       case lookupEnv (CT cls tc) iEnv of
->         Just (m,cx) -> (m,map (expandAliasType tys) (maxContext tcEnv cx))
+>         Just (m,cx) -> (m,map (expandAliasType tys) cx)
 >         Nothing ->
 >           internalError ("instContext " ++ show cls ++ " " ++ show tc)
 >     _ ->
@@ -694,38 +707,40 @@ the transformed code and replaces them by applications of the
 corresponding instance methods.
 
 The dictionary transformation so far has replaced each occurrence of a
-method $f$ from class $C$ by an application $f\,d_1 \dots d_n$, where
-$d_1,\dots,d_n$ are expressions returning suitable dictionaries for
-the instances of $C$ and all of its super classes at the type where
-the method is used (cf.~the code of \texttt{methodStubs} above). Since
-only single parameter classes are allowed, all dictionary expressions
-$d_i$ must have a type of the form $D_i\,\tau$, where $D_i$ is the
-dictionary type constructor corresponding to $C$ or one of its super
-classes and $\tau$ is the type of the instance at which the method is
+method $f$ from class $C$ by an application $f\,d$, where $d$ is an
+expression returning a suitable dictionary for the instance of $C$ at
+the type where the method is used (cf.\ the code of function
+\texttt{methodStubs} above). Since only single parameter classes are
+allowed, the dictionary expression $d$ must have a type of the form
+$D\,\tau$, where $D$ is the dictionary type constructor corresponding
+to $C$ and $\tau$ is the type of the instance at which the method is
 used.
 
-In order to replace method calls efficiently, we collect all known
-type class methods in an environment that maps each method $f$ onto a
-triple consisting of the method's class $C$, the position of $C$ in the
-(sorted) list of all of its super classes, and the number of super
-classes.
+In order to specialize method calls, we construct an environment that
+maps pairs of all method names and instance dictionary functions onto
+the names of the respective instance method implementations. For the
+sake of a more efficient implementation, this environment is really
+implemented as an environment from method names to association lists,
+which map instance dictionary functions onto instance method names.
 \label{dict-specialize}
 \begin{verbatim}
 
-> type MethodEnv = Env QualIdent (QualIdent,Int,Int)
+> type MethodEnv = Env QualIdent [(QualIdent,QualIdent)]
 
-> dictSpecializeModule :: TCEnv -> Module Type -> Module Type
-> dictSpecializeModule tcEnv (Module m es is ds) =
->   Module m es is (map (dictSpecialize (methodEnv tcEnv)) ds)
+> dictSpecializeModule :: TCEnv -> InstEnv -> Module Type -> Module Type
+> dictSpecializeModule tcEnv iEnv (Module m es is ds) =
+>   Module m es is (map (dictSpecialize (methodEnv tcEnv iEnv)) ds)
 
-> methodEnv :: TCEnv -> MethodEnv
-> methodEnv tcEnv = foldr bindMethods emptyEnv (allEntities tcEnv)
->   where bindMethods (DataType _ _ _) mEnv = mEnv
->         bindMethods (AliasType _ _ _ _) mEnv = mEnv
->         bindMethods (TypeClass cls _ _ fs) mEnv =
->           foldr (bindMethod cls i (length cx)) mEnv fs
->           where (i,cx) = methodStubContext tcEnv cls
->         bindMethod cls i n f = bindEnv (qualifyLike cls f) (cls,i,n)
+> methodEnv :: TCEnv -> InstEnv -> MethodEnv
+> methodEnv tcEnv iEnv = foldr (uncurry bindInstance) emptyEnv (envToList iEnv)
+>   where bindInstance (CT cls tc) (m,_) mEnv =
+>           foldr (bindMethod m cls ty) mEnv (classMethods cls tcEnv)
+>           where ty = TypeConstructor tc {-cheating!-}
+>         bindMethod m cls ty f mEnv =
+>           bindEnv f' ((d,f'') : fromMaybe [] (lookupEnv f' mEnv)) mEnv
+>           where f' = qualifyLike cls f
+>                 d = qInstFunId m (TypePred cls ty)
+>                 f'' = qInstMethodId m cls ty f
 
 > class DictSpecialize a where
 >   dictSpecialize :: MethodEnv -> a Type -> a Type
@@ -768,34 +783,8 @@ classes.
 \end{verbatim}
 When we change an application of a method stub $f$ from class $C$ into
 an application of the corresponding instance method $f'$ for type
-$\tau$, we must be careful to apply the instance method to all
-dictionaries required by the instance's context. These dictionaries
-can be determined by looking at the argument expression for the
-$C\,\tau$ instance dictionary to which the method stub $f$ is applied.
-This expression is either an application of the global $C\,\tau$
-instance creation function to exactly the dictionaries required by the
-instance's context or it is a variable that was introduced for an
-implicit dictionary argument of a data constructor in a pattern of an
-enclosing expression. In the former case, we can simply copy the
-dictionary arguments of the instance creation function to the
-specialized application of $f'$. In the latter case we cannot
-specialize the method application. Fortunately, this will happen only
-when the data constructor's declaration includes right hand side
-constraints for a universally quantified type variable \emph{and} the
-constructor is used at a fixed type for one of these variables, e.g.,
-\begin{verbatim}
-  data Bag a = Ord a => Bag [a]
-  insertInt :: Int -> Bag Int -> Bag Int
-  insertInt x (Bag xs) = Bag (ys ++ x:zs) where (ys,zs) = span (< x) xs
-\end{verbatim}
-In this rather contrived example, the compiler cannot use the
-\texttt{Int} implementation of \texttt{Ord}'s \texttt{(<)} method but
-will rather use the type class' method stub.
-
-Note that $C$'s dictionary is not necessarily the first argument of
-the instance creation function. This is the reason why the position of
-$C$ in the list of its super classes is recorded in the method
-environment.
+$\tau$, we must be careful to apply the instance method to the same
+dictionaries as its instance creation function.
 \begin{verbatim}
 
 > dictSpecializeApp :: MethodEnv -> Expression Type -> [Expression Type]
@@ -803,17 +792,14 @@ environment.
 > dictSpecializeApp _ (Literal ty l) es = apply (Literal ty l) es
 > dictSpecializeApp mEnv (Variable ty v) es =
 >   case lookupEnv v mEnv of
->     Just (cls,i,n)
->       | isKnownType ty' && isQualified f' ->
->           apply (Variable ty'' f'') (es'' ++ es')
->       | otherwise -> apply (Variable ty v) es
->       where f = apply (Variable ty v) ds
->             (ds,es') = splitAt n es
->             (Variable _ f',es'') = unapply (ds !! i) []
->             TypeApply (TypeConstructor _) ty' = typeOf (head ds)
->             tp = TypePred cls ty' -- XXX still in use?
->             f'' = qualifyLike f' (instMethodId cls ty' (unqualify v))
->             ty'' = foldr (TypeArrow . typeOf) (typeOf f) es''
+>     Just fs ->
+>       case lookup f' fs of
+>         Just f'' -> apply (Variable ty'' f'') (es'' ++ es')
+>         Nothing -> apply (Variable ty v) es
+>       where d:es' = es
+>             (Variable _ f',es'') = unapply d []
+>             ty'' = foldr (TypeArrow . typeOf) (typeOf e) es''
+>             e = Apply (Variable ty v) d
 >     Nothing -> apply (Variable ty v) es
 > dictSpecializeApp _ (Constructor ty c) es = apply (Constructor ty c) es
 > dictSpecializeApp mEnv (Apply e1 e2) es =
@@ -824,14 +810,6 @@ environment.
 >   apply (Case (dictSpecialize mEnv e) (map (dictSpecialize mEnv) as)) es
 > dictSpecializeApp mEnv (Fcase e as) es =
 >   apply (Fcase (dictSpecialize mEnv e) (map (dictSpecialize mEnv) as)) es
-
-> isKnownType :: Type -> Bool
-> isKnownType (TypeConstructor _) = True
-> isKnownType (TypeVariable _) = False
-> isKnownType (TypeConstrained _ _) = True
-> isKnownType (TypeSkolem _) = False
-> isKnownType (TypeApply ty _) = isKnownType ty
-> isKnownType (TypeArrow _ _) = True
 
 > unapply :: Expression a -> [Expression a] -> (Expression a,[Expression a])
 > unapply (Literal ty l) es = (Literal ty l,es)
@@ -867,7 +845,7 @@ transformation matches the initial arrows of the instance type.
 > matchContext tcEnv (ForAll _ (QualType cx ty1)) ty2 =
 >   foldr (\(cx1,cx2) cx' -> fromMaybe cx' (qualMatch tcEnv cx1 ty1 cx2 ty2))
 >         (internalError "matchContext")
->         (splits (maxContext tcEnv cx))
+>         (splits cx)
 
 > qualMatch :: TCEnv -> Context -> Type -> Context -> Type -> Maybe Context
 > qualMatch tcEnv cx1 ty1 cx2 ty2 =
@@ -918,6 +896,20 @@ return the (qualified) name of a lifted default type class method.
 
 > qDefaultMethodId :: QualIdent -> Ident -> QualIdent
 > qDefaultMethodId cls = qualifyLike cls . defaultMethodId cls
+
+\end{verbatim}
+The functions \texttt{superDictId} and \texttt{qSuperDictId} return
+the (qualified) name of the global function which returns a superclass
+dictionary from the dictionary of a class. The first argument is the
+name of the class and the second the name of its superclass.
+\begin{verbatim}
+
+> superDictId :: QualIdent -> QualIdent -> Ident
+> superDictId cls super =
+>   mkIdent ("_Dict#" ++ qualName cls ++ '#' : qualName super)
+
+> qSuperDictId :: QualIdent -> QualIdent -> QualIdent
+> qSuperDictId cls = qualifyLike cls . superDictId cls
 
 \end{verbatim}
 The functions \texttt{instFunId} and \texttt{qInstFunId} return the

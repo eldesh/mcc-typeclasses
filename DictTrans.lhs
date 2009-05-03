@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2799 2009-04-26 16:24:46Z wlux $
+% $Id: DictTrans.lhs 2813 2009-05-03 18:09:48Z wlux $
 %
 % Copyright (c) 2006-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -88,14 +88,14 @@ The first two phases are implemented in function
 implemented in \texttt{dictSpecializeModule} on
 p.~\pageref{dict-specialize}.
 
-\textbf{Note:} The function \texttt{lift} deliberately uses
-\texttt{toQualType} instead of \texttt{expandPolyType} when converting
-the instance type.  Since renaming types have been changed into type
-synonyms, the compiler would otherwise expand the instance type.
-Fortunately, no real type synonyms can occur in the instance type,
-since instances can be defined only for data and renaming types and
-all arguments must be type variables (cf.\ Sect.~4.3.2
-of~\cite{PeytonJones03:Haskell}).
+\textbf{Note:} The \texttt{InstanceDecl} equation of function
+\texttt{liftDecls} deliberately uses \texttt{toQualType} instead of
+\texttt{expandPolyType} when converting the instance type. Since
+renaming types have been changed into type synonyms, the compiler
+would otherwise expand the instance type. Fortunately, no real type
+synonyms can occur in the instance type, since instances can be
+defined only for data and renaming types and all arguments must be
+type variables (cf.\ Sect.~4.3.2 of~\cite{PeytonJones03:Haskell}).
 \begin{verbatim}
 
 > dictTransModule :: TCEnv -> InstEnv -> ValueEnv -> Module Type
@@ -103,13 +103,13 @@ of~\cite{PeytonJones03:Haskell}).
 > dictTransModule tcEnv iEnv tyEnv (Module m es is ds) =
 >   run (do
 >          ds' <- mapM (dictTrans m tcEnv' iEnv tyEnv' emptyEnv)
->                      (concatMap (liftDecls m tcEnv tyEnv') ds)
->          dss <- mapM (methodStubs m tcEnv' tyEnv') ds
+>                      (concatMap (liftDecls m tcEnv tyEnv) ds)
+>          dss <- mapM (methodStubs m tcEnv tyEnv) ds
 >          tyEnv'' <- fetchSt
 >          return (tcEnv',tyEnv'',Module m es is (ds' ++ concat dss)))
 >       (dictTransValues tcEnv' tyEnv')
 >   where tcEnv' = bindDictTypes m tcEnv
->         tyEnv' = bindClassDecls m tcEnv' (bindInstDecls m tcEnv' iEnv tyEnv)
+>         tyEnv' = bindClassDecls m tcEnv (bindInstDecls m tcEnv iEnv tyEnv)
 
 > liftDecls :: ModuleIdent -> TCEnv -> ValueEnv -> TopDecl Type
 >           -> [TopDecl Type]
@@ -117,8 +117,8 @@ of~\cite{PeytonJones03:Haskell}).
 > liftDecls _ _ _ (NewtypeDecl p cx tc tvs nc _) =
 >   [NewtypeDecl p cx tc tvs nc []]
 > liftDecls _ _ _ (TypeDecl p tc tvs ty) = [TypeDecl p tc tvs ty]
-> liftDecls _ tcEnv tyEnv (ClassDecl p _ cls tv ds) =
->   classDecls tcEnv tyEnv p cls tv ds
+> liftDecls m tcEnv tyEnv (ClassDecl p _ cls tv ds) =
+>   classDecls tcEnv tyEnv p (qualifyWith m cls) tv ds
 > liftDecls m tcEnv tyEnv (InstanceDecl p cx cls ty ds) =
 >   -- NB Don't use expandPolyType tcEnv (QualTypeExpr cx ty) here!
 >   instDecls m tcEnv tyEnv p cls (toQualType (QualTypeExpr cx ty)) ds
@@ -176,7 +176,7 @@ uses a default implementation that is equivalent to
 > bindDictType m (TypeClass cls k _ _) =
 >   bindEntity m tc (DataType tc (KindArrow k KindStar) [c])
 >   where tc = qDictTypeId cls
->         c = dictConstrId (unqualify cls)
+>         c = dictConstrId cls
 > bindDictType _ _ = id
 
 > bindClassDecls :: ModuleIdent -> TCEnv -> ValueEnv -> ValueEnv
@@ -199,21 +199,22 @@ uses a default implementation that is equivalent to
 > bindDefaultMethod m tyEnv cls f =
 >   bindMethod m (qDefaultMethodId cls f) (classMethodType tyEnv cls f)
 
-> classDecls :: TCEnv -> ValueEnv -> Position -> Ident -> Ident -> [Decl Type]
->            -> [TopDecl Type]
+> classDecls :: TCEnv -> ValueEnv -> Position -> QualIdent -> Ident
+>            -> [Decl Type] -> [TopDecl Type]
 > classDecls tcEnv tyEnv p cls tv ds =
 >   dictDataDecl tcEnv p cls tv ods :
 >   map (uncurry (defaultMethodDecl tyEnv cls (methodMap vds))) fs
 >   where (vds,ods) = partition isValueDecl ds
 >         fs = [(p,f) | TypeSig p fs _ <- ods, f <- fs]
 
-> dictDataDecl :: TCEnv -> Position -> Ident -> Ident -> [Decl a] -> TopDecl a
+> dictDataDecl :: TCEnv -> Position -> QualIdent -> Ident -> [Decl a]
+>              -> TopDecl a
 > dictDataDecl tcEnv p cls tv ds =
 >   DataDecl p [] (dictTypeId cls) [tv] [dictConstrDecl tcEnv p cls tv tys] []
->   where tys = map (expandMethodType tcEnv (qualify cls) tv)
+>   where tys = map (expandMethodType tcEnv cls tv)
 >                   [ty | TypeSig _ fs ty <- ds, _ <- fs]
 
-> defaultMethodDecl :: ValueEnv -> Ident -> [(Ident,Decl Type)] -> Position
+> defaultMethodDecl :: ValueEnv -> QualIdent -> [(Ident,Decl Type)] -> Position
 >                   -> Ident -> TopDecl Type
 > defaultMethodDecl tyEnv cls ds p f =
 >   methodDecl qUndefinedId p (defaultMethodId cls f) ty (lookup f ds)
@@ -228,7 +229,7 @@ uses a default implementation that is equivalent to
 > classMethodType tyEnv cls f = ty
 >   where ForAll _ ty = funType (qualifyLike cls f) tyEnv
 
-> dictConstrDecl :: TCEnv -> Position -> Ident -> Ident -> [QualType]
+> dictConstrDecl :: TCEnv -> Position -> QualIdent -> Ident -> [QualType]
 >                -> ConstrDecl
 > dictConstrDecl tcEnv p cls tv tys =
 >   ConstrDecl p (filter (tv /=) (nub (fv tys'))) [] (dictConstrId cls) tys'
@@ -238,12 +239,6 @@ uses a default implementation that is equivalent to
 > transformMethodType :: TCEnv -> QualType -> Type
 > transformMethodType tcEnv =
 >   transformType . contextMap (maxContext tcEnv . tail)
-
-> defaultMethodId :: Ident -> Ident -> Ident
-> defaultMethodId cls f = mkIdent ("_Method#" ++ name cls ++ "#" ++ name f)
-
-> qDefaultMethodId :: QualIdent -> Ident -> QualIdent
-> qDefaultMethodId cls = qualifyLike cls . defaultMethodId (unqualify cls)
 
 \end{verbatim}
 \paragraph{Method Stubs}
@@ -456,15 +451,6 @@ of method $f_i$ in class $C$.
 
 > methodMap :: [Decl a] -> [(Ident,Decl a)]
 > methodMap ds = [(unRenameIdent f,d) | d@(FunctionDecl _ f _) <- ds]
-
-> instMethodId :: QualIdent -> Type -> Ident -> Ident
-> instMethodId cls ty = instMethodId' cls (rootOfType ty)
->   where instMethodId' cls tc f =
->           mkIdent ("_Method#" ++ qualName cls ++ "#"
->                               ++ qualName tc ++ "#" ++ name f)
-
-> qInstMethodId :: ModuleIdent -> QualIdent -> Type -> Ident -> QualIdent
-> qInstMethodId m cls ty = qualifyWith m . instMethodId cls ty
 
 \end{verbatim}
 \paragraph{Adding Dictionary Arguments}
@@ -910,30 +896,54 @@ dictionary type and its data constructor. The functions
 functions that transform qualified names.
 \begin{verbatim}
 
-> dictTypeId :: Ident -> Ident
-> dictTypeId cls = mkIdent ("_Dict#" ++ name cls)
+> dictTypeId :: QualIdent -> Ident
+> dictTypeId cls = mkIdent ("_Dict#" ++ qualName cls)
 
 > qDictTypeId :: QualIdent -> QualIdent
-> qDictTypeId cls = qualifyLike cls (dictTypeId (unqualify cls))
+> qDictTypeId cls = qualifyLike cls (dictTypeId cls)
 
-> dictConstrId :: Ident -> Ident
+> dictConstrId :: QualIdent -> Ident
 > dictConstrId = dictTypeId
 
 > qDictConstrId :: QualIdent -> QualIdent
 > qDictConstrId = qDictTypeId
 
 \end{verbatim}
+The functions \texttt{defaultMethodId} and \texttt{qDefaultMethodId}
+return the (qualified) name of a lifted default type class method.
+\begin{verbatim}
+
+> defaultMethodId :: QualIdent -> Ident -> Ident
+> defaultMethodId cls f = mkIdent ("_meth#" ++ qualName cls ++ '#' : name f)
+
+> qDefaultMethodId :: QualIdent -> Ident -> QualIdent
+> qDefaultMethodId cls = qualifyLike cls . defaultMethodId cls
+
+\end{verbatim}
 The functions \texttt{instFunId} and \texttt{qInstFunId} return the
-name of the global function which returns the dictionary for a
-particular C-T instance pair.
+(qualified) name of the global function which returns the dictionary
+for a particular C-T instance pair.
 \begin{verbatim}
 
 > instFunId :: TypePred -> Ident
 > instFunId (TypePred cls ty) =
->   mkIdent ("_Inst#" ++ qualName cls ++ "#" ++ qualName (rootOfType ty))
+>   mkIdent ("_inst#" ++ qualName cls ++ '#' : qualName (rootOfType ty))
 
 > qInstFunId :: ModuleIdent -> TypePred -> QualIdent
 > qInstFunId m = qualifyWith m . instFunId
+
+\end{verbatim}
+The functions \texttt{instMethodId} and \texttt{qInstMethodId} return
+the (qualified) name of a lifted type class instance method.
+\begin{verbatim}
+
+> instMethodId :: QualIdent -> Type -> Ident -> Ident
+> instMethodId cls ty = instMethodId' cls (rootOfType ty)
+>   where instMethodId' cls tc f = mkIdent $
+>           "_meth#" ++ qualName cls ++ '#' : qualName tc ++ '#' : name f
+
+> qInstMethodId :: ModuleIdent -> QualIdent -> Type -> Ident -> QualIdent
+> qInstMethodId m cls ty = qualifyWith m . instMethodId cls ty
 
 \end{verbatim}
 The functions \texttt{dictType} and \texttt{qualDictType} return the

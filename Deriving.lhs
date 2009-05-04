@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2780 2009-03-28 16:25:54Z wlux $
+% $Id: Deriving.lhs 2815 2009-05-04 13:59:57Z wlux $
 %
 % Copyright (c) 2006-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -54,7 +54,7 @@ derived.
 > deriveInstance m pEnv tcEnv iEnv tc tvs cs (DClass p cls) =
 >   liftE (InstanceDecl p cx' cls ty' . trustAll p)
 >         (deriveMethods pEnv tcEnv p (map constr cs) cls)
->   where cx = snd (fromJust (lookupEnv (CT cls' tc') iEnv))
+>   where cx = snd3 (fromJust (lookupEnv (CT cls' tc') iEnv))
 >         ty = foldl TypeApply (TypeConstructor tc') tvs'
 >         tc' = qualifyWith m tc
 >         tvs' = take (length tvs) (map TypeVariable [0..])

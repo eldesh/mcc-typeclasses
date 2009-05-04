@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2725 2008-06-14 17:24:48Z wlux $
+% $Id: Imports.lhs 2815 2009-05-04 13:59:57Z wlux $
 %
 % Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -92,16 +92,17 @@ all instance declarations are always imported into the current module.
 > importCTs ds iEnv = foldr addCT iEnv ds
 
 > addCT :: IDecl -> InstSet -> InstSet
-> addCT (IInstanceDecl _ _ cls ty _) = addToSet (CT cls (typeConstr ty))
+> addCT (IInstanceDecl _ _ cls ty _ _) = addToSet (CT cls (typeConstr ty))
 > addCT _ = id
 
 > importInstances :: [IDecl] -> InstEnv -> InstEnv
 > importInstances ds iEnv = foldr bindInstance iEnv ds
 
 > bindInstance :: IDecl -> InstEnv -> InstEnv
-> bindInstance (IInstanceDecl _ cx cls ty (Just m)) =
->   bindEnv (CT cls (rootOfType ty')) (m,cx')
+> bindInstance (IInstanceDecl _ cx cls ty (Just m) fs) =
+>   bindEnv (CT cls (rootOfType ty')) (m,cx',fs')
 >   where QualType cx' ty' = toQualType (QualTypeExpr cx ty)
+>         fs' = [(f,fromInteger n) | (f,n) <- fs]
 > bindInstance _ = id
 
 \end{verbatim}
@@ -149,18 +150,21 @@ following functions.
 >   [typeCon RenamingType tc k tvs (nconstr nc)]
 > types (ITypeDecl _ tc k tvs ty) =
 >   [typeCon (flip AliasType (length tvs)) tc k tvs (toType tvs ty)]
-> types (IClassDecl _ cx cls k tv ds _) = [typeCls cx cls k tv (map imethod ds)]
+> types (IClassDecl _ cx cls k tv ds _) = [typeCls cx cls k tv (map clsMthd ds)]
 > types _ = []
 
 > typeCon :: (QualIdent -> Kind -> a) -> QualIdent -> Maybe KindExpr -> [Ident]
 >         -> a
 > typeCon f tc k tvs = f tc (maybe (simpleKind (length tvs)) toKind k)
 
-> typeCls :: [ClassAssert] -> QualIdent -> Maybe KindExpr -> Ident -> [Ident]
+> typeCls :: [ClassAssert] -> QualIdent -> Maybe KindExpr -> Ident -> MethodList
 >         -> TypeInfo
-> typeCls cx cls k tv =
->   TypeClass cls (maybe KindStar toKind k) [cls | TypePred cls _ <- cx']
+> typeCls cx cls k tv fs =
+>   TypeClass cls (maybe KindStar toKind k) [cls | TypePred cls _ <- cx'] fs
 >   where QualType cx' _ = toQualType (QualTypeExpr cx (VariableType tv))
+
+> clsMthd :: IMethodDecl -> (Ident,Int)
+> clsMthd (IMethodDecl _ f n _) = (f,maybe 0 fromInteger n)
 
 > values :: IDecl -> [ValueInfo]
 > values (IDataDecl _ cx tc _ tvs cs xs) =
@@ -214,7 +218,7 @@ following functions.
 >   where ty' = QualTypeExpr cx (ArrowType (constrType tc tvs) ty)
 
 > classMethod :: QualIdent -> Ident -> IMethodDecl -> ValueInfo
-> classMethod cls tv (IMethodDecl _ f ty) =
+> classMethod cls tv (IMethodDecl _ f _ ty) =
 >   Value (qualifyLike cls f) 0 (typeScheme (toMethodType cls tv ty))
 
 \end{verbatim}

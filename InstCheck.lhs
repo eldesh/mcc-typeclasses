@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2780 2009-03-28 16:25:54Z wlux $
+% $Id: InstCheck.lhs 2815 2009-05-04 13:59:57Z wlux $
 %
 % Copyright (c) 2006-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -34,6 +34,7 @@ instances of class \texttt{Prelude.Num}.
 > import TypeInfo
 > import TypeSubst
 > import TypeTrans
+> import Utils
 
 > instCheck :: ModuleIdent -> TCEnv -> InstEnv -> [TopDecl a] -> Error InstEnv
 > instCheck m tcEnv iEnv ds =
@@ -82,9 +83,10 @@ instance environment.
 
 > bindInstance :: ModuleIdent -> TCEnv -> TopDecl a -> InstEnv -> InstEnv
 > bindInstance m tcEnv (InstanceDecl _ cx cls ty _) =
->   bindEnv (CT cls' (rootOfType ty')) (m,cx')
+>   bindEnv (CT cls' (rootOfType ty')) (m,cx',fs)
 >   where cls' = origName (head (qualLookupTopEnv cls tcEnv))
 >         QualType cx' ty' = expandPolyType tcEnv (QualTypeExpr cx ty)
+>         fs = [(f,0) | (f,_) <- classMethods cls tcEnv]
 > bindInstance _ _ _ = id
 
 \end{verbatim}
@@ -176,8 +178,9 @@ contexts for their instance declarations.
 > bindDerived :: ModuleIdent -> TCEnv -> Position -> QualIdent -> QualType
 >             -> [Type] -> InstEnv -> QualIdent -> Error InstEnv
 > bindDerived m tcEnv p tc ty tys iEnv cls =
->   liftM (bindInstance m iEnv) (inferContext tcEnv iEnv p tc ty tys cls)
->   where bindInstance m iEnv (ct,cx) = bindEnv ct (m,cx) iEnv
+>   liftM (bindInstance m [(f,0) | (f,_) <- classMethods cls tcEnv] iEnv)
+>         (inferContext tcEnv iEnv p tc ty tys cls)
+>   where bindInstance m fs iEnv (ct,cx) = bindEnv ct (m,cx,fs) iEnv
 
 > bindInitialContexts :: ModuleIdent -> TCEnv -> InstEnv -> Deriving
 >                     -> Error InstEnv
@@ -209,9 +212,9 @@ contexts for their instance declarations.
 >   where (iEnv',upds) = mapAccumL updateInstance iEnv cxs
 >         updateInstance iEnv (ct,cx) =
 >           case lookupEnv ct iEnv of
->             Just (m,cx')
+>             Just (m,cx',fs)
 >               | cx == cx' -> (iEnv,False)
->               | otherwise -> (bindEnv ct (m,cx) iEnv,True)
+>               | otherwise -> (bindEnv ct (m,cx,fs) iEnv,True)
 >             Nothing -> internalError "updateContext"
 
 > sortDeriving :: [Deriving] -> [[Deriving]]
@@ -300,7 +303,7 @@ implied by other predicates in the context are removed.
 > instContext iEnv cls ty =
 >   case unapplyType False ty of
 >     (TypeConstructor tc,tys) ->
->       fmap (map (expandAliasType tys) . snd) (lookupEnv (CT cls tc) iEnv)
+>       fmap (map (expandAliasType tys) . snd3) (lookupEnv (CT cls tc) iEnv)
 >     _ -> Nothing
 
 > partitionContext :: Context -> (Context,Context)

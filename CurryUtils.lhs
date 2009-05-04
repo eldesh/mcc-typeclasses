@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryUtils.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: CurryUtils.lhs 2815 2009-05-04 13:59:57Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -190,7 +190,7 @@ source and interface modules, respectively.
 > methods (TrustAnnot _ _ _) = []
 
 > imethod :: IMethodDecl -> Ident
-> imethod (IMethodDecl _ f _) = f
+> imethod (IMethodDecl _ f _ _) = f
 
 \end{verbatim}
 The function \texttt{eqnArity} returns the (syntactic) arity of a
@@ -243,7 +243,7 @@ defined by an interface declaration.
 > entity (ITypeDecl _ tc _ _ _) = tc
 > entity (HidingClassDecl _ _ cls _ _) = cls
 > entity (IClassDecl _ _ cls _ _ _ _) = cls
-> entity (IInstanceDecl _ _ _ _ m) = maybe qualify qualifyWith m anonId
+> entity (IInstanceDecl _ _ _ _ m _) = maybe qualify qualifyWith m anonId
 > entity (IFunctionDecl _ f _ _) = f
 
 \end{verbatim}
@@ -261,7 +261,7 @@ specifications from interface declarations.
 > unhide (ITypeDecl p tc k tvs ty) = ITypeDecl p tc k tvs ty
 > unhide (HidingClassDecl p cx cls k tv) = IClassDecl p cx cls k tv [] []
 > unhide (IClassDecl p cx cls k tv ds _) = IClassDecl p cx cls k tv ds []
-> unhide (IInstanceDecl p cx cls ty m) = IInstanceDecl p cx cls ty m
+> unhide (IInstanceDecl p cx cls ty m fs) = IInstanceDecl p cx cls ty m fs
 > unhide (IFunctionDecl p f n ty) = IFunctionDecl p f n ty
 
 \end{verbatim}

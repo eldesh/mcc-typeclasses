@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeInfo.lhs 2725 2008-06-14 17:24:48Z wlux $
+% $Id: TypeInfo.lhs 2815 2009-05-04 13:59:57Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -22,11 +22,12 @@ synonym's arity cannot be determined from its own kind. For instance,
 is explicitly permitted by the revised Haskell'98
 report~\cite{PeytonJones03:Haskell} (see Sect.~4.2.2). For type
 classes, the names of their immediate super classes and their methods
-are saved. The list of super classes is always sorted according to
-their names. Type classes are recorded in the type constructor
-environment because type constructors and type classes share a common
-name space. For type variables, only their kind is recorded in the
-environment.
+are saved. The list of super classes is always sorted by their names.
+The list of method names also includes the arities of the default
+method implementations. Type classes are recorded in the type
+constructor environment because type constructors and type classes
+share a common name space. For type variables, only their kind is
+recorded in the environment.
 
 \ToDo{Sort methods of a type class, too, because their order is not
   relevant?}
@@ -50,9 +51,10 @@ constructors in the interface.
 > data TypeInfo = DataType QualIdent Kind [Ident]
 >               | RenamingType QualIdent Kind Ident
 >               | AliasType QualIdent Int Kind Type
->               | TypeClass QualIdent Kind [QualIdent] [Ident]
+>               | TypeClass QualIdent Kind [QualIdent] MethodList
 >               | TypeVar Kind
 >               deriving Show
+> type MethodList = [(Ident,Int)]
 
 > instance Entity TypeInfo where
 >   origName (DataType tc _ _) = tc
@@ -141,7 +143,7 @@ methods defined by a class.
 > allSuperClasses cls clsEnv = nub (classes cls)
 >   where classes cls = cls : concatMap classes (superClasses cls clsEnv)
 
-> classMethods :: QualIdent -> TCEnv -> [Ident]
+> classMethods :: QualIdent -> TCEnv -> MethodList
 > classMethods cls clsEnv =
 >   case qualLookupTopEnv cls clsEnv of
 >     [TypeClass _ _ _ fs] -> fs

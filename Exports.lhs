@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2797 2009-04-26 14:12:48Z wlux $
+% $Id: Exports.lhs 2815 2009-05-04 13:59:57Z wlux $
 %
 % Copyright (c) 2000-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -31,7 +31,8 @@ interfaces.
 to \texttt{exportInterface} reflect the types of the module's entities
 after type inference. However, the source code module passed to
 \texttt{exportInterface} must reflect the module's code \emph{after}
-applying all source code transformations to the program.
+applying all source code transformations to the program so that
+correct arity annotations are written to the interface.
 \begin{verbatim}
 
 > module Exports(exportInterface) where
@@ -58,16 +59,16 @@ applying all source code transformations to the program.
 > exportInterface :: Module a -> PEnv -> TCEnv -> InstEnv -> ValueEnv
 >                 -> Interface
 > exportInterface (Module m (Just (Exporting _ es)) _ ds) pEnv tcEnv iEnv tyEnv =
->   Interface m imports (unqualIntf m (precs ++ ds'))
+>   Interface m imports (unqualIntf m (precs ++ ds''))
 >   where aEnv = bindArities m ds
 >         tvs = nameSupply
->         imports = map (IImportDecl noPos) (filter (m /=) (usedModules ds'))
+>         imports = map (IImportDecl noPos) (filter (m /=) (usedModules ds''))
 >         precs = foldr (infixDecl pEnv) [] es
->         ds' =
->           closeInterface m tcEnv iEnv tvs zeroSet (types ++ values ++ insts)
->         types = foldr (typeDecl tcEnv tyEnv tvs) [] es
+>         ds' = types ++ values ++ insts
+>         ds'' = closeInterface m tcEnv iEnv aEnv tvs zeroSet ds'
+>         types = foldr (typeDecl tcEnv aEnv tyEnv tvs) [] es
 >         values = foldr (valueDecl aEnv tyEnv tvs) [] es
->         insts = foldr (uncurry (instDecl tcEnv tvs)) [] (envToList iEnv)
+>         insts = foldr (uncurry (instDecl tcEnv aEnv tvs)) [] (envToList iEnv)
 
 > infixDecl :: PEnv -> Export -> [IDecl] -> [IDecl]
 > infixDecl pEnv (Export f) ds = iInfixDecl pEnv f ds
@@ -81,9 +82,10 @@ applying all source code transformations to the program.
 >     [PrecInfo _ (OpPrec fix pr)] -> IInfixDecl noPos fix pr op : ds
 >     _ -> internalError "infixDecl"
 
-> typeDecl :: TCEnv -> ValueEnv -> [Ident] -> Export -> [IDecl] -> [IDecl]
-> typeDecl _ _ _ (Export _) ds = ds
-> typeDecl tcEnv tyEnv tvs (ExportTypeWith tc xs) ds =
+> typeDecl :: TCEnv -> ArityEnv -> ValueEnv -> [Ident] -> Export -> [IDecl]
+>          -> [IDecl]
+> typeDecl _ _ _ _ (Export _) ds = ds
+> typeDecl tcEnv aEnv tyEnv tvs (ExportTypeWith tc xs) ds =
 >   case qualLookupTopEnv tc tcEnv of
 >     [DataType _ k cs] -> iTypeDecl IDataDecl cx' tc tvs n k constrs xs' : ds
 >       where n = kindArity k
@@ -103,8 +105,8 @@ applying all source code transformations to the program.
 >       iTypeDecl (const . ITypeDecl) [] tc tvs n k (fromType tvs ty) : ds
 >     [TypeClass _ k clss fs] ->
 >       iClassDecl IClassDecl tc tvs k clss methods fs' : ds
->       where methods = map (methodDecl tyEnv tc tvs) fs
->             fs' = filter (`notElem` xs) fs
+>       where methods = map (methodDecl aEnv tyEnv tc tvs) fs
+>             fs' = filter (`notElem` xs) (map fst fs)
 >     _ -> internalError "typeDecl"
 
 > iTypeDecl :: (Position -> [ClassAssert] -> QualIdent -> Maybe KindExpr
@@ -144,53 +146,81 @@ applying all source code transformations to the program.
 >         QualTypeExpr cx' ty' = fromQualType tvs ty
 >         ty'' = head (argTypes ty')
 
-> methodDecl :: ValueEnv -> QualIdent -> [Ident] -> Ident -> IMethodDecl
-> methodDecl tyEnv cls tvs f =
->   IMethodDecl noPos f (fromQualType tvs (contextMap tail ty))
->   where ForAll _ ty = funType (qualifyLike cls f) tyEnv
+> methodDecl :: ArityEnv -> ValueEnv -> QualIdent -> [Ident] -> (Ident,Int)
+>            -> IMethodDecl
+> methodDecl aEnv tyEnv cls tvs (f,n) =
+>   IMethodDecl noPos f n' (fromQualType tvs (contextMap tail ty))
+>   where n' = arityAnnot (qualifyLike cls f) n 0 aEnv
+>         ForAll _ ty = funType (qualifyLike cls f) tyEnv
 
 > valueDecl :: ArityEnv -> ValueEnv -> [Ident] -> Export -> [IDecl] -> [IDecl]
 > valueDecl aEnv tyEnv tvs (Export f) ds =
->   IFunctionDecl noPos f n' (fromQualType tvs ty) : ds
->   where n = fromMaybe (arity f tyEnv) (lookupEnv f aEnv)
->         n'
->           | arrowArity (unqualType ty) == n = Nothing
->           | otherwise = Just (toInteger n)
+>   IFunctionDecl noPos f n (fromQualType tvs ty) : ds
+>   where n = arityAnnot f (arity f tyEnv) (arrowArity (unqualType ty)) aEnv
 >         ForAll _ ty = funType f tyEnv
 > valueDecl _ _ _ (ExportTypeWith _ _) ds = ds
 
-> instDecl :: TCEnv -> [Ident] -> CT -> (ModuleIdent,Context) -> [IDecl]
+> instDecl :: TCEnv -> ArityEnv -> [Ident] -> CT -> InstInfo -> [IDecl]
 >          -> [IDecl]
-> instDecl tcEnv tvs (CT cls tc) (m,cx) ds
+> instDecl tcEnv aEnv tvs (CT cls tc) (m,cx,fs) ds
 >   | fst (splitQualIdent cls) /= Just m && fst (splitQualIdent tc) /= Just m =
->       iInstDecl tcEnv tvs (CT cls tc) (m,cx) : ds
+>       iInstDecl tcEnv aEnv tvs (CT cls tc) (m,cx,fs) : ds
 >   | otherwise = ds
 
-> iInstDecl :: TCEnv -> [Ident] -> CT -> (ModuleIdent,Context) -> IDecl
-> iInstDecl tcEnv tvs (CT cls tc) (m,cx) =
->   IInstanceDecl noPos cx' cls ty' (Just m)
+> iInstDecl :: TCEnv -> ArityEnv -> [Ident] -> CT -> InstInfo -> IDecl
+> iInstDecl tcEnv aEnv tvs (CT cls tc) (m,cx,fs) =
+>   IInstanceDecl noPos cx' cls ty' (Just m) [(f,n) | (f,Just n) <- fs']
 >   where QualTypeExpr cx' ty' =
 >           fromQualType tvs (QualType cx (applyType (TypeConstructor tc) tvs'))
 >         n = kindArity (constrKind tc tcEnv) - kindArity (classKind cls tcEnv)
 >         tvs' = take n (map TypeVariable [0..])
+>         fs' = [(f,arityAnnot (qInstMethodId m tc f) n 0 aEnv) | (f,n) <- fs]
+>         qInstMethodId m tc f = qualifyWith m (instMethodId tc f)
+
+> arityAnnot :: QualIdent -> Int -> Int -> ArityEnv -> Maybe Integer
+> arityAnnot f n n0 aEnv = if n' == n0 then Nothing else Just (toInteger n')
+>   where n' = fromMaybe n (lookupEnv f aEnv)
 
 \end{verbatim}
 Simplification can change the arity of an exported function defined in
 the current module via $\eta$-expansion (cf.\ 
 Sect.~\ref{eta-expansion}). In order to generate correct arity
 annotations, the compiler collects the arities of all user defined
-functions at the top-level of the transformed code in an auxiliary
-environment. Note that we ignore foreign function declarations here
-because their arities are fixed and cannot be changed by program
-transformations.
+functions at the top-level and in the class and instance declarations
+of the transformed code in an auxiliary environment. Note that we
+ignore foreign function declarations here because their arities are
+fixed and cannot be changed by program transformations. When adding
+the arities of default type class and instance methods, we must remove
+the unique key added during renaming. Furthermore, we prefix instance
+method identifiers with the name of the instance's type in order to
+avoid name conflicts between methods of different instances of the
+same class.
 \begin{verbatim}
 
 > type ArityEnv = Env QualIdent Int
 
 > bindArities :: ModuleIdent -> [TopDecl a] -> ArityEnv
-> bindArities m ds =
->   foldr bindArity emptyEnv [(f,eqs) | BlockDecl (FunctionDecl _ f eqs) <- ds]
+> bindArities m ds = foldr bindArity emptyEnv (concatMap functions ds)
 >   where bindArity (f,eqs) = bindEnv (qualifyWith m f) (eqnArity (head eqs))
+
+> functions :: TopDecl a -> [(Ident,[Equation a])]
+> functions (DataDecl _ _ _ _ _ _) = []
+> functions (NewtypeDecl _ _ _ _ _ _) = []
+> functions (TypeDecl _ _ _ _) = []
+> functions (ClassDecl _ _ _ _ ds) =
+>   [(unRenameIdent f,eqs) | FunctionDecl _ f eqs <- ds]
+> functions (InstanceDecl _ _ _ ty ds) =
+>   [(instMethodId tc (unRenameIdent f),eqs) | FunctionDecl _ f eqs <- ds]
+>   where tc = typeConstr ty
+> functions (DefaultDecl _ _) = []
+> functions (BlockDecl d) =
+>   case d of
+>     FunctionDecl _ f eqs -> [(f,eqs)]
+>     _ -> []
+> functions (SplitAnnot _) = []
+
+> instMethodId :: QualIdent -> Ident -> Ident
+> instMethodId tc f = mkIdent (qualName tc ++ '.' : name f)
 
 \end{verbatim}
 The compiler determines the list of imported modules from the set of
@@ -231,7 +261,7 @@ not module \texttt{B}.
 >   modules (HidingClassDecl _ cx cls _ _) = modules cx . modules cls
 >   modules (IClassDecl _ cx cls _ _ ds _) =
 >     modules cx . modules cls . modules ds
->   modules (IInstanceDecl _ cx cls ty m) =
+>   modules (IInstanceDecl _ cx cls ty m _) =
 >      modules cx . modules cls . modules ty . maybe id (:) m
 >   modules (IFunctionDecl _ f _ ty) = modules f . modules ty
 
@@ -249,7 +279,7 @@ not module \texttt{B}.
 >   modules (NewRecordDecl _ _ _ ty) = modules ty
 
 > instance HasModule IMethodDecl where
->   modules (IMethodDecl _ _ ty) = modules ty
+>   modules (IMethodDecl _ _ _ ty) = modules ty
 
 > instance HasModule QualTypeExpr where
 >   modules (QualTypeExpr cx ty) = modules cx . modules ty
@@ -345,19 +375,20 @@ environment.
 > data DeclIs =
 >   IsOther | IsType QualIdent | IsClass QualIdent | IsInst CT deriving (Eq,Ord)
 
-> closeInterface :: ModuleIdent -> TCEnv -> InstEnv -> [Ident] -> Set DeclIs
->                -> [IDecl] -> [IDecl]
-> closeInterface _ _ _ _ _ [] = []
-> closeInterface m tcEnv iEnv tvs ds' (d:ds)
->   | d' == IsOther = d : closeInterface m tcEnv iEnv tvs ds' (ds ++ ds'')
->   | d' `elemSet` ds' = closeInterface m tcEnv iEnv tvs ds' ds
+> closeInterface :: ModuleIdent -> TCEnv -> InstEnv -> ArityEnv -> [Ident]
+>                -> Set DeclIs -> [IDecl] -> [IDecl]
+> closeInterface _ _ _ _ _ _ [] = []
+> closeInterface m tcEnv iEnv aEnv tvs ds' (d:ds)
+>   | d' == IsOther =
+>       d : closeInterface m tcEnv iEnv aEnv tvs ds' (ds ++ ds'')
+>   | d' `elemSet` ds' = closeInterface m tcEnv iEnv aEnv tvs ds' ds
 >   | otherwise =
->       d : closeInterface m tcEnv iEnv tvs (d' `addToSet` ds') (ds ++ ds'')
+>       d : closeInterface m tcEnv iEnv aEnv tvs (d' `addToSet` ds') (ds ++ ds'')
 >   where d' = declIs d
 >         ds'' =
 >           map (hiddenTypeDecl tcEnv tvs)
 >               (filter (not . isPrimTypeId . unqualify) (usedTypes d [])) ++
->           instances m tcEnv iEnv tvs ds' d'
+>           instances m tcEnv iEnv aEnv tvs ds' d'
 
 > declIs :: IDecl -> DeclIs
 > declIs (IInfixDecl _ _ _ _) = IsOther
@@ -367,28 +398,28 @@ environment.
 > declIs (ITypeDecl _ _ _ _ _) = IsOther {-sic!-}
 > declIs (HidingClassDecl _ _ cls _ _) = IsClass cls
 > declIs (IClassDecl _ _ cls _ _ _ _) = IsClass cls
-> declIs (IInstanceDecl _ _ cls ty _) = IsInst (CT cls (typeConstr ty))
+> declIs (IInstanceDecl _ _ cls ty _ _) = IsInst (CT cls (typeConstr ty))
 > declIs (IFunctionDecl _ _ _ _) = IsOther
 
-> instances :: ModuleIdent -> TCEnv -> InstEnv -> [Ident] -> Set DeclIs
->           -> DeclIs -> [IDecl]
-> instances _ _ _ _ _ IsOther = []
-> instances _ tcEnv iEnv tvs ds' (IsType tc) =
->   [iInstDecl tcEnv tvs (CT cls tc) (m',cx)
->   | (CT cls tc',(m',cx)) <- envToList iEnv,
+> instances :: ModuleIdent -> TCEnv -> InstEnv -> ArityEnv -> [Ident]
+>           -> Set DeclIs -> DeclIs -> [IDecl]
+> instances _ _ _ _ _ _ IsOther = []
+> instances _ tcEnv iEnv aEnv tvs ds' (IsType tc) =
+>   [iInstDecl tcEnv aEnv tvs (CT cls tc) (m',cx,fs)
+>   | (CT cls tc',(m',cx,fs)) <- envToList iEnv,
 >     tc == tc',
 >     if fst (splitQualIdent cls) == Just m'
 >       then IsClass cls `elemSet` ds'
 >       else fst (splitQualIdent tc) == Just m']
-> instances m tcEnv iEnv tvs ds' (IsClass cls) =
->   [iInstDecl tcEnv tvs (CT cls tc) (m',cx)
->   | (CT cls' tc,(m',cx)) <- envToList iEnv,
+> instances m tcEnv iEnv aEnv tvs ds' (IsClass cls) =
+>   [iInstDecl tcEnv aEnv tvs (CT cls tc) (m',cx,fs)
+>   | (CT cls' tc,(m',cx,fs)) <- envToList iEnv,
 >     cls == cls',
 >     fst (splitQualIdent cls) == Just m',
 >     m /= m' || isPrimTypeId (unqualify tc)
 >             || fst (splitQualIdent tc) /= Just m
 >             || IsType tc `elemSet` ds']
-> instances _ _ _ _ _ (IsInst _) = []
+> instances _ _ _ _ _ _ (IsInst _) = []
 
 > hiddenTypeDecl :: TCEnv -> [Ident] -> QualIdent -> IDecl
 > hiddenTypeDecl tcEnv tvs tc =
@@ -418,7 +449,7 @@ environment.
 >   usedTypes (ITypeDecl _ _ _ _ ty) = usedTypes ty
 >   usedTypes (HidingClassDecl _ cx _ _ _) = usedTypes cx
 >   usedTypes (IClassDecl _ cx _ _ _ ds _) = usedTypes cx . usedTypes ds
->   usedTypes (IInstanceDecl _ cx cls ty _) =
+>   usedTypes (IInstanceDecl _ cx cls ty _ _) =
 >     usedTypes cx . (cls :) . usedTypes ty
 >   usedTypes (IFunctionDecl _ _ _ ty) = usedTypes ty
 
@@ -436,7 +467,7 @@ environment.
 >   usedTypes (NewRecordDecl _ _ _ ty) = usedTypes ty
 
 > instance HasType IMethodDecl where
->   usedTypes (IMethodDecl _ _ ty) = usedTypes ty
+>   usedTypes (IMethodDecl _ _ _ ty) = usedTypes ty
 
 > instance HasType QualTypeExpr where
 >   usedTypes (QualTypeExpr cx ty) = usedTypes cx . usedTypes ty

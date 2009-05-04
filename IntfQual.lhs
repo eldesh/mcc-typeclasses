@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfQual.lhs 2722 2008-06-14 14:08:49Z wlux $
+% $Id: IntfQual.lhs 2815 2009-05-04 13:59:57Z wlux $
 %
 % Copyright (c) 2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -50,9 +50,10 @@ readability.
 >     HidingClassDecl p (mapQId q m cx) (q m cls) k tv
 >   mapQId q m (IClassDecl p cx cls k tv fs fs') =
 >     IClassDecl p (mapQId q m cx) (q m cls) k tv (mapQId q m fs) fs'
->   mapQId q m (IInstanceDecl p cx cls ty m') =
->     IInstanceDecl p (mapQId q m cx) (q m cls) (mapQId q m ty)
->         (fst (splitQualIdent (q m (maybe qualify qualifyWith m' anonId))))
+>   mapQId q m (IInstanceDecl p cx cls ty m' fs) =
+>     IInstanceDecl p (mapQId q m cx) (q m cls) (mapQId q m ty) m'' fs
+>     where m'' = fst $ splitQualIdent $ q m
+>                     $ maybe qualify qualifyWith m' anonId
 >   mapQId q m (IFunctionDecl p f n ty) =
 >     IFunctionDecl p (q m f) n (mapQId q m ty)
 
@@ -72,7 +73,7 @@ readability.
 >   mapQId q m (FieldDecl p ls ty) = FieldDecl p ls (mapQId q m ty)
 
 > instance Qual IMethodDecl where
->   mapQId q m (IMethodDecl p f ty) = IMethodDecl p f (mapQId q m ty)
+>   mapQId q m (IMethodDecl p f n ty) = IMethodDecl p f n (mapQId q m ty)
 
 > instance Qual QualTypeExpr where
 >   mapQId q m (QualTypeExpr cx ty) =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2725 2008-06-14 17:24:48Z wlux $
+% $Id: IntfCheck.lhs 2815 2009-05-04 13:59:57Z wlux $
 %
 % Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -63,6 +63,7 @@ error for both.
 > import InstInfo
 > import Kinds
 > import KindTrans
+> import List
 > import Maybe
 > import Monad
 > import PrecInfo
@@ -125,14 +126,15 @@ error for both.
 >   where checkClass (TypeClass cls' k' clss' fs')
 >           | cls == cls' && maybe KindStar toKind k == k' &&
 >             [cls | ClassAssert cls _ <- cx] == clss' &&
->             map imethod ds == fs' =
+>             [(f,maybe 0 fromInteger n) | IMethodDecl _ f n _ <- ds] == fs' =
 >               Just (mapM_ (checkMethodImport tyEnv cls tv) ds)
 >         checkClass _ = Nothing
-> checkImport _ _ iEnv _ (IInstanceDecl p cx cls ty m) =
->   checkInstInfo checkContext iEnv p cls tc m
+> checkImport _ _ iEnv _ (IInstanceDecl p cx cls ty m fs) =
+>   checkInstInfo checkInst iEnv p cls tc m
 >   where QualType cx' ty' = toQualType (QualTypeExpr cx ty)
 >         tc = rootOfType ty'
->         checkContext cx'' = cx' == cx''
+>         checkInst cx'' fs' =
+>           cx' == cx'' && sort fs == sort [(f,toInteger n) | (f,n) <- fs']
 > checkImport _ _ _ tyEnv (IFunctionDecl p f n ty) =
 >   checkValueInfo "function" checkFun tyEnv p f
 >   where checkFun (Value f' n' (ForAll _ ty')) =
@@ -182,7 +184,7 @@ error for both.
 >         checkNewConstr _ = False
 
 > checkMethodImport :: ValueEnv -> QualIdent -> Ident -> IMethodDecl -> Error ()
-> checkMethodImport tyEnv cls tv (IMethodDecl p f ty) =
+> checkMethodImport tyEnv cls tv (IMethodDecl p f _ ty) =
 >   checkValueInfo "method" checkMethod tyEnv p qf
 >   where qf = qualifyLike cls f
 >         checkMethod (Value f' _ (ForAll _ ty')) =
@@ -218,16 +220,16 @@ error for both.
 >             [vi] -> unless (check vi) (errorAt p (importConflict what m x'))
 >             _ -> errorAt p (inconsistentImports what x)
 
-> checkInstInfo :: (Context -> Bool) -> InstEnv -> Position
+> checkInstInfo :: (Context -> MethodList -> Bool) -> InstEnv -> Position
 >               -> QualIdent -> QualIdent -> Maybe ModuleIdent -> Error ()
-> checkInstInfo checkContext iEnv p cls tc m =
+> checkInstInfo checkInst iEnv p cls tc m =
 >   checkImported checkInfo (maybe qualify qualifyWith m anonId)
 >   where checkInfo m' _ =
 >           case lookupEnv (CT cls tc) iEnv of
->             Just (m,cx)
+>             Just (m,cx,fs)
 >               | m /= m' -> errorAt p (noInstance m' cls tc)
 >               | otherwise ->
->                   unless (checkContext cx)
+>                   unless (checkInst cx fs)
 >                          (errorAt p (instanceConflict m' cls tc))
 >             Nothing -> errorAt p (noInstance m' cls tc)
 

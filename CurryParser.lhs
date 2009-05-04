@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2780 2009-03-28 16:25:54Z wlux $
+% $Id: CurryParser.lhs 2815 2009-05-04 13:59:57Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -416,8 +416,13 @@ directory path to the module is ignored.
 
 > iInstanceDecl :: Parser Token IDecl a
 > iInstanceDecl =
->   iClassInstDecl IInstanceDecl KW_instance qtycls type2 <*>
->   option (pragma ModulePragma mIdent)
+>   uncurry <$> iClassInstDecl IInstanceDecl KW_instance qtycls type2
+>           <*> pragmas
+>   where pragmas = ((,) . Just <$> iInstModule <*> (iInstArity `opt` [])
+>               <|> flip (,) <$> iInstArity <*> option iInstModule
+>             `opt` (Nothing,[]))
+>         iInstModule = pragma ModulePragma mIdent
+>         iInstArity = pragma ArityPragma (many ((,) <$> fun <*> integer))
 
 > iClassInstDecl :: (Position -> [ClassAssert] -> a -> b -> c) -> Category
 >                -> Parser Token a d -> Parser Token b d -> Parser Token c d
@@ -425,13 +430,16 @@ directory path to the module is ignored.
 >   where f' p = uncurry (uncurry . f p)
 
 > iFunctionDecl :: Parser Token IDecl a
-> iFunctionDecl =
->   IFunctionDecl <$> position <*> qfun <*-> token DoubleColon
->                 <*> option iFunctionArity <*> qualType
+> iFunctionDecl = iFunDecl IFunctionDecl qfun
 
 > iMethodDecl :: Parser Token IMethodDecl a
-> iMethodDecl = 
->   IMethodDecl <$> position <*> fun <*-> token DoubleColon <*> qualType
+> iMethodDecl = iFunDecl IMethodDecl fun
+
+> iFunDecl :: (Position -> a -> Maybe Integer -> QualTypeExpr -> b)
+>          -> Parser Token a c -> Parser Token b c
+> iFunDecl f fun =
+>   f <$> position <*> fun <*-> token DoubleColon
+>     <*> option iFunctionArity <*> qualType
 
 > iFunctionArity :: Parser Token Integer a
 > iFunctionArity = pragma ArityPragma integer

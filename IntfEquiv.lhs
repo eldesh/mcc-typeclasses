@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfEquiv.lhs 2692 2008-05-02 13:22:41Z wlux $
+% $Id: IntfEquiv.lhs 2815 2009-05-04 13:59:57Z wlux $
 %
 % Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -50,21 +50,26 @@ inadvertently mix up these cases.
 >     fix1 == fix2 && p1 == p2 && op1 == op2
 >   HidingDataDecl _ tc1 k1 tvs1 =~= HidingDataDecl _ tc2 k2 tvs2 =
 >     tc1 == tc2 && k1 == k2 && tvs1 == tvs2
->   IDataDecl _ cx1 tc1 k1 tvs1 cs1 xs1 =~= IDataDecl _ cx2 tc2 k2 tvs2 cs2 xs2 =
+>   IDataDecl _ cx1 tc1 k1 tvs1 cs1 xs1 =~=
+>       IDataDecl _ cx2 tc2 k2 tvs2 cs2 xs2 =
 >     cx1 == cx2 && tc1 == tc2 && k1 == k2 && tvs1 == tvs2 &&
 >     cs1 `eqvList` cs2 && xs1 `eqvSet` xs2
->   INewtypeDecl _ cx1 tc1 k1 tvs1 nc1 xs1 =~= INewtypeDecl _ cx2 tc2 k2 tvs2 nc2 xs2 =
+>   INewtypeDecl _ cx1 tc1 k1 tvs1 nc1 xs1 =~=
+>       INewtypeDecl _ cx2 tc2 k2 tvs2 nc2 xs2 =
 >     cx1 == cx2 && tc1 == tc2 && k1 == k2 && tvs1 == tvs2 &&
 >     nc1 =~= nc2 && xs1 `eqvSet` xs2
 >   ITypeDecl _ tc1 k1 tvs1 ty1 =~= ITypeDecl _ tc2 k2 tvs2 ty2 =
 >     tc1 == tc2 && k1 == k2 && tvs1 == tvs2 && ty1 == ty2
 >   HidingClassDecl _ cx1 cls1 k1 _ =~= HidingClassDecl _ cx2 cls2 k2 _ =
 >     cx1 == cx2 && cls1 == cls2 && k1 == k2
->   IClassDecl _ cx1 cls1 k1 _ ds1 fs1' =~= IClassDecl _ cx2 cls2 k2 _ ds2 fs2' =
+>   IClassDecl _ cx1 cls1 k1 _ ds1 fs1' =~=
+>       IClassDecl _ cx2 cls2 k2 _ ds2 fs2' =
 >     cx1 == cx2 && cls1 == cls2 && k1 == k2 &&
 >     ds1 `eqvList` ds2 && fs1' `eqvSet` fs2'
->   IInstanceDecl _ cx1 cls1 ty1 m1 =~= IInstanceDecl _ cx2 cls2 ty2 m2 =
->     cx1 == cx2 && cls1 == cls2 && ty1 == ty2 && m1 == m2
+>   IInstanceDecl _ cx1 cls1 ty1 m1 fs1 =~=
+>       IInstanceDecl _ cx2 cls2 ty2 m2 fs2 =
+>     cx1 == cx2 && cls1 == cls2 && ty1 == ty2 && m1 == m2 &&
+>     sort fs1 == sort fs2
 >   IFunctionDecl _ f1 n1 ty1 =~= IFunctionDecl _ f2 n2 ty2 =
 >     f1 == f2 && n1 == n2 && ty1 == ty2
 >   _ =~= _ = False
@@ -88,7 +93,8 @@ inadvertently mix up these cases.
 >   _ =~= _ = False
 
 > instance IntfEquiv IMethodDecl where
->   IMethodDecl _ f1 ty1 =~= IMethodDecl _ f2 ty2 = f1 == f2 && ty1 == ty2
+>   IMethodDecl _ f1 n1 ty1 =~= IMethodDecl _ f2 n2 ty2 =
+>     f1 == f2 && n1 == n2 && ty1 == ty2
 
 > instance IntfEquiv Ident where
 >   (=~=) = (==)
@@ -126,8 +132,8 @@ by function \texttt{fixInterface} and the associated type class
 >     HidingClassDecl p (fix tcs cx) cls k tv
 >   fix tcs (IClassDecl p cx cls k tv ds fs') =
 >     IClassDecl p (fix tcs cx) cls k tv (fix tcs ds) fs'
->   fix tcs (IInstanceDecl p cx cls ty m) =
->     IInstanceDecl p (fix tcs cx) cls (fix tcs ty) m
+>   fix tcs (IInstanceDecl p cx cls ty m fs) =
+>     IInstanceDecl p (fix tcs cx) cls (fix tcs ty) m fs
 >   fix tcs (IFunctionDecl p f n ty) = IFunctionDecl p f n (fix tcs ty)
 
 > instance FixInterface ConstrDecl where
@@ -144,7 +150,7 @@ by function \texttt{fixInterface} and the associated type class
 >   fix tcs (NewRecordDecl p c l ty) = NewRecordDecl p c l (fix tcs ty)
 
 > instance FixInterface IMethodDecl where
->   fix tcs (IMethodDecl p f ty) = IMethodDecl p f (fix tcs ty)
+>   fix tcs (IMethodDecl p f n ty) = IMethodDecl p f n (fix tcs ty)
 
 > instance FixInterface QualTypeExpr where
 >   fix tcs (QualTypeExpr cx ty) = QualTypeExpr (fix tcs cx) (fix tcs ty)
@@ -176,7 +182,7 @@ by function \texttt{fixInterface} and the associated type class
 >         tcs (ITypeDecl _ tc _ _ _) tcs = tc : tcs
 >         tcs (HidingClassDecl _ _ _ _ _) tcs = tcs
 >         tcs (IClassDecl _ _ _ _ _ _ _) tcs = tcs
->         tcs (IInstanceDecl _ _ _ _ _) tcs = tcs
+>         tcs (IInstanceDecl _ _ _ _ _ _) tcs = tcs
 >         tcs (IFunctionDecl _ _ _ _) tcs = tcs
 
 \end{verbatim}

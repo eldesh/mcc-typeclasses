@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2780 2009-03-28 16:25:54Z wlux $
+% $Id: KindCheck.lhs 2815 2009-05-04 13:59:57Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -318,8 +318,9 @@ have to do it while instantiating the remaining kind variables in
 > bindTypeClass m cls clss fs tcEnv =
 >   do
 >     k <- freshKindVar
->     return (globalBindTopEnv m cls (TypeClass cls' k clss fs) tcEnv)
+>     return (globalBindTopEnv m cls (TypeClass cls' k clss fs') tcEnv)
 >   where cls' = qualifyWith m cls
+>         fs' = [(f,0) | f <- fs]
 
 > bindDefaultKind :: ModuleIdent -> TCEnv -> TopDecl a -> TCEnv -> TCEnv
 > bindDefaultKind m _ (DataDecl _ _ tc _ _ _) tcEnv =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Curry.lhs 2780 2009-03-28 16:25:54Z wlux $
+% $Id: Curry.lhs 2815 2009-05-04 13:59:57Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -118,11 +118,13 @@ Interface declarations are restricted to type declarations and signatures.
 >   | IClassDecl Position [ClassAssert] QualIdent (Maybe KindExpr) Ident
 >                [IMethodDecl] [Ident]
 >   | IInstanceDecl Position [ClassAssert] QualIdent TypeExpr
->                   (Maybe ModuleIdent)
+>                   (Maybe ModuleIdent) [(Ident,Integer)]
 >   | IFunctionDecl Position QualIdent (Maybe Integer) QualTypeExpr
 >   deriving (Eq,Show)
 
-> data IMethodDecl = IMethodDecl Position Ident QualTypeExpr deriving (Eq,Show)
+> data IMethodDecl =
+>   IMethodDecl Position Ident (Maybe Integer) QualTypeExpr
+>   deriving (Eq,Show)
 
 \end{verbatim}
 \paragraph{Kinds}

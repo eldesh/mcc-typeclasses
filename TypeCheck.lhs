@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2812 2009-04-29 15:27:39Z wlux $
+% $Id: TypeCheck.lhs 2815 2009-05-04 13:59:57Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1538,7 +1538,7 @@ may cause a further extension of the current substitution.
 >     _ ->
 >       case unapplyType False ty of
 >         (TypeConstructor tc,tys) ->
->           fmap (map (expandAliasType tys) . snd) (lookupEnv (CT cls tc) iEnv)
+>           fmap (map (expandAliasType tys) . snd3) (lookupEnv (CT cls tc) iEnv)
 >         _ -> Nothing
 
 > partitionContext :: Context -> (Context,Context)

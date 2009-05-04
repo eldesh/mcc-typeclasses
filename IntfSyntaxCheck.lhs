@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2724 2008-06-14 16:42:57Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2815 2009-05-04 13:59:57Z wlux $
 %
 % Copyright (c) 2000-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -91,11 +91,12 @@ during syntax checking of type expressions.
 >     checkHiding False p cls (map imethod ds) fs'
 >     return (IClassDecl p cx' cls k tv ds' fs')
 >   where doc = ppQIdent cls <+> ppIdent tv
-> checkIDecl env (IInstanceDecl p cx cls ty m) =
+> checkIDecl env (IInstanceDecl p cx cls ty m fs) =
 >   do
 >     (cx',ty') <- checkClass env p cls &&> checkInstType env p cx ty
->     mapE_ (checkSimpleConstraint "instance" doc p) cx
->     return (IInstanceDecl p cx' cls ty' m)
+>     mapE_ (checkSimpleConstraint "instance" doc p) cx &&>
+>       mapE_ (errorAt p . multipleArity . fst) (duplicates (map fst fs))
+>     return (IInstanceDecl p cx' cls ty' m fs)
 >   where doc = ppQIdent cls <+> ppTypeExpr 2 ty
 > checkIDecl env (IFunctionDecl p f n ty) =
 >   maybe (return ()) (checkArity p) n &&>
@@ -155,12 +156,12 @@ during syntax checking of type expressions.
 >   liftE (NewRecordDecl p c l) (checkClosedType env p tvs ty)
 
 > checkIMethodDecl :: TypeEnv -> Ident -> IMethodDecl -> Error IMethodDecl
-> checkIMethodDecl env tv (IMethodDecl p f ty) =
+> checkIMethodDecl env tv (IMethodDecl p f n ty) =
 >   do
 >     ty' <- checkQualType env p ty
 >     unless (tv `elem` fv ty') (errorAt p (ambiguousType tv))
 >     when (tv `elem` cvars ty') (errorAt p (constrainedClassType tv))
->     return (IMethodDecl p f ty')
+>     return (IMethodDecl p f n ty')
 >   where cvars (QualTypeExpr cx _) = [cvar ty | ClassAssert _ ty <- cx]
 >         cvar (VariableType tv) = tv
 >         cvar (ApplyType ty _) = cvar ty
@@ -265,6 +266,10 @@ Error messages.
 > undefinedClass :: QualIdent -> String
 > undefinedClass cls = "Undefined type class " ++ qualName cls
 
+> multipleArity :: Ident -> String
+> multipleArity f =
+>   "Method " ++ name f ++ " occurs more than once in ARITY pragma"
+
 > nonLinear :: Ident -> String
 > nonLinear tv =
 >   "Type variable " ++ name tv ++
@@ -272,7 +277,7 @@ Error messages.
 
 > noVariable :: String -> Ident -> String
 > noVariable what tv =
->   "Type constructor or type class " ++ name tv ++ " used in " ++ what
+>   "Type constructor or type class " ++ name tv ++ " used on " ++ what
 
 > noElement :: Bool -> QualIdent -> Ident -> String
 > noElement True tc x =

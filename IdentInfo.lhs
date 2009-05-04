@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IdentInfo.lhs 2724 2008-06-14 16:42:57Z wlux $
+% $Id: IdentInfo.lhs 2815 2009-05-04 13:59:57Z wlux $
 %
 % Copyright (c) 1999-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -78,7 +78,7 @@ declarations with \texttt{CurryUtils.unhide} before applying
 > tidents (HidingClassDecl _ _ _ _ _) = []
 > tidents (IClassDecl _ _ cls _ _ ds fs) =
 >   [Class cls (filter (`notElem` fs) (map imethod ds))]
-> tidents (IInstanceDecl _ _ _ _ _) = []
+> tidents (IInstanceDecl _ _ _ _ _ _) = []
 > tidents (IFunctionDecl _ _ _ _) = []
 
 \end{verbatim}
@@ -153,7 +153,7 @@ identifiers declared by an interface declaration.
 > vidents (ITypeDecl _ _ _ _ _) = []
 > vidents (HidingClassDecl _ _ _ _ _) = []
 > vidents (IClassDecl _ _ cls _ _ ds fs) = midents cls fs (map imethod ds)
-> vidents (IInstanceDecl _ _ _ _ _) = []
+> vidents (IInstanceDecl _ _ _ _ _ _) = []
 > vidents (IFunctionDecl _ f _ _) = [Var f []]
 
 > cidents :: QualIdent -> [Ident] -> [Ident] -> [ValueKind]

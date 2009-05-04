@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2780 2009-03-28 16:25:54Z wlux $
+% $Id: CurryPP.lhs 2815 2009-05-04 13:59:57Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -218,9 +218,15 @@ Interfaces
 >   ppPragma "CLASS" (sep [ppContext cx,ppITypeIdent cls k <+> ppIdent tv])
 > ppIDecl (IClassDecl _ cx cls k tv ds fs') =
 >   ppIClassDecl (ppClassHead cx (ppITypeIdent cls k) tv) ds fs'
-> ppIDecl (IInstanceDecl _ cx cls ty m) =
->   ppInstanceHead cx cls ty <+> maybePP instModule m
+> ppIDecl (IInstanceDecl _ cx cls ty m fs) =
+>   sep [ppInstanceHead cx cls ty,
+>        indent (maybePP instModule m),
+>        indent (instArity fs)]
 >   where instModule m = ppPragma "MODULE" (ppMIdent m)
+>         instArity fs
+>           | null fs = empty
+>           | otherwise = ppPragma "ARITY" (fsep (map ppArity fs))
+>         ppArity (f,n) = ppIdent f <+> integer n
 > ppIDecl (IFunctionDecl _ f n ty) =
 >   ppQIdent f <+> text "::" <+> maybePP ppArity n <+> ppQualTypeExpr ty
 >   where ppArity n = ppPragma "ARITY" (integer n)
@@ -242,8 +248,8 @@ Interfaces
 >       ppIBlock head ([ppHiding fs' | not (null fs')] ++ map ppIMethodDecl ds)
 
 > ppIMethodDecl :: IMethodDecl -> Doc
-> ppIMethodDecl (IMethodDecl p f ty) =
->   ppIDecl (IFunctionDecl p (qualify f) Nothing ty)
+> ppIMethodDecl (IMethodDecl p f n ty) =
+>   ppIDecl (IFunctionDecl p (qualify f) n ty)
 
 > ppIBlock :: Doc -> [Doc] -> Doc
 > ppIBlock prefix ds =

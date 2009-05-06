@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Common.lhs 2814 2009-05-03 18:48:18Z wlux $
+% $Id: Common.lhs 2819 2009-05-06 15:40:58Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -179,6 +179,10 @@ code.
 
 > writeCCode :: FilePath -> CFile -> IO ()
 > writeCCode fn = writeFile fn . showLn . CPretty.ppCFile
+>   where showLn = fullRender LeftMode undefined undefined cat "\n"
+>         cat (Chr c) = showChar c
+>         cat (Str cs) = showString cs
+>         cat (PStr cs) = showString cs
 
 > cExt :: String
 > cExt = ".c"

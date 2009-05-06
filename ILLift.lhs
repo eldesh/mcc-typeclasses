@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILLift.lhs 2811 2009-04-29 15:10:27Z wlux $
+% $Id: ILLift.lhs 2817 2009-05-06 14:24:56Z wlux $
 %
 % Copyright (c) 2000-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -31,7 +31,7 @@ positions are lifted into global functions.
 >         nameSupply = map (qual m . appIdent (name f') (uniqueId f')) [1..]
 >           where (m,f') = splitQualIdent f
 >         qual m = maybe qualify qualifyWith m
->         appIdent f i n = renameIdent (mkIdent (f ++ "._#app" ++ show i)) n
+>         appIdent f n i = renameIdent (mkIdent (f ++ "._#app" ++ show i)) n
 > liftDecl (ForeignDecl f cc ie ty) = [ForeignDecl f cc ie ty]
 > liftDecl SplitAnnot = [SplitAnnot]
 

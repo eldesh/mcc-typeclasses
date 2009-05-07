@@ -1,6 +1,6 @@
--- $Id: cymk.hs 2608 2008-02-03 23:10:52Z wlux $
+-- $Id: cymk.hs 2821 2009-05-07 16:31:23Z wlux $
 --
--- Copyright (c) 2002-2008, Wolfgang Lux
+-- Copyright (c) 2002-2009, Wolfgang Lux
 -- See LICENSE for the full license.
 
 import CurryDeps
@@ -15,6 +15,7 @@ data Options =
   Options{
     importPaths :: [(Bool,FilePath)],
     output :: Maybe FilePath,
+    goal :: Maybe String,
     debug :: Bool,
     mkDepend :: Bool,
     mkClean :: Bool,
@@ -25,6 +26,7 @@ defaultOptions =
   Options{
     importPaths = [],
     output = Nothing,
+    goal = Nothing,
     debug = False,
     mkDepend = False,
     mkClean = False,
@@ -33,7 +35,7 @@ defaultOptions =
 
 data Option =
     Help | ImportPath FilePath | LibPath FilePath | Output FilePath
-  | Debug | Clean | Depend | Find
+  | Goal String | Debug | Clean | Depend | Find
   deriving Eq
 
 options = [
@@ -45,6 +47,8 @@ options = [
            "create Makefile dependencies for all targets",
     Option "o" ["output"] (ReqArg Output "FILE")
            "output goes to FILE",
+    Option "e" ["goal"] (ReqArg Goal "GOAL")
+           "executable evaluates GOAL",
     Option "P" ["lib-dir"] (ReqArg LibPath "DIR")
            "search for library interfaces in DIR",
     Option ""  ["clean"] (NoArg Clean)
@@ -60,6 +64,7 @@ selectOption (ImportPath dir) opts =
 selectOption (LibPath dir) opts =
   opts{ importPaths = (False,dir) : importPaths opts }
 selectOption (Output file) opts = opts{ output = Just file }
+selectOption (Goal g) opts = opts{ goal = Just g }
 selectOption Debug opts = opts{ debug = True }
 selectOption Depend opts = opts{ mkDepend = True }
 selectOption Clean opts = opts{ mkClean = True }
@@ -114,7 +119,7 @@ processFiles opts prog files
         es <- fmap concat (mapM script files)
 	unless (null es) (mapM putErrLn es >> exitWith (ExitFailure 2))
   where script = buildScript (mkClean opts) (debug opts) (importPaths opts)
-			     (output opts)
+			     (goal opts) (output opts)
 
 putErr, putErrLn :: String -> IO ()
 putErr = hPutStr stderr

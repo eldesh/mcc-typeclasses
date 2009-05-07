@@ -3,7 +3,7 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 2769 2009-03-26 09:14:55Z wlux $
+# $Id: cymake.in 2821 2009-05-07 16:31:23Z wlux $
 #
 # Copyright (c) 2002-2009, Wolfgang Lux
 # See LICENSE for the full license.
@@ -234,8 +234,13 @@ for f in $files; do
     * ) suffix=;;
   esac
   check_source "$f" "$suffix" "$suffixes" || exit $?
-  test -n "$verbose" && echo 1>&2 $cymk $clean $mkopts $imports $f
-  $cymk $clean $mkopts -o /tmp/cymake$$ $imports $f
+  if test -n "$goal$typeIt"; then
+    test -n "$verbose" && echo 1>&2 $cymk $clean $mkopts -e \""$goal$typeIt"\" $imports $f
+    $cymk $clean $mkopts -e "$goal$typeIt" -o /tmp/cymake$$ $imports $f
+  else
+    test -n "$verbose" && echo 1>&2 $cymk $clean $mkopts $imports $f
+    $cymk $clean $mkopts -o /tmp/cymake$$ $imports $f
+  fi
 
   . /tmp/cymake$$
   set +e

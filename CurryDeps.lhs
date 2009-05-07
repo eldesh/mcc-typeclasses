@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryDeps.lhs 2610 2008-02-03 23:24:59Z wlux $
+% $Id: CurryDeps.lhs 2821 2009-05-07 16:31:23Z wlux $
 %
-% Copyright (c) 2002-2008, Wolfgang Lux
+% Copyright (c) 2002-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryDeps.lhs}
@@ -39,13 +39,13 @@ Makefile, and the function \texttt{findModules} tries to find a source
 or interface file for each module.
 \begin{verbatim}
 
-> buildScript :: Bool -> Bool -> [(Bool,FilePath)] -> Maybe FilePath -> FilePath
->             -> IO [String]
-> buildScript clean debug paths output fn =
+> buildScript :: Bool -> Bool -> [(Bool,FilePath)] -> Maybe String
+>             -> Maybe FilePath -> FilePath -> IO [String]
+> buildScript clean debug paths goal output fn =
 >   do
 >     (ms,es) <- fmap (flattenDeps . sortDeps) (deps paths emptyEnv fn)
->     when (null es)
->          (maybe putStr writeFile output (makeScript clean debug target ms))
+>     when (null es) $
+>       maybe putStr writeFile output (makeScript clean debug goal target ms)
 >     return es
 >   where target
 >           | extension fn `elem` moduleExts ++ [oExt] = Nothing
@@ -150,7 +150,7 @@ Prelude itself. Any errors reported by the parser are ignored.
 >   | otherwise = id
 
 \end{verbatim}
-It is quite straight forward to generate Makefile dependencies from
+It is quite straightforward to generate Makefile dependencies from
 the dependency environment. In order for these dependencies to work,
 the Makefile must include a rule
 \begin{verbatim}
@@ -222,32 +222,35 @@ generated script uses commands of the form
 \end{quote}
 and
 \begin{quote}
-  \texttt{link} $i$ $n$ \emph{target} \texttt{-M}\emph{module$_1$}
-  \dots{} \texttt{-M}\emph{module$_m$} \emph{object$_1$} \dots{}
-  \emph{object$_l$}
+  \texttt{link} $i$ $n$ \emph{target} \emph{module-list}
+  \emph{object$_1$} \dots{} \emph{object$_l$}
 \end{quote}
 where \emph{source} is a source file, \emph{object} is the object file
-to be generated, and \emph{interface$_1$}, \dots, \emph{interface$_k$}
-are the interface files on which \emph{source} depends. \emph{Target}
-is the executable and \emph{object$_1$}, \dots, \emph{object$_l$} are
-the object files to be linked, and \emph{module$_1$}, \dots,
-\emph{module$_m$} are the modules of the program. The numbers $i$ and
-$n$ give the index of the current command and the total number of
-commands in the build script, respectively. These numbers can be used
-to provide feedback to the user about the progress of building the
-target. Note that the index of the first command is 1, not 0. The
-number $i$ actually is redundant for a \texttt{link} command since it
-will always be the last command of a build script. Of course, the
-commands \verb|compile| and \verb|link| must be defined in the
-environment where the script is executed. The script deliberately uses
-the \verb|-e| shell option so that the script is terminated upon the
-first error.
+to be generated, \emph{interface$_1$}, \dots, \emph{interface$_k$} are
+the interface files on which \emph{source} depends, \emph{target} is
+the executable, and \emph{object$_1$}, \dots, \emph{object$_l$} are
+the object files to be linked. The \emph{module-list} is equal to
+\texttt{-M}\emph{target} if no explicit goal has been specified on the
+commmand line and equal to \texttt{-M}\emph{module$_1$} \dots{}
+\texttt{-M}\emph{module$_m$}, where \emph{module$_1$}, \dots,
+\emph{module$_m$} are the modules of the program, otherwise. The
+numbers $i$ and $n$ give the index of the current command and the
+total number of commands in the build script, respectively. These
+numbers can be used to provide feedback to the user about the progress
+of building the target. Note that the index of the first command is 1,
+not 0. The number $i$ actually is redundant for a \texttt{link}
+command since it will always be the last command of a build script. Of
+course, the commands \verb|compile| and \verb|link| must be defined in
+the environment where the script is executed. The script deliberately
+uses the \verb|-e| shell option so that the script is terminated upon
+the first error.
 
 \ToDo{Provide support for an equivalent of \texttt{make -k}.}
 \begin{verbatim}
 
-> makeBuildScript :: Bool -> Maybe FilePath -> [(ModuleIdent,Source)] -> String
-> makeBuildScript debug target mEnv = unlines ("set -e" : cmds)
+> makeBuildScript :: Bool -> Maybe String -> Maybe FilePath
+>                 -> [(ModuleIdent,Source)] -> String
+> makeBuildScript debug goal target mEnv = unlines ("set -e" : cmds)
 >   where n = length cmds
 >         sources = [(fn,ms) | (_,Source fn ms) <- mEnv]
 >         cmds = zipWith compile [1..] sources ++ map link (maybeToList target)
@@ -256,7 +259,8 @@ first error.
 >           where ofn = objectName debug fn
 >                 ifns = catMaybes (map interf ms)
 >         link fn = unwords ("link" : show n : show n : fn : ms ++ os)
->           where ms = catMaybes (map modul mEnv)
+>           where m0 = (undefined,Source fn undefined)
+>                 ms = catMaybes (map modul (maybe [m0] (const mEnv) goal))
 >                 os = reverse (map (objectName debug . fst) sources)
 >         modul (_,Source fn _) = Just ("-M" ++ fn)
 >         modul (m,Interface _) = Just ("-M" ++ moduleName m)
@@ -279,8 +283,9 @@ where the \verb|remove| command must be defined in the environment
 where the script is executed.
 \begin{verbatim}
 
-> makeCleanScript :: Bool -> Maybe FilePath -> [(ModuleIdent,Source)] -> String
-> makeCleanScript debug target mEnv =
+> makeCleanScript :: Bool -> Maybe String -> Maybe FilePath
+>                 -> [(ModuleIdent,Source)] -> String
+> makeCleanScript debug _ target mEnv =
 >   unwords ("remove" : foldr (files . snd) (maybeToList target) mEnv)
 >   where d = if debug then 2 else 0
 >         files (Source fn _) fs =

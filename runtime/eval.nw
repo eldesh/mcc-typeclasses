@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2805 2009-04-26 17:26:16Z wlux $
+% $Id: eval.nw 2824 2009-05-15 17:19:58Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -367,8 +367,12 @@ FUNCTION(__pbReturn)
 #ifndef NDEBUG
     while ( regs.sp[0] != regs.r[1] )
     {
+# if !COPY_SEARCH_SPACE
 	assert(is_tagged_ptr(regs.r[1]) && is_indir_node(regs.r[1]) &&
 	       is_local_space(regs.r[1]->n.spc));
+# else
+	assert(is_tagged_ptr(regs.r[1]) && is_indir_node(regs.r[1]));
+# endif
 	regs.r[1] = regs.r[1]->n.node;
     }
 #endif

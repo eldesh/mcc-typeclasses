@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 2771 2009-03-26 10:30:26Z wlux $
+% $Id: backtrack.nw 2825 2009-05-15 17:23:31Z wlux $
 %
 % Copyright (c) 2002-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -138,7 +138,7 @@ copy_stack()
      *     released with free(3) upon backtracking */
     old_goal = regs.bp->btBp ? ((Node **)regs.bp->btBp)[-2] : stack_end[-2];
     goal     = ((Node **)regs.bp)[-2];
-    for ( i = 1, n = closure_argc(goal); i < n; i++ )
+    for ( i = 0, n = closure_argc(goal); i < n - 1; i++ )
 	add_name(goal->c.args[i], strdup(lookup_name(old_goal->c.args[i])));
 #endif
 }

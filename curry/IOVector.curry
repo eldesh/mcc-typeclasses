@@ -1,4 +1,4 @@
--- $Id: IOVector.curry 2854 2009-05-29 12:33:07Z wlux $
+-- $Id: IOVector.curry 2855 2009-05-29 12:45:21Z wlux $
 --
 -- Copyright (c) 2004-2009, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -9,6 +9,14 @@ module IOVector where
 
 data Vector a
 data IOVector a
+
+instance Eq a => Eq (Vector a) where
+  v1 == v2 = elems v1 == elems v2
+    where elems v = [readVector v i | i <- [0 .. lengthVector v - 1]]
+instance Show a => Show (Vector a) where
+  showsPrec p v =
+    showParen (p > 10) (showString "vector " . showsPrec 11 (elems v))
+    where elems v = [readVector v i | i <- [0 .. lengthVector v - 1]]
 
 instance Eq (IOVector a) where
   (==) = primEqIOVector

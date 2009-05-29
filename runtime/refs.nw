@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: refs.nw 2854 2009-05-29 12:33:07Z wlux $
+% $Id: refs.nw 2856 2009-05-29 12:47:35Z wlux $
 %
 % Copyright (c) 2004-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -92,6 +92,11 @@ an enclosing search space, but we must be careful to \emph{copy} the
 assigned node into the search space of the mutable reference in order
 to prevent local nodes from escaping their scope.
 
+\ToDo{We would like to use the [[SET_FIELD]] macro for updating the
+  mutable reference node. However, the macro is based on an assumption
+  that does not hold for mutable references, namely that only fresh
+  nodes are assigned to the updated field.}
+
 <<refs.c>>=
 DECLARE_LABEL(extern, __writeIORef);
 DECLARE_LABEL(static, __writeIORef_1);
@@ -126,9 +131,17 @@ FUNCTION(__writeIORef_1)
 	}
 	while ( !is_local_space(regs.r[0]->g.spc) );
 	END_LOCAL_ROOTS
-	SET_FIELD(regs.r[0], g.node, regs.r[1]);
+#if !COPY_SEARCH_SPACE
+	if ( (word *)regs.r[0] < regs.hlim )
+	    DO_SAVE(regs.r[0], g.node);
+#endif
+	regs.r[0]->g.node = regs.r[1];
 	RET(unit);
     }
-    SET_FIELD(regs.r[0], g.node, regs.sp[0]);
+#if !COPY_SEARCH_SPACE
+    if ( (word *)regs.r[0] < regs.hlim )
+	DO_SAVE(regs.r[0], g.node);
+#endif
+    regs.r[0]->g.node = regs.sp[0];
     RETURN(unit, 1);
 }

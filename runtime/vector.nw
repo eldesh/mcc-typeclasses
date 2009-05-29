@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: vector.nw 2854 2009-05-29 12:33:07Z wlux $
+% $Id: vector.nw 2856 2009-05-29 12:47:35Z wlux $
 %
 % Copyright (c) 2002-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -250,6 +250,11 @@ in a search goal, the vector \texttt{v} will contain two
 \emph{distinct} variables instead of just one if \texttt{v} is a
 global vector and these variables are both distinct from \texttt{u}.
 
+\ToDo{We would like to use the [[SET_FIELD]] macro for updating the
+  mutable vector element. However, the macro is based on an assumption
+  that does not hold for mutable vectors, namely that only fresh nodes
+  are assigned to the updated field.}
+
 <<vector.c>>=
 DECLARE_LABEL(extern, __writeIOVector);
 DECLARE_LABEL(static, __writeIOVector_1);
@@ -304,10 +309,19 @@ FUNCTION(__writeIOVector_2)
 	}
 	while ( !is_local_space(regs.r[0]->g.spc) );
 	END_LOCAL_ROOTS
-	SET_FIELD(regs.r[0]->g.node, a.args[i], regs.r[1]);
+	vec = regs.r[0]->g.node;
+#if !COPY_SEARCH_SPACE
+	if ( (word *)vec < regs.hlim )
+	    DO_SAVE(vec, a.args[i]);
+#endif
+	vec->a.args[i] = regs.r[1];
 	RET(unit);
     }
-    SET_FIELD(vec, a.args[i], regs.sp[1]);
+#if !COPY_SEARCH_SPACE
+    if ( (word *)vec < regs.hlim )
+	DO_SAVE(vec, a.args[i]);
+#endif
+    vec->a.args[i] = regs.sp[1];
     RETURN(unit, 2);
 }
 

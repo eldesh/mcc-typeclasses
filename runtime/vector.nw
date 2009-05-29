@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: vector.nw 2668 2008-04-21 06:50:50Z wlux $
+% $Id: vector.nw 2853 2009-05-29 11:55:01Z wlux $
 %
 % Copyright (c) 2002-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -31,27 +31,6 @@ static NodeInfo vector_info = {
 static const struct vector_node empty = {
     &vector_info, vector_node_size(0), { 0 }
 };
-
-@ 
-Two vector nodes are considered equal, if they are physically the
-same.
-
-<<vector.h>>=
-extern Node *primEqIOVector(Node *, Node *);
-
-@ 
-<<vector.c>>=
-DECLARE_CONST(__Prelude__False);
-DECLARE_CONST(__Prelude__True);
-
-#define Prelude_False CONST(__Prelude__False)
-#define Prelude_True  CONST(__Prelude__True)
-
-Node *
-primEqIOVector(Node *x, Node *y)
-{
-    return x == y ? Prelude_True : Prelude_False;
-}
 
 @ 
 The function [[primNewIOVector]] allocates a new vector with the

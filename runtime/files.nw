@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2773 2009-03-26 10:38:21Z wlux $
+% $Id: files.nw 2853 2009-05-29 11:55:01Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -167,27 +167,6 @@ finalize_process(Node *node)
 	waitpid(proc->pid, &proc->status, WNOHANG);
 }
 #endif
-
-@ 
-Two file \verb|Handle|s are considered equal, if they are physically
-the same.
-
-<<files.h>>=
-extern Node *primEqHandle(Node *, Node *);
-
-@ 
-<<files.c>>=
-DECLARE_CONST(__Prelude__False);
-DECLARE_CONST(__Prelude__True);
-
-#define Prelude_False CONST(__Prelude__False)
-#define Prelude_True  CONST(__Prelude__True)
-
-Node *
-primEqHandle(Node *x, Node *y)
-{
-    return x == y ? Prelude_True : Prelude_False;
-}
 
 @ 
 The functions [[primStdin]], [[primStdout]], and [[primStderr]] return

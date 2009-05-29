@@ -1,4 +1,4 @@
--- $Id: IOExts.curry 2313 2007-06-20 12:04:50Z wlux $
+-- $Id: IOExts.curry 2853 2009-05-29 11:55:01Z wlux $
 --
 -- Copyright (c) 2004-2007, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -26,7 +26,7 @@ foreign import primitive fixIO :: (a -> IO a) -> IO a
 data IORef a
 instance Eq (IORef a) where
   (==) = primEqIORef
-    where foreign import rawcall "refs.h"
+    where foreign import rawcall "equal.h primEqAddr"
     	  	  	 primEqIORef :: IORef a -> IORef a -> Bool
 
 newIORef :: a -> IO (IORef a)

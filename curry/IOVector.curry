@@ -1,4 +1,4 @@
--- $Id: IOVector.curry 2309 2007-06-20 11:52:36Z wlux $
+-- $Id: IOVector.curry 2853 2009-05-29 11:55:01Z wlux $
 --
 -- Copyright (c) 2004-2007, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -15,7 +15,7 @@ data IOVector a
 
 instance Eq (IOVector a) where
   (==) = primEqIOVector
-    where foreign import rawcall "vector.h"
+    where foreign import rawcall "equal.h primEqAddr"
                   	 primEqIOVector :: IOVector a -> IOVector a -> Bool
 
 newIOVector :: Int -> a -> IO (IOVector a)

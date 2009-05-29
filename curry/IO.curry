@@ -1,4 +1,4 @@
--- $Id: IO.curry 2313 2007-06-20 12:04:50Z wlux $
+-- $Id: IO.curry 2853 2009-05-29 11:55:01Z wlux $
 --
 -- Copyright (c) 2003-2007, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -21,7 +21,7 @@ module IO(Handle, HandlePosn, IOMode(..), BufferMode(..), SeekMode(..),
 data Handle
 instance Eq Handle where
   (==) = primEqHandle
-    where foreign import rawcall "files.h"
+    where foreign import rawcall "equal.h primEqAddr"
     	  	  	 primEqHandle :: Handle -> Handle -> Bool
 instance Show Handle where
   -- FIXME: use a dedicated primitive for this

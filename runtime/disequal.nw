@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2751 2008-08-30 13:24:59Z wlux $
+% $Id: disequal.nw 2854 2009-05-29 12:33:07Z wlux $
 %
-% Copyright (c) 2002-2008, Wolfgang Lux
+% Copyright (c) 2002-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Disequality Constraints}
@@ -37,6 +37,7 @@ DECLARE_LABEL(extern, ___61__47__61_);
 #include "stack.h"
 #include "eval.h"
 #include "threads.h"
+#include "search.h"
 #include "spaces.h"
 #include "trail.h"
 #include "unify.h"
@@ -103,6 +104,16 @@ FUNCTION(___61__47__61__2)
 	regs.r[0]  = arg2;
 	regs.sp[0] = arg1;
 	GOTO(diseq_var);
+    }
+    else if ( is_tagged_ptr(arg1) && is_global_var_node(arg1) )
+    {
+	regs.sp[0] = arg2;
+	CALL1(sync_global, ___61__47__61__2, arg1);
+    }
+    else if ( is_tagged_ptr(arg2) && is_global_var_node(arg2) )
+    {
+	regs.sp[0] = arg1;
+	CALL1(sync_global, ___61__47__61__2, regs.r[0]);
     }
     else
     {
@@ -188,13 +199,8 @@ FUNCTION(diseq_var)
     Disequality *cstr;
  ENTRY_LABEL(static, diseq_var)
     if ( is_tagged_ptr(regs.sp[0]) && is_variable_node(regs.sp[0]) &&
-	 is_local_space(regs.sp[0]->v.spc) )
-    {
-	if ( regs.sp[0] > regs.r[0] || !is_local_space(regs.r[0]->v.spc) )
-	    SWAPn(0);
-    }
-    else if ( !is_local_space(regs.r[0]->v.spc) )
-	CALL1(sync_var, ___61__47__61__1, regs.r[0]);
+	 regs.sp[0] > regs.r[0] )
+	SWAPn(0);
 
     /* occurs check */
     occ = occurs(regs.r[0], regs.sp[0]);

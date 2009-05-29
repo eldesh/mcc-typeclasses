@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: threads.nw 2750 2008-08-30 13:21:58Z wlux $
+% $Id: threads.nw 2854 2009-05-29 12:33:07Z wlux $
 %
-% Copyright (c) 2001-2008, Wolfgang Lux
+% Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Thread Management}
@@ -376,8 +376,7 @@ FUNCTION(suspend_thread)
     thd = interrupt_thread(1, regs.ret, Eval);
 
     susp = regs.r[0];
-    ASSERT(is_tagged_ptr(susp) && is_queueMe_node(susp));
-    assert(is_local_space(susp->q.spc));
+    assert(is_tagged_ptr(susp) && is_queueMe_node(susp));
     thd->t.next = susp->q.wq;
     SET_FIELD(susp, q.wq, thd);
 
@@ -392,8 +391,7 @@ FUNCTION(delay_thread)
     thd = interrupt_thread(1, regs.ret, Delay);
 
     var = regs.r[0];
-    ASSERT(is_tagged_ptr(var) && is_variable_node(var));
-    assert(is_local_space(var->v.spc));
+    assert(is_tagged_ptr(var) && is_variable_node(var));
     thd->t.next = var->v.wq;
     SET_FIELD(var, v.wq, thd);
 
@@ -438,8 +436,7 @@ FUNCTION(yield_delay_thread)
     CHECK_HEAP(2, 2*thread_surrogate_size);
 
     var	 = regs.r[0];
-    ASSERT(is_tagged_ptr(var) && is_variable_node(var));
-    assert(is_local_space(var->v.spc));
+    assert(is_tagged_ptr(var) && is_variable_node(var));
     thd1 = (ThreadQueue)regs.r[1];
 
     thd		= (ThreadQueue)regs.hp;

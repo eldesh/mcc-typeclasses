@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2806 2009-04-26 17:30:18Z wlux $
+% $Id: CGen.lhs 2854 2009-05-29 12:33:07Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -593,9 +593,6 @@ applied to exactly its missing arguments.
 
 > lazyCode :: Int -> [CStmt]
 > lazyCode n =
->   CIf (CFunCall "!is_local_space" [CField (reg 0) "s.spc"])
->       [CProcCall "suspend_search" [CInt 1,CField (reg 0) "s.spc"]]
->       [] :
 >   loadVars vs0 ++
 >   CLocalVar labelType "entry" (Just (field v "info->entry")) :
 >   [setReg i (arg i) | i <- [0..n-1]] ++
@@ -610,7 +607,7 @@ applied to exactly its missing arguments.
 >         v' = Name "que"
 >         vs0 = (True,[v],[])
 >         k = CPSCont (CPSFunction (Name (lazyFunc n)) 0 [] [v] undefined)
->         arg = element (field v "s.args")
+>         arg = element (field v "c.args")
 
 \end{verbatim}
 The CPS entry function of an abstract machine code function receives
@@ -905,16 +902,14 @@ split into minimal binding groups.
 > initLazy :: Name -> Name -> [Name] -> [CStmt]
 > initLazy v f vs =
 >   setField v "info" (CExpr (lazyInfoTable f)) :
->   setField v "s.spc" (CExpr "regs.ss") :
 >   if null vs then
->     [setElem (lfield v "s.args") 0 CNull]
+>     [setElem (lfield v "c.args") 0 CNull]
 >   else
->     initArgs v "s.args" vs
+>     initArgs v "c.args" vs
 
 > initFree :: Name -> [CStmt]
 > initFree v =
 >   [setField v "info" (CExpr "variable_info_table"),
->    setField v "v.spc" (CExpr "regs.ss"),
 >    setField v "v.wq" CNull,
 >    setField v "v.cstrs" CNull]
 
@@ -1003,7 +998,7 @@ translation function.
 
 > lock :: Name -> [CStmt]
 > lock v =
->   [assertLazyNode v "SUSPEND_KIND" "s.spc",
+>   [assertLazyNode v "SUSPEND_KIND",
 >    CppCondStmts "!COPY_SEARCH_SPACE"
 >      [CIf (CRel (CCast wordPtrType (var v)) "<" (CExpr "regs.hlim"))
 >           [CProcCall "DO_SAVE" [var v,CExpr "q.wq"],
@@ -1014,7 +1009,7 @@ translation function.
 
 > lockIndir :: Name -> Name -> [CStmt]
 > lockIndir v1 v2 =
->   [assertLazyNode v2 "QUEUEME_KIND" "q.spc",
+>   [assertLazyNode v2 "QUEUEME_KIND",
 >    CppCondStmts "!COPY_SEARCH_SPACE"
 >      [CIf (CRel (CCast wordPtrType (var v1)) "<" (CExpr "regs.hlim"))
 >           [CProcCall "DO_SAVE" [var v1,CExpr "n.node"],
@@ -1023,10 +1018,9 @@ translation function.
 >      [setField v1 "info" (addr "indir_info")],
 >    setField v1 "n.node" (var v2)]
 
-> assertLazyNode :: Name -> String -> String -> CStmt
-> assertLazyNode v kind spc =
->   rtsAssertList [isTaggedPtr v,CRel (nodeKind v) "==" (CExpr kind),
->                  CFunCall "is_local_space" [field v spc]]
+> assertLazyNode :: Name -> String -> CStmt
+> assertLazyNode v kind =
+>   rtsAssertList [isTaggedPtr v,CRel (nodeKind v) "==" (CExpr kind)]
 
 > unifyVar :: (Bool,[Name],[Name]) -> Name -> Name -> [CPSCont] -> [CStmt]
 > unifyVar vs0 v n ks =
@@ -1037,7 +1031,8 @@ translation function.
 
 > delayNonLocal :: (Bool,[Name],[Name]) -> Name -> [CPSCont] -> [CStmt]
 > delayNonLocal vs0 v ks =
->   [CIf (CFunCall "!is_local_space" [field v "v.spc"])
+>   [CIf (CRel (CRel (nodeKind v) "==" (CExpr "GVAR_KIND")) "&&"
+>              (CFunCall "!is_local_space" [field v "g.spc"]))
 >        (delay vs0 v ks)
 >        []]
 

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2772 2009-03-26 10:36:11Z wlux $
+% $Id: heap.nw 2854 2009-05-29 12:33:07Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -145,10 +145,13 @@ enum {
     EAPP_KIND,                  /* ditto for existentially quantified types */
     PAPP_KIND,			/* partial application node */
     LVAR_KIND,			/* (unbound) logic variable */
+    GVAR_KIND,			/* global free variable of a search goal */
+    GAPP_KIND,			/* global application node of a search goal */
     SUSPEND_KIND,		/* shared function application node */
     FAPP_KIND,			/* unshard function application node */
     QUEUEME_KIND,		/* queue-me node */
     INDIR_KIND,			/* indirection node */
+    MUTABLE_KIND,		/* mutable references */
     VECTOR_KIND,		/* vector nodes */
     CHAR_KIND,			/* character node */
     INT_KIND,			/* integer number */
@@ -254,10 +257,13 @@ enum {
 #define is_eapp_node(node)	(node_kind(node) == EAPP_KIND)
 #define is_papp_node(node)	(node_kind(node) == PAPP_KIND)
 #define is_variable_node(node)	(node_kind(node) == LVAR_KIND)
+#define is_global_var_node(node) (node_kind(node) == GVAR_KIND)
+#define is_global_app_node(node) (node_kind(node) == GAPP_KIND)
 #define is_suspend_node(node)	(node_kind(node) == SUSPEND_KIND)
 #define is_fapp_node(node)	(node_kind(node) == FAPP_KIND)
 #define is_queueMe_node(node)	(node_kind(node) == QUEUEME_KIND)
 #define is_indir_node(node)	(node_kind(node) == INDIR_KIND)
+#define is_mutable_node(node)	(node_kind(node) == MUTABLE_KIND)
 #define is_vector_node(node)	(node_kind(node) == VECTOR_KIND)
 #define is_char_node(node)	(node_kind(node) == CHAR_KIND)
 #define is_int_node(node)	(node_kind(node) == INT_KIND)
@@ -603,18 +609,16 @@ node and setting the [[node]] field in the indirection node.
 Note that the size of an indirection node may be smaller than that of
 the original node. However, it is safe to set the node info pointer to
 [[indir_info]] only when the overwritten node's state cannot be              %'
-recovered, i.e., the node is not protected by a choice point. For that
-reason, variables and lazy applications will provide specialized
-indirection info vectors that match the size of the overwritten node.
+recovered, i.e., the node is allocated in the topmost heap segment.
+For that reason, variables and lazy applications will provide
+specialized indirection info pointers that match the size of the
+overwritten node.
 
 <<heap.h>>=
 extern NodeInfo indir_info;
 struct indir_node {
-    NodeInfo	*info;
-#if !COPY_SEARCH_SPACE
-    SearchSpace	*spc;		/* defining search space (of original node) */
-#endif
-    Node	*node;		/* referenced node */
+    NodeInfo *info;
+    Node     *node;		/* referenced node */
 };
 #define indir_node_size		wordsof(struct indir_node)
 
@@ -625,17 +629,15 @@ NodeInfo indir_info = {
 };
 
 @ 
-Unbound logic variable nodes comprise a pointer to the search space in
-which the variable was created, a list of threads which are delayed by
-the variable, and a list of constraints on that variable other than
-equality constraints. The latter are implemented by overwriting the
-variable node.
+Unbound logical variable nodes comprise a list of threads which are
+delayed by the variable and a list of constraints on that variable
+other than equality constraints. The latter are implemented by
+overwriting the variable node.
 
 <<heap.h>>=
 extern NodeInfo variable_info_table[];
 struct variable_node {
     NodeInfo	*info;
-    SearchSpace	*spc;		/* defining search space */
     ThreadQueue	wq;		/* wait queue */
     Constraint	*cstrs;		/* constraint list */
 };
@@ -672,37 +674,29 @@ struct constraint {
 };
 
 @ 
-Lazy application nodes (a.k.a. suspended applications) are composed of
-a pointer to the search space in which the node was created and an
-array of arguments. The search space pointer is required because a
-lazy application must be evaluated in the search space where it was
-created or a descendant of that space in order to properly share its
-result. When the evaluation of a lazy application is finished, the
-node is overwritten with an indirection pointing to the result.
-Furthermore, in order to prevent multiple threads from evaluating a
-lazy application concurrently, the node is immediately overwritten
-with a queue-me node (see below) when the evaluation is started.
+Lazy application nodes (a.k.a. suspended applications) are represented
+like normal closure nodes. However, when evaluation of a lazy
+application is finished, the node is overwritten with an indirection
+pointing to the result. Furthermore, in order to prevent multiple
+threads from evaluating a lazy application concurrently, the node is
+immediately overwritten with a queue-me node (see below) when the
+evaluation is started.
 
-A shared lazy application node must provide space for at least one
-argument into which the result of the application can be written.
-When a shared lazy application node is overwritten that is protected
-by a choice point, its size cannot be changed. Therefore specialized
-info vectors for queue-me and indirection nodes, which take the
-original size of the application into account, must be provided for
-each function (see the [[LAZYINFO]] macro below). However, if the node
-is not protected when it is overwritten, we will shrink its size so
-that the arguments of the application can be garbage collected when
-they are no longer used.
+In order to allow overwriting a shared lazy application node with the
+result of the application, it must provide space for at least one
+argument. When a shared lazy application node is overwritten that is
+protected by a choice point, its size cannot be changed. Therefore
+specialized info pointers, which take the original size of the
+application into account, must be provided for the queue-me and
+indirection nodes associated with each function (see the [[LAZYINFO]]
+macro below). If the node is allocated in the topmost heap segment
+when it is overwritten, its info pointer will be overwritten with a
+standard queue-me or indirection node info pointer so that the
+arguments of the application can be garbage collected when they are no
+longer used.
 
 <<heap.h>>=
-struct suspend_node {
-    NodeInfo	*info;
-    SearchSpace	*spc;		/* defining search space */
-    Node	*args[1];	/* arguments */
-};
-#define	suspend_argc(node)	(node_size(node) - raw_suspend_node_size(0))
-#define suspend_node_size(argc)	raw_suspend_node_size((argc) > 1 ? (argc) : 1)
-#define raw_suspend_node_size(argc) (wordsof(struct suspend_node) + (argc) - 1)
+#define suspend_node_size(argc)	closure_node_size((argc) > 1 ? (argc) : 1)
 
 @ 
 When the evaluation of a shared lazy application node is started, it
@@ -715,8 +709,7 @@ the runtime system.
 extern NodeInfo queueMe_info_table[];
 struct queueMe_node {
     NodeInfo	*info;
-    SearchSpace	*spc;		/* defining search space */
-    ThreadQueue wq;		/* pointer to waitqueue */
+    ThreadQueue wq;		/* wait queue */
 };
 #define queueMe_node_size       wordsof(struct queueMe_node)
 
@@ -734,20 +727,53 @@ NodeInfo queueMe_info_table[] = {
 #endif
 
 @ 
+The free variables of a search goal cannot be evaluated or
+instantiated within an encapsulated search. In order to implement the
+necessary write barrier, references to the free variables of a search
+goal are wrapped in global reference nodes. There are two kinds of
+global reference nodes. Those with kind [[GAPP_KIND]], which are
+possibly unevaluated, and those with kind [[GVAR_KIND]], which are
+known to be in head normal form but may be uninstantiated. When a
+global reference is evaluated to a non-variable head normal form, the
+global reference node is changed into an indirection node, which
+points to a copy of the term with all arguments wrapped in global
+reference nodes.
+
+An important invariant maintained by the runtime system is that global
+reference nodes are used only for references to nodes which are not
+part of the current search goal's own space, i.e., a program will %'
+never see a global reference node whose [[spc]] field references the
+current search space. Note that while global references are used only
+for referencing the free variables of a search goal, they belong to
+the global space semantically. This is important when it comes to
+updating a global reference node. Such updates must be recorded on the
+trail of the \emph{global} space not that of the local space.
+
+Since mutable references are subject to the same restrictions with
+respect to updates within an encapsulated search, they are represented
+like global references. The option to restrict mutable references to
+the local space and use global reference nodes to reference mutable
+references in global spaces was abandoned, since equality for mutable
+references must be based on their addresses and not on their contents.
+Using global references to mutable reference nodes would unnecessarily
+complicate testing the equality of mutable references.
+
+<<heap.h>>=
+struct global_ref_node {
+    NodeInfo	*info;
+    Node	*node;		/* referenced node */
+    SearchSpace *spc;		/* search space where node is allocated */
+};
+#define global_ref_node_size	wordsof(struct global_ref_node)
+
+@ 
 Search continuation nodes represent the continuation of a search goal
-in an encapsulated search. Note that search continuations have two
-search space fields. The [[spc]] field, just like the field with the
-same name of indirection, variable, lazy application, and queue-me
-nodes, points to the search space of the computation in which the
-search continuation was created. The [[ss]] field, on the other hand,
-points to the search goal's local search space and thus maintains the
-local bindings of its updatable nodes. %'
+in an encapsulated search.
 
 <<heap.h>>=
 extern NodeInfo search_cont_info;
 struct search_cont_node {
     NodeInfo	*info;
-    SearchSpace *spc;		/* defining search space */
     Node	*susp;		/* suspended goal application */
     Node	*var;		/* goal variable */
     Label	code;		/* next instruction to be executed */
@@ -786,9 +812,9 @@ union node {
     struct ptr_node p;
     struct foreign_ptr_node fp;
     struct variable_node v;
-    struct suspend_node s;
     struct queueMe_node q;
     struct indir_node n;
+    struct global_ref_node g;
     struct search_cont_node sc;
 };
 

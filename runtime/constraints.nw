@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: constraints.nw 2766 2009-03-26 08:59:48Z wlux $
+% $Id: constraints.nw 2854 2009-05-29 12:33:07Z wlux $
 %
-% Copyright (c) 2002-2008, Wolfgang Lux
+% Copyright (c) 2002-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Concurrent Conjunction}\label{sec:concurrent}
@@ -19,6 +19,7 @@ This file implements the concurrent conjunction of two constraints
 #include "stack.h"
 #include "eval.h"
 #include "threads.h"
+#include "search.h"
 #include "cam.h"
 
 @
@@ -74,16 +75,16 @@ FUNCTION(___38_)
     case FAPP_KIND:
 	switch ( node_kind(c2) )
 	{
+	case GAPP_KIND:
 	case SUSPEND_KIND:
 	case FAPP_KIND:
 	    regs.r[0] = c1;
 	    regs.r[1] = c2;
 	    CHECK_HEAP(2, queueMe_node_size);
-	    aux	   = (Node *)regs.hp;
-	    aux->info  = queueMe_info_table;
-	    aux->q.spc = regs.ss;
-	    aux->q.wq  = 0;
-	    regs.hp   += queueMe_node_size;
+	    aux	      = (Node *)regs.hp;
+	    aux->info = queueMe_info_table;
+	    aux->q.wq = 0;
+	    regs.hp  += queueMe_node_size;
 
 	    SAVE_RET2(aux, regs.r[1]);
 	    regs.r[1] = aux;
@@ -96,6 +97,7 @@ FUNCTION(___38_)
     case SUSPEND_KIND:
 	switch ( node_kind(c2) )
 	{
+	case GAPP_KIND:
 	case SUSPEND_KIND:
 	case FAPP_KIND:
 	    SAVE_RET2(c1, c2);
@@ -104,6 +106,7 @@ FUNCTION(___38_)
 	    ENT(regs.r[0]);
 	case QUEUEME_KIND:
 	case LVAR_KIND:
+	case GVAR_KIND:
 	    SAVE_RET1(c2);
 	    CALL_ENT(c1, ___38__2);
 	default:
@@ -114,12 +117,37 @@ FUNCTION(___38_)
     case QUEUEME_KIND:
 	switch ( node_kind(c2) )
 	{
+	case GAPP_KIND:
 	case SUSPEND_KIND:
 	case FAPP_KIND:
 	    SAVE_RET1(c1);
 	    CALL_ENT(c2, ___38__2);
 	case QUEUEME_KIND:
 	case LVAR_KIND:
+	case GVAR_KIND:
+	    SAVE_RET1(c2);
+	    CALL_ENT(c1, ___38__2);
+	default:
+	    assert(node_kind(c2) == CAPP_KIND);
+	}
+	ENT(c1);
+
+    case GAPP_KIND:
+	switch ( node_kind(c2) )
+	{
+	case GAPP_KIND:
+	    regs.r[0] = c1->g.node;
+	    regs.r[1] = c2->g.node;
+	    suspend_search(2, regs.bp->btSpc);
+	    GOTO(___38_);
+	case SUSPEND_KIND:
+	case FAPP_KIND:
+	    /* Note: no concurrent evaluation possible here */
+	    SAVE_RET2(c1, c2);
+	    CALL_ENT(c1, ___38__1);
+	case QUEUEME_KIND:
+	case LVAR_KIND:
+	case GVAR_KIND:
 	    SAVE_RET1(c2);
 	    CALL_ENT(c1, ___38__2);
 	default:
@@ -128,6 +156,7 @@ FUNCTION(___38_)
 	ENT(c1);
 
     case LVAR_KIND:
+    case GVAR_KIND:
 	/* evaluate the other argument then delay */
 	switch ( node_tag(c2) )
 	{
@@ -176,7 +205,7 @@ FUNCTION(___38__2)
     for ( c2 = regs.sp[0]; node_kind(c2) == INDIR_KIND; c2 = c2->n.node )
 	;
 
-    if ( node_kind(c1) == LVAR_KIND )
+    if ( node_tag(c1) == LVAR_TAG )
     {
 	switch ( node_kind(c2) )
 	{
@@ -184,6 +213,7 @@ FUNCTION(___38__2)
 	    regs.sp[0] = c1;
 	    CALL_ENT(c2, ___38__2);
 	case LVAR_KIND:
+	case GVAR_KIND:
 	    regs.sp[0] = c2;
 	    CALL1(sync_var, ___38__3, c1);
 	default:
@@ -241,6 +271,7 @@ FUNCTION(__spawnConstraint)
 	case INDIR_KIND:
 	    c = c->n.node;
 	    continue;
+	case GAPP_KIND:
 	case SUSPEND_KIND:
 	case FAPP_KIND:
 	    SAVE_REGS(1);

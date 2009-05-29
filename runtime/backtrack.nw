@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 2825 2009-05-15 17:23:31Z wlux $
+% $Id: backtrack.nw 2854 2009-05-29 12:33:07Z wlux $
 %
 % Copyright (c) 2002-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -132,7 +132,7 @@ copy_stack()
     memcpy(regs.sp, regs.sp + wordsof(Choicepoint) + stk_sz, stk_sz*word_size);
 
 #if COPY_SEARCH_SPACE
-    (void)copy_graph(0, 0, 0);
+    (void)copy_graph(0, 0, regs.ss);
     /* insert the copied global variables into the dictionary */
     /* NB: copied names must be strdup'ed so that they can be
      *     released with free(3) upon backtracking */
@@ -295,7 +295,6 @@ eval_apply(NodeInfo *goal_info, const char *fv_names[])
     {
 	var	     = (Node *)regs.hp;
 	var->info    = variable_info_table;
-	var->v.spc   = regs.ss;
 	var->v.wq    = 0;
 	var->v.cstrs = 0;
 	regs.hp	    += variable_node_size;
@@ -391,11 +390,10 @@ FUNCTION(start)
     TRACE(("start program\n"));
 
     CHECK_HEAP(1, queueMe_node_size);
-    susp	= (Node *)regs.hp;
-    susp->info	= queueMe_info_table;
-    susp->q.spc	= regs.ss;
-    susp->q.wq	= 0;
-    regs.hp    += queueMe_node_size;
+    susp       = (Node *)regs.hp;
+    susp->info = queueMe_info_table;
+    susp->q.wq = 0;
+    regs.hp   += queueMe_node_size;
 
     regs.sp    = stack_end - 2;
     regs.sp[0] = regs.r[0];

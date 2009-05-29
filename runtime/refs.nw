@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: refs.nw 2853 2009-05-29 11:55:01Z wlux $
+% $Id: refs.nw 2854 2009-05-29 12:33:07Z wlux $
 %
-% Copyright (c) 2004-2008, Wolfgang Lux
+% Copyright (c) 2004-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Mutable References}
@@ -17,89 +17,118 @@ which are defined in this file.
 #include "run.h"
 #include "regs.h"
 #include "heap.h"
-#include "eval.h"
+#include "stack.h"
 #include "trail.h"
-#include "refs.h"
+#include "spaces.h"
+#include "search.h"
+#include "eval.h"
+#include "cam.h"
 
-typedef struct ioref_node {
-    NodeInfo *info;
-    Node     *ref;
-} IORef;
-
-#define ioref_node_size wordsof(IORef)
+#define ioref_node_size global_ref_node_size
 
 static NodeInfo ioref_info = {
-    ABSTRACT_KIND, 0, closure_node_size(1), 0, "<IORef>", eval_whnf, 0, 0, 0
+    MUTABLE_KIND, 0, ioref_node_size, 0, "<IORef>", eval_whnf, 0, 0, 0
 };
 
 @ 
-The function [[primNewIORef]] creates a new mutable reference and
-initializes it with the specified value. The initial value is passed
-in the form \texttt{Wrap}~$e$ in order to prevent evaluation of $e$ by
-the foreign function interface code.
+The function [[newIORef]] creates a new mutable reference and
+initializes it with the specified value.
 
-<<refs.h>>=
-extern Node *primNewIORef(Node *);
-
-@ 
 <<refs.c>>=
-Node *
-primNewIORef(Node *wrappedArg)
+DECLARE_LABEL(extern, __newIORef);
+
+FUNCTION(__newIORef)
 {
-    IORef *ref;
-
-    BEGIN_LOCAL_ROOTS1(wrappedArg)
-    CHECK_HEAP(0, ioref_node_size);
-    ref	      = (IORef *)regs.hp;
-    ref->info = &ioref_info;
-    ref->ref  = wrappedArg->c.args[0];
-    regs.hp  += ioref_node_size;
-    END_LOCAL_ROOTS
-
-    return (Node *)ref;
+    Node *ref;
+ ENTRY_LABEL(extern, __newIORef)
+    CHECK_HEAP(1, ioref_node_size);
+    ref		= (Node *)regs.hp;
+    ref->info	= &ioref_info;
+    ref->g.node	= regs.r[0];
+    ref->g.spc	= regs.ss;
+    regs.hp    += ioref_node_size;
+    RET(ref);
 }
 
 @ 
-The function [[primReadIORef]] returns the value that is currently
-saved in a mutable reference.
+The function [[readIORef]] returns the value that is currently saved
+in a mutable reference. Note that the value is \emph{not} evaluated to
+head normal form because the \texttt{IO} monad is lazy.
 
-<<refs.h>>=
-extern Node *primReadIORef(Node *);
-
-@ 
 <<refs.c>>=
-Node *
-primReadIORef(Node *refNode)
-{
-    IORef *ref;
+DECLARE_LABEL(extern, __readIORef);
+DECLARE_LABEL(static, __readIORef_1);
 
-    assert(refNode->info == &ioref_info);
-    ref = (IORef *)refNode;
-    return ref->ref;
+FUNCTION(__readIORef)
+{
+ ENTRY_LABEL(extern, __readIORef)
+    SAVE_REGS(0);
+    EVAL_NODE(__readIORef_1);
+}
+
+static
+FUNCTION(__readIORef_1)
+{
+    Node *node;
+ ENTRY_LABEL(static, __readIORef_1)
+    MATCH_RIGID_MUTABLE(__readIORef_1);
+    assert(regs.r[0]->info == &ioref_info);
+    node = regs.r[0]->g.node;
+    if ( !is_local_space(regs.r[0]->g.spc) )
+	node = copy_global(0, node, regs.r[0]->g.spc);
+    RETURN(node, 0);
 }
 
 @ 
-The function [[primWriteIORef]] updates the value saved in a mutable
-reference. The assigned value is passed in the form \texttt{Wrap}~$e$
-in order to prevent evaluation of $e$ by the foreign function
-interface code. The old value is saved on the trail even though the
+The function [[writeIORef]] updates the value saved in a mutable
+reference. The old value is saved on the trail even though the
 \texttt{IO} monad is expected to run only deterministic code. However,
-trailing prevents program crashes when this function is used inside an
+trailing prevents program crashes when this function is used inside
 [[unsafePerformIO]]. Note that this makes it impossible to use mutable
 references for generating globally unique indices that are different
-even across different branches of a non-deterministic search.
+even across different branches of a non-deterministic search. On the
+other hand it is possible to write to a mutable reference defined in
+an enclosing search space, but we must be careful to \emph{copy} the
+assigned node into the search space of the mutable reference in order
+to prevent local nodes from escaping their scope.
 
-<<refs.h>>=
-extern void primWriteIORef(Node *, Node *);
-
-@ 
 <<refs.c>>=
-void
-primWriteIORef(Node *refNode, Node *wrappedArg)
-{
-    IORef *ref;
+DECLARE_LABEL(extern, __writeIORef);
+DECLARE_LABEL(static, __writeIORef_1);
 
-    assert(refNode->info == &ioref_info);
-    ref = (IORef *)refNode;
-    SET_FIELD(ref, ref, wrappedArg->c.args[0]);
+FUNCTION(__writeIORef)
+{
+ ENTRY_LABEL(extern, __writeIORef)
+    SAVE_REGS(1);
+    EVAL_NODE(__writeIORef_1);
+}
+
+static
+FUNCTION(__writeIORef_1)
+{
+ ENTRY_LABEL(static, __writeIORef_1)
+    MATCH_RIGID_MUTABLE(__writeIORef_1);
+    assert(regs.r[0]->info == &ioref_info);
+    if ( !is_local_space(regs.r[0]->g.spc) )
+    {
+	SearchSpace *spc;
+
+	regs.r[1] = regs.sp[0];
+	regs.ret  = (Label)regs.sp[1];
+	regs.sp	 += 2;
+	BEGIN_LOCAL_ROOTS1(spc)
+	do
+	{
+	    assert(regs.bp);
+	    spc = regs.ss;
+	    suspend_search(2, regs.bp->btSpc);
+	    regs.r[1] = copy_graph(2, regs.r[1], spc);
+	}
+	while ( !is_local_space(regs.r[0]->g.spc) );
+	END_LOCAL_ROOTS
+	SET_FIELD(regs.r[0], g.node, regs.r[1]);
+	RET(unit);
+    }
+    SET_FIELD(regs.r[0], g.node, regs.sp[0]);
+    RETURN(unit, 1);
 }

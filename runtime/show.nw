@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 2773 2009-03-26 10:38:21Z wlux $
+% $Id: show.nw 2854 2009-05-29 12:33:07Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -44,6 +44,8 @@ DECLARE_LABEL(extern, __shows);
 DECLARE_LABEL(extern, __dvals);
 DECLARE_LABEL(static, showp);
 DECLARE_LABEL(static, showp_1);
+DECLARE_LABEL(static, showCat);
+DECLARE_LABEL(static, showCat_1);
 DECLARE_LABEL(static, showArgs);
 DECLARE_LABEL(static, showInfix);
 DECLARE_LABEL(static, showTuple);
@@ -93,10 +95,12 @@ static const struct int_node two_node  = { &int_info, 2 };
 #endif
 
 
+DECLARE_LABEL(static, eval_lazy_2);
 DECLARE_LABEL(static, eval_lazy_3);
 DECLARE_LABEL(static, eval_lazy_4);
 
 static NodeInfo showp_lazy_info_table[] = LAZYINFO("showp", showp, 4);
+static NodeInfo showCat_lazy_info_table[] = LAZYINFO("showCat", showCat, 2);
 static NodeInfo showArgs_lazy_info_table[] = LAZYINFO("showArgs", showArgs, 4);
 static NodeInfo showTupleArgs_lazy_info_table[] =
     LAZYINFO("showTupleArgs", showTupleArgs, 3);
@@ -105,21 +109,67 @@ static NodeInfo showStringTail_lazy_info_table[] =
     LAZYINFO("showStringTail", showStringTail, 3);
 
 static
+FUNCTION(eval_lazy_2)
+{
+    Node  *susp;
+    Label entry;
+ ENTRY_LABEL(static, eval_lazy_2)
+    /* get the arguments */
+    susp      = regs.r[0];
+    entry     = susp->info->entry;
+    regs.r[0] = susp->c.args[0];
+    regs.r[1] = susp->c.args[1];
+
+    /* create an indirection if there is an update frame immediately above */
+    if ( regs.ret == update )
+    {
+#if !COPY_SEARCH_SPACE
+	if ( (word *)susp < regs.hlim )
+	{
+	    DO_SAVE(susp, n.node);
+	    susp->info += 2;
+	}
+	else
+#endif
+	    susp->info = &indir_info;
+	assert(is_queueMe_node(regs.sp[0]));
+	susp->n.node = regs.sp[0];
+    }
+
+    /* otherwise, lock the application node and create an update frame */
+    else
+    {
+	SAVE_RET1(susp);
+	regs.ret = update;
+
+#if !COPY_SEARCH_SPACE
+	if ( (word *)susp < regs.hlim )
+	{
+	    DO_SAVE(susp, q.wq);
+	    susp->info++;
+	}
+	else
+#endif
+	    susp->info = queueMe_info_table;
+	susp->q.wq = 0;
+    }
+
+    /* enter the callee */
+    EXEC2(entry, regs.r[0], regs.r[1]);
+}
+
+static
 FUNCTION(eval_lazy_3)
 {
     Node  *susp;
     Label entry;
  ENTRY_LABEL(static, eval_lazy_3)
-    /* suspend the search if the node is not local */
-    if ( !is_local_space(regs.r[0]->s.spc) )
-	suspend_search(1, regs.r[0]->s.spc);
-
     /* get the arguments */
     susp      = regs.r[0];
     entry     = susp->info->entry;
-    regs.r[0] = susp->s.args[0];
-    regs.r[1] = susp->s.args[1];
-    regs.r[2] = susp->s.args[2];
+    regs.r[0] = susp->c.args[0];
+    regs.r[1] = susp->c.args[1];
+    regs.r[2] = susp->c.args[2];
 
     /* create an indirection if there is an update frame immediately above */
     if ( regs.ret == update )
@@ -165,17 +215,13 @@ FUNCTION(eval_lazy_4)
     Node  *susp;
     Label entry;
  ENTRY_LABEL(static, eval_lazy_4)
-    /* suspend the search if the node is not local */
-    if ( !is_local_space(regs.r[0]->s.spc) )
-	suspend_search(1, regs.r[0]->s.spc);
-
     /* get the arguments */
     susp      = regs.r[0];
     entry     = susp->info->entry;
-    regs.r[0] = susp->s.args[0];
-    regs.r[1] = susp->s.args[1];
-    regs.r[2] = susp->s.args[2];
-    regs.r[3] = susp->s.args[3];
+    regs.r[0] = susp->c.args[0];
+    regs.r[1] = susp->c.args[1];
+    regs.r[2] = susp->c.args[2];
+    regs.r[3] = susp->c.args[3];
 
     /* create an indirection if there is an update frame immediately above */
     if ( regs.ret == update )
@@ -316,6 +362,21 @@ FUNCTION(showp_1)
 	    str = lookup_name(node);
 	    break;
 
+	case GVAR_KIND:
+	    if ( show != zero )
+		CALL1(sync_global, showp_1, node);
+	case GAPP_KIND:
+	    assert(show == zero);
+	    assert(!is_local_space(node->g.spc));
+	    regs.ret  = showCat_1;
+	    regs.r[0] = node->g.node;
+	    regs.r[1] = prec;
+	    regs.r[2] = show;
+	    regs.r[3] = nil;
+	    regs.sp  += 2;
+	    suspend_search(4, node->g.spc);
+	    GOTO(showp);
+
 	case CHAR_KIND:
 #if NO_POINTER_TAGS
 	    buf[0] = '\'';
@@ -371,6 +432,7 @@ FUNCTION(showp_1)
 	    argc = closure_argc(node);
 	    break;
 
+	case MUTABLE_KIND:
 	case SEARCH_CONT_KIND:
 	case ABSTRACT_KIND:
 	    str = node->info->cname;
@@ -422,11 +484,10 @@ FUNCTION(showp_1)
 
 	susp		= (Node *)regs.hp;
 	susp->info	= showArgs_lazy_info_table;
-	susp->s.spc	= regs.ss;
-	susp->s.args[0] = arglist;
-	susp->s.args[1] = prec;
-	susp->s.args[2] = show;
-	susp->s.args[3] = tail;
+	susp->c.args[0] = arglist;
+	susp->c.args[1] = prec;
+	susp->c.args[2] = show;
+	susp->c.args[3] = tail;
 	regs.hp	       += suspend_node_size(4);
 
 	tail = susp;
@@ -472,6 +533,51 @@ FUNCTION(showp_1)
     RETURN(cons, 3);
 }
 
+@ 
+The function \texttt{showCat} concatenates two strings. It is
+effectively equivalent to the Prelude operator \texttt{(++)}.
+
+<<show.c>>=
+static
+FUNCTION(showCat)
+{
+ ENTRY_LABEL(static, showCat)
+    TRACE_FUN("showCat", 2);
+    SAVE_REGS(1);
+    EVAL(showCat_1);
+}
+
+static
+FUNCTION(showCat_1)
+{
+    Node *susp, *list;
+ ENTRY_LABEL(static, showCat_1)
+    BEGIN_MATCH_RIGID_NODE(showCat_1)
+    {
+    case NIL_TAG:
+	list = regs.sp[0];
+	break;
+    case CONS_TAG:
+	CHECK_HEAP(1, suspend_node_size(2) + cons_node_size);
+	susp		= (Node *)regs.hp;
+	susp->info	= showCat_lazy_info_table;
+	susp->c.args[0] = regs.r[0]->c.args[1];
+	susp->c.args[1] = regs.sp[0];
+	regs.hp	       += suspend_node_size(2);
+
+	list		= (Node *)regs.hp;
+	list->info	= &cons_info;
+	list->c.args[0] = regs.r[0]->c.args[0];
+	list->c.args[1] = susp;
+	regs.hp	       += cons_node_size;
+	break;
+    default:
+	unexpected_tag("showCat", node_tag(regs.r[0]));
+    }
+    END_MATCH_RIGID_NODE
+    RETURN(list, 1);
+}
+
 @
 The function \texttt{showArgs} displays the arguments of an
 application. Each argument is preceded by a space and enclosed in
@@ -511,20 +617,18 @@ FUNCTION(showArgs)
 
 	susp		= (Node *)regs.hp;
 	susp->info	= showArgs_lazy_info_table;
-	susp->s.spc	= regs.ss;
-	susp->s.args[0] = arglist->c.args[1];
-	susp->s.args[1] = prec;
-	susp->s.args[2] = show;
-	susp->s.args[3] = tail;
+	susp->c.args[0] = arglist->c.args[1];
+	susp->c.args[1] = prec;
+	susp->c.args[2] = show;
+	susp->c.args[3] = tail;
 	regs.hp	       += suspend_node_size(4);
 
 	susp2		 = (Node *)regs.hp;
 	susp2->info	 = showp_lazy_info_table;
-	susp2->s.spc	 = regs.ss;
-	susp2->s.args[0] = arglist->c.args[0];
-	susp2->s.args[1] = two;
-	susp2->s.args[2] = show;
-	susp2->s.args[3] = susp;
+	susp2->c.args[0] = arglist->c.args[0];
+	susp2->c.args[1] = two;
+	susp2->c.args[2] = show;
+	susp2->c.args[3] = susp;
 	regs.hp		+= suspend_node_size(4);
 
 	cons		= (Node *)regs.hp;
@@ -570,11 +674,10 @@ FUNCTION(showInfix)
 
     susp	    = (Node *)regs.hp;
     susp->info	    = showp_lazy_info_table;
-    susp->s.spc	    = regs.ss;
-    susp->s.args[0] = node->c.args[1];
-    susp->s.args[1] = one;
-    susp->s.args[2] = show;
-    susp->s.args[3] = tail;
+    susp->c.args[0] = node->c.args[1];
+    susp->c.args[1] = one;
+    susp->c.args[2] = show;
+    susp->c.args[3] = tail;
     regs.hp	   += suspend_node_size(4);
 
     cons	    = (Node *)regs.hp;
@@ -601,11 +704,10 @@ FUNCTION(showInfix)
     {
 	susp		= (Node *)regs.hp;
 	susp->info	= showp_lazy_info_table;
-	susp->s.spc	= regs.ss;
-	susp->s.args[0] = node;
-	susp->s.args[1] = one;
-	susp->s.args[2] = show;
-	susp->s.args[3] = cons;
+	susp->c.args[0] = node;
+	susp->c.args[1] = one;
+	susp->c.args[2] = show;
+	susp->c.args[3] = cons;
 	regs.hp	       += suspend_node_size(4);
 
 	cons		= (Node *)regs.hp;
@@ -658,10 +760,9 @@ FUNCTION(showTuple)
 
     susp	    = (Node *)regs.hp;
     susp->info	    = showTupleArgs_lazy_info_table;
-    susp->s.spc	    = regs.ss;
-    susp->s.args[0] = arglist;
-    susp->s.args[1] = show;
-    susp->s.args[2] = tail;
+    susp->c.args[0] = arglist;
+    susp->c.args[1] = show;
+    susp->c.args[2] = tail;
     regs.hp	   += suspend_node_size(3);
 
     if ( argc )
@@ -670,11 +771,10 @@ FUNCTION(showTuple)
 
 	susp		= (Node *)regs.hp;
 	susp->info	= showp_lazy_info_table;
-	susp->s.spc	= regs.ss;
-	susp->s.args[0] = *--argp;
-	susp->s.args[1] = zero;
-	susp->s.args[2] = show;
-	susp->s.args[3] = tail;
+	susp->c.args[0] = *--argp;
+	susp->c.args[1] = zero;
+	susp->c.args[2] = show;
+	susp->c.args[3] = tail;
 	regs.hp	       += suspend_node_size(4);
     }
 
@@ -714,19 +814,17 @@ FUNCTION(showTupleArgs)
 
 	susp		= (Node *)regs.hp;
 	susp->info	= showTupleArgs_lazy_info_table;
-	susp->s.spc	= regs.ss;
-	susp->s.args[0] = arglist->c.args[1];
-	susp->s.args[1] = show;
-	susp->s.args[2] = tail;
+	susp->c.args[0] = arglist->c.args[1];
+	susp->c.args[1] = show;
+	susp->c.args[2] = tail;
 	regs.hp	       += suspend_node_size(3);
 
 	susp2		 = (Node *)regs.hp;
 	susp2->info	 = showp_lazy_info_table;
-	susp2->s.spc	 = regs.ss;
-	susp2->s.args[0] = arglist->c.args[0];
-	susp2->s.args[1] = zero;
-	susp2->s.args[2] = show;
-	susp2->s.args[3] = susp;
+	susp2->c.args[0] = arglist->c.args[0];
+	susp2->c.args[1] = zero;
+	susp2->c.args[2] = show;
+	susp2->c.args[3] = susp;
 	regs.hp		+= suspend_node_size(4);
 
 	cons		= (Node *)regs.hp;
@@ -833,10 +931,9 @@ FUNCTION(showList_1)
 
 		susp		= (Node *)regs.hp;
 		susp->info	= showStringTail_lazy_info_table;
-		susp->s.spc	= regs.ss;
-		susp->s.args[0] = cons;
-		susp->s.args[1] = tag_char('\0');
-		susp->s.args[2] = tail;
+		susp->c.args[0] = cons;
+		susp->c.args[1] = tag_char('\0');
+		susp->c.args[2] = tail;
 		regs.hp        += suspend_node_size(3);
 
 		cons		= (Node *)regs.hp;
@@ -857,6 +954,7 @@ FUNCTION(showList_1)
 		hd = hd->n.node;
 		continue;
 	    case LVAR_KIND:
+	    case GVAR_KIND:
 		if ( show != zero )
 		    CALL1(sync_var, showList_1, hd);
 		break;
@@ -879,10 +977,9 @@ FUNCTION(showList_1)
 
 		    susp	    = (Node *)regs.hp;
 		    susp->info	    = showStringTail_lazy_info_table;
-		    susp->s.spc	    = regs.ss;
-		    susp->s.args[0] = cons;
-		    susp->s.args[1] = (Node *)char_table;
-		    susp->s.args[2] = tail;
+		    susp->c.args[0] = cons;
+		    susp->c.args[1] = (Node *)char_table;
+		    susp->c.args[2] = tail;
 		    regs.hp	   += suspend_node_size(3);
 
 		    cons	    = (Node *)regs.hp;
@@ -910,19 +1007,17 @@ FUNCTION(showList_1)
 
     susp	    = (Node *)regs.hp;
     susp->info	    = showTail_lazy_info_table;
-    susp->s.spc	    = regs.ss;
-    susp->s.args[0] = tl;
-    susp->s.args[1] = show;
-    susp->s.args[2] = tail;
+    susp->c.args[0] = tl;
+    susp->c.args[1] = show;
+    susp->c.args[2] = tail;
     regs.hp	   += suspend_node_size(3);
 
     susp2	     = (Node *)regs.hp;
     susp2->info	     = showp_lazy_info_table;
-    susp2->s.spc     = regs.ss;
-    susp2->s.args[0] = hd;
-    susp2->s.args[1] = zero;
-    susp2->s.args[2] = show;
-    susp2->s.args[3] = susp;
+    susp2->c.args[0] = hd;
+    susp2->c.args[1] = zero;
+    susp2->c.args[2] = show;
+    susp2->c.args[3] = susp;
     regs.hp	    += suspend_node_size(4);
 
     cons	    = (Node *)regs.hp;
@@ -979,11 +1074,10 @@ FUNCTION(showTail_1)
 
 	susp		= (Node *)regs.hp;
 	susp->info	= showp_lazy_info_table;
-	susp->s.spc	= regs.ss;
-	susp->s.args[0] = list;
-	susp->s.args[1] = zero;
-	susp->s.args[2] = show;
-	susp->s.args[3] = cons;
+	susp->c.args[0] = list;
+	susp->c.args[1] = zero;
+	susp->c.args[2] = show;
+	susp->c.args[3] = cons;
 	regs.hp	       += suspend_node_size(4);
 
 	cons		= (Node *)regs.hp;
@@ -1014,19 +1108,17 @@ FUNCTION(showTail_1)
 
 	susp		= (Node *)regs.hp;
 	susp->info	= showTail_lazy_info_table;
-	susp->s.spc	= regs.ss;
-	susp->s.args[0] = list->c.args[1];
-	susp->s.args[1] = show;
-	susp->s.args[2] = tail;
+	susp->c.args[0] = list->c.args[1];
+	susp->c.args[1] = show;
+	susp->c.args[2] = tail;
 	regs.hp	       += suspend_node_size(3);
 
 	susp2		 = (Node *)regs.hp;
 	susp2->info	 = showp_lazy_info_table;
-	susp2->s.spc     = regs.ss;
-	susp2->s.args[0] = list->c.args[0];
-	susp2->s.args[1] = zero;
-	susp2->s.args[2] = show;
-	susp2->s.args[3] = susp;
+	susp2->c.args[0] = list->c.args[0];
+	susp2->c.args[1] = zero;
+	susp2->c.args[2] = show;
+	susp2->c.args[3] = susp;
 	regs.hp		+= suspend_node_size(4);
 
 	cons		= (Node *)regs.hp;
@@ -1073,10 +1165,9 @@ FUNCTION(showString_1)
 
     susp	    = (Node *)regs.hp;
     susp->info	    = showStringTail_lazy_info_table;
-    susp->s.spc	    = regs.ss;
-    susp->s.args[0] = tl;
-    susp->s.args[1] = hd;
-    susp->s.args[2] = tail;
+    susp->c.args[0] = tl;
+    susp->c.args[1] = hd;
+    susp->c.args[2] = tail;
     regs.hp	   += suspend_node_size(3);
 
     RETURN(prefix_string(0, lit_char(buf, char_val(prev), char_val(hd), '"'),

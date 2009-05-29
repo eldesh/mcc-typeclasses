@@ -1,18 +1,28 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: search.nw 2766 2009-03-26 08:59:48Z wlux $
+% $Id: search.nw 2854 2009-05-29 12:33:07Z wlux $
 %
-% Copyright (c) 2002-2008, Wolfgang Lux
+% Copyright (c) 2002-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Encapsulated Search}
 The implementation of encapsulated search is mostly private to this
-module. The external entry points into this module are the external
-function [[try]], which starts a new encapsulated search, and the
-function [[suspend_search]], which allows the program to temporarily
-suspend an encapsulated search.
+module. The external entry points into this module are the primitive
+function [[try]], which starts a new encapsulated search, the runtime
+system support function [[sync_global]], which suspends the current
+search goal until a global free variable of the search goal is
+instantiated, and the functions [[suspend_search]] and
+[[copy_global]]. The former allows a program to temporarily leave an
+encapsulated search and the latter copies a node from an enclosing
+computation into the current search goal, adding global reference
+wrappers to the copied node as necessary. Note that when a search goal
+is suspended with [[suspend_search]] and later resumed,
+[[copy_global]] is applied automatically to the node returned to the
+search goal.
 
 <<search.h>>=
+DECLARE_LABEL(extern, sync_global);
 extern void suspend_search(unsigned int, SearchSpace *);
+extern Node *copy_global(unsigned int, Node *, SearchSpace *);
 
 @ 
 <<search.c>>=
@@ -29,10 +39,13 @@ DECLARE_LABEL(static, solved_goal);
 DECLARE_LABEL(static, search_goal_success);
 DECLARE_LABEL(static, search_cont);
 DECLARE_LABEL(static, search_goal_proceed);
-DECLARE_LABEL(static, resume_search);
 DECLARE_LABEL(static, choices_search);
 DECLARE_LABEL(static, deadlock_search);
 DECLARE_LABEL(static, fail_search);
+DECLARE_LABEL(static, copy_result);
+DECLARE_LABEL(static, resume_search);
+DECLARE_LABEL(static, eval_global);
+DECLARE_LABEL(static, update_global);
 
 static const struct nondet_handlers search_handlers = {
     choices_search, deadlock_search, fail_search
@@ -53,6 +66,24 @@ static NodeInfo solved_goal_papp_info_table[] = {
 static NodeInfo search_cont_papp_info_table[] = {
     PAPPINFO("<search goal>", 1, search_cont, 2)
 };
+
+#if !COPY_SEARCH_SPACE
+static NodeInfo global_app_info_table[] = {
+    { GAPP_KIND, EVAL_TAG, global_ref_node_size, 0, 0, eval_global, 0, 0, 0 },
+    { INDIR_KIND, INDIR_TAG, global_ref_node_size, 0, 0, eval_indir, 0, 0, 0 }
+};
+static NodeInfo global_var_info_table[] = {
+    { GVAR_KIND, LVAR_TAG, global_ref_node_size, 0, 0, eval_whnf, 0, 0, 0 },
+    { INDIR_KIND, INDIR_TAG, global_ref_node_size, 0, 0, eval_indir, 0, 0, 0 }
+};
+#else
+static NodeInfo global_app_info_table[] = {
+    { GAPP_KIND, EVAL_TAG, global_ref_node_size, 0, 0, eval_global, 0, 0, 0 }
+};
+static NodeInfo global_var_info_table[] = {
+    { GVAR_KIND, LVAR_TAG, global_ref_node_size, 0, 0, eval_whnf, 0, 0, 0 }
+};
+#endif
 
 @
 Search contexts are allocated on the stack in order to save the
@@ -91,6 +122,7 @@ are shared instead of allocating fresh nodes.
 <<search.c>>=
 DECLARE_LABEL(extern, __try);
 DECLARE_LABEL(static, __try_1);
+DECLARE_LABEL(static, __try_2);
 
 FUNCTION(__try)
 {
@@ -130,6 +162,13 @@ FUNCTION(__try_1)
     if ( regs.r[0]->info == search_cont_papp_info_table )
     {
 	sc = regs.r[0]->c.args[0];
+	while ( is_global_var_node(sc) )
+	{
+	    sc = sc->g.node;
+	    while ( is_indir_node(sc) )
+		sc = sc->n.node;
+	}
+	assert(is_search_cont_node(sc));
 #if COPY_SEARCH_SPACE
 	sc = copy_graph(0, sc, sc->sc.ss);
 #endif
@@ -149,20 +188,21 @@ FUNCTION(__try_1)
     new_search_space(1);
 #endif
 
+    /* wrap the goal's arguments */
+    regs.r[0] = copy_global(0, regs.r[0], regs.bp->btSpc);
+
     /* allocate new goal variable and suspension */
     CHECK_HEAP(1, variable_node_size + queueMe_node_size);
     var		 = (Node *)regs.hp;
     var->info	 = variable_info_table;
-    var->v.spc	 = regs.ss;
     var->v.wq	 = 0;
     var->v.cstrs = 0;
     regs.hp	+= variable_node_size;
 
-    susp	= (Node *)regs.hp;
-    susp->info	= queueMe_info_table;
-    susp->q.spc	= regs.ss;
-    susp->q.wq	= 0;
-    regs.hp    += queueMe_node_size;
+    susp       = (Node *)regs.hp;
+    susp->info = queueMe_info_table;
+    susp->q.wq = 0;
+    regs.hp   += queueMe_node_size;
 
     /* start the initial thread and evaluate the goal */
     CHECK_STACK(2);
@@ -170,8 +210,17 @@ FUNCTION(__try_1)
     regs.sp[0] = regs.r[2] = susp;
     regs.sp[1] = regs.r[1] = var;
     start_thread(3, 0);
-    SAVE_RET3(regs.r[1], (Node *)update, regs.r[2]);
+    SAVE_RET3(regs.r[1], (Node *)__try_2, regs.r[2]);
     GOTO(regs.r[0]->info->apply);
+}
+
+static
+FUNCTION(__try_2)
+{
+ ENTRY_LABEL(static, __try_2)
+    MATCH_RIGID_DATA(__try_2);
+    assert(regs.r[0] == Success);
+    GOTO(update);
 }
 
 @ 
@@ -192,16 +241,22 @@ succeeds because \verb|try (\x -> success)| is equivalent to
 static
 FUNCTION(solved_goal)
 {
-    Node  *cont, *res, *arg;
+    Node *cont, *res, *arg;
  ENTRY_LABEL(static, solved_goal)
     cont = regs.r[0];
-    res	 = copy_graph(2, cont->sc.var, cont->sc.ss);
+    while ( is_global_var_node(cont) )
+    {
+	cont = cont->g.node;
+	while ( is_indir_node(cont) )
+	    cont = cont->n.node;
+    }
+    assert(is_search_cont_node(cont));
+    res = copy_graph(2, cont->sc.var, cont->sc.ss);
 
     arg = regs.r[1];
     while ( is_tagged_ptr(arg) && is_indir_node(arg) )
 	arg = arg->n.node;
-    if ( is_tagged_ptr(arg) && is_variable_node(arg) &&
-	 is_local_space(arg->v.spc) )
+    if ( is_tagged_ptr(arg) && is_variable_node(arg) )
     {
 	SAVE_REGS(0);
 	CALL2(bind_var, search_goal_success, arg, res);
@@ -242,8 +297,9 @@ variable before resuming a search goal, e.g.,
 \verb|try (\z -> (z<x)=:=True & g z)|, where \verb|g| is a search
 continuation and \verb|x| an upper limit for the goal variable. In the
 unusual case where a search goal is continued in the enclosing
-computation, the saved state is always copied, even if the enclosing
-computation's search space is a root space.
+computation, the saved state is always copied because the search
+goal's graph may contain global references into the current search
+space, which must be short-circuited.
 
 Note that [[search_goal_proceed]] discards the value on the top of the
 stack and therefore it does not matter that [[bind_var]] returns the
@@ -257,8 +313,21 @@ FUNCTION(search_cont)
     Node *arg, *cont;
  ENTRY_LABEL(static, search_cont)
     cont = regs.r[0];
-    if ( is_local_space(cont->sc.spc) || !inject_search_space(cont->sc.ss) )
-	regs.r[0] = cont = copy_graph(2, cont, cont->sc.ss);
+    if ( is_search_cont_node(cont) )
+	cont = copy_graph(2, cont, cont->sc.ss);
+    else
+    {
+	while ( is_global_var_node(cont) )
+	{
+	    cont = cont->g.node;
+	    while ( is_indir_node(cont) )
+		cont = cont->n.node;
+	}
+	assert(is_search_cont_node(cont));
+	if ( !inject_search_space(cont->sc.ss) )
+	    cont = copy_graph(2, cont, cont->sc.ss);
+    }
+    regs.r[0] = cont;
     restore_continuation(2, cont->sc.code, cont->sc.rq);
 
     /* NB reload cont -- restore_continuation might invoke gc */
@@ -268,8 +337,7 @@ FUNCTION(search_cont)
 	arg = arg->n.node;
 
     SAVE_RET1(cont->sc.susp);
-    if ( is_tagged_ptr(arg) && is_variable_node(arg) &&
-	 is_local_space(arg->v.spc) )
+    if ( is_tagged_ptr(arg) && is_variable_node(arg) )
 	CALL2(bind_var, search_goal_proceed, arg, cont->sc.var);
     CALL2(___61__58__61_, search_goal_proceed, arg, cont->sc.var);
 }
@@ -288,11 +356,12 @@ FUNCTION(search_goal_proceed)
 When no thread can be run in an encapsulated search, the evaluation of
 the search goal either did succeed or a deadlock has occurred. Both
 cases can be distinguished by examining the queue-me node allocated by
-[[try]] for that purpose. If the search was successful, the queue-me
-node has been overwritten with (an indirection to) [[Success]]. Thus,
-if this node is not bound to [[Success]], the evaluation has stopped
-due to a deadlock. In that case, the calling thread cannot be
-continued, too, and is terminated instantly.
+[[try]] for that purpose. If evaluation of the search goal was
+successful, the queue-me node has been overwritten with (an
+indirection to) [[Success]]. Thus, if this node is not bound to
+[[Success]], the evaluation has stopped due to a deadlock. In that
+case, the calling thread cannot be continued, too, and is terminated
+instantly.
 
 \ToDo{Instead of waiting for the deadlock to propagate up to the
   global context, report an error when a deadlock occurs.}
@@ -310,9 +379,9 @@ FUNCTION(deadlock_search)
 	switch ( goal->info->kind )
 	{
 	case CAPP_KIND:
+	    assert(goal == Success);
 	    break;
 	case QUEUEME_KIND:
-	case LVAR_KIND:
 	    TRACE(("deadlock in encapsulated search\n"));
 	    discard_search_space();
 	    pop_search_context();
@@ -338,7 +407,6 @@ FUNCTION(deadlock_search)
     CHECK_HEAP(0, search_cont_node_size + closure_node_size(1) + cons_node_size);
     sc		= (Node *)regs.hp;
     sc->info	= &search_cont_info;
-    sc->sc.spc	= regs.bp->btSpc;
     sc->sc.susp	= 0;
     sc->sc.var	= regs.sp[1];
     sc->sc.code	= 0;
@@ -360,91 +428,6 @@ FUNCTION(deadlock_search)
     /* return the list */
     pop_search_context();
     RETURN(list, 0);
-}
-
-@ 
-The function [[suspend_search]] suspends the current search and
-eventually enclosing searches in order to make [[space]] a local space.
-This is intended to allow evaluation of a non-local lazy application
-within an encapsulated search and in order to suspend a search until a
-non-local variable is instantiated. The return stack set up by
-[[suspend_search]] ensures that the suspended search is resumed at the
-current return address.
-
-<<search.c>>=
-void
-suspend_search(unsigned int n_regs, SearchSpace *space)
-{
-    Node *sc;
-
-    BEGIN_LOCAL_ROOTS1(space)
-    while ( !is_local_space(space) )
-    {
-	TRACE(("suspending encapsulated search\n"));
-	if ( regs.bp == 0 || !is_search_context(regs.bp) )
-	    curry_panic("local variable escaped its search space\n");
-
-	/* save the current state */
-	save_continuation(n_regs);
-
-	/* dereference the goal nodes in order to avoid some garbage */
-	assert(regs.sp == (Node **)regs.bp - 2);
-	while ( is_tagged_ptr(regs.sp[0]) && is_indir_node(regs.sp[0]) )
-	    regs.sp[0] = regs.sp[0]->n.node;
-	while ( is_tagged_ptr(regs.sp[1]) && is_indir_node(regs.sp[1]) )
-	    regs.sp[1] = regs.sp[1]->n.node;
-
-	/* save the local space */
-	save_search_space(n_regs);
-
-	/* allocate a search continuation */
-	CHECK_HEAP(n_regs, search_cont_node_size);
-	sc	    = (Node *)regs.hp;
-	sc->info    = &search_cont_info;
-	sc->sc.spc  = regs.bp->btSpc;
-	sc->sc.susp = regs.sp[0];
-	sc->sc.var  = regs.sp[1];
-	sc->sc.code = regs.ret;
-	sc->sc.rq   = regs.rq;
-	sc->sc.ss   = regs.ss;
-	regs.hp	   += search_cont_node_size;
-
-	/* save the search continuation and set up a return frame that
-	 * restores the suspended search */
-	pop_search_context();
-	CHECK_STACK1();
-	regs.ret   = resume_search;
-	regs.sp   -= 1;
-	regs.sp[0] = sc;
-    }
-    END_LOCAL_ROOTS
-}
-
-@ 
-An encapsulated search whose state was saved by [[suspend_search]] is
-resumed by [[resume_search]]. This function restores the state of the
-encapsulated search using the search continuation node found at the
-top of the stack. Note that since the argument registers are not
-changed, their contents can be used in the resumed thread.
-
-<<search.c>>=
-static
-FUNCTION(resume_search)
-{
-    Node *sc;
- ENTRY_LABEL(static, resume_search)
-    sc = *regs.sp++;
-    assert(is_tagged_ptr(sc) && is_search_cont_node(sc));
-
-    TRACE(("resuming encapsulated search\n"));
-    push_search_context();
-
-    CHECK_STACK(2);
-    regs.sp   -= 2;
-    regs.sp[0] = sc->sc.susp;
-    regs.sp[1] = sc->sc.var;
-    restore_search_space(sc->sc.ss);
-    GOTO(resume_continuation(sc->sc.code, sc->sc.rq));
 }
 
 @ 
@@ -491,7 +474,6 @@ FUNCTION(choices_search)
     {
 	sc	    = (Node *)regs.hp;
 	sc->info    = &search_cont_info;
-	sc->sc.spc  = regs.bp->btSpc;
 	sc->sc.susp = regs.sp[0];
 	sc->sc.var  = regs.sp[1];
 	sc->sc.code = *--conts;
@@ -538,6 +520,351 @@ FUNCTION(fail_search)
     /* return an empty list to the caller */
     TRACE(("leaving encapsulated search with no solution\n"));
     RETURN(nil, 0);
+}
+
+@ 
+The function [[suspend_search]] suspends the current search goal and
+eventually enclosing search goals in order to make [[space]] the
+current search space. This is intended to allow evaluation of a global
+lazy application within an encapsulated search and in order to suspend
+an encapsulated search until a global free variable is instantiated,
+respectively. The return stack set up by [[suspend_search]] ensures
+that the suspended search goal is resumed at the current return
+address and the result of the application or the instantiated variable
+is copied into the local search space with [[copy_global]].
+
+<<search.c>>=
+void
+suspend_search(unsigned int n_regs, SearchSpace *space)
+{
+    Node *sc;
+
+    BEGIN_LOCAL_ROOTS1(space)
+    while ( !is_local_space(space) )
+    {
+	TRACE(("suspending encapsulated search\n"));
+	if ( regs.bp == 0 || !is_search_context(regs.bp) )
+	    curry_panic("local variable escaped its search space\n");
+
+	/* save the current state */
+	save_continuation(n_regs);
+
+	/* dereference the goal nodes in order to avoid some garbage */
+	assert(regs.sp == (Node **)regs.bp - 2);
+	while ( is_tagged_ptr(regs.sp[0]) && is_indir_node(regs.sp[0]) )
+	    regs.sp[0] = regs.sp[0]->n.node;
+	while ( is_tagged_ptr(regs.sp[1]) && is_indir_node(regs.sp[1]) )
+	    regs.sp[1] = regs.sp[1]->n.node;
+
+	/* save the local space */
+	save_search_space(n_regs);
+
+	/* allocate a search continuation */
+	CHECK_HEAP(n_regs, search_cont_node_size);
+	sc	    = (Node *)regs.hp;
+	sc->info    = &search_cont_info;
+	sc->sc.susp = regs.sp[0];
+	sc->sc.var  = regs.sp[1];
+	sc->sc.code = regs.ret;
+	sc->sc.rq   = regs.rq;
+	sc->sc.ss   = regs.ss;
+	regs.hp	   += search_cont_node_size;
+
+	/* save the search continuation and set up a return frame that
+	 * restores the suspended search */
+	pop_search_context();
+	CHECK_STACK1();
+	regs.ret   = resume_search;
+	regs.sp   -= 1;
+	regs.sp[0] = sc;
+    }
+    END_LOCAL_ROOTS
+
+    /* set up return frame to protect the result before resuming */
+    SAVE_RET0();
+    regs.ret = copy_result;
+}
+
+static
+FUNCTION(copy_result)
+{
+    Node *r;
+ ENTRY_LABEL(static, copy_result)
+    r = copy_global(0, regs.r[0], regs.ss);
+    RETURN(r, 0);
+}
+
+@ 
+An encapsulated search whose state was saved by [[suspend_search]] is
+resumed by [[resume_search]]. This function restores the state of the
+encapsulated search using the search continuation node found at the
+top of the stack. Note that since the argument registers are not
+changed, their contents can be used in the resumed thread.
+
+<<search.c>>=
+static
+FUNCTION(resume_search)
+{
+    Node *sc;
+ ENTRY_LABEL(static, resume_search)
+    sc = *regs.sp++;
+    assert(is_tagged_ptr(sc) && is_search_cont_node(sc));
+
+    TRACE(("resuming encapsulated search\n"));
+    push_search_context();
+
+    CHECK_STACK(2);
+    regs.sp   -= 2;
+    regs.sp[0] = sc->sc.susp;
+    regs.sp[1] = sc->sc.var;
+    restore_search_space(sc->sc.ss);
+    GOTO(resume_continuation(sc->sc.code, sc->sc.rq));
+}
+
+@ 
+Arguments of a search goal -- unless copied into the current search
+space as by [[encapsulate]] below -- must not be updated within an
+encapsulated search. In order to prevent unintended updates, such
+arguments are wrapped in global reference nodes when [[try]] is
+applied to a search goal. There are two kinds of global reference
+nodes, global application nodes with kind [[GAPP_KIND]], which are not
+known to be in head normal form, and global variable nodes with kind
+[[GVAR_KIND]], which may point to a global free variable node. Note
+that at the point where a global reference node is examined by its
+search goal, a global application node may have been evaluated to head
+normal form and a global free variable instantiated to a non-variable
+term, respectively, by a concurrent computation in the global space.
+
+The evaluation method [[eval_global]] of a global application node
+first suspends the current search goal via [[suspend_search]] and then
+evaluates the referenced node in the global space. When a head normal
+form has been computed, it is copied into the local search space of
+the suspended search goal and the global application node is changed
+into an indirection to the copied node in order to avoid repeated
+evaluation in the global space.
+
+When a global free variable is detected during pattern matching, it
+cannot be instantiated within an encapsulated search. Instead, the
+search goal must be suspended until the variable has been instantiated
+by the enclosing computation. This is implemented in function
+[[sync_global]], which suspends the current search goal via
+[[suspend_search]] and then blocks the current thread in the global
+space. When the node has been instantiated, it is copied into the
+local space of the suspended search goal and the global variabl node
+is updated into an indirection to the copied node. Note that
+[[sync_global]] carefully avoids an expensive context switch to the
+enclosing search space when the global variable is instantiated to a
+non-variable term already.
+
+<<search.c>>=
+static
+FUNCTION(eval_global)
+{
+ ENTRY_LABEL(static, eval_global)
+    assert(!is_local_space(regs.r[0]->g.spc));
+    suspend_search(1, regs.r[0]->g.spc);
+    /* NB We ignore the return address (copy_result) set up by suspend_search
+     *    since we use our own code to copy the result */
+    CHECK_STACK1();
+    regs.sp   -= 1;
+    regs.sp[0] = regs.r[0];
+    regs.r[0]  = regs.r[0]->g.node;
+    EVAL(update_global);
+}
+
+FUNCTION(sync_global)
+{
+    Node	*node;
+    SearchSpace *spc;
+ ENTRY_LABEL(extern, sync_global)
+    assert(is_global_var_node(regs.r[0]) && !is_local_space(regs.r[0]->g.spc));
+    spc	 = regs.r[0]->g.spc;
+    node = regs.r[0]->g.node;
+    while ( is_tagged_ptr(node) )
+    {
+	switch ( node_tag(node) )
+	{
+	case INDIR_TAG:
+	    node = node->n.node;
+	    continue;
+	case LVAR_TAG:
+	    regs.r[1] = node;
+	    suspend_search(2, spc);
+	    /* NB We ignore the return address (copy_result) set up by
+	     *    suspend_search since we use our own code to copy the
+	     *    result */
+	    CHECK_STACK1();
+	    regs.sp   -= 1;
+	    regs.sp[0] = regs.r[0];
+	    CALL1(sync_var, update_global, regs.r[1]);
+	case EVAL_TAG:
+	    curry_panic("sync_global: unevaluated application\n");
+	default:
+	    node = copy_global(0, node, spc);
+	    break;
+	}
+	break;
+    }
+    RET(node);
+}
+
+static
+FUNCTION(update_global)
+{
+    Node *gref, *node;
+ ENTRY_LABEL(static, update_global)
+    node = copy_global(0, regs.r[0], regs.ss);
+    gref = regs.sp[0];
+    TRACE(("%I %N = %N\n", gref, node));
+#if !COPY_SEARCH_SPACE
+    if ( (word *)gref < regs.hlim )
+    {
+	assert(&gref->g.node == &gref->n.node);
+	DO_SAVE(gref, g.node);
+	gref->info++;
+    }
+    else
+#endif
+	gref->info = &indir_info;
+    gref->n.node = node;
+    RETURN(node, 1);
+}
+
+@ 
+The function [[copy_global]] copies a node from a global search space
+into the local search space adding global reference nodes in or around
+the copied node as necessary to enforce the write barrier for global
+nodes.
+
+<<search.c>>=
+Node *
+copy_global(unsigned int n_regs, Node *node, SearchSpace *spc)
+{
+    bool	 is_vect;
+    unsigned int n, sz;
+    Node	 *gref, **argp, *arg;
+    NodeInfo	 *info;
+
+    while ( is_tagged_ptr(node) &&
+	    node >= (Node *)heap_base && node < (Node *)regs.hp )
+    {
+	switch ( node_kind(node) )
+	{
+	case INDIR_KIND:
+	    node = node->n.node;
+	    continue;
+	case CAPP_KIND:
+	case EAPP_KIND:
+	case PAPP_KIND:
+	    is_vect = false;
+	    n	    = closure_argc(node);
+	    sz	    = node->info->length;
+	    break;
+	case VECTOR_KIND:
+	    is_vect = true;
+	    n	    = vector_argc(node);
+	    sz	    = node->a.length;
+	    break;
+	case SUSPEND_KIND:
+	case FAPP_KIND:
+	case QUEUEME_KIND:
+	    BEGIN_LOCAL_ROOTS2(node, spc)
+	    CHECK_HEAP(n_regs, global_ref_node_size);
+	    END_LOCAL_ROOTS
+	    gref	 = (Node *)regs.hp;
+	    gref->info   = global_app_info_table;
+	    gref->g.node = node;
+	    gref->g.spc  = spc;
+	    regs.hp	+= global_ref_node_size;
+
+	    node    = gref;
+	    is_vect = false;
+	    n = sz  = 0;
+	    break;
+	case LVAR_KIND:
+	    BEGIN_LOCAL_ROOTS2(node, spc)
+	    CHECK_HEAP(n_regs, global_ref_node_size);
+	    END_LOCAL_ROOTS
+	    gref	 = (Node *)regs.hp;
+	    gref->info   = global_var_info_table;
+	    gref->g.node = node;
+	    gref->g.spc  = spc;
+	    regs.hp	+= global_ref_node_size;
+
+	    node    = gref;
+	    is_vect = false;
+	    n = sz  = 0;
+	    break;
+	default:
+	    is_vect = false;
+	    n = sz  = 0;
+	    break;
+	}
+
+	if ( n > 0 )
+	{
+	    BEGIN_LOCAL_ROOTS2(node, spc)
+	    CHECK_HEAP(n_regs, sz + n * global_ref_node_size);
+	    END_LOCAL_ROOTS
+
+	    arg	 = node;
+	    node = (Node *)regs.hp;
+	    memcpy(node, arg, sz * word_size);
+	    regs.hp += sz;
+
+	    for ( argp = is_vect ? node->a.args : node->c.args;
+		  n > 0;
+		  argp++, n-- )
+	    {
+		arg = *argp;
+		while ( is_tagged_ptr(arg) &&
+			arg >= (Node *)heap_base && arg < (Node *)regs.hp )
+		{
+		    switch ( node_kind(arg) )
+		    {
+		    case INDIR_KIND:
+			arg = arg->n.node;
+			continue;
+		    case CAPP_KIND:
+		    case EAPP_KIND:
+		    case PAPP_KIND:
+			info =
+			    closure_argc(arg) > 0 ? global_var_info_table : 0;
+			break;
+		    case VECTOR_KIND:
+			info =
+			    vector_argc(arg) > 0 ? global_var_info_table : 0;
+			break;
+		    case SUSPEND_KIND:
+		    case FAPP_KIND:
+		    case QUEUEME_KIND:
+			info = global_app_info_table;
+			break;
+		    case LVAR_KIND:
+			info = global_var_info_table;
+			break;
+		    default:
+			info = 0;
+			break;
+		    }
+
+		    if ( info )
+		    {
+			gref	     = (Node *)regs.hp;
+			gref->info   = info;
+			gref->g.node = arg;
+			gref->g.spc  = spc;
+			regs.hp	    += global_ref_node_size;
+
+			*argp = gref;
+		    }
+		    break;
+		}
+	    }
+	}
+	break;
+    }
+    return node;
 }
 
 @ 
@@ -612,16 +939,14 @@ FUNCTION(__encapsulate)
     CHECK_HEAP(1, queueMe_node_size + variable_node_size);
     var		 = (Node *)regs.hp;
     var->info	 = variable_info_table;
-    var->v.spc	 = regs.ss;
     var->v.wq	 = 0;
     var->v.cstrs = 0;
     regs.hp	+= variable_node_size;
 
-    susp	= (Node *)regs.hp;
-    susp->info	= queueMe_info_table;
-    susp->q.spc = regs.ss;
-    susp->q.wq	= 0;
-    regs.hp    += queueMe_node_size;
+    susp       = (Node *)regs.hp;
+    susp->info = queueMe_info_table;
+    susp->q.wq = 0;
+    regs.hp   += queueMe_node_size;
 
     /* prepare the initial thread that evaluates the argument via v=:=e */
     CHECK_STACK(2);
@@ -641,7 +966,6 @@ FUNCTION(__encapsulate)
     CHECK_HEAP(0, search_cont_node_size + closure_node_size(1));
     sc		= (Node *)regs.hp;
     sc->info	= &search_cont_info;
-    sc->sc.spc	= regs.bp->btSpc;
     sc->sc.susp	= regs.sp[0];
     sc->sc.var	= regs.sp[1];
     sc->sc.code	= __encapsulate_1;

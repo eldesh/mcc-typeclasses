@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: trace.nw 2766 2009-03-26 08:59:48Z wlux $
+% $Id: trace.nw 2854 2009-05-29 12:33:07Z wlux $
 %
-% Copyright (c) 2001-2008, Wolfgang Lux
+% Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Tracing}
@@ -184,12 +184,20 @@ trace_shownode(int depth, Node *node)
 	case LVAR_KIND:
 	    fprintf(stderr, "var@%p", node);
 	    break;
+	case GVAR_KIND:
+	    fprintf(stderr, "gvar@%p[spc@%p]=", node, node->g.spc);
+	    trace_shownode(depth, node->g.node);
+	    break;
+	case GAPP_KIND:
+	    fprintf(stderr, "gapp@%p[spc@%p]=", node, node->g.spc);
+	    trace_shownode(depth, node->g.node);
+	    break;
 	case SUSPEND_KIND:
 	    fprintf(stderr, "app@%p=", node);
-	    argc = suspend_argc(node);
-	    if ( argc == 1 && node->s.args[0] == 0 )
+	    argc = closure_argc(node);
+	    if ( argc == 1 && node->c.args[0] == 0 )
 		argc = 0;
-	    trace_showapp(depth, node, argc, node->s.args);
+	    trace_showapp(depth, node, argc, node->c.args);
 	    break;
 	case QUEUEME_KIND:
 	    fprintf(stderr, "que@%p", node);
@@ -221,6 +229,9 @@ trace_shownode(int depth, Node *node)
 	case FOREIGN_PTR_KIND:
 	    fprintf(stderr, depth > 0 ? "(%s %p)" : "(%s ...)",
 		    node->info->cname, node->fp.ptr);
+	    break;
+	case MUTABLE_KIND:
+	    trace_showapp(depth, node, 1, &node->g.node);
 	    break;
 	case VECTOR_KIND:
 	    trace_showapp(depth, node, vector_argc(node), node->a.args);

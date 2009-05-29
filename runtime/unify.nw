@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2766 2009-03-26 08:59:48Z wlux $
+% $Id: unify.nw 2854 2009-05-29 12:33:07Z wlux $
 %
-% Copyright (c) 2001-2008, Wolfgang Lux
+% Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Unification}\label{sec:unification}
@@ -38,6 +38,7 @@ extern Node *eq_args(unsigned int, Node *, Node *, int);
 #include "stack.h"
 #include "eval.h"
 #include "threads.h"
+#include "search.h"
 #include "spaces.h"
 #include "trail.h"
 #include "equal.h"
@@ -101,6 +102,16 @@ FUNCTION(___61__58__61__2)
 	regs.r[0]  = arg2;
 	regs.sp[0] = arg1;
 	GOTO(unify_var);
+    }
+    else if ( is_tagged_ptr(arg1) && is_global_var_node(arg1) )
+    {
+	regs.sp[0] = arg2;
+	CALL1(sync_global, ___61__58__61__2, arg1);
+    }
+    else if ( is_tagged_ptr(arg2) && is_global_var_node(arg2) )
+    {
+	regs.sp[0] = arg1;
+	CALL1(sync_global, ___61__58__61__2, regs.r[0]);
     }
     else
     {
@@ -244,6 +255,7 @@ eq_root(Node *arg1, Node *arg2)
 	    if ( eq )
 		argc = vector_argc(arg1);
 	    break;
+	case MUTABLE_KIND:
 	case SEARCH_CONT_KIND:
 	case ABSTRACT_KIND:
 	    eq = arg1 == arg2;
@@ -400,9 +412,19 @@ eq_args(unsigned int n_regs, Node *arg1, Node *arg2, int n)
 		if ( x == y )
 		    continue;
 		break;
+	    case GVAR_KIND:
+	    case GAPP_KIND:
 	    case SUSPEND_KIND:
 	    case FAPP_KIND:
 	    case QUEUEME_KIND:
+		break;
+	    case MUTABLE_KIND:
+		if ( is_mutable_node(y) )
+		{
+		    if ( x != y )
+			return 0;
+		    continue;
+		}
 		break;
 	    case VECTOR_KIND:
 		if ( is_vector_node(y) )
@@ -519,11 +541,10 @@ FUNCTION(unify_args)
 	CALL_RET2(___61__58__61_, 1, arglist->c.args[0], arglist->c.args[1]);
 
     CHECK_HEAP(0, queueMe_node_size);
-    susp	= (Node *)regs.hp;
-    susp->info	= queueMe_info_table;
-    susp->q.spc	= regs.ss;
-    susp->q.wq	= 0;
-    regs.hp    += queueMe_node_size;
+    susp       = (Node *)regs.hp;
+    susp->info = queueMe_info_table;
+    susp->q.wq = 0;
+    regs.hp   += queueMe_node_size;
 
     arglist = regs.sp[0];
     CHECK_STACK1();
@@ -690,6 +711,7 @@ occurs(Node *var, Node *arg)
 	    argc = closure_argc(arg);
 	    argp = arg->c.args;
 	    break;
+	case GAPP_KIND:
 	case SUSPEND_KIND:
 	case FAPP_KIND:
 	case QUEUEME_KIND:
@@ -730,13 +752,8 @@ FUNCTION(unify_var)
     Node	 *var, *arg, *next, *arglist, **argp;
  ENTRY_LABEL(static, unify_var)
     if ( is_tagged_ptr(regs.sp[0]) && is_variable_node(regs.sp[0]) &&
-	 is_local_space(regs.sp[0]->v.spc) )
-    {
-	if ( regs.sp[0] > regs.r[0] || !is_local_space(regs.r[0]->v.spc) )
-	    SWAPn(0);
-    }
-    else if ( !is_local_space(regs.r[0]->v.spc) )
-	CALL1(sync_var, ___61__58__61__1, regs.r[0]);
+	 regs.sp[0] > regs.r[0] )
+	SWAPn(0);
 
     /* occurs check */
     var = regs.r[0];
@@ -792,7 +809,6 @@ FUNCTION(unify_var)
 		{
 		    var	= *argp	 = (Node *)regs.hp;
 		    var->info	 = variable_info_table;
-		    var->v.spc	 = regs.ss;
 		    var->v.wq	 = 0;
 		    var->v.cstrs = 0;
 		    regs.hp	+= variable_node_size;
@@ -862,7 +878,6 @@ unification between the two values.
 
 <<unify.c>>=
 DECLARE_LABEL(static, bind_var_1);
-DECLARE_LABEL(static, bind_var_2);
 DECLARE_LABEL(static, check_constraints);
 DECLARE_LABEL(static, check_constraints_1);
 DECLARE_LABEL(static, wake);
@@ -878,8 +893,7 @@ FUNCTION(bind_var)
     var	 = regs.r[0];
     node = regs.r[1];
 
-    if ( !is_tagged_ptr(var) || !is_variable_node(var) ||
-	 !is_local_space(var->v.spc) )
+    if ( !is_tagged_ptr(var) || !is_variable_node(var) )
     {
 	SAVE_RET1(node);
 	CALL2(___61__58__61_, bind_var_1, regs.r[0], regs.r[1]);
@@ -891,17 +905,12 @@ FUNCTION(bind_var)
     for (;;)
     {
 	if ( is_tagged_ptr(node) )
-	    switch ( node->info->tag )
+	    switch ( node->info->kind )
 	    {
-	    case INDIR_TAG:
+	    case INDIR_KIND:
 		node = node->n.node;
 		continue;
-	    case LVAR_TAG:
-		if ( !is_local_space(node->v.spc) && (wq || cstrs) )
-		{
-		    SAVE_RET1(var);
-		    CALL1(sync_var, bind_var_2, node);
-		}
+	    case LVAR_KIND:
 		is_var = true;
 		break;
 	    }
@@ -950,7 +959,7 @@ FUNCTION(bind_var)
     }
 
     /* we need to check the constraints of the other variable, too */
-    if ( is_var && is_local_space(node->v.spc) && node->v.cstrs )
+    if ( is_var && node->v.cstrs )
     {
         SAVE_RET1((Node *)node->v.cstrs);
 	regs.ret = check_constraints;
@@ -966,15 +975,6 @@ FUNCTION(bind_var_1)
 {
  ENTRY_LABEL(static, bind_var_1)
     RETURN(regs.sp[0], 1);
-}
-
-static
-FUNCTION(bind_var_2)
-{
-    Node *node;
- ENTRY_LABEL(static, bind_var_2)
-    node = regs.r[0];
-    CALL_RET2(bind_var, 1, regs.sp[0], node);
 }
 
 static

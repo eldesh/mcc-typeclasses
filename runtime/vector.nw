@@ -1,13 +1,18 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: vector.nw 2853 2009-05-29 11:55:01Z wlux $
+% $Id: vector.nw 2854 2009-05-29 12:33:07Z wlux $
 %
-% Copyright (c) 2002-2008, Wolfgang Lux
+% Copyright (c) 2002-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
-\subsection{Mutable Vectors}
-Mutable vectors are implemented essentially as tuples with an
-arbitrary length. We use the string \texttt{"(,)"} as closure name for
-vectors because this will make the printing code treat vectors as tuples.
+\subsection{Mutable and Immutable Vectors}
+Immutable vectors are implemented as tuples with an arbitrary length.
+We use the string \texttt{"(,)"} as closure name for vectors because
+this will make the printing code treat vectors as tuples. Mutable
+vectors are implemented by wrapping a plain vector node in a mutable
+reference node, which records the search space where the mutable
+vector was allocated. Note that the only way to construct new
+immutable vectors is by converting a mutable vector with
+[[freezeIOVector]] or [[unsafeFreezeIOVector]].
 
 <<vector.c>>=
 #include "config.h"
@@ -19,10 +24,19 @@ vectors because this will make the printing code treat vectors as tuples.
 #include "run.h"
 #include "regs.h"
 #include "heap.h"
-#include "eval.h"
+#include "stack.h"
 #include "trail.h"
+#include "spaces.h"
+#include "search.h"
+#include "eval.h"
 #include "io_monad.h"
-#include "vector.h"
+#include "cam.h"
+
+#define iovector_node_size global_ref_node_size
+
+static NodeInfo iovector_info = {
+    MUTABLE_KIND, 0, iovector_node_size, 0, "<IOVector>", eval_whnf, 0, 0, 0
+};
 
 static NodeInfo vector_info = {
     VECTOR_KIND, 0, 0, 0, "(,)", eval_whnf, 0, 0, 0
@@ -33,133 +47,73 @@ static const struct vector_node empty = {
 };
 
 @ 
-The function [[primNewIOVector]] allocates a new vector with the
-specified length and assigns an initial value to every element of the
-vector. The initial value is passed in the form \texttt{Wrap}~$e$ in
-order to prevent evaluation of $e$ by the foreign function interface
-code.
-
-<<vector.h>>=
-extern Node *primNewIOVector(Node *, Node *);
-
-@ 
-<<vector.c>>=
-Node *
-primNewIOVector(Node *len, Node *wrappedArg)
-{
-    long i, n;
-    Node *init, *vec;
-
-    n = long_val(len);
-    if ( n < 0 )
-	fail_with("newIOVector: negative length (%ld)", n);
-
-    if ( n == 0 )
-	vec = (Node *)&empty;
-    else
-    {
-	init = wrappedArg->c.args[0];
-	while ( is_tagged_ptr(init) && is_indir_node(init) )
-	    init = init->n.node;
-
-	BEGIN_LOCAL_ROOTS1(init)
-	CHECK_HEAP(0, vector_node_size(n));
-	vec	      = (Node *)regs.hp;
-	vec->info     = &vector_info;
-	vec->a.length = vector_node_size(n);
-	for ( i = 0; i < n; i++ )
-	    vec->a.args[i] = init;
-	regs.hp	     += vector_node_size(n);
-	END_LOCAL_ROOTS
-    }
-
-    return vec;
-}
-
-@ 
-The function [[primCopyIOVector]] creates a copy of a vector. The copy
-of an empty vector is always the vector itself.
-
-<<vector.h>>=
-extern Node *primCopyIOVector(Node *);
-
-@ 
-<<vector.c>>=
-Node *
-primCopyIOVector(Node *vec)
-{
-    if ( vector_argc(vec) > 0 )
-    {
-	BEGIN_LOCAL_ROOTS1(vec)
-	CHECK_HEAP(0, vec->a.length);
-	memcpy(regs.hp, vec, vec->a.length * word_size);
-	vec	 = (Node *)regs.hp;
-	regs.hp += vec->a.length;
-	END_LOCAL_ROOTS
-    }
-
-    return vec;
-}
-
-@ 
-The function [[primReadIOVector]] returns the $i$th element of a
+The function [[readVector]] returns the $i$th element of an immutable
 vector. If the index is out of range, the program fails.
 
-<<vector.h>>=
-extern Node *primReadIOVector(Node *, Node *);
-
-@ 
 <<vector.c>>=
-Node *
-primReadIOVector(Node *vec, Node *ofs)
+DECLARE_LABEL(extern, __readVector);
+DECLARE_LABEL(static, __readVector_1);
+DECLARE_LABEL(static, __readVector_2);
+
+FUNCTION(__readVector)
 {
-    long i = long_val(ofs);
+ ENTRY_LABEL(extern, __readVector)
+    SAVE_REGS(1);
+    EVAL_NODE(__readVector_1);
+}
+
+static
+FUNCTION(__readVector_1)
+{
+ ENTRY_LABEL(static, __readVector_1)
+    MATCH_RIGID_VECTOR(__readVector_1);
+    SWAPn(0);
+    EVAL(__readVector_2);
+}
+
+static
+FUNCTION(__readVector_2)
+{
+    long i;
+    Node *vec, *node;
+ ENTRY_LABEL(static, __readVector_2)
+    MATCH_RIGID_INT(__readVector_2);
+    i	= long_val(regs.r[0]);
+    vec = regs.sp[0];
 
     if ( i < 0 || (unsigned long)i >= vector_argc(vec) )
-	fail_with("readIOVector: index out range (%ld)", i);
-    return vec->a.args[i];
+	fail_with("readVector: index out range (%ld)", i);
+
+    node = vec->a.args[i];
+    if ( is_tagged_ptr(node) )
+	ENTER(node, 1);
+    RETURN(node, 1);
 }
 
 @ 
-The function [[primWriteIOVector]] updates the $i$th element of a
-vector. As for [[primReadIOVector]], the program fails if the index is
-out of range. The assigned value is passed in the form
-\texttt{Wrap}~$e$ in order to prevent evaluation of $e$ by the foreign
-function interface code. The old value of the $i$th element is
-recorded on the trail in order prevent program crashes when mutable
-vectors are used in non-deterministic code via [[unsafePerformIO]].
+The function [[lengthVector]] returns the length of an immutable
+vector.
 
-<<vector.h>>=
-extern void primWriteIOVector(Node *, Node *, Node *);
-
-@ 
 <<vector.c>>=
-void
-primWriteIOVector(Node *vec, Node *ofs, Node *wrappedArg)
-{
-    long i = long_val(ofs);
+DECLARE_LABEL(extern, __lengthVector);
+DECLARE_LABEL(static, __lengthVector_1);
 
-    if ( i < 0 || (unsigned long)i >= vector_argc(vec) )
-	fail_with("writeIOVector: index out range (%ld)", i);
-    SET_FIELD(vec, a.args[i], wrappedArg->c.args[0]);
+FUNCTION(__lengthVector)
+{
+ ENTRY_LABEL(extern, __lengthVector)
+    SAVE_REGS(0);
+    EVAL_NODE(__lengthVector_1);
 }
 
-@ 
-The function [[primLengthIOVector]] returns the length of a vector,
-i.e., the number of elements that can be stored in the vector.
-
-<<vector.h>>=
-extern Node *primLengthIOVector(Node *);
-
-@ 
-<<vector.c>>=
-Node *
-primLengthIOVector(Node *vec)
+static
+FUNCTION(__lengthVector_1)
 {
     long n;
     Node *r;
+ ENTRY_LABEL(static, __lengthVector_1)
+    MATCH_RIGID_VECTOR(__lengthVector_1);
+    n = vector_argc(regs.r[0]);
 
-    n = vector_argc(vec);
 #if !NO_POINTER_TAGS
     if ( !is_large_int(n) )
 	r = tag_int(n);
@@ -172,6 +126,380 @@ primLengthIOVector(Node *vec)
 	r->i.i	 = n;
 	regs.hp += int_node_size;
     }
+    RETURN(r, 0);
+}
 
-    return r;
+@ 
+The function [[newIOVector]] allocates a new mutable vector with a
+specified length and assigns an initial value to every element of the
+vector.
+
+<<vector.c>>=
+DECLARE_LABEL(extern, __newIOVector);
+DECLARE_LABEL(static, __newIOVector_1);
+
+FUNCTION(__newIOVector)
+{
+ ENTRY_LABEL(extern, __newIOVector)
+    SAVE_REGS(1);
+    EVAL(__newIOVector_1);
+}
+
+static
+FUNCTION(__newIOVector_1)
+{
+    long i, n;
+    Node *init, *vec, *iov;
+ ENTRY_LABEL(static, __newIOVector_1)
+    MATCH_RIGID_INT(__newIOVector_1);
+    n = long_val(regs.r[0]);
+    if ( n < 0 )
+	fail_with("newIOVector: negative length (%ld)", n);
+
+    CHECK_HEAP(0, vector_node_size(n) + iovector_node_size);
+    if ( n == 0 )
+	vec = (Node *)&empty;
+    else
+    {
+	init = regs.sp[0];
+	while ( is_tagged_ptr(init) && is_indir_node(init) )
+	    init = init->n.node;
+	vec	      = (Node *)regs.hp;
+	vec->info     = &vector_info;
+	vec->a.length = vector_node_size(n);
+	for ( i = 0; i < n; i++ )
+	    vec->a.args[i] = init;
+	regs.hp	     += vector_node_size(n);
+    }
+
+    iov		= (Node *)regs.hp;
+    iov->info	= &iovector_info;
+    iov->g.node	= vec;
+    iov->g.spc	= regs.ss;
+    regs.hp    += iovector_node_size;
+
+    RETURN(iov, 1);
+}
+
+@ 
+The function [[readIOVector]] returns the $i$th element of a mutable
+vector. If the index is out of range, the program fails. The element
+is \emph{not} evaluated to head normal form because the IO monad is
+lazy.
+
+<<vector.c>>=
+DECLARE_LABEL(extern, __readIOVector);
+DECLARE_LABEL(static, __readIOVector_1);
+DECLARE_LABEL(static, __readIOVector_2);
+
+FUNCTION(__readIOVector)
+{
+ ENTRY_LABEL(extern, __readIOVector)
+    SAVE_REGS(1);
+    EVAL_NODE(__readIOVector_1);
+}
+
+static
+FUNCTION(__readIOVector_1)
+{
+ ENTRY_LABEL(static, __readIOVector_1)
+    MATCH_RIGID_MUTABLE(__readIOVector_1);
+    assert(regs.r[0]->info == &iovector_info);
+    assert(is_vector_node(regs.r[0]->g.node));
+    SWAPn(0);
+    EVAL(__readIOVector_2);
+}
+
+static
+FUNCTION(__readIOVector_2)
+{
+    long i;
+    Node *iov, *vec, *node;
+ ENTRY_LABEL(static, __readIOVector_2)
+    MATCH_RIGID_INT(__readIOVector_2);
+    i	= long_val(regs.r[0]);
+    iov = regs.sp[0];
+    vec = iov->g.node;
+
+    if ( i < 0 || (unsigned long)i >= vector_argc(vec) )
+	fail_with("readIOVector: index out range (%ld)", i);
+
+    node = vec->a.args[i];
+    if ( !is_local_space(iov->g.spc) )
+	node = copy_global(0, node, iov->g.spc);
+
+    RETURN(node, 1);
+}
+
+@ 
+The function [[writeIOVector]] updates the $i$th element of a mutable
+vector. As for [[readIOVector]], the program fails if the index is out
+of range. The old value of the $i$th element is recorded on the trail
+in order to prevent program crashes when mutable vectors are used in
+non-deterministic code via [[unsafePerformIO]].
+
+It is possible to write to a mutable vector defined in an enclosing
+search space, but we must be careful to \emph{copy} the assigned node
+into the search space of the mutable vector in order to prevent local
+nodes from escaping their scope. Note that copying breaks
+sharing. Thus, after evaluating the code
+\begin{verbatim}
+  let u free in unsafePerformIO (writeIOVector v 0 u >> writeIOVector v 1 u)
+\end{verbatim}
+in a search goal, the vector \texttt{v} will contain two
+\emph{distinct} variables instead of just one if \texttt{v} is a
+global vector and these variables are both distinct from \texttt{u}.
+
+<<vector.c>>=
+DECLARE_LABEL(extern, __writeIOVector);
+DECLARE_LABEL(static, __writeIOVector_1);
+DECLARE_LABEL(static, __writeIOVector_2);
+
+FUNCTION(__writeIOVector)
+{
+ ENTRY_LABEL(extern, __writeIOVector)
+    SAVE_REGS(2);
+    EVAL_NODE(__writeIOVector_1);
+}
+
+static
+FUNCTION(__writeIOVector_1)
+{
+ ENTRY_LABEL(static, __writeIOVector_1)
+    MATCH_RIGID_MUTABLE(__writeIOVector_1);
+    assert(regs.r[0]->info == &iovector_info);
+    assert(is_vector_node(regs.r[0]->g.node));
+    SWAPn(0);
+    EVAL(__writeIOVector_2);
+}
+
+static
+FUNCTION(__writeIOVector_2)
+{
+    long i;
+    Node *iov, *vec;
+ ENTRY_LABEL(static, __writeIOVector_2)
+    MATCH_RIGID_INT(__writeIOVector_2);
+    i	= long_val(regs.r[0]);
+    iov = regs.sp[0];
+    vec	= iov->g.node;
+
+    if ( i < 0 || (unsigned long)i >= vector_argc(vec) )
+	fail_with("writeIOVector: index out range (%ld)", i);
+    if ( !is_local_space(iov->g.spc) )
+    {
+	SearchSpace *spc;
+
+	regs.r[0] = iov;
+	regs.r[1] = regs.sp[1];
+	regs.ret  = (Label)regs.sp[2];
+	regs.sp	 += 3;
+	BEGIN_LOCAL_ROOTS1(spc)
+	do
+	{
+	    assert(regs.bp);
+	    spc = regs.ss;
+	    suspend_search(2, regs.bp->btSpc);
+	    regs.r[1] = copy_graph(2, regs.r[1], spc);
+	}
+	while ( !is_local_space(regs.r[0]->g.spc) );
+	END_LOCAL_ROOTS
+	SET_FIELD(regs.r[0]->g.node, a.args[i], regs.r[1]);
+	RET(unit);
+    }
+    SET_FIELD(vec, a.args[i], regs.sp[1]);
+    RETURN(unit, 2);
+}
+
+@ 
+The pure function [[lengthIOVector]] returns the length of a mutable
+vector, i.e., the number of elements that can be stored in the vector.
+
+<<vector.c>>=
+DECLARE_LABEL(extern, __lengthIOVector);
+DECLARE_LABEL(static, __lengthIOVector_1);
+
+FUNCTION(__lengthIOVector)
+{
+ ENTRY_LABEL(extern, __lengthIOVector)
+    SAVE_REGS(0);
+    EVAL_NODE(__lengthIOVector_1);
+}
+
+static
+FUNCTION(__lengthIOVector_1)
+{
+    long n;
+    Node *r;
+ ENTRY_LABEL(static, __lengthIOVector_1)
+    MATCH_RIGID_MUTABLE(__lengthIOVector_1);
+    assert(regs.r[0]->info == &iovector_info);
+    assert(is_vector_node(regs.r[0]->g.node));
+    n = vector_argc(regs.r[0]->g.node);
+
+#if !NO_POINTER_TAGS
+    if ( !is_large_int(n) )
+	r = tag_int(n);
+    else
+#endif
+    {
+	CHECK_HEAP(0, int_node_size);
+	r	 = (Node *)regs.hp;
+	r->info	 = &int_info;
+	r->i.i	 = n;
+	regs.hp += int_node_size;
+    }
+    RETURN(r, 0);
+}
+
+@ 
+The function [[freezeIOVector]] converts a mutable vector into an
+immutable vector.
+
+<<vector.c>>=
+DECLARE_LABEL(extern, __freezeIOVector);
+DECLARE_LABEL(static, __freezeIOVector_1);
+
+FUNCTION(__freezeIOVector)
+{
+ ENTRY_LABEL(extern, __freezeIOVector)
+    SAVE_REGS(0);
+    EVAL_NODE(__freezeIOVector_1);
+}
+
+static
+FUNCTION(__freezeIOVector_1)
+{
+    unsigned int sz;
+    Node	 *iov, *vec;
+ ENTRY_LABEL(static, __freezeIOVector_1)
+    MATCH_RIGID_MUTABLE(__freezeIOVector_1);
+    assert(regs.r[0]->info == &iovector_info);
+    iov = regs.r[0];
+    vec = iov->g.node;
+    assert(is_vector_node(vec));
+
+    if ( !is_local_space(iov->g.spc) )
+	vec = copy_global(0, vec, iov->g.spc);
+    else if ( vector_argc(vec) > 0 )
+    {
+	sz = vec->a.length;
+	CHECK_HEAP(1, sz);
+	vec = (Node *)regs.hp;
+	memcpy(vec, regs.r[0]->g.node, sz * word_size);
+	regs.hp += sz;
+    }
+
+    RETURN(vec, 0);
+}
+
+@ 
+The function [[unsafeFreezeIOVector]] is a more efficient variant of
+[[freezeIOVector]], which returns the plain vector directly instead of
+creating a copy. This is safe only when the frozen vector is not
+updated in the remaining program.
+
+<<vector.c>>=
+DECLARE_LABEL(extern, __unsafeFreezeIOVector);
+DECLARE_LABEL(static, __unsafeFreezeIOVector_1);
+
+FUNCTION(__unsafeFreezeIOVector)
+{
+ ENTRY_LABEL(extern, __unsafeFreezeIOVector)
+    SAVE_REGS(0);
+    EVAL_NODE(__unsafeFreezeIOVector_1);
+}
+
+static
+FUNCTION(__unsafeFreezeIOVector_1)
+{
+    Node *iov, *vec;
+ ENTRY_LABEL(static, __unsafeFreezeIOVector_1)
+    MATCH_RIGID_MUTABLE(__unsafeFreezeIOVector_1);
+    assert(regs.r[0]->info == &iovector_info);
+    iov = regs.r[0];
+    vec = iov->g.node;
+    assert(is_vector_node(vec));
+
+    if ( !is_local_space(iov->g.spc) )
+	vec = copy_global(0, vec, iov->g.spc);
+
+    RETURN(vec, 0);
+}
+
+@ 
+The function [[thawIOVector]] converts an immutable vector into a
+mutable vector.
+
+<<vector.c>>=
+DECLARE_LABEL(extern, __thawIOVector);
+DECLARE_LABEL(static, __thawIOVector_1);
+
+FUNCTION(__thawIOVector)
+{
+ ENTRY_LABEL(extern, __thawIOVector)
+    SAVE_REGS(0);
+    EVAL_NODE(__thawIOVector_1);
+}
+
+static
+FUNCTION(__thawIOVector_1)
+{
+    unsigned int sz;
+    Node	 *vec, *iov;
+ ENTRY_LABEL(static, __thawIOVector_1)
+    MATCH_RIGID_VECTOR(__thawIOVector_1);
+    sz = regs.r[0]->a.length;
+
+    CHECK_HEAP(1, sz + iovector_node_size);
+    if ( vector_argc(regs.r[0]) == 0 )
+	vec = regs.r[0];
+    else
+    {
+	vec = (Node *)regs.hp;
+	memcpy(vec, regs.r[0], sz * word_size);
+	regs.hp += sz;
+    }
+
+    iov		= (Node *)regs.hp;
+    iov->info	= &iovector_info;
+    iov->g.node	= vec;
+    iov->g.spc	= regs.ss;
+    regs.hp    += iovector_node_size;
+
+    RETURN(iov, 0);
+}
+
+@ 
+The function [[unsafeThawIOVector]] is a more efficient variant of
+[[thawIOVector]], which does not create a copy of the thawed vector.
+This is safe only when the thawed vector is not updated or the plain
+vector is not used in the remaining program.
+
+<<vector.c>>=
+DECLARE_LABEL(extern, __unsafeThawIOVector);
+DECLARE_LABEL(static, __unsafeThawIOVector_1);
+
+FUNCTION(__unsafeThawIOVector)
+{
+ ENTRY_LABEL(extern, __unsafeThawIOVector)
+    SAVE_REGS(0);
+    EVAL_NODE(__unsafeThawIOVector_1);
+}
+
+static
+FUNCTION(__unsafeThawIOVector_1)
+{
+    Node *iov;
+ ENTRY_LABEL(static, __unsafeThawIOVector_1)
+    MATCH_RIGID_VECTOR(__unsafeThawIOVector_1);
+
+    CHECK_HEAP(1, iovector_node_size);
+    iov		= (Node *)regs.hp;
+    iov->info	= &iovector_info;
+    iov->g.node	= regs.r[0];
+    iov->g.spc	= regs.ss;
+    regs.hp    += iovector_node_size;
+
+    RETURN(iov, 0);
 }

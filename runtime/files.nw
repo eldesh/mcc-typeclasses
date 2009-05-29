@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: files.nw 2853 2009-05-29 11:55:01Z wlux $
+% $Id: files.nw 2854 2009-05-29 12:33:07Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -589,9 +589,6 @@ primHGetLine(Node *hdl)
 	    CHECK_HEAP(0, indir_node_size);
 	    cont	 = (Node *)regs.hp;
 	    cont->info	 = &indir_info;
-#if !COPY_SEARCH_SPACE
-	    cont->n.spc	 = regs.ss;
-#endif
 	    cont->n.node = nil;
 	    regs.hp	+= indir_node_size;
 	}
@@ -637,14 +634,10 @@ FUNCTION(eval_lazy_1)
     Node  *susp;
     Label entry;
  ENTRY_LABEL(static, eval_lazy_1)
-    /* suspend the search if the node is not local */
-    if ( !is_local_space(regs.r[0]->s.spc) )
-	suspend_search(1, regs.r[0]->s.spc);
-
     /* get the argument */
     susp      = regs.r[0];
     entry     = susp->info->entry;
-    regs.r[0] = susp->s.args[0];
+    regs.r[0] = susp->c.args[0];
 
     /* create an indirection if there is an update frame immediately above */
     if ( regs.ret == update )
@@ -711,8 +704,7 @@ FUNCTION(lazyRead)
 
 	    tail	    = (Node *)regs.hp;
 	    tail->info	    = lazyRead_lazy_info_table;
-	    tail->s.spc	    = regs.ss;
-	    tail->s.args[0] = regs.r[0];
+	    tail->c.args[0] = regs.r[0];
 	    regs.hp	   += suspend_node_size(1);
 
 	    list	    = (Node *)regs.hp;
@@ -746,8 +738,7 @@ primHGetContents(Node *hdl)
     CHECK_HEAP(0, suspend_node_size(1));
     susp	    = (Node *)regs.hp;
     susp->info	    = lazyRead_lazy_info_table;
-    susp->s.spc	    = regs.ss;
-    susp->s.args[0] = hdl;
+    susp->c.args[0] = hdl;
     regs.hp	   += suspend_node_size(1);
     END_LOCAL_ROOTS
 

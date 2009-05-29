@@ -1,22 +1,21 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 2766 2009-03-26 08:59:48Z wlux $
+% $Id: spaces.nw 2854 2009-05-29 12:33:07Z wlux $
 %
-% Copyright (c) 2003-2008, Wolfgang Lux
+% Copyright (c) 2003-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Managing Search Spaces}\label{sec:spaces}
 By default, the runtime system uses an extended trailing scheme in
 order to manage multiple bindings for variables and shared
 applications in encapsulated search. A new search space is created
-each time [[try]] is applied to a new search goal. Variable nodes and
-shared lazy applications are tagged with the search space that was
-active at the time of their allocation. Search spaces are organized in
-trees with the root space corresponding to the initial evaluation of a
-particular search goal, and the other nodes of that tree corresponding
-to different evaluation states of that goal. Within each tree, the
-bindings of only one space are active at each time. A pointer to this
-space is recorded in the [[s.active]] field of the root space. The
-current search space is maintained in the register [[regs.ss]].
+each time [[try]] is applied to a new search goal. Search spaces are
+organized in trees with the root space corresponding to the initial
+evaluation of a particular search goal, and the other nodes of that
+tree corresponding to different evaluation states of that goal. Within
+each tree, the bindings of only one space are active at each time. A
+pointer to this space is recorded in the [[s.active]] field of the
+root space. The current search space is maintained in the register
+[[regs.ss]].
 
 \textbf{Invariant}: The runtime system preserves the invariant
 [[regs.ss->root->s.active == regs.ss]]. The garbage collector makes
@@ -33,8 +32,8 @@ The runtime system can also be configured to use a copying
 implementation of encapsulated search~\cite{Lux04:CopyTrail}, where a
 copy of the search goal is used whenever the evaluation of a partially
 solved search goal is continued. In that case, search spaces only
-serve as tags that allow distinguishing local and non-local variables
-and shared lazy applications, respectively, and carry no further
+serve as tags that allow distinguishing global and local shared lazy
+applications and logical variables, respectively, and carry no further
 information.
 
 <<spaces.h>>=
@@ -79,22 +78,23 @@ struct search_space {
 static void switch_bindings(SearchSpace *space);
 static void set_safe_ancestor(SearchSpace *space, Choicepoint *cp);
 #endif
-static Node *copy_node(Node *node, SearchSpace *space);
+static Node *copy_node(Node *node, SearchSpace *space, bool is_local);
 
 static NodeInfo search_space_info = {
     SEARCH_SPACE_KIND, 0, wordsof(struct search_space), 0, 0, no_eval, 0, 0, 0
 };
 
 @ 
-Each variable and shared application is tagged with the search space
-in which it was created. A node is considered local when its search
-space and the current search space have the same root.
+In the standard trail based runtime system configuration two search
+spaces are considered equivalent if they have a common root. In the
+copying runtime system configuration, a space is only equivalent to
+itself.
 
 <<spaces.h>>=
 #if !COPY_SEARCH_SPACE
-# define is_local_space(space) ((space)->root == regs.ss->root)
+# define is_local_space(space)	((space)->root == regs.ss->root)
 #else
-# define is_local_space(space) ((space) == regs.ss)
+# define is_local_space(space)	((space) == regs.ss)
 #endif
 
 @ 
@@ -258,12 +258,12 @@ if ( active->s.script )
 }
 
 @ 
-We have to be a little bit careful with the lazy update strategy in
-conjunction with the immediate release upon failure policy employed by
-the runtime system. If a search goal is evaluated inside another
-encapsulated search or within a global backtracking search, failure of
-the outer search may leave dangling pointers in the heap because the
-active space of the inner search goal may have become garbage. For that
+We must be careful with the lazy update strategy in conjunction with
+the immediate release upon failure policy employed by the runtime
+system. If a search goal is evaluated inside another encapsulated
+search or within a global backtracking search, failure of the outer
+search may leave dangling pointers in the heap because the active
+space of the inner search goal may have become garbage. For that
 reason, we always set the [[s.active]] pointer in the root space to a
 ``safe'' space, which is a space that is allocated in the same heap
 segment as the root space. To that end, the runtime system must call
@@ -339,7 +339,7 @@ set_safe_ancestor(SearchSpace *active, Choicepoint *cp)
 
 @ 
 The function [[new_search_space]] allocates a new empty search space
-for a search goal and assigns it to the register [[regs.ss]]. The new
+for a search goal and assigns it to register [[regs.ss]]. The new
 space is its own root and its (non-existent) bindings are considered
 active.
 
@@ -508,7 +508,7 @@ discard_search_space()
 
 @
 The function [[restore_search_space]] restores the bindings of a
-search space and assigns it to the register [[regs.ss]].
+search space and assigns it to register [[regs.ss]].
 
 <<spaces.h>>=
 #if !COPY_SEARCH_SPACE
@@ -530,15 +530,19 @@ restore_search_space(SearchSpace *space)
 #endif
 
 @ 
-When a search goal is restored into another search space that
-is not a root space, it must be copied into that search space. Copying
-is performed by the function [[copy_graph]], which is also used for
-copying the solution of a solved goal into the current search
-space. As a special case, [[copy_graph]] copies all nodes on the stack
-and the ready queue if [[graph == 0]] and the runtime system has been
-configured with the [[--enable-copying]] option. This special case is
-used in order to create a copy of the current state of the computation
-at a non-deterministic choice in global search.
+When a search goal is continued by another search goal whose search
+space is not a root space, the graph of the continued goal must be
+copied into the current search space. Copying is performed by the
+function [[copy_graph]]. As a special case, [[copy_graph]] copies all
+nodes on the stack and the ready queue if [[graph == 0]] and the
+runtime system has been configured with the [[--enable-copying]]
+option. This special case is used in order to create a copy of the
+current state of the computation at a non-deterministic choice in
+global search. The [[space]] argument is the local search space of the
+copied search goal. Global references to nodes in an enclosing search
+space are shared during copying. If [[space == 0]], all nodes
+reachable from [[graph]] are copied into the current space. This is
+used to implement encapsulated search with strong encapsulation.
 
 <<spaces.h>>=
 extern Node *copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space);
@@ -576,7 +580,7 @@ static Node **alloc;			/* temp. allocation pointer */
 static Node **ntp;			/* used for saving updated node */
 
 @
-We use the least significant bit in the info pointer of a node to mark
+We use the least significant bit of the info pointer of a node to mark
 forwarding pointers.
 
 <<spaces.c>>=
@@ -596,68 +600,97 @@ static jmp_buf restart_copy;
 @
 The function [[copy_node]] copies a single node from the graph. If the
 node is allocated outside the heap or is a constant, a pointer to the
-original node is returned. The same is true for non-local variables,
-shared applications, and search continuations when [[space != 0]].
-When [[copy_node]] is called with a node that has been copied
-(forwarded) to the current search space already, the new address of
-the copied node is returned. For all other nodes, including non-local
-variables, shared applications, and search continuations when
-[[space == 0]], [[copy_node]] creates a copy of the node, writes a
-forwarding pointer to the original node, and returns the new address
-of the copied node.
+original node is returned. When [[copy_node]] is called with a node
+that has been copied (forwarded) to the current search space already,
+the new address of the copied node is returned. For all other nodes,
+[[copy_node]] creates a copy of the node, writes a forwarding pointer
+to the original node, and returns the new address of the copied node.
 
-A special case is made for search space nodes. Since the purpose of
-[[copy_graph]] is to copy a graph into the current search space,
-[[copy_node]] in general returns the current search space when it is
-called with a non-forwarded search space node. However, if the address
-of that node is equal to the [[space]] argument, a copy of the search
-space is created. This is used by [[copy_search_space]] to copy the
-local search space tree of a search continuation (see below). Note
-that [[copy_graph]] calls [[copy_node]] only for the root of the graph
-and for nodes that have been copied already. The search space of the
-root of the graph is forwarded to the current search space at the
-beginning of [[copy_graph]] and nodes that have been copied into the
-current search space can contain pointers to non-forwarded search
-spaces only when [[space == 0]]. Thus, the special exception for
-[[copy_search_space]] cannot lead to a search space node being
-unintentionally copied.
+Global references require special treatment during copying. In order
+to maintain the invariant that during pattern matching the search
+space field of a matched global reference node does not point to the
+current search space, [[copy_node]] must not copy a global reference
+node that is referenced from a node in the copied graph's search space       %'
+and references a node in the current search space. Instead, a pointer
+to the referenced node is returned. In order to detect references from
+the copied graph's search space the [[is_local]] argument of                 %'
+[[copy_node]] is used. When this flag is [[true]], the node passed to
+[[copy_node]] is reached from the copied graph's search space;               %'
+otherwise, the node is reached from a local search continuation of the
+copied graph.
 
-One has to be careful when the copied graph contains (local) search
-continuations. Since these continuations may contain references to
-other nodes from the copied graph, they have to be copied as well
-using fresh search spaces. There are two options here. Either one can
-create a fresh root space for each local search space encountered, or
-one retains the original search tree structure. We have chosen the
-latter option because the copying algorithm uses a breadth first
-traversal, whereas copying local continuations into fresh root spaces
-requires a depth first traversal in order to ensure that the local
-bindings of a space are in effect while its nodes are begin copied. We
-duplicate the search continuation's local search space tree by calling        %'
+In general, the [[is_local]] flag is propagated to the children of a
+copied node. The only exceptions are search continuations and global
+and mutable reference nodes, whose referenced nodes all belong to the
+search space determined by the search continuation or reference node's       %'
+search space field. Due to the breadth-first traversal of the copied
+graph employed by [[copy_graph]] we must save the value of the
+[[is_local]] flag along with the copied graph. We use the policy to
+temporarily mark nodes whose children are allocated in a search space
+of a local search continuation by setting the least significant bit of
+the info pointer of the copied node. Note that there is no danger of
+confusing forwarded and marked nodes, since the former occur only in
+the original graph and the latter only in the copied graph.
+
+A special case is made for search space nodes. Recall that search
+space nodes are referenced only from search continuation, global
+reference, and mutable reference nodes. The local search space of a
+search continuation is always copied to a fresh search space via
+[[copy_search_space]], which in turn calls [[copy_node]] with
+[[is_local == false]] (see below). As explained above, global
+reference nodes are copied only if their search space has been
+forwarded already and mutable references are copied if their search
+space has been forwarded already or [[space == 0]]. Thus, the
+[[SEARCH_CONT_KIND]] case is entered only when [[copy_node]] is called
+from [[copy_search_cont]] and when it is called from the main loop of
+[[copy_graph]] for the search space field of a copied mutable
+reference node. Apparently, the copied node belongs to the current
+search space in the latter case when its search space has not been
+forwarded to a fresh space and therefore its search space pointer is
+updated accordingly.
+
+One has to be careful when the copied graph contains nested search
+continuations. Since these continuations may contain global references
+into outer search spaces, they have to be copied as well using fresh
+search spaces. There are two options here. Either one can create a
+fresh root space for each local search space encountered, or one
+retains the original search tree structure. We have chosen the latter
+option because the copying algorithm uses a breadth first traversal,
+whereas copying local continuations into fresh root spaces requires a
+depth first traversal in order to ensure that the local bindings of a
+space are in effect while its nodes are being copied. We duplicate the
+search continuation's local search space tree by calling                     %'
 [[copy_search_tree]] for it when the continuation node is copied.
 
 Due to the breadth first traversal of the graph, we cannot activate
 the bindings of a particular local search space during copying.
 Therefore, we must not shorten any indirection chains within those
 spaces. Shortening is valid only for indirection nodes from the copied
-graph as well as for indirections in outer search spaces. Note that
-this restriction does not apply when the runtime system is configured
-to use a copying implementation of encapsulated search. In that case,
-all indirection chains can be shortened.
+graph. Note that this restriction does not apply when the runtime
+system is configured to use a copying implementation of encapsulated
+search. In that case, all indirection chains can be shortened.
 
 Actually, copying of local continuations could be avoided for
-continuations that are closed, i.e., which do not reference any
-non-local nodes. However, the runtime system currently offers no means
-to check whether a search continuation is closed.
+continuations that are closed, i.e., which do not reference any global
+nodes. Unfortunately, the runtime system currently offers no efficient
+means to check whether a search continuation is closed.
 
 <<spaces.c>>=
+#define MARK_FLAG		0x01
+#define is_marked(node)		((long)(node)->info & MARK_FLAG)
+#define mark_node(node) \
+    ((node)->info = (NodeInfo *)((long)(node)->info | MARK_FLAG))
+#define unmark_node(node) \
+    ((node)->info = (NodeInfo *)((long)(node)->info & ~MARK_FLAG))
+
 #if !COPY_SEARCH_SPACE
 static void copy_search_space(SearchSpace *spc);
 #else
-# define copy_search_space(spc) copy_node((Node *)(spc), spc)
+# define copy_search_space(spc) copy_node((Node *)(spc), spc, false)
 #endif
 
 static Node *
-copy_node(Node *node, SearchSpace *space)
+copy_node(Node *node, SearchSpace *space, bool is_local)
 {
     bool	 do_copy;
     unsigned int sz;
@@ -684,19 +717,28 @@ copy_node(Node *node, SearchSpace *space)
 		do_copy = false;
 		break;
 
-	    case LVAR_KIND:
-		do_copy = !space || is_forwarded(node->v.spc);
+	    case GAPP_KIND:
+	    case GVAR_KIND:
+		do_copy = is_forwarded(node->g.spc);
+		if ( do_copy )
+		    is_local =
+			(SearchSpace *)get_forward(node->g.spc) == regs.ss;
+		else if ( space )
+		{
+		    if ( is_local && is_local_space(node->g.spc) )
+			node = node->g.node;
+		}
+		else
+		{
+		    node     = node->g.node;
+		    is_local = true;
+		    continue;
+		}
 		break;
-	    case SUSPEND_KIND:
-		do_copy = !space || is_forwarded(node->s.spc);
-		break;
-	    case QUEUEME_KIND:
-		do_copy = !space || is_forwarded(node->q.spc);
-		break;
+
 	    case INDIR_KIND:
 #if !COPY_SEARCH_SPACE
-		if ( is_forwarded(node->n.spc) &&
-		     space && node->n.spc->root != space->root )
+		if ( !is_local )
 		{
 		    do_copy = true;
 		    break;
@@ -705,25 +747,36 @@ copy_node(Node *node, SearchSpace *space)
 		node = node->n.node;
 		continue;
 
+	    case MUTABLE_KIND:
+		do_copy = is_forwarded(node->g.spc);
+		if ( do_copy )
+		    is_local =
+			(SearchSpace *)get_forward(node->g.spc) == regs.ss;
+		else if ( !space )
+		    do_copy = is_local = true;
+		break;
+
 	    case SEARCH_CONT_KIND:
-		if ( is_forwarded(node->sc.ss) )
-		    do_copy = true;
-		else
+		do_copy = true;
+		if ( !is_forwarded(node->sc.ss) )
 		{
-		    do_copy = !space || is_forwarded(node->sc.spc);
-		    if ( do_copy )
-			copy_search_space(node->sc.ss);
+		    copy_search_space(node->sc.ss);
+		    is_local = false;
 		}
+		else
+		    is_local =
+			(SearchSpace *)get_forward(node->sc.ss) == regs.ss;
 		break;
 
 	    case SEARCH_SPACE_KIND:
-		if ( node != (Node *)space )
+		do_copy = !is_local;
+		if ( !do_copy )
 		{
-		    do_copy = false;
-		    node    = (Node *)regs.ss;
-		    break;
+		    assert(!space);
+		    node = (Node *)regs.ss;
 		}
-		/* FALL THROUGH!!! */
+		break;
+
 	    default:
 		do_copy = true;
 		break;
@@ -745,6 +798,9 @@ copy_node(Node *node, SearchSpace *space)
 		forward(node, alloc);
 		node   = (Node *)alloc;
 		alloc += sz;
+
+		if ( !is_local )
+		    mark_node(node);
 	    }
 	}
 	break;
@@ -755,14 +811,14 @@ copy_node(Node *node, SearchSpace *space)
 }
 
 @ 
-In order to distinguish local nodes, which have to be copied, and
-nodes from global search spaces, which are shared, [[copy_node]]
-checks whether a node's search space is forwarded or not. This means         %'
-that a search space and its parents have to be copied \emph{before}
-any node from that space is copied. This is handled by the function
-[[copy_search_space]]. Note that this function does not update the
-parent pointers of the copied spaces because this is handled by the
-loop in [[copy_graph]] below.
+In order to distinguish global references to local nodes, which have
+to be copied, from references to nodes from global search spaces,
+which are shared, [[copy_node]] checks whether a node's search space         %'
+is forwarded or not. This means that a search space and its parents
+have to be copied \emph{before} any node from that space is copied.
+This is handled by the function [[copy_search_space]]. Note that this
+function does not update the parent pointers of the copied spaces
+because this is handled by the loop in [[copy_graph]] below.
 
 We maintain the invariant that for a copied search space, all of its
 parents have been copied as well. Therefore, [[copy_search_space]]
@@ -774,7 +830,7 @@ static void
 copy_search_space(SearchSpace *spc)
 {
     /* copy the space itself */
-    copy_node((Node *)spc, spc);
+    copy_node((Node *)spc, spc, false);
 
     /* eventually copy the active space and its parents */
     /* NB don't activate the copied space's bindings since this could
@@ -785,7 +841,7 @@ copy_search_space(SearchSpace *spc)
     /* copy all parent spaces */
     /* NB parent pointers will be updated later */
     for ( spc = spc->parent; spc && !is_forwarded(spc); spc = spc->parent )
-	copy_node((Node *)spc, spc);
+	copy_node((Node *)spc, spc, false);
 }
 #endif
 
@@ -823,6 +879,7 @@ copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space)
 	{
 	    ASSERT(is_forwarded(*ntp));
 	    (*ntp)->info = get_forward(*ntp)->info;
+	    unmark_node(*ntp);
 	}
 	if ( space )
 	{
@@ -854,30 +911,35 @@ copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space)
     /* copy the root of the graph */
     alloc = (Node **)regs.hp;
     ntp	  = (Node **)heap_end;
-    copy  = copy_node(graph, space);
 #if COPY_SEARCH_SPACE
-    if ( !copy )
+    if ( !graph )
     {
 	/* NB don't update the stack here because the copied pointers would
 	 *    not be followed during a garbage collection */
 	assert(regs.bp != 0);
 	for ( scan = (Node **)regs.bp; scan-- > regs.sp; )
-	    copy_node(*scan, space);
+	    copy_node(*scan, space, true);
 # if !NO_STABILITY
-	copy_node((Node *)regs.thd, space);
+	copy_node((Node *)regs.thd, space, true);
 # endif
-	copy_node((Node *)regs.rq, space);
+	copy_node((Node *)regs.rq, space, true);
 	copy = 0;
     }
+    else
 #endif
+	copy = copy_node(graph, space, true);
 
     /* copy all children */
     for ( scan = (Node **)regs.hp; scan < alloc; scan += sz )
     {
-	bool	  is_vect;
+	bool	  is_local, is_vect;
 	int	  i, j, n, el_len;
 	NodeInfo  *info;
 	const int *otable;
+
+	is_local = !is_marked((Node *)scan);
+	if ( !is_local )
+	    unmark_node((Node *)scan);
 
 	info	= ((Node *)scan)->info;
 	sz	= info->length;
@@ -889,7 +951,7 @@ copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space)
 	if ( otable == 0 )
 	{
 	    for ( i = is_vect ? 2 : 1; i < sz; i++ )
-		scan[i] = copy_node(scan[i], space);
+		scan[i] = copy_node(scan[i], space, is_local);
 	}
 	else
 	{
@@ -899,7 +961,7 @@ copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space)
 		while ( n-- > 0 )
 		{
 		    i = *otable++;
-		    scan[i] = copy_node(scan[i], space);
+		    scan[i] = copy_node(scan[i], space, is_local);
 		}
 	    }
 	    else
@@ -913,7 +975,7 @@ copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space)
 		    while ( n-- > 0 )
 		    {
 			i	  = *otable++;
-			scan[j+i] = copy_node(scan[j+i], space);
+			scan[j+i] = copy_node(scan[j+i], space, is_local);
 		    }
 		}
 		assert(j == sz);
@@ -929,11 +991,11 @@ copy_graph(unsigned int n_regs, Node *graph, SearchSpace *space)
     if ( !copy )
     {
 	for ( scan = (Node **)regs.bp; scan-- > regs.sp; )
-	    *scan = copy_node(*scan, space);
+	    *scan = copy_node(*scan, space, true);
 # if !NO_STABILITY
-	regs.thd = (Thread *)copy_node((Node *)regs.thd, space);
+	regs.thd = (Thread *)copy_node((Node *)regs.thd, space, true);
 # endif
-	regs.rq	 = (ThreadQueue)copy_node((Node *)regs.rq, space);
+	regs.rq	 = (ThreadQueue)copy_node((Node *)regs.rq, space, true);
     }
 #endif
 

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 2771 2009-03-26 10:30:26Z wlux $
+% $Id: print.nw 2854 2009-05-29 12:33:07Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -160,14 +160,17 @@ print_node(unsigned int prec, Node *node)
 		printf("%s", lookup_name(node));
 		break;
 	    case SUSPEND_KIND:
-		argc = suspend_argc(node);
-		if ( argc == 1 && node->s.args[0] == 0 )
+		argc = closure_argc(node);
+		if ( argc == 1 && node->c.args[0] == 0 )
 		    argc = 0;
-		print_app(prec, node, argc, node->s.args);
+		print_app(prec, node, argc, node->c.args);
 		break;
 	    case QUEUEME_KIND:
 		printf("Suspended");
 		break;
+	    case GAPP_KIND:
+	    case GVAR_KIND:
+		curry_panic("print_node: stray global reference!?\n");
 	    case INDIR_KIND:
 		node = node->n.node;
 		continue;
@@ -210,6 +213,7 @@ print_node(unsigned int prec, Node *node)
 		printf(prec > 1 ? "(%s %p)" : "%s %p",
 		       node->info->cname, node->fp.ptr);
 		break;
+	    case MUTABLE_KIND:
 	    case ABSTRACT_KIND:
 	    case SEARCH_CONT_KIND:
 		name = node->info->cname;
@@ -428,10 +432,13 @@ print_constraints(Node *node)
 		    print_constrained_var(node);
 		break;
 	    case SUSPEND_KIND:
-		argc = suspend_argc(node);
-		if ( argc > 1 || node->s.args[0] )
-		    print_app_constraints(argc, node->s.args);
+		argc = closure_argc(node);
+		if ( argc > 1 || node->c.args[0] )
+		    print_app_constraints(argc, node->c.args);
 		break;
+	    case GAPP_KIND:
+	    case GVAR_KIND:
+		curry_panic("print_constraints: stray global reference!?\n");
 	    case INDIR_KIND:
 		node = node->n.node;
 		continue;

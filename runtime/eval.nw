@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2824 2009-05-15 17:19:58Z wlux $
+% $Id: eval.nw 2854 2009-05-29 12:33:07Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -121,36 +121,31 @@ FUNCTION(eval_queueMe)
     if ( regs.ret == update )
     {
 	susp2 = regs.sp[0];
-	assert(is_queueMe_node(susp2) && is_local_space(susp2->q.spc));
-	if ( is_local_space(susp->q.spc) || !susp2->q.wq )
-	{
-	    wq = susp2->q.wq;
+	assert(is_queueMe_node(susp2));
+	wq = susp2->q.wq;
 #if !COPY_SEARCH_SPACE
-	    SAVE(susp2, n.node);
-	    susp2->info++;
+	SAVE(susp2, n.node);
+	susp2->info++;
 #else
-	    susp2->info	  = &indir_info;
+	susp2->info   = &indir_info;
 #endif
-	    susp2->n.node = susp;
+	susp2->n.node = susp;
 
-	    if ( wq )
-	    {
-		wq = join_queues(susp->q.wq, wq);
-		if ( wq != susp->q.wq )
-		    SET_FIELD(susp, q.wq, wq);
-	    }
-
-	    regs.ret = (Label)regs.sp[1];
-	    regs.sp += 2;
-	    if ( regs.ret == stop_thread )
-		GOTO(stop_thread);
+	if ( wq )
+	{
+	    wq = join_queues(susp->q.wq, wq);
+	    if ( wq != susp->q.wq )
+		SET_FIELD(susp, q.wq, wq);
 	}
+
+	regs.ret = (Label)regs.sp[1];
+	regs.sp += 2;
+	if ( regs.ret == stop_thread )
+	    GOTO(stop_thread);
     }
     else if ( regs.ret == stop_thread )
 	GOTO(stop_thread);
 
-    if ( !is_local_space(susp->q.spc) )
-	suspend_search(1, susp->q.spc);
     SAVE_RET1(regs.r[0]);
     regs.ret = resume;
     GOTO(suspend_thread);
@@ -209,8 +204,7 @@ FUNCTION(update)
  ENTRY_LABEL(extern, update)
     result = regs.r[0];
     susp   = regs.sp[0];
-    assert(is_tagged_ptr(susp) && is_queueMe_node(susp) &&
-	   is_local_space(susp->q.spc));
+    assert(is_queueMe_node(susp));
 
     /* update the suspended application */
     TRACE(("%I %N = %N\n", susp, result));
@@ -291,7 +285,6 @@ FUNCTION(__pbUpdate)
     switch (node_kind(susp))
     {
     case SUSPEND_KIND:
-	assert(is_local_space(susp->s.spc));
 #if !COPY_SEARCH_SPACE
 	if ( (word *)susp < regs.hlim )
 	{
@@ -311,7 +304,6 @@ FUNCTION(__pbUpdate)
 	assert(is_queueMe_node(susp));
 	/* FALL THROUGH!!! */
     case QUEUEME_KIND:
-	assert(is_local_space(susp->q.spc));
 	wq = susp->q.wq;
 #if !COPY_SEARCH_SPACE
 	SAVE(susp, q.wq);
@@ -324,8 +316,7 @@ FUNCTION(__pbUpdate)
 	/* eventually wake the suspended threads */
 	if ( wq )
 	{
-	    if ( is_tagged_ptr(result) && is_queueMe_node(result)
-		 && is_local_space(result->q.spc) )
+	    if ( is_tagged_ptr(result) && is_queueMe_node(result) )
 		SET_FIELD(result, q.wq, join_queues(wq, result->q.wq));
 	    else
 		wake_threads(wq);
@@ -367,12 +358,7 @@ FUNCTION(__pbReturn)
 #ifndef NDEBUG
     while ( regs.sp[0] != regs.r[1] )
     {
-# if !COPY_SEARCH_SPACE
-	assert(is_tagged_ptr(regs.r[1]) && is_indir_node(regs.r[1]) &&
-	       is_local_space(regs.r[1]->n.spc));
-# else
 	assert(is_tagged_ptr(regs.r[1]) && is_indir_node(regs.r[1]));
-# endif
 	regs.r[1] = regs.r[1]->n.node;
     }
 #endif
@@ -396,8 +382,9 @@ DECLARE_LABEL(extern, sync_var);
 FUNCTION(sync_var)
 {
  ENTRY_LABEL(extern, sync_var)
-    if ( !is_local_space(regs.r[0]->v.spc) )
-	suspend_search(1, regs.r[0]->v.spc);
+    if ( is_global_var_node(regs.r[0]) )
+	GOTO(sync_global);
+
     SAVE_RET1(regs.r[0]);
     regs.ret = resume;
     GOTO(delay_thread);
@@ -491,14 +478,10 @@ FUNCTION(eval_lazy_1)
     Node  *susp;
     Label entry;
  ENTRY_LABEL(static, eval_lazy_1)
-    /* suspend the search if the node is not local */
-    if ( !is_local_space(regs.r[0]->s.spc) )
-	suspend_search(1, regs.r[0]->s.spc);
-
     /* get the argument */
     susp      = regs.r[0];
     entry     = susp->info->entry;
-    regs.r[0] = susp->s.args[0];
+    regs.r[0] = susp->c.args[0];
 
     /* create an indirection if there is an update frame immediately above */
     if ( regs.ret == update )
@@ -594,8 +577,7 @@ FUNCTION(__ensureGround_1)
 	    {
 		susp		= (Node *)regs.hp;
 		susp->info	= ensureGround_lazy_info_table;
-		susp->s.spc	= regs.ss;
-		susp->s.args[0]	= *argp;
+		susp->c.args[0]	= *argp;
 		regs.hp	       += suspend_node_size(1);
 
 		*argp = susp;

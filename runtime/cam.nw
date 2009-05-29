@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cam.nw 2766 2009-03-26 08:59:48Z wlux $
+% $Id: cam.nw 2854 2009-05-29 12:33:07Z wlux $
 %
-% Copyright (c) 2001-2008, Wolfgang Lux
+% Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Abstract Machine Code Macros}
@@ -152,12 +152,12 @@ address from the stack and drop [[n]] values from the stack.
 	GOTO(_ret_);			 \
     } while ( 0 )
 
-#define ENTER(x,n) do {			\
-	Node *node = (x);		\
-	regs.r[0]  = node;		\
-	regs.ret   = (Label)regs.sp[n]; \
-	regs.sp	  += n + 1;		\
-	GOTO(node->info->eval);		\
+#define ENTER(x,n) do {			  \
+	Node *_node_ = (x);		  \
+	regs.r[0]    = _node_;		  \
+	regs.ret     = (Label)regs.sp[n]; \
+	regs.sp	    += n + 1;		  \
+	GOTO(_node_->info->eval);	  \
     } while ( 0 )
 
 @ 
@@ -282,5 +282,6 @@ this is the entry point of the function that uses the [[MATCH]] macro.
 #define MATCH_RIGID_FOREIGN_PTR(l)	MATCH_RIGID_NODE(FOREIGN_PTR, l)
 #define MATCH_RIGID_DATA(l)		MATCH_RIGID_NODE(CAPP, l)
 #define MATCH_RIGID_PAPP(l)		MATCH_RIGID_NODE(PAPP, l)
+#define MATCH_RIGID_MUTABLE(l)		MATCH_RIGID_NODE(MUTABLE, l)
 #define MATCH_RIGID_VECTOR(l)		MATCH_RIGID_NODE(VECTOR, l)
 #define MATCH_RIGID_ABSTRACT(l)		MATCH_RIGID_NODE(ABSTRACT, l)

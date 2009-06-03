@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: constraints.nw 2854 2009-05-29 12:33:07Z wlux $
+% $Id: constraints.nw 2860 2009-06-03 05:45:36Z wlux $
 %
 % Copyright (c) 2002-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -244,7 +244,8 @@ FUNCTION(___38__3)
     for ( c2 = regs.sp[0]; node_kind(c2) == INDIR_KIND; c2 = c2->n.node )
 	;
     assert(node_kind(c1) == CAPP_KIND);
-    assert(node_kind(c2) == CAPP_KIND || node_kind(c2) == LVAR_KIND);
+    assert(node_kind(c2) == CAPP_KIND || node_kind(c2) == LVAR_KIND ||
+	   node_kind(c2) == GVAR_KIND);
 
     RETURN(c2, 1);
 }

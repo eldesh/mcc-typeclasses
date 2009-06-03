@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2854 2009-05-29 12:33:07Z wlux $
+% $Id: eval.nw 2862 2009-06-03 05:49:47Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -282,7 +282,7 @@ FUNCTION(__pbUpdate)
     result = regs.r[1];
 
     TRACE(("%I %N = %N\n", susp, result));
-    switch (node_kind(susp))
+    switch ( node_kind(susp) )
     {
     case SUSPEND_KIND:
 #if !COPY_SEARCH_SPACE
@@ -353,6 +353,18 @@ DECLARE_LABEL(extern, __pbReturn);
 FUNCTION(__pbReturn)
 {
  ENTRY_LABEL(extern, __pbReturn)
+    if ( do_trace && regs.ret != update )
+    {
+	/* FIXME This is a dirty hack that swaps the low-level tracer's
+	 *       return frame and the update frame. We assume here that
+	 *       the tracer does not save any local state.
+	 */
+	Label ret_ip = regs.ret;
+	regs.ret     = (Label)regs.sp[0];
+	regs.sp[0]   = regs.sp[1];
+	regs.sp[1]   = (Node *)ret_ip;
+    }
+
     /* make sure this function is called from the correct update frame */
     assert(regs.ret == update);
 #ifndef NDEBUG

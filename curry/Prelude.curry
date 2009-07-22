@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 2726 2008-06-16 06:11:54Z wlux $
+-- $Id: Prelude.curry 2871 2009-07-22 09:06:36Z wlux $
 --
 -- Copyright (c) 1999-2008, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -835,9 +835,8 @@ instance Enum Int where
   enumFromThen n1 n2 =
     enumFromThenTo n1 n2 (if n1 <= n2 then maxBound else minBound)
   enumFromTo n m = takeWhile (m >=) (iterate (1 +) n)
-  enumFromThenTo n1 n2 m
-    | n1 <= n2 = takeWhile (m >=) (iterate ((n2 - n1) +) n1)
-    | otherwise = takeWhile (m <=) (iterate ((n2 - n1) +) n1)
+  enumFromThenTo n1 n2 m =
+    takeWhile (if n1 <= n2 then (m >=) else (m <=)) (iterate (n2 - n1 +) n1)
 instance Bounded Int where
   minBound = primMinInt
     where foreign import ccall "prims.h" primMinInt :: Int
@@ -918,10 +917,9 @@ instance Enum Integer where
   fromEnum n = fromInteger n
   enumFrom n = iterate succ n
   enumFromTo n m = takeWhile (m >=) (enumFrom n)
-  enumFromThen n1 n2 = iterate ((n1 - n2) +) n1
-  enumFromThenTo n1 n2 m
-    | n1 <= n2 = takeWhile (m >=) (enumFromThen n1 n2)
-    | otherwise = takeWhile (m <=) (enumFromThen n1 n2)
+  enumFromThen n1 n2 = iterate (n2 - n1 +) n1
+  enumFromThenTo n1 n2 m =
+    takeWhile (if n1 <= n2 then (m >=) else (m <=)) (enumFromThen n1 n2)
 
 instance Show Integer where
   -- FIXME: use a dedicated primitive for this
@@ -1008,9 +1006,9 @@ instance Enum Float where
   enumFromTo x1 x2 = takeWhile (<= x2 + 0.5) (enumFrom x1)
   enumFromThen x1 x2 = [x1 + n * i | n <- enumFrom 0]
     where i = x2 - x1
-  enumFromThenTo x1 x2 x3
-    | x1 <= x2 = takeWhile (<= x3 + (x2 - x1) * 0.5) (enumFromThen x1 x2)
-    | otherwise = takeWhile (>= x3 + (x2 - x1) * 0.5) (enumFromThen x1 x2)
+  enumFromThenTo x1 x2 x3 =
+    takeWhile (if x1 <= x2 then (<= lim) else (>= lim)) (enumFromThen x1 x2)
+    where lim = x3 + (x2 - x1) * 0.5
 instance Show Float where
   -- FIXME: use a dedicated primitive for this
   -- FIXME: check for negative zeros, too

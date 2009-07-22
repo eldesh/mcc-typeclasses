@@ -340,25 +340,23 @@ instance Enum Bool
 instance Enum Char
   {-# ARITY succ 1 pred 1 toEnum 1 fromEnum 1 enumFrom 1
 	    enumFromThen 2 #-};
-instance Eq () {-# ARITY (==) 2 (/=) 2 #-};
-instance (Eq a, Eq b) => Eq (a, b) {-# ARITY (==) 2 (/=) 2 #-};
-instance (Eq a, Eq b, Eq c) => Eq (a, b, c)
-  {-# ARITY (==) 2 (/=) 2 #-};
+instance Eq () {-# ARITY (==) 2 #-};
+instance (Eq a, Eq b) => Eq (a, b) {-# ARITY (==) 2 #-};
+instance (Eq a, Eq b, Eq c) => Eq (a, b, c) {-# ARITY (==) 2 #-};
 instance (Eq a, Eq b, Eq c, Eq d) => Eq (a, b, c, d)
-  {-# ARITY (==) 2 (/=) 2 #-};
+  {-# ARITY (==) 2 #-};
 instance (Eq a, Eq b, Eq c, Eq d, Eq e) => Eq (a, b, c, d, e)
-  {-# ARITY (==) 2 (/=) 2 #-};
+  {-# ARITY (==) 2 #-};
 instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f) =>
 	 Eq (a, b, c, d, e, f)
-  {-# ARITY (==) 2 (/=) 2 #-};
+  {-# ARITY (==) 2 #-};
 instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g) =>
 	 Eq (a, b, c, d, e, f, g)
-  {-# ARITY (==) 2 (/=) 2 #-};
-instance Eq Bool {-# ARITY (==) 2 (/=) 2 #-};
+  {-# ARITY (==) 2 #-};
+instance Eq Bool {-# ARITY (==) 2 #-};
 instance Eq Char {-# ARITY (==) 2 (/=) 2 #-};
-instance (Eq a, Eq b) => Eq (Either a b)
-  {-# ARITY (==) 2 (/=) 2 #-};
-instance Eq a => Eq [a] {-# ARITY (==) 2 (/=) 2 #-};
+instance (Eq a, Eq b) => Eq (Either a b) {-# ARITY (==) 2 #-};
+instance Eq a => Eq [a] {-# ARITY (==) 2 #-};
 instance Enum Float
   {-# ARITY succ 1 pred 1 toEnum 1 fromEnum 1 enumFrom 1
 	    enumFromThen 2 enumFromTo 2 enumFromThenTo 3 #-};
@@ -381,7 +379,7 @@ instance Integral Int
 instance Integral Integer
   {-# ARITY quot 2 rem 2 div 2 mod 2 quotRem 2 divMod 2 toInt 1
 	    toInteger 1 #-};
-instance Eq a => Eq (Maybe a) {-# ARITY (==) 2 (/=) 2 #-};
+instance Eq a => Eq (Maybe a) {-# ARITY (==) 2 #-};
 instance Functor Maybe {-# ARITY fmap 2 #-};
 instance Monad IO {-# ARITY return 2 (>>=) 3 (>>) 3 fail 2 #-};
 instance Monad Maybe {-# ARITY return 1 (>>=) 2 (>>) 2 fail 1 #-};
@@ -424,7 +422,7 @@ instance Bounded Ordering;
 instance Enum Ordering
   {-# ARITY succ 1 pred 1 toEnum 1 fromEnum 1 enumFrom 1
 	    enumFromThen 2 #-};
-instance Eq Ordering {-# ARITY (==) 2 (/=) 2 #-};
+instance Eq Ordering {-# ARITY (==) 2 #-};
 instance Ord Ordering {-# ARITY compare 2 #-};
 instance Real Float {-# ARITY toRational 1 #-};
 instance Real Int {-# ARITY toRational 1 #-};
@@ -463,7 +461,7 @@ instance Integral a => Enum (Ratio.Ratio a)
 	    enumFromTo 2 enumFromThenTo 3 #-};
 instance Integral a => Eq (Ratio.Ratio a)
   {-# MODULE Ratio #-}
-  {-# ARITY (==) 2 (/=) 2 #-};
+  {-# ARITY (==) 2 #-};
 instance Integral a => Fractional (Ratio.Ratio a)
   {-# MODULE Ratio #-}
   {-# ARITY (/) 2 recip 1 fromRational 1 #-};

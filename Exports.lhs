@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2815 2009-05-04 13:59:57Z wlux $
+% $Id: Exports.lhs 2872 2009-07-22 12:28:12Z wlux $
 %
 % Copyright (c) 2000-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -150,7 +150,7 @@ correct arity annotations are written to the interface.
 >            -> IMethodDecl
 > methodDecl aEnv tyEnv cls tvs (f,n) =
 >   IMethodDecl noPos f n' (fromQualType tvs (contextMap tail ty))
->   where n' = arityAnnot (qualifyLike cls f) n 0 aEnv
+>   where n' = arityAnnot (qualifyLike cls (dfltMethodId f)) n 0 aEnv
 >         ForAll _ ty = funType (qualifyLike cls f) tyEnv
 
 > valueDecl :: ArityEnv -> ValueEnv -> [Ident] -> Export -> [IDecl] -> [IDecl]
@@ -191,8 +191,12 @@ of the transformed code in an auxiliary environment. Note that we
 ignore foreign function declarations here because their arities are
 fixed and cannot be changed by program transformations. When adding
 the arities of default type class and instance methods, we must remove
-the unique key added during renaming. Furthermore, we prefix instance
-method identifiers with the name of the instance's type in order to
+the unique key added during renaming. Furthermore, we prefix default
+and instance method identifiers with an anonymous identifier and the
+name of the instance's type, respectively. This is necessary for
+default method implementations so that their arities are not confused
+with that of a method (stub) if a method is exported without its
+class, i.e., like a top-level function, and for instance methods to
 avoid name conflicts between methods of different instances of the
 same class.
 \begin{verbatim}
@@ -208,7 +212,7 @@ same class.
 > functions (NewtypeDecl _ _ _ _ _ _) = []
 > functions (TypeDecl _ _ _ _) = []
 > functions (ClassDecl _ _ _ _ ds) =
->   [(unRenameIdent f,eqs) | FunctionDecl _ f eqs <- ds]
+>   [(dfltMethodId (unRenameIdent f),eqs) | FunctionDecl _ f eqs <- ds]
 > functions (InstanceDecl _ _ _ ty ds) =
 >   [(instMethodId tc (unRenameIdent f),eqs) | FunctionDecl _ f eqs <- ds]
 >   where tc = typeConstr ty
@@ -218,6 +222,9 @@ same class.
 >     FunctionDecl _ f eqs -> [(f,eqs)]
 >     _ -> []
 > functions (SplitAnnot _) = []
+
+> dfltMethodId  :: Ident -> Ident
+> dfltMethodId = instMethodId (qualify anonId)
 
 > instMethodId :: QualIdent -> Ident -> Ident
 > instMethodId tc f = mkIdent (qualName tc ++ '.' : name f)

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 2798 2009-04-26 15:29:05Z wlux $
+% $Id: Typing.lhs 2873 2009-07-24 08:45:50Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -116,11 +116,10 @@ newtype constructor \texttt{ST} and its type must be changed from
 >   case unapplyType True ty of
 >     (TypeConstructor tc,tys) ->
 >       case qualLookupTopEnv tc tcEnv of
->         [AliasType _ n _ ty]
->           | n > n' -> ty
->           | n == n' -> etaType tcEnv n (expandAliasType tys ty)
->           | otherwise -> internalError "etaType"
->           where n' = length tys
+>         [AliasType _ n' _ ty'] ->
+>           -- NB n' <= length tys here because ty has kind *
+>           etaType tcEnv n (applyType (expandAliasType tys' ty') tys'')
+>           where (tys',tys'') = splitAt n' tys
 >         [_] -> ty
 >         _ -> internalError "etaType"
 >     _ -> ty
@@ -182,10 +181,10 @@ removed newtypes.
 >   where expandType tcEnv (TypeConstructor tc) tys =
 >           case qualLookupTopEnv tc tcEnv of
 >             [AliasType _ n _ ty]
->               | n > n' -> []
->               | n == n' -> expand tcEnv (expandAliasType tys ty)
->               | otherwise -> internalError "expand"
->               where n' = length tys
+>               | n < length tys -> []
+>               | otherwise ->
+>                   expand tcEnv (applyType (expandAliasType tys' ty) tys'')
+>               where (tys',tys'') = splitAt n tys
 >             [_] -> []
 >             _ -> internalError "expand"
 >         expandType _ _ _ = []

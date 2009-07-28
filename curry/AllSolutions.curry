@@ -1,6 +1,6 @@
--- $Id: AllSolutions.curry 2041 2006-12-13 09:43:43Z wlux $
+-- $Id: AllSolutions.curry 2878 2009-07-28 15:51:55Z wlux $
 --
--- Copyright (c) 2004, Wolfgang Lux
+-- Copyright (c) 2004-2009, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module AllSolutions(SearchTree(..), getSearchTree, allValuesD, allValuesB,
@@ -11,6 +11,12 @@ import Maybe
 import Monad
 
 data SearchTree a = Fail | Val a | Or [SearchTree a] deriving (Eq,Ord,Show)
+
+instance Functor SearchTree where
+  fmap _ Fail = Fail
+  fmap f (Val x) = Val (f x)
+  fmap f (Or ts) = Or (map (fmap f) ts)
+
 
 foreign import primitive encapsulate :: a -> IO (a -> Success)
 

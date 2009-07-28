@@ -1,6 +1,6 @@
--- $Id: Prelude.curry 2871 2009-07-22 09:06:36Z wlux $
+-- $Id: Prelude.curry 2874 2009-07-28 07:39:39Z wlux $
 --
--- Copyright (c) 1999-2008, Wolfgang Lux
+-- Copyright (c) 1999-2009, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module Prelude((.), id, const, curry, uncurry, flip, until,
@@ -22,6 +22,7 @@ module Prelude((.), id, const, curry, uncurry, flip, until,
                String, lines, unlines, words, unwords,
                ShowS, shows, showChar, showString, showParen,
                Num(..), Real(..), Integral(..), Fractional(..), RealFrac(..),
+               Floating(..), RealFloat(..),
                subtract, even, odd, gcd, lcm, (^), (^^),
                fromIntegral, realToFrac,
                Int(), Integer(), Float(), Ratio(), Rational(),
@@ -45,7 +46,7 @@ import IO
 
 infixl 9 !!
 infixr 9 .
-infixl 8 ^, ^^
+infixl 8 ^, ^^, **
 infixl 7 *, /, `quot`, `rem`, `div`, `mod`
 infixl 6 +, -
 infixr 5 :, ++
@@ -712,7 +713,7 @@ class (Eq a, Show a) => Num a where
   (*) :: a -> a -> a
   negate :: a -> a
   abs, signum :: a -> a
-  fromInt :: Int -> a           -- NB non-standard addition
+  fromInt :: Int -> a                  -- NB non-standard addition
   fromInteger :: Integer -> a
 
   -- Minimal complete definition:
@@ -751,11 +752,13 @@ class Num a => Fractional a where
   (/) :: a -> a -> a
   recip :: a -> a
   fromRational :: Rational -> a
+  fromFloat :: Float -> a              -- NB non-standard addition
 
   -- Minimal complete definition:
   -- fromRational and either recip or (/)
   recip x = 1 / x
   x / y   = x * recip y
+  fromFloat f = realToFrac f
 
 class (Real a, Fractional a) => RealFrac a where
   properFraction  :: Integral b => a -> (b,a)
@@ -774,6 +777,32 @@ class (Real a, Fractional a) => RealFrac a where
         where s = signum (abs r - 0.5)
   ceiling x = case properFraction x of (n,r) -> if r > 0 then n + 1 else n
   floor x   = case properFraction x of (n,r) -> if r < 0 then n - 1 else n
+
+class Fractional a => Floating a where
+  pi                  :: a
+  exp, log, sqrt      :: a -> a
+  (**), logBase       :: a -> a -> a
+  sin, cos, tan       :: a -> a
+  asin, acos, atan    :: a -> a
+  sinh, cosh, tanh    :: a -> a
+  asinh, acosh, atanh :: a -> a
+
+  -- Minimal complete definition:
+  -- pi, exp, log, sin, cos, sinh, cosh, asin, acos, atan, asinh, acosh, atanh
+  x ** y = exp (log x * y)
+  logBase x y = log y / log x
+  sqrt x = x ** 0.5
+  tan  x = sin x / cos x
+  tanh x = sinh x / cosh x
+
+class (RealFrac a, Floating a) => RealFloat a where
+  -- FIXME This class is grossly incomplete
+  atan2 :: a -> a -> a
+  toFloat :: a -> Float                -- NB non-standard addition
+
+  -- Minimal complete definition:
+  -- toRational
+  toFloat x = realToFrac x
 
 subtract :: Num a => a -> a -> a
 subtract x y = y - x
@@ -1047,6 +1076,7 @@ instance Fractional Float where
   (/) = primDivFloat
     where foreign import ccall "prims.h" primDivFloat :: Float -> Float -> Float
   fromRational x = fromInteger (numerator x) / fromInteger (denominator x)
+  fromFloat x = x
 
 instance RealFrac Float where
   properFraction x =
@@ -1055,6 +1085,30 @@ instance RealFrac Float where
     where foreign import rawcall "integer.h"
     	  	  	 primProperFraction :: Float -> (Integer,Float)
 
+instance Floating Float where
+  pi = 3.14159265358979323846
+  exp = exp where foreign import ccall "math.h" exp :: Float -> Float
+  log = log where foreign import ccall "math.h" log :: Float -> Float
+  sqrt = sqrt where foreign import ccall "math.h" sqrt :: Float -> Float
+  (**) = pow where foreign import ccall "math.h" pow :: Float -> Float -> Float
+  sin = sin where foreign import ccall "math.h" sin :: Float -> Float
+  cos = cos where foreign import ccall "math.h" cos :: Float -> Float
+  tan = tan where foreign import ccall "math.h" tan :: Float -> Float
+  asin = asin where foreign import ccall "math.h" asin :: Float -> Float
+  acos = acos where foreign import ccall "math.h" acos :: Float -> Float
+  atan = atan where foreign import ccall "math.h" atan :: Float -> Float
+  sinh = sinh where foreign import ccall "math.h" sinh :: Float -> Float
+  cosh = cosh where foreign import ccall "math.h" cosh :: Float -> Float
+  tanh = tanh where foreign import ccall "math.h" tanh :: Float -> Float
+  asinh = asinh where foreign import ccall "math.h" asinh :: Float -> Float
+  acosh = acosh where foreign import ccall "math.h" acosh :: Float -> Float
+  atanh = atanh where foreign import ccall "math.h" atanh :: Float -> Float
+
+instance RealFloat Float where
+  atan2 = atan2
+    where foreign import ccall "math.h" atan2 :: Float -> Float -> Float
+  toFloat x = x
+  
 
 -- Constraints
 -- NB The Success constructor is not exported from the Prelude, but the

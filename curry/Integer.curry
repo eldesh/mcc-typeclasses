@@ -1,13 +1,12 @@
--- $Id: Integer.curry 2701 2008-05-19 18:26:34Z wlux $
+-- $Id: Integer.curry 2874 2009-07-28 07:39:39Z wlux $
 --
--- Copyright (c) 2004-2008, Wolfgang Lux
+-- Copyright (c) 2004-2009, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module Integer(pow, ilog, isqrt, factorial, binomial, abs,
 	       max3, min3, maxlist, minlist, bitTrunc, bitAnd, bitOr,
 	       bitNot, bitXor, even, odd) where
 import Bits
-import Float
 
 --- (pow m n) returns the m raised to the power of n
 pow :: Int -> Int -> Int
@@ -15,11 +14,12 @@ pow = (^)
 
 --- (ilog n) returns the floor of the logarithm in base 10 of n
 ilog :: Int -> Int
-ilog n | n > 0 = truncate (log10 (i2f n))
+ilog n | n > 0 = truncate (log10 (fromInt n))
+  where foreign import ccall "math.h" log10 :: Float -> Float
 
 --- (isqrt n) returns the floor of the square root of n.
 isqrt :: Int -> Int
-isqrt n | n >= 0 = truncate (sqrt (i2f n))
+isqrt n | n >= 0 = truncate (sqrt (fromInt n))
 
 --- (factorial n) returns the factorial of n
 factorial :: Int -> Int

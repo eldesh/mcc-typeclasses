@@ -2,6 +2,7 @@ interface Prelude where {
 import Ratio;
 infix 4 ==;
 infix 4 /=;
+infixl 8 **;
 infixl 7 /;
 infixl 7 `quot`;
 infixl 7 `rem`;
@@ -120,10 +121,31 @@ class Eq a where {
 };
 type FilePath = [Char];
 data Float;
+class Fractional a => Floating a where {
+pi :: a;
+exp :: a -> a;
+log :: a -> a;
+sqrt :: {-# ARITY 1 #-} a -> a;
+(**) :: {-# ARITY 2 #-} a -> a -> a;
+logBase :: {-# ARITY 2 #-} a -> a -> a;
+sin :: a -> a;
+cos :: a -> a;
+tan :: {-# ARITY 1 #-} a -> a;
+asin :: a -> a;
+acos :: a -> a;
+atan :: a -> a;
+sinh :: a -> a;
+cosh :: a -> a;
+tanh :: {-# ARITY 1 #-} a -> a;
+asinh :: a -> a;
+acosh :: a -> a;
+atanh :: a -> a
+};
 class Num a => Fractional a where {
 (/) :: {-# ARITY 2 #-} a -> a -> a;
 recip :: {-# ARITY 1 #-} a -> a;
-fromRational :: Ratio.Ratio Integer -> a
+fromRational :: Ratio.Ratio Integer -> a;
+fromFloat :: {-# ARITY 1 #-} Float -> a
 };
 class (Functor :: * -> *) a where {
 fmap :: (b -> c) -> a b -> a c
@@ -171,6 +193,10 @@ max :: {-# ARITY 2 #-} a -> a -> a
 data Ordering = LT | EQ | GT;
 class (Num a, Ord a) => Real a where {
 toRational :: a -> Ratio.Ratio Integer
+};
+class (Floating a, RealFrac a) => RealFloat a where {
+atan2 :: a -> a -> a;
+toFloat :: {-# ARITY 1 #-} a -> Float
 };
 class (Fractional a, Real a) => RealFrac a where {
 properFraction :: Integral b => a -> (b, a);
@@ -361,7 +387,11 @@ instance Enum Float
   {-# ARITY succ 1 pred 1 toEnum 1 fromEnum 1 enumFrom 1
 	    enumFromThen 2 enumFromTo 2 enumFromThenTo 3 #-};
 instance Eq Float {-# ARITY (==) 2 (/=) 2 #-};
-instance Fractional Float {-# ARITY (/) 2 fromRational 1 #-};
+instance Floating Float
+  {-# ARITY exp 1 log 1 sqrt 1 (**) 2 sin 1 cos 1 tan 1 asin 1 acos 1
+	    atan 1 sinh 1 cosh 1 tanh 1 asinh 1 acosh 1 atanh 1 #-};
+instance Fractional Float
+  {-# ARITY (/) 2 fromRational 1 fromFloat 1 #-};
 instance Functor [] {-# ARITY fmap 2 #-};
 instance Functor IO {-# ARITY fmap 2 #-};
 instance Bounded Int;
@@ -427,6 +457,7 @@ instance Ord Ordering {-# ARITY compare 2 #-};
 instance Real Float {-# ARITY toRational 1 #-};
 instance Real Int {-# ARITY toRational 1 #-};
 instance Real Integer {-# ARITY toRational 1 #-};
+instance RealFloat Float {-# ARITY atan2 2 toFloat 1 #-};
 instance RealFrac Float {-# ARITY properFraction 1 #-};
 instance Show () {-# ARITY showsPrec 2 #-};
 instance (Show a, Show b) => Show (a, b) {-# ARITY showsPrec 2 #-};

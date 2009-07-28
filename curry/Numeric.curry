@@ -1,6 +1,6 @@
--- $Id: Numeric.curry 2629 2008-02-20 17:27:00Z wlux $
+-- $Id: Numeric.curry 2874 2009-07-28 07:39:39Z wlux $
 --
--- Copyright (c) 2003-2007, Wolfgang Lux
+-- Copyright (c) 2003-2009, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module Numeric(showSigned, showIntAtBase, showInt, showOct, showHex,
@@ -66,27 +66,27 @@ readHex :: Integral a => ReadS a
 readHex = readInt 16 isHexDigit digitToInt
 
 
-showEFloat :: Maybe Int -> Float -> ShowS
-showEFloat d f = showString (primShowEFloat (maybe (-1) (max 0) d) f)
+showEFloat :: RealFloat a => Maybe Int -> a -> ShowS
+showEFloat d f = showString (primShowEFloat (maybe (-1) (max 0) d) (toFloat f))
   where foreign import rawcall "show.h" primShowEFloat :: Int -> Float -> String
 
-showFFloat :: Maybe Int -> Float -> ShowS
-showFFloat d f = showString (primShowFFloat (maybe (-1) (max 0) d) f)
+showFFloat :: RealFloat a => Maybe Int -> a -> ShowS
+showFFloat d f = showString (primShowFFloat (maybe (-1) (max 0) d) (toFloat f))
   where foreign import rawcall "show.h" primShowFFloat :: Int -> Float -> String
 
-showGFloat :: Maybe Int -> Float -> ShowS
+showGFloat :: RealFloat a => Maybe Int -> a -> ShowS
 showGFloat d f
   | f' >= 0.1 && f' < 1.0e7 = showFFloat d f
   | otherwise = showEFloat d f
   where f' = if f < 0 then -f else f
         
-showFloat :: Float -> ShowS
+showFloat :: RealFloat a => a -> ShowS
 showFloat = showGFloat Nothing
 
 
-readFloat :: ReadS Float
-readFloat r = [(convert ds (k - d),t) | (ds,d,s) <- lexFix r,
-                                        (k,t) <- readExp s] ++
+readFloat :: RealFrac a => ReadS a
+readFloat r = [(fromFloat (convert ds (k - d)),t) | (ds,d,s) <- lexFix r,
+                                                    (k,t) <- readExp s] ++
               [(0/0,t) | t <- match "NaN" r] ++
               [(1/0,t) | t <- match "Infinity" r]
   where lexFix r = [(ds ++ ds',length ds',t) | (ds,s) <- lexDigits r,

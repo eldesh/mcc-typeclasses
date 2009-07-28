@@ -1,4 +1,4 @@
--- $Id: IOExts.curry 2854 2009-05-29 12:33:07Z wlux $
+-- $Id: IOExts.curry 2876 2009-07-28 08:46:16Z wlux $
 --
 -- Copyright (c) 2004-2009, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -34,46 +34,46 @@ modifyIORef :: IORef a -> (a -> a) -> IO ()
 modifyIORef r f = readIORef r >>= \x -> writeIORef r (f x)
 
 -- mutable arrays
-data IOArray a = IOArray (Int,Int) (IOVector a)
-instance Eq (IOArray a) where
+data Ix a => IOArray a b = IOArray (a,a) (IOVector b)
+instance Ix a => Eq (IOArray a b) where
   a1 == a2 =
     case (a1,a2) of
       (IOArray b1 v1,IOArray b2 v2) -> b1 == b2 && v1 == v2
 
-newIOArray :: (Int,Int) -> a -> IO (IOArray a)
+newIOArray :: Ix a => (a,a) -> b -> IO (IOArray a b)
 newIOArray b x =
   do
     v <- newIOVector (rangeSize b) x
     return (IOArray b v)
 
-boundsIOArray :: IOArray a -> (Int,Int)
+boundsIOArray :: Ix a => IOArray a b -> (a,a)
 boundsIOArray (IOArray b _) = b
 
-readIOArray :: IOArray a -> Int -> IO a
+readIOArray :: Ix a => IOArray a b -> a -> IO b
 readIOArray (IOArray b v) i = readIOVector v (index b i)
 
-writeIOArray :: IOArray a -> Int -> a -> IO ()
+writeIOArray :: Ix a => IOArray a b -> a -> b -> IO ()
 writeIOArray (IOArray b v) i x = writeIOVector v (index b i) x
 
-freezeIOArray :: IOArray a -> IO (Array a)
+freezeIOArray :: Ix a => IOArray a b -> IO (Array a b)
 freezeIOArray (IOArray b v) =
   do
     v' <- freezeIOVector v
     return (vectorArray b v')
 
-thawIOArray :: Array a -> IO (IOArray a)
+thawIOArray :: Ix a => Array a b -> IO (IOArray a b)
 thawIOArray a =
   do
     v <- thawIOVector (vector a)
     return (IOArray (bounds a) v)
 
-unsafeFreezeIOArray :: IOArray a -> IO (Array a)
+unsafeFreezeIOArray :: Ix a => IOArray a b -> IO (Array a b)
 unsafeFreezeIOArray (IOArray b v) =
   do
     v' <- unsafeFreezeIOVector v
     return (vectorArray b v')
 
-unsafeThawIOArray :: Array a -> IO (IOArray a)
+unsafeThawIOArray :: Ix a => Array a b -> IO (IOArray a b)
 unsafeThawIOArray a =
   do
     v <- unsafeThawIOVector (vector a)

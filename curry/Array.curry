@@ -1,3 +1,8 @@
+-- $Id: Array.curry 2876 2009-07-28 08:46:16Z wlux $
+--
+-- Copyright (c) 2000-2009, Wolfgang Lux
+-- See ../LICENSE for the full license.
+
 module Array(module Ix,    -- export all of Ix for convenience
        	     Array, array, listArray, (!), bounds, indices, elems, assocs,
 	     accumArray, (//), accum, ixmap,
@@ -8,21 +13,21 @@ import Unsafe
 
 infixl 9 !, //
 
-data Array a = Array (Int,Int) (Vector a)
+data Ix a => Array a b = Array (a,a) (Vector b)
 
-instance Eq a => Eq (Array a) where
+instance (Ix a, Eq b) => Eq (Array a b) where
   a1 == a2 = assocs a1 == assocs a2
-instance Ord a => Ord (Array a) where
+instance (Ix a, Ord b) => Ord (Array a b) where
   a1 `compare` a2 = assocs a1 `compare` assocs a2
-instance Show a => Show (Array a) where
+instance (Ix a, Show a, Show b) => Show (Array a b) where
   showsPrec p a =
     showParen (p > 10)
               (showString "array " . showsPrec 11 (bounds a) .
                       showChar ' ' . showsPrec 11 (assocs a))
-instance Functor Array where
+instance Ix a => Functor (Array a) where
   fmap f a = listArray (bounds a) (map f (elems a))
 
-array      :: (Int,Int) -> [(Int,a)] -> Array a
+array      :: Ix a => (a,a) -> [(a,b)] -> Array a b
 array b ixs = unsafePerformIO initArray
   where initArray = 
           do
@@ -31,7 +36,7 @@ array b ixs = unsafePerformIO initArray
 	    v' <- unsafeFreezeIOVector v
 	    return (Array b v')
 
-listArray  :: (Int,Int) -> [a] -> Array a
+listArray  :: Ix a => (a,a) -> [b] -> Array a b
 listArray b xs = unsafePerformIO initArray
   where initArray =
 	  do
@@ -41,22 +46,22 @@ listArray b xs = unsafePerformIO initArray
 	    return (Array b v')
 	  where n = rangeSize b
 
-(!)	   :: Array a -> Int -> a
+(!)	   :: Ix a => Array a b -> a -> b
 Array b v ! i = readVector v (index b i)
 
-bounds     :: Array a -> (Int,Int)
+bounds     :: Ix a => Array a b -> (a,a)
 bounds (Array b _) = b
 
-indices    :: Array a -> [Int]
+indices    :: Ix a => Array a b -> [a]
 indices (Array b _) = range b
 
-elems      :: Array a -> [a]
+elems      :: Ix a => Array a b -> [b]
 elems (Array b v) = map (readVector v) (take (rangeSize b) [0..])
 
-assocs	   :: Array a -> [(Int,a)]
+assocs	   :: Ix a => Array a b -> [(a,b)]
 assocs a = zip (indices a) (elems a)
 
-(//)       :: Array a -> [(Int,a)] -> Array a
+(//)       :: Ix a => Array a b -> [(a,b)] -> Array a b
 Array b v // ixs = unsafePerformIO updateArray
   where updateArray =
           do
@@ -65,7 +70,7 @@ Array b v // ixs = unsafePerformIO updateArray
 	    v'' <- unsafeFreezeIOVector v'
 	    return (Array b v'')
 
-accum      :: (a -> b -> a) -> Array a -> [(Int,b)] -> Array a
+accum      :: Ix a => (b -> c -> b) -> Array a b -> [(a,c)] -> Array a b
 accum f (Array b v) ixs = unsafePerformIO updateArray
   where updateArray =
           do
@@ -79,19 +84,18 @@ accum f (Array b v) ixs = unsafePerformIO updateArray
 	    writeIOVector v j (f z x)
 	  where j = index b i
 
-accumArray :: (a -> b -> a) -> a -> (Int,Int) -> [(Int,b)] -> Array a
+accumArray :: Ix a => (b -> c -> b) -> b -> (a,a) -> [(a,c)] -> Array a b
 accumArray f z b = accum f (array b [(i,z) | i <- range b])
 
-ixmap	   :: (Int,Int) -> (Int -> Int) -> Array a -> Array a
+ixmap	   :: (Ix a,Ix b) => (a,a) -> (a -> b) -> Array b c -> Array a c
 ixmap b f a = listArray b [a ! f i | i <- range b]
-
 
 -- vectorArray and vector are MCC extensions for converting vectors
 -- into arrays and vice versa
-vectorArray :: (Int,Int) -> Vector a -> Array a
+vectorArray :: Ix a => (a,a) -> Vector b -> Array a b
 vectorArray b v
   | rangeSize b == lengthVector v = Array b v
   | otherwise = error "internal error: vectorArray"
 
-vector :: Array a -> Vector a
+vector :: Ix a => Array a b -> Vector b
 vector (Array _ v) = v

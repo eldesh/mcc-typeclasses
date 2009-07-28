@@ -1,6 +1,6 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 2779 2009-03-28 10:22:16Z wlux $
+# $Id: Makefile.in 2876 2009-07-28 08:46:16Z wlux $
 #
 # Copyright (c) 2004-2009, Wolfgang Lux
 # See ../LICENSE for the full license.
@@ -48,7 +48,8 @@ curry_prelude_SRCS = \
 	Ptr.curry \
 	StablePtr.curry \
 	Ratio.curry \
-	IO.curry
+	IO.curry \
+	Ix.curry
 curry_stdlib_SRCS  = \
 	AllSolutions.curry \
 	Array.curry \
@@ -66,7 +67,6 @@ curry_stdlib_SRCS  = \
 	ForeignPtr.curry \
 	IOExts.curry \
 	IOVector.curry \
-	Ix.curry \
 	Integer.curry \
 	Lexing.curry \
 	List.curry \
@@ -204,7 +204,7 @@ libcurry_g.a: $(debug_OBJS) $(debug_INTF) $(curry_INTF)
 		xargs $(AR) qc $@
 	$(RANLIB) $@
 
-# special rules handling mutual recursion between Prelude, Ratio, and IO
+# special rules handling mutual recursion between Prelude, Ratio, IO, and Ix
 .Prelude.icurry-boot: $(srcdir)/Prelude.icurry-boot
 	cmp -s Prelude.icurry $(srcdir)/Prelude.icurry-boot || \
 		cp -p $(srcdir)/Prelude.icurry-boot Prelude.icurry
@@ -225,6 +225,10 @@ Ratio.o: Prelude.icurry
 IO.c: .Prelude.icurry-boot
 IO.d.c: Prelude.icurry
 IO.o: Prelude.icurry
+
+Ix.c: .Prelude.icurry-boot
+Ix.d.c: Prelude.icurry
+Ix.o: Prelude.icurry
 
 # link all source files into the current directory
 # NB if $(srcdir) is a relative path we have to modify the paths for target
@@ -310,7 +314,7 @@ depend: $(curry_prelude_SRCS) $(curry_stdlib_SRCS) $(debug_SRCS)
 		stem=`basename $$f .curry`; o="$$stem.c $$stem.d.c"; \
 		echo $$o : $$f; \
 		case $$f in \
-			Prelude.curry | Ratio.curry | IO.curry ) ;; \
+			Prelude.curry | Ratio.curry | IO.curry | Ix.curry ) ;; \
 			* ) echo $$o : Prelude.icurry ;; \
 		esac; \
 		sed -e '/^import/!d;s/import \([A-Za-z0-9_]*\).*/'"$$o : "'\1.icurry/' $(srcdir)/$$f; \

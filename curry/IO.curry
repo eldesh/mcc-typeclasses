@@ -1,6 +1,6 @@
--- $Id: IO.curry 2853 2009-05-29 11:55:01Z wlux $
+-- $Id: IO.curry 2876 2009-07-28 08:46:16Z wlux $
 --
--- Copyright (c) 2003-2007, Wolfgang Lux
+-- Copyright (c) 2003-2009, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module IO(Handle, HandlePosn, IOMode(..), BufferMode(..), SeekMode(..),
@@ -17,6 +17,7 @@ module IO(Handle, HandlePosn, IOMode(..), BufferMode(..), SeekMode(..),
 	  IO, FilePath, IOError, ioError, catch, interact,
 	  putChar, putStr, putStrLn, print, getChar, getLine, getContents,
 	  readFile, writeFile, appendFile) where
+import Ix
 
 data Handle
 instance Eq Handle where
@@ -32,6 +33,12 @@ data HandlePosn	= HandlePosn Handle Int deriving (Eq,Show)
 data IOMode =
   ReadMode | WriteMode | AppendMode | ReadWriteMode
   deriving (Eq,Ord,Bounded,Enum,Show)
+instance Ix IOMode where
+  range (m,m') = [m .. m']
+  index b@(m,_) i
+    | inRange b i = fromEnum i - fromEnum m
+  inRange (m,m') i = m <= i && i <= m'
+  rangeSize (m,m') = if m <= m' then fromEnum m' - fromEnum m + 1 else 0
 
 data BufferMode =
   NoBuffering | LineBuffering | BlockBuffering (Maybe Int)
@@ -40,6 +47,12 @@ data BufferMode =
 data SeekMode =
   AbsoluteSeek | RelativeSeek | SeekFromEnd
   deriving (Eq,Ord,Bounded,Enum,Show)
+instance Ix SeekMode where
+  range (m,m') = [m .. m']
+  index b@(m,_) i
+    | inRange b i = fromEnum i - fromEnum m
+  inRange (m,m') i = m <= i && i <= m'
+  rangeSize (m,m') = if m <= m' then fromEnum m' - fromEnum m + 1 else 0
 
 --- Predefined handles for standard input, output, and error
 foreign import rawcall "files.h primStdin"  stdin  :: Handle

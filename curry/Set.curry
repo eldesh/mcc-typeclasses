@@ -1,6 +1,6 @@
 -- sets based on finite maps
 
--- Copyright (c) 2002-2006, Wolfgang Lux
+-- Copyright (c) 2002-2009, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module Set(Set, nullSet, zeroSet, unitSet, addToSet, deleteFromSet,
@@ -79,4 +79,4 @@ mapSet :: Ord b => (a -> b) -> Set a -> Set b
 mapSet f xs = fromListSet (map f (toListSet xs))
 
 domainFM :: FM a b -> Set a
-domainFM xs = Set (mapFM (const ()) xs)
+domainFM xs = Set (fmap (const ()) xs)

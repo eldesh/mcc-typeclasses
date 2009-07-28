@@ -1,10 +1,10 @@
 -- finite maps based on 2-3 trees
 
--- Copyright (c) 1999-2006, Wolfgang Lux
+-- Copyright (c) 1999-2009, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module FiniteMap(FM, nullFM, zeroFM, unitFM, addToFM, deleteFromFM,
-                 lookupFM, fromListFM, toListFM, mapFM) where
+                 lookupFM, fromListFM, toListFM) where
 
 data FM a b =
     Empty
@@ -21,6 +21,12 @@ instance (Show a, Show b) => Show (FM a b) where
         where showl [] = showChar '}'
               showl (xy:xys) = showChar ',' . showp xy . showl xys
               showp (x,y) = showsPrec 11 x . showString ":=" . showsPrec 11 y
+instance Functor (FM a) where
+  fmap f Empty = Empty
+  fmap f (Node2 a (k,x) b) = Node2 (fmap f a) (k,f x) (fmap f b)
+  fmap f (Node3 a (k,x) b (l,y) c) =
+    Node3 (fmap f a) (k,f x) (fmap f b) (l,f y) (fmap f c)
+
 
 nullFM :: FM a b -> Bool
 nullFM Empty             = True
@@ -149,12 +155,6 @@ toListFM = flip elems []
   where elems Empty xs = xs
         elems (Node2 a x b) xs = elems a (x : elems b xs)
         elems (Node3 a x b y c) xs = elems a (x : elems b (y : elems c xs))
-
-mapFM :: (b -> c) -> FM a b -> FM a c
-mapFM f Empty = Empty
-mapFM f (Node2 a (k,x) b) = Node2 (mapFM f a) (k,f x) (mapFM f b)
-mapFM f (Node3 a (k,x) b (l,y) c) =
-    Node3 (mapFM f a) (k,f x) (mapFM f b) (l,f y) (mapFM f c)
 
 {-
 checkTree :: FM a b -> Int

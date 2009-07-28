@@ -1,6 +1,6 @@
 module Array(module Ix,    -- export all of Ix for convenience
        	     Array, array, listArray, (!), bounds, indices, elems, assocs,
-	     accumArray, (//), accum, ixmap, amap,
+	     accumArray, (//), accum, ixmap,
 	     vectorArray, vector) where
 import Ix
 import IOVector
@@ -19,6 +19,8 @@ instance Show a => Show (Array a) where
     showParen (p > 10)
               (showString "array " . showsPrec 11 (bounds a) .
                       showChar ' ' . showsPrec 11 (assocs a))
+instance Functor Array where
+  fmap f a = listArray (bounds a) (map f (elems a))
 
 array      :: (Int,Int) -> [(Int,a)] -> Array a
 array b ixs = unsafePerformIO initArray
@@ -83,9 +85,6 @@ accumArray f z b = accum f (array b [(i,z) | i <- range b])
 ixmap	   :: (Int,Int) -> (Int -> Int) -> Array a -> Array a
 ixmap b f a = listArray b [a ! f i | i <- range b]
 
--- amap replaces the Functor instace of Haskell arrays
-amap       :: (a -> b) -> Array a -> Array b
-amap f a = listArray (bounds a) (map f (elems a))
 
 -- vectorArray and vector are MCC extensions for converting vectors
 -- into arrays and vice versa

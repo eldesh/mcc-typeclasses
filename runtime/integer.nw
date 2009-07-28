@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: integer.nw 2702 2008-05-19 18:38:47Z wlux $
+% $Id: integer.nw 2877 2009-07-28 14:47:04Z wlux $
 %
-% Copyright (c) 2007-2008, Wolfgang Lux
+% Copyright (c) 2007-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Multi-Precision Integer Primitives}
@@ -1065,4 +1065,351 @@ primQuotRemInteger(Node *x, Node *y)
     regs.hp	+= pair_node_size;
 
     return p;
+}
+
+@ 
+The following functions implement bitwise conjunction, disjunction,
+exclusive-or, and complement for multi-precision integer numbers.
+
+<<integer.h>>=
+extern Node *primAndInteger(Node *, Node *);
+extern Node *primOrInteger(Node *, Node *);
+extern Node *primXorInteger(Node *, Node *);
+extern Node *primNotInteger(Node *);
+
+@ 
+<<integer.c>>=
+Node *
+primAndInteger(Node *x, Node *y)
+{
+    Node *z;
+
+    INIT_MP_TMP();
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	    mpz_set_si(mp_tmp, untag_int(x) & untag_int(y));
+	else
+	{
+	    mpz_set_si(mp_tmp, untag_int(x));
+	    mpz_and(mp_tmp, mp_tmp, y->bi.mpz);
+	}
+    }
+    else if ( is_tagged_int(y) )
+    {
+	mpz_set_si(mp_tmp, untag_int(y));
+	mpz_and(mp_tmp, x->bi.mpz, mp_tmp);
+    }
+    else
+#endif
+	mpz_and(mp_tmp, x->bi.mpz, y->bi.mpz);
+
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(mp_tmp) )
+	z = tag_int(mpz_get_si(mp_tmp));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	z	 = (Node *)regs.hp;
+	z->info  = &bigint_info;
+	mpz_init_set(z->bi.mpz, mp_tmp);
+	regs.hp += bigint_node_size;
+	register_final(z);
+    }
+
+    return z;
+}
+
+Node *
+primOrInteger(Node *x, Node *y)
+{
+    Node *z;
+
+    INIT_MP_TMP();
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	    mpz_set_si(mp_tmp, untag_int(x) | untag_int(y));
+	else
+	{
+	    mpz_set_si(mp_tmp, untag_int(x));
+	    mpz_ior(mp_tmp, mp_tmp, y->bi.mpz);
+	}
+    }
+    else if ( is_tagged_int(y) )
+    {
+	mpz_set_si(mp_tmp, untag_int(y));
+	mpz_ior(mp_tmp, x->bi.mpz, mp_tmp);
+    }
+    else
+#endif
+	mpz_ior(mp_tmp, x->bi.mpz, y->bi.mpz);
+
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(mp_tmp) )
+	z = tag_int(mpz_get_si(mp_tmp));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	z	 = (Node *)regs.hp;
+	z->info  = &bigint_info;
+	mpz_init_set(z->bi.mpz, mp_tmp);
+	regs.hp += bigint_node_size;
+	register_final(z);
+    }
+
+    return z;
+}
+
+Node *
+primXorInteger(Node *x, Node *y)
+{
+    Node *z;
+
+    INIT_MP_TMP();
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+    {
+	if ( is_tagged_int(y) )
+	    mpz_set_si(mp_tmp, untag_int(x) ^ untag_int(y));
+	else
+	{
+	    mpz_set_si(mp_tmp, untag_int(x));
+	    mpz_xor(mp_tmp, mp_tmp, y->bi.mpz);
+	}
+    }
+    else if ( is_tagged_int(y) )
+    {
+	mpz_set_si(mp_tmp, untag_int(y));
+	mpz_xor(mp_tmp, x->bi.mpz, mp_tmp);
+    }
+    else
+#endif
+	mpz_xor(mp_tmp, x->bi.mpz, y->bi.mpz);
+
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(mp_tmp) )
+	z = tag_int(mpz_get_si(mp_tmp));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	z	 = (Node *)regs.hp;
+	z->info  = &bigint_info;
+	mpz_init_set(z->bi.mpz, mp_tmp);
+	regs.hp += bigint_node_size;
+	register_final(z);
+    }
+
+    return z;
+}
+
+Node *
+primNotInteger(Node *x)
+{
+    Node *z;
+
+    INIT_MP_TMP();
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+	mpz_set_si(mp_tmp, ~untag_int(x));
+    else
+#endif
+	mpz_com(mp_tmp, x->bi.mpz);
+
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(mp_tmp) )
+	z = tag_int(mpz_get_si(mp_tmp));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	z	 = (Node *)regs.hp;
+	z->info  = &bigint_info;
+	mpz_init_set(z->bi.mpz, mp_tmp);
+	regs.hp += bigint_node_size;
+	register_final(z);
+    }
+
+    return z;
+}
+
+@ 
+The following functions set, reset, flip, and test an individual bit
+of a multi-precision integer number.
+
+<<integer.h>>=
+extern Node *primSetBitInteger(Node *, Node *);
+extern Node *primClearBitInteger(Node *, Node *);
+extern Node *primComplBitInteger(Node *, Node *);
+extern Node *primTestBitInteger(Node *, Node *);
+
+@ 
+<<integer.c>>=
+Node *
+primSetBitInteger(Node *x, Node *y)
+{
+    long n;
+    Node *z;
+
+    INIT_MP_TMP();
+    n = long_val(y);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+	mpz_set_si(mp_tmp, untag_int(x));
+    else
+#endif
+	mpz_set(mp_tmp, x->bi.mpz);
+    if ( n >= 0 )
+	mpz_setbit(mp_tmp, n);
+
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(mp_tmp) )
+	z = tag_int(mpz_get_si(mp_tmp));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	z	 = (Node *)regs.hp;
+	z->info  = &bigint_info;
+	mpz_init_set(z->bi.mpz, mp_tmp);
+	regs.hp += bigint_node_size;
+	register_final(z);
+    }
+
+    return z;
+}
+
+Node *
+primClearBitInteger(Node *x, Node *y)
+{
+    long n;
+    Node *z;
+
+    INIT_MP_TMP();
+    n = long_val(y);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+	mpz_set_si(mp_tmp, untag_int(x));
+    else
+#endif
+	mpz_set(mp_tmp, x->bi.mpz);
+    if ( n >= 0 )
+	mpz_clrbit(mp_tmp, n);
+
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(mp_tmp) )
+	z = tag_int(mpz_get_si(mp_tmp));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	z	 = (Node *)regs.hp;
+	z->info  = &bigint_info;
+	mpz_init_set(z->bi.mpz, mp_tmp);
+	regs.hp += bigint_node_size;
+	register_final(z);
+    }
+
+    return z;
+}
+
+Node *
+primComplBitInteger(Node *x, Node *y)
+{
+    long n;
+    Node *z;
+
+    INIT_MP_TMP();
+    n = long_val(y);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+	mpz_set_si(mp_tmp, untag_int(x));
+    else
+#endif
+	mpz_set(mp_tmp, x->bi.mpz);
+    if ( n >= 0 )
+	mpz_combit(mp_tmp, n);
+
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(mp_tmp) )
+	z = tag_int(mpz_get_si(mp_tmp));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	z	 = (Node *)regs.hp;
+	z->info  = &bigint_info;
+	mpz_init_set(z->bi.mpz, mp_tmp);
+	regs.hp += bigint_node_size;
+	register_final(z);
+    }
+
+    return z;
+}
+
+Node *
+primTestBitInteger(Node *x, Node *y)
+{
+    bool r;
+    long n;
+
+    INIT_MP_TMP();
+    n = long_val(y);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+	mpz_set_si(mp_tmp, untag_int(x));
+    else
+#endif
+	mpz_set(mp_tmp, x->bi.mpz);
+    r = n >= 0 && mpz_tstbit(mp_tmp, n);
+    return r ? CONST(__Prelude__True) : CONST(__Prelude__False);
+}
+
+@ 
+The following function implements left and right shifts for
+multi-precision integer numbers.
+
+<<integer.h>>=
+Node *primShiftInteger(Node *, Node *);
+
+<<integer.c>>=
+Node *
+primShiftInteger(Node *x, Node *y)
+{
+    long cnt;
+    Node *z;
+
+    INIT_MP_TMP();
+    cnt = long_val(y);
+#if !NO_POINTER_TAGS
+    if ( is_tagged_int(x) )
+	mpz_set_si(mp_tmp, untag_int(x));
+    else
+#endif
+	mpz_set(mp_tmp, x->bi.mpz);
+    if ( cnt >= 0 )
+	mpz_mul_2exp(mp_tmp, mp_tmp, cnt);
+    else
+	mpz_fdiv_q_2exp(mp_tmp, mp_tmp, -cnt);
+
+#if !NO_POINTER_TAGS
+    if ( !is_large_mpz(mp_tmp) )
+	z = tag_int(mpz_get_si(mp_tmp));
+    else
+#endif
+    {
+	CHECK_HEAP(0, bigint_node_size);
+	z	 = (Node *)regs.hp;
+	z->info  = &bigint_info;
+	mpz_init_set(z->bi.mpz, mp_tmp);
+	regs.hp += bigint_node_size;
+	register_final(z);
+    }
+
+    return z;
 }

@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: bigint.nw 2770 2009-03-26 10:12:39Z wlux $
+% $Id: bigint.nw 2877 2009-07-28 14:47:04Z wlux $
 %
-% Copyright (c) 2007-2008, Wolfgang Lux
+% Copyright (c) 2007-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Multiprecision Arithmetic}\label{sec:bigint}
@@ -75,6 +75,7 @@ typedef BIGNUM mpz_t[1];
 #define mpz_sub_ui(z,x,y)	bnz_sub_ui(z,x,y)
 #define mpz_mul(z,x,y)		bnz_mul(z,x,y)
 #define mpz_mul_si(z,x,y)	bnz_mul_si(z,x,y)
+#define mpz_mul_2exp(z,x,y)	bnz_mul_2exp(z,x,y)
 #define mpz_neg(z,x)		bnz_neg(z,x)
 #define mpz_abs(z,x)		bnz_abs(z,x)
 
@@ -82,6 +83,7 @@ typedef BIGNUM mpz_t[1];
 #define mpz_fdiv_q(q,n,d)	bnz_fdiv_q(q,n,d)
 #define mpz_fdiv_r(r,n,d)	bnz_fdiv_r(r,n,d)
 #define mpz_fdiv_qr(q,r,x,y)	bnz_fdiv_qr(q,r,x,y)
+#define mpz_fdiv_q_2exp(z,x,y)	bnz_fdiv_q_2exp(z,x,y)
 #define mpz_tdiv_q(q,n,d)	bnz_tdiv_q(q,n,d)
 #define mpz_tdiv_r(r,n,d)	bnz_tdiv_r(r,n,d)
 #define mpz_tdiv_qr(q,r,x,y)	bnz_tdiv_qr(q,r,x,y)
@@ -90,6 +92,16 @@ typedef BIGNUM mpz_t[1];
 #define mpz_cmp(x,y)		bnz_cmp(x,y)
 #define mpz_cmp_si(x,y)		bnz_cmp_si(x,y)
 #define mpz_sgn(x)		bnz_sgn(x)
+
+/* logical and bit manipulation functions */
+#define mpz_and(z,x,y)		bnz_and(z,x,y)
+#define mpz_ior(z,x,y)		bnz_ior(z,x,y)
+#define mpz_xor(z,x,y)		bnz_xor(z,x,y)
+#define mpz_com(z,x)		bnz_com(z,x)
+#define mpz_setbit(x,n)		bnz_setbit(x,n)
+#define mpz_clrbit(x,n)		bnz_clrbit(x,n)
+#define mpz_combit(x,n)		bnz_combit(x,n)
+#define mpz_tstbit(x,n)		bnz_tstbit(x,n)
 
 /* input and output functions */
 #define mpz_out_str(fp,base,x)	bnz_out_str(fp,base,x)
@@ -133,18 +145,21 @@ The emulation code uses a few global variables that must be
 initialized at the beginning of the program.
 
 <<libcrypto based emulation code>>=
-extern BIGNUM *big_zero, *big_aux;
+extern BIGNUM *big_zero, *big_minus1, *big_aux;
 
 @ 
 <<bigint.c>>=
-BIGNUM *big_zero, *big_aux;
+BIGNUM *big_zero, *big_minus1, *big_aux;
 
 void
 init_bigint()
 {
-    big_aux  = BN_new();
-    big_zero = BN_new();
+    big_aux    = BN_new();
+    big_zero   = BN_new();
+    big_minus1 = BN_new();
     BN_zero(big_zero);
+    BN_one(big_minus1);
+    BN_sub(big_minus1, big_zero, big_minus1);
 }
 
 @ 
@@ -341,8 +356,9 @@ bnz_get_str(char *buf, int base, BIGNUM *x)
 
 @ 
 The arithmetic functions map (almost) directly onto the libcrpyto API
-except for [[mpz_mul_si]] because libcrypto's [[BN_mul_word]] does not
-handle negative numbers. %'
+except for [[mpz_mul_si]] and [[mpz_mul_2exp]] because libcrypto's           %'
+[[BN_mul_word]] does not handle negative numbers and [[BN_lshift]] and
+[[BN_rshift]] have an [[int]] argument instead of an [[unsigned long]].
 
 <<libcrypto based emulation code>>=
 #define bnz_add(z,x,y)		(void)BN_add(z,x,y)
@@ -354,6 +370,7 @@ handle negative numbers. %'
 
 extern void bnz_mul(BIGNUM *, BIGNUM *, BIGNUM *);
 extern void bnz_mul_si(BIGNUM *, BIGNUM *, long);
+extern void bnz_mul_2exp(BIGNUM *, BIGNUM *, unsigned long);
 
 @ 
 <<bigint.c>>=
@@ -382,6 +399,15 @@ bnz_mul_si(BIGNUM *z, BIGNUM *x, long y)
     }
 }
 
+void
+bnz_mul_2exp(BIGNUM *z, BIGNUM *x, unsigned long n)
+{
+    /* FIXME: Handle n > INT_MAX properly */
+    if ( n > INT_MAX )
+	curry_panic("bnz_mul_2exp(): n > INT_MAX");
+    BN_lshift(z, x, (int)n);
+}
+
 @ 
 The division functions provided by libcrypto require an additional
 context argument. In addition, libcrypto provides only division
@@ -394,6 +420,7 @@ functions that truncate towards zero.
 #define bnz_tdiv_r(r,x,y)	(void)bnz_tdiv_qr(NULL,r,x,y)
 
 extern void bnz_fdiv_qr(BIGNUM *, BIGNUM *, BIGNUM *, BIGNUM *);
+extern void bnz_fdiv_q_2exp(BIGNUM *, BIGNUM *, unsigned long);
 extern void bnz_tdiv_qr(BIGNUM *, BIGNUM *, BIGNUM *, BIGNUM *);
 
 @ 
@@ -439,6 +466,15 @@ bnz_fdiv_qr(BIGNUM *q, BIGNUM *r, BIGNUM *x, BIGNUM *y)
     }
 }
 
+void
+bnz_fdiv_q_2exp(BIGNUM *z, BIGNUM *x, unsigned long n)
+{
+    /* FIXME: Handle n > INT_MAX properly */
+    if ( n > INT_MAX )
+	curry_panic("bnz_fdiv_q_2exp(): n > INT_MAX");
+    BN_rshift(z, x, (int)n);
+}
+
 @ 
 Unfortunately, libcrypto implements only comparisons between two
 multi-precision integers. Comparison with a signed or unsigned long
@@ -449,6 +485,295 @@ frequently in the code, we use macros for this.
 #define bnz_cmp(x,y)		BN_cmp(x,y)
 #define bnz_cmp_si(x,y)		(bnz_set_si(big_aux, y), bnz_cmp(x, big_aux))
 #define bnz_sgn(x)		bnz_cmp(x,big_zero)
+
+@ 
+Libcrpyto provides functions for setting, clearing, and testing
+individual bits of multi-precision integers. However, these functions
+take an [[int]] argument instead of an [[unsigned long]]. To make
+things worse, the Gnu MP library uses a two's complement
+representation internally, whereas libcrypto uses a representation
+consisting of the number's sign and its absolute value. In order to
+implement the GNU MP semantics for negative numbers, the operations
+below first compute the one's complement of a negative number, apply
+the inverted operation to that number, and then compute the one's
+complement of the operation's result. %'
+
+\ToDo{We could avoid complementing numbers in some cases by using the
+  fact that the least significant bits of [[x]] and [[-x]] are always
+  equal for a two's complement representation. Furthermore, for an odd
+  number all other bits in the representation of [[-x]] are equal to
+  the complement of the respective bits of [[x]]'s representation.}
+
+<<libcrypto based emulation code>>=
+extern void bnz_setbit(BIGNUM *, unsigned long);
+extern void bnz_clrbit(BIGNUM *, unsigned long);
+extern void bnz_combit(BIGNUM *, unsigned long);
+extern int  bnz_tstbit(BIGNUM *, unsigned long);
+
+@ 
+<<bigint.c>>=
+void
+bnz_setbit(BIGNUM *x, unsigned long n)
+{
+    if ( n > INT_MAX )
+	curry_panic("bnz_setbit(): n > INT_MAX");
+    if ( bnz_sgn(x) >= 0 )
+	BN_set_bit(x, n);
+    else
+    {
+	bnz_com(x, x);
+	BN_clear_bit(x, n);
+	bnz_com(x, x);
+    }
+}
+
+void
+bnz_clrbit(BIGNUM *x, unsigned long n)
+{
+    if ( n > INT_MAX )
+	curry_panic("bnz_clrbit(): n > INT_MAX");
+    if ( bnz_sgn(x) >= 0 )
+	BN_clear_bit(x, n);
+    else
+    {
+	bnz_com(x, x);
+	BN_set_bit(x, n);
+	bnz_com(x, x);
+    }
+}
+
+void
+bnz_combit(BIGNUM *x, unsigned long n)
+{
+    int neg = bnz_sgn(x) < 0;
+
+    if ( n > INT_MAX )
+	curry_panic("bnz_combit(): n > INT_MAX");
+    if ( neg )
+	bnz_com(x, x);
+    if ( BN_is_bit_set(x, n) )
+	BN_clear_bit(x, n);
+    else
+	BN_set_bit(x, n);
+    if ( neg )
+	bnz_com(x, x);
+}
+
+int
+bnz_tstbit(BIGNUM *x, unsigned long n)
+{
+    int r;
+
+    if ( n > INT_MAX )
+	curry_panic("bnz_setbit(): n > INT_MAX");
+    if ( bnz_sgn(x) >= 0 )
+	r = BN_is_bit_set(x, n);
+    else
+    {
+	bnz_com(x, x);
+	r = !BN_is_bit_set(x, n);
+    }
+    return r ? 1 : 0;
+}
+
+@ 
+While libcrypto provides functions for setting and testing individual
+bits of a multi-precision integer, there are no functions that
+implement the logical and, or, and complement operations. This makes
+the emulation of the logical operations quite complex. The only
+exception is the logical complement of a number, which can easily be
+computed using the relation $\texttt{complement}\;n = -1-n$.
+
+<<libcrypto based emulation code>>=
+extern void bnz_and(BIGNUM *, BIGNUM *, BIGNUM *);
+extern void bnz_ior(BIGNUM *, BIGNUM *, BIGNUM *);
+extern void bnz_xor(BIGNUM *, BIGNUM *, BIGNUM *);
+#define bnz_com(z,x)		bnz_sub(z,big_minus1,x)
+
+@ 
+<<bigint.c>>=
+void
+bnz_and(BIGNUM *z, BIGNUM *x, BIGNUM *y)
+{
+    int		  i, neg_x, neg_y, n_aux, n_x, n_y;
+    unsigned char *buf;
+    BIGNUM	  max;
+
+    n_x = BN_num_bytes(x);
+    n_y = BN_num_bytes(y);
+    if ( n_x < n_y )
+    {
+	BIGNUM *aux;
+
+	n_aux = n_x; n_x = n_y; n_y = n_aux;
+	aux   = x;   x	 = y;	y   = aux;
+    }
+
+    buf = (unsigned char *)malloc(2 * n_x);
+    if ( !buf )
+	sys_error("bnz_and");
+
+    BN_init(&max);
+    BN_one(&max);
+    BN_lshift(&max, &max, CHAR_BIT * n_x);
+
+    neg_x = bnz_sgn(x) < 0;
+    if ( neg_x )
+    {
+	BN_add(big_aux, &max, x);
+	n_aux = BN_num_bytes(big_aux);
+	memset(buf, 0, n_x - n_aux);
+	BN_bn2bin(big_aux, buf + (n_x - n_aux));
+    }
+    else
+	BN_bn2bin(x, buf);
+
+    neg_y = bnz_sgn(y) < 0;
+    if ( neg_y )
+    {
+	BN_add(big_aux, &max, y);
+	n_aux = BN_num_bytes(big_aux);
+	memset(buf + n_x, 0, n_x - n_aux);
+	BN_bn2bin(big_aux, buf + (2 * n_x - n_aux));
+    }
+    else
+    {
+	memset(buf + n_x, 0, n_x - n_y);
+	BN_bn2bin(y, buf + (2 * n_x - n_y));
+    }
+
+    for ( i = 0; i < n_x; i++ )
+	buf[i] &= buf[i + n_x];
+
+    BN_bin2bn(buf, n_x, z);
+    if ( neg_x && neg_y )
+	BN_sub(z, z, &max);
+    free(buf);
+
+    BN_free(&max);
+}
+
+void
+bnz_ior(BIGNUM *z, BIGNUM *x, BIGNUM *y)
+{
+    int		  i, neg_x, neg_y, n_aux, n_x, n_y;
+    unsigned char *buf;
+    BIGNUM	  max;
+
+    n_x = BN_num_bytes(x);
+    n_y = BN_num_bytes(y);
+    if ( n_x < n_y )
+    {
+	BIGNUM *aux;
+
+	n_aux = n_x; n_x = n_y; n_y = n_aux;
+	aux   = x;   x	 = y;	y   = aux;
+    }
+
+    buf = (unsigned char *)malloc(2 * n_x);
+    if ( !buf )
+	sys_error("bnz_ior");
+
+    BN_init(&max);
+    BN_one(&max);
+    BN_lshift(&max, &max, CHAR_BIT * n_x);
+
+    neg_x = bnz_sgn(x) < 0;
+    if ( neg_x )
+    {
+	BN_add(big_aux, &max, x);
+	n_aux = BN_num_bytes(big_aux);
+	memset(buf, 0, n_x - n_aux);
+	BN_bn2bin(big_aux, buf + (n_x - n_aux));
+    }
+    else
+	BN_bn2bin(x, buf);
+
+    neg_y = bnz_sgn(y) < 0;
+    if ( neg_y )
+    {
+	BN_add(big_aux, &max, y);
+	n_aux = BN_num_bytes(big_aux);
+	memset(buf + n_x, 0, n_x - n_aux);
+	BN_bn2bin(big_aux, buf + (2 * n_x - n_aux));
+    }
+    else
+    {
+	memset(buf + n_x, 0, n_x - n_y);
+	BN_bn2bin(y, buf + (2 * n_x - n_y));
+    }
+
+    for ( i = 0; i < n_x; i++ )
+	buf[i] |= buf[i + n_x];
+
+    BN_bin2bn(buf, n_x, z);
+    if ( neg_x || neg_y )
+	BN_sub(z, z, &max);
+    free(buf);
+
+    BN_free(&max);
+}
+
+void
+bnz_xor(BIGNUM *z, BIGNUM *x, BIGNUM *y)
+{
+    int		  i, neg_x, neg_y, n_aux, n_x, n_y;
+    unsigned char *buf;
+    BIGNUM	  max;
+
+    n_x = BN_num_bytes(x);
+    n_y = BN_num_bytes(y);
+    if ( n_x < n_y )
+    {
+	BIGNUM *aux;
+
+	n_aux = n_x; n_x = n_y; n_y = n_aux;
+	aux   = x;   x	 = y;	y   = aux;
+    }
+
+    buf = (unsigned char *)malloc(2 * n_x);
+    if ( !buf )
+	sys_error("bnz_xor");
+
+    BN_init(&max);
+    BN_one(&max);
+    BN_lshift(&max, &max, CHAR_BIT * n_x);
+
+    neg_x = bnz_sgn(x) < 0;
+    if ( neg_x )
+    {
+	BN_add(big_aux, &max, x);
+	n_aux = BN_num_bytes(big_aux);
+	memset(buf, 0, n_x - n_aux);
+	BN_bn2bin(big_aux, buf + (n_x - n_aux));
+    }
+    else
+	BN_bn2bin(x, buf);
+
+    neg_y = bnz_sgn(y) < 0;
+    if ( neg_y )
+    {
+	BN_add(big_aux, &max, y);
+	n_aux = BN_num_bytes(big_aux);
+	memset(buf + n_x, 0, n_x - n_aux);
+	BN_bn2bin(big_aux, buf + (2 * n_x - n_aux));
+    }
+    else
+    {
+	memset(buf + n_x, 0, n_x - n_y);
+	BN_bn2bin(y, buf + (2 * n_x - n_y));
+    }
+
+    for ( i = 0; i < n_x; i++ )
+	buf[i] ^= buf[i + n_x];
+
+    BN_bin2bn(buf, n_x, z);
+    if ( neg_x != neg_y )
+	BN_sub(z, z, &max);
+    free(buf);
+
+    BN_free(&max);
+}
 
 @ 
 The function [[mpz_out_str]] can be implemented directly only for a

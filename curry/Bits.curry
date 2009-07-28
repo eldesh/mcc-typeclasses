@@ -1,52 +1,98 @@
--- $Id: Bits.curry 1744 2005-08-23 16:17:12Z wlux $
+-- $Id: Bits.curry 2877 2009-07-28 14:47:04Z wlux $
 --
--- Copyright (c) 2005, Wolfgang Lux
+-- Copyright (c) 2005-2009, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
-module Bits((.&.), (.|.), xor, complement, shift, rotate,
-            bit, setBit, clearBit, complementBit, testBit,
-            bitSize, isSigned, shiftL, shiftR, rotateL, rotateR) where
+module Bits(Bits(..)) where
 
 infixl 8 `shift`, `shiftL`, `shiftR`, `rotate`, `rotateL`, `rotateR`
 infixl 7 .&.
 infixl 6 `xor`
 infixl 5 .|.
 
-foreign import ccall "prims.h primAndInt" (.&.) :: Int -> Int -> Int
-foreign import ccall "prims.h primOrInt" (.|.) :: Int -> Int -> Int
-foreign import ccall "prims.h primXorInt" xor :: Int -> Int -> Int
-foreign import ccall "prims.h primNotInt" complement :: Int -> Int
+class Num a => Bits a where
+  (.&.), (.|.), xor :: a -> a -> a
+  complement :: a -> a
+  shift, rotate :: a -> Int -> a
+  bit :: Int -> a
+  setBit, clearBit, complementBit :: a -> Int -> a
+  testBit :: a -> Int -> Bool
+  bitSize :: a -> Int
+  isSigned :: a -> Bool
+  shiftL, shiftR :: a -> Int -> a
+  rotateL, rotateR :: a -> Int -> a
 
-shift :: Int -> Int -> Int
-shift = shiftL
+  -- Minimal complete definition:
+  -- (.&.), (.|.), xor, complement, shift, rotate, bitSize, isSigned
+  bit n = setBit 0 n
+  setBit x n = x .|. shift 1 n
+  clearBit x n = x .&. complement (shift 1 n)
+  complementBit x n = x `xor` shift 1 n
+  testBit x n = x .&. shift 1 n /= 0
+  shiftL n = shift n
+  shiftR n = shift (-n)
+  rotateL n = rotate n
+  rotateR n = rotate (-n)
 
-rotate :: Int -> Int -> Int
-rotate = rotateL
+instance Bits Int where
+  (.&.) = primAndInt
+    where foreign import ccall "prims.h" primAndInt :: Int -> Int -> Int
+  (.|.) = primOrInt
+    where foreign import ccall "prims.h" primOrInt :: Int -> Int -> Int
+  xor = primXorInt
+    where foreign import ccall "prims.h" primXorInt :: Int -> Int -> Int
+  complement = primNotInt
+    where foreign import ccall "prims.h" primNotInt :: Int -> Int
+  setBit = primSetBitInt
+    where foreign import ccall "prims.h" primSetBitInt :: Int -> Int -> Int
+  clearBit = primClearBitInt
+    where foreign import ccall "prims.h" primClearBitInt :: Int -> Int -> Int
+  complementBit = primComplBitInt
+    where foreign import ccall "prims.h" primComplBitInt :: Int -> Int -> Int
+  testBit = primTestBitInt
+    where foreign import ccall "prims.h" primTestBitInt :: Int -> Int -> Bool
+  shift = shiftL
+  rotate = rotateL
+  bitSize _ = primBitSizeInt
+    where foreign import ccall "prims.h" primBitSizeInt :: Int
+  isSigned _ = True
+  shiftL = primShiftLInt
+    where foreign import ccall "prims.h" primShiftLInt :: Int -> Int -> Int
+  shiftR = primShiftRInt
+    where foreign import ccall "prims.h" primShiftRInt :: Int -> Int -> Int
+  rotateL = primRotateLInt
+    where foreign import ccall "prims.h" primRotateLInt :: Int -> Int -> Int
+  rotateR = primRotateRInt
+    where foreign import ccall "prims.h" primRotateRInt :: Int -> Int -> Int
 
-bit :: Int -> Int
-bit n = setBit 0 n
-
-setBit :: Int -> Int -> Int
-setBit x n = x .|. shift 1 n
-
-clearBit :: Int -> Int -> Int
-clearBit x n = x .&. complement (shift 1 n)
-
-complementBit :: Int -> Int -> Int
-complementBit x n = x `xor` shift 1 n
-
-testBit :: Int -> Int -> Bool
-testBit x n = x .&. shift 1 n /= 0
-
-bitSize :: Int -> Int
-bitSize _ = primBitSizeInt
-  where foreign import ccall "prims.h" primBitSizeInt :: Int
-
-isSigned :: Int -> Bool
-isSigned _ = True
-
-foreign import ccall "prims.h primShiftLInt" shiftL :: Int -> Int -> Int
-foreign import ccall "prims.h primShiftRInt" shiftR :: Int -> Int -> Int
-
-foreign import ccall "prims.h primRotateLInt" rotateL :: Int -> Int -> Int
-foreign import ccall "prims.h primRotateRInt" rotateR :: Int -> Int -> Int
+instance Bits Integer where
+  (.&.) = primAndInteger
+    where foreign import rawcall "integer.h"
+    	  	  primAndInteger :: Integer -> Integer -> Integer
+  (.|.) = primOrInteger
+    where foreign import rawcall "integer.h"
+    	  	  primOrInteger :: Integer -> Integer -> Integer
+  xor = primXorInteger
+    where foreign import rawcall "integer.h"
+    	  	  primXorInteger :: Integer -> Integer -> Integer
+  complement = primNotInteger
+    where foreign import rawcall "integer.h"
+    	  	  primNotInteger :: Integer -> Integer
+  setBit = primSetBitInteger
+    where foreign import rawcall "integer.h"
+    	  	  primSetBitInteger :: Integer -> Int -> Integer
+  clearBit = primClearBitInteger
+    where foreign import rawcall "integer.h"
+    	  	  primClearBitInteger :: Integer -> Int -> Integer
+  complementBit = primComplBitInteger
+    where foreign import rawcall "integer.h"
+    	  	  primComplBitInteger :: Integer -> Int -> Integer
+  testBit = primTestBitInteger
+    where foreign import rawcall "integer.h"
+    	  	  primTestBitInteger :: Integer -> Int -> Bool
+  shift = primShiftInteger
+    where foreign import rawcall "integer.h"
+    	  	  primShiftInteger :: Integer -> Int -> Integer
+  rotate = shift
+  bitSize _ = error "bitSize(Integer)"
+  isSigned _ = True

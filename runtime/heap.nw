@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2854 2009-05-29 12:33:07Z wlux $
+% $Id: heap.nw 2887 2009-08-05 15:54:11Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -705,6 +705,12 @@ evaluating the node as well. Generic queue-me nodes, as described by
 [[queueMe_info_table[0]]], are used as a means of synchronization in
 the runtime system.
 
+A dedicated queue-me node is provided for the translation of cyclic
+variable definitions like \verb|x = x|, which is considered an
+abbreviation for \verb|x = Prelude.id x|. Since the queue-me node can
+never be updated, a single, constant node can be shared among all such
+definitions.
+
 <<heap.h>>=
 extern NodeInfo queueMe_info_table[];
 struct queueMe_node {
@@ -712,6 +718,8 @@ struct queueMe_node {
     ThreadQueue wq;		/* wait queue */
 };
 #define queueMe_node_size       wordsof(struct queueMe_node)
+
+extern const struct queueMe_node blackHole;
 
 @
 <<heap.c>>=
@@ -725,6 +733,8 @@ NodeInfo queueMe_info_table[] = {
     { QUEUEME_KIND, EVAL_TAG, queueMe_node_size, 0, 0, eval_queueMe, 0, 0, 0 }
 };
 #endif
+
+const struct queueMe_node blackHole = { queueMe_info_table, 0 };
 
 @ 
 The free variables of a search goal cannot be evaluated or

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachLoader.lhs 2806 2009-04-26 17:30:18Z wlux $
+% $Id: MachLoader.lhs 2887 2009-08-05 15:54:11Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -67,7 +67,7 @@ in order to allow mutual recursion between functions.
 >   (f,length vs,entry (map show vs) (transl st))
 >   where transl = maybe translStmt translInstrumented instrument
 >         translInstrumented instrument st = instrument st (translStmt st)
->         translStmt (Return e) = returnNode (translExpr e)
+>         translStmt (Return e) = returnNode (translExpr Nothing e)
 >         translStmt (Enter v) = enter (show v)
 >         translStmt (Exec f vs) = exec (lookupFun f fEnv) (map show vs)
 >         translStmt (CCall _ _ cc) = translCCall cc
@@ -79,7 +79,7 @@ in order to allow mutual recursion between functions.
 >         translStmt (Choices alts) = choices (map transl alts)
 >         translStmt0 (v :<- st) = seqStmts (show v) (transl st)
 >         translStmt0 (Let bds) =
->           letNodes [(show v,translExpr n) | Bind v n <- bds]
+>           letNodes [(show v,translExpr (Just v) n) | Bind v n <- bds]
 >         translCCall (StaticCall f vs) =
 >           cCall (lookupPrim f primEnv) (map (show . snd) vs)
 >         translCCall (DynamicCall _ _) =
@@ -94,15 +94,18 @@ in order to allow mutual recursion between functions.
 >                 isDefault _ = False
 >         translCase (Case t st) =
 >           (caseTag cEnv t,bindArgs (translPattern t) (transl st))
->         translExpr (Lit c) = translLiteral c
->         translExpr (Constr c vs) =
+>         translExpr _ (Lit c) = translLiteral c
+>         translExpr _ (Constr c vs) =
 >           initConstr (lookupConstr c cEnv) (map show vs)
->         translExpr (Papp f vs) = initClosure (lookupFun f fEnv) (map show vs)
->         translExpr (Closure f vs) =
+>         translExpr _ (Papp f vs) =
 >           initClosure (lookupFun f fEnv) (map show vs)
->         translExpr (Lazy f vs) = initLazy (lookupFun f fEnv) (map show vs)
->         translExpr Free = initFree
->         translExpr (Var v) = initIndir (show v)
+>         translExpr _ (Closure f vs) =
+>           initClosure (lookupFun f fEnv) (map show vs)
+>         translExpr _ (Lazy f vs) = initLazy (lookupFun f fEnv) (map show vs)
+>         translExpr _ Free = initFree
+>         translExpr v (Var v')
+>           | v == Just v' = initQueueMe
+>           | otherwise = initIndir (show v')
 >         translLiteral (Char c) = initChar c
 >         translLiteral (Int i) = initInt i
 >         translLiteral (Integer i) = initInt i

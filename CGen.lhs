@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2886 2009-08-05 15:52:11Z wlux $
+% $Id: CGen.lhs 2887 2009-08-05 15:54:11Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -788,7 +788,8 @@ split into minimal binding groups.
 >         init o (v,Closure f vs)
 >           | null vs = (o,(v,constRef (constFunc f)))
 >           | otherwise = (o + length vs + 1,(v,constant o))
->         init o (v,Var v') = (o,(v,var v'))
+>         init o (v,Var v') =
+>           (o,(v,if v == v then constRef "blackHole" else var v'))
 >         init _ (v,n) = error ("internal error: constants.init" ++ show n)
 >         constant = asNode . add (CExpr constArray) . int
 

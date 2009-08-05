@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2884 2009-08-05 15:49:01Z wlux $
+% $Id: Simplify.lhs 2885 2009-08-05 15:50:32Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -462,7 +462,7 @@ variable declarations (see \texttt{simplifyDecl} above).
 > inlineVars m tyEnv trEnv
 >            [FunctionDecl _ f [Equation p (FunLhs _ ts) (SimpleRhs _ e _)]]
 >            env
->   | f `notElem` qfv m e && maybe True (Trust==) (lookupEnv f trEnv) =
+>   | f `notElem` qfv m e && trustedFun trEnv f =
 >       case etaReduce m tyEnv p ts e of
 >         Lambda _ _ _ -> env
 >         e' -> bindEnv f e' env
@@ -615,11 +615,8 @@ form where the arguments of all applications would be variables.
 > prelFailed ty = Variable ty (qualifyWith preludeMIdent (mkIdent "failed"))
 
 \end{verbatim}
-Auxiliary functions.
+Generation of fresh names.
 \begin{verbatim}
-
-> trustedFun :: TrustEnv -> Ident -> Bool
-> trustedFun trEnv f = maybe True (Trust ==) (lookupEnv f trEnv)
 
 > freshVar :: ModuleIdent -> String -> Type -> SimplifyState (Type,Ident)
 > freshVar m prefix ty =
@@ -628,6 +625,10 @@ Auxiliary functions.
 >     updateSt_ (bindFun m v 0 (monoType ty))
 >     return (ty,v)
 >   where mkName n = mkIdent (prefix ++ show n)
+
+\end{verbatim}
+Auxiliary functions.
+\begin{verbatim}
 
 > tuplePattern :: [ConstrTerm Type] -> ConstrTerm Type
 > tuplePattern ts =

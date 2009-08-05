@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Common.lhs 2819 2009-05-06 15:40:58Z wlux $
+% $Id: Common.lhs 2885 2009-08-05 15:50:32Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -111,7 +111,8 @@ transformation.
 >   where (lifted,tyEnv',trEnv') = lift tyEnv trEnv m
 >         il = ilTrans tcEnv tyEnv' lifted
 >         ilDbg
->           | debug = debugAddMain (dTransform (trustedFun trEnv') il)
+>           | debug =
+>               debugAddMain (dTransform (trustedFun trEnv' . unqualify) il)
 >           | otherwise = il
 >         dumps =
 >           [(DumpLifted,ppModule lifted),
@@ -158,9 +159,6 @@ code.
 >         isCodeDecl (IL.TypeDecl _ _ _) = False
 >         isCodeDecl (IL.FunctionDecl _ _ _ _) = True
 >         isCodeDecl (IL.ForeignDecl _ _ _ _) = True
-
-> trustedFun :: TrustEnv -> QualIdent -> Bool
-> trustedFun trEnv f = maybe True (Trust ==) (lookupEnv (unqualify f) trEnv)
 
 > dataTypes :: TCEnv -> [(Cam.Name,[Cam.Name])]
 > dataTypes tcEnv = [dataType tc cs | DataType tc _ cs <- allEntities tcEnv]

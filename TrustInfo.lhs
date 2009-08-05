@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TrustInfo.lhs 2513 2007-10-18 09:50:08Z wlux $
+% $Id: TrustInfo.lhs 2885 2009-08-05 15:50:32Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TrustInfo.lhs}
@@ -18,5 +18,8 @@ declarative debugger (cf.\ Sect.~\ref{sec:dtrans}).
 > import Env
 
 > type TrustEnv = Env Ident Trust
+
+> trustedFun :: TrustEnv -> Ident -> Bool
+> trustedFun trEnv f = maybe True (Trust ==) (lookupEnv f trEnv)
 
 \end{verbatim}

@@ -3,7 +3,7 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 2821 2009-05-07 16:31:23Z wlux $
+# $Id: cymake.in 2883 2009-08-05 15:46:52Z wlux $
 #
 # Copyright (c) 2002-2009, Wolfgang Lux
 # See LICENSE for the full license.
@@ -135,8 +135,8 @@ while test $# -gt 0; do
     # Linker options
     -ldopt-* | -ldopts-* | --ldopt-* | --ldopts-* ) ldopts="$ldopts $1";;
     -ldopt | -ldopts | --ldopt | --ldopts ) ldopts="$ldopts $1 $2"; shift;;
-    -L ) ldopts="$ldopts -L$2"; shift;;
-    -L* ) ldopts="$ldopts $1";;
+    -[LR] ) ldopts="$ldopts $1$2"; shift;;
+    -[LR]* ) ldopts="$ldopts $1";;
     -l ) libs="$libs -l$2"; shift;;
     -l* ) libs="$libs $1";;
 

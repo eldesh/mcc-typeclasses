@@ -3,7 +3,7 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 2769 2009-03-26 09:14:55Z wlux $
+# $Id: cyc.in 2883 2009-08-05 15:46:52Z wlux $
 #
 # Copyright (c) 2002-2009, Wolfgang Lux
 # See LICENSE for the full license.
@@ -163,8 +163,8 @@ while test $# -gt 0; do
     -ldopts-* | --ldopts-* )
       ldopts=$ldopts\ `expr X"$1" : X'-*ldopts*\(-.*\)' | tr , ' '`;;
     -ldopts | --ldopts ) ldopts=$ldopts\ `echo "$2" | tr , ' '`; shift;;
-    -L ) ldopts="$ldopts -L$2"; shift;;
-    -L* ) ldopts="$ldopts $1";;
+    -[LR] ) ldopts="$ldopts $1$2"; shift;;
+    -[LR]* ) ldopts="$ldopts $1";;
     -l ) libs="$libs -l$2"; shift;;
     -l* ) libs="$libs $1";;
     -framework ) ldopts="$ldopts $1 $2"; shift;;

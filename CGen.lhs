@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2861 2009-06-03 05:48:15Z wlux $
+% $Id: CGen.lhs 2886 2009-08-05 15:52:11Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -210,9 +210,7 @@ initialized upon their first use.
 > constr (ConstrDecl c tys) = (c,length tys)
 
 > tagDecl :: [Name] -> CTopDecl
-> tagDecl cs =
->   CEnumDecl [CConst (dataTag c) (Just n)
->             | (c,n) <- zip cs [0..], c /= Name "_"]
+> tagDecl cs = CEnumDecl [CConst (dataTag c) (Just n) | (c,n) <- zip cs [0..]]
 
 > dataDecl :: Name -> Int -> CTopDecl
 > dataDecl c n = head (dataDef undefined c n)

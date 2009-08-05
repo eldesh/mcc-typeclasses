@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 2806 2009-04-26 17:30:18Z wlux $
+% $Id: ILCompile.lhs 2886 2009-08-05 15:52:11Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -43,9 +43,9 @@ language into abstract machine code.
 >   where vs = nameSupply "_"
 
 > compileConstr :: [Cam.Name] -> ConstrDecl -> Cam.ConstrDecl
-> compileConstr vs (ConstrDecl c tys) = Cam.ConstrDecl c' (map compileType tys)
->   where c' = if c == hidden then hiddenCon else con c
->         compileType (TypeConstructor tc tys) =
+> compileConstr vs (ConstrDecl c tys) =
+>   Cam.ConstrDecl (con c) (map compileType tys)
+>   where compileType (TypeConstructor tc tys) =
 >           Cam.TypeApp (con tc) (map compileType tys)
 >         compileType (TypeVariable n) = Cam.TypeVar (vs !! n)
 >         compileType (TypeArrow ty1 ty2) =
@@ -410,7 +410,7 @@ equivalences.
 \begin{quote}\def\lb{\char`\{}\def\rb{\char`\}}
   \begin{tabular}{r@{$\null\equiv\null$}ll}
     \texttt{let} \texttt{\lb} $x$ \texttt{=} $e$ \texttt{\rb;} \emph{st} &
-      $x$ \texttt{<-} \texttt{return} $e$ & $(x \not\in \textrm{vars}(e))$ \\
+      $x$ \texttt{<-} \texttt{return} $e$\texttt{;} \emph{st} & $(x \not\in \textrm{vars}(e))$ \\
     $x$ \texttt{<-} \emph{st}\texttt{;} \texttt{return} $x$ & \emph{st} \\
     $x$ \texttt{<-} \texttt{return} $y$\texttt{;} \emph{st} &
       $\emph{st}[y/x]$ \\
@@ -505,15 +505,9 @@ external representation used by the abstract machine code.
 > con :: QualIdent -> Cam.Name
 > con c = Cam.mangleQualified (show c)
 
-> hiddenCon :: Cam.Name
-> hiddenCon = Cam.Name "_"
-
 \end{verbatim}
 Auxiliary functions.
 \begin{verbatim}
-
-> hidden :: QualIdent
-> hidden = qualify anonId
 
 > nameSupply :: String -> [Cam.Name]
 > nameSupply v = [Cam.Name (v ++ show i) | i <- [0..]]

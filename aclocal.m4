@@ -1,6 +1,6 @@
-# $Id: aclocal.m4 2749 2008-08-30 13:11:27Z wlux $
+# $Id: aclocal.m4 2882 2009-08-05 15:45:29Z wlux $
 #
-# Copyright (c) 2002-2008, Wolfgang Lux
+# Copyright (c) 2002-2009, Wolfgang Lux
 #
 
 ########################################################################
@@ -202,7 +202,7 @@ AC_DEFUN([CURRY_HC_VERSION],
 [cat <<EOF >conftest.hs
 main = putStr (
 #ifdef __GLASGOW_HASKELL__
-  "ghc " ++ show (__GLASGOW_HASKELL__/100)
+  "ghc " ++ shows (div __GLASGOW_HASKELL__ 100) ('.' : show (mod __GLASGOW_HASKELL__ 100))
 #endif
 #ifdef __HBC__
 # if __HASKELL1__==5
@@ -221,7 +221,7 @@ main = putStr (
 # endif
 # if __HASKELL__==98
 #  if __NHC__ > 1
-  "nhc98 " ++ show (__NHC__/100)
+  "nhc98 " ++ shows (div __NHC__ 100) ('.' : show (mod __NHC__ 100))
 #  else
   "nhc98"
 #  endif

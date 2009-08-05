@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: prims.nw 2877 2009-07-28 14:47:04Z wlux $
+% $Id: prims.nw 2880 2009-08-05 14:34:49Z wlux $
 %
 % Copyright (c) 2004-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -119,11 +119,6 @@ modulo 64 on the PowerPC architecture in 32-bit mode).
 #define primOrInt(x,y)  ((x)|(y))
 #define primXorInt(x,y) ((x)^(y))
 #define primNotInt(x)   (~(x))
-
-#define primSetBitInt(x,y)   ((x)|(1<<(y)))
-#define primClearBitInt(x,y) ((x)&~(1<<(y)))
-#define primComplBitInt(x,y) ((x)^(1<<(y)))
-#define primTestBitInt(x,y)  ((x)&(1<<(y)))
 
 #define primBitSizeInt()  (CHAR_BIT*sizeof(long))
 

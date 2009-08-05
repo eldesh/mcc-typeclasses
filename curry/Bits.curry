@@ -1,4 +1,4 @@
--- $Id: Bits.curry 2877 2009-07-28 14:47:04Z wlux $
+-- $Id: Bits.curry 2880 2009-08-05 14:34:49Z wlux $
 --
 -- Copyright (c) 2005-2009, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -43,14 +43,6 @@ instance Bits Int where
     where foreign import ccall "prims.h" primXorInt :: Int -> Int -> Int
   complement = primNotInt
     where foreign import ccall "prims.h" primNotInt :: Int -> Int
-  setBit = primSetBitInt
-    where foreign import ccall "prims.h" primSetBitInt :: Int -> Int -> Int
-  clearBit = primClearBitInt
-    where foreign import ccall "prims.h" primClearBitInt :: Int -> Int -> Int
-  complementBit = primComplBitInt
-    where foreign import ccall "prims.h" primComplBitInt :: Int -> Int -> Int
-  testBit = primTestBitInt
-    where foreign import ccall "prims.h" primTestBitInt :: Int -> Int -> Bool
   shift = shiftL
   rotate = rotateL
   bitSize _ = primBitSizeInt

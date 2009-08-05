@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILLift.lhs 2817 2009-05-06 14:24:56Z wlux $
+% $Id: ILLift.lhs 2888 2009-08-05 15:55:47Z wlux $
 %
 % Copyright (c) 2000-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -7,7 +7,7 @@
 \nwfilename{ILLift.lhs}
 \section{Normalization}
 Before the intermediate language code is translated into abstract
-machine code, all case and or expressions occurring in argument
+machine code, all (f)case and choice expressions occurring in argument
 positions are lifted into global functions.
 \begin{verbatim}
 
@@ -50,25 +50,19 @@ positions are lifted into global functions.
 >     (e',ds) <- liftExpr e
 >     (as',ds') <- mapLift liftAlt as
 >     return (Case ev e' as',ds ++ ds')
-> liftExpr (Or e1 e2) =
+> liftExpr (Choice es) =
 >   do
->     (e1',ds) <- liftExpr e1
->     (e2',ds') <- liftExpr e2
->     return (Or e1' e2',ds ++ ds')
-> liftExpr (Exist v e) =
+>     (es',ds) <- mapLift liftExpr es
+>     return (Choice es',ds)
+> liftExpr (Exist vs e) =
 >   do
 >     (e',ds) <- liftExpr e
->     return (Exist v e',ds)
-> liftExpr (Let b e) =
->   do
->     (b',ds) <- liftBinding b
->     (e',ds') <- liftExpr e
->     return (Let b' e',ds ++ ds')
-> liftExpr (Letrec bs e) =
+>     return (Exist vs e',ds)
+> liftExpr (Let rec bs e) =
 >   do
 >     (bs',ds) <- mapLift liftBinding bs
 >     (e',ds') <- liftExpr e
->     return (Letrec bs' e',ds ++ ds')
+>     return (Let rec bs' e',ds ++ ds')
 > liftExpr (SrcLoc p e) =
 >   do
 >     (e',ds) <- liftExpr e
@@ -85,21 +79,16 @@ positions are lifted into global functions.
 >     (e',ds') <- liftArg e
 >     return (Apply f' e',ds ++ ds')
 > liftArg (Case ev e as) = lift (Case ev e as)
-> liftArg (Or e1 e2) = lift (Or e1 e2)
-> liftArg (Exist v e) =
+> liftArg (Choice es) = lift (Choice es)
+> liftArg (Exist vs e) =
 >   do
 >     (e',ds) <- liftArg e
->     return (Exist v e',ds)
-> liftArg (Let b e) =
->   do
->     (b',ds) <- liftBinding b
->     (e',ds') <- liftArg e
->     return (Let b' e',ds ++ ds')
-> liftArg (Letrec bs e) =
+>     return (Exist vs e',ds)
+> liftArg (Let rec bs e) =
 >   do
 >     (bs',ds) <- mapLift liftBinding bs
 >     (e',ds') <- liftArg e
->     return (Letrec bs' e',ds ++ ds')
+>     return (Let rec bs' e',ds ++ ds')
 > liftArg (SrcLoc p e) =
 >   do
 >     (e',ds) <- liftArg e
@@ -150,12 +139,13 @@ positions are lifted into global functions.
 > fv (Constructor _ _) = []
 > fv (Apply f e) = fv f ++ fv e
 > fv (Case _ e as) = fv e ++ concatMap fvAlt as
-> fv (Or e1 e2) = fv e1 ++ fv e2
-> fv (Exist v e) = filter (v /=) (fv e)
-> fv (Let (Binding v e1) e2) = fv e1 ++ filter (v /=) (fv e2)
-> fv (Letrec bs e) =
->   filter (`notElem` bvs) ([v | Binding _ e <- bs, v <- fv e] ++ fv e)
->   where bvs = [v | Binding v _ <- bs]
+> fv (Choice es) = concatMap fv es
+> fv (Exist vs e) = filter (`notElem` vs) (fv e)
+> fv (Let rec bs e) =
+>   fvBinds rec vs (concatMap fv es) ++ filter (`notElem` vs) (fv e)
+>   where (vs,es) = unzip [(v,e) | Binding v e <- bs]
+>         fvBinds NonRec _ = id
+>         fvBinds Rec vs = filter (`notElem` vs)
 > fv (SrcLoc _ e) = fv e
 
 > fvAlt :: Alt -> [Ident]

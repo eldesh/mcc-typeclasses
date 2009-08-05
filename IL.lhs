@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IL.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: IL.lhs 2888 2009-08-05 15:55:47Z wlux $
 %
 % Copyright (c) 1999-2009 Wolfgang Lux
 % See LICENSE for the full license.
@@ -19,24 +19,25 @@ invariant.
 
 Type declarations use a de-Bruijn indexing scheme (starting at 0) for
 type variables. In the type of a function, all type variables are
-numbered in the order of their occurence from left to right, i.e., a
+numbered in the order of their occurrence from left to right, i.e., a
 type \texttt{(Int -> b) -> (a,b) -> c -> (a,c)} is translated into the
 type (using integer numbers to denote type variables)
 \texttt{(Int -> 0) -> (1,0) -> 2 -> (1,2)}.
 
-Pattern matching in equations is handled via flexible and rigid
-\texttt{case} expressions. \texttt{Case} expressions always evaluate
-the scrutinized expression to head normal form. Note that their
-semantics thus differs from Curry source code where the expression
-\texttt{case e1 of \char`\{\ x -> e2 \char`\}} is equivalent to
-\texttt{let \char`\{\ x = e1 \char`\}\ in e2}. Overlapping rules are
-translated with the help of \texttt{or} expressions. The intermediate
-language has three kinds of binding expressions: \texttt{Exist}
-expressions introduce a new logical variable, \texttt{let} expressions
-support a single non-recursive variable binding, and \texttt{letrec}
-expressions introduce multiple variables with mutually recursive
-initializer expressions. The intermediate language explicitly
-distinguishes (local) variables and (global) functions in expressions.
+Pattern matching in equations is handled by rigid \texttt{case} and
+flexible \texttt{fcase} expressions. \texttt{(F)case} expressions
+always evaluate the scrutinized expression to head normal form. Note
+that their semantics thus differs from Curry source code where the
+expression \texttt{case e1 of \char`\{\ x -> e2 \char`\}} is
+equivalent to \texttt{let \char`\{\ x = e1 \char`\}\ in e2}.
+Overlapping rules are translated with the help of \texttt{choice}
+expressions. The intermediate language has three kinds of binding
+expressions: \texttt{Exist} expressions introduce new logical
+variables, \texttt{let} expressions introduce multiple, non-recursive
+variable bindings, and \texttt{letrec} expressions introduce multiple
+possibly mutually recursive variable bindings. The intermediate
+language explicitly distinguishes (local) variables and (global)
+functions in expressions.
 \begin{verbatim}
 
 > module IL(module IL,module Ident) where
@@ -86,17 +87,17 @@ distinguishes (local) variables and (global) functions in expressions.
 >   | Apply Expression Expression
 >   -- case expressions
 >   | Case Eval Expression [Alt]
->   -- non-determinisismic or
->   | Or Expression Expression
+>   -- non-determinisismic choice
+>   | Choice [Expression]
 >   -- binding forms
->   | Exist Ident Expression
->   | Let Binding Expression
->   | Letrec [Binding] Expression
+>   | Exist [Ident] Expression
+>   | Let Rec [Binding] Expression
 >   -- source code location annotations
 >   | SrcLoc String Expression
 >   deriving (Eq,Show)
 
 > data Eval = Rigid | Flex deriving (Eq,Show)
+> data Rec = NonRec | Rec deriving (Eq,Show)
 > data Alt = Alt ConstrTerm Expression deriving (Eq,Show)
 > data Binding = Binding Ident Expression deriving (Eq,Show)
 

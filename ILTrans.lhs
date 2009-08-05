@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2798 2009-04-26 15:29:05Z wlux $
+% $Id: ILTrans.lhs 2888 2009-08-05 15:55:47Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -191,14 +191,16 @@ further possibilities to apply this transformation.
 >   IL.Apply (translExpr tyEnv vs e1) (translExpr tyEnv vs e2)
 > translExpr tyEnv vs (Let ds e) =
 >   case ds of
->     [FreeDecl _ vs'] -> foldr IL.Exist e' vs'
->     [d] | all (`notElem` bv d) (qfv (mkMIdent []) d) ->
->       IL.Let (translBinding vs' d) e'
->     _ -> IL.Letrec (map (translBinding vs') ds) e'
+>     [FreeDecl _ vs'] -> IL.Exist vs' e'
+>     [d] -> IL.Let (rec d) [translBinding vs' d] e'
+>     _ -> IL.Let IL.Rec (map (translBinding vs') ds) e'
 >   where e' = translExpr tyEnv vs' e
 >         vs' = vs ++ bv ds
 >         translBinding vs (PatternDecl _ (VariablePattern _ v) rhs) =
 >           IL.Binding v (translRhs tyEnv vs rhs)
+>         rec d
+>           | any (`elem` bv d) (qfv (mkMIdent []) d) = IL.Rec
+>           | otherwise = IL.NonRec
 > translExpr tyEnv vs (Case e as) =
 >   caseExpr IL.Rigid (translExpr tyEnv vs e) (nub (concat vss')) as'
 >   where (vss',as') = unzip (map (translAlt tyEnv vs) as)
@@ -206,7 +208,7 @@ further possibilities to apply this transformation.
 >   case e of
 >     Let [FreeDecl _ [v]] (Variable _ v')
 >       | qualify v == v' && all isChoice as ->
->           foldl1 IL.Or [translRhs tyEnv vs rhs | Alt _ _ rhs <- as]
+>           IL.Choice [translRhs tyEnv vs rhs | Alt _ _ rhs <- as]
 >     _ -> caseExpr IL.Flex (translExpr tyEnv vs e) (nub (concat vss')) as'
 >   where (vss',as') = unzip (map (translAlt tyEnv vs) as)
 >         isChoice (Alt _ t rhs) = all (`notElem` qfv (mkMIdent []) rhs) (bv t)
@@ -219,14 +221,13 @@ further possibilities to apply this transformation.
 > caseExpr :: IL.Eval -> IL.Expression -> [Ident] -> [IL.Alt] -> IL.Expression
 > caseExpr ev e vs as =
 >   case (e,vs) of
->     (IL.Variable v,_) ->
->       foldr (bindVar v) (IL.Case ev (IL.Variable v) as) (filter (v /=) vs)
+>     (IL.Variable v,_) -> match ev v (filter (v /=) vs) as
 >     (_,[]) -> IL.Case ev e as
 >     (_,v:vs) ->
->       IL.Case IL.Flex e
->               [IL.Alt (IL.VariablePattern v)
->                       (foldr (bindVar v) (IL.Case ev (IL.Variable v) as) vs)]
->   where bindVar v v' = IL.Let (IL.Binding v' (IL.Variable v))
+>       IL.Case IL.Flex e [IL.Alt (IL.VariablePattern v) (match ev v vs as)]
+>   where match ev v vs as =
+>           IL.Let IL.NonRec [IL.Binding v' e | v' <- vs] (IL.Case ev e as)
+>           where e = IL.Variable v
 
 > instance QuantExpr IL.ConstrTerm where
 >   bv (IL.LiteralPattern _) = []
@@ -240,11 +241,13 @@ further possibilities to apply this transformation.
 >   fv (IL.Constructor _ _) = []
 >   fv (IL.Apply e1 e2) = fv e1 ++ fv e2
 >   fv (IL.Case _ e as) = fv e ++ fv as
->   fv (IL.Or e1 e2) = fv e1 ++ fv e2
->   fv (IL.Exist v e) = filter (/= v) (fv e)
->   fv (IL.Let (IL.Binding v e1) e2) = fv e1 ++ filter (/= v) (fv e2)
->   fv (IL.Letrec bds e) = filter (`notElem` vs) (fv es ++ fv e)
->     where (vs,es) = unzip [(v,e) | IL.Binding v e <- bds]
+>   fv (IL.Choice es) = fv es
+>   fv (IL.Exist vs e) = filter (`notElem` vs) (fv e)
+>   fv (IL.Let rec bs e) =
+>     fvBinds rec vs (fv es) ++ filter (`notElem` vs) (fv e)
+>     where (vs,es) = unzip [(v,e) | IL.Binding v e <- bs]
+>           fvBinds IL.NonRec _ = id
+>           fvBinds IL.Rec vs = filter (`notElem` vs)
 >   fv (IL.SrcLoc _ e) = fv e
 
 > instance Expr IL.Alt where
@@ -293,10 +296,9 @@ module.
 >   modules (IL.Constructor c _) = modules c
 >   modules (IL.Apply e1 e2) = modules e1 . modules e2
 >   modules (IL.Case _ e as) = modules e . modules as
->   modules (IL.Or e1 e2) = modules e1 . modules e2
+>   modules (IL.Choice es) = modules es
 >   modules (IL.Exist _ e) = modules e
->   modules (IL.Let b e) = modules b . modules e
->   modules (IL.Letrec bs e) = modules bs . modules e
+>   modules (IL.Let _ bs e) = modules bs . modules e
 >   modules (IL.SrcLoc _ e) = modules e
 
 > instance HasModule IL.Alt where

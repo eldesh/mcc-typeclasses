@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILPP.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: ILPP.lhs 2888 2009-08-05 15:55:47Z wlux $
 %
 % Copyright (c) 1999-2009 Wolfgang Lux
 % See LICENSE for the full license.
@@ -112,24 +112,28 @@ Marlow's pretty printer for Haskell.
 >     Apply (Function f _) e | isQInfixOp f -> ppInfixApp p e f e2
 >     Apply (Constructor c _) e | isQInfixOp c -> ppInfixApp p e c e2
 >     _ -> ppParen (p > 2) (sep [ppExpr 2 e1,nest exprIndent (ppExpr 3 e2)])
-> ppExpr p (Case ev e alts) =
+> ppExpr p (Case ev e as) =
 >   ppParen (p > 0)
->           (text "case" <+> ppEval ev <+> ppExpr 0 e <+> text "of" $$
->            nest caseIndent (vcat (map ppAlt alts)))
->   where ppEval Rigid = text "rigid"
->         ppEval Flex = text "flex"
-> ppExpr p (Or e1 e2) =
->   ppParen (p > 0) (sep [ppExpr 1 e1,char '|' <+> ppExpr 0 e2])
-> ppExpr p (Exist v e) =
->   ppParen (p > 1)
->           (sep [text "let" <+> ppIdent v <+> text "free" <+> text "in",
->                 ppExpr 1 e])
-> ppExpr p (Let b e) =
->   ppParen (p > 1) (sep [text "let" <+> ppBinding b <+> text "in",ppExpr 1 e])
-> ppExpr p (Letrec bs e) =
->   ppParen (p > 1)
->           (sep [text "letrec" <+> vcat (map ppBinding bs) <+> text "in",
->                 ppExpr 1 e])
+>           (ppCase ev <+> ppExpr 0 e <+> text "of" $$
+>            nest caseIndent (vcat (map ppAlt as)))
+>   where ppCase Rigid = text "case"
+>         ppCase Flex = text "fcase"
+> ppExpr p (Choice es) =
+>   ppParen (p > 0)
+>           (sep (zipWith (<+>)
+>                         (empty : repeat (char '|'))
+>                         (map (ppExpr 1) es)))
+> ppExpr p (Exist vs e) =
+>   ppParen (p > 0)
+>           (sep [text "let" <+> ppIdentList vs <+> text "free" <+> text "in",
+>                 ppExpr 0 e])
+>   where ppIdentList = fsep . punctuate comma . map ppIdent
+> ppExpr p (Let rec bs e) =
+>   ppParen (p > 0)
+>           (sep [ppLet rec <+> vcat (map ppBinding bs) <+> text "in",
+>                 ppExpr 0 e])
+>   where ppLet NonRec = text "let"
+>         ppLet Rec = text "letrec"
 > ppExpr p (SrcLoc _ e) = ppExpr p e
 
 > ppInfixApp :: Int -> Expression -> QualIdent -> Expression -> Doc

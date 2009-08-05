@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2805 2009-04-26 17:26:16Z wlux $
+% $Id: DTransform.lhs 2888 2009-08-05 15:55:47Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2009, Wolfgang Lux
@@ -507,10 +507,9 @@ function and partial constructor applications.
 >     | otherwise = Constructor c n
 >   firstPhase d (Apply e1 e2) = Apply (firstPhase (d+1) e1) (firstPhase 0 e2)
 >   firstPhase _ (Case rf e as) = Case rf (firstPhase 0 e) (firstPhase 0 as)
->   firstPhase _ (Or e1 e2) = Or (firstPhase 0 e1) (firstPhase 0 e2)
->   firstPhase _ (Exist v e) = Exist v (firstPhase 0 e)
->   firstPhase _ (Let d e) = Let (firstPhase 0 d) (firstPhase 0 e)
->   firstPhase _ (Letrec ds e) = Letrec (firstPhase 0 ds) (firstPhase 0 e)
+>   firstPhase _ (Choice es) = Choice (firstPhase 0 es)
+>   firstPhase _ (Exist vs e) = Exist vs (firstPhase 0 e)
+>   firstPhase _ (Let rec ds e) = Let rec (firstPhase 0 ds) (firstPhase 0 e)
 >   firstPhase _ (SrcLoc p e) = SrcLoc p (firstPhase 0 e)
 
 > instance FirstPhase Alt where
@@ -574,20 +573,18 @@ the list of subcomputations of the computation tree \texttt{t1}.
 > etaExpandIO :: Expression -> Expression -> Expression
 > etaExpandIO (Case rf e as) = Case rf e . zipWith etaExpandIOAlt as . repeat
 >   where etaExpandIOAlt (Alt t e) = Alt t . etaExpandIO e
-> etaExpandIO (Exist v e)    = Exist v . etaExpandIO e
-> etaExpandIO (Let d e)      = Let d . etaExpandIO e
-> etaExpandIO (Letrec ds e)  = Letrec ds . etaExpandIO e
+> etaExpandIO (Exist vs e)   = Exist vs . etaExpandIO e
+> etaExpandIO (Let rec ds e) = Let rec ds . etaExpandIO e
 > etaExpandIO (SrcLoc p e)   = SrcLoc p . etaExpandIO e
 > etaExpandIO e              = Apply (Apply debugPerformIO e)
 
 > etaReduceIO :: Expression -> (Expression,Expression)
-> etaReduceIO (Apply e1 e2) = (e1, e2)
+> etaReduceIO (Apply e1 e2)  = (e1, e2)
 > etaReduceIO (Case rf e1 [Alt t e2]) = (Case rf e1 [Alt t e2'], v)
->                                               where (e2', v) = etaReduceIO e2
-> etaReduceIO (Exist v e)   = (Exist v e', v')  where (e', v') = etaReduceIO e
-> etaReduceIO (Let d e)     = (Let d e', v)     where (e', v) = etaReduceIO e
-> etaReduceIO (Letrec ds e) = (Letrec ds e', v) where (e', v) = etaReduceIO e
-> etaReduceIO (SrcLoc p e)  = (SrcLoc p e', v)  where (e', v) = etaReduceIO e
+>                                                where (e2', v) = etaReduceIO e2
+> etaReduceIO (Exist vs e)   = (Exist vs e', v)   where (e', v) = etaReduceIO e
+> etaReduceIO (Let rec ds e) = (Let rec ds e', v) where (e', v) = etaReduceIO e
+> etaReduceIO (SrcLoc p e)   = (SrcLoc p e', v)   where (e', v) = etaReduceIO e
 > etaReduceIO e = error ("etaReduceIO " ++ showsPrec 11 e "")
 
 > debugPerformIO :: Expression
@@ -610,8 +607,8 @@ introduced. The third component is the transformed expression itself
 \end{verbatim}
 
 The next function changes an expression \texttt{e} into
-\texttt{let aux$N$ = e in } \texttt{let result$N$ = fst e in }
-\texttt{let tree$N$ = snd e in} \texttt{Variable result$N$},
+\texttt{let \lb{} aux$N$ = e \rb{} in } \texttt{let \lb{} result$N$ =
+fst e; tree$N$ = snd e \rb{} in} \texttt{Variable result$N$}, 
 where $N$ represents a number used to ensure distinct names of
 variables. Actually this information is returned in the following,
 more convenient format:
@@ -631,9 +628,9 @@ local declarations of \texttt{aux$N$}, \texttt{result$N$}, and
 >         treeId    = newIdName n "tree"
 >         fst       = Function (qualPreludeName "fst") 1
 >         snd       = Function (qualPreludeName "snd") 1
->         lets      = Let (Binding auxId exp) .
->                     Let (Binding resultId (Apply fst (Variable auxId))) .
->                     Let (Binding treeId (Apply snd (Variable auxId)))
+>         lets      = Let NonRec [Binding auxId exp] .
+>                     Let NonRec [Binding resultId (Apply fst (Variable auxId)),
+>                                 Binding treeId (Apply snd (Variable auxId))]
 >         cleanTree = retrieveCleanTree resultId treeId
 
 
@@ -645,26 +642,22 @@ local declarations of \texttt{aux$N$}, \texttt{result$N$}, and
 >   newBindings createNode p cts n (Case rf e as) = (n2,lets1 (Case rf e' as'))
 >     where (n1,cts1,lets1,e') = extractBindings n e
 >           (n2,as') = mapAccumL (newBindings createNode p (cts++cts1)) n1 as
->   newBindings createNode p cts n (Or e1 e2) = (n2,Or e1' e2')
->     where (n1,e1') = newBindings createNode p cts n e1
->           (n2,e2') = newBindings createNode p cts n1 e2
->   newBindings createNode p cts n (Exist v e) = (n',Exist v e')
+>   newBindings createNode p cts n (Choice es) = (n',Choice es')
+>     where (n',es') = mapAccumL (newBindings createNode p cts) n es
+>   newBindings createNode p cts n (Exist vs e) = (n',Exist vs e')
 >     where (n',e') = newBindings createNode p cts n e
->   newBindings createNode p cts n (Let d e) = (n2,lets1 (Let d' e'))
->     where (n1,cts1,lets1,d') = extractBindings n d
->           (n2,e') = newBindings createNode p (cts++cts1) n1 e
->   newBindings createNode p cts n (Letrec ds e) =
->     (n2,letrecBindings lets1 ds' e')
+>   newBindings createNode p cts n (Let rec ds e) =
+>     (n2,letBindings rec lets1 ds' e')
 >     where (n1,cts1,lets1,ds') = extractBindings n ds
 >           (n2,e') = newBindings createNode p (cts++cts1) n1 e
 >   newBindings createNode _ cts n (SrcLoc p e) = (n',SrcLoc p e')
 >     where (n',e') = newBindings createNode p cts n e
->   newBindings createNode p cts n e = (n1+1,lets2 rhs)
+>   newBindings createNode p cts n e = (n1+1,lets1 (lets2 rhs))
 >     where (n1,cts1,lets1,e') = extractBindings n e
 >           rid   = newIdName n1 "result"
 >           tid   = newIdName n1 "tree"
 >           ct    = createNode p rid (cts++cts1)
->           lets2 = lets1 . Let (Binding rid e') . Let (Binding tid ct)
+>           lets2 = Let NonRec [Binding rid e'] . Let NonRec [Binding tid ct]
 >           rhs   = debugBuildPairExp (Variable rid) (Variable tid)
 
 > instance SecondPhase Alt where
@@ -687,15 +680,12 @@ local declarations of \texttt{aux$N$}, \texttt{result$N$}, and
 >     | otherwise = decomposeExp n e
 >   extractBindings n e@(Case _ _ _) = decomposeExp n' e'
 >     where (n',e') = newBindings createEmptyNode "" [] n e
->   extractBindings n e@(Or _ _) = decomposeExp n' e'
+>   extractBindings n e@(Choice _) = decomposeExp n' e'
 >     where (n',e') = newBindings createEmptyNode "" [] n e
->   extractBindings n (Exist v e) = (n',cts',Exist v . lets',e')
+>   extractBindings n (Exist vs e) = (n',cts',Exist vs . lets',e')
 >     where (n',cts',lets',e') = extractBindings n e
->   extractBindings n (Let d e) = (n2,cts1++cts2,lets1 . Let d' . lets2,e')
->     where (n1,cts1,lets1,d') = extractBindings n d
->           (n2,cts2,lets2,e') = extractBindings n1 e
->   extractBindings n (Letrec ds e) =
->     (n2,cts1++cts2,letrecBindings lets1 ds' . lets2,e')
+>   extractBindings n (Let rec ds e) =
+>     (n2,cts1++cts2,letBindings rec lets1 ds' . lets2,e')
 >     where (n1,cts1,lets1,ds') = extractBindings n ds
 >           (n2,cts2,lets2,e') = extractBindings n1 e
 >   extractBindings n (SrcLoc p e) = (n',cts',lets',SrcLoc p e')
@@ -747,18 +737,17 @@ local declarations of \texttt{aux$N$}, \texttt{result$N$}, and
 > createEmptyNode _ _ trees = if null trees then void else emptyNode clean
 >   where clean = Apply (Function debugClean 1) (debugBuildList trees)
 
-> letrecBindings :: Context -> [Binding] -> Context
-> letrecBindings lets ds =
->   fixLetrecBindings Letrec (lets (Letrec ds (Variable undefined)))
+> letBindings :: Rec -> Context -> [Binding] -> Context
+> letBindings NonRec lets ds = lets . Let NonRec ds
+> letBindings Rec lets ds =
+>   fixLetrecBindings (Let Rec) (lets (Let Rec ds (Variable undefined)))
 
 > fixLetrecBindings :: ([Binding]->Context) -> Expression -> Context
 > fixLetrecBindings bindings (Variable _) = bindings []
-> fixLetrecBindings bindings (Exist var exp) =
->   Exist var . fixLetrecBindings bindings exp
-> fixLetrecBindings bindings (Let binding exp) =
->   fixLetrecBindings (bindings . (binding:)) exp
-> fixLetrecBindings bindings (Letrec lbindings exp) =
->   fixLetrecBindings (bindings . (lbindings++)) exp
+> fixLetrecBindings bindings (Exist vs e) =
+>   Exist vs . fixLetrecBindings bindings e
+> fixLetrecBindings bindings (Let _ ds e) =
+>   fixLetrecBindings (bindings . (ds++)) e
 
 \end{verbatim}
 

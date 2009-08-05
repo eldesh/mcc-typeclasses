@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 2887 2009-08-05 15:54:11Z wlux $
+% $Id: ILCompile.lhs 2888 2009-08-05 15:55:47Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -13,7 +13,6 @@ language into abstract machine code.
 > module ILCompile(camCompile, var, fun, apFun, con) where
 > import qualified Cam
 > import Combined
-> import Env
 > import IL
 > import List
 > import Map
@@ -231,29 +230,22 @@ normal form, is passed as an additional argument to
 >       _ ->
 >         do
 >           v <- freshName
->           as' <- mapM (flip (compileCase hnfs' v) vs) as
+>           as' <- sequence [compileCase hnfs' v a vs | a <- as]
 >           return (Cam.Seq (v Cam.:<- st) (Cam.Switch (rf ev) v as'))
 >   where hnfs' = noteHnf e hnfs
-> compileStrict hnfs (Or e1 e2) vs =
+> compileStrict hnfs (Choice es) vs =
 >   do
->     sts <- mapM (flip (compileStrict hnfs) vs) (branches e1 ++ branches e2)
+>     sts <- sequence [compileStrict hnfs e vs | e <- es]
 >     return (Cam.Choices sts)
->   where branches (Or e1 e2) = branches e1 ++ branches e2
->         branches e = [e]
-> compileStrict hnfs (Exist v e) vs =
+> compileStrict hnfs (Exist us e) vs =
 >   do
->     st <- compileStrict (v:hnfs) e vs
->     return (Cam.Seq (var v Cam.:<- Cam.Return Cam.Free) st)
-> compileStrict hnfs (Let bd e) vs =
+>     st <- compileStrict (us ++ hnfs) e vs
+>     return (foldr Cam.Seq st [var u Cam.:<- Cam.Return Cam.Free | u <- us])
+> compileStrict hnfs (Let rec bs e) vs =
 >   do
->     st1 <- compileBinding bd
->     st2 <- compileStrict (addHnfs [bd] hnfs) e vs
->     return (Cam.Seq st1 st2)
-> compileStrict hnfs (Letrec bds e) vs =
->   do
->     bdss' <- compileRecBindings bds
->     st <- compileStrict (addHnfs bds hnfs) e vs
->     return (foldr (Cam.Seq . Cam.Let) st bdss')
+>     sts <- mapM compileBinding bs
+>     st <- compileStrict (addHnfs bs hnfs) e vs
+>     return (foldr Cam.Seq st (recBindings rec sts))
 > compileStrict hnfs (SrcLoc _ e) vs = compileStrict hnfs e vs
 
 > literal :: Literal -> Cam.Literal
@@ -269,14 +261,13 @@ normal form, is passed as an additional argument to
 > noteHnf (Constructor _ _) hnfs = hnfs
 > noteHnf (Apply f _) hnfs = noteHnf f hnfs
 > noteHnf (Case _ e _) hnfs = noteHnf e hnfs
-> noteHnf (Or e1 e2) hnfs = intersect (noteHnf e1 hnfs) (noteHnf e2 hnfs)
+> noteHnf (Choice es) hnfs = foldl1 intersect [noteHnf e hnfs | e <- es]
 > noteHnf (Exist _ e) hnfs = noteHnf e hnfs
-> noteHnf (Let _ e) hnfs = noteHnf e hnfs
-> noteHnf (Letrec _ e) hnfs = noteHnf e hnfs
+> noteHnf (Let _ _ e) hnfs = noteHnf e hnfs
 > noteHnf (SrcLoc _ e) hnfs = noteHnf e hnfs
 
 > addHnfs :: [Binding] -> [Ident] -> [Ident]
-> addHnfs bds hnfs = [v | Binding v e <- bds, isHnf hnfs e] ++ hnfs
+> addHnfs bs hnfs = [v | Binding v e <- bs, isHnf hnfs e] ++ hnfs
 
 > isHnf :: [Ident] -> Expression -> Bool
 > isHnf _ (Literal _) = True
@@ -284,9 +275,8 @@ normal form, is passed as an additional argument to
 > isHnf _ (Function _ n) = n > 0
 > isHnf _ (Constructor _ _) = True
 > isHnf _ (Apply e1 e2) = isHnfApp e1 [e2]
-> isHnf hnfs (Exist v e) = isHnf (v:hnfs) e
-> isHnf hnfs (Let bd e) = isHnf (addHnfs [bd] hnfs) e
-> isHnf hnfs (Letrec bds e) = isHnf (addHnfs bds hnfs) e
+> isHnf hnfs (Exist vs e) = isHnf (vs ++ hnfs) e
+> isHnf hnfs (Let _ bs e) = isHnf (addHnfs bs hnfs) e
 > isHnf hnfs (SrcLoc _ e) = isHnf hnfs e
 > isHnf _ _ = internalError "isHnf"
 
@@ -296,8 +286,7 @@ normal form, is passed as an additional argument to
 > isHnfApp (Constructor _ _) _ = True
 > isHnfApp (Apply e1 e2) es = isHnfApp e1 (e2:es)
 > isHnfApp (Exist _ e) es = isHnfApp e es
-> isHnfApp (Let _ e) es = isHnfApp e es
-> isHnfApp (Letrec _ e) es = isHnfApp e es
+> isHnfApp (Let _ _ e) es = isHnfApp e es
 > isHnfApp (SrcLoc _ e) es = isHnfApp e es
 > isHnfApp _ _ = internalError "isHnfApp"
 
@@ -320,11 +309,11 @@ normal form, is passed as an additional argument to
 >   Cam.Case Cam.DefaultCase . Cam.Seq (var v' Cam.:<- Cam.Return (Cam.Var v))
 
 \end{verbatim}
-When compiling expressions in lazy -- i.e., argument -- positions,
-the compiler generates minimal binding groups in order to improve the
+When compiling expressions in lazy -- i.e., argument -- positions, the
+compiler generates minimal binding groups in order to improve the
 efficiency of the compiler. Note that the compiler can only handle
-constants, applications, and let bindings in lazy positions. Case and
-non-deterministic or expressions have to be lifted into global
+constants, applications, and let bindings in lazy positions. (F)case
+and non-deterministic choice expressions must be lifted into global
 functions before compiling into abstract machine code.
 \begin{verbatim}
 
@@ -334,14 +323,12 @@ functions before compiling into abstract machine code.
 >     st <- compileLazy e []
 >     return (var v Cam.:<- st)
 
-> compileRecBindings :: [Binding] -> CompState [[Cam.Bind]]
-> compileRecBindings bds =
->   do
->     bds' <- mapM compileBinding bds
->     return (scc bound free (concatMap binds bds'))
+> recBindings :: Rec -> [Cam.Stmt0] -> [Cam.Stmt0]
+> recBindings NonRec sts = sts
+> recBindings Rec sts = map Cam.Let (scc bound free (concatMap binds sts))
 >   where binds (v Cam.:<- Cam.Return e) = [Cam.Bind v e]
 >         binds (v Cam.:<- Cam.Seq st1 st2) = binds st1 ++ binds (v Cam.:<- st2)
->         binds (Cam.Let bds) = bds
+>         binds (Cam.Let bs) = bs
 >         binds st = internalError ("compileRecBindings " ++ show st)
 >         bound (Cam.Bind v _) = [v]
 >         free (Cam.Bind _ e) = vars e
@@ -377,20 +364,15 @@ functions before compiling into abstract machine code.
 >     st1 <- compileLazy e2 []
 >     st2 <- compileLazy e1 (v:vs)
 >     return (Cam.Seq (v Cam.:<- st1) st2)
-> compileLazy (Exist v e) vs =
+> compileLazy (Exist us e) vs =
 >   do
 >     st <- compileLazy e vs
->     return (Cam.Seq (var v Cam.:<- Cam.Return Cam.Free) st)
-> compileLazy (Let bd e) vs =
+>     return (foldr Cam.Seq st [var u Cam.:<- Cam.Return Cam.Free | u <- us])
+> compileLazy (Let rec bs e) vs =
 >   do
->     st1 <- compileBinding bd
->     st2 <- compileLazy e vs
->     return (Cam.Seq st1 st2)
-> compileLazy (Letrec bds e) vs =
->   do
->     bdss' <- compileRecBindings bds
+>     sts <- mapM compileBinding bs
 >     st <- compileLazy e vs
->     return (foldr (Cam.Seq . Cam.Let) st bdss')
+>     return (foldr Cam.Seq st (recBindings rec sts))
 > compileLazy (SrcLoc _ e) vs = compileLazy e vs
 > compileLazy e _ = internalError ("compileLazy: " ++ show e)
 
@@ -451,15 +433,15 @@ equivalences.
 >   case unaliasStmt aliases st of
 >     Cam.Return (Cam.Var v') -> (addToFM v v' aliases,id)
 >     st'                     -> (aliases,Cam.Seq (v Cam.:<- st'))
-> unaliasStmt0 aliases (Cam.Let bds) = (aliases',Cam.Seq (Cam.Let bds'''))
->   where (bds',bds'') =
->           case partition isAlias bds of
->             (bd':bds',[]) -> (bds',[bd'])    -- cyclic chain of variable defs
->             (bds',bds'') -> (bds',bds'')
->         bds''' = [Cam.Bind v (unaliasExpr aliases' e) | Cam.Bind v e <- bds'']
+> unaliasStmt0 aliases (Cam.Let bs) = (aliases',Cam.Seq (Cam.Let bs'''))
+>   where (bs',bs'') =
+>           case partition isAlias bs of
+>             (b':bs',[]) -> (bs',[b'])        -- cyclic chain of variable defs
+>             (bs',bs'') -> (bs',bs'')
+>         bs''' = [Cam.Bind v (unaliasExpr aliases' e) | Cam.Bind v e <- bs'']
 >         aliases' = foldr (uncurry addToFM) aliases
 >                          [(v,unaliasVar aliases' v')
->                          | Cam.Bind v (Cam.Var v') <- bds']
+>                          | Cam.Bind v (Cam.Var v') <- bs']
 >         isAlias (Cam.Bind _ (Cam.Var _)) = True
 >         isAlias (Cam.Bind _ _) = False
 

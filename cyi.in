@@ -3,9 +3,9 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 2366 2007-06-23 13:48:09Z wlux $
+# $Id: cyi.in 2890 2009-08-05 15:58:32Z wlux $
 #
-# Copyright (c) 2002-2007, Wolfgang Lux
+# Copyright (c) 2002-2009, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -51,6 +51,10 @@ dobjects=
 prompt='> '
 goal=
 
+# NB On some systems (e.g., Mac OS X 10.5) bash turns on SYSV echo style
+#    by default when it is run as /bin/sh. The following command turns this
+#    off by unsetting the respective shell option if it is available.
+( shopt -u xpg_echo ) 2>/dev/null && shopt -u xpg_echo
 case `echo "echo\c"` in
   echo ) echo_c='\c';;		# SYSV style
   *    ) echo_c= ;;
@@ -158,8 +162,8 @@ set_module ( ) {
     case $1 in
       *.curry ) stem=`expr "$1" : '\(.*\).curry'`;;
       *.lcurry ) stem=`expr "$1" : '\(.*\).lcurry'`;;
-      *.icurry ) stem=`expr "$m" : '\(.*\)'.icurry`;;
-      *.o ) stem=`expr "$m" : '\(.*\)'.o`;;
+      *.icurry ) stem=`expr "$1" : '\(.*\)'.icurry`;;
+      *.o ) stem=`expr "$1" : '\(.*\)'.o`;;
       * ) stem=$1;;
     esac
     read line < $stem.icurry

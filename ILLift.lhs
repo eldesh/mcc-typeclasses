@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILLift.lhs 2888 2009-08-05 15:55:47Z wlux $
+% $Id: ILLift.lhs 2889 2009-08-05 15:57:07Z wlux $
 %
 % Copyright (c) 2000-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -27,7 +27,7 @@ positions are lifted into global functions.
 > liftDecl (DataDecl tc n cs) = [DataDecl tc n cs]
 > liftDecl (TypeDecl tc n ty) = [TypeDecl tc n ty]
 > liftDecl (FunctionDecl f vs ty e) = FunctionDecl f vs ty e' : ds'
->   where (e',ds') = runSt (liftExpr e) nameSupply
+>   where (e',ds') = runSt (liftExpr True e) nameSupply
 >         nameSupply = map (qual m . appIdent (name f') (uniqueId f')) [1..]
 >           where (m,f') = splitQualIdent f
 >         qual m = maybe qualify qualifyWith m
@@ -35,70 +35,48 @@ positions are lifted into global functions.
 > liftDecl (ForeignDecl f cc ie ty) = [ForeignDecl f cc ie ty]
 > liftDecl SplitAnnot = [SplitAnnot]
 
-> liftExpr :: Expression -> LiftState (Expression,[Decl])
-> liftExpr (Literal l) = return (Literal l,[])
-> liftExpr (Variable v) = return (Variable v,[])
-> liftExpr (Function f n) = return (Function f n,[])
-> liftExpr (Constructor c n) = return (Constructor c n,[])
-> liftExpr (Apply f e) =
+> liftExpr :: Bool -> Expression -> LiftState (Expression,[Decl])
+> liftExpr _ (Literal l) = return (Literal l,[])
+> liftExpr _ (Variable v) = return (Variable v,[])
+> liftExpr _ (Function f n) = return (Function f n,[])
+> liftExpr _ (Constructor c n) = return (Constructor c n,[])
+> liftExpr root (Apply f e) =
 >   do
->     (f',ds) <- liftExpr f
->     (e',ds') <- liftArg e
+>     (f',ds) <- liftExpr root f
+>     (e',ds') <- liftExpr False e
 >     return (Apply f' e',ds ++ ds')
-> liftExpr (Case ev e as) =
+> liftExpr root (Case ev e as)
+>   | root =
+>       do
+>         (e',ds) <- liftExpr root e
+>         (as',ds') <- mapLift (liftAlt root) as
+>         return (Case ev e' as',ds ++ ds')
+>   | otherwise = lift (Case ev e as)
+> liftExpr root (Choice es)
+>   | root =
+>       do
+>         (es',ds) <- mapLift (liftExpr root) es
+>         return (Choice es',ds)
+>   | otherwise = lift (Choice es)
+> liftExpr root (Exist vs e) =
 >   do
->     (e',ds) <- liftExpr e
->     (as',ds') <- mapLift liftAlt as
->     return (Case ev e' as',ds ++ ds')
-> liftExpr (Choice es) =
->   do
->     (es',ds) <- mapLift liftExpr es
->     return (Choice es',ds)
-> liftExpr (Exist vs e) =
->   do
->     (e',ds) <- liftExpr e
+>     (e',ds) <- liftExpr root e
 >     return (Exist vs e',ds)
-> liftExpr (Let rec bs e) =
+> liftExpr root (Let rec bs e) =
 >   do
 >     (bs',ds) <- mapLift liftBinding bs
->     (e',ds') <- liftExpr e
+>     (e',ds') <- liftExpr root e
 >     return (Let rec bs' e',ds ++ ds')
-> liftExpr (SrcLoc p e) =
+> liftExpr root (SrcLoc p e) =
 >   do
->     (e',ds) <- liftExpr e
->     return (SrcLoc p e',ds)
-
-> liftArg :: Expression -> LiftState (Expression,[Decl])
-> liftArg (Literal l) = return (Literal l,[])
-> liftArg (Variable v) = return (Variable v,[])
-> liftArg (Function f n) = return (Function f n,[])
-> liftArg (Constructor c n) = return (Constructor c n,[])
-> liftArg (Apply f e) =
->   do
->     (f',ds) <- liftArg f
->     (e',ds') <- liftArg e
->     return (Apply f' e',ds ++ ds')
-> liftArg (Case ev e as) = lift (Case ev e as)
-> liftArg (Choice es) = lift (Choice es)
-> liftArg (Exist vs e) =
->   do
->     (e',ds) <- liftArg e
->     return (Exist vs e',ds)
-> liftArg (Let rec bs e) =
->   do
->     (bs',ds) <- mapLift liftBinding bs
->     (e',ds') <- liftArg e
->     return (Let rec bs' e',ds ++ ds')
-> liftArg (SrcLoc p e) =
->   do
->     (e',ds) <- liftArg e
+>     (e',ds) <- liftExpr root e
 >     return (SrcLoc p e',ds)
 
 > lift :: Expression -> LiftState (Expression,[Decl])
 > lift e =
 >   do
 >     f <- uniqueName
->     (e',ds') <- liftExpr e
+>     (e',ds') <- liftExpr True e
 >     return (foldl Apply (Function f n) (map Variable fvs),
 >             FunctionDecl f fvs ty e' : ds')
 >   where fvs = nub (fv e)
@@ -114,16 +92,16 @@ positions are lifted into global functions.
   expression in the module.}
 \begin{verbatim}
 
-> liftAlt :: Alt -> LiftState (Alt,[Decl])
-> liftAlt (Alt t e) =
+> liftAlt :: Bool -> Alt -> LiftState (Alt,[Decl])
+> liftAlt root (Alt t e) =
 >   do
->     (e',ds) <- liftExpr e
+>     (e',ds) <- liftExpr root e
 >     return (Alt t e',ds)
 
 > liftBinding :: Binding -> LiftState (Binding,[Decl])
 > liftBinding (Binding v e) =
 >   do
->     (e',ds) <- liftArg e
+>     (e',ds) <- liftExpr False e
 >     return (Binding v e',ds)
 
 > mapLift :: (a -> LiftState (a,[Decl])) -> [a] -> LiftState ([a],[Decl])

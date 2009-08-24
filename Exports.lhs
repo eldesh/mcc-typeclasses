@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2872 2009-07-22 12:28:12Z wlux $
+% $Id: Exports.lhs 2901 2009-08-24 15:12:43Z wlux $
 %
 % Copyright (c) 2000-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -61,7 +61,9 @@ correct arity annotations are written to the interface.
 > exportInterface (Module m (Just (Exporting _ es)) _ ds) pEnv tcEnv iEnv tyEnv =
 >   Interface m imports (unqualIntf m (precs ++ ds''))
 >   where aEnv = bindArities m ds
->         tvs = nameSupply
+>         tcs = foldr definedType [] ds''
+>         tcs' = [tc | Just tc <- map (localIdent m) tcs]
+>         tvs = filter (`notElem` tcs') nameSupply
 >         imports = map (IImportDecl noPos) (filter (m /=) (usedModules ds''))
 >         precs = foldr (infixDecl pEnv) [] es
 >         ds' = types ++ values ++ insts
@@ -87,13 +89,13 @@ correct arity annotations are written to the interface.
 > typeDecl _ _ _ _ (Export _) ds = ds
 > typeDecl tcEnv aEnv tyEnv tvs (ExportTypeWith tc xs) ds =
 >   case qualLookupTopEnv tc tcEnv of
->     [DataType _ k cs] -> iTypeDecl IDataDecl cx' tc tvs n k constrs xs' : ds
+>     [DataType _ k cs] -> iTypeDecl IDataDecl cx'' tc tvs n k constrs xs' : ds
 >       where n = kindArity k
->             cx' = guard vis >>
->                   orderContext (map VariableType (take n tvs))
->                                (nub (concat cxs))
+>             cx'' = guard vis >> cx'
 >             constrs = guard vis >> cs'
 >             xs' = guard vis >> filter (`notElem` xs) (cs ++ ls)
+>             QualTypeExpr cx' _ = fromQualType tvs ty'
+>             ty' = canonType (qualInstType (nub (concat cxs)) tc n)
 >             (cxs,cs') = unzip (map (constrDecl tyEnv xs tc tvs) cs)
 >             ls = nub (concatMap labels cs')
 >             vis = not (null xs) || tc `elem` [qSuccessId,qRatioId]
@@ -124,15 +126,14 @@ correct arity annotations are written to the interface.
 >         cx = [ClassAssert cls (VariableType tv) | cls <- clss]
 
 > constrDecl :: ValueEnv -> [Ident] -> QualIdent -> [Ident] -> Ident
->            -> ([ClassAssert],ConstrDecl)
+>            -> (Context,ConstrDecl)
 > constrDecl tyEnv xs tc tvs c
->   | any (`elem` xs) ls = (cxL',RecordDecl noPos evs cxR' c fs)
->   | otherwise = (cxL',ConstrDecl noPos evs cxR' c tys)
+>   | any (`elem` xs) ls = (cxL,RecordDecl noPos evs cxR' c fs)
+>   | otherwise = (cxL,ConstrDecl noPos evs cxR' c tys)
 >   where evs = drop (n - n') (take n tvs)
 >         (ls,ConstrInfo n' cxR,ForAll n (QualType cx ty)) =
 >           conType (qualifyLike tc c) tyEnv
 >         cxL = filter (`notElem` cxR) cx
->         QualTypeExpr cxL' _ = fromQualType tvs (QualType cxL ty)
 >         QualTypeExpr cxR' ty' = fromQualType tvs (QualType cxR ty)
 >         tys = argTypes ty'
 >         fs = zipWith (FieldDecl noPos . return) ls tys
@@ -170,10 +171,8 @@ correct arity annotations are written to the interface.
 > iInstDecl :: TCEnv -> ArityEnv -> [Ident] -> CT -> InstInfo -> IDecl
 > iInstDecl tcEnv aEnv tvs (CT cls tc) (m,cx,fs) =
 >   IInstanceDecl noPos cx' cls ty' (Just m) [(f,n) | (f,Just n) <- fs']
->   where QualTypeExpr cx' ty' =
->           fromQualType tvs (QualType cx (applyType (TypeConstructor tc) tvs'))
+>   where QualTypeExpr cx' ty' = fromQualType tvs (qualInstType cx tc n)
 >         n = kindArity (constrKind tc tcEnv) - kindArity (classKind cls tcEnv)
->         tvs' = take n (map TypeVariable [0..])
 >         fs' = [(f,arityAnnot (qInstMethodId m tc f) n 0 aEnv) | (f,n) <- fs]
 >         qInstMethodId m tc f = qualifyWith m (instMethodId tc f)
 
@@ -408,6 +407,17 @@ environment.
 > declIs (IInstanceDecl _ _ cls ty _ _) = IsInst (CT cls (typeConstr ty))
 > declIs (IFunctionDecl _ _ _ _) = IsOther
 
+> definedType :: IDecl -> [QualIdent] -> [QualIdent]
+> definedType (IInfixDecl _ _ _ _) tcs = tcs
+> definedType (HidingDataDecl _ tc _ _) tcs = tc : tcs
+> definedType (IDataDecl _ _ tc _ _ _ _) tcs = tc : tcs
+> definedType (INewtypeDecl _ _ tc _ _ _ _) tcs = tc : tcs
+> definedType (ITypeDecl _ tc _ _ _) tcs = tc : tcs
+> definedType (HidingClassDecl _ _ cls _ _) tcs = cls : tcs
+> definedType (IClassDecl _ _ cls _ _ _ _) tcs = cls : tcs
+> definedType (IInstanceDecl _ _ _ _ _ _) tcs = tcs
+> definedType (IFunctionDecl _ _ _ _) tcs = tcs
+
 > instances :: ModuleIdent -> TCEnv -> InstEnv -> ArityEnv -> [Ident]
 >           -> Set DeclIs -> DeclIs -> [IDecl]
 > instances _ _ _ _ _ _ IsOther = []
@@ -497,15 +507,12 @@ Auxiliary definitions.
 > noPos :: Position
 > noPos = undefined
 
-> orderContext :: [TypeExpr] -> [ClassAssert] -> [ClassAssert]
-> orderContext [] _ = []
-> orderContext (ty:tys) cx = cx' ++ orderContext tys cx''
->   where (cx',cx'') = partition (\(ClassAssert _ ty') -> ty == root ty') cx
->         root (ApplyType ty _) = root ty
->         root ty = ty
-
 > argTypes :: TypeExpr -> [TypeExpr]
 > argTypes (ArrowType ty1 ty2) = ty1 : argTypes ty2
 > argTypes _ = []
+
+> qualInstType :: Context -> QualIdent -> Int -> QualType
+> qualInstType cx tc n =
+>   QualType cx (applyType (TypeConstructor tc) (map TypeVariable [0..n-1]))
 
 \end{verbatim}

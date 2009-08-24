@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 2903 2009-08-24 15:29:21Z wlux $
+% $Id: ShadowCheck.lhs 2904 2009-08-24 15:55:01Z wlux $
 %
 % Copyright (c) 2005-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -82,7 +82,10 @@ set of defined variables.
 
 \end{verbatim}
 Collecting shadowing identifiers is implemented by just another
-traversal of the syntax tree.
+traversal of the syntax tree. Note that method implementations in type
+class and instance declarations do not define a new name and therefore
+shadowing warnings are to be reported only for the right hand sides of
+those method definitions.
 \begin{verbatim}
 
 > class SyntaxTree a where
@@ -97,8 +100,10 @@ traversal of the syntax tree.
 >   shadow _ (DataDecl _ _ _ _ _ _) = id
 >   shadow _ (NewtypeDecl _ _ _ _ _ _) = id
 >   shadow _ (TypeDecl _ _ _ _) = id
->   shadow _ (ClassDecl p _ _ _ ds) = shadow p ds
->   shadow _ (InstanceDecl p _ _ _ ds) = shadow p ds
+>   shadow _ (ClassDecl p _ _ _ ds) =
+>     foldr (&&&) id [shadow p eqs | FunctionDecl p _ eqs <- ds]
+>   shadow _ (InstanceDecl p _ _ _ ds) =
+>     foldr (&&&) id [shadow p eqs | FunctionDecl p _ eqs <- ds]
 >   shadow _ (DefaultDecl _ _) = id
 >   shadow p (BlockDecl d) = shadow p d
 >   shadow _ (SplitAnnot _) = id

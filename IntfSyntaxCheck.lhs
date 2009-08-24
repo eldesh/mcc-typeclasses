@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2815 2009-05-04 13:59:57Z wlux $
+% $Id: IntfSyntaxCheck.lhs 2900 2009-08-24 13:03:24Z wlux $
 %
-% Copyright (c) 2000-2008, Wolfgang Lux
+% Copyright (c) 2000-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{IntfSyntaxCheck.lhs}
@@ -93,7 +93,7 @@ during syntax checking of type expressions.
 >   where doc = ppQIdent cls <+> ppIdent tv
 > checkIDecl env (IInstanceDecl p cx cls ty m fs) =
 >   do
->     (cx',ty') <- checkClass env p cls &&> checkInstType env p cx ty
+>     (cx',ty') <- checkClass env p [] cls &&> checkInstType env p cx ty
 >     mapE_ (checkSimpleConstraint "instance" doc p) cx &&>
 >       mapE_ (errorAt p . multipleArity . fst) (duplicates (map fst fs))
 >     return (IInstanceDecl p cx' cls ty' m fs)
@@ -107,12 +107,8 @@ during syntax checking of type expressions.
 > checkTypeLhs :: TypeEnv -> Position -> [ClassAssert] -> [Ident]
 >              -> Error [ClassAssert]
 > checkTypeLhs env p cx tvs =
->   mapE_ (errorAt p . noVariable "left hand side of type declaration")
->         (nub tcs) &&>
->   mapE_ (errorAt p . nonLinear . fst) (duplicates tvs') &&>
->   mapE (checkClassAssert env p) cx
->   where (tcs,tvs') = partition isTypeConstr tvs
->         isTypeConstr tv = not (null (lookupTopEnv tv env))
+>   mapE_ (errorAt p . nonLinear . fst) (duplicates tvs) &&>
+>   mapE (checkClassAssert env p tvs) cx
 
 > checkSimpleConstraint :: String -> Doc -> Position -> ClassAssert -> Error ()
 > checkSimpleConstraint what doc p (ClassAssert cls ty) =
@@ -170,7 +166,7 @@ during syntax checking of type expressions.
 >                 -> Error TypeExpr
 > checkClosedType env p tvs ty =
 >   do
->     ty' <- checkType env p ty
+>     ty' <- checkType env p tvs ty
 >     mapE_ (errorAt p . unboundVariable)
 >           (nub (filter (`notElem` tvs) (fv ty')))
 >     return ty'
@@ -189,14 +185,16 @@ during syntax checking of type expressions.
 > checkQualType env p (QualTypeExpr cx ty) =
 >   do
 >     (cx',ty') <-
->       liftE (,) (mapE (checkClassAssert env p) cx) &&& checkType env p ty
+>       liftE (,) (mapE (checkClassAssert env p []) cx) &&&
+>       checkType env p [] ty
 >     checkClosedContext p cx' (fv ty')
 >     return (QualTypeExpr cx' ty')
 
-> checkClassAssert :: TypeEnv -> Position -> ClassAssert -> Error ClassAssert
-> checkClassAssert env p (ClassAssert cls ty) =
+> checkClassAssert :: TypeEnv -> Position -> [Ident] -> ClassAssert
+>                  -> Error ClassAssert
+> checkClassAssert env p tvs (ClassAssert cls ty) =
 >   do
->     ty' <- checkClass env p cls &&> checkType env p ty
+>     ty' <- checkClass env p tvs cls &&> checkType env p tvs ty
 >     unless (isVariableType (root ty'))
 >            (errorAt p (invalidConstraint (ClassAssert cls ty')))
 >     return (ClassAssert cls ty')
@@ -207,35 +205,41 @@ during syntax checking of type expressions.
 > checkClosedContext p cx tvs =
 >   mapE_ (errorAt p . unboundVariable) (nub (filter (`notElem` tvs) (fv cx)))
 
-> checkType :: TypeEnv -> Position -> TypeExpr -> Error TypeExpr
-> checkType env p (ConstructorType tc) =
->   case qualLookupTopEnv tc env of
->     []
->       | isPrimTypeId tc' -> return (ConstructorType tc)
->       | isQualified tc -> errorAt p (undefinedType tc)
->       | otherwise -> return (VariableType tc')
->       where tc' = unqualify tc
->     [Data _ _] -> return (ConstructorType tc)
->     [Alias _] -> errorAt p (badTypeSynonym tc)
->     [Class _ _] -> errorAt p (undefinedType tc)
->     _ -> internalError "checkType"
-> checkType env p (VariableType tv) =
->   checkType env p (ConstructorType (qualify tv))
-> checkType env p (TupleType tys) = liftE TupleType (mapE (checkType env p) tys)
-> checkType env p (ListType ty) = liftE ListType (checkType env p ty)
-> checkType env p (ArrowType ty1 ty2) =
->   liftE2 ArrowType (checkType env p ty1) (checkType env p ty2)
-> checkType env p (ApplyType ty1 ty2) =
->   liftE2 ApplyType (checkType env p ty1) (checkType env p ty2)
+> checkType :: TypeEnv -> Position -> [Ident] -> TypeExpr -> Error TypeExpr
+> checkType env p tvs (ConstructorType tc)
+>   | tc `elem` map qualify tvs = return (VariableType (unqualify tc))
+>   | otherwise =
+>       case qualLookupTopEnv tc env of
+>         []
+>           | isPrimTypeId tc' -> return (ConstructorType tc)
+>           | isQualified tc -> errorAt p (undefinedType tc)
+>           | otherwise -> return (VariableType tc')
+>           where tc' = unqualify tc
+>         [Data _ _] -> return (ConstructorType tc)
+>         [Alias _] -> errorAt p (badTypeSynonym tc)
+>         [Class _ _] -> errorAt p (undefinedType tc)
+>         _ -> internalError "checkType"
+> checkType env p tvs (VariableType tv)
+>   | tv `elem` tvs = return (VariableType tv)
+>   | otherwise = checkType env p tvs (ConstructorType (qualify tv))
+> checkType env p tvs (TupleType tys) =
+>   liftE TupleType (mapE (checkType env p tvs) tys)
+> checkType env p tvs (ListType ty) = liftE ListType (checkType env p tvs ty)
+> checkType env p tvs (ArrowType ty1 ty2) =
+>   liftE2 ArrowType (checkType env p tvs ty1) (checkType env p tvs ty2)
+> checkType env p tvs (ApplyType ty1 ty2) =
+>   liftE2 ApplyType (checkType env p tvs ty1) (checkType env p tvs ty2)
 
-> checkClass :: TypeEnv -> Position -> QualIdent -> Error ()
-> checkClass env p cls =
->   case qualLookupTopEnv cls env of
->     [] -> errorAt p (undefinedClass cls)
->     [Data _ _] -> errorAt p (undefinedClass cls)
->     [Alias _] -> errorAt p (undefinedClass cls)
->     [Class _ _] -> return ()
->     _ -> internalError "checkClass"
+> checkClass :: TypeEnv -> Position -> [Ident] -> QualIdent -> Error ()
+> checkClass env p tvs cls
+>   | cls `elem` map qualify tvs = errorAt p (undefinedClass cls)
+>   | otherwise =
+>       case qualLookupTopEnv cls env of
+>         [] -> errorAt p (undefinedClass cls)
+>         [Data _ _] -> errorAt p (undefinedClass cls)
+>         [Alias _] -> errorAt p (undefinedClass cls)
+>         [Class _ _] -> return ()
+>         _ -> internalError "checkClass"
 
 > checkHiding :: Bool -> Position -> QualIdent -> [Ident] -> [Ident] -> Error ()
 > checkHiding isType p tc xs xs' =
@@ -274,10 +278,6 @@ Error messages.
 > nonLinear tv =
 >   "Type variable " ++ name tv ++
 >   " occurs more than once on left hand side of type declaration"
-
-> noVariable :: String -> Ident -> String
-> noVariable what tv =
->   "Type constructor or type class " ++ name tv ++ " used on " ++ what
 
 > noElement :: Bool -> QualIdent -> Ident -> String
 > noElement True tc x =

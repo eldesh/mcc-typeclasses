@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 2780 2009-03-28 16:25:54Z wlux $
+% $Id: TypeSyntaxCheck.lhs 2900 2009-08-24 13:03:24Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -85,7 +85,7 @@ signatures.
 >     checkClosedContext p cx' tvs
 >     cs' <-
 >       liftE const (mapE (checkConstrDecl env tvs) cs) &&&
->       mapE_ (checkDClass env) clss
+>       mapE_ (checkDClass env tvs) clss
 >     return (DataDecl p cx' tc tvs cs' clss)
 > checkTopDecl env (NewtypeDecl p cx tc tvs nc clss) =
 >   do
@@ -93,7 +93,7 @@ signatures.
 >     checkClosedContext p cx' tvs
 >     nc' <-
 >       liftE const (checkNewConstrDecl env tvs nc) &&&
->       mapE_ (checkDClass env) clss
+>       mapE_ (checkDClass env tvs) clss
 >     return (NewtypeDecl p cx' tc tvs nc' clss)
 > checkTopDecl env (TypeDecl p tc tvs ty) =
 >   do
@@ -112,19 +112,19 @@ signatures.
 >   where doc = ppIdent cls <+> ppIdent tv
 > checkTopDecl env (InstanceDecl p cx cls ty ds) =
 >   do
->     (cx',ty') <- checkClass env p cls &&> checkInstType env p cx ty
+>     (cx',ty') <- checkClass env p [] cls &&> checkInstType env p cx ty
 >     ds' <-
 >       mapE_ (checkSimpleConstraint "instance" doc p) cx' &&>
 >       mapE (checkDecl env) ds
 >     return (InstanceDecl p cx' cls ty' ds')
 >   where doc = ppQIdent cls <+> ppTypeExpr 2 ty
 > checkTopDecl env (DefaultDecl p tys) =
->   liftE (DefaultDecl p) (mapE (checkType env p) tys)
+>   liftE (DefaultDecl p) (mapE (checkType env p []) tys)
 > checkTopDecl env (BlockDecl d) = liftE BlockDecl (checkDecl env d)
 > checkTopDecl _ (SplitAnnot p) = return (SplitAnnot p)
 
-> checkDClass :: TypeEnv -> DClass -> Error ()
-> checkDClass env (DClass p cls) = checkClass env p cls
+> checkDClass :: TypeEnv -> [Ident] -> DClass -> Error ()
+> checkDClass env tvs (DClass p cls) = checkClass env p tvs cls
 
 > checkGoal :: TypeEnv -> Goal a -> Error (Goal a)
 > checkGoal env (Goal p e ds) =
@@ -156,20 +156,16 @@ not contain any additional constraints for that type variable
 > checkDecl env (PatternDecl p t rhs) =
 >   liftE (PatternDecl p t) (checkRhs env rhs)
 > checkDecl env (ForeignDecl p cc s ie f ty) =
->   liftE (ForeignDecl p cc s ie f) (checkType env p ty)
+>   liftE (ForeignDecl p cc s ie f) (checkType env p [] ty)
 > checkDecl _ (FreeDecl p vs) = return (FreeDecl p vs)
 > checkDecl _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
 
 > checkTypeLhs :: TypeEnv -> Position -> [ClassAssert] -> [Ident]
 >              -> Error [ClassAssert]
 > checkTypeLhs env p cx tvs =
->   mapE_ (errorAt p . noVariable "left hand side of type declaration")
->         (nub tcs) &&>
 >   mapE_ (errorAt p . nonLinear "left hand side of type declaration" . fst)
->         (duplicates (filter (anonId /=) tvs')) &&>
->   mapE (checkClassAssert env p) cx
->   where (tcs,tvs') = partition isTypeConstr tvs
->         isTypeConstr tv = not (null (lookupTopEnv tv env))
+>         (duplicates (filter (anonId /=) tvs)) &&>
+>   mapE (checkClassAssert env p tvs) cx
 
 > checkSimpleConstraint :: String -> Doc -> Position -> ClassAssert -> Error ()
 > checkSimpleConstraint what doc p (ClassAssert cls ty) =
@@ -297,14 +293,16 @@ declaration groups.
 The parser cannot distinguish unqualified nullary type constructors
 and type variables. Therefore, if the compiler finds an unbound
 identifier in a position where a type variable is admissible, it will
-interpret the identifier as such.
+interpret the identifier as such. In type declarations, type variables
+on the left hand side of a declaration can shadow type constructors
+with the same name.
 \begin{verbatim}
 
 > checkClosedType :: TypeEnv -> Position -> [Ident] -> TypeExpr
 >                 -> Error TypeExpr
 > checkClosedType env p tvs ty =
 >   do
->     ty' <- checkType env p ty
+>     ty' <- checkType env p tvs ty
 >     mapE_ (errorAt p . unboundVariable)
 >           (nub (filter (\tv -> tv == anonId || tv `notElem` tvs) (fv ty')))
 >     return ty'
@@ -323,14 +321,16 @@ interpret the identifier as such.
 > checkQualType env p (QualTypeExpr cx ty) =
 >   do
 >     (cx',ty') <-
->       liftE (,) (mapE (checkClassAssert env p) cx) &&& checkType env p ty
+>       liftE (,) (mapE (checkClassAssert env p []) cx) &&&
+>       checkType env p [] ty
 >     checkClosedContext p cx' (fv ty')
 >     return (QualTypeExpr cx' ty')
 
-> checkClassAssert :: TypeEnv -> Position -> ClassAssert -> Error ClassAssert
-> checkClassAssert env p (ClassAssert cls ty) =
+> checkClassAssert :: TypeEnv -> Position -> [Ident] -> ClassAssert
+>                  -> Error ClassAssert
+> checkClassAssert env p tvs (ClassAssert cls ty) =
 >   do
->     ty' <- checkClass env p cls &&> checkType env p ty
+>     ty' <- checkClass env p tvs cls &&> checkType env p tvs ty
 >     unless (isVariableType (root ty'))
 >            (errorAt p (invalidConstraint (ClassAssert cls ty')))
 >     return (ClassAssert cls ty')
@@ -341,34 +341,40 @@ interpret the identifier as such.
 > checkClosedContext p cx tvs =
 >   mapE_ (errorAt p . unboundVariable) (nub (filter (`notElem` tvs) (fv cx)))
 
-> checkType :: TypeEnv -> Position -> TypeExpr -> Error TypeExpr
-> checkType env p (ConstructorType tc) =
->   case qualLookupTopEnv tc env of
->     []
->       | isQualified tc -> errorAt p (undefinedType tc)
->       | otherwise -> return (VariableType (unqualify tc))
->     [Data _ _] -> return (ConstructorType tc)
->     [Alias _] -> return (ConstructorType tc)
->     [Class _ _] -> errorAt p (undefinedType tc)
->     rs -> errorAt p (ambiguousIdent rs tc)
-> checkType env p (VariableType tv)
->   | tv == anonId = return (VariableType tv)
->   | otherwise = checkType env p (ConstructorType (qualify tv))
-> checkType env p (TupleType tys) = liftE TupleType (mapE (checkType env p) tys)
-> checkType env p (ListType ty) = liftE ListType (checkType env p ty)
-> checkType env p (ArrowType ty1 ty2) =
->   liftE2 ArrowType (checkType env p ty1) (checkType env p ty2)
-> checkType env p (ApplyType ty1 ty2) =
->   liftE2 ApplyType (checkType env p ty1) (checkType env p ty2)
+> checkType :: TypeEnv -> Position -> [Ident] -> TypeExpr -> Error TypeExpr
+> checkType env p tvs (ConstructorType tc)
+>   | tc `elem` map qualify tvs = return (VariableType (unqualify tc))
+>   | otherwise =
+>       case qualLookupTopEnv tc env of
+>         []
+>           | isQualified tc -> errorAt p (undefinedType tc)
+>           | otherwise -> return (VariableType (unqualify tc))
+>         [Data _ _] -> return (ConstructorType tc)
+>         [Alias _] -> return (ConstructorType tc)
+>         [Class _ _] -> errorAt p (undefinedType tc)
+>         rs -> errorAt p (ambiguousIdent rs tc)
+> checkType env p tvs (VariableType tv)
+>   | tv `elem` anonId:tvs = return (VariableType tv)
+>   | otherwise = checkType env p tvs (ConstructorType (qualify tv))
+> checkType env p tvs (TupleType tys) =
+>   liftE TupleType (mapE (checkType env p tvs) tys)
+> checkType env p tvs (ListType ty) =
+>   liftE ListType (checkType env p tvs ty)
+> checkType env p tvs (ArrowType ty1 ty2) =
+>   liftE2 ArrowType (checkType env p tvs ty1) (checkType env p tvs ty2)
+> checkType env p tvs (ApplyType ty1 ty2) =
+>   liftE2 ApplyType (checkType env p tvs ty1) (checkType env p tvs ty2)
 
-> checkClass :: TypeEnv -> Position -> QualIdent -> Error ()
-> checkClass env p cls =
->   case qualLookupTopEnv cls env of
->     [] -> errorAt p (undefinedClass cls)
->     [Data _ _] -> errorAt p (undefinedClass cls)
->     [Alias _] -> errorAt p (undefinedClass cls)
->     [Class _ _] -> return ()
->     rs -> errorAt p (ambiguousIdent rs cls)
+> checkClass :: TypeEnv -> Position -> [Ident] -> QualIdent -> Error ()
+> checkClass env p tvs cls
+>   | cls `elem` map qualify tvs = errorAt p (undefinedClass cls)
+>   | otherwise =
+>       case qualLookupTopEnv cls env of
+>         [] -> errorAt p (undefinedClass cls)
+>         [Data _ _] -> errorAt p (undefinedClass cls)
+>         [Alias _] -> errorAt p (undefinedClass cls)
+>         [Class _ _] -> return ()
+>         rs -> errorAt p (ambiguousIdent rs cls)
 
 \end{verbatim}
 The compiler reports an error when more than one instance is defined
@@ -485,10 +491,6 @@ Error messages.
 > nonLinear :: String -> Ident -> String
 > nonLinear what tv =
 >   "Type variable " ++ name tv ++ " occurs more than once in " ++ what
-
-> noVariable :: String -> Ident -> String
-> noVariable what tv =
->   "Type constructor or type class " ++ name tv ++ " used in " ++ what
 
 > unboundVariable :: Ident -> String
 > unboundVariable tv = "Undefined type variable " ++ name tv

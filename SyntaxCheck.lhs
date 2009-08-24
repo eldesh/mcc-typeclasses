@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: SyntaxCheck.lhs 2900 2009-08-24 13:03:24Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -11,9 +11,9 @@ syntax check on the remaining declarations. This check disambiguates
 nullary data constructors and variables, which cannot be done in the
 parser because Curry -- in contrast to many other declarative
 languages -- lacks a capitalization convention. In addition, this pass
-checks for undefined as well as ambiguous variables and constructors.
-Finally, all (adjacent) equations of a function are merged into a
-single definition.
+checks for undefined as well as ambiguous value identifiers. Finally,
+all (adjacent) equations of a function are merged into a single
+definition.
 \begin{verbatim}
 
 > module SyntaxCheck(syntaxCheck,syntaxCheckGoal) where
@@ -81,7 +81,7 @@ later for checking the optional export list of the current module.
 \end{verbatim}
 When a module's global declaration group is checked, the compiler must
 preserve the order of type and value declarations. This is necessary
-in order to detect the error in the following code fragment.
+to detect the error in the following code fragment.
 \begin{verbatim}
   f = 0
   data T = C
@@ -90,7 +90,7 @@ in order to detect the error in the following code fragment.
 This error would go by unnoticed if the compiler would partition
 top-level declarations into type and value declarations.
 Unfortunately, this means that we cannot use \texttt{checkLocalDecls}
-in order to check the global declaration group.
+to check the global declaration group.
 
 Note that fixity declarations for class methods can occur either at
 the top-level of a module or in the class declaration itself
@@ -117,10 +117,8 @@ declarations are passed to \texttt{checkMethodDecls}.
 > checkTopDeclLhs _ (NewtypeDecl p cx tc tvs nc clss) =
 >   return (NewtypeDecl p cx tc tvs nc clss)
 > checkTopDeclLhs _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
-> checkTopDeclLhs env (ClassDecl p cx cls tv ds) =
->   do
->     mapE_ (checkMethodSig env) ds
->     return (ClassDecl p cx cls tv ds)
+> checkTopDeclLhs _ (ClassDecl p cx cls tv ds) =
+>   return (ClassDecl p cx cls tv ds)
 > checkTopDeclLhs _ (InstanceDecl p cx cls ty ds) =
 >   return (InstanceDecl p cx cls ty ds)
 > checkTopDeclLhs _ (DefaultDecl p tys) = return (DefaultDecl p tys)
@@ -195,59 +193,105 @@ declaration, type signature, and trust annotation in this group and
 that there are no duplicate definitions. Finally, the right hand sides
 are checked.
 
-The function \texttt{checkDeclLhs} also handles the case where a
-pattern declaration is recognized as a function declaration by the
-parser. This happens, e.g., for the declaration \verb|Just x = y|
-because the parser cannot distinguish nullary constructors and
-functions. Note that pattern declarations are not allowed on the
-top-level.
+The absence of a capitalization convention in Curry introduces a
+subtle ambiguity between function and pattern declarations. For
+instance, \texttt{Just x = Nothing} is syntactically both a valid
+function declaration defining the function \texttt{Just} and a pattern
+declaration matching the pattern \texttt{Just x} against the
+expression \texttt{Nothing}. Since no pattern declarations are allowed
+at the top-level of a module, the declaration is unambiguous in the
+global scope. In a local declaration group, we always consider the
+declaration a pattern declaration.
+
+The ambiguity is getting more subtle when infix operator declarations
+and infix patterns are taken into account.\footnote{Infix constructors
+  are an extension supported for compatibility with Haskell. The Curry
+  report~\cite{Hanus:Report} knows only a single infix data
+  constructor, the list constructor \texttt{:}.} Consider a
+declaration \texttt{$t_1$ `op$_1$` $t_2$ $\dots$ $t_n$ `op$_n$` $t_n$
+  = $e$}. If all operators $\texttt{op}_1, \dots, \texttt{op}_n$
+except for a single operator $op_i$ denote a data constructor, this
+declaration is considered a function declaration of \texttt{op$_i$}.
+If more than one operator does not denote a data constructor, the
+declaration is invalid and we arbitrarily choose the leftmost operator
+as root of the left hand side. If all operators denote a data
+constructor, the declaration is considered a pattern declaration, but
+only in a local declaration group. At the top-level, we arbitrarily
+choose the leftmost unqualified operator (if one exists) and consider
+the declaration a function declaration of that operator. Ideally, the
+choice of the left hand side's root operator should be based on the
+relative precedences of the operators, but unfortunately these
+precedences are not known during syntax checking\footnote{Note that
+  this is a principal limitation. Since fixities are associated with
+  entities and not identifiers, the fixity of an operator cannot be
+  known before the compiler knows where the identifier is defined.}.
+In some contrived examples our heuristics means that the compiler may
+choose the wrong root, e.g.,
+\begin{verbatim}
+module A where { infixl 7 :/; data Rat a = a :/ a }
+module M where
+  import A
+  infixl 1 :/; infix 4 :=
+  data Assoc a b = a := b
+  a := _ :/ b = a := b
+\end{verbatim}
+The last line of module \texttt{M} is supposed to define the operator
+\verb|:/| and, in fact, the compiler would accept this declaration if
+the import of module A where omitted. Unfortunately, the import
+declaration brings a data constructor definition for \verb|:/| into
+scope, which means that the compiler will -- wrongly -- consider the
+leftmost unqualified operator, i.e., \verb|:=| the root of the left
+hand side and therefore complain about the redefinition of that
+operator. To avoid this error, the user has to add redundant
+parentheses around the argument term \verb|a := _|.\footnote{One can
+  also use the qualified name of the operator \texttt{:=} on the left
+  hand side, i.e., \texttt{a M.:= b :/ b = a := b}.}
 \begin{verbatim}
 
 > checkLocalDecls :: VarEnv -> [Decl a] -> Error (VarEnv,[Decl a])
 > checkLocalDecls env ds =
 >   do
->     ds' <- liftE joinEquations (mapE (checkDeclLhs False env') ds)
->     env'' <- checkDeclVars bindVar [] [] env' ds'
->     ds'' <- mapE (checkDeclRhs env'') ds'
->     return (env'',ds'')
->   where env' = nestEnv env
-
-> checkMethodSig :: VarEnv -> Decl a -> Error ()
-> checkMethodSig _ (InfixDecl _ _ _ _) = return ()
-> checkMethodSig env (TypeSig p fs _) = checkVars "type signature" p env fs
-> checkMethodSig _ (FunctionDecl _ _ _) = return ()
-> checkMethodSig _ (TrustAnnot _ _ _) = return ()
+>     ds' <- liftE joinEquations (mapE (checkDeclLhs False env) ds)
+>     env' <- checkDeclVars bindVar [] [] (nestEnv env) ds'
+>     ds'' <- mapE (checkDeclRhs env') ds'
+>     return (env',ds'')
 
 > checkDeclLhs :: Bool -> VarEnv -> Decl a -> Error (Decl a)
 > checkDeclLhs _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
 > checkDeclLhs _ _ (TypeSig p vs ty) = return (TypeSig p vs ty)
 > checkDeclLhs top env (FunctionDecl p _ eqs) = checkEquationLhs top env p eqs
-> checkDeclLhs _ env (ForeignDecl p cc s ie f ty) =
->   do
->     checkVars "foreign declaration" p env [f]
->     return (ForeignDecl p cc s ie f ty)
+> checkDeclLhs _ _ (ForeignDecl p cc s ie f ty) =
+>   return (ForeignDecl p cc s ie f ty)
 > checkDeclLhs top env (PatternDecl p t rhs)
 >   | top = internalError "checkDeclLhs"
 >   | otherwise = liftE (flip (PatternDecl p) rhs) (checkConstrTerm p env t)
-> checkDeclLhs top env (FreeDecl p vs)
+> checkDeclLhs top _ (FreeDecl p vs)
 >   | top = internalError "checkDeclLhs"
->   | otherwise =
->       do
->         checkVars "free variables declaration" p env vs
->         return (FreeDecl p vs)
+>   | otherwise = return (FreeDecl p vs)
 > checkDeclLhs _ _ (TrustAnnot p t fs) = return (TrustAnnot p t fs)
 
 > checkEquationLhs :: Bool -> VarEnv -> Position -> [Equation a]
 >                  -> Error (Decl a)
 > checkEquationLhs top env p [Equation p' lhs rhs] =
 >   either funDecl patDecl (checkEqLhs env p' lhs)
->   where funDecl (f,lhs)
->           | isDataConstr env f =
->               errorAt p (nonVariable "curried definition" f)
->           | otherwise = return (FunctionDecl p f [Equation p' lhs rhs])
+>   where funDecl (f,lhs) = return (FunctionDecl p f [Equation p' lhs rhs])
 >         patDecl t
->           | top = errorAt p noToplevelPattern
+>           | top = maybe (errorAt p noToplevelPattern) funDecl (toFunLhs t)
 >           | otherwise = checkDeclLhs top env (PatternDecl p' t rhs)
+>         toFunLhs t =
+>           case t of
+>             VariablePattern _ v -> Just (v,FunLhs v [])
+>             ConstructorPattern _ c ts -> funLhs (\f -> FunLhs f ts) Nothing c
+>             InfixPattern a t1 op t2 ->
+>               funLhs (\f -> OpLhs t1 f t2) (shift a t1 op t2 >>= toFunLhs) op
+>             _ -> Nothing
+>         funLhs lhs lhs' c = maybe (Just (f,lhs f)) (const lhs') m
+>           where (m,f) = splitQualIdent c
+>         shift a1 t1 op1 t =
+>           case t of
+>             InfixPattern a2 t2 op2 t3 ->
+>               Just (InfixPattern a2 (InfixPattern a1 t1 op1 t2) op2 t3)
+>             _ -> Nothing
 > checkEquationLhs _ _ _ _ = internalError "checkEquationLhs"
 
 > checkEqLhs :: VarEnv -> Position -> Lhs a
@@ -278,10 +322,6 @@ top-level.
 >   | otherwise = Left (op',OpLhs (f t1) op' t2)
 >   where (m,op') = splitQualIdent op
 > checkOpLhs _ f t = Right (f t)
-
-> checkVars :: String -> Position -> VarEnv -> [Ident] -> Error ()
-> checkVars what p env vs =
->   mapE_ (errorAt p . nonVariable what) (nub (filter (isDataConstr env) vs))
 
 > checkDeclVars :: (P Ident -> VarEnv -> VarEnv) -> [P Ident] -> [P Ident]
 >               -> VarEnv -> [Decl a] -> Error VarEnv
@@ -508,7 +548,6 @@ runtime system.
 > checkConstrTerm p env (ListPattern a ts) =
 >   liftE (ListPattern a) (mapE (checkConstrTerm p env) ts)
 > checkConstrTerm p env (AsPattern v t) =
->   checkVars "@ pattern" p env [v] &&>
 >   liftE (AsPattern v) (checkConstrTerm p env t)
 > checkConstrTerm p env (LazyPattern t) =
 >   liftE LazyPattern (checkConstrTerm p env t)
@@ -752,23 +791,16 @@ Auxiliary definitions.
 Due to the lack of a capitalization convention in Curry, it is
 possible that an identifier may ambiguously refer to a data
 constructor and a function provided that both are imported from some
-other module. When checking whether an identifier denotes a
-constructor there are two options with regard to ambiguous
-identifiers:
-\begin{enumerate}
-\item Handle the identifier as a data constructor if at least one of
-  the imported names is a data constructor.
-\item Handle the identifier as a data constructor only if all imported
-  entities are data constructors.
-\end{enumerate}
-We have chosen the first option because otherwise a redefinition of a
-constructor can become possible by importing a function with the same
-name.
+other module. For the purpose of disambiguating the left hand sides of
+operator declarations, we consider an identifier to denote a data
+constructor only if it does so unambiguously.
 \begin{verbatim}
 
 > isDataConstr :: VarEnv -> Ident -> Bool
 > isDataConstr env v =
->   any isConstr (lookupNestEnv v (globalEnv (toplevelEnv env)))
+>   case lookupNestEnv v env of
+>     [Constr _] -> True
+>     _ -> False
 
 > isConstr :: ValueKind -> Bool
 > isConstr (Constr _) = True
@@ -896,10 +928,6 @@ Error messages.
 
 > repeatedTrustAnnot :: Ident -> String
 > repeatedTrustAnnot f = "Repeated trust annotation for " ++ name f
-
-> nonVariable :: String -> Ident -> String
-> nonVariable what c =
->   "Data constructor " ++ name c ++ " used in left hand side of " ++ what
 
 > noLabel :: QualIdent -> QualIdent -> String
 > noLabel c l =

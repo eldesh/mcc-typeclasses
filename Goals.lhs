@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Goals.lhs 2800 2009-04-26 16:54:22Z wlux $
+% $Id: Goals.lhs 2903 2009-08-24 15:29:21Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -97,7 +97,7 @@ interfaces are in scope with their qualified names.
 >     (tEnv,vEnv,g') <-
 >       okM $ maybe (return (mainGoal (last ms))) parseGoal g >>=
 >             checkGoalSyntax mEnv ms
->     liftErr $ mapM_ putErrLn $ warnGoalSyntax caseMode warn m g'
+>     liftErr $ mapM_ putErrLn $ warnGoalSyntax caseMode warn mEnv ms m g'
 >     (tcEnv,iEnv,tyEnv,cx,g'') <-
 >       okM $ checkGoal task mEnv m ms tEnv vEnv g'
 >     liftErr $ mapM_ putErrLn $ warnGoal warn tyEnv g''
@@ -147,10 +147,11 @@ interfaces are in scope with their qualified names.
 > qualifyGoal EvalGoal tEnv vEnv = qual2 tEnv vEnv
 > qualifyGoal TypeGoal _ _ = id
 
-> warnGoalSyntax :: CaseMode -> [Warn] -> ModuleIdent -> Goal a -> [String]
-> warnGoalSyntax caseMode warn m g =
+> warnGoalSyntax :: CaseMode -> [Warn] -> ModuleEnv -> [ModuleIdent]
+>                -> ModuleIdent -> Goal a -> [String]
+> warnGoalSyntax caseMode warn mEnv ms m g =
 >   caseCheckGoal caseMode g ++ unusedCheckGoal warn m g ++
->   shadowCheckGoal warn g
+>   shadowCheckGoal warn mEnv ms g
 
 > warnGoal :: [Warn] -> ValueEnv -> Goal a -> [String]
 > warnGoal warn tyEnv g = overlapCheckGoal warn tyEnv g

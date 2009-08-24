@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 2900 2009-08-24 13:03:24Z wlux $
+% $Id: ShadowCheck.lhs 2903 2009-08-24 15:29:21Z wlux $
 %
 % Copyright (c) 2005-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -9,36 +9,51 @@
 Besides unused variables, the compiler can also report local
 definitions which shadow a declaration from an outer scope.
 
-\ToDo{Take imported definitions into account.}
+\ToDo{Report warnings for local type definitions that shadow imported
+  type declarations and for type variables in type declarations that
+  shadow type constructors.}
 \begin{verbatim}
 
 > module ShadowCheck(shadowCheck, shadowCheckGoal) where
 > import Base
 > import Curry
+> import Interfaces
 > import List
+> import Map
+> import Maybe
 > import Options
 > import Position
-> import Set
 
 > infixl 1 &&&, >>>
 
-> shadowCheck :: [Warn] -> Module a -> [String]
-> shadowCheck v (Module m _ _ ds) =
->   report v $ shadow noPosition ds (const []) zeroSet
+> shadowCheck :: [Warn] -> ModuleEnv -> Module a -> [String]
+> shadowCheck v mEnv (Module m _ is ds) =
+>   report v $ shadow noPosition ds (const []) (imports mEnv is)
 >   where noPosition = error "noPosition"
 
-> shadowCheckGoal :: [Warn] -> Goal a -> [String]
-> shadowCheckGoal v (Goal p e ds) =
->   report v $ shadow p (SimpleRhs p e ds) (const []) zeroSet
+> shadowCheckGoal :: [Warn] -> ModuleEnv -> [ModuleIdent] -> Goal a -> [String]
+> shadowCheckGoal v mEnv ms (Goal p e ds) =
+>   report v $ shadow p (SimpleRhs p e ds) (const []) (imports mEnv is)
+>   where is = nub [ImportDecl undefined m False Nothing Nothing | m <- ms]
 
-> report :: [Warn] -> [P Ident] -> [String]
+> report :: [Warn] -> [P (Ident,D)] -> [String]
 > report ws
 >   | WarnShadow `elem` ws = map format
 >   | otherwise = const []
 
-> format :: P Ident -> String
-> format (P p x) =
->   atP p ("Warning: " ++ name x ++ " shadows non-local definition")
+> format :: P (Ident,D) -> String
+> format (P p (x,d)) = atP p ("Warning: " ++ name x ++ " shadows " ++ formatD d)
+
+> formatD :: D -> String
+> formatD (I ms) =
+>   case nub ms of
+>     [m] -> "import from module " ++ show m
+>     [m1,m2] -> "imports from modules " ++ show m1 ++ " and " ++ show m2
+>     ms' ->
+>       "imports from modules " ++
+>       concat (intersperse ", " (map show (init ms'))) ++ ", and " ++
+>       show (last ms')
+> formatD (L p') = "definition at " ++ show (p'{ file = "" })
 
 \end{verbatim}
 Since shadowing can be checked efficiently only with unrenamed
@@ -53,12 +68,13 @@ by $f$ and $f\,$\verb|&&&|$\,g$ invokes both $f$ and $g$ with the same
 set of defined variables.
 \begin{verbatim}
 
-> type S = Set Ident -> [P Ident]
+> data D = I [ModuleIdent] | L Position
+> type S = FM Ident D -> [P (Ident,D)]
 
 > bindEnts :: [P Ident] -> S -> S
 > bindEnts bvs k vs =
->   filter (\(P _ x) -> x `elemSet` vs) bvs ++
->   k (foldr addToSet vs [x | P _ x <- bvs])
+>   catMaybes [fmap (\d -> P p (x,d)) (lookupFM x vs) | P p x <- bvs] ++
+>   k (foldr (uncurry addToFM) vs [(x,L p) | P p x <- bvs])
 
 > (>>>), (&&&) :: (S -> S) -> (S -> S) -> S -> S
 > f1 >>> f2 = \f gvs -> f1 (f2 f) gvs
@@ -190,5 +206,50 @@ positions.
 > vars (PatternDecl p t _) = map (P p) (bv t)
 > vars (FreeDecl p vs) = map (P p) vs
 > vars (TrustAnnot _ _ _) = []
+
+\end{verbatim}
+In order to report imported definitions that are shadowed by top-level
+or local declarations, we process the import declarations of the
+module. Since we consider only unqualified identifiers for shadowing
+warnings we can ignore all qualified imports. Note that we collect the
+import paths under which identifier is available, not the original
+names of the imported entities.
+\begin{verbatim}
+
+> imports :: ModuleEnv -> [ImportDecl] -> FM Ident D
+> imports mEnv is = foldr importModule zeroFM is
+>   where importModule (ImportDecl _ m False _ is) xs =
+>           foldr (importEnt m) xs (visible is (ents (moduleInterface m mEnv)))
+>         importEnt m x xs =
+>           addToFM x (I (m : maybe [] (\(I ms) -> ms) (lookupFM x xs))) xs
+>         ents (Interface _ _ ds) = concatMap intfEnts ds
+
+> visible :: Maybe ImportSpec -> [Ident] -> [Ident]
+> visible Nothing = id
+> visible (Just (Importing _ is)) = const (foldr impEnts [] is)
+> visible (Just (Hiding _ is)) = filter (`notElem` foldr impEnts [] is)
+
+> impEnts :: Import -> [Ident] -> [Ident]
+> impEnts (Import x) = (x:)
+> impEnts (ImportTypeWith _ xs) = (xs ++)
+
+> intfEnts :: IDecl -> [Ident]
+> intfEnts (IInfixDecl _ _ _ _) = []
+> intfEnts (HidingDataDecl _ _ _ _) = []
+> intfEnts (IDataDecl _ _ _ _ _ cs xs) =
+>   filter (`notElem` xs) (concatMap ents cs)
+>   where ents (ConstrDecl _ _ _ c _) = [c]
+>         ents (ConOpDecl _ _ _ _ op _) = [op]
+>         ents (RecordDecl _ _ _ c fs) =
+>           c : [l | FieldDecl _ ls _ <- fs, l <- ls]
+> intfEnts (INewtypeDecl _ _ _ _ _ nc xs) = filter (`notElem` xs) (ents nc)
+>   where ents (NewConstrDecl _ c _) = [c]
+>         ents (NewRecordDecl _ c l _) = [c,l]
+> intfEnts (ITypeDecl _ _ _ _ _) = []
+> intfEnts (HidingClassDecl _ _ _ _ _) = []
+> intfEnts (IClassDecl _ _ _ _ _ ds fs) = filter (`notElem` fs) (map mthd ds)
+>   where mthd (IMethodDecl _ f _ _) = f
+> intfEnts (IInstanceDecl _ _ _ _ _ _) = []
+> intfEnts (IFunctionDecl _ f _ _) = [unqualify f]
 
 \end{verbatim}

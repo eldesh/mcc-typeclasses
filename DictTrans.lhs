@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2815 2009-05-04 13:59:57Z wlux $
+% $Id: DictTrans.lhs 2899 2009-08-24 09:52:45Z wlux $
 %
 % Copyright (c) 2006-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -988,8 +988,9 @@ environment.
 > bindEntity :: Entity a => ModuleIdent -> QualIdent -> a -> TopEnv a
 >            -> TopEnv a
 > bindEntity m x =
->   uncurry (maybe (globalBindTopEnv m) (\m' -> qualImportTopEnv m' . const x))
->           (splitQualIdent (qualUnqualify m x))
+>   case splitQualIdent (qualUnqualify m x) of
+>     (Just _,_) -> qualImportTopEnv x
+>     (Nothing,x') -> globalBindTopEnv m x'
 
 \end{verbatim}
 The monad transformer \texttt{freshVar} returns a new identifier and

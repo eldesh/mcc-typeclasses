@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TopEnv.lhs 2898 2009-08-24 09:40:09Z wlux $
+% $Id: TopEnv.lhs 2899 2009-08-24 09:52:45Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -19,9 +19,7 @@ the functions \texttt{lookupTopEnv} and \texttt{qualLookupTopEnv}
 contains exactly one element for each imported entity regardless of
 how many times and from which modules it was imported. Thus, the
 result of these function is a list with exactly one element if and
-only if the identifier is unambiguous. The module names associated
-with an imported entity identify the modules from which the entity was
-imported.
+only if the identifier is unambiguous.
 \begin{verbatim}
 
 > module TopEnv(TopEnv, Entity(..), emptyTopEnv, importTopEnv, qualImportTopEnv,
@@ -36,7 +34,7 @@ imported.
 > import Utils
 
 > newtype TopEnv a = TopEnv (Env QualIdent [(Source,a)]) deriving Show
-> data Source = Local | Import [ModuleIdent] deriving (Eq,Show)
+> data Source = Local | Imported deriving (Eq,Show)
 
 > instance Functor TopEnv where
 >   fmap f (TopEnv env) = TopEnv (fmap (map (apSnd f)) env)
@@ -82,22 +80,21 @@ import are performed.
 >              -> TopEnv a -> TopEnv a
 > importTopEnv qual
 >   | qual = qualImport
->   | otherwise = \m x y -> unqualImport m x y . qualImport m x y
->   where unqualImport m x = qualImportTopEnv m (qualify x)
->         qualImport m x = qualImportTopEnv m (qualifyWith m x)
+>   | otherwise = \m x y -> unqualImport x y . qualImport m x y
+>   where unqualImport x = qualImportTopEnv (qualify x)
+>         qualImport m x = qualImportTopEnv (qualifyWith m x)
 
-> qualImportTopEnv :: Entity a => ModuleIdent -> QualIdent -> a -> TopEnv a
->                  -> TopEnv a
-> qualImportTopEnv m x y (TopEnv env) =
->   TopEnv (bindEnv x (mergeImport m y (entities x env)) env)
+> qualImportTopEnv :: Entity a => QualIdent -> a -> TopEnv a -> TopEnv a
+> qualImportTopEnv x y (TopEnv env) =
+>   TopEnv (bindEnv x (mergeImport y (entities x env)) env)
 
-> mergeImport :: Entity a => ModuleIdent -> a -> [(Source,a)] -> [(Source,a)]
-> mergeImport m x [] = [(Import [m],x)]
-> mergeImport m x ((Local,x') : xs) = (Local,x') : mergeImport m x xs
-> mergeImport m x ((Import ms,x') : xs) =
+> mergeImport :: Entity a => a -> [(Source,a)] -> [(Source,a)]
+> mergeImport x [] = [(Imported,x)]
+> mergeImport x ((Local,x') : xs) = (Local,x') : mergeImport x xs
+> mergeImport x ((Imported,x') : xs) =
 >   case merge x x' of
->     Just x'' -> (Import (m:ms),x'') : xs
->     Nothing -> (Import ms,x') : mergeImport m x xs
+>     Just x'' -> (Imported,x'') : xs
+>     Nothing -> (Imported,x') : mergeImport x xs
 
 \end{verbatim}
 The function \texttt{globalBindTopEnv} introduces a binding for a
@@ -146,7 +143,7 @@ introduce bindings for both global and local definitions.
 >   TopEnv (bindEnv x (rebindLocal (entities x env)) env)
 >   where rebindLocal [] = error "internal error: qualRebindTopEnv"
 >         rebindLocal ((Local,_) : ys) = (Local,y) : ys
->         rebindLocal ((Import ms,y) : ys) = (Import ms,y) : rebindLocal ys
+>         rebindLocal ((Imported,y) : ys) = (Imported,y) : rebindLocal ys
 
 > localUnimportTopEnv :: Ident -> TopEnv a -> TopEnv a
 > localUnimportTopEnv x (TopEnv env) =
@@ -154,7 +151,7 @@ introduce bindings for both global and local definitions.
 >   where x' = qualify x
 >         unbindImport [] = []
 >         unbindImport ((Local,y) : ys) = [(Local,y)]
->         unbindImport ((Import _,_) : ys) = unbindImport ys
+>         unbindImport ((Imported,_) : ys) = unbindImport ys
 
 > localUnbindTopEnv :: Ident -> TopEnv a -> TopEnv a
 > localUnbindTopEnv x (TopEnv env) =
@@ -162,7 +159,7 @@ introduce bindings for both global and local definitions.
 >   where x' = qualify x
 >         unbindLocal [] = error "internal error: unbindTopEnv"
 >         unbindLocal ((Local,_) : ys) = ys
->         unbindLocal ((Import ms,y) : ys) = (Import ms,y) : unbindLocal ys
+>         unbindLocal ((Imported,y) : ys) = (Imported,y) : unbindLocal ys
 
 > lookupTopEnv :: Ident -> TopEnv a -> [a]
 > lookupTopEnv = qualLookupTopEnv . qualify
@@ -193,7 +190,7 @@ identifiers are ordered first by their module qualifier.
 
 > allImports :: TopEnv a -> [(QualIdent,a)]
 > allImports (TopEnv env) =
->   [(x,y) | (x,ys) <- envToList env, (Import _,y) <- ys]
+>   [(x,y) | (x,ys) <- envToList env, (Imported,y) <- ys]
 
 > unqualBindings :: Maybe ModuleIdent -> TopEnv a -> [(Ident,(Source,a))]
 > unqualBindings m (TopEnv env) =

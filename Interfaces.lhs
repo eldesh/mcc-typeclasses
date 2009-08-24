@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Interfaces.lhs 2898 2009-08-24 09:40:09Z wlux $
+% $Id: Interfaces.lhs 2905 2009-08-24 16:16:35Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -13,7 +13,6 @@ goal.
 > module Interfaces(ModuleEnv,moduleInterface,
 >                   loadInterfaces,loadGoalInterfaces,
 >                   importModuleIdents,importModules,
->                   importInterfaceIdents,importInterfaces,
 >                   qualifyEnv1,qualifyEnv2,updateInterface) where
 > import Base
 > import Combined
@@ -177,8 +176,8 @@ current module.
 
 \end{verbatim}
 The functions \texttt{importModuleIdents} and \texttt{importModules}
-bring the declarations of all imported modules into scope in the
-current module.
+bring the declarations of all imported modules into scope for the
+current module or goal expression.
 \begin{verbatim}
 
 > importModuleIdents :: ModuleEnv -> [ImportDecl] -> (TypeEnv,InstSet,FunEnv)
@@ -192,27 +191,6 @@ current module.
 >   where (pEnv,tcEnv,iEnv,tyEnv) = foldl importModule initEnvs ds
 >         importModule envs (ImportDecl _ m q asM is) =
 >           importInterface (fromMaybe m asM) q is envs (moduleInterface m mEnv)
-
-\end{verbatim}
-The functions \texttt{importInterfaceIdents} and
-\texttt{importInterfaces} bring the declarations of all loaded modules
-into scope with their qualified names and in addition bring the
-declarations of the specified modules into scope with their
-unqualified names, too.
-\begin{verbatim}
-
-> importInterfaceIdents :: ModuleEnv -> [ModuleIdent] -> (TypeEnv,FunEnv)
-> importInterfaceIdents mEnv ms = (importUnifyData tEnv,importUnifyData vEnv)
->   where (tEnv,_,vEnv) =
->           foldl (uncurry . importModule) initIdentEnvs (envToList mEnv)
->         importModule envs m = importIdents m (m `notElem` ms) Nothing envs
-
-> importInterfaces :: ModuleEnv -> [ModuleIdent]
->                  -> (PEnv,TCEnv,InstEnv,ValueEnv)
-> importInterfaces mEnv ms = (pEnv,tcEnv,iEnv,tyEnv)
->   where (pEnv,tcEnv,iEnv,tyEnv) =
->           foldl (uncurry . importModule) initEnvs (envToList mEnv)
->         importModule envs m = importInterface m (m `notElem` ms) Nothing envs
 
 \end{verbatim}
 The function \texttt{qualifyEnv1} brings the declarations of all

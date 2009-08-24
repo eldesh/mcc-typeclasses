@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ExportSyntaxCheck.lhs 2692 2008-05-02 13:22:41Z wlux $
+% $Id: ExportSyntaxCheck.lhs 2898 2009-08-24 09:40:09Z wlux $
 %
-% Copyright (c) 2000-2008, Wolfgang Lux
+% Copyright (c) 2000-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ExportSyntaxCheck.lhs}
@@ -45,17 +45,19 @@ entities.
 
 \end{verbatim}
 While checking all export specifications, the compiler expands
-specifications of the form \verb|T(..)| into
+specifications of the form \verb|T(..)| and \verb|C(..)| into
 \texttt{T($C_1,\dots,C_m,l_1,\dots,l_n$)}, where $C_1,\dots,C_m$ are
 the data constructors of type \texttt{T} and $l_1,\dots,l_n$ its field
-labels, and replaces an export specification \verb|module M| by
-specifications for all entities which are defined in module \texttt{M}
-and imported into the current module with their unqualified name. In
-order to distinguish exported type constructors from exported
-functions, the former are translated into the equivalent form
-\verb|T()|. Note that the export specification \texttt{x} may export a
-type constructor \texttt{x} \emph{and} a global function \texttt{x} at
-the same time.
+labels, and \texttt{C($f_1,\dots,f_n$)}, respectively, where
+$f_1,\dots,f_n$ are the methods of type class \texttt{C}. In addition,
+it replaces an export specification \verb|module M| by specifications
+for all entities which are in scope with an unqualified name $x$ and a
+qualified name \verb|M.|$x$. In order to distinguish exported type
+constructors and type classes from exported functions, the former are
+translated into the equivalent form \verb|T()| and \verb|C()|,
+respectively. Note that the export specification \texttt{x} may export
+a type constructor or type class \texttt{x} \emph{and} a global
+function \texttt{x} at the same time.
 
 The code of \texttt{expandSpecs} ensures that the unit, list, and
 tuple types are exported from the Prelude even if its exported
@@ -70,24 +72,21 @@ exported by any module other than the Prelude.
 >             -> Maybe ExportSpec -> Error ExportSpec
 > expandSpecs ms m tEnv fEnv (Just (Exporting p es)) =
 >   liftE (Exporting p . (es' ++) . concat)
->         (mapE (expandExport p ms m tEnv fEnv) es)
+>         (mapE (expandExport p (addToSet m ms) tEnv fEnv) es)
 >   where es' = [exportType t | m == preludeMIdent,
 >                               (tc,t) <- localBindings tEnv, isPrimTypeId tc]
 > expandSpecs _ _ tEnv fEnv Nothing =
 >   return (Exporting noPos (expandLocalModule tEnv fEnv))
 >   where noPos = undefined
 
-> expandExport :: Position -> Set ModuleIdent -> ModuleIdent -> TypeEnv
->              -> FunEnv -> Export -> Error [Export]
-> expandExport p _ _ tEnv fEnv (Export x) = expandThing p tEnv fEnv x
-> expandExport p _ _ tEnv _ (ExportTypeWith tc xs) = expandTypeWith p tEnv tc xs
-> expandExport p _ _ tEnv _ (ExportTypeAll tc) = expandTypeAll p tEnv tc
-> expandExport p ms m tEnv fEnv (ExportModule m')
->   | m == m' =
->       return ((if m `elemSet` ms then expandModule tEnv fEnv m else []) ++
->               expandLocalModule tEnv fEnv)
->   | m' `elemSet` ms = return (expandModule tEnv fEnv m')
->   | otherwise = errorAt p (moduleNotImported m')
+> expandExport :: Position -> Set ModuleIdent -> TypeEnv -> FunEnv -> Export
+>              -> Error [Export]
+> expandExport p _ tEnv fEnv (Export x) = expandThing p tEnv fEnv x
+> expandExport p _ tEnv _ (ExportTypeWith tc xs) = expandTypeWith p tEnv tc xs
+> expandExport p _ tEnv _ (ExportTypeAll tc) = expandTypeAll p tEnv tc
+> expandExport p ms tEnv fEnv (ExportModule m)
+>   | m `elemSet` ms = return (expandModule tEnv fEnv m)
+>   | otherwise = errorAt p (moduleNotImported m)
 
 > expandThing :: Position -> TypeEnv -> FunEnv -> QualIdent -> Error [Export]
 > expandThing p tEnv fEnv tc =
@@ -136,12 +135,20 @@ exported by any module other than the Prelude.
 > expandLocalModule :: TypeEnv -> FunEnv -> [Export]
 > expandLocalModule tEnv fEnv =
 >   [exportType t | (_,t) <- localBindings tEnv] ++
->   [Export f' | (f,Var f' _) <- localBindings fEnv, not (isRenamed f)]
+>   [Export f' | (_,Var f' _) <- localBindings fEnv]
 
 > expandModule :: TypeEnv -> FunEnv -> ModuleIdent -> [Export]
 > expandModule tEnv fEnv m =
->   [exportType t | (tc,t) <- moduleImports m tEnv, not (isPrimTypeId tc)] ++
->   [Export f | (_,Var f _) <- moduleImports m fEnv]
+>   [exportType (restrict xs t) | (tc,t) <- moduleBindings m tEnv,
+>                                 not (isPrimTypeId tc)] ++
+>   [Export f | Var f _ <- vs]
+>   where vs = map snd (moduleBindings m fEnv)
+>         xs = map origName vs
+>         restrict xs' (Data tc xs) =
+>           Data tc (filter ((`elem` xs') . qualifyLike tc) xs)
+>         restrict _ (Alias tc) = Alias tc
+>         restrict xs (Class cls fs) =
+>           Class cls (filter ((`elem` xs) . qualifyLike cls) fs)
 
 > exportType :: TypeKind -> Export
 > exportType (Data tc xs) = ExportTypeWith tc xs
@@ -150,8 +157,9 @@ exported by any module other than the Prelude.
 
 \end{verbatim}
 For compatibility with Haskell, we allow exporting field labels and
-type class methods (but not constructors) individually as well as
-together with their types. Thus, given the declaration
+type class methods but not constructors individually as well as
+together with their types and classes, respectively. Thus, given the
+declaration
 \begin{verbatim}
   data T a = C{ l::a }
 \end{verbatim}

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TopEnv.lhs 2725 2008-06-14 17:24:48Z wlux $
+% $Id: TopEnv.lhs 2898 2009-08-24 09:40:09Z wlux $
 %
-% Copyright (c) 1999-2008, Wolfgang Lux
+% Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TopEnv.lhs}
@@ -29,7 +29,7 @@ imported.
 >               rebindTopEnv, globalRebindTopEnv, localRebindTopEnv,
 >               qualRebindTopEnv, localUnimportTopEnv, localUnbindTopEnv,
 >               lookupTopEnv, qualLookupTopEnv, allEntities,
->               allImports, moduleImports, localBindings) where
+>               allImports, localBindings, moduleBindings) where
 > import Env
 > import Ident
 > import Maybe
@@ -174,12 +174,17 @@ introduce bindings for both global and local definitions.
 The function \texttt{allEntities} returns a list of all entities bound
 in an environment. The function \texttt{allImports} returns a list of
 the names and values of all entities in an environment that were
-imported from another module. The functions \texttt{localBindings} and
-\texttt{moduleImports} return the list of entities defined in the
-current module and imported from a particular module, respectively.
-Since a name can be defined only once at the top-level of a module and
-imports of the same entity are merged, the result lists of both
-functions will contain no duplicates.
+imported from another module. The function \texttt{localBindings}
+returns the list of all entities defined in the current module, and
+the function \texttt{moduleBindings} returns the list of all entities
+which are in scope with both an unqualified name $x$ and a qualified
+name $M.x$. Since a name can be defined only once at the top-level of
+a module and imports of the same entity are merged, the result lists
+of both functions will contain no duplicates. Note that both functions
+(actually, their help function \texttt{unqualBindings}) make use of
+the fact that the list returned by \texttt{envToList} is sorted
+according to the qualified names of the entities and qualified
+identifiers are ordered first by their module qualifier.
 \begin{verbatim}
 
 > allEntities :: TopEnv a -> [a]
@@ -190,16 +195,19 @@ functions will contain no duplicates.
 > allImports (TopEnv env) =
 >   [(x,y) | (x,ys) <- envToList env, (Import _,y) <- ys]
 
-> unqualBindings :: TopEnv a -> [(Ident,(Source,a))]
-> unqualBindings (TopEnv env) =
->   [(x',y) | (x,ys) <- takeWhile (not . isQualified . fst) (envToList env),
+> unqualBindings :: Maybe ModuleIdent -> TopEnv a -> [(Ident,(Source,a))]
+> unqualBindings m (TopEnv env) =
+>   [(x',y) | (x,ys) <- takeWhile p (dropWhile (not . p) (envToList env)),
 >             let x' = unqualify x, y <- ys]
-
-> moduleImports :: ModuleIdent -> TopEnv a -> [(Ident,a)]
-> moduleImports m env =
->   [(x,y) | (x,(Import ms,y)) <- unqualBindings env, m `elem` ms]
+>   where p = (m ==) . fst . splitQualIdent . fst
 
 > localBindings :: TopEnv a -> [(Ident,a)]
-> localBindings env = [(x,y) | (x,(Local,y)) <- unqualBindings env]
+> localBindings env =
+>   [(x,y) | (x,(Local,y)) <- unqualBindings Nothing env]
+
+> moduleBindings :: Entity a => ModuleIdent -> TopEnv a -> [(Ident,a)]
+> moduleBindings m env =
+>   [(x',y) | (x',(_,y)) <- unqualBindings (Just m) env,
+>             origName y `elem` map origName (lookupTopEnv x' env)]
 
 \end{verbatim}

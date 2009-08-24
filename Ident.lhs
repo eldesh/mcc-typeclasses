@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Ident.lhs 2690 2008-05-01 20:40:17Z wlux $
+% $Id: Ident.lhs 2898 2009-08-24 09:40:09Z wlux $
 %
-% Copyright (c) 1999-2008, Wolfgang Lux
+% Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Ident.lhs}
@@ -18,11 +18,10 @@ and, hence, its \emph{id} will not be shown.
 
 \ToDo{Probably we should use \texttt{Integer} for the \emph{id}s.}
 
-Qualified identifiers may optionally be prefixed by a module
-name. \textbf{The order of the cases \texttt{UnqualIdent} and
-\texttt{QualIdent} is important. Some parts of the compiler rely on
-the fact that all qualified identifiers are greater than any
-unqualified identifier.}
+Qualified identifiers may optionally be prefixed by a module name.
+\textbf{Note that some parts of the compiler rely on the fact that
+qualified identifiers are ordered first by their module qualifiers,
+i.e., $M.x < M'.x'$ iff $M < M' \vee (M == M' \wedge x < x')$.}
 \begin{verbatim}
 
 > module Ident(Ident,QualIdent,ModuleIdent,

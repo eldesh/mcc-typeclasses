@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Interfaces.lhs 2785 2009-04-10 09:58:03Z wlux $
+% $Id: Interfaces.lhs 2898 2009-08-24 09:40:09Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -237,7 +237,7 @@ local module aliases for qualified imports whereas
 >         (pEnv',tcEnv',_,tyEnv') = foldl (importInterfaceIntf ms') initEnvs is'
 >         importEntities env (m,asM) env' =
 >           foldr (uncurry (importTopEnv False m)) env'
->                 (moduleImports (fromMaybe m asM) env)
+>                 (moduleBindings (fromMaybe m asM) env)
 
 > qualifyEnv2 :: ModuleEnv -> ModuleIdent -> PEnv -> TCEnv -> ValueEnv
 >            -> (PEnv,TCEnv,ValueEnv)

@@ -1,0 +1,660 @@
+% -*- noweb-code-mode: c-mode -*-
+% $Id: funpat.nw 2921 2009-12-02 21:22:18Z wlux $
+%
+% Copyright (c) 2009, Wolfgang Lux
+% See ../LICENSE for the full license.
+%
+\subsection{Function Patterns}
+The constraint operator \texttt{(=:<=)} is a lazy variant of the
+equality constraint operator \texttt{(=:=)} and is used for the
+implementation of function patterns. The essential difference between
+\texttt{$e_1$ =:<= $e_2$} and \texttt{$e_1$ =:= $e_2$} is that if
+$e_1$ evaluates to an unbound variable $x$, \texttt{(=:<=)} simply
+binds $x$ to $e_2$ without evaluating it further, whereas
+\texttt{(=:=)} evaluates $e_2$ to normal form. Note that this means
+that \texttt{(=:<=)} is not symmetrical with respect to its arguments.
+The left argument of \texttt{(=:<=)} is always evaluated to normal
+form, but the right one may not be evaluated at all. Thus, the
+constraint \texttt{let x free in x =:<= failed} succeeds, whereas the
+constraint \texttt{let x free in failed =:<= x} fails. This means that
+the use of \texttt{(=:<=)} is unsafe in general.
+
+If the left hand side argument of \texttt{(=:<=)} describes a
+non-linear pattern, i.e., some variables occur more than once in its
+normal form, we must ensure for all those variables that each of its
+occurrences is unified with the same (finite) data term. Otherwise, an
+expression like \texttt{let x,u free in (x,x) =:<= (u,failed)} would
+either fail or bind \texttt{u} to the unevaluated expression
+\texttt{failed} depending on the order in which the argument
+constraints \texttt{x =:<= u} and \texttt{x =:<= failed} are
+evaluated.
+
+When the left argument reduces to a variable with constraints or a
+non-empty wait list, we must evaluate the right argument -- at least
+-- to head normal form before the variable is bound to it. This is
+necessary to prevent blocked threads from being woken prematurely --
+recall that the pattern matching code expects a head normal form --
+and to ensure that constraint satisfaction tests are applied to head
+normal forms. Note that if the \texttt{(=:<=)} constraint is due to a
+function pattern, a variable on the left hand side can have a
+non-empty wait list only if it is used more than once and therefore
+the right argument will be evaluated to normal form anyway.
+
+<<funpat.h>>=
+DECLARE_LABEL(extern, ___61__58__60__61_);
+
+@ 
+<<funpat.c>>=
+#include "config.h"
+#include "debug.h"
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "run.h"
+#include "regs.h"
+#include "heap.h"
+#include "stack.h"
+#include "eval.h"
+#include "threads.h"
+#include "spaces.h"
+#include "search.h"
+#include "trail.h"
+#include "equal.h"
+#include "funpat.h"
+#include "unify.h"
+#include "cam.h"
+#include "trace.h"
+
+DECLARE_LABEL(static, ___61__58__60__61__1);
+DECLARE_LABEL(static, ___61__58__60__61__2);
+DECLARE_LABEL(static, ___61__58__60__61__3);
+DECLARE_LABEL(static, ___61__58__60__61__4);
+DECLARE_LABEL(static, funpat_succeed);
+DECLARE_LABEL(static, funpat_args);
+DECLARE_LABEL(static, funpat_args_1);
+DECLARE_LABEL(static, funpat_args_2);
+DECLARE_LABEL(static, funpat_papp_args);
+DECLARE_LABEL(static, eval_count_pattern_variable);
+DECLARE_LABEL(static, eval_pattern_variable);
+
+static unsigned int term_vars(Node *);
+static unsigned int unmark_nodes(unsigned int);
+static bool	    dup_vars(unsigned int, Node *, Node **);
+
+static NodeInfo pattern_variable_info_table[];
+
+#define NO_SOLUTION "(=:<=): no solution"
+
+FUNCTION(___61__58__60__61_)
+{
+ ENTRY_LABEL(extern, ___61__58__60__61_)
+    C_STACK_CHECK(___61__58__60__61_);
+    TRACE_FUN("=:<=", 2);
+    SAVE_REGS(1);
+    EVAL(___61__58__60__61__1);
+}
+
+static
+FUNCTION(___61__58__60__61__1)
+{
+    Node *arg1, *arg2, *arglist;
+ ENTRY_LABEL(static, ___61__58__60__61__1)
+    arg1 = regs.r[0];
+    arg2 = regs.sp[0];
+    if ( is_tagged_ptr(arg1) )
+    {
+	if ( is_variable_node(arg1) )
+	{
+	    while ( is_tagged_ptr(arg2) && is_indir_node(arg2) )
+		arg2 = arg2->n.node;
+
+	    /* check for trivial unification */
+	    if ( arg1 == arg2 )
+		RETURN(Success, 1);
+
+	    /* if the variable is constrained or has blocked threads evaluate
+	     * the other argument to a head normal form first */
+	    if ( arg1->v.wq || arg1->v.cstrs )
+	    {
+		regs.sp[0] = arg1;
+		regs.r[0]  = arg2;
+		EVAL(___61__58__60__61__2);
+	    }
+
+	    /* otherwise bind the variable to the unevaluated right argument */
+	    regs.sp += 1;
+	    CALL2(bind_var, funpat_succeed, arg1, arg2);
+	}
+	else if ( is_global_var_node(arg1) )
+	{
+	    GOTO(sync_global);
+	}
+    }
+
+    /* Prepare to compute normal forms of all variables that occur more than
+     * once in the normal form of the left argument */
+    regs.r[0]  = arg2;
+    regs.sp[0] = arg1;
+    if ( dup_vars(1, arg1, &arglist) )
+    {
+	CHECK_STACK(2);
+	regs.sp -= 2;
+	regs.sp[0] = regs.sp[2];
+	regs.sp[1] = (Node *)___61__58__60__61__4;
+	regs.sp[2] = arglist;
+    }
+
+    /* Evaluate the right argument, too */
+    EVAL(___61__58__60__61__3);
+}
+
+static
+FUNCTION(___61__58__60__61__2)
+{
+    Node *arg1, *arg2;
+ ENTRY_LABEL(static, ___61__58__60__61__2)
+    arg1 = regs.sp[0];
+    arg2 = regs.r[0];
+    while ( is_tagged_ptr(arg1) )
+    {
+	switch ( node_kind(arg1) )
+	{
+	case INDIR_KIND:
+	    arg1 = arg1->n.node;
+	    continue;
+	case LVAR_KIND:
+	    /* check for trivial unification */
+	    if ( arg1 == arg2 )
+		RETURN(Success, 1);
+
+	    /* bind the variable to the computed head normal form */
+	    regs.sp += 1;
+	    CALL2(bind_var, funpat_succeed, arg1, arg2);
+	}
+	break;
+    }
+
+    /* special case: the left argument has been instantiated */
+    regs.sp[0] = arg2;
+    regs.r[0] = arg1;
+    GOTO(___61__58__60__61__1);
+}
+
+static
+FUNCTION(___61__58__60__61__3)
+{
+    Node *arg1, *arg2;
+ ENTRY_LABEL(static, ___61__58__60__61__3)
+    arg1 = regs.sp[0];
+    arg2 = regs.r[0];
+
+    while ( is_tagged_ptr(arg1) && is_indir_node(arg1) )
+        arg1 = arg1->n.node;
+    assert(!is_tagged_ptr(arg1) ||
+	   (!is_variable_node(arg1) && !is_global_var_node(arg1)));
+    if ( is_tagged_ptr(arg2) &&
+	 (is_variable_node(arg2) || is_global_var_node(arg2)) )
+    {
+	regs.sp[0] = arg1;
+	CALL_RET2(___61__58__61_, 1, arg1, arg2);
+    }
+    else
+    {
+	int n = eq_root(arg1, arg2);
+
+	if ( n < 0 )
+	    FAIL(NO_SOLUTION);
+	else if ( n > 0 )
+	{
+	    bool exist_type;
+	    Node *arglist;
+
+	    /* NB assign exist_type before calling eq_args because a
+	     *    garbage collection in eq_args will invalidate arg1 */
+	    exist_type = is_eapp_node(arg1) || is_papp_node(arg1);
+	    arglist    = eq_args(0, arg1, arg2, n);
+	    if ( !arglist )
+		FAIL(NO_SOLUTION);
+
+	    if ( arglist != nil )
+	    {
+		regs.sp[0] = arglist;
+		if ( exist_type )
+		{
+		    regs.r[0] = CONST(__Prelude__True);
+		    GOTO(funpat_papp_args);
+		}
+		else
+		    GOTO(funpat_args);
+	    }
+	}
+    }
+
+    RETURN(Success, 1);
+}
+
+static
+FUNCTION(funpat_succeed)
+{
+    RETURN(Success, 0);
+}
+
+@
+The unification of the arguments of data terms proceeds
+concurrently. Instead of calling the code for the predefined operator
+[[(&)]], we handle concurrent evaluation ourselves. Thus, we can
+make use of the fact that the unification always returns the value
+[[Success]] and can never return an unbound variable.
+
+<<funpat.c>>=
+static
+FUNCTION(funpat_args)
+{
+    Node *susp, *arglist;
+ ENTRY_LABEL(static, funpat_args)
+    arglist = regs.sp[0];
+    if ( arglist->c.args[2] == nil )
+	CALL_RET2(___61__58__60__61_, 1,
+		  arglist->c.args[0], arglist->c.args[1]);
+
+    CHECK_HEAP(0, queueMe_node_size);
+    susp	= (Node *)regs.hp;
+    susp->info	= queueMe_info_table;
+    susp->q.wq	= 0;
+    regs.hp    += queueMe_node_size;
+
+    arglist = regs.sp[0];
+    CHECK_STACK1();
+    regs.sp   -= 1;
+    regs.sp[0] = regs.r[2] = susp;
+    regs.sp[1] = arglist->c.args[2];
+    regs.r[0]  = arglist->c.args[0];
+    regs.r[1]  = arglist->c.args[1];
+    start_thread(3, funpat_args_1);
+
+    SAVE_RET1(regs.r[2]);
+    CALL2(___61__58__60__61_, update, regs.r[0], regs.r[1]);
+}
+
+static
+FUNCTION(funpat_args_1)
+{
+    Node *r;
+ ENTRY_LABEL(static, funpat_args_1)
+    for ( r = regs.sp[0]; node_kind(r) == INDIR_KIND; r = r->n.node )
+	;
+
+    if ( node_kind(r) == CAPP_KIND )
+    {
+	regs.sp += 1;
+	GOTO(funpat_args);
+    }
+
+    ASSERT(node_kind(r) == QUEUEME_KIND);
+    CHECK_STACK1();
+    regs.sp   -= 1;
+    regs.sp[0] = regs.sp[2];
+    regs.sp[1] = (Node *)funpat_args_2;
+    regs.sp[2] = r;
+    GOTO(funpat_args);
+}
+
+static
+FUNCTION(funpat_args_2)
+{
+    Node *r;
+ ENTRY_LABEL(static, funpat_args_2)
+    ASSERT(node_kind(regs.r[0]) == CAPP_KIND);
+    for ( r = regs.sp[0]; node_kind(r) == INDIR_KIND; r = r->n.node )
+	;
+    if ( node_kind(r) == QUEUEME_KIND )
+	ENTER(r, 1);
+    ASSERT(node_kind(r) == CAPP_KIND);
+    RETURN(r, 1);
+}
+
+@ 
+As explained on p.~\pageref{unsafe-equality} in
+Sect.~\ref{unsafe-equality}, computing the equality of two partial
+applications and of two data constructors with existentially
+quantified types, respectively, is not type safe. In order to prevent
+ill-typed nodes from escaping the scope of an equality constraint,
+e.g., by using a function \texttt{cast x | flip const x =:<= flip
+  const y = y where y free} with type \texttt{a -> b}, we restrict
+equality constraints between partial applications and between
+existentially quantified data constructors to ground terms. This is
+implemented by applying the \texttt{(==)} primitive to each pair of
+arguments and checking that all of these applications reduce to
+\texttt{True}.
+
+\ToDo{Using \texttt{(==)} and checking argument pairs sequentially is
+probably too restrictive. Provide a more general solution by defining
+and using a rigid variant of \texttt{(=:<=)}.}
+
+<<funpat.c>>=
+static
+FUNCTION(funpat_papp_args)
+{
+    Node *arglist;
+ ENTRY_LABEL(static, funpat_papp_args)
+    if ( regs.r[0] != CONST(__Prelude__True) )
+	FAIL(NO_SOLUTION);
+
+    arglist = regs.sp[0];
+    if ( arglist == nil )
+	RETURN(Success, 1);
+
+    regs.sp[0] = arglist->c.args[2];
+    CALL2(___61__61_, funpat_papp_args, arglist->c.args[0], arglist->c.args[1]);
+}
+
+@ 
+As noted in the introduction of this section, the implementation must
+ensure that all occurrences of a variable $x$ in the normal form of
+the left hand side argument of \texttt{(=:<=)} must be bound to the
+same finite data term if $x$ occurs more than once in the normal form.
+However, since evaluation of the normal form and binding of its free
+variables are interleaved there is no point in time where we could
+determine the number of occurrences of a particular variable in the
+normal form. Instead, we follow an approach inspired by the
+implementation of function patterns in PAKCS. If the left argument of
+\texttt{(=:<=)} is not a plain variable after computing its head
+normal form, we change each of its variables that may be used more
+than once into a shared application of a primitive function which
+returns (a fresh copy of) that variable and counts how often it was
+used, i.e., evaluated. After solving the constraints for all arguments
+of the left hand side expression, we check the list of transformed
+variables and ensure that each variable is bound to a normal form.
+
+The function [[term_vars]] below collects all unbound variables
+occurring in its argument term and pushes them onto the stack. In
+addition, tag bits are added to their info pointers in order to
+distinguish variables that can be used at most once and variables that
+may be used more than once. At the end, the function [[unmark_nodes]]
+resets all mark bits and keeps only those variable nodes that may be
+used more than once. The function [[dup_vars]] then creates a list
+containing these variables wrapped in applications of the
+[[pattern_variable]] primitive. Note that variables occurring in
+arguments of unevaluated applications are always considered
+potentially shared, even if they occur just once. In order to prevent
+non-termination for mutually recursive variable bindings we also mark
+unevaluated applications temporarily while traversing the graph. In
+particular, we use the least significant bit of the info pointer to
+mark variable nodes and the next bit to mark shared variables and
+applications. This leads to the following association between tag bits
+and nodes
+\begin{center}
+  \begin{tabular}{|r|l|}
+    \hline
+    Tag & Node \\
+    \hline
+    00 & other node \\
+    01 & non-shared variable \\
+    10 & unevaluated application \\
+    11 & possibly shared variable \\
+    \hline
+  \end{tabular}
+\end{center}
+
+\ToDo{Also distinguish variables that may be used more than once and
+  variables that are definitely used more than once, e.g.,
+  \texttt{const x x} vs. \texttt{(x,x)}. There is no need to count
+  usages for the latter; instead the binding of such variables can
+  always be evaluated to normal form after the argument constraints
+  have been solved.}
+
+<<funpat.c>>=
+#define VAR_FLAG		0x01
+#define SHARED_FLAG		0x02
+#define is_var(node)		((long)(node)->info & VAR_FLAG)
+#define is_shared(node)		((long)(node)->info & SHARED_FLAG)
+#define mark_var(node) \
+    ((node)->info = (NodeInfo *)((long)(node)->info | VAR_FLAG))
+#define mark_shared(node) \
+    ((node)->info = (NodeInfo *)((long)(node)->info | SHARED_FLAG))
+#define unmark(node) \
+    ((node)->info = (NodeInfo *)((long)(node)->info & ~(VAR_FLAG|SHARED_FLAG)))
+
+static unsigned int
+term_vars(Node *arg)
+{
+    unsigned i, n = 0, argc;
+    Node     **argp;
+
+    while ( is_tagged_ptr(arg) && !is_shared(arg) )
+    {
+	if ( is_var(arg) )
+	{
+	    mark_shared(arg);
+	    break;
+	}
+
+	argc = 0;
+	argp = 0;
+	switch ( node_kind(arg) )
+	{
+	case CAPP_KIND:
+	case EAPP_KIND:
+	case PAPP_KIND:
+	case FAPP_KIND:
+	    argc = closure_argc(arg);
+	    argp = arg->c.args;
+	    break;
+	case LVAR_KIND:
+	    CHECK_STACK1();
+	    n	       = 1;
+	    regs.sp   -= 1;
+	    regs.sp[0] = arg;
+	    mark_var(arg);
+	    break;
+	case SUSPEND_KIND:
+	    argc = closure_argc(arg);
+	    argp = arg->c.args;
+	    if ( argc == 1 && !argp[0] )
+		argc = 0;
+	    CHECK_STACK1();
+	    n	       = 1;
+	    regs.sp   -= 1;
+	    regs.sp[0] = arg;
+	    mark_shared(arg);
+	    break;
+	case INDIR_KIND:
+	    arg = arg->n.node;
+	    continue;
+	case VECTOR_KIND:
+	    argc = vector_argc(arg);
+	    argp = arg->a.args;
+	    break;
+	default:
+	    break;
+	}
+
+	for ( i = 0; i < argc; i++ )
+	    n += term_vars(argp[i]);
+	break;
+    }
+    return n;
+}
+
+static unsigned int
+unmark_nodes(unsigned int n)
+{
+    unsigned int i;
+    Node	 **from, **to;
+
+    from = to = regs.sp + n;
+    for ( i = 0; i < n; i++ )
+    {
+	--from;
+	if ( is_shared(*from) && is_var(*from) )
+	    *--to = *from;
+	unmark(*from);
+    }
+    regs.sp = to;
+    return n - (to - from);
+}
+
+static bool
+dup_vars(unsigned int n_regs, Node *term, Node **duplist)
+{
+    unsigned i, n, sz;
+    Node     *hd, *tl, *susp, *oldVar, *newVar;
+
+    n  = unmark_nodes(term_vars(term));
+    tl = nil;
+    sz = n * (variable_node_size + suspend_node_size(1) + cons_node_size);
+    CHECK_HEAP(n_regs, sz);
+    for ( i = 0 ; i < n; i++ )
+    {
+	assert(is_variable_node(regs.sp[i]));
+	oldVar = regs.sp[i];
+
+	newVar		= (Node *)regs.hp;
+	newVar->info	= variable_info_table;
+	newVar->v.wq	= oldVar->v.wq;
+	newVar->v.cstrs = oldVar->v.cstrs;
+	regs.hp	       += variable_node_size;
+
+	susp		= (Node *)regs.hp;
+	susp->info	= pattern_variable_info_table;
+	susp->c.args[0] = newVar;
+	regs.hp	       += suspend_node_size(1);
+
+#if !COPY_SEARCH_SPACE
+	if ( (word *)oldVar < regs.hlim )
+	{
+	    DO_SAVE(oldVar, n.node);
+	    oldVar->info++;
+	}
+	else
+#endif
+	    oldVar->info = &indir_info;
+	oldVar->n.node = susp;
+
+	hd	      = (Node *)regs.hp;
+	hd->info      = &cons_info;
+	hd->c.args[0] = susp;
+	hd->c.args[1] = tl;
+	regs.hp	     += cons_node_size;
+	tl	      = hd;
+    }
+    regs.sp += n;
+
+    *duplist = tl;
+    return tl != nil;
+}
+
+@ 
+The auxiliary primitive [[pattern_variable]] implements the code to
+count how often a variable is used. Counting is achieved with a trick:
+Instead of using a normal lazy application node, we provide a special
+info table with three (almost) identical descriptors. The evaluation
+entry points of all three descriptors return the first argument of the
+application node, which is the decorated pattern variable. In
+addition, the first two entry points increment the info pointer. Thus,
+we can determine how often a variable was used by computing the
+difference between the info pointer of the wrapped variable after
+unification succeeds and the base address of the node descriptor table.
+
+\textbf{Attention:} Even though the third descriptor in the info table
+is effectively equivalent to that of an indirection node, we must not
+use [[INDIR_KIND]] for it. The reason is that an indirection node may
+be short-circuited during garbage collections (though only when using
+the purely copying runtime system configuration) and when a search
+goal is copied, which could lead to wrong counts being attributed to
+the respective variables.
+
+<<funpat.c>>=
+static NodeInfo pattern_variable_info_table[] = {
+	{ SUSPEND_KIND, EVAL_TAG, suspend_node_size(1), 0,
+	  "@<<pattern variable>>", eval_count_pattern_variable, 0, 0, 0 },
+	{ SUSPEND_KIND, EVAL_TAG, suspend_node_size(1), 0,
+	  "@<<pattern variable>>", eval_count_pattern_variable, 0, 0, 0 },
+	{ SUSPEND_KIND, EVAL_TAG, suspend_node_size(1), 0,
+	  "@<<pattern variable>>", eval_pattern_variable, 0, 0, 0 }
+    };
+
+static
+FUNCTION(eval_count_pattern_variable)
+{
+    Node *susp, *var;
+ ENTRY_LABEL(static, eval_count_pattern_variable)
+    /* update the closure */
+    susp = regs.r[0];
+    SAVE(susp, c.args[0]);
+    susp->info++;
+
+    /* return the variable node */
+    var = susp->c.args[0]; 
+    while ( is_tagged_ptr(var) && is_indir_node(var) )
+	var = var->n.node;
+    RET(var);
+}
+
+static
+FUNCTION(eval_pattern_variable)
+{
+    Node *var;
+ ENTRY_LABEL(static, eval_pattern_variable)
+    var = regs.r[0]->c.args[0]; 
+    while ( is_tagged_ptr(var) && is_indir_node(var) )
+	var = var->n.node;
+    RET(var);
+}
+
+@
+After unification of the arguments of \texttt{(=:<=)} succeeds, we
+check which variables have been used more than once and evaluate their
+bindings to normal form. To that end, we process the list constructed
+by [[dup_vars]] and check the info pointer of each element of that
+list. Depending on whether the respective variable was not used at
+all, was used once, or was used more than once, the info pointer of an
+element will be [[pattern_variable_info_table]],
+[[pattern_variable_info_table]]+1, and
+[[pattern_variable_info_table]]+2, respectively. In the latter case,
+we evaluate the bound variable to normal form.
+
+\ToDo{Compute normal forms concurrently rather than sequentially.}
+
+<<funpat.c>>=
+static
+FUNCTION(___61__58__60__61__4)
+{
+    unsigned n;
+    Node     *var, *arglist;
+ ENTRY_LABEL(static, ___61__58__60__61__4)
+    arglist = regs.sp[0];
+    assert(arglist->info == &cons_info);
+    for ( ; arglist != nil; arglist = arglist->c.args[1] )
+    {
+	var = arglist->c.args[0];
+	n   = var->info - pattern_variable_info_table;
+
+	/* change the application into a real indirection */
+	assert(node_size(var) == indir_node_size);
+	SAVE(var, c.args[0]);
+	var->info = &indir_info;
+
+	/* eventually evaluate the node to NF */
+	switch ( n )
+	{
+	case 0:
+	case 1:
+	    break;
+	case 2:
+	    if ( arglist->c.args[1] != nil )
+	    {
+		regs.sp[0] = arglist->c.args[1];
+		CALL2(___61__58__61_, ___61__58__60__61__4,
+		      var->c.args[0], var->c.args[0]);
+	    }
+	    CALL_RET2(___61__58__61_, 1, var->c.args[0], var->c.args[0]);
+	default:
+	    curry_panic("___61__58__60__61__4: bad info pointer\n");
+	}
+    }
+
+    /* if we get here, we are done */
+    RETURN(Success, 1);
+}

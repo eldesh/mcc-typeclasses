@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2815 2009-05-04 13:59:57Z wlux $
+% $Id: TypeCheck.lhs 2921 2009-12-02 21:22:18Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1001,13 +1001,22 @@ in \texttt{tcFunctionDecl} above.
 >     return ([],ty,VariablePattern ty v)
 > tcConstrTerm poly tcEnv p t@(ConstructorPattern _ c ts) =
 >   do
->     (cx,ty,ts') <- tcConstrApp poly tcEnv p (ppConstrTerm 0 t) c ts
->     return (cx,ty,ConstructorPattern ty c ts')
+>     (cx,ty) <- fetchSt >>= skol tcEnv . conType c
+>     tcConstrApp poly tcEnv p (ppConstrTerm 0 t) c cx ty ts
+> tcConstrTerm poly tcEnv p t@(FunctionPattern _ f ts) =
+>   do
+>     (cx,ty) <- fetchSt >>= inst . funType f
+>     tcFunctPattern poly tcEnv p (ppConstrTerm 0 t) f id cx ty ts
 > tcConstrTerm poly tcEnv p t@(InfixPattern _ t1 op t2) =
 >   do
->     (cx,ty,[t1',t2']) <-
->       tcConstrApp poly tcEnv p (ppConstrTerm 0 t) op [t1,t2]
->     return (cx,ty,InfixPattern ty t1' op t2')
+>     (cx,ty) <- tcPatternOp tcEnv p op
+>     (alpha,beta,gamma) <-
+>       tcBinary p "infix pattern" (doc $-$ text "Operator:" <+> ppOp op)
+>                tcEnv ty
+>     (cx',t1') <- tcConstrArg poly tcEnv p doc t1 alpha
+>     (cx'',t2') <- tcConstrArg poly tcEnv p doc t2 beta
+>     return (cx ++ cx' ++ cx'',gamma,InfixPattern gamma t1' op t2')
+>   where doc = ppConstrTerm 0 t
 > tcConstrTerm poly tcEnv p (ParenPattern t) =
 >   do
 >     (cx,ty,t') <- tcConstrTerm poly tcEnv p t
@@ -1044,22 +1053,43 @@ in \texttt{tcFunctionDecl} above.
 >     (cx,ty,t') <- tcConstrTerm poly tcEnv p t
 >     return (cx,ty,LazyPattern t')
 
-> tcConstrApp :: Bool -> TCEnv -> Position -> Doc -> QualIdent -> [ConstrTerm a]
->             -> TcState (Context,Type,[ConstrTerm Type])
-> tcConstrApp poly tcEnv p doc c ts =
+> tcConstrApp :: Bool -> TCEnv -> Position -> Doc -> QualIdent
+>             -> Context -> Type -> [ConstrTerm a]
+>             -> TcState (Context,Type,ConstrTerm Type)
+> tcConstrApp poly tcEnv p doc c cx ty ts =
 >   do
->     tyEnv <- fetchSt
->     (cx,(tys,ty)) <- liftM (apSnd arrowUnapply) (skol tcEnv (conType c tyEnv))
 >     unless (length tys == n) (errorAt p (wrongArity c (length tys) n))
 >     (cxs,ts') <- liftM unzip $ zipWithM (tcConstrArg poly tcEnv p doc) ts tys
->     return (cx ++ concat cxs,ty,ts')
->   where n = length ts
+>     return (cx ++ concat cxs,ty',ConstructorPattern ty' c ts')
+>   where (tys,ty') = arrowUnapply ty
+>         n = length ts
+
+> tcFunctPattern :: Bool -> TCEnv -> Position -> Doc -> QualIdent
+>                -> ([ConstrTerm Type] -> [ConstrTerm Type]) -> Context -> Type
+>                -> [ConstrTerm a] -> TcState (Context,Type,ConstrTerm Type)
+> tcFunctPattern _ _ _ _ f ts cx ty [] =
+>   return (cx,ty,FunctionPattern ty f (ts []))
+> tcFunctPattern poly tcEnv p doc f ts cx ty (t':ts') =
+>   do
+>     (alpha,beta) <-
+>       tcArrow p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t) tcEnv ty
+>     (cx',t'') <- tcConstrArg poly tcEnv p doc t' alpha
+>     tcFunctPattern poly tcEnv p doc f (ts . (t'':)) (cx ++ cx') beta ts'
+>   where t = FunctionPattern ty f (ts [])
 
 > tcConstrArg :: Bool -> TCEnv -> Position -> Doc -> ConstrTerm a -> Type
 >             -> TcState (Context,ConstrTerm Type)
 > tcConstrArg poly tcEnv p doc t ty =
 >   tcConstrTerm poly tcEnv p t >>-
 >   unify p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t) tcEnv ty
+
+> tcPatternOp :: TCEnv -> Position -> InfixOp a -> TcState (Context,Type)
+> tcPatternOp tcEnv p (InfixConstr _ op) =
+>   do
+>     (cx,ty) <- fetchSt >>= skol tcEnv . conType op
+>     unless (arrowArity ty == 2) (errorAt p (wrongArity op (arrowArity ty) 2))
+>     return (cx,ty)
+> tcPatternOp _ _ (InfixOp _ op) = fetchSt >>= inst . funType op
 
 > tcRhs :: ModuleIdent -> TCEnv -> Rhs a -> TcState (Context,Type,Rhs Type)
 > tcRhs m tcEnv (SimpleRhs p e ds) =

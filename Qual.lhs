@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2780 2009-03-28 16:25:54Z wlux $
+% $Id: Qual.lhs 2921 2009-12-02 21:22:18Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -137,9 +137,12 @@ order to compile this module with hbc.
 >   qual _ _ _ (VariablePattern a v) = VariablePattern a v
 >   qual phase tEnv vEnv (ConstructorPattern a c ts) =
 >     ConstructorPattern a (qualIdent phase vEnv c) (qual phase tEnv vEnv ts)
+>   qual phase tEnv vEnv (FunctionPattern a f ts) =
+>     FunctionPattern a (qualIdent phase vEnv f) (qual phase tEnv vEnv ts)
 >   qual phase tEnv vEnv (InfixPattern a t1 op t2) =
->     InfixPattern a (qual phase tEnv vEnv t1)
->                  (qualIdent phase vEnv op)
+>     InfixPattern a
+>                  (qual phase tEnv vEnv t1)
+>                  (qual phase tEnv vEnv op)
 >                  (qual phase tEnv vEnv t2)
 >   qual phase tEnv vEnv (ParenPattern t) =
 >     ParenPattern (qual phase tEnv vEnv t)
@@ -154,7 +157,7 @@ order to compile this module with hbc.
 
 > instance Qual (Rhs a) where
 >   qual phase tEnv vEnv (SimpleRhs p e ds) =
->     SimpleRhs p (qual phase tEnv vEnv e) (qual phase tEnv vEnv ds) 
+>     SimpleRhs p (qual phase tEnv vEnv e) (qual phase tEnv vEnv ds)
 >   qual phase tEnv vEnv (GuardedRhs es ds) =
 >     GuardedRhs (qual phase tEnv vEnv es) (qual phase tEnv vEnv ds)
 

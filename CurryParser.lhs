@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2815 2009-05-04 13:59:57Z wlux $
+% $Id: CurryParser.lhs 2921 2009-12-02 21:22:18Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -284,8 +284,9 @@ directory path to the module is ignored.
 >           | not (isConstrId c) = funDecl p (f,FunLhs f ts)
 >           where f = unqualify c
 >         valDecl p t = opDecl p id t
->         opDecl p f (InfixPattern a t1 op t2)
->           | isConstrId op = opDecl p (f . InfixPattern a t1 op) t2
+>         opDecl p f (InfixPattern a1 t1 (InfixConstr a2 op) t2)
+>           | isConstrId op =
+>               opDecl p (f . InfixPattern a1 t1 (InfixConstr a2 op)) t2
 >           | otherwise = funDecl p (op',OpLhs (f t1) op' t2)
 >           where op' = unqualify op
 >         opDecl p f t = PatternDecl p (f t)
@@ -306,7 +307,8 @@ directory path to the module is ignored.
 >                            <*> opLhs'
 >         funLhs f ts = (f,FunLhs f ts)
 >         opLhs op t2 f t1 = (op,OpLhs (f t1) op t2)
->         infixPat op t2 f g t1 = f (g . InfixPattern () t1 op) t2
+>         infixPat op t2 f g t1 =
+>           f (g . InfixPattern () t1 (InfixConstr () op)) t2
 
 > curriedLhs :: Parser Token (Ident,Lhs ()) a
 > curriedLhs = apLhs <$> parens funLhs <*> many1 constrTerm2
@@ -531,7 +533,7 @@ directory path to the module is ignored.
 \begin{verbatim}
 
 > constrTerm0 :: Parser Token (ConstrTerm ()) a
-> constrTerm0 = constrTerm1 `chainr1` (infixPat <$> gconop)
+> constrTerm0 = constrTerm1 `chainr1` (infixPat <$> infixCon)
 >   where infixPat op t1 t2 = InfixPattern () t1 op t2
 
 > constrTerm1 :: Parser Token (ConstrTerm ()) a
@@ -555,6 +557,9 @@ directory path to the module is ignored.
 > constrTerm2 :: Parser Token (ConstrTerm ()) a
 > constrTerm2 = literalPattern <|> anonPattern <|> identPattern
 >           <|> parenPattern <|> listPattern <|> lazyPattern
+
+> infixCon :: Parser Token (InfixOp ()) a
+> infixCon = InfixConstr () <$> gconop
 
 > literalPattern :: Parser Token (ConstrTerm ()) a
 > literalPattern = LiteralPattern () <$> literal
@@ -605,7 +610,7 @@ the left-hand side of a declaration.
 >         recPattern fs c = RecordPattern () c fs
 
 > optInfixPattern :: Parser Token (ConstrTerm () -> ConstrTerm ()) a
-> optInfixPattern = infixPat <$> gconop <*> constrTerm0
+> optInfixPattern = infixPat <$> infixCon <*> constrTerm0
 >             `opt` id
 >   where infixPat op t2 t1 = InfixPattern () t1 op t2
 

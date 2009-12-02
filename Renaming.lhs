@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: Renaming.lhs 2921 2009-12-02 21:22:18Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -256,7 +256,7 @@ class method.
 >     QualTypeExpr _ ty' <- renameTypeSig emptyEnv (QualTypeExpr [] ty)
 >     return (ForeignDecl p cc s ie f' ty')
 > renameDecl env (PatternDecl p t rhs) =
->   liftM2 (PatternDecl p) (renameConstrTerm env t) (renameRhs env rhs)
+>   liftM2 (PatternDecl p) (renameConstrTerm env env t) (renameRhs env rhs)
 > renameDecl env (FreeDecl p vs) =
 >   liftM (FreeDecl p) (mapM (renameVar env) vs)
 > renameDecl env (TrustAnnot p t fs) =
@@ -266,21 +266,38 @@ class method.
 Note that the root of the left hand side term of an equation must be
 equal to the name of the function declaration. This means that we must
 not rename this identifier in the same environment as its arguments.
+Similarly, we must be careful with function patterns. For instance,
+given the (contrived) definition \texttt{f (id id x) = x}, the
+argument is considered a function pattern with the first occurrence of
+\texttt{id} referring to the global definition of \texttt{Prelude.id}.
+The second occurrence of \texttt{id} in the function pattern
+introduces a local variable that shadows the global function.
+Nevertheless, the first occurrence of \texttt{id} must not be renamed.
+For that reason, \texttt{renameLhs} and \texttt{renameConstrTerm} are
+applied to two renaming environments. The first is the global
+environment in which the function is defined and the second is the
+local environment, which includes the function's arguments. Obviously,
+the same environment is used for both arguments in case of pattern
+declarations.
 \begin{verbatim}
 
 > renameEqn :: Ident -> RenameEnv -> Equation a -> RenameState (Equation a)
 > renameEqn f env (Equation p lhs rhs) =
 >   do
 >     env' <- bindVars env (bv lhs)
->     liftM2 (Equation p) (renameLhs f env' lhs) (renameRhs env' rhs)
+>     liftM2 (Equation p) (renameLhs f env env' lhs) (renameRhs env' rhs)
 
-> renameLhs :: Ident -> RenameEnv -> Lhs a -> RenameState (Lhs a)
-> renameLhs f env (FunLhs _ ts) =
->   liftM (FunLhs f) (mapM (renameConstrTerm env) ts)
-> renameLhs f env (OpLhs t1 _ t2) =
->   liftM2 (flip OpLhs f) (renameConstrTerm env t1) (renameConstrTerm env t2)
-> renameLhs f env (ApLhs lhs ts) =
->   liftM2 ApLhs (renameLhs f env lhs) (mapM (renameConstrTerm env) ts)
+> renameLhs :: Ident -> RenameEnv -> RenameEnv -> Lhs a -> RenameState (Lhs a)
+> renameLhs f env env' (FunLhs _ ts) =
+>   liftM (FunLhs f) (mapM (renameConstrTerm env env') ts)
+> renameLhs f env env' (OpLhs t1 _ t2) =
+>   liftM2 (flip OpLhs f)
+>          (renameConstrTerm env env' t1)
+>          (renameConstrTerm env env' t2)
+> renameLhs f env env' (ApLhs lhs ts) =
+>   liftM2 ApLhs
+>          (renameLhs f env env' lhs)
+>          (mapM (renameConstrTerm env env') ts)
 
 > renameRhs :: RenameEnv -> Rhs a -> RenameState (Rhs a)
 > renameRhs env (SimpleRhs p e ds) =
@@ -296,29 +313,36 @@ not rename this identifier in the same environment as its arguments.
 >     es' <- mapM (renameCondExpr env') es
 >     return (GuardedRhs es' ds')
 
-> renameConstrTerm :: RenameEnv -> ConstrTerm a -> RenameState (ConstrTerm a)
-> renameConstrTerm _ (LiteralPattern a l) = return (LiteralPattern a l)
-> renameConstrTerm _ (NegativePattern a l) = return (NegativePattern a l)
-> renameConstrTerm env (VariablePattern a x) =
->   liftM (VariablePattern a) (renameVar env x)
-> renameConstrTerm env (ConstructorPattern a c ts) =
->   liftM (ConstructorPattern a c) (mapM (renameConstrTerm env) ts)
-> renameConstrTerm env (InfixPattern a t1 op t2) =
->   liftM2 (flip (InfixPattern a) op)
->          (renameConstrTerm env t1)
->          (renameConstrTerm env t2)
-> renameConstrTerm env (ParenPattern t) =
->   liftM ParenPattern (renameConstrTerm env t)
-> renameConstrTerm env (RecordPattern a c fs) =
->   liftM (RecordPattern a c) (mapM (renameField (renameConstrTerm env)) fs)
-> renameConstrTerm env (TuplePattern ts) =
->   liftM TuplePattern (mapM (renameConstrTerm env) ts)
-> renameConstrTerm env (ListPattern a ts) =
->   liftM (ListPattern a) (mapM (renameConstrTerm env) ts)
-> renameConstrTerm env (AsPattern x t) =
->   liftM2 AsPattern (renameVar env x) (renameConstrTerm env t)
-> renameConstrTerm env (LazyPattern t) =
->   liftM LazyPattern (renameConstrTerm env t)
+> renameConstrTerm :: RenameEnv -> RenameEnv -> ConstrTerm a
+>                  -> RenameState (ConstrTerm a)
+> renameConstrTerm _ _ (LiteralPattern a l) = return (LiteralPattern a l)
+> renameConstrTerm _ _ (NegativePattern a l) = return (NegativePattern a l)
+> renameConstrTerm _ env' (VariablePattern a x) =
+>   liftM (VariablePattern a) (renameVar env' x)
+> renameConstrTerm env env' (ConstructorPattern a c ts) =
+>   liftM (ConstructorPattern a c) (mapM (renameConstrTerm env env') ts)
+> renameConstrTerm env env' (FunctionPattern a f ts) =
+>   liftM2 (FunctionPattern a)
+>          (renameQual env f)
+>          (mapM (renameConstrTerm env env') ts)
+> renameConstrTerm env env' (InfixPattern a t1 op t2) =
+>   liftM3 (InfixPattern a)
+>          (renameConstrTerm env env' t1)
+>          (renameOp env op)
+>          (renameConstrTerm env env' t2)
+> renameConstrTerm env env' (ParenPattern t) =
+>   liftM ParenPattern (renameConstrTerm env env' t)
+> renameConstrTerm env env' (RecordPattern a c fs) =
+>   liftM (RecordPattern a c)
+>         (mapM (renameField (renameConstrTerm env env')) fs)
+> renameConstrTerm env env' (TuplePattern ts) =
+>   liftM TuplePattern (mapM (renameConstrTerm env env') ts)
+> renameConstrTerm env env' (ListPattern a ts) =
+>   liftM (ListPattern a) (mapM (renameConstrTerm env env') ts)
+> renameConstrTerm env env' (AsPattern x t) =
+>   liftM2 AsPattern (renameVar env' x) (renameConstrTerm env env' t)
+> renameConstrTerm env env' (LazyPattern t) =
+>   liftM LazyPattern (renameConstrTerm env env' t)
 
 > renameCondExpr :: RenameEnv -> CondExpr a -> RenameState (CondExpr a)
 > renameCondExpr env (CondExpr p g e) =
@@ -366,7 +390,9 @@ not rename this identifier in the same environment as its arguments.
 > renameExpr env (Lambda p ts e) =
 >   do
 >     env' <- bindVars env (bv ts)
->     liftM2 (Lambda p) (mapM (renameConstrTerm env') ts) (renameExpr env' e)
+>     liftM2 (Lambda p)
+>            (mapM (renameConstrTerm env env') ts)
+>            (renameExpr env' e)
 > renameExpr env (Let ds e) =
 >   do
 >     env' <- bindVars env (bv ds)
@@ -399,7 +425,7 @@ not rename this identifier in the same environment as its arguments.
 >   do
 >     e' <- renameExpr env e
 >     env' <- bindVars env (bv t)
->     t' <- renameConstrTerm env' t
+>     t' <- renameConstrTerm env env' t
 >     return (env',StmtBind p t' e')
 > renameStmt env (StmtDecl ds) =
 >   do
@@ -411,7 +437,7 @@ not rename this identifier in the same environment as its arguments.
 > renameAlt env (Alt p t rhs) =
 >   do
 >     env' <- bindVars env (bv t)
->     liftM2 (Alt p) (renameConstrTerm env' t) (renameRhs env' rhs)
+>     liftM2 (Alt p) (renameConstrTerm env env' t) (renameRhs env' rhs)
 
 > renameField :: (a -> RenameState a) -> Field a -> RenameState (Field a)
 > renameField rename (Field l x) = liftM (Field l) (rename x)

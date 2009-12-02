@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2900 2009-08-24 13:03:24Z wlux $
+% $Id: SyntaxCheck.lhs 2921 2009-12-02 21:22:18Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -54,11 +54,9 @@ later for checking the optional export list of the current module.
 > syntaxCheck m tEnv env ds =
 >   do
 >     reportDuplicates duplicateData repeatedData cs
->     (env'',ds') <-
->       checkTopDecls m tEnv (mergeBy comparePos cs (map fst ls)) env' ds
+>     (env'',ds') <- checkTopDecls m tEnv cs ls env' ds
 >     return (toplevelEnv env'',ds')
->   where env' =
->           foldr (bindLabel m) (foldr (bindConstr m) (globalEnv env) cs) ls
+>   where env' = foldr (bindConstr m) (globalEnv env) cs
 >         cs = concatMap constrs ds
 >         ls = concatMap fieldLabels ds
 
@@ -79,18 +77,87 @@ later for checking the optional export list of the current module.
 > bindVar (P _ v) = localBindNestEnv v (Var (qualify v) [])
 
 \end{verbatim}
-When a module's global declaration group is checked, the compiler must
-preserve the order of type and value declarations. This is necessary
-to detect the error in the following code fragment.
+In each declaration group, the compiler must first disambiguate
+variable and data constructor identifiers on the left hand side so
+that it can distinguish function and pattern declarations. For
+instance, the declaration \texttt{Just x = Nothing} is syntactically
+both a valid function declaration defining the function \texttt{Just}
+and a pattern declaration matching the pattern \texttt{Just x} against
+the expression \texttt{Nothing}. Since no pattern declarations are
+allowed at the top-level of a module, the declaration is unambiguous
+in the global scope. In a local declaration group, we always consider
+the declaration a pattern declaration provided that the Prelude's
+definition of data constructor \texttt{Just} is in scope.
+
+The ambiguity is getting more subtle when infix operator declarations
+and infix patterns are taken into account.\footnote{Infix constructors
+  are an extension supported for compatibility with Haskell. The Curry
+  report~\cite{Hanus:Report} knows only a single infix data
+  constructor, the list constructor \texttt{:}.} Consider a
+declaration \texttt{$t_1$ `op$_1$` $t_2$ $\dots$ $t_n$ `op$_n$` $t_n$
+  = $e$}. If all operators $\texttt{op}_1, \dots, \texttt{op}_n$
+except for a single operator $op_i$ denote a data constructor, this
+declaration is considered a function declaration of \texttt{op$_i$}.
+If more than one operator does not denote a data constructor, the
+declaration is invalid and we arbitrarily choose the leftmost operator
+as root of the left hand side. If all operators denote a data
+constructor, the declaration is considered a pattern declaration, but
+only in a local declaration group. At the top-level, we arbitrarily
+choose the leftmost unqualified operator (if one exists) and consider
+the declaration a function declaration of that operator. Ideally, the
+choice of the left hand side's root operator should be based on the
+relative precedences of the operators, but unfortunately these
+precedences are not known during syntax checking\footnote{Note that
+  this is a principal limitation. Since fixities are associated with
+  entities and not identifiers, the fixity of an operator cannot be
+  known before the compiler knows where the identifier is defined.}.
+For some contrived examples our heuristics means that the compiler may
+choose the wrong root, e.g.,
+\begin{verbatim}
+module A where { infixl 7 :/; data Rat a = a :/ a }
+module M where
+  import A
+  infixl 1 :/; infix 4 :=
+  data Assoc a b = a := b
+  a := _ :/ b = a := b
+\end{verbatim}
+The last line of module \texttt{M} is supposed to define the operator
+\verb|:/| and, in fact, the compiler would accept this declaration if
+the import of module A where omitted. Unfortunately, the import
+declaration brings a data constructor definition for \verb|:/| into
+scope, which means that the compiler will -- wrongly -- consider the
+leftmost unqualified operator, i.e., \verb|:=| the root of the left
+hand side and therefore complain about the redefinition of that
+operator. To avoid this error, the user has to add redundant
+parentheses around the argument term \verb|a := _| or use the
+qualified name \texttt{M.:=} for the first operator.
+
+After disambiguating variable and data constructor identifiers, the
+compiler merges adjacent equations for the same function into a single
+definition. When a module's global declaration group is checked, the
+compiler must be careful to preserve the order of type and value
+declarations; otherwise it would fail to detect the error in the
+following code fragment.
 \begin{verbatim}
   f = 0
   data T = C
   f = 1
 \end{verbatim}
-This error would go by unnoticed if the compiler would partition
-top-level declarations into type and value declarations.
-Unfortunately, this means that we cannot use \texttt{checkLocalDecls}
-to check the global declaration group.
+Next, the compiler checks that there is a corresponding value
+definition for every fixity declaration, type signature, and trust
+annotation in this group and that there are no duplicate definitions.
+Finally, each declaration of the group is checked.
+
+Without function patterns it would be safe to report undefined data
+constructors already during disambiguation because data constructors
+can be defined only in top-level declarations and pattern declarations
+are valid only in local declaration groups. However, a function
+pattern in a pattern declaration might use a function defined in the
+same declaration group, e.g.\ \texttt{let dup x = (x,x); (dup z) = e
+  in z}.\footnote{The parentheses around \texttt{(dup z)} are
+  necessary to make the declaration a pattern declaration.}
+Therefore, we can report undefined identifiers only after determining
+the bound identifiers of the current declaration group.
 
 Note that fixity declarations for class methods can occur either at
 the top-level of a module or in the class declaration itself
@@ -100,30 +167,65 @@ fixity declarations for class methods, the relevant top-level fixity
 declarations are passed to \texttt{checkMethodDecls}.
 \begin{verbatim}
 
-> checkTopDecls :: ModuleIdent -> TypeEnv -> [P Ident] -> VarEnv -> [TopDecl a]
->               -> Error (VarEnv,[TopDecl a])
-> checkTopDecls m tEnv xs env ds =
+> checkTopDecls :: ModuleIdent -> TypeEnv -> [P Ident] -> [(P Ident,[Ident])]
+>               -> VarEnv -> [TopDecl a] -> Error (VarEnv,[TopDecl a])
+> checkTopDecls m tEnv cs ls env ds =
 >   do
->     ds' <- liftE joinTopEquations (mapE (checkTopDeclLhs env) ds)
->     env' <- checkDeclVars (bindFunc m) xs (concatMap mthds ds') env
->                           [d | BlockDecl d <- ds']
->     ds'' <- mapE (checkTopDeclRhs tEnv env' ops) ds'
->     return (env',ds'')
+>     ds' <- liftE joinTopEquations (mapE (disambTopDecl env) ds)
+>     env'' <- checkDeclVars (bindFunc m) xs (concatMap mthds ds') env'
+>                            [d | BlockDecl d <- ds']
+>     ds'' <- mapE (checkTopDecl tEnv env'' ops) ds'
+>     return (env'',ds'')
 >   where ops = [P p op | BlockDecl (InfixDecl p _ _ ops) <- ds, op <- ops]
+>         env' = foldr (bindLabel m) env ls
+>         xs = mergeBy comparePos cs (map fst ls)
 
-> checkTopDeclLhs :: VarEnv -> TopDecl a -> Error (TopDecl a)
-> checkTopDeclLhs _ (DataDecl p cx tc tvs cs clss) =
->   mapE_ checkDeclLabels cs >> return (DataDecl p cx tc tvs cs clss)
-> checkTopDeclLhs _ (NewtypeDecl p cx tc tvs nc clss) =
+> disambTopDecl :: VarEnv -> TopDecl a -> Error (TopDecl a)
+> disambTopDecl _ (DataDecl p cx tc tvs cs clss) =
+>   return (DataDecl p cx tc tvs cs clss)
+> disambTopDecl _ (NewtypeDecl p cx tc tvs nc clss) =
 >   return (NewtypeDecl p cx tc tvs nc clss)
-> checkTopDeclLhs _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
-> checkTopDeclLhs _ (ClassDecl p cx cls tv ds) =
->   return (ClassDecl p cx cls tv ds)
-> checkTopDeclLhs _ (InstanceDecl p cx cls ty ds) =
+> disambTopDecl _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
+> disambTopDecl _ (ClassDecl p cx cls tv ds) = return (ClassDecl p cx cls tv ds)
+> disambTopDecl _ (InstanceDecl p cx cls ty ds) =
 >   return (InstanceDecl p cx cls ty ds)
-> checkTopDeclLhs _ (DefaultDecl p tys) = return (DefaultDecl p tys)
-> checkTopDeclLhs env (BlockDecl d) = liftE BlockDecl (checkDeclLhs True env d)
-> checkTopDeclLhs _ (SplitAnnot p) = return (SplitAnnot p)
+> disambTopDecl _ (DefaultDecl p tys) = return (DefaultDecl p tys)
+> disambTopDecl env (BlockDecl d) = liftE BlockDecl (disambBlockDecl env d)
+> disambTopDecl _ (SplitAnnot p) = return (SplitAnnot p)
+
+> disambBlockDecl :: VarEnv -> Decl a -> Error (Decl a)
+> disambBlockDecl _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
+> disambBlockDecl _ (TypeSig p vs ty) = return (TypeSig p vs ty)
+> disambBlockDecl env (FunctionDecl p _ [Equation p' lhs rhs]) =
+>   case disambLhs env lhs of
+>     Left (f',lhs') -> return (funDecl f' lhs')
+>     Right t' ->
+>       case msum (map toFunLhs (terms t')) of
+>         Just (f',lhs') -> return (funDecl f' lhs')
+>         Nothing -> errorAt p noToplevelPattern
+>   where funDecl f lhs = FunctionDecl p f [Equation p' lhs rhs]
+> disambBlockDecl _ (ForeignDecl p cc s ie f ty) =
+>   return (ForeignDecl p cc s ie f ty)
+> --disambBlockDecl _ (PatternDecl p _ _) = errorAt p noToplevelPattern
+> --disambBlockDecl _ (FreeDecl p _) = errorAt p noToplevelFree
+> disambBlockDecl _ (TrustAnnot p t fs) = return (TrustAnnot p t fs)
+
+> terms :: ConstrTerm a -> [ConstrTerm a]
+> terms t = t :
+>   case t of
+>     InfixPattern a1 t1 op1 (InfixPattern a2 t2 op2 t3) ->
+>       terms (InfixPattern a2 (InfixPattern a1 t1 op1 t2) op2 t3)
+>     _ -> []
+
+> toFunLhs :: ConstrTerm a -> Maybe (Ident,Lhs a)
+> toFunLhs t =
+>   case t of
+>     VariablePattern _ v -> Just (v,FunLhs v [])
+>     ConstructorPattern _ c ts -> funLhs (\f -> FunLhs f ts) c
+>     InfixPattern _ t1 (InfixConstr _ op) t2 -> funLhs (\f -> OpLhs t1 f t2) op
+>     _ -> Nothing
+>   where funLhs lhs c = maybe (Just (f,lhs f)) (const Nothing) m
+>           where (m,f) = splitQualIdent c
 
 > joinTopEquations :: [TopDecl a] -> [TopDecl a]
 > joinTopEquations [] = []
@@ -134,23 +236,23 @@ declarations are passed to \texttt{checkMethodDecls}.
 >   | otherwise = d : joinTopEquations ds
 >   where (ds',ds'') = span isBlockDecl ds
 
-> checkTopDeclRhs :: TypeEnv -> VarEnv -> [P Ident] -> TopDecl a
+> checkTopDecl :: TypeEnv -> VarEnv -> [P Ident] -> TopDecl a
 >                 -> Error (TopDecl a)
-> checkTopDeclRhs _ _ _ (DataDecl p cx tc tvs cs clss) =
->   return (DataDecl p cx tc tvs cs clss)
-> checkTopDeclRhs _ _ _ (NewtypeDecl p cx tc tvs nc clss) =
+> checkTopDecl _ _ _ (DataDecl p cx tc tvs cs clss) =
+>   mapE_ checkDeclLabels cs >> return (DataDecl p cx tc tvs cs clss)
+> checkTopDecl _ _ _ (NewtypeDecl p cx tc tvs nc clss) =
 >   return (NewtypeDecl p cx tc tvs nc clss)
-> checkTopDeclRhs _ _ _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
-> checkTopDeclRhs _ env ops (ClassDecl p cx cls tv ds) =
+> checkTopDecl _ _ _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
+> checkTopDecl _ env ops (ClassDecl p cx cls tv ds) =
 >   liftE (ClassDecl p cx cls tv)
 >         (checkMethodDecls env (qualify cls) (filter (`elem` fs) ops) fs ds)
 >   where fs = mthds (ClassDecl p cx cls tv ds)
-> checkTopDeclRhs tEnv env _ (InstanceDecl p cx cls ty ds) =
+> checkTopDecl tEnv env _ (InstanceDecl p cx cls ty ds) =
 >   liftE (InstanceDecl p cx cls ty) (checkMethodDecls env cls [] fs ds)
 >   where fs = map (P p) (classMthds cls tEnv)
-> checkTopDeclRhs _ _ _ (DefaultDecl p tys) = return (DefaultDecl p tys)
-> checkTopDeclRhs _ env _ (BlockDecl d) = liftE BlockDecl (checkDeclRhs env d)
-> checkTopDeclRhs _ _ _ (SplitAnnot p) = return (SplitAnnot p)
+> checkTopDecl _ _ _ (DefaultDecl p tys) = return (DefaultDecl p tys)
+> checkTopDecl _ env _ (BlockDecl d) = liftE BlockDecl (checkDecl env d)
+> checkTopDecl _ _ _ (SplitAnnot p) = return (SplitAnnot p)
 
 \end{verbatim}
 The compiler checks field labels in data type declarations twice
@@ -184,144 +286,81 @@ declarations. The final environment can be discarded.
 >     e' <- checkExpr p env' e
 >     return (Goal p e' ds')
 
-\end{verbatim}
-In each declaration group, first the left hand sides of all
-declarations are checked and adjacent equations for the same function
-are merged into a single definition. Next, the compiler checks that
-there is a corresponding value definition for every fixity
-declaration, type signature, and trust annotation in this group and
-that there are no duplicate definitions. Finally, the right hand sides
-are checked.
-
-The absence of a capitalization convention in Curry introduces a
-subtle ambiguity between function and pattern declarations. For
-instance, \texttt{Just x = Nothing} is syntactically both a valid
-function declaration defining the function \texttt{Just} and a pattern
-declaration matching the pattern \texttt{Just x} against the
-expression \texttt{Nothing}. Since no pattern declarations are allowed
-at the top-level of a module, the declaration is unambiguous in the
-global scope. In a local declaration group, we always consider the
-declaration a pattern declaration.
-
-The ambiguity is getting more subtle when infix operator declarations
-and infix patterns are taken into account.\footnote{Infix constructors
-  are an extension supported for compatibility with Haskell. The Curry
-  report~\cite{Hanus:Report} knows only a single infix data
-  constructor, the list constructor \texttt{:}.} Consider a
-declaration \texttt{$t_1$ `op$_1$` $t_2$ $\dots$ $t_n$ `op$_n$` $t_n$
-  = $e$}. If all operators $\texttt{op}_1, \dots, \texttt{op}_n$
-except for a single operator $op_i$ denote a data constructor, this
-declaration is considered a function declaration of \texttt{op$_i$}.
-If more than one operator does not denote a data constructor, the
-declaration is invalid and we arbitrarily choose the leftmost operator
-as root of the left hand side. If all operators denote a data
-constructor, the declaration is considered a pattern declaration, but
-only in a local declaration group. At the top-level, we arbitrarily
-choose the leftmost unqualified operator (if one exists) and consider
-the declaration a function declaration of that operator. Ideally, the
-choice of the left hand side's root operator should be based on the
-relative precedences of the operators, but unfortunately these
-precedences are not known during syntax checking\footnote{Note that
-  this is a principal limitation. Since fixities are associated with
-  entities and not identifiers, the fixity of an operator cannot be
-  known before the compiler knows where the identifier is defined.}.
-In some contrived examples our heuristics means that the compiler may
-choose the wrong root, e.g.,
-\begin{verbatim}
-module A where { infixl 7 :/; data Rat a = a :/ a }
-module M where
-  import A
-  infixl 1 :/; infix 4 :=
-  data Assoc a b = a := b
-  a := _ :/ b = a := b
-\end{verbatim}
-The last line of module \texttt{M} is supposed to define the operator
-\verb|:/| and, in fact, the compiler would accept this declaration if
-the import of module A where omitted. Unfortunately, the import
-declaration brings a data constructor definition for \verb|:/| into
-scope, which means that the compiler will -- wrongly -- consider the
-leftmost unqualified operator, i.e., \verb|:=| the root of the left
-hand side and therefore complain about the redefinition of that
-operator. To avoid this error, the user has to add redundant
-parentheses around the argument term \verb|a := _|.\footnote{One can
-  also use the qualified name of the operator \texttt{:=} on the left
-  hand side, i.e., \texttt{a M.:= b :/ b = a := b}.}
-\begin{verbatim}
-
 > checkLocalDecls :: VarEnv -> [Decl a] -> Error (VarEnv,[Decl a])
 > checkLocalDecls env ds =
 >   do
->     ds' <- liftE joinEquations (mapE (checkDeclLhs False env) ds)
 >     env' <- checkDeclVars bindVar [] [] (nestEnv env) ds'
->     ds'' <- mapE (checkDeclRhs env') ds'
+>     ds'' <- mapE (checkDecl env') ds'
 >     return (env',ds'')
+>   where ds' = joinEquations (map (disambDecl env) ds)
 
-> checkDeclLhs :: Bool -> VarEnv -> Decl a -> Error (Decl a)
-> checkDeclLhs _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
-> checkDeclLhs _ _ (TypeSig p vs ty) = return (TypeSig p vs ty)
-> checkDeclLhs top env (FunctionDecl p _ eqs) = checkEquationLhs top env p eqs
-> checkDeclLhs _ _ (ForeignDecl p cc s ie f ty) =
->   return (ForeignDecl p cc s ie f ty)
-> checkDeclLhs top env (PatternDecl p t rhs)
->   | top = internalError "checkDeclLhs"
->   | otherwise = liftE (flip (PatternDecl p) rhs) (checkConstrTerm p env t)
-> checkDeclLhs top _ (FreeDecl p vs)
->   | top = internalError "checkDeclLhs"
->   | otherwise = return (FreeDecl p vs)
-> checkDeclLhs _ _ (TrustAnnot p t fs) = return (TrustAnnot p t fs)
+> disambDecl :: VarEnv -> Decl a -> Decl a
+> disambDecl _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops
+> disambDecl _ (TypeSig p vs ty) = TypeSig p vs ty
+> disambDecl env (FunctionDecl p _ [Equation p' lhs rhs]) =
+>   case disambLhs env lhs of
+>     Left (f',lhs') -> FunctionDecl p f' [Equation p' lhs' rhs]
+>     Right t' -> PatternDecl p' (disambTerm env t') rhs
+> disambDecl _ (ForeignDecl p cc s ie f ty) = ForeignDecl p cc s ie f ty
+> disambDecl env (PatternDecl p t rhs) = PatternDecl p (disambTerm env t) rhs
+> disambDecl _ (FreeDecl p vs) = FreeDecl p vs
+> disambDecl _ (TrustAnnot p t fs) = TrustAnnot p t fs
 
-> checkEquationLhs :: Bool -> VarEnv -> Position -> [Equation a]
->                  -> Error (Decl a)
-> checkEquationLhs top env p [Equation p' lhs rhs] =
->   either funDecl patDecl (checkEqLhs env p' lhs)
->   where funDecl (f,lhs) = return (FunctionDecl p f [Equation p' lhs rhs])
->         patDecl t
->           | top = maybe (errorAt p noToplevelPattern) funDecl (toFunLhs t)
->           | otherwise = checkDeclLhs top env (PatternDecl p' t rhs)
->         toFunLhs t =
->           case t of
->             VariablePattern _ v -> Just (v,FunLhs v [])
->             ConstructorPattern _ c ts -> funLhs (\f -> FunLhs f ts) Nothing c
->             InfixPattern a t1 op t2 ->
->               funLhs (\f -> OpLhs t1 f t2) (shift a t1 op t2 >>= toFunLhs) op
->             _ -> Nothing
->         funLhs lhs lhs' c = maybe (Just (f,lhs f)) (const lhs') m
->           where (m,f) = splitQualIdent c
->         shift a1 t1 op1 t =
->           case t of
->             InfixPattern a2 t2 op2 t3 ->
->               Just (InfixPattern a2 (InfixPattern a1 t1 op1 t2) op2 t3)
->             _ -> Nothing
-> checkEquationLhs _ _ _ _ = internalError "checkEquationLhs"
-
-> checkEqLhs :: VarEnv -> Position -> Lhs a
->            -> Either (Ident,Lhs a) (ConstrTerm a)
-> checkEqLhs env _ (FunLhs f ts)
->   | isDataConstr env f =
->       -- FIXME: need a better attribute value here
->       Right (ConstructorPattern undefined (qualify f) ts)
+> disambLhs :: VarEnv -> Lhs a -> Either (Ident,Lhs a) (ConstrTerm a)
+> disambLhs env (FunLhs f ts)
+>   | isDataConstr env f = Right (ConstructorPattern undefined (qualify f) ts)
+>       -- FIXME: need a better attribute value above
 >   | otherwise = Left (f,FunLhs f ts)
-> checkEqLhs env _ (OpLhs t1 op t2)
->   | isDataConstr env op = checkOpLhs env (infixPattern t1 (qualify op)) t2
+> disambLhs env (OpLhs t1 op t2)
+>   | isDataConstr env op =
+>       disambOpLhs env (infixPattern t1 (InfixConstr () (qualify op))) t2
 >   | otherwise = Left (op,OpLhs t1 op t2)
 >   where infixPattern (InfixPattern a t1 op1 t2) op2 t3 =
 >           InfixPattern a t1 op1 (infixPattern t2 op2 t3)
 >         infixPattern t1 op t2 = InfixPattern undefined t1 op t2
->           -- FIXME: need a better attribute value here
-> checkEqLhs env p (ApLhs lhs ts) =
->   case checkEqLhs env p lhs of
+>           -- FIXME: need a better attribute value above
+> disambLhs env (ApLhs lhs ts) =
+>   case disambLhs env lhs of
 >     Left (f',lhs') -> Left (f',ApLhs lhs' ts)
 >     Right _ -> Left (f,ApLhs lhs ts)
 >   where (f,_) = flatLhs lhs
 
-> checkOpLhs :: VarEnv -> (ConstrTerm a -> ConstrTerm a) -> ConstrTerm a
->            -> Either (Ident,Lhs a) (ConstrTerm a)
-> checkOpLhs env f (InfixPattern a t1 op t2)
+> disambOpLhs :: VarEnv -> (ConstrTerm a -> ConstrTerm a) -> ConstrTerm a
+>             -> Either (Ident,Lhs a) (ConstrTerm a)
+> disambOpLhs env f (InfixPattern a t1 op t2)
 >   | isJust m || isDataConstr env op' =
->       checkOpLhs env (f . InfixPattern a t1 op) t2
+>       disambOpLhs env (f . InfixPattern a t1 op) t2
 >   | otherwise = Left (op',OpLhs (f t1) op' t2)
->   where (m,op') = splitQualIdent op
-> checkOpLhs _ f t = Right (f t)
+>   where (m,op') = splitQualIdent (opName op)
+> disambOpLhs _ f t = Right (f t)
+
+> disambTerm :: VarEnv -> ConstrTerm a -> ConstrTerm a
+> disambTerm _ (LiteralPattern a l) = LiteralPattern a l
+> disambTerm _ (NegativePattern a l) = NegativePattern a l
+> disambTerm env (VariablePattern a v)
+>   | v == anonId = VariablePattern a v
+>   | otherwise = disambTerm env (ConstructorPattern a (qualify v) [])
+> disambTerm env (ConstructorPattern a c ts)
+>   | any isConstr (qualLookupNestEnv c env) = ConstructorPattern a c ts'
+>   | not (isQualified c) && null ts = VariablePattern a (unqualify c)
+>   | otherwise = FunctionPattern a c ts'
+>   where ts' = map (disambTerm env) ts
+> disambTerm env (FunctionPattern a f ts) =
+>   disambTerm env (ConstructorPattern a f ts)
+> disambTerm env (InfixPattern a t1 op t2) =
+>   InfixPattern a t1' (disambOp env (opName op)) t2'
+>   where t1' = disambTerm env t1
+>         t2' = disambTerm env t2
+>         disambOp env op
+>           | any isConstr (qualLookupNestEnv op env) = InfixConstr () op
+>           | otherwise = InfixOp () op
+> disambTerm env (ParenPattern t) = ParenPattern (disambTerm env t)
+> disambTerm env (RecordPattern a c fs) =
+>   RecordPattern a c [Field l (disambTerm env t) | Field l t <- fs]
+> disambTerm env (TuplePattern ts) = TuplePattern (map (disambTerm env) ts)
+> disambTerm env (ListPattern a ts) = ListPattern a (map (disambTerm env) ts)
+> disambTerm env (AsPattern v t) = AsPattern v (disambTerm env t)
+> disambTerm env (LazyPattern t) = LazyPattern (disambTerm env t)
 
 > checkDeclVars :: (P Ident -> VarEnv -> VarEnv) -> [P Ident] -> [P Ident]
 >               -> VarEnv -> [Decl a] -> Error VarEnv
@@ -337,7 +376,7 @@ parentheses around the argument term \verb|a := _|.\footnote{One can
 >   mapE_ (\(P p v) -> errorAt p (noBody v))
 >         (filter (`notElem` xs ++ fs ++ bvs) ops ++
 >          filter (`notElem` bvs) (tys ++ trs)) &&>
->   return (foldr bindVar env (nub (fs ++ bvs)))
+>   return (foldr bindVar env (fs ++ bvs))
 >   where bvs = concatMap vars (filter isValueDecl ds)
 >         tys = concatMap vars (filter isTypeSig ds)
 >         trs = concatMap vars (filter isTrustAnnot ds)
@@ -349,20 +388,20 @@ parentheses around the argument term \verb|a := _|.\footnote{One can
   foreign functions.}
 \begin{verbatim}
 
-> checkDeclRhs :: VarEnv -> Decl a -> Error (Decl a)
-> checkDeclRhs _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
-> checkDeclRhs _ (TypeSig p fs ty) = return (TypeSig p fs ty)
-> checkDeclRhs env (FunctionDecl p f eqs) =
+> checkDecl :: VarEnv -> Decl a -> Error (Decl a)
+> checkDecl _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
+> checkDecl _ (TypeSig p fs ty) = return (TypeSig p fs ty)
+> checkDecl env (FunctionDecl p f eqs) =
 >   checkArity p f eqs &&>
 >   liftE (FunctionDecl p f) (mapE (checkEquation env) eqs)
-> checkDeclRhs _ (ForeignDecl p cc s ie f ty) =
+> checkDecl _ (ForeignDecl p cc s ie f ty) =
 >   do
 >     ie' <- checkForeign p f cc ie
 >     return (ForeignDecl p cc s ie' f ty)
-> checkDeclRhs env (PatternDecl p t rhs) =
->   liftE (PatternDecl p t) (checkRhs env rhs)
-> checkDeclRhs _ (FreeDecl p vs) = return (FreeDecl p vs)
-> checkDeclRhs _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
+> checkDecl env (PatternDecl p t rhs) =
+>   liftE2 (PatternDecl p) (checkConstrTerm p env t) (checkRhs env rhs)
+> checkDecl _ (FreeDecl p vs) = return (FreeDecl p vs)
+> checkDecl _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
 
 > checkArity :: Position -> Ident -> [Equation a] -> Error ()
 > checkArity p f eqs = unless (sameArity eqs) (errorAt p (differentArity f))
@@ -397,9 +436,9 @@ report~\cite{PeytonJones03:Haskell}).
 >                  -> Error [Decl a]
 > checkMethodDecls env cls ops fs ds =
 >   do
->     ds' <- liftE joinEquations (mapE (checkDeclLhs True env) ds)
+>     ds' <- liftE joinEquations (mapE (disambBlockDecl env) ds)
 >     checkMethods cls ops fs ds'
->     mapE (checkDeclRhs env) ds'
+>     mapE (checkDecl env) ds'
 
 > checkMethods :: QualIdent -> [P Ident] -> [P Ident] -> [Decl a] -> Error ()
 > checkMethods cls ops fs ds =
@@ -511,25 +550,37 @@ runtime system.
 > checkConstrTerm p env (VariablePattern a v)
 >   | v == anonId = return (VariablePattern a v)
 >   | otherwise = checkConstrTerm p env (ConstructorPattern a (qualify v) [])
-> checkConstrTerm p env (ConstructorPattern a c ts) =
->   liftE2 ($)
->          (case qualLookupNestEnv c env of
->             [Constr _] -> return (ConstructorPattern a c)
->             rs
->               | any isConstr rs -> errorAt p (ambiguousData rs c)
->               | not (isQualified c) && null ts ->
->                   return (const (VariablePattern a (unqualify c)))
->               | otherwise -> errorAt p (undefinedData c))
->          (mapE (checkConstrTerm p env) ts)
+> checkConstrTerm p env (ConstructorPattern a c ts)
+>   | not (isQualified c) && null ts =
+>       case qualLookupNestEnv c env of
+>         [Constr _] -> return (ConstructorPattern a c [])
+>         rs
+>           | any isConstr rs -> errorAt p (ambiguousData rs c)
+>           | otherwise -> return (VariablePattern a (unqualify c))
+>   | otherwise =
+>       liftE2 ($)
+>              (case qualLookupNestEnv c env of
+>                 [] -> errorAt p (undefinedData c)
+>                 [Constr _] -> return (ConstructorPattern a c)
+>                 [Var _ _] -> return (FunctionPattern a c)
+>                 rs
+>                   | any isConstr rs -> errorAt p (ambiguousData rs c)
+>                   | otherwise -> errorAt p (ambiguousFunction rs c))
+>              (mapE (checkConstrTerm p env) ts)
+> checkConstrTerm p env (FunctionPattern a f ts) =
+>   checkConstrTerm p env (ConstructorPattern a f ts)
 > checkConstrTerm p env (InfixPattern a t1 op t2) =
->   liftE3 ($)
->          (case qualLookupNestEnv op env of
->             [Constr _] -> return (flip (InfixPattern a) op)
->             rs
->               | any isConstr rs -> errorAt p (ambiguousData rs op)
->               | otherwise -> errorAt p (undefinedData op))
+>   liftE3 (InfixPattern a)
 >          (checkConstrTerm p env t1)
+>          (case qualLookupNestEnv op' env of
+>             [] -> errorAt p (undefinedData op')
+>             [Constr _] -> return (InfixConstr () op')
+>             [Var _ _] -> return (InfixOp () op')
+>             rs
+>               | any isConstr rs -> errorAt p (ambiguousData rs op')
+>               | otherwise -> errorAt p (ambiguousFunction rs op'))
 >          (checkConstrTerm p env t2)
+>   where op' = opName op
 > checkConstrTerm p env (ParenPattern t) =
 >   liftE ParenPattern (checkConstrTerm p env t)
 > checkConstrTerm p env (RecordPattern a c fs) =
@@ -872,6 +923,9 @@ Error messages.
 
 > ambiguousVariable :: [ValueKind] -> QualIdent -> String
 > ambiguousVariable = ambiguous "variable"
+
+> ambiguousFunction :: [ValueKind] -> QualIdent -> String
+> ambiguousFunction = ambiguous "function"
 
 > ambiguousData :: [ValueKind] -> QualIdent -> String
 > ambiguousData = ambiguous "data constructor"

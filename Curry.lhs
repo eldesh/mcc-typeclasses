@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Curry.lhs 2815 2009-05-04 13:59:57Z wlux $
+% $Id: Curry.lhs 2921 2009-12-02 21:22:18Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -187,10 +187,11 @@ Interface declarations are restricted to type declarations and signatures.
 
 \end{verbatim}
 \paragraph{Patterns}
-Note that the (type) attributes of constructor and infix patterns will
-apply to the whole pattern an not to the pattern's constructor itself.
-List patterns carry an attribute in order to accommodate the empty
-list.
+Note that the (type) attributes of constructor, function, and infix
+patterns will apply to the whole pattern and not to the pattern's
+constructor or function itself. For that reason we only use a fixed
+attribute for the operator of an infix pattern. List patterns carry an
+attribute in order to accommodate the empty list.
 
 \ToDo{Use \texttt{ConstructorPattern qNilId} to represent the empty
   list? If so, the attribute can be omitted from list patterns.}
@@ -201,7 +202,8 @@ list.
 >   | NegativePattern a Literal
 >   | VariablePattern a Ident
 >   | ConstructorPattern a QualIdent [ConstrTerm a]
->   | InfixPattern a (ConstrTerm a) QualIdent (ConstrTerm a)
+>   | FunctionPattern a QualIdent [ConstrTerm a]
+>   | InfixPattern a (ConstrTerm a) (InfixOp (){-sic!-}) (ConstrTerm a)
 >   | ParenPattern (ConstrTerm a)
 >   | RecordPattern a QualIdent [Field (ConstrTerm a)]
 >   | TuplePattern [ConstrTerm a]
@@ -318,6 +320,8 @@ The abstract syntax tree is a functor with respect to its attributes.
 >   fmap f (VariablePattern a v) = VariablePattern (f a) v
 >   fmap f (ConstructorPattern a c ts) =
 >     ConstructorPattern (f a) c (map (fmap f) ts)
+>   fmap f (FunctionPattern a f' ts) =
+>     FunctionPattern (f a) f' (map (fmap f) ts)
 >   fmap f (InfixPattern a t1 op t2) =
 >     InfixPattern (f a) (fmap f t1) op (fmap f t2)
 >   fmap f (ParenPattern t) = ParenPattern (fmap f t)

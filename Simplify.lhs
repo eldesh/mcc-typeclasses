@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2920 2009-12-02 18:07:19Z wlux $
+% $Id: Simplify.lhs 2921 2009-12-02 21:22:18Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -91,6 +91,7 @@ Currently, the following optimizations are implemented:
 >                 [patDecl p t (Variable (typeOf t) v) | t <- ts]
 >               match _ (Tuple es) = zipWith (patDecl p) ts es
 >               match p' (Let ds e) = ds ++ match p' e
+>               match p' e@(Case _ _) = [PatternDecl p t (SimpleRhs p' e [])]
 >               match p' e@(Fcase _ _) = [PatternDecl p t (SimpleRhs p' e [])]
 >       _ -> return [PatternDecl p t rhs']
 > simplifyDecl _ _ (FreeDecl p vs) = return [FreeDecl p vs]
@@ -536,6 +537,7 @@ variable declarations (see \texttt{simplifyDecl} above).
 >         filterBody (Variable _ v) =
 >           tupleExpr (filterUsed [Variable ty v | VariablePattern ty _ <- ts])
 >         filterBody (Tuple es) = tupleExpr (filterUsed es)
+>         filterBody (Case e [Alt p t rhs]) = Case e [Alt p t (filterRhs rhs)]
 >         filterBody (Fcase e [Alt p t rhs]) =
 >           Fcase e [Alt p t (filterRhs rhs)]
 >         filterBody (Let ds e) = Let ds (filterBody e)

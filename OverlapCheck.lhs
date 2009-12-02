@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: OverlapCheck.lhs 2779 2009-03-28 10:22:16Z wlux $
+% $Id: OverlapCheck.lhs 2921 2009-12-02 21:22:18Z wlux $
 %
 % Copyright (c) 2006-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -196,8 +196,11 @@ not relevant in practice.
 > desugar _ (VariablePattern _ v) = VariablePattern () anonId
 > desugar tyEnv (ConstructorPattern _ c ts) =
 >   ConstructorPattern () c (map (desugar tyEnv) ts)
+> desugar _ (FunctionPattern _ _ _) = VariablePattern () anonId
 > desugar tyEnv (InfixPattern a t1 op t2) =
->   desugar tyEnv (ConstructorPattern a op [t1,t2])
+>   desugar tyEnv (desugarOp a op [t1,t2])
+>   where desugarOp a (InfixConstr _ op) = ConstructorPattern a op
+>         desugarOp a (InfixOp _ op) = FunctionPattern a op
 > desugar tyEnv (ParenPattern t) = desugar tyEnv t
 > desugar tyEnv (RecordPattern a c fs) =
 >   ConstructorPattern () c (map (argument tyEnv) (orderFields fs ls))

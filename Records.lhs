@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Records.lhs 2809 2009-04-29 13:11:20Z wlux $
+% $Id: Records.lhs 2921 2009-12-02 21:22:18Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -164,6 +164,8 @@ expressions.
 > unlabelTerm _ (VariablePattern ty v) = return (VariablePattern ty v)
 > unlabelTerm m (ConstructorPattern ty c ts) =
 >   liftM (ConstructorPattern ty c) (mapM (unlabelTerm m) ts)
+> unlabelTerm m (FunctionPattern ty f ts) =
+>   liftM (FunctionPattern ty f) (mapM (unlabelTerm m) ts)
 > unlabelTerm m (RecordPattern ty c fs) =
 >   do
 >     tcEnv <- liftSt envRt

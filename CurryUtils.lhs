@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryUtils.lhs 2815 2009-05-04 13:59:57Z wlux $
+% $Id: CurryUtils.lhs 2921 2009-12-02 21:22:18Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -140,6 +140,7 @@ this function returns \texttt{True} for lazy patterns.
 > isVarPattern (NegativePattern _ _) = False
 > isVarPattern (VariablePattern _ _) = True
 > isVarPattern (ConstructorPattern _ _ _) = False
+> isVarPattern (FunctionPattern _ _ _) = False
 > isVarPattern (InfixPattern _ _ _ _) = False
 > isVarPattern (ParenPattern t) = isVarPattern t
 > isVarPattern (TuplePattern _) = False

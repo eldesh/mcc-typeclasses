@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Newtype.lhs 2899 2009-08-24 09:52:45Z wlux $
+% $Id: Newtype.lhs 2921 2009-12-02 21:22:18Z wlux $
 %
 % Copyright (c) 2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -157,6 +157,8 @@ removes newtype constructors in patterns and expressions.
 >         | isNewtypeConstr tyEnv c -> transNewt tyEnv t
 >         | otherwise -> ConstructorPattern ty c [transNewt tyEnv t]
 >       _ -> ConstructorPattern ty c (transNewt tyEnv ts)
+>   transNewt tyEnv (FunctionPattern ty f ts) =
+>     FunctionPattern ty f (transNewt tyEnv ts)
 >   transNewt tyEnv (AsPattern v t) = AsPattern v (transNewt tyEnv t)
 >   transNewt tyEnv (LazyPattern t) = LazyPattern (transNewt tyEnv t)
 

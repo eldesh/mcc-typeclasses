@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: Base.lhs 2921 2009-12-02 21:22:18Z wlux $
 %
-% Copyright (c) 1999-2008, Wolfgang Lux
+% Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Base.lhs}
@@ -64,7 +64,7 @@ variables cannot be computed independently for each declaration.
 
 > instance QualExpr (Decl a) where
 >   qfv m (FunctionDecl _ _ eqs) = qfv m eqs
->   qfv m (PatternDecl _ _ rhs) = qfv m rhs
+>   qfv m (PatternDecl _ t rhs) = qfv m t ++ qfv m rhs
 >   qfv _ _ = []
 
 > instance QuantExpr (Decl a) where
@@ -75,7 +75,10 @@ variables cannot be computed independently for each declaration.
 >   bv _ = []
 
 > instance QualExpr (Equation a) where
->   qfv m (Equation _ lhs rhs) = filterBv lhs (qfv m rhs)
+>   qfv m (Equation _ lhs rhs) = qfv m lhs ++ filterBv lhs (qfv m rhs)
+
+> instance QualExpr (Lhs a) where
+>   qfv m = qfv m . snd . flatLhs
 
 > instance QuantExpr (Lhs a) where
 >   bv = bv . snd . flatLhs
@@ -108,23 +111,23 @@ variables cannot be computed independently for each declaration.
 >   qfv m (InfixApply e1 op e2) = qfv m op ++ qfv m e1 ++ qfv m e2
 >   qfv m (LeftSection e op) = qfv m op ++ qfv m e
 >   qfv m (RightSection op e) = qfv m op ++ qfv m e
->   qfv m (Lambda _ ts e) = filterBv ts (qfv m e)
+>   qfv m (Lambda _ ts e) = qfv m ts ++ filterBv ts (qfv m e)
 >   qfv m (Let ds e) = filterBv ds (qfv m ds ++ qfv m e)
 >   qfv m (Do sts e) = foldr (qfvStmt m) (qfv m e) sts
 >   qfv m (IfThenElse e1 e2 e3) = qfv m e1 ++ qfv m e2 ++ qfv m e3
->   qfv m (Case e alts) = qfv m e ++ qfv m alts
->   qfv m (Fcase e alts) = qfv m e ++ qfv m alts
+>   qfv m (Case e as) = qfv m e ++ qfv m as
+>   qfv m (Fcase e as) = qfv m e ++ qfv m as
 
 > qfvStmt :: ModuleIdent -> Statement a -> [Ident] -> [Ident]
 > qfvStmt m st fvs = qfv m st ++ filterBv st fvs
 
 > instance QualExpr (Statement a) where
 >   qfv m (StmtExpr e) = qfv m e
->   qfv m (StmtBind _ t e) = qfv m e
+>   qfv m (StmtBind _ t e) = qfv m e ++ qfv m t
 >   qfv m (StmtDecl ds) = filterBv ds (qfv m ds)
 
 > instance QualExpr (Alt a) where
->   qfv m (Alt _ t rhs) = filterBv t (qfv m rhs)
+>   qfv m (Alt _ t rhs) = qfv m t ++ filterBv t (qfv m rhs)
 
 > instance QuantExpr (Statement a) where
 >   bv (StmtExpr e) = []
@@ -137,11 +140,26 @@ variables cannot be computed independently for each declaration.
 > instance QualExpr a => QualExpr (Field a) where
 >   qfv m (Field _ e) = qfv m e
 
+> instance QualExpr (ConstrTerm a) where
+>   qfv _ (LiteralPattern _ _) = []
+>   qfv _ (NegativePattern _ _) = []
+>   qfv _ (VariablePattern _ _) = []
+>   qfv m (ConstructorPattern _ _ ts) = qfv m ts
+>   qfv m (FunctionPattern _ f ts) = maybe id (:) (localIdent m f) (qfv m ts)
+>   qfv m (InfixPattern _ t1 op t2) = qfv m t1 ++ qfv m op ++ qfv m t2
+>   qfv m (ParenPattern t) = qfv m t
+>   qfv m (RecordPattern _ _ fs) = qfv m fs
+>   qfv m (TuplePattern ts) = qfv m ts
+>   qfv m (ListPattern _ ts) = qfv m ts
+>   qfv m (AsPattern _ t) = qfv m t
+>   qfv m (LazyPattern t) = qfv m t
+
 > instance QuantExpr (ConstrTerm a) where
 >   bv (LiteralPattern _ _) = []
 >   bv (NegativePattern _ _) = []
 >   bv (VariablePattern _ v) = [v | v /= anonId]
 >   bv (ConstructorPattern _ _ ts) = bv ts
+>   bv (FunctionPattern _ _ ts) = bv ts
 >   bv (InfixPattern _ t1 _ t2) = bv t1 ++ bv t2
 >   bv (ParenPattern t) = bv t
 >   bv (RecordPattern _ _ fs) = bv fs

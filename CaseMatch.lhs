@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 2809 2009-04-29 13:11:20Z wlux $
+% $Id: CaseMatch.lhs 2921 2009-12-02 21:22:18Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -11,14 +11,16 @@ equations, lambda abstractions, and $($f$)$case expressions fully
 explicit by restricting pattern matching to $($f$)$case expressions
 with only flat patterns. This means that the compiler transforms the
 code in such way that all functions have only a single equation,
-equations and lambda abstractions have only variable arguments,xs and
+equations and lambda abstractions have only variable arguments, and
 all patterns in $($f$)$case expressions are of the form $l$, $v$,
 $C\,v_1\dots v_n$, or $v\texttt{@}(C\,v_1\dots v_n)$ where $l$ is a
 literal, $v$ and $v_1, \dots, v_n$ are variables, and $C$ is a data
 constructor.\footnote{Recall that all newtype constructors have been
   removed previously.} During this transformation, the compiler also
-replaces (boolean) guards by if-then-else cascades and changes
-if-then-else expressions into equivalent case expressions.
+replaces (boolean) guards by if-then-else cascades, changes
+if-then-else expressions into equivalent case expressions, and
+transforms function patterns into equivalent right hand side
+constraints.
 \begin{verbatim}
 
 > module CaseMatch(caseMatch) where
@@ -54,16 +56,18 @@ The case flattening phase is applied recursively to all declarations
 and expressions of the desugared source code. A special case is made
 for pattern declarations. Since we cannot flatten the left hand side
 of a pattern declaration $t$~\texttt{=}~$e$, where $t$ is not a
-variable pattern, it is first transformed into the form
-$(v_1,\dots,v_n)$~\texttt{=} \texttt{fcase}~$e$ \texttt{of}
-\texttt{\lb}~$\sigma(t) \rightarrow (v'_1,\dots,v'_n)$~\texttt{\rb},
-where $v_1,\dots,v_n$ are the variables occurring in $t$,
-$v'_1,\dots,v'_n$ are fresh variables, and the substitution $\sigma =
-\{ v_1 \mapsto v'_1, \dots, v_n \mapsto v'_n \}$. Now $t$ can be
-flattened on the right hand side of the declaration. After
+variable pattern, and also cannot insert the additional constraints
+for any transformed function patterns\footnote{Recall that the guards
+  of a pattern declaration apply to the right hand side expression
+  against which the pattern is matched.}, it is first transformed into
+the form $(x_1,\dots,x_n)$~\texttt{=} \texttt{fcase}~$e$ \texttt{of}
+\texttt{\lb}~$\sigma t \rightarrow (x'_1,\dots,x'_n)$~\texttt{\rb},
+where $x_1,\dots,x_n$ are the variables occurring in $t$,
+$x'_1,\dots,x'_n$ are fresh variables, and $\sigma$ is the
+substitution $\{ x_1 \mapsto x'_1, \dots, x_n \mapsto x'_n \}$. After
 simplification, the compiler will replace the transformed pattern
 declaration by individual declarations for those variables from
-$\{v_1,\dots,v_n\}$ that are used in the scope of the declaration
+$\{x_1,\dots,x_n\}$ that are used in the scope of the declaration
 using a space-leak avoiding transformation of pattern bindings (cf.\ 
 Sect.~\ref{sec:pattern-bindings}).
 
@@ -113,10 +117,9 @@ For instance, \texttt{Just x = unknown} becomes \texttt{x = fcase
 >   match _ _ (TypeSig p fs ty) = return (TypeSig p fs ty)
 >   match m _ (FunctionDecl p f eqs) =
 >     do
->       vs <- matchVars m (map snd3 as)
->       e <- flexMatch m p vs as
+>       (vs,e) <-
+>         matchFlex m p [(p,ts,rhs) | Equation p (FunLhs _ ts) rhs <- eqs]
 >       return (funDecl p f (map (uncurry VariablePattern) vs) e)
->     where as = [(p,ts,rhs) | Equation p (FunLhs _ ts) rhs <- eqs]
 >   match _ _ (ForeignDecl p cc s ie f ty) = return (ForeignDecl p cc s ie f ty)
 >   match m _ (PatternDecl p t rhs) =
 >     match m p rhs >>= liftM (uncurry (PatternDecl p)) . matchLhs m t
@@ -131,20 +134,24 @@ For instance, \texttt{Just x = unknown} becomes \texttt{x = fcase
 >       do
 >         vs' <- mapM (freshVar m "_#case" . fst) vs
 >         let t' = rename (zip (map snd vs) (map snd vs')) t
->         [v] <- matchVars m [[t']]
->         Fcase _ as' <- flexMatch m p [v] [(p,[t'],mkRhs p (tupleExpr vs'))]
->         return (tuplePattern vs,mkRhs p (Fcase e as'))
+>             rhs' = mkRhs p (tupleExpr (map (uncurry mkVar) vs'))
+>         ([v],e') <- matchFlex m p [(p,[t'],rhs')]
+>         return (tuplePattern ts,mkRhs p (mkCase m p v e e'))
 >   where vs = vars t
+>         ts = map (uncurry VariablePattern) vs
 >         rename _ (LiteralPattern ty l) = LiteralPattern ty l
 >         rename vs (VariablePattern ty v) = VariablePattern ty (renameVar vs v)
 >         rename vs (ConstructorPattern ty c ts) =
 >           ConstructorPattern ty c (map (rename vs) ts)
+>         rename vs (FunctionPattern ty f ts) =
+>           FunctionPattern ty f (map (rename vs) ts)
 >         rename vs (AsPattern v t) = AsPattern (renameVar vs v) (rename vs t)
 >         renameVar vs v = maybe v id (lookup v vs)
 
 \end{verbatim}
-A list of boolean guards is expanded into a nested if-then-else
-expression, whereas a constraint guard is replaced by a case
+A list of guarded equations or alternatives with boolean guards is
+expanded into a nested if-then-else expression, whereas a guarded
+equation or alternative with a constraint guard is replaced by a case
 expression. Note that if the guard type is \texttt{Success} only a
 single guard is allowed for each equation. We check whether the
 guard's type is \texttt{Bool} because it defaults to \texttt{Success}
@@ -166,12 +173,14 @@ if it is not restricted by the guard expression.
 >           -> CaseMatchState (Expression Type)
 >           -> CaseMatchState (Expression Type)
 > expandRhs m p es e0
->   | booleanGuards es =
->       liftM2 (flip (foldr mkIfThenElse)) (mapM (match m p) es) e0
+>   | booleanGuards es = liftM2 expandBooleanGuards (mapM (match m p) es) e0
 >   | otherwise = liftM mkCond (mapM (match m p) es)
+>   where mkCond [CondExpr p g e] = Case g [caseAlt p successPattern e]
+
+> expandBooleanGuards :: [CondExpr Type] -> Expression Type -> Expression Type
+> expandBooleanGuards es e0 = foldr mkIfThenElse e0 es
 >   where mkIfThenElse (CondExpr p g e1) e2 =
 >           Case g [caseAlt p truePattern e1,caseAlt p falsePattern e2]
->         mkCond [CondExpr p g e] = Case g [caseAlt p successPattern e]
 
 > booleanGuards :: [CondExpr Type] -> Bool
 > booleanGuards [] = False
@@ -188,22 +197,141 @@ if it is not restricted by the guard expression.
 >   match m p (Apply e1 e2) = liftM2 Apply (match m p e1) (match m p e2)
 >   match m _ (Lambda p ts e) =
 >     do
->       vs <- matchVars m [ts]
->       e' <- flexMatch m p vs [(p,ts,mkRhs p e)]
+>       (vs,e') <- matchFlex m p [(p,ts,mkRhs p e)]
 >       return (Lambda p (map (uncurry VariablePattern) vs) e')
 >   match m p (Let ds e) = liftM2 Let (mapM (match m p) ds) (match m p e)
 >   match m p (Case e as) =
 >     do
 >       e' <- match m p e
->       [v] <- matchVars m [ts | (_,_,ts,_) <- as']
->       liftM (mkCase m p v e') (rigidMatch m (typeOf (Case e as)) id [v] as')
->     where as' = [(p,id,[t],rhs) | Alt p t rhs <- as]
+>       ([v],e'') <- matchRigid m ty [(p,[t],rhs) | Alt p t rhs <- as]
+>       return (mkCase m p v e' e'')
+>     where ty = typeOf (Case e as)
 >   match m p (Fcase e as) =
 >     do
 >       e' <- match m p e
->       [v] <- matchVars m (map snd3 as')
->       liftM (mkCase m p v e') (flexMatch m p [v] as')
->     where as' = [(p,[t],rhs) | Alt p t rhs <- as]
+>       ([v],e'') <- matchFlex m p [(p,[t],rhs) | Alt p t rhs <- as]
+>       return (mkCase m p v e' e'')
+
+\end{verbatim}
+Before flattening case patterns, the compiler eliminates all function
+patterns. In a first step, we transform every pattern $t$ that
+contains one or more function patterns into a pattern $t'$ containing
+no function patterns and a list of pairs of the form $(x_i,t_i)$,
+where $t_i$ is an outermost function pattern in $t$ and $x_i$ is the
+variable that replaces $t_i$ in $t'$. In a second step the pairs
+$(x_i,t_i)$ are converted into constraints of the form \texttt{$t_i$
+  =:<= $x_i$} that are injected into the right hand side of their
+respective function equation or $($f$)$case alternative together with
+declarations that define the variables occurring in $t_i$.
+\begin{verbatim}
+
+> type Match a = (Position,[ConstrTerm a],Rhs a)
+> type Match' a =
+>   (Position,[ConstrTerm a] -> [ConstrTerm a],[ConstrTerm a],Rhs a)
+
+> matchFlex :: ModuleIdent -> Position -> [Match Type]
+>           -> CaseMatchState ([(Type,Ident)],Expression Type)
+> matchFlex m p as =
+>   do
+>     as' <- mapM (elimFP m) as
+>     vs <- matchVars m (map snd3 as')
+>     e <- flexMatch m p vs as'
+>     return (vs,e)
+>   where elimFP m (p,ts,rhs) =
+>           do
+>             (ts',fpss) <- mapAndUnzipM (liftFP m) ts
+>             return (p,ts',inject id p (concat fpss) rhs)
+
+> matchRigid :: ModuleIdent -> Type -> [Match Type]
+>            -> CaseMatchState ([(Type,Ident)],Expression Type)
+> matchRigid m ty as =
+>   do
+>     as' <- mapM (elimFP m) as
+>     vs <- matchVars m [ts | (_,_,ts,_) <- as']
+>     e <- rigidMatch m ty id vs as'
+>     return (vs,e)
+>   where elimFP m (p,ts,rhs) =
+>           do
+>             (ts',fpss) <- mapAndUnzipM (liftFP m) ts
+>             return (p,id,ts',inject ensure p (concat fpss) rhs)
+>         ensure e = Apply (prelEnsure (typeOf e)) e
+
+\end{verbatim}
+When injected into a guarded equation or alternative with a constraint
+guard, the additional constraints are evaluated concurrently with the
+guard. On the other hand, a sequence of guarded equations or
+alternatives with boolean guards is transformed into an if-then-else
+cascade first and the function pattern constraints are evaluated
+before entering that expression. As a consequence case alternatives
+with boolean guards will no longer fall through into the remaining
+alternatives if all guards fail. E.g.,
+\begin{verbatim}
+  case [-1] of
+    xs ++ [x] | x > 0 -> x
+    _ -> 0
+\end{verbatim}
+fails instead of reducing to 0. However, this behavior is at least
+consistent, since the default case is also not reached when the
+function pattern does not match at all, e.g., when the scrutinized
+expression was \texttt{[]}.
+
+\ToDo{This semantics of function patterns in case expressions looks
+  dubious. Eventually drop support for them. If so, remember that list
+  comprehensions may expand into case expressions, too.}
+\begin{verbatim}
+
+> liftFP :: ModuleIdent -> ConstrTerm Type
+>        -> CaseMatchState (ConstrTerm Type,[((Type,Ident),ConstrTerm Type)])
+> liftFP _ t@(LiteralPattern _ _) = return (t,[])
+> liftFP _ t@(VariablePattern _ _) = return (t,[])
+> liftFP m (ConstructorPattern ty c ts) =
+>   do
+>     (ts',fpss) <- mapAndUnzipM (liftFP m) ts
+>     return (ConstructorPattern ty c ts',concat fpss)
+> liftFP m t@(FunctionPattern ty _ _) =
+>   do
+>     v <- freshVar m "_#fpat" ty
+>     return (uncurry VariablePattern v,[(v,t)])
+> liftFP m (AsPattern v t) =
+>   do
+>     (t',fps) <- liftFP m t
+>     return (AsPattern v t',fps)
+
+> inject :: (Expression Type -> Expression Type) -> Position
+>        -> [((Type,Ident),ConstrTerm Type)] -> Rhs Type -> Rhs Type
+> inject f p fps rhs
+>   | null fps = rhs
+>   | otherwise = injectRhs cs ds rhs
+>   where cs = [apply (unify ty) [toExpr t,f (mkVar ty v)] | ((ty,v),t) <- fps]
+>         ds = concatMap (decls p . snd) fps
+
+> injectRhs :: [Expression Type] -> [Decl Type] -> Rhs Type -> Rhs Type
+> injectRhs cs ds (SimpleRhs p e ds') = injectCond p cs e ds ds'
+> injectRhs cs ds (GuardedRhs es@(CondExpr p g e : _) ds')
+>   | booleanGuards es = injectCond p cs (expandBooleanGuards es e0) ds ds'
+>   | otherwise = injectCond p (cs ++ [g]) e ds ds'
+>   where e0 = prelFailed (typeOf e)
+
+> injectCond :: Position -> [Expression Type] -> Expression Type -> [Decl Type]
+>            -> [Decl Type] -> Rhs Type
+> injectCond p cs e ds ds' =
+>   GuardedRhs [CondExpr p (foldr1 (Apply . Apply prelConj) cs) e] (ds ++ ds')
+
+> toExpr :: ConstrTerm Type -> Expression Type
+> toExpr (LiteralPattern ty l) = Literal ty l
+> toExpr (VariablePattern ty v) = mkVar ty v
+> toExpr (ConstructorPattern ty c ts) =
+>   apply (Constructor (foldr (TypeArrow . typeOf) ty ts) c) (map toExpr ts)
+> toExpr (FunctionPattern ty f ts) =
+>   apply (Variable (foldr (TypeArrow . typeOf) ty ts) f) (map toExpr ts)
+> toExpr (AsPattern v t) = mkVar (typeOf t) v
+
+> decls :: Position -> ConstrTerm Type -> [Decl Type]
+> decls _ (LiteralPattern _ _) = []
+> decls p (VariablePattern _ v) = [FreeDecl p [v]]
+> decls p (ConstructorPattern _ _ ts) = concatMap (decls p) ts
+> decls p (FunctionPattern _ _ ts) = concatMap (decls p) ts
+> decls p (AsPattern v t) = varDecl p (typeOf t) v (toExpr t) : decls p t
 
 \end{verbatim}
 Our pattern matching algorithm is based on the notions of demanded and
@@ -255,10 +383,6 @@ make the result of the transformation easier to check and more
 comprehensible.
 \begin{verbatim}
 
-> type Match a = (Position,[ConstrTerm a],Rhs a)
-> type Match' a =
->   (Position,[ConstrTerm a] -> [ConstrTerm a],[ConstrTerm a],Rhs a)
-
 > pattern :: ConstrTerm a -> ConstrTerm ()
 > pattern (LiteralPattern _ l) = LiteralPattern () l
 > pattern (VariablePattern _ _) = VariablePattern () anonId
@@ -293,10 +417,10 @@ comprehensible.
 >       optMatch m (join (liftM2 (matchOr m p) e1 e2)) (v:) vs (map skipArg as)
 >   where (vars,nonVars) = partition (isVarPattern . fst) (map tagAlt as)
 >         e1 = matchInductive m id v vs nonVars
->         e2 = flexMatch m p vs (map (matchVar . snd) vars)
+>         e2 = flexMatch m p vs (map (matchVar (snd v) . snd) vars)
 >         tagAlt (p,t:ts,rhs) = (pattern t,(p,id,t:ts,rhs))
 >         skipArg (p,t:ts,rhs) = (p,(t:),ts,rhs)
->         matchVar (p,_,t:ts,rhs) = (p,ts,bindVars p (snd v) t rhs)
+>         matchVar v (p,_,t:ts,rhs) = (p,ts,bindVars p v t rhs)
 
 > optMatch :: ModuleIdent -> CaseMatchState (Expression Type)
 >          -> ([(Type,Ident)] -> [(Type,Ident)]) -> [(Type,Ident)]
@@ -304,10 +428,12 @@ comprehensible.
 > optMatch _ e _      []     _ = e
 > optMatch m e prefix (v:vs) as
 >   | null vars = matchInductive m prefix v vs nonVars
+>   | null nonVars = optMatch m e prefix vs (map (matchVar (snd v)) as)
 >   | otherwise = optMatch m e (prefix . (v:)) vs (map skipArg as)
 >   where (vars,nonVars) = partition (isVarPattern . fst) (map tagAlt as)
 >         tagAlt (p,prefix,t:ts,rhs) = (pattern t,(p,prefix,t:ts,rhs))
 >         skipArg (p,prefix,t:ts,rhs) = (p,prefix . (t:),ts,rhs)
+>         matchVar v (p,prefix,t:ts,rhs) = (p,prefix,ts,bindVars p v t rhs)
 
 > matchInductive :: ModuleIdent -> ([(Type,Ident)] -> [(Type,Ident)])
 >                -> (Type,Ident) -> [(Type,Ident)]
@@ -549,7 +675,7 @@ where the default alternative is redundant.
 >   case fst (head as') of
 >     VariablePattern _ _
 >       | all (isVarPattern . fst) (tail as') ->
->           rigidMatch m ty prefix vs (map matchVar as)
+>           rigidMatch m ty prefix vs (map (matchVar (snd v)) as)
 >       | otherwise -> rigidMatch m ty (prefix . (v:)) vs (map skipArg as)
 >     t'@(LiteralPattern _ l')
 >       | fst v `elem` (charType:numTypes) ->
@@ -572,7 +698,7 @@ where the default alternative is redundant.
 >         (lts,cts,vts) = partitionPatterns (nub (map fst as'))
 >         tagAlt (p,prefix,t:ts,rhs) = (pattern t,(p,prefix,t:ts,rhs))
 >         skipArg (p,prefix,t:ts,rhs) = (p,prefix . (t:),ts,rhs)
->         matchVar (p,prefix,t:ts,rhs) = (p,prefix,ts,bindVars p (snd v) t rhs)
+>         matchVar v (p,prefix,t:ts,rhs) = (p,prefix,ts,bindVars p v t rhs)
 >         dupArg (p,prefix,t:ts,rhs) =
 >           (p,prefix . (asLiteral v t :),asConstrApp v t:ts,rhs)
 >         eqNum ty v l = apply (prelEq ty) [uncurry mkVar v,numLit ty l]
@@ -642,13 +768,18 @@ Generation of fresh names
 Prelude entities
 \begin{verbatim}
 
+> prelConj :: Expression Type
+> prelConj = preludeFun [successType,successType] successType "&"
+
 > prelEq, prelFromInteger, prelFromRational :: Type -> Expression Type
 > prelEq ty = preludeFun [ty,ty] boolType "=="
 > prelFromInteger ty = preludeFun [integerType] ty "fromInteger"
 > prelFromRational ty = preludeFun [rationalType] ty "fromRational"
 
-> prelFailed :: Type -> Expression Type
+> unify, prelFailed, prelEnsure :: Type -> Expression Type
+> unify ty = preludeFun [ty,ty] successType "=:<="
 > prelFailed ty = preludeFun [] ty "failed"
+> prelEnsure ty = preludeFun [ty] ty "ensureNotFree"
 
 > preludeFun :: [Type] -> Type -> String -> Expression Type
 > preludeFun tys ty f =
@@ -682,20 +813,21 @@ Auxiliary definitions
 > vars (LiteralPattern _ _) = []
 > vars (VariablePattern ty v) = [(ty,v) | unRenameIdent v /= anonId]
 > vars (ConstructorPattern _ _ ts) = concatMap vars ts
+> vars (FunctionPattern _ _ ts) = concatMap vars ts
 > vars (AsPattern v t) = (typeOf t,v) : vars t
 
-> tuplePattern :: [(Type,Ident)] -> ConstrTerm Type
-> tuplePattern vs =
->   case vs of
+> tuplePattern :: [ConstrTerm Type] -> ConstrTerm Type
+> tuplePattern ts =
+>   case ts of
 >     [] -> ConstructorPattern unitType qUnitId []
->     [v] -> uncurry VariablePattern v
->     _ -> TuplePattern (map (uncurry VariablePattern) vs)
+>     [t] -> t
+>     _ -> TuplePattern ts
 
-> tupleExpr :: [(Type,Ident)] -> Expression Type
-> tupleExpr vs =
->   case vs of
+> tupleExpr :: [Expression Type] -> Expression Type
+> tupleExpr es =
+>   case es of
 >     [] -> Constructor unitType qUnitId
->     [v] -> uncurry mkVar v
->     _ -> Tuple (map (uncurry mkVar) vs)
+>     [e] -> e
+>     _ -> Tuple es
 
 \end{verbatim}

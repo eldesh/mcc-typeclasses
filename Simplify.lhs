@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2885 2009-08-05 15:50:32Z wlux $
+% $Id: Simplify.lhs 2920 2009-12-02 18:07:19Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -98,7 +98,12 @@ Currently, the following optimizations are implemented:
 > simplifyEquation :: ModuleIdent -> InlineEnv -> Equation Type
 >                  -> SimplifyState (Equation Type)
 > simplifyEquation m env (Equation p lhs rhs) =
->   simplifyRhs m env rhs >>= etaExpand m . Equation p lhs
+>   do
+>     rhs' <- simplifyRhs m env rhs
+>     etaExpand m (Equation p (simplifyLhs (qfv m rhs') lhs) rhs')
+
+> simplifyLhs :: [Ident] -> Lhs a -> Lhs a
+> simplifyLhs fvs (FunLhs f ts) = FunLhs f (map (simplifyPattern fvs) ts)
 
 > simplifyRhs :: ModuleIdent -> InlineEnv -> Rhs Type
 >             -> SimplifyState (Rhs Type)
@@ -147,11 +152,10 @@ Obviously, $\eta$-expansion of an equation \texttt{$f\,t_1\dots t_n$ =
   $f\,x_1\dots x_n$)} and \texttt{let a = $f\,x_1\dots x_n$ in (a,a)}
 are equivalent. In order to find a safe approximation of definitions
 for which this property holds, the distinction between expansive and
-non-expansive expressions is useful again, which was introduced in
-order to identify let-bound variables for which polymorphic
-generalization is safe (see p.~\pageref{non-expansive} in
-Sect.~\ref{non-expansive}). An expression is non-expansive if it is
-either
+non-expansive expressions is useful again, which was introduced to
+identify let-bound variables for which polymorphic generalization is
+safe (see p.~\pageref{non-expansive} in Sect.~\ref{non-expansive}). An
+expression is non-expansive if it is either
 \begin{itemize}
 \item a literal,
 \item a variable,
@@ -339,9 +343,9 @@ technology, these optimizations correspond to constant folding and
 copy propagation, respectively. The transformation is applied
 recursively to a substituted variable in order to handle chains of
 variable definitions. Note that the compiler carefully updates the
-type annotations of the inlined expression. This is necessary in order
-to preserve soundness of the annotations when inlining a variable with
-a polymorphic type because in that case each use of the variable is
+type annotations of the inlined expression. This is necessary to
+preserve soundness of the annotations when inlining a variable with a
+polymorphic type because in that case each use of the variable is
 annotated with fresh type variables that are unrelated to the type
 variables used on the right hand side of the variable's definition. In
 addition, newtype constructors in the result of the substituted
@@ -351,15 +355,15 @@ annotated type has the same arity before and after the substitution.
 \ToDo{Apply the type substitution only when necessary, i.e., when the
   inlined variable has a polymorphic type.}
 
-The bindings of a let expression are sorted topologically in order to
-split them into minimal binding groups. In addition, local
-declarations occurring on the right hand side of variable and pattern
-declarations are lifted into the enclosing binding group using the
-equivalence (modulo $\alpha$-conversion) of \texttt{let}
-$x$~=~\texttt{let} \emph{decls} \texttt{in} $e_1$ \texttt{in} $e_2$
-and \texttt{let} \emph{decls}\texttt{;} $x$~=~$e_1$ \texttt{in} $e_2$.
-This transformation avoids the creation of some redundant lifted
-functions in later phases of the compiler.
+The bindings of a let expression are sorted topologically to split
+them into minimal binding groups. In addition, local declarations
+occurring on the right hand side of variable and pattern declarations
+are lifted into the enclosing binding group using the equivalence
+(modulo $\alpha$-conversion) of \texttt{let} $x$~=~\texttt{let}
+\emph{decls} \texttt{in} $e_1$ \texttt{in} $e_2$ and \texttt{let}
+\emph{decls}\texttt{;} $x$~=~$e_1$ \texttt{in} $e_2$.  This
+transformation avoids the creation of some redundant lifted functions
+in later phases of the compiler.
 \begin{verbatim}
 
 > simplifyExpr :: ModuleIdent -> InlineEnv -> Expression Type
@@ -388,7 +392,8 @@ functions in later phases of the compiler.
 >     tyEnv <- fetchSt
 >     tcEnv <- liftSt envRt
 >     (ts',e'') <- etaExpr m tcEnv tyEnv e'
->     return (etaReduce m tyEnv p (ts ++ ts') e'')
+>     let ts'' = map (simplifyPattern (qfv m e'')) (ts ++ ts')
+>     return (etaReduce m tyEnv p ts'' e'')
 > simplifyExpr m env (Let ds e) =
 >   simplifyLet m env (scc bv (qfv m) (foldr hoistDecls [] ds)) e
 > simplifyExpr m env (Case e as) =
@@ -406,7 +411,17 @@ functions in later phases of the compiler.
 
 > simplifyAlt :: ModuleIdent -> InlineEnv -> Alt Type
 >             -> SimplifyState (Alt Type)
-> simplifyAlt m env (Alt p t rhs) = liftM (Alt p t) (simplifyRhs m env rhs)
+> simplifyAlt m env (Alt p t rhs) =
+>   do
+>     rhs' <- simplifyRhs m env rhs
+>     return (Alt p (simplifyPattern (qfv m rhs') t) rhs')
+
+> simplifyPattern _ (LiteralPattern a l) = LiteralPattern a l
+> simplifyPattern _ (VariablePattern a v) = VariablePattern a v
+> simplifyPattern fvs (ConstructorPattern a c ts) =
+>   ConstructorPattern a c (map (simplifyPattern fvs) ts)
+> simplifyPattern fvs (AsPattern v t) =
+>   (if v `elem` fvs then AsPattern v else id) (simplifyPattern fvs t)
 
 > hoistDecls :: Decl a -> [Decl a] -> [Decl a]
 > hoistDecls (PatternDecl p t (SimpleRhs p' (Let ds e) _)) ds' =
@@ -425,12 +440,12 @@ either simple constants or free variables of $f$, the application
 $g\,e_1\dots e_m$ is inlined in place of $f$.
 
 A constant is considered simple if it is either a literal, a
-constructor, or a non-nullary function. Note that it is not possible
-to define nullary functions in local declarations in Curry. Thus, an
-unqualified name always refers to either a variable or a non-nullary
-function. Applications of constructors and partial applications of
-functions to at least one argument are not inlined in order to avoid
-code duplication (for the allocation of the terms). In order to
+constructor, or a non-nullary function. Since it is not possible to
+define nullary functions in a local declaration groups in Curry, an
+unqualified name here always refers to either a variable or a
+non-nullary function. Applications of constructors and partial
+applications of functions to at least one argument are not inlined to
+avoid code duplication (for the allocation of the terms). In order to
 prevent non-termination, no inlining is performed for entities defined
 in recursive binding groups.
 
@@ -534,8 +549,8 @@ expression to the right hand side of the matching alternative or to
 \texttt{Prelude.failed} if no alternative matches. When a case
 expression collapses to a matching alternative, the pattern variables
 are bound to the matching (sub)terms of the scrutinized expression. We
-have to be careful with as-patterns in order to avoid losing sharing
-by code duplication. For instance, the expression
+have to be careful with as-patterns to avoid losing sharing by code
+duplication. For instance, the expression
 \begin{verbatim}
   case (0?1) : undefined of
     l@(x:_) -> (x,l)

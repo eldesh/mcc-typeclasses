@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2926 2010-03-23 11:24:24Z wlux $
+% $Id: disequal.nw 2929 2010-03-23 11:26:46Z wlux $
 %
 % Copyright (c) 2002-2010, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -203,7 +203,7 @@ FUNCTION(diseq_var)
 	SWAPn(0);
 
     /* occurs check */
-    occ = occurs(regs.r[0], regs.sp[0]);
+    occ = occurs(occurs_no_nf, regs.r[0], regs.sp[0]);
     if ( occ == occurs_yes )
 	RETURN(Success, 1);
 

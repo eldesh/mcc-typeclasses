@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2928 2010-03-23 11:25:53Z wlux $
+% $Id: unify.nw 2929 2010-03-23 11:26:46Z wlux $
 %
 % Copyright (c) 2001-2010, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -17,9 +17,9 @@ DECLARE_LABEL(extern, bind_var);
 
 enum occurs { occurs_yes, occurs_no, occurs_no_nf };
 #if NO_OCCURS_CHECK
-# define occurs(var,arg)	(is_tagged_ptr(arg) ? occurs_no : occurs_no_nf)
+# define occurs(res,var,arg)	(is_tagged_ptr(arg) ? occurs_no : (res))
 #else
-extern enum occurs occurs(Node *, Node *);
+extern enum occurs occurs(enum occurs, Node *, Node *);
 #endif
 extern int  eq_root(Node *, Node *);
 extern Node *eq_args(unsigned int, Node *, Node *, int);
@@ -690,13 +690,11 @@ unification is not trivial are replaced by fresh variables.
 <<unify.c>>=
 #if !NO_OCCURS_CHECK
 enum occurs
-occurs(Node *var, Node *arg)
+occurs(enum occurs result, Node *var, Node *arg)
 {
-    enum occurs	 result;
     unsigned int i, argc;
     Node	 **argp;
 
-    result = occurs_no_nf;
     while ( is_tagged_ptr(arg) )
     {
 	if ( arg == var )
@@ -719,13 +717,14 @@ occurs(Node *var, Node *arg)
 	    result = occurs_no;
 	    break;
 	case GVAR_KIND:
-	    /* NB var cannot occur in the global variable's value but we
-	     * want to know whether the value is in normal form already */
-	    /* FIXME we could avoid traversing the global variable's value
-	     *       if we already know that the global variable is part of a
-	     *       a non-NF term. */
-	    arg = arg->g.node;
-	    continue;
+	    if (result == occurs_no_nf)
+	    {
+		/* NB var cannot occur in the global variable's value but we
+		 * want to know whether the value is in normal form already */
+		arg = arg->g.node;
+		continue;
+	    }
+	    break;
 	case INDIR_KIND:
 	    arg = arg->n.node;
 	    continue;
@@ -736,16 +735,11 @@ occurs(Node *var, Node *arg)
 	}
 
 	for ( i = 0; i < argc; i++ )
-	    switch ( occurs(var, *argp++) )
-	    {
-	    case occurs_yes:
-		return occurs_yes;
-	    case occurs_no:
-		result = occurs_no;
-		break;
-	    case occurs_no_nf:
-		break;
-	    }
+	{
+	    result = occurs(result, var, *argp++);
+	    if ( result == occurs_yes )
+	        break;
+	}
 	break;
     }
     return result;
@@ -767,7 +761,7 @@ FUNCTION(unify_var)
     /* occurs check */
     var = regs.r[0];
     arg = regs.sp[0];
-    occ = occurs(var, arg);
+    occ = occurs(occurs_no_nf, var, arg);
     if ( occ == occurs_yes )
 	FAIL(NO_SOLUTION);
 

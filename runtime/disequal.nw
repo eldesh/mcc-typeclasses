@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2854 2009-05-29 12:33:07Z wlux $
+% $Id: disequal.nw 2926 2010-03-23 11:24:24Z wlux $
 %
-% Copyright (c) 2002-2009, Wolfgang Lux
+% Copyright (c) 2002-2010, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Disequality Constraints}
@@ -218,9 +218,21 @@ FUNCTION(diseq_var)
     SET_FIELD(regs.r[0], v.cstrs, (Constraint *)cstr);
 
     /* if necessary, evaluate the argument to normal form */
-    if ( occ == occurs_no_nf )
-	RETURN(Success, 1);
-    CALL_RET2(___61__58__61_, 1, regs.sp[0], regs.sp[0]);
+    if ( occ == occurs_no )
+    {
+	Node *var;
+
+	CHECK_HEAP(0, variable_node_size);
+	var	     = (Node *)regs.hp;
+	var->info    = variable_info_table;
+	var->v.wq    = 0;
+	var->v.cstrs = 0;
+	regs.hp	    += variable_node_size;
+
+	CALL_RET2(___61__58__61_, 1, var, regs.sp[0]);
+    }
+    RETURN(Success, 1);
+
 }
 
 @ 

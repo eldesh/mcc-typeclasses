@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: funpat.nw 2921 2009-12-02 21:22:18Z wlux $
+% $Id: funpat.nw 2927 2010-03-23 11:25:01Z wlux $
 %
-% Copyright (c) 2009, Wolfgang Lux
+% Copyright (c) 2009-2010, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Function Patterns}
@@ -587,8 +587,18 @@ FUNCTION(eval_count_pattern_variable)
 
     /* return the variable node */
     var = susp->c.args[0]; 
-    while ( is_tagged_ptr(var) && is_indir_node(var) )
-	var = var->n.node;
+    while ( is_tagged_ptr(var) )
+    {
+	switch ( node_tag(var) )
+	{
+	case INDIR_TAG:
+	    var = var->n.node;
+	    continue;
+	case EVAL_TAG:
+	    ENT(var);
+	}
+	break;
+    }
     RET(var);
 }
 
@@ -597,9 +607,19 @@ FUNCTION(eval_pattern_variable)
 {
     Node *var;
  ENTRY_LABEL(static, eval_pattern_variable)
-    var = regs.r[0]->c.args[0]; 
-    while ( is_tagged_ptr(var) && is_indir_node(var) )
-	var = var->n.node;
+    var = regs.r[0]->c.args[0];
+    while ( is_tagged_ptr(var) )
+    {
+	switch ( node_tag(var) )
+	{
+	case INDIR_TAG:
+	    var = var->n.node;
+	    continue;
+	case EVAL_TAG:
+	    ENT(var);
+	}
+	break;
+    }
     RET(var);
 }
 
@@ -622,7 +642,7 @@ static
 FUNCTION(___61__58__60__61__4)
 {
     unsigned n;
-    Node     *var, *arglist;
+    Node     *var, *arg, *arglist;
  ENTRY_LABEL(static, ___61__58__60__61__4)
     arglist = regs.sp[0];
     assert(arglist->info == &cons_info);
@@ -643,13 +663,22 @@ FUNCTION(___61__58__60__61__4)
 	case 1:
 	    break;
 	case 2:
-	    if ( arglist->c.args[1] != nil )
+	    regs.r[0]  = var->c.args[0];
+	    regs.sp[0] = arglist->c.args[1];
+
+	    CHECK_HEAP(1, variable_node_size);
+	    var		 = (Node *)regs.hp;
+	    var->info	 = variable_info_table;
+	    var->v.wq	 = 0;
+	    var->v.cstrs = 0;
+	    regs.hp	+= variable_node_size;
+
+	    arg = regs.r[0];
+	    if ( regs.sp[0] != nil )
 	    {
-		regs.sp[0] = arglist->c.args[1];
-		CALL2(___61__58__61_, ___61__58__60__61__4,
-		      var->c.args[0], var->c.args[0]);
+		CALL2(___61__58__61_, ___61__58__60__61__4, var, arg);
 	    }
-	    CALL_RET2(___61__58__61_, 1, var->c.args[0], var->c.args[0]);
+	    CALL_RET2(___61__58__61_, 1, var, arg);
 	default:
 	    curry_panic("___61__58__60__61__4: bad info pointer\n");
 	}

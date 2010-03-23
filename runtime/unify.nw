@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 2854 2009-05-29 12:33:07Z wlux $
+% $Id: unify.nw 2928 2010-03-23 11:25:53Z wlux $
 %
-% Copyright (c) 2001-2009, Wolfgang Lux
+% Copyright (c) 2001-2010, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Unification}\label{sec:unification}
@@ -53,6 +53,7 @@ DECLARE_LABEL(static, ___61__58__61__1);
 DECLARE_LABEL(static, ___61__58__61__2);
 DECLARE_LABEL(static, unify_var);
 DECLARE_LABEL(static, unify_var_1);
+DECLARE_LABEL(static, unify_var_2);
 DECLARE_LABEL(static, unify_args);
 DECLARE_LABEL(static, unify_args_1);
 DECLARE_LABEL(static, unify_args_2);
@@ -717,6 +718,14 @@ occurs(Node *var, Node *arg)
 	case QUEUEME_KIND:
 	    result = occurs_no;
 	    break;
+	case GVAR_KIND:
+	    /* NB var cannot occur in the global variable's value but we
+	     * want to know whether the value is in normal form already */
+	    /* FIXME we could avoid traversing the global variable's value
+	     *       if we already know that the global variable is part of a
+	     *       a non-NF term. */
+	    arg = arg->g.node;
+	    continue;
 	case INDIR_KIND:
 	    arg = arg->n.node;
 	    continue;
@@ -779,6 +788,13 @@ FUNCTION(unify_var)
 	    n	    = vector_argc(arg);
 	    sz	    = arg->a.length;
 	    break;
+	case GVAR_KIND:
+	    CHECK_STACK(2);
+	    regs.sp   -= 2;
+	    regs.sp[0] = arg;
+	    regs.sp[1] = (Node *)unify_var_2;
+	    /*regs.sp[2] = arg;*/
+	    /* FALL THROUGH!!! */
 	default:
 	    is_vect = false;
 	    n	    = 0;
@@ -842,6 +858,28 @@ FUNCTION(unify_var_1)
     if ( regs.sp[0] == nil )
 	RETURN(Success, 1);
     GOTO(unify_args);
+}
+
+static
+FUNCTION(unify_var_2)
+{
+    Node *var, *gvar;
+ ENTRY_LABEL(static, unify_var_2)
+    gvar      = regs.sp[0];
+    regs.ret  = (Label)regs.sp[1];
+    regs.r[0] = gvar->g.node;
+    regs.sp  += 2;
+    suspend_search(1, gvar->g.spc);
+
+    CHECK_HEAP(1, variable_node_size);
+    var		 = (Node *)regs.hp;
+    var->info	 = variable_info_table;
+    var->v.wq	 = 0;
+    var->v.cstrs = 0;
+    regs.hp	+= variable_node_size;
+
+    gvar = regs.r[0];
+    EXEC2(___61__58__61_, var, gvar);
 }
 
 @

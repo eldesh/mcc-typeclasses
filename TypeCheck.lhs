@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2921 2009-12-02 21:22:18Z wlux $
+% $Id: TypeCheck.lhs 2933 2010-04-14 15:52:30Z wlux $
 %
-% Copyright (c) 1999-2009, Wolfgang Lux
+% Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeCheck.lhs}
@@ -437,9 +437,10 @@ general than the type signature.
 >     tyEnv <- fetchSt
 >     (cx',impDs') <- mapAccumM (tcDecl m tcEnv tyEnv) cx impDs
 >     theta <- liftSt fetchSt
->     let tvs = [tv | (ty,PatternDecl _ t rhs) <- impDs',
->                     not (isVariablePattern t && isNonExpansive tyEnv rhs),
->                     tv <- typeVars (subst theta ty)]
+>     let tvs =
+>           [tv | (ty,PatternDecl _ t rhs) <- impDs',
+>                 not (isVariablePattern t && isNonExpansive tcEnv tyEnv rhs),
+>                 tv <- typeVars (subst theta ty)]
 >         fvs = foldr addToSet (fvEnv (subst theta tyEnv0)) tvs
 >         (gcx,lcx) = splitContext fvs cx'
 >     lcx' <- foldM (uncurry . dfltDecl tcEnv fvs) lcx impDs'
@@ -677,7 +678,7 @@ context because the context of a function's type signature is
 >         sigma = if poly then gen fvs lcx ty' else monoType ty'
 >     checkDeclSig tcEnv sigTy sigma d'
 >     return (gcx,d')
->   where poly = isNonExpansive tyEnv d
+>   where poly = isNonExpansive tcEnv tyEnv d
 
 > checkDeclSig :: TCEnv -> QualTypeExpr -> TypeScheme -> Decl a -> TcState ()
 > checkDeclSig tcEnv sigTy sigma (FunctionDecl p f eqs)
@@ -694,58 +695,83 @@ context because the context of a function's type signature is
 >   ty == sigTy && all (`elem` maxContext tcEnv sigCx) cx
 
 > class Binding a where
->   isNonExpansive :: ValueEnv -> a -> Bool
+>   isNonExpansive :: TCEnv -> ValueEnv -> a -> Bool
 
 > instance Binding a => Binding [a] where
->   isNonExpansive tyEnv = all (isNonExpansive tyEnv)
+>   isNonExpansive tcEnv tyEnv = all (isNonExpansive tcEnv tyEnv)
 
 > instance Binding (Decl a) where
->   isNonExpansive _ (InfixDecl _ _ _ _) = True
->   isNonExpansive _ (TypeSig _ _ _) = True
->   isNonExpansive _ (FunctionDecl _ _ _) = True
->   isNonExpansive _ (ForeignDecl _ _ _ _ _ _) = True
->   isNonExpansive tyEnv (PatternDecl _ t rhs) =
->     isVariablePattern t && isNonExpansive tyEnv rhs
->   isNonExpansive _ (FreeDecl _ _) = False
->   isNonExpansive _ (TrustAnnot _ _ _) = True
+>   isNonExpansive _ _ (InfixDecl _ _ _ _) = True
+>   isNonExpansive _ _ (TypeSig _ _ _) = True
+>   isNonExpansive _ _ (FunctionDecl _ _ _) = True
+>   isNonExpansive _ _ (ForeignDecl _ _ _ _ _ _) = True
+>   isNonExpansive tcEnv tyEnv (PatternDecl _ t rhs) =
+>     isVariablePattern t && isNonExpansive tcEnv tyEnv rhs
+>   isNonExpansive _ _ (FreeDecl _ _) = False
+>   isNonExpansive _ _ (TrustAnnot _ _ _) = True
 
 > instance Binding (Rhs a) where
->   isNonExpansive tyEnv (SimpleRhs _ e ds) =
->     isNonExpansive tyEnv ds && isNonExpansive tyEnv e
->   isNonExpansive _ (GuardedRhs _ _) = False
+>   isNonExpansive tcEnv tyEnv (SimpleRhs _ e ds) =
+>     isNonExpansive tcEnv tyEnv' ds && isNonExpansive tcEnv tyEnv' e
+>     where tyEnv' = foldr (bindDeclArity tcEnv) tyEnv ds
+>   isNonExpansive _ _ (GuardedRhs _ _) = False
 
 > instance Binding (Expression a) where
->   isNonExpansive tyEnv = isNonExpansiveApp tyEnv 0
+>   isNonExpansive tcEnv tyEnv = isNonExpansiveApp tcEnv tyEnv 0
 
 > instance Binding a => Binding (Field a) where
->   isNonExpansive tyEnv (Field _ e) = isNonExpansive tyEnv e
+>   isNonExpansive tcEnv tyEnv (Field _ e) = isNonExpansive tcEnv tyEnv e
 
-> isNonExpansiveApp :: ValueEnv -> Int -> Expression a -> Bool
-> isNonExpansiveApp _ _ (Literal _ _) = True
-> isNonExpansiveApp tyEnv n (Variable _ v)
+> isNonExpansiveApp :: TCEnv -> ValueEnv -> Int -> Expression a -> Bool
+> isNonExpansiveApp _ _ _ (Literal _ _) = True
+> isNonExpansiveApp _ tyEnv n (Variable _ v)
 >   | unqualify v == anonId = False
 >   | isRenamed (unqualify v) = n == 0 || n < arity v tyEnv
 >   | otherwise = n < arity v tyEnv
-> isNonExpansiveApp _ _ (Constructor _ _) = True
-> isNonExpansiveApp tyEnv n (Paren e) = isNonExpansiveApp tyEnv n e
-> isNonExpansiveApp tyEnv n (Typed e _) = isNonExpansiveApp tyEnv n e
-> isNonExpansiveApp tyEnv _ (Record _ _ fs) = isNonExpansive tyEnv fs
+> isNonExpansiveApp _ _ _ (Constructor _ _) = True
+> isNonExpansiveApp tcEnv tyEnv n (Paren e) = isNonExpansiveApp tcEnv tyEnv n e
+> isNonExpansiveApp tcEnv tyEnv n (Typed e _) =
+>   isNonExpansiveApp tcEnv tyEnv n e
+> isNonExpansiveApp tcEnv tyEnv _ (Record _ _ fs) =
+>   isNonExpansive tcEnv tyEnv fs
 >   -- FIXME: stricly speaking a record construction is non-expansive
 >   -- only if *all* field labels are present; for instance, (:){}
 >   -- probably should be considered expansive
-> isNonExpansiveApp tyEnv _ (Tuple es) = isNonExpansive tyEnv es
-> isNonExpansiveApp tyEnv _ (List _ es) = isNonExpansive tyEnv es
-> isNonExpansiveApp tyEnv n (Apply f e) =
->   isNonExpansive tyEnv e && isNonExpansiveApp tyEnv (n + 1) f
-> isNonExpansiveApp tyEnv n (InfixApply e1 op e2) =
->   isNonExpansiveApp tyEnv (n + 2) (infixOp op) &&
->   isNonExpansive tyEnv e1 && isNonExpansive tyEnv e2
-> isNonExpansiveApp tyEnv n (LeftSection e op) =
->   isNonExpansiveApp tyEnv (n + 1) (infixOp op) && isNonExpansive tyEnv e
-> isNonExpansiveApp _ n (Lambda _ ts _) = n < length ts
-> isNonExpansiveApp tyEnv n (Let ds e) =
->   isNonExpansive tyEnv ds && isNonExpansiveApp tyEnv n e
-> isNonExpansiveApp _ _ _ = False
+> isNonExpansiveApp tcEnv tyEnv _ (Tuple es) = isNonExpansive tcEnv tyEnv es
+> isNonExpansiveApp tcEnv tyEnv _ (List _ es) = isNonExpansive tcEnv tyEnv es
+> isNonExpansiveApp tcEnv tyEnv n (Apply f e) =
+>   isNonExpansiveApp tcEnv tyEnv (n + 1) f && isNonExpansive tcEnv tyEnv e
+> isNonExpansiveApp tcEnv tyEnv n (InfixApply e1 op e2) =
+>   isNonExpansiveApp tcEnv tyEnv (n + 2) (infixOp op) &&
+>   isNonExpansive tcEnv tyEnv e1 && isNonExpansive tcEnv tyEnv e2
+> isNonExpansiveApp tcEnv tyEnv n (LeftSection e op) =
+>   isNonExpansiveApp tcEnv tyEnv (n + 1) (infixOp op) &&
+>   isNonExpansive tcEnv tyEnv e
+> isNonExpansiveApp tcEnv tyEnv n (Lambda _ ts e) =
+>   n < length ts ||
+>   all isVarPattern ts && isNonExpansiveApp tcEnv tyEnv' (n - length ts) e
+>   where tyEnv' = foldr bindVarArity tyEnv (bv ts)
+> isNonExpansiveApp tcEnv tyEnv n (Let ds e) =
+>   isNonExpansive tcEnv tyEnv' ds && isNonExpansiveApp tcEnv tyEnv' n e
+>   where tyEnv' = foldr (bindDeclArity tcEnv) tyEnv ds
+> isNonExpansiveApp _ _ _ _ = False
+
+> bindDeclArity :: TCEnv -> Decl a -> ValueEnv -> ValueEnv
+> bindDeclArity _ (InfixDecl _ _ _ _) tyEnv = tyEnv
+> bindDeclArity _ (TypeSig _ _ _) tyEnv = tyEnv
+> bindDeclArity _ (FunctionDecl _ f eqs) tyEnv =
+>   bindArity f (eqnArity (head eqs)) tyEnv
+> bindDeclArity tcEnv (ForeignDecl _ _ _ _ f ty) tyEnv =
+>   bindArity f (foreignArity (expandPolyType tcEnv (QualTypeExpr [] ty))) tyEnv
+> bindDeclArity _ (PatternDecl _ t _) tyEnv = foldr bindVarArity tyEnv (bv t)
+> bindDeclArity _ (FreeDecl _ vs) tyEnv = foldr bindVarArity tyEnv vs
+> bindDeclArity _ (TrustAnnot _ _ _) tyEnv = tyEnv
+
+> bindVarArity :: Ident -> ValueEnv -> ValueEnv
+> bindVarArity v tyEnv = bindArity v 0 tyEnv
+
+> bindArity :: Ident -> Int -> ValueEnv -> ValueEnv
+> bindArity v n tyEnv = localBindTopEnv v (Value (qualify v) n undefined) tyEnv
 
 \end{verbatim}
 \paragraph{Class and instance declarations}
@@ -887,17 +913,19 @@ equivalent to $\emph{World}\rightarrow(t,\emph{World})$.
 > tcForeignFunct m tcEnv p cc ie f ty =
 >   do
 >     checkForeignType cc (unqualType ty')
->     updateSt_ (bindFun m f (foreignArity (unqualType ty')) (typeScheme ty'))
+>     updateSt_ (bindFun m f (foreignArity ty') (typeScheme ty'))
 >   where ty' = expandPolyType tcEnv (QualTypeExpr [] ty)
 >         checkForeignType cc ty
 >           | cc == CallConvPrimitive = return ()
 >           | ie == Just "dynamic" = checkCDynCallType tcEnv p cc ty
 >           | maybe False ('&' `elem`) ie = checkCAddrType tcEnv p ty
 >           | otherwise = checkCCallType tcEnv p cc ty
->         foreignArity ty
->           | isIO ty' = length tys + 1
->           | otherwise = length tys
->           where (tys,ty') = arrowUnapply ty
+
+> foreignArity :: QualType -> Int
+> foreignArity ty
+>   | isIO ty' = length tys + 1
+>   | otherwise = length tys
+>   where (tys,ty') = arrowUnapply (unqualType ty)
 >         isIO (TypeApply (TypeConstructor tc) _) = tc == qIOId
 >         isIO _ = False
 

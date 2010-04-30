@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Records.lhs 2921 2009-12-02 21:22:18Z wlux $
+% $Id: Records.lhs 2938 2010-04-30 12:41:28Z wlux $
 %
-% Copyright (c) 2001-2009, Wolfgang Lux
+% Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Records.lhs}
@@ -76,7 +76,8 @@ selector function for each field label.
 >           ConstrDecl p evs cx c [ty | FieldDecl _ ls ty <- fs, _ <- ls]
 > unlabelTopDecl m tyEnv (NewtypeDecl p cx tc tvs nc clss) =
 >   do
->     ds' <- newSelectorDecl m tyEnv p (qualifyWith m (nconstr nc))
+>     ds' <-
+>       mapM (selectorDecl m tyEnv p [qualifyWith m (nconstr nc)]) (nlabel nc)
 >     return (NewtypeDecl p cx tc tvs (unlabelNewConstrDecl nc) clss : ds')
 >   where unlabelNewConstrDecl (NewConstrDecl p c ty) = NewConstrDecl p c ty
 >         unlabelNewConstrDecl (NewRecordDecl p c _ ty) = NewConstrDecl p c ty
@@ -108,18 +109,6 @@ selector function for each field label.
 >     Nothing -> return []
 >   where (ls,_,ty) = conType c tyEnv
 >         (tys,ty0) = arrowUnapply (rawType ty)
-
-> newSelectorDecl :: ModuleIdent -> ValueEnv -> Position -> QualIdent
->                 -> UnlabelState [TopDecl Type]
-> newSelectorDecl m tyEnv p c
->   | l /= anonId =
->       do
->         v <- freshVar m "_#rec" (head tys)
->         return [matchDecl p l (constrPattern ty0 c [v]) (uncurry mkVar v)]
->   | otherwise = return []
->   where (l:_,_,ty) = conType c tyEnv
->         (tys,ty0) = arrowUnapply (rawType ty)
->         matchDecl p f t e = BlockDecl (funDecl p f [t] e)
 
 \end{verbatim}
 Within block level declarations, the compiler replaces record patterns

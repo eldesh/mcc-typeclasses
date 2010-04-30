@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2921 2009-12-02 21:22:18Z wlux $
+% $Id: Simplify.lhs 2939 2010-04-30 12:43:04Z wlux $
 %
-% Copyright (c) 2003-2009, Wolfgang Lux
+% Copyright (c) 2003-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Simplify.lhs}
@@ -80,7 +80,7 @@ Currently, the following optimizations are implemented:
 >   return [ForeignDecl p cc s ie f ty]
 > simplifyDecl m env (PatternDecl p t rhs) =
 >   do
->     rhs' <- simplifyRhs m env rhs
+>     rhs' <- simplifyRhs m env rhs >>= etaExpand m
 >     case (t,rhs') of
 >       (VariablePattern _ f,SimpleRhs _ (Lambda _ ts e) _) ->
 >         do
@@ -100,8 +100,8 @@ Currently, the following optimizations are implemented:
 >                  -> SimplifyState (Equation Type)
 > simplifyEquation m env (Equation p lhs rhs) =
 >   do
->     rhs' <- simplifyRhs m env rhs
->     etaExpand m (Equation p (simplifyLhs (qfv m rhs') lhs) rhs')
+>     rhs' <- simplifyRhs m env rhs >>= etaExpand m
+>     etaExpandEqn m p (simplifyLhs (qfv m rhs') lhs) rhs'
 
 > simplifyLhs :: [Ident] -> Lhs a -> Lhs a
 > simplifyLhs fvs (FunLhs f ts) = FunLhs f (map (simplifyPattern fvs) ts)
@@ -115,13 +115,13 @@ Currently, the following optimizations are implemented:
 
 \end{verbatim}
 \label{eta-expansion}
-After transforming the body of an equation defining a
-function\footnote{Recall that after making pattern matching explicit
-  each function is defined by exactly one equation.}, the compiler
-tries to $\eta$-expand the definition. Using $\eta$-expanded
-definitions has the advantage that the compiler can avoid intermediate
-lazy applications. For instance, if the \texttt{map} function were
-defined as follows
+After transforming the right hand side of a variable declaration and
+the body of a function equation\footnote{Recall that after making
+  pattern matching explicit each function is defined by exactly one
+  equation.}, respectively, the compiler tries to $\eta$-expand the
+definition. Using $\eta$-expanded definitions has the advantage that
+the compiler can avoid intermediate lazy applications. For instance,
+if the \texttt{map} function were defined as follows
 \begin{verbatim}
   map f = foldr (\x -> (f x :)) []
 \end{verbatim}
@@ -173,18 +173,28 @@ expression is non-expansive if it is either
   variable declarations of the form \texttt{$x$=$e$} where $e$ is a
   non-expansive expression.
 \end{itemize}
-A function definition can be $\eta$-expanded safely if its body is a
-non-expansive expression.
+A function or variable definition can be $\eta$-expanded safely if its
+body is a non-expansive expression.
 \begin{verbatim}
 
-> etaExpand :: ModuleIdent -> Equation Type -> SimplifyState (Equation Type)
-> etaExpand m (Equation p1 (FunLhs f ts) (SimpleRhs p2 e _)) =
+> etaExpandEqn :: ModuleIdent -> Position -> Lhs Type -> Rhs Type
+>              -> SimplifyState (Equation Type)
+> etaExpandEqn m p lhs rhs =
+>   case rhs of
+>     SimpleRhs p' (Lambda _ ts' e') _ ->
+>       do
+>         updateSt_ (changeArity m f (length ts + length ts'))
+>         return (Equation p (FunLhs f (ts ++ ts')) (SimpleRhs p' e' []))
+>       where FunLhs f ts = lhs
+>     _ -> return (Equation p lhs rhs)
+
+> etaExpand :: ModuleIdent -> Rhs Type -> SimplifyState (Rhs Type)
+> etaExpand m rhs@(SimpleRhs p e _) =
 >   do
 >     tyEnv <- fetchSt
 >     tcEnv <- liftSt envRt
 >     (ts',e') <- etaExpr m tcEnv tyEnv e
->     unless (null ts') (updateSt_ (changeArity m f (length ts + length ts')))
->     return (Equation p1 (FunLhs f (ts ++ ts')) (SimpleRhs p2 e' []))
+>     return (if null ts' then rhs else SimpleRhs p (Lambda p ts' e') [])
 
 > etaExpr :: ModuleIdent -> TCEnv -> ValueEnv -> Expression Type
 >         -> SimplifyState ([ConstrTerm Type],Expression Type)
@@ -393,7 +403,7 @@ in later phases of the compiler.
 >     tyEnv <- fetchSt
 >     tcEnv <- liftSt envRt
 >     (ts',e'') <- etaExpr m tcEnv tyEnv e'
->     let ts'' = map (simplifyPattern (qfv m e'')) (ts ++ ts')
+>     let ts'' = map (simplifyPattern (qfv m e'')) ts ++ ts'
 >     return (etaReduce m tyEnv p ts'' e'')
 > simplifyExpr m env (Let ds e) =
 >   simplifyLet m env (scc bv (qfv m) (foldr hoistDecls [] ds)) e

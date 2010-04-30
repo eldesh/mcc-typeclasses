@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 2921 2009-12-02 21:22:18Z wlux $
+% $Id: CaseMatch.lhs 2937 2010-04-30 12:32:53Z wlux $
 %
-% Copyright (c) 2001-2009, Wolfgang Lux
+% Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CaseMatch.lhs}
@@ -29,6 +29,7 @@ constraints.
 > import Curry
 > import CurryUtils
 > import List
+> import Maybe
 > import Monad
 > import PredefIdent
 > import PredefTypes
@@ -159,28 +160,35 @@ if it is not restricted by the guard expression.
 \begin{verbatim}
 
 > instance CaseMatch Rhs where
->   match m p rhs =
->     liftM (mkRhs p) (matchRhs m p rhs (return (prelFailed (typeOf rhs))))
+>   match m p rhs = liftM (mkRhs p) (matchRhs m p rhs Nothing)
 
 > matchRhs :: ModuleIdent -> Position -> Rhs Type
->          -> CaseMatchState (Expression Type)
+>          -> Maybe (CaseMatchState (Expression Type))
 >          -> CaseMatchState (Expression Type)
 > matchRhs m _ (SimpleRhs p e ds) _ = match m p (mkLet ds e)
 > matchRhs m p (GuardedRhs es ds) e0 =
 >   liftM2 mkLet (mapM (match m p) ds) (expandRhs m p es e0)
 
 > expandRhs :: ModuleIdent -> Position -> [CondExpr Type]
->           -> CaseMatchState (Expression Type)
+>           -> Maybe (CaseMatchState (Expression Type))
 >           -> CaseMatchState (Expression Type)
 > expandRhs m p es e0
->   | booleanGuards es = liftM2 expandBooleanGuards (mapM (match m p) es) e0
+>   | booleanGuards es =
+>       liftM2 expandBooleanGuards (mapM (match m p) es) (liftMaybe e0)
 >   | otherwise = liftM mkCond (mapM (match m p) es)
 >   where mkCond [CondExpr p g e] = Case g [caseAlt p successPattern e]
+>         liftMaybe (Just e0) = liftM Just e0
+>         liftMaybe Nothing = return Nothing
 
-> expandBooleanGuards :: [CondExpr Type] -> Expression Type -> Expression Type
-> expandBooleanGuards es e0 = foldr mkIfThenElse e0 es
->   where mkIfThenElse (CondExpr p g e1) e2 =
->           Case g [caseAlt p truePattern e1,caseAlt p falsePattern e2]
+> expandBooleanGuards :: [CondExpr Type] -> Maybe (Expression Type)
+>                     -> Expression Type
+> expandBooleanGuards [] (Just e0) = e0
+> expandBooleanGuards (CondExpr p g e1:es) e0 =
+>   Case g (caseAlt p truePattern e1 :
+>           map (caseAlt p falsePattern) (expand es e0))
+>   where expand es e0
+>           | null es = maybeToList e0
+>           | otherwise = [expandBooleanGuards es e0]
 
 > booleanGuards :: [CondExpr Type] -> Bool
 > booleanGuards [] = False
@@ -308,9 +316,8 @@ expression was \texttt{[]}.
 > injectRhs :: [Expression Type] -> [Decl Type] -> Rhs Type -> Rhs Type
 > injectRhs cs ds (SimpleRhs p e ds') = injectCond p cs e ds ds'
 > injectRhs cs ds (GuardedRhs es@(CondExpr p g e : _) ds')
->   | booleanGuards es = injectCond p cs (expandBooleanGuards es e0) ds ds'
+>   | booleanGuards es = injectCond p cs (expandBooleanGuards es Nothing) ds ds'
 >   | otherwise = injectCond p (cs ++ [g]) e ds ds'
->   where e0 = prelFailed (typeOf e)
 
 > injectCond :: Position -> [Expression Type] -> Expression Type -> [Decl Type]
 >            -> [Decl Type] -> Rhs Type
@@ -664,13 +671,14 @@ where the default alternative is redundant.
 > rigidMatch :: ModuleIdent -> Type -> ([(Type,Ident)] -> [(Type,Ident)])
 >            -> [(Type,Ident)] -> [Match' Type]
 >            -> CaseMatchState (Expression Type)
-> rigidMatch _ ty _      _  []     = return (prelFailed ty)
-> rigidMatch m ty prefix [] (a:as) =
->   matchAlt vs a (rigidMatch m ty id vs (map resetArgs as))
+> rigidMatch m ty prefix [] (a:as) = matchAlt vs a (matchFail vs as)
 >   where vs = prefix []
 >         resetArgs (p,prefix,ts,rhs) = (p,id,prefix ts,rhs)
 >         matchAlt vs (p,prefix,_,rhs) =
 >           matchRhs m p (foldr2 (bindVars p . snd) rhs vs (prefix []))
+>         matchFail vs as
+>           | null as = Nothing
+>           | otherwise = Just (rigidMatch m ty id vs (map resetArgs (a:as)))
 > rigidMatch m ty prefix (v:vs) as =
 >   case fst (head as') of
 >     VariablePattern _ _
@@ -776,9 +784,8 @@ Prelude entities
 > prelFromInteger ty = preludeFun [integerType] ty "fromInteger"
 > prelFromRational ty = preludeFun [rationalType] ty "fromRational"
 
-> unify, prelFailed, prelEnsure :: Type -> Expression Type
+> unify, prelEnsure :: Type -> Expression Type
 > unify ty = preludeFun [ty,ty] successType "=:<="
-> prelFailed ty = preludeFun [] ty "failed"
 > prelEnsure ty = preludeFun [ty] ty "ensureNotFree"
 
 > preludeFun :: [Type] -> Type -> String -> Expression Type

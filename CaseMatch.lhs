@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 2937 2010-04-30 12:32:53Z wlux $
+% $Id: CaseMatch.lhs 2941 2010-06-02 12:13:22Z wlux $
 %
 % Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -678,7 +678,7 @@ where the default alternative is redundant.
 >           matchRhs m p (foldr2 (bindVars p . snd) rhs vs (prefix []))
 >         matchFail vs as
 >           | null as = Nothing
->           | otherwise = Just (rigidMatch m ty id vs (map resetArgs (a:as)))
+>           | otherwise = Just (rigidMatch m ty id vs (map resetArgs as))
 > rigidMatch m ty prefix (v:vs) as =
 >   case fst (head as') of
 >     VariablePattern _ _

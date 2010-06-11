@@ -3,7 +3,7 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 2890 2009-08-05 15:58:32Z wlux $
+# $Id: cyi.in 2944 2010-06-11 10:38:14Z wlux $
 #
 # Copyright (c) 2002-2009, Wolfgang Lux
 # See LICENSE for the full license.
@@ -336,7 +336,7 @@ system ( ) {
 while test $# -gt 0; do
   case $1 in
     -[ilDILU] ) cyopts="$cyopts $1 $2"; shift;;
-    -[ilDILOU]* ) cyopts="$option $1";;
+    -[ilDILOU]* ) cyopts="$cyopts $1";;
     -* ) echo "$cyi: unknown option $1"; exit 1;;
     * ) break;;
   esac

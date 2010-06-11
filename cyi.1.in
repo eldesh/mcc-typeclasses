@@ -4,9 +4,9 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cyi.1.in 2373 2007-06-23 14:16:25Z wlux $
+.\" $Id: cyi.1.in 2945 2010-06-11 10:39:16Z wlux $
 .\"
-.\" Copyright (c) 2004-2007, Wolfgang Lux
+.\" Copyright (c) 2004-2010, Wolfgang Lux
 .\" See LICENSE for the full license.
 .\"
 .Dd 17.11.05               \" DATE 
@@ -241,6 +241,17 @@ displays the following warning at startup when it is appropriate.
 .Dl \& \& For instance, use \(rs\(rsx -> x for a lambda abstraction
 .Dl \& \& and '\(rs\(rsn' for the linefeed character.
 .Pp
+Due to the way the
+.Nm
+shell script processes commands entered at its prompt, it is necessary
+to escape single quotes in module names and paths. E.g., in order to
+load module
+.Li Module'
+you must enter the command line
+.Li :load Module\(rs' .
+Similarly, white space in paths must be escaped or quoted (between
+single or double quotes).
+.Pp
 Command line editing and history require support from the
 .Ic read
 command of the shell, which executes the
@@ -248,9 +259,3 @@ command of the shell, which executes the
 script. This is available only for Gnu Bash and Korn shells except for
 the public domain version. Command line editing also works for the Z
 shell, but without history.
-.Pp
-Changing the compiler's search path for library modules with the
-.Ic :set
-command does not change the search path used by the
-.Ic :load
-command.

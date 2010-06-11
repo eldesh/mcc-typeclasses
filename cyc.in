@@ -3,14 +3,14 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 2883 2009-08-05 15:46:52Z wlux $
+# $Id: cyc.in 2945 2010-06-11 10:39:16Z wlux $
 #
-# Copyright (c) 2002-2009, Wolfgang Lux
+# Copyright (c) 2002-2010, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
 # Configuration parameters
-cyc=`basename $0`
+cyc=`basename "$0"`
 version=@PACKAGE_VERSION@
 build="%BUILD_DATE%"
 prefix=@prefix@
@@ -28,6 +28,7 @@ srcdir="@srcdir@"
 export CURRY_IMPORT_PATH
 
 # Local variables
+echo=:
 exec=
 verbose=
 toC=
@@ -79,6 +80,13 @@ incr ( ) {
     eval $1=`expr "$_x" + "$_y"`
 }
 
+quote ( ) {
+    case $1 in
+      *\'* ) echo "$1" | sed "s/'/'\\\\''/g;s/^/'/;s/$/'/";;
+      * ) echo "'$1'";;
+    esac
+}
+
 # Option processing
 while test $# -gt 0; do
   case $1 in
@@ -93,8 +101,8 @@ while test $# -gt 0; do
     -q ) ;; # option ignored for compatibility with cymake
 
     # (C-)Preprocessor definitions
-    -[DU] ) ccopts="$ccopts $1 $2"; shift;;
-    -[DU]* ) ccopts="$ccopts $1";;
+    -[DU] ) ccopts="$ccopts $1 "`quote "$2"`; shift;;
+    -[DU]* ) ccopts="$ccopts "`quote "$1"`;;
 
     # Special definitions
     -gg ) debug=-g;;
@@ -123,58 +131,78 @@ while test $# -gt 0; do
     -trusted | --trusted ) cyccopts="$cyccopts --trusted";;
 
     # goal options
-    -M ) modules="$modules $2"; shift;;
-    -M* ) modules=$modules\ `expr X"$1" : X'-M\(.*\)'`;;
+    -M ) modules="$modules "`quote "$2"`; shift;;
+    -M* ) arg=`expr X"$1" : X'-M\(.*\)'`; modules="$modules "`quote "$arg"`;;
     -e ) goal=$2; shift;;
     -e* ) goal=`expr X"$1" : X'-e\(.*\)'`;;
     -T ) typeIt=$2; shift;;
     -T* ) typeIt=`expr X"$1" : X'-T\(.*\)'`;;
 
     # C Compiler options
-    -cc ) cc=$2; shift;;
+    -cc ) cc=`quote "$2"`; shift;;
     -ccopt-* | --ccopt-* )
-      ccopts=$ccopts\ `expr X"$1" : X'-*ccopts*\(-.*\)'`;;
-    -ccopt | --ccopt ) ccopts="$ccopts $2"; shift;;
+      arg=`expr X"$1" : X'-*ccopt\(-.*\)'`; ccopts="$ccopts "`quote "$arg"`;;
+    -ccopt | --ccopt ) ccopts="$ccopts "`quote "$2"`; shift;;
     -ccopts-* | --ccopts-* )
-      ccopts=$ccopts\ `expr X"$1" : X'-*ccopts*\(-.*\)' | tr , ' '`;;
-    -ccopts | --ccopts ) ccopts=$ccopts\ `echo "$2" | tr , ' '`; shift;;
-    -arch ) ccopts="$ccopts $1 $2"; shift;;
-    -O* ) ccopts="$ccopts $1";;
+      ifs=$IFS; IFS=,
+      for arg in `expr X"$1" : X'-*ccopts*\(-.*\)'`; do
+	ccopts="$ccopts "`quote "$arg"`
+      done
+      IFS=$ifs;;
+    -ccopts | --ccopts )
+      ifs=$IFS; IFS=,
+      for arg in $2; do ccopts="$ccopts "`quote "$arg"`; done
+      IFS=$ifs; shift;;
+    -arch ) ccopts="$ccopts $1 "`quote "$2"`; shift;;
+    -O* ) ccopts="$ccopts "`quote "$1"`;;
 
     # Include files and imported modules
-    -I ) ccopts="$ccopts -I$2"; shift;;
-    -I* ) ccopts="$ccopts $1";;
-    -i ) ccopts="$ccopts -I$2"; imports="$imports -i $2"; shift;;
-    -i* ) ccopts=$ccopts\ -I`expr X"$1" : X'-i\(.*\)'`; imports="$imports $1";;
+    -I ) ccopts="$ccopts -I"`quote "$2"`; shift;;
+    -I* ) ccopts="$ccopts "`quote "$1"`;;
+    -i )
+      arg=`quote "$2"`; shift
+      ccopts="$ccopts -I$arg"; imports="$imports -i $arg";;
+    -i* )
+      arg=`expr X"$1" : X'-i\(.*\)'`; arg=`quote "$arg"`
+      ccopts=$ccopts\ -I$arg; imports="$imports -i$arg";;
     -P )
-      ccopts="$ccopts -I$1"; ldopts="$ldopts -L$2"
-      imports="$imports -i $2"; shift;;
-    -P* )
-      arg=`expr X"$1" : X'-P\(.*\)'`
+      arg=`quote "$2"`; shift
       ccopts="$ccopts -I$arg"; ldopts="$ldopts -L$arg"
       imports="$imports -i $arg";;
-    -F ) ccopts="$ccopts -F$2"; shift;;
-    -F* ) ccopts="$ccopts $1";;
+    -P* )
+      arg=`expr X"$1" : X'-P\(.*\)'`; arg=`quote "$arg"`
+      ccopts="$ccopts -I$arg"; ldopts="$ldopts -L$arg"
+      imports="$imports -i $arg";;
+    -F ) ccopts="$ccopts -F"`quote "$2"`; shift;;
+    -F* ) ccopts="$ccopts "`quote "$1"`;;
 
     # Linker options
     -ldopt-* | --ldopt-* )
-      ldopts=$ldopts\ `expr X"$1" : X'-*ldopts*\(-.*\)'`;;
-    -ldopt | --ldopt ) ldopts="$ldopts $2"; shift;;
+      opt=`expr X"$1" : X'-*ldopt\(-.*\)'`
+      ldopts="$ldopts "`quote "$opt"`;;
+    -ldopt | --ldopt ) ldopts="$ldopts "`quote "$2"`; shift;;
     -ldopts-* | --ldopts-* )
-      ldopts=$ldopts\ `expr X"$1" : X'-*ldopts*\(-.*\)' | tr , ' '`;;
-    -ldopts | --ldopts ) ldopts=$ldopts\ `echo "$2" | tr , ' '`; shift;;
-    -[LR] ) ldopts="$ldopts $1$2"; shift;;
-    -[LR]* ) ldopts="$ldopts $1";;
-    -l ) libs="$libs -l$2"; shift;;
-    -l* ) libs="$libs $1";;
-    -framework ) ldopts="$ldopts $1 $2"; shift;;
+      ifs=$IFS; IFS=,
+      for opt in `expr X"$1" : X'-*ldopts*\(-.*\)'`; do
+	ldopts="$ldopts "`quote "$opt"`
+      done
+      IFS=$ifs;;
+    -ldopts | --ldopts )
+      ifs=$IFS; IFS=,
+      for opt in $2; do ccopts="$ccopts "`quote "$opt"`; done
+      IFS=$ifs; shift;;
+    -[LR] ) ldopts="$ldopts $1"`quote "$2"`; shift;;
+    -[LR]* ) ldopts="$ldopts "`quote "$1"`;;
+    -l ) libs="$libs -l"`quote "$2"`; shift;;
+    -l* ) libs="$libs "`quote "$1"`;;
+    -framework ) ldopts="$ldopts $1 "`quote "$2"`; shift;;
 
     # Runtime system options for cycc
-    -H* ) rtopts="$rtopts $1";;
+    -H* ) rtopts="$rtopts "`quote "$1"`;;
     +RTS )
 	shift
-	while test $# -gt 0 -a "$1" != "-RTS"; do
-	  rtopts="$rtopts $1";
+	while test $# -gt 0 && test "$1" != "-RTS"; do
+	  rtopts="$rtopts "`quote "$1"`;
 	  shift
 	done;;
 
@@ -190,24 +218,25 @@ while test $# -gt 0; do
     -t* ) tsize=`expr X"$1" : X'-t\(.*\)'`; check_size -t tsize;;
 
     # Pass all other flags to the C compiler
-    -* ) ccopts="$ccopts $1";;
+    -* ) ccopts="$ccopts "`quote "$1"`;;
 
     # Save all files
-    * ) files="$files $1";;
+    * ) files="$files "`quote "$1"`;;
   esac
   shift
 done
 
 # Add runtime options to cycc
+cycc=`quote "$cycc"`
 test -n "$rtopts" && cycc="$cycc +RTS $rtopts -RTS"
 
 # Eventually display the compiler version
 if test -n "$verbose"; then
   echo 1>&2 "$cyc version $version (built on $build)"
-  test "$exec" && verbose=
+  test "$exec" || echo='echo 1>&2'
 fi
 # Check for conflicting options
-if test -n "$goal" -a -n "$typeIt"; then
+if test -n "$goal" && test -n "$typeIt"; then
   echo 1>&2 "$cyc: conflicting options -e and -T specified"
   exit 1
 fi
@@ -223,10 +252,10 @@ fi
 ifs=$IFS
 IFS=:
 for d in $CURRY_INCLUDE_PATH; do 
-  ccopts="$ccopts -I$d"
+  ccopts="$ccopts -I"`quote "$d"`
 done
 for d in $CURRY_LIBRARY_PATH; do 
-  ldopts="$ldopts -L$d"
+  ldopts="$ldopts -L"`quote "$d"`
 done
 IFS=$ifs
 
@@ -244,14 +273,14 @@ fi
 trap 'rc=$?; test "$temps" && rm -f $temps; exit $rc' 0 1 2 3 15
 
 # Process all files
-set dummy $files; shift
-if test -n "$ofile" -a -n "$toC$toS$toO" -a $# -gt 1; then
+eval set dummy "$files"; shift
+if test -n "$ofile" && test -n "$toC$toS$toO" && test $# -gt 1; then
   echo 1>&2 "$cyc: cannot specify -o with -c, -S, or -C and multiple input files"
   exit 1
 fi
 
 i=0
-for f in $files; do
+for f in "$@"; do
   i=`expr $i + 1`
   stem=
   curry_ccopts=
@@ -259,8 +288,9 @@ for f in $files; do
   # Compile Curry source files into C code
   case $f in
     *.curry | *.lcurry )
-      curry_ccopts=-I`dirname $f`
-      modules="$modules $f"
+      dir=`dirname "$f"`
+      curry_ccopts=-I`quote "$dir"`
+      modules="$modules "`quote "$f"`
       stem=`expr "$f" : '\(.*\)\.curry'`
       stem=$stem`expr "$f" : '\(.*\)\.lcurry'`
       if test -n "$toC"; then
@@ -274,7 +304,7 @@ for f in $files; do
 	  target=$stem.c
 	else
           target=/tmp/cyc$$_$i.c
-	  temps="$temps $target"
+	  temps="$temps "`quote "$target"`
 	fi
       fi
       # Cygpath workaround: converts paths to Windows-style
@@ -285,8 +315,10 @@ for f in $files; do
         target2=$target
         f2=$f
       fi
-      test -n "$verbose" && echo 1>&2 $cycc $imports $cyccopts -o $target2 $f2
-      $exec $cycc $imports $cyccopts -o $target2 $f2 || exit $?
+      target2=`quote "$target2"`
+      f2=`quote "$f2"`
+      eval $echo "$cycc" "$imports" "$cyccopts" -o "$target2" "$f2"
+      eval $exec "$cycc" "$imports" "$cyccopts" -o "$target2" "$f2" || exit $?
       f=$target
       ;;
   esac
@@ -308,18 +340,20 @@ for f in $files; do
 	  target=$stem.o
 	else
           target=/tmp/cyc$$_$i.o
-	  temps="$temps $target"
+	  temps="$temps "`quote "$target"`
 	fi
       fi
-      test -n "$verbose" && echo 1>&2 $cc $debug $curry_ccopts $ccopts $saveTemps $c -o $target $f
-      $exec $cc $debug $curry_ccopts $ccopts $saveTemps $c -o $target $f || exit $?
+      target2=`quote "$target"`
+      f2=`quote "$f"`
+      eval $echo "$cc" $debug "$curry_ccopts" "$ccopts" $saveTemps $c -o "$target2" "$f2"
+      eval $exec "$cc" $debug "$curry_ccopts" "$ccopts" $saveTemps $c -o "$target2" "$f2" || exit $?
       f=$target
       ;;
   esac
   test -n "$toS$toO" && continue
 
   # Add all files for the link step
-  linkfiles="$linkfiles $f"
+  linkfiles="$linkfiles "`quote "$f"`
 done
 
 # Eventually link the program or compute the goal's type
@@ -331,14 +365,15 @@ if test -n "$typeIt"; then
     else
       ofile2=$ofile
     fi
-    target="-o $ofile2"
+    target="-o "`quote "$ofile2"`
   else
     target=
   fi
-  test -n "$verbose" && echo 1>&2 $cycc $imports $cyccopts -t\""$typeIt"\" $modules $target
-  $exec $cycc $imports $cyccopts -t"$typeIt" $modules $target || exit $?
+  typeIt2=`quote "$typeIt"`
+  eval $echo "$cycc" "$imports" "$cyccopts" -t"\\\"$typeIt2\\\"" "$modules" "$target" || exit $?
+  eval $exec "$cycc" "$imports" "$cyccopts" -t"$typeIt2" "$modules" "$target" || exit $? || exit $?
 elif test -z "$toC$toS$toO"; then
-  temps="$temps /tmp/cyc$$.c"
+  test -n "$debug$saveTemps" || temps="$temps /tmp/cyc$$.c"
   target=/tmp/cyc$$.c
   # Cygpath workaround: converts path to Windows-style
   if test -n "@CYGPATH@"; then
@@ -346,8 +381,10 @@ elif test -z "$toC$toS$toO"; then
   else
     target2=$target
   fi
-  test -n "$verbose" && echo 1>&2 $cycc $imports $cyccopts -e\""$goal"\" $modules -o $target2
-  $exec $cycc $imports $cyccopts -e"$goal" $modules -o $target2 || exit $?
+  goal=`quote "$goal"`
+  target2=`quote "$target2"`
+  eval $echo "$cycc" "$imports" "$cyccopts" -e"\\\"$goal\\\"" "$modules" -o "$target2"
+  eval $exec "$cycc" "$imports" "$cyccopts" -e"$goal" "$modules" -o "$target2" || exit $?
 
   test -n "$hsize" && ldopts="$ldopts -DDEFAULT_HEAPSIZE=$hsize"
   test -n "$ssize" && ldopts="$ldopts -DDEFAULT_STACKSIZE=$ssize"
@@ -355,9 +392,9 @@ elif test -z "$toC$toS$toO"; then
   test -n "$pfail" && ldopts="$ldopts -DDEFAULT_PRINT_FAIL=$pfail"
   test -n "$stats" && ldopts="$ldopts -DDEFAULT_SHOW_STATS=$stats"
   test -n "$trace" && ldopts="$ldopts -DDEFAULT_DO_TRACE=$trace"
-  test -n "$ofile" && ldopts="$ldopts -o $ofile"
-  test -n "$verbose" && echo 1>&2 $cc $debug $ccopts $ldopts /tmp/cyc$$.c $linkfiles $libs $dbglib -lcurry @LIBS@
-  $exec $cc $debug $ccopts $ldopts /tmp/cyc$$.c $linkfiles $libs $dbglib -lcurry @LIBS@ || exit $?
+  test -n "$ofile" && ldopts="$ldopts -o "`quote "$ofile"`
+  eval $echo "$cc" $debug "$ccopts" "$ldopts" /tmp/cyc$$.c "$linkfiles" "$libs" $dbglib -lcurry @LIBS@
+  eval $exec "$cc" $debug "$ccopts" "$ldopts" /tmp/cyc$$.c "$linkfiles" "$libs" $dbglib -lcurry @LIBS@ || exit $?
 fi
 
 # done

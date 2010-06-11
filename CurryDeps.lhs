@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryDeps.lhs 2821 2009-05-07 16:31:23Z wlux $
+% $Id: CurryDeps.lhs 2945 2010-06-11 10:39:16Z wlux $
 %
-% Copyright (c) 2002-2009, Wolfgang Lux
+% Copyright (c) 2002-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryDeps.lhs}
@@ -166,12 +166,10 @@ object code.
 
 > makeDeps :: SourceEnv -> String
 > makeDeps mEnv =
->   unlines (filter (not . null) (map (depsLine . snd) (envToList mEnv)))
->   where depsLine (Source fn ms) =
+>   unlines [depsLine fn ms | Source fn ms <- map snd (envToList mEnv)]
+>   where depsLine fn ms =
 >           objectName False fn ++ ": " ++ fn ++ " " ++
 >           unwords (filter (not . null) (map interf ms))
->         depsLine (Interface _) = []
->         depsLine Unknown = []
 >         interf m = maybe [] interfFile (lookupEnv m mEnv)
 >         interfFile (Source fn _) = interfName fn
 >         interfFile (Interface fn) = fn
@@ -255,10 +253,10 @@ the first error.
 >         sources = [(fn,ms) | (_,Source fn ms) <- mEnv]
 >         cmds = zipWith compile [1..] sources ++ map link (maybeToList target)
 >         compile i (fn,ms) =
->           unwords ("compile" : show i : show n : fn : ofn : ifns)
+>           command ("compile" : show i : show n : fn : ofn : ifns)
 >           where ofn = objectName debug fn
 >                 ifns = catMaybes (map interf ms)
->         link fn = unwords ("link" : show n : show n : fn : ms ++ os)
+>         link fn = command ("link" : show n : show n : fn : ms ++ os)
 >           where m0 = (undefined,Source fn undefined)
 >                 ms = catMaybes (map modul (maybe [m0] (const mEnv) goal))
 >                 os = reverse (map (objectName debug . fst) sources)
@@ -271,6 +269,13 @@ the first error.
 >             Just (Interface fn) -> Just fn
 >             Just Unknown -> Nothing
 >             Nothing -> Nothing
+
+> command :: [String] -> String
+> command = unwords . map quote
+
+> quote :: String -> String
+> quote cs = "'" ++ foldr quoteChar "'" cs
+>   where quoteChar c cs = if c == '\'' then "'\\''" ++ cs else c:cs
 
 \end{verbatim}
 The function \texttt{makeCleanScript} returns a shell script that
@@ -286,7 +291,7 @@ where the script is executed.
 > makeCleanScript :: Bool -> Maybe String -> Maybe FilePath
 >                 -> [(ModuleIdent,Source)] -> String
 > makeCleanScript debug _ target mEnv =
->   unwords ("remove" : foldr (files . snd) (maybeToList target) mEnv)
+>   command ("remove" : foldr (files . snd) (maybeToList target) mEnv)
 >   where d = if debug then 2 else 0
 >         files (Source fn _) fs =
 >           drop d [interfName fn,objectName False fn,objectName True fn] ++ fs

@@ -3,9 +3,9 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 2883 2009-08-05 15:46:52Z wlux $
+# $Id: cymake.in 2945 2010-06-11 10:39:16Z wlux $
 #
-# Copyright (c) 2002-2009, Wolfgang Lux
+# Copyright (c) 2002-2010, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -51,7 +51,23 @@ files=
 temps=
 
 # Functions
-noecho ( ) { return 0; }
+quote1 ( ) {
+  case $1 in
+    *\'* ) echo "$1" | sed "s/'/'\\\\''/g;s/^/'/;s/$/'/";;
+    * ) echo "'$1'";;
+  esac
+}
+
+quote ( ) {
+  res=
+  for arg in "$@"; do
+    case $arg in
+      *\'* ) res="$res${res:+ }"`quote1 "$arg"`;;
+      * ) res="$res${res:+ }'$arg'";;
+    esac
+  done
+  echo "$res"
+}
 
 check_source ( ) {
   stem=`expr "$1" : '\(.*\)'$2`
@@ -68,7 +84,7 @@ remove ( ) {
     * ) target=$f;;
   esac
   for f in "$@"; do
-    if test "$target" = "$f" -a -n "$output"; then f=$output; fi
+    if test "$target" = "$f" && test -n "$output"; then f=$output; fi
     if test -f "$f"; then
       $echo rm -f "$f"
       $exec rm -f "$f"
@@ -78,33 +94,37 @@ remove ( ) {
 
 compile ( ) {
   i=$1 n=$2 source=$3 object=$4; shift 4
-  if $newer "$object" "$source" "$@"; then
+  if "$newer" "$object" "$source" "$@"; then
     $progress $i $n skipping "$source"
   else
     $progress $i $n compiling "$source"
-    $echo $cyc $cyopts -c "$source" -o "$object"
-    $exec $cyc $cyopts -c "$source" -o "$object"
+    source=`quote1 "$source"` object=`quote1 "$object"`
+    eval $echo "$cyc" "$cyopts" -c "$source" -o "$object"
+    eval $exec "$cyc" "$cyopts" -c "$source" -o "$object"
   fi
 }
 
 link ( ) {
   if test -n "$output"; then target=$output; else target=$3; fi;
-  i=$1 n=$2; shift 3
+  i=$1 n=$2; shift 3; objs=`quote "$@"`
   if test -n "$goal"; then
     $progress $i $n linking "$target"
-    $echo $cyc $cyopts $ldopts -e "$goal" -o "$target" "$@" $libs
-    $exec $cyc $cyopts $ldopts -e "$goal" -o "$target" "$@" $libs
+    goal=`quote1 "$goal"` target=`quote1 "$target"`
+    eval $echo "$cyc" "$cyopts" "$ldopts" -e "\\\"$goal\\\"" -o "$target" "$objs" "$libs"
+    eval $exec "$cyc" "$cyopts" "$ldopts" -e "$goal" -o "$target" "$objs" "$libs"
   elif test -n "$typeIt"; then
     $progress $i $n linking ""
-    if test -n "$output"; then set dummy -o "$output" "$@"; shift; fi
-    $echo $cyc $cyopts -T "$typeIt" "$@"
-    $exec $cyc $cyopts -T "$typeIt" "$@"
-  elif test -z "$linkAlways" && $newer "$target" "$@"; then
+    if test -n "$output"; then objs="-o "`quote1 "$output"`" $objs"; shift; fi
+    typeIt=`quote1 "$typeIt"`
+    eval $echo "$cyc" "$cyopts" -T "\\\"$typeIt\\\"" "$objs"
+    eval $exec "$cyc" "$cyopts" -T "$typeIt" "$objs"
+  elif test -z "$linkAlways" && "$newer" "$target" "$@"; then
     $progress $i $n skipping ""
   else
     $progress $i $n linking "$target"
-    $echo $cyc $cyopts $ldopts -o "$target" "$@" $libs
-    $exec $cyc $cyopts $ldopts -o "$target" "$@" $libs
+    target=`quote1 "$target"`
+    eval $echo "$cyc" "$cyopts" "$ldopts" -o "$target" "$objs" "$libs"
+    eval $exec "$cyc" "$cyopts" "$ldopts" -o "$target" "$objs" "$libs"
   fi
 }
 
@@ -125,41 +145,47 @@ while test $# -gt 0; do
     -o ) output="$2"; shift;;
     -o* ) output=`expr X"$1" : X'-o\(.*\)'`;;
     -n ) exec=echo;;
+    -###) exec=quote;;
     -v ) verbose=-v; echo=echo cyopts="$cyopts -v";;
-    -q ) echo=noecho;;
+    -q ) echo=:;;
 
     # Include files and imported modules
-    -i | -P ) cyopts="$cyopts $1 $2"; imports="$imports $1 $2"; shift;;
-    -i* | -P* ) cyopts="$cyopts $1"; imports="$imports $1";;
+    -i | -P )
+      arg=`quote1 "$2"`; shift
+      cyopts="$cyopts $1 $arg"; imports="$imports $1 $arg";;
+    -i* | -P* )
+      arg=`quote1 "$1`; cyopts="$cyopts $arg"; imports="$imports $arg";;
 
     # Linker options
-    -ldopt-* | -ldopts-* | --ldopt-* | --ldopts-* ) ldopts="$ldopts $1";;
-    -ldopt | -ldopts | --ldopt | --ldopts ) ldopts="$ldopts $1 $2"; shift;;
-    -[LR] ) ldopts="$ldopts $1$2"; shift;;
-    -[LR]* ) ldopts="$ldopts $1";;
-    -l ) libs="$libs -l$2"; shift;;
-    -l* ) libs="$libs $1";;
+    -ldopt-* | -ldopts-* | --ldopt-* | --ldopts-* )
+      ldopts="$ldopts "`quote1 "$1"`;;
+    -ldopt | -ldopts | --ldopt | --ldopts )
+      ldopts="$ldopts $1 "`quote1 "$2"`; shift;;
+    -[LR] ) ldopts="$ldopts $1"`quote1 "$2"`; shift;;
+    -[LR]* ) ldopts="$ldopts "`quote1 "$1"`;;
+    -l ) libs="$libs -l"`quote1 "$2"`; shift;;
+    -l* ) libs="$libs "`quote1 "$1"`;;
 
     # Pass all other flags to the Curry compiler
     # NB some options require an argument; must keep this list in sync with cyc
     -[DUIFhkt] | -cc | -ccopt | --ccopt | -ccopts | --ccopts | -arch | -framework )
-	 cyopts="$cyopts $1 $2"; shift;;
-    -* ) cyopts="$cyopts $1";;
+	 cyopts="$cyopts $1 "`quote1 "$2"`; shift;;
+    -* ) cyopts="$cyopts "`quote1 "$1"`;;
 
     +RTS )
 	shift
 	cyopts="$cyopts +RTS"
-	while test $# -gt 0 -a "$1" != "-RTS"; do
-	  cyopts="$cyopts $1";
+	while test $# -gt 0 && test "$1" != "-RTS"; do
+	  cyopts="$cyopts "`quote1 "$1"`;
 	  shift
 	done
 	cyopts="$cyopts -RTS";;
 
     # Pass archive files and shared libraries to the linker
-    *.a | *.so | *.dylib | *.dll ) libs="$libs $1";;
+    *.a | *.so | *.dylib | *.dll ) libs="$libs "`quote1 "$1"`;;
 
     # Save all files
-    * ) files="$files $1";;
+    * ) files="$files "`quote1 "$1"`;;
   esac
   shift
 done
@@ -168,10 +194,12 @@ if test $# -gt 1; then
   echo 1>&2 "$cymake: specify only one of -M, --clean, and --find"
   exit 1
 fi
+cyc=`quote1 "$cyc"`
+cymk=`quote1 "$cymk"`
 
 # Eventually display the compiler version
 test -n "$verbose" && echo 1>&2 "$cymake version $version (built on $build)"
-test "$exec" && verbose= echo=noecho
+test "$exec" && verbose= echo=:
 
 # Generate only dependencies if requested
 if test -n "$depend$find"; then
@@ -179,9 +207,10 @@ if test -n "$depend$find"; then
     echo 1>&2 "$cymake: no targets"
     exit 1
   fi
-  test -n "$output" && mkopts="$mkopts -o $output"
-  test -n "$verbose" && echo 1>&2 $cymk $depend $find $mkopts $imports $files
-  $exec $cymk $depend $find $mkopts $imports $files
+  test -n "$output" && mkopts="$mkopts -o "`quote1 "$output"`
+  test -n "$verbose" && \
+    eval echo 1>&2 "$cymk" $depend $find "$mkopts" "$imports" "$files"
+  eval $exec "$cymk" $depend $find "$mkopts" "$imports" "$files"
   exit $?
 fi
 
@@ -196,20 +225,20 @@ fi
 trap 'rc=$?; rm -f /tmp/cymake$$; exit $rc' 0 1 2 3 15
 
 # Process all targets
-set dummy $files; shift
-if test -n "$output" -a $# -gt 1; then
+eval set dummy "$files"; shift
+if test -n "$output" && test $# -gt 1; then
   echo 1>&2 "$cymake: cannot specify -o with multiple targets"
   exit 1
 fi
-if test -n "$goal" -a $# -gt 1; then
+if test -n "$goal" && test $# -gt 1; then
   echo 1>&2 "$cymake: cannot specify -e with multiple targets"
   exit 1
 fi
-if test -n "$typeIt" -a $# -gt 1; then
+if test -n "$typeIt" && test $# -gt 1; then
   echo 1>&2 "$cymake: cannot specify -T with multiple targets"
   exit 1
 fi
-if test -n "$goal" -a -n "$typeIt"; then
+if test -n "$goal" && test -n "$typeIt"; then
   echo 1>&2 "$cymake: conflicting options -e and -T specified"
   exit 1
 fi
@@ -218,14 +247,15 @@ fi
 if test $# -eq 0; then
   if test -n "$clean"; then
     test -n "$output" || output=a.out
-    remove $output
+    remove "$output"
   else
     link 1 1 a.out
   fi
   exit $?
 fi
 
-for f in $files; do
+eval set dummy "$files"; shift
+for f in "$@"; do
   suffixes=".lcurry .curry"
   case $f in
     *.curry ) suffix=.curry suffixes=.curry;;
@@ -234,12 +264,16 @@ for f in $files; do
     * ) suffix=;;
   esac
   check_source "$f" "$suffix" "$suffixes" || exit $?
+  f=`quote1 "$f"`
   if test -n "$goal$typeIt"; then
-    test -n "$verbose" && echo 1>&2 $cymk $clean $mkopts -e \""$goal$typeIt"\" $imports $f
-    $cymk $clean $mkopts -e "$goal$typeIt" -o /tmp/cymake$$ $imports $f
+    g=`quote1 "$goal$typeIt"`
+    test -n "$verbose" && \
+      eval echo 1>&2 "$cymk" $clean "$mkopts" -e "\\\"$g\\\"" "$imports" "$f"
+    eval "$cymk" $clean "$mkopts" -e "$g" -o /tmp/cymake$$ "$imports" "$f"
   else
-    test -n "$verbose" && echo 1>&2 $cymk $clean $mkopts $imports $f
-    $cymk $clean $mkopts -o /tmp/cymake$$ $imports $f
+    test -n "$verbose" && \
+      eval echo 1>&2 "$cymk" $clean "$mkopts" "$imports" "$f"
+    eval "$cymk" $clean "$mkopts" -o /tmp/cymake$$ "$imports" "$f"
   fi
 
   . /tmp/cymake$$

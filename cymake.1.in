@@ -4,9 +4,9 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cymake.1.in 2609 2008-02-03 23:22:17Z wlux $
+.\" $Id: cymake.1.in 2945 2010-06-11 10:39:16Z wlux $
 .\"
-.\" Copyright (c) 2004-2008, Wolfgang Lux
+.\" Copyright (c) 2004-2010, Wolfgang Lux
 .\" See LICENSE for the full license.
 .\"
 .Dd 17.11.05               \" DATE 
@@ -75,6 +75,12 @@ understands the following options:
 .Bl -tag -width -indent
 .It Fl n
 No execution mode. Print commands but do not execute them.
+.It Fl ###
+No execution mode. Print commands but do not execute them. Differs
+from
+.Fl n
+in that all arguments are quoted. This allows to capture the commands
+and execute them in another shell.
 .It Fl q
 Quiet mode. Do not print commands before executing them.
 .It Fl M

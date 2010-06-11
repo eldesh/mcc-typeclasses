@@ -3,9 +3,9 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 2944 2010-06-11 10:38:14Z wlux $
+# $Id: cyi.in 2945 2010-06-11 10:39:16Z wlux $
 #
-# Copyright (c) 2002-2009, Wolfgang Lux
+# Copyright (c) 2002-2010, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -43,11 +43,11 @@ pager=${PAGER-/bin/cat}
 editor=${VISUAL-${EDITOR-/usr/bin/vi}}
 srcdir=
 source=
+target=
 cyopts=
-interfaces=
 module=
-objects=
-dobjects=
+command=
+dcommand=
 prompt='> '
 goal=
 
@@ -126,16 +126,27 @@ help ( ) {
   test $rawread = yes || backslash_warning
 }
 
+quote ( ) {
+  case $1 in
+    *\'* ) echo "$1" | sed "s/'/'\\\\''/g;s/^/'/;s/$/'/";;
+    * ) echo "'$1'";;
+  esac
+}
+
 compile_source ( ) {
-  test -z "$source" || (cd "$srcdir" && $cymake $* $cyopts $source)
+  test -z "$source" || (cd "$srcdir" && "$cymake" $* $cyopts "$source")
 }
 
 compile_target ( ) {
-  (cd "$srcdir" && $cyc $cyopts $interfaces -M "$source" "$@")
+  if test -n "$target"; then
+    (cd "$srcdir" && "$cymake" -q $cyopts "$@" "$target")
+  else
+    (cd "${srcdir:-.}" && "$cymake" -q $cyopts "$@")
+  fi
 }
 
 find_module ( ) {
-  $cymake --find $cyopts "$1" | sed 's/^.*: //'
+  "$cymake" --find $cyopts "$1" | sed 's/^.*: //'
 }
 
 set_goal ( ) {
@@ -147,15 +158,8 @@ set_goal ( ) {
 	return 1
       fi
       ;;
-    * ) goal=$1;;
+    * ) goal=$1; qgoal=`quote "$goal"`;;
   esac
-}
-
-trap 'rc=$?; rm -f /tmp/cyi$$@EXEEXT@; exit $rc' 0 1 15
-trap 'rm -f /tmp/cyi$$@EXEEXT@' 2 3
-run_goal ( ) {
-  compile_target -e "$goal" $* -o /tmp/cyi$$ && /tmp/cyi$$
-  rm -f /tmp/cyi$$@EXEEXT@
 }
 
 set_module ( ) {
@@ -173,15 +177,15 @@ set_module ( ) {
 }
 
 load ( ) {
-  eval set dummy $1; shift
+  eval set dummy "$1"; shift
   case $# in
     0 )
-      srcdir=.
+      srcdir=
       source=
+      target=
       module=Prelude
-      interfaces=
-      objects=
-      dobjects=
+      command=
+      dcommand=
       prompt="$module> "
       ;;
     1 )
@@ -190,7 +194,14 @@ load ( ) {
         "" ) echo "missing source file for $1";;
 	*.curry | *.lcurry )
 	    if test -f "$m"; then
-              srcdir=`pwd`; source=$m
+              srcdir=`pwd`
+	      source=$m
+	      case $m in
+		*.curry ) target=`expr "$m" : '\(.*\)\.curry'`;;
+		*.lcurry ) target=`expr "$m" : '\(.*\)\.lcurry'`;;
+	      esac
+	      command=
+	      dcommand=
             else
 	      echo "source file $m does not exist"
 	    fi
@@ -198,9 +209,9 @@ load ( ) {
 	*.icurry )
 	    srcdir=`pwd`
 	    source=
-	    interfaces=-M$m
-	    objects=
-	    dobjects=
+	    target=
+	    command=
+	    dcommand=
 	    set_module "$m";;
 	* )
 	  echo >&2 "$cyi: internal error: unexpected result from cymake --find"
@@ -213,18 +224,17 @@ load ( ) {
 reload ( ) {
   if test -n "$source"; then
     compile_source || return
-    set dummy `compile_source -M | sed 's/.*\.curry / /;s/.*\.lcurry / /'`
-    shift
-    interfaces=
-    for m in $*; do
-      case "$interfaces " in
-        *" -M$m "* ) ;;
-        * ) interfaces="$interfaces -M$m";;
-      esac
-    done
-    objects=`compile_source -M | sed 's/:.*$//'`
-    dobjects=
     set_module "$source"
+    command=
+    dcommand=
+    eval set dummy "`compile_target -a -### | tail -1`"; shift
+    while test $# -gt 0; do
+      case $1 in
+	-o ) shift;;
+	* ) command="$command "`quote "$1"`
+      esac
+      shift
+    done
   fi
 }
 
@@ -233,10 +243,10 @@ clean ( ) {
 }
 
 interface ( ) {
-  eval set dummy $1; shift
+  eval set dummy "$1"; shift
   case $# in
-    0 ) d=$srcdir; if test -n "$source"; then m=$source; else m=$module; fi;;
-    1 ) d=.; m=$1;;
+    0 ) d=${srcdir:-.}; if test -n "$source"; then m=$source; else m=$module; fi;;
+    1 ) d=. m=$1;;
     * ) echo "too many modules"; return;;
   esac
   i=`cd "$d" && find_module "$m"`
@@ -250,7 +260,7 @@ interface ( ) {
       return;;
   esac
   if test -n "$i" && (cd "$d" && test -f "$i"); then
-    (cd "$d"; $pager $i)
+    (cd "$d"; $pager "$i")
   else
     echo "Interface of module $m not found";
     return 1
@@ -258,7 +268,7 @@ interface ( ) {
 }
 
 edit ( ) {
-  eval set dummy $1; shift
+  eval set dummy "$1"; shift
   case $# in
     0 ) test -n "$source" || { echo "no source file"; return; }
 	(cd "$srcdir" && $editor "$source");;
@@ -267,23 +277,37 @@ edit ( ) {
   esac
 }
 
+trap 'rc=$?; rm -f /tmp/cyi$$@EXEEXT@; exit $rc' 0 1 15
+trap 'rm -f /tmp/cyi$$@EXEEXT@' 2 3
 evaluate ( ) {
-  set_goal "$1" && run_goal $objects
+  set_goal "$1" || return
+  eval "${command:-compile_target}" -e "$qgoal" -o /tmp/cyi$$ && /tmp/cyi$$
+  rm -f /tmp/cyi$$@EXEEXT@
 }
 
 debug ( ) {
+  set_goal "$1" || return
   if test -n "$source"; then
-    echo "Preparing $source for debugging; this may take some time..."
-    if test -z "$dobjects"; then
+    if test -z "$dcommand"; then
+      echo "Preparing $source for debugging; this may take some time..."
       compile_source --debug || return
-      dobjects=`compile_source -M | sed 's/\.o:.*$/.d.o/'`
+      eval set dummy "`compile_target -a --debug -### | tail -1`"; shift
+      while test $# -gt 0; do
+	case $1 in
+	  -o ) shift;;
+	  * ) dcommand="$dcommand "`quote "$1"`
+	esac
+	shift
+      done
     fi
   fi
-  set_goal "$1" && run_goal --debug $dobjects
+  eval "${dcommand:-compile_target --debug}" -e "$qgoal" -o /tmp/cyi$$ && /tmp/cyi$$
+  rm -f /tmp/cyi$$@EXEEXT@
 }
 
 type_goal ( ) {
-  set_goal "$1" && compile_target -T "$goal"
+  set_goal "$1" || return
+  eval "${command:-compile_target}" -T "$qgoal"
 }
 
 show_options ( ) {
@@ -314,22 +338,22 @@ unset_options ( ) {
 }
 
 chdir ( ) {
-  set dummy $line; shift
+  set dummy "$1" $1; shift
   case $# in
-    0 ) pwd;;
+    1 ) pwd;;
     * )
      # First check whether we can change to the new directory in a subshell.
      # This is a workaround for some brain-dead old Bourne shells that
      # exit immediately when an internal command like cd fails.
-     ( eval cd $line ) && eval cd $line;;
+     ( eval cd "$1" ) && eval cd "$1";;
   esac
 }
 
 system ( ) {
-  set dummy $line; shift
+  set dummy "$1" $1; shift
   case $# in
-    0 ) ${SHELL-/bin/sh};;
-    * ) /bin/sh -c "$line";;
+    1 ) ${SHELL-/bin/sh};;
+    * ) /bin/sh -c "$1";;
   esac
 }
 
@@ -398,7 +422,7 @@ interpret ( ) {
     :u | :un | :unset ) shift; unset_options $*;;
     :cd ) line=`expr "$line" : $1'\([^;]*\)'`; chdir "$line";;
     :!* ) line=`expr "$line" : ':![ 	]*\(.*\)'`; system "$line";;
-    :v | :version ) $cyc -v;;
+    :v | :version ) "$cyc" -v;;
     :q | :quit ) quit;;
     :d ) line=`expr "$line" : ':d\(.*\)'`; debug "  $line";;
     :debug ) line=`expr "$line" : ':debug\(.*\)'`; debug "      $line";;

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2955 2010-06-12 22:40:11Z wlux $
+% $Id: DTransform.lhs 2956 2010-06-12 22:41:10Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2010, Wolfgang Lux
@@ -51,10 +51,11 @@ children.
 \begin{verbatim}
 
 > dTransform :: (QualIdent -> Bool) -> Module -> Module
-> dTransform trusted (Module m is ds) = Module m is' ds'
+> dTransform trusted (Module m is ds) =
+>   Module m is' (ds' ++ SplitAnnot : generateAuxFuncs m (numAuxFuncs m ds'))
 >   where ms = m:is
 >         is' = imp preludeMIdent ++ imp debugPreludeMIdent ++ is
->         ds' = debugDecls trusted ds
+>         ds' = debugDecls trusted m ds
 >         imp m = [m | m `notElem` ms]
 
 \end{verbatim}
@@ -63,55 +64,27 @@ The debugging transformation is applied independently to each
 declaration in the module. Type declarations are not changed by the
 transformation except for the types of higher order arguments of data
 constructors, which are transformed in order to ensure a type correct
-transformed program. In addition, auxiliary functions are introduced
-to handle partial applications of the data constructors. Function
-declarations are changed by the program transformation and auxiliary
-functions are introduced for their partial applications, too. Finally,
-foreign function declarations cannot be transformed at all, but a
-wrapper function pairing the result of the foreign function with a
-suitable computation tree is introduced for each foreign function.
-Auxiliary functions for partial applications of the foreign functions
-are provided as well.
+transformed program. Function declarations are changed by the program
+transformation. Finally, foreign function declarations cannot be
+transformed at all, but a wrapper function pairing the result of the
+foreign function with a suitable computation tree is introduced for
+each foreign function.
 
 \begin{verbatim}
 
-> data SymbolType = IsFunction | IsConstructor deriving (Eq,Show)
+> debugDecls :: (QualIdent -> Bool) -> ModuleIdent -> [Decl] -> [Decl]
+> debugDecls trusted m ds = concatMap (debugDecl trusted m) ds
 
-> debugDecls :: (QualIdent -> Bool) -> [Decl] -> [Decl]
-> debugDecls trusted ds = concatMap (debugDecl trusted) ds
-
-> debugDecl :: (QualIdent -> Bool) -> Decl -> [Decl]
-> debugDecl _ (DataDecl tc n cs) = DataDecl tc n cs' : concat ds'
->   where (cs',ds') = unzip (map (debugConstrDecl ty0) cs)
->         ty0 = TypeConstructor tc (map TypeVariable [0..n-1])
-> debugDecl _ (TypeDecl tc n ty) = [TypeDecl tc n (transformType ty)]
-> debugDecl trusted (FunctionDecl f vs ty e) =
->   generateAuxFuncs (f,IsFunction,length vs,ty) ++
->   [debugFunction trusted f vs ty e]
-> debugDecl _ (ForeignDecl f cc s ty) =
->   generateAuxFuncs (f,IsFunction,n',ty) ++
->   generateForeign f cc s n' ty
+> debugDecl :: (QualIdent -> Bool) -> ModuleIdent -> Decl -> [Decl]
+> debugDecl _ _ (DataDecl tc n cs) = [DataDecl tc n cs']
+>   where cs' = [ConstrDecl c (map transformType tys) | ConstrDecl c tys <- cs]
+> debugDecl _ _ (TypeDecl tc n ty) = [TypeDecl tc n (transformType ty)]
+> debugDecl trusted m (FunctionDecl f vs ty e) =
+>   [debugFunction trusted m f vs ty e]
+> debugDecl _ _ (ForeignDecl f cc s ty) = generateForeign f cc s n' ty
 >   where n = typeArity ty
 >         n' = if isIOType (resultType ty) then n + 1 else n
-> debugDecl _ SplitAnnot = [SplitAnnot]
-
-> debugConstrDecl :: Type -> ConstrDecl -> (ConstrDecl,[Decl])
-> debugConstrDecl ty0 (ConstrDecl c tys) =
->   (ConstrDecl c (map transformType tys),
->    generateAuxFuncs (c,IsConstructor,length tys,ty))
->   where ty = normalizeType (foldr TypeArrow ty0 tys)
-
-> normalizeType :: Type -> Type
-> normalizeType ty = rename (nub (tvars ty)) ty
->   where rename tvs (TypeConstructor c tys) =
->           TypeConstructor c (map (rename tvs) tys)
->         rename tvs (TypeVariable tv) =
->           TypeVariable (fromJust (elemIndex tv tvs))
->         rename tvs (TypeArrow ty1 ty2) =
->           TypeArrow (rename tvs ty1) (rename tvs ty2)
->         tvars (TypeConstructor _ tys) = concatMap tvars tys
->         tvars (TypeVariable tv) = [tv]
->         tvars (TypeArrow ty1 ty2) = tvars ty1 ++ tvars ty2
+> debugDecl _ _ SplitAnnot = [SplitAnnot]
 
 \end{verbatim}
 
@@ -137,13 +110,13 @@ Some auxiliary functions widely used throughout the module.
 > debugIOFunctionqId :: QualIdent
 > debugIOFunctionqId = debugQualPreludeName debugIOFunctionName
 
-> debugRenameId :: String -> Ident -> Ident
-> debugRenameId suffix ident =
->   renameIdent (mkIdent (debugPrefix ++ name ident ++ suffix)) (uniqueId ident)
+> debugRenameId :: Ident -> Ident
+> debugRenameId ident =
+>   renameIdent (mkIdent (debugPrefix ++ name ident)) (uniqueId ident)
 
-> debugRenameqId :: String -> QualIdent -> QualIdent
-> debugRenameqId suffix qIdent =
->   maybe qualify qualifyWith mIdent' (debugRenameId suffix ident')
+> debugRenameqId :: QualIdent -> QualIdent
+> debugRenameqId qIdent =
+>   maybe qualify qualifyWith mIdent' (debugRenameId ident')
 >   where (mIdent',ident') = splitQualIdent qIdent
 
 \end{verbatim}
@@ -244,7 +217,7 @@ code for the debugger (cf. Sect.~\ref{sec:desugar}).
 >   where (arity,ty) =
 >           head [(length vs,ty) | FunctionDecl f vs ty _ <- ds, f == mainId']
 >         mainId = qualifyWith m goalId
->         mainId' = qualifyWith m (debugRenameId "" goalId)
+>         mainId' = qualifyWith m (debugRenameId goalId)
 >         mainType = TypeConstructor qIOId [TypeConstructor qUnitId []]
 >         mainExpr = debugMain arity ty (Function mainId' arity)
 
@@ -335,47 +308,87 @@ the same arity as the original primitives.
 \end{verbatim}
 
 Auxiliary functions are introduced to deal with higher order parameter
-applications. In particular, the transformation introduces $n-1$
-auxiliary functions $f'_0, \dots, f'_{n-2}$ for a (foreign) function
-$f$ with arity $n$. These functions are necessary in order to make the
-transformed program type correct and are defined by equations $f'_i\,x
-= (f'_{i+1}\,x, \texttt{Void})$, where $f'$ is used instead of
-$f'_{n-1}$. For the same reason, the transformation introduces $n$
-auxiliary functions $c'_0, \dots, c'_{n-1}$ for each data constructor
-$c$ with arity $n$. Their definitions are similar to those of the
-auxiliary functions for transformed functions except for using $c$ in
-place of $c'_n$.
-
-The next function gets the current module identifier, a qualified
-identifier, a value indicating whether the identifier denotes a
-function or a constructor, its arity \texttt{n}, and its type, and
-generates the new auxiliary functions.
+applications. In particular, the transformation replaces every partial
+application $C\,e_1\dots e_k$ of a constructor with arity $n>k$ by an
+application $@_{n-k}\;(C\,e_1\dots e_k)$ and every partial application
+$f\,e_1\dots e_k$ of a (foreign or user defined) function with arity
+$n>k+1$ by an application $@_{n-k-1}\;(f\,e_1\dots e_k)$. The family
+of auxiliary functions $@_i$ is defined by the equations
+\begin{eqnarray*}
+  @_1\, f\, x &=& (f\, x, \texttt{Void}) \\
+  @_{i+1}\, f\, x &=& (@_i (f x), \texttt{Void})
+\end{eqnarray*}
+and is necessary in order to make the transformed program type
+correct.
 
 \begin{verbatim}
 
-> generateAuxFuncs :: (QualIdent,SymbolType,Int,Type) -> [Decl]
-> generateAuxFuncs (f,IsFunction,n,ty) =
->   map (generateAuxFunc f ty (Function f n)) [0..n-2]
-> generateAuxFuncs (c,IsConstructor,n,ty) =
->   map (generateAuxFunc c ty (Constructor c n)) [0..n-1]
+> generateAuxFuncs :: ModuleIdent -> Int -> [Decl]
+> generateAuxFuncs m n = map (generateAuxFunc m) [1..n]
 
-> generateAuxFunc :: QualIdent -> Type -> Expression -> Int -> Decl
-> generateAuxFunc f ty e i = FunctionDecl f' vs ty' e'
->   where f' = qidAuxiliaryFunction f i
->         vs = map (mkIdent . ("_"++) . show) [0..i]
->         ty' = transformFunType (i+1) ty
->         app = debugFirstPhase (createApply e (map Variable vs))
->         e' = debugBuildPairExp app void
+> generateAuxFunc :: ModuleIdent -> Int -> Decl
+> generateAuxFunc m i = FunctionDecl f [v1,v2] ty' e
+>   where f = qIdAuxiliaryFunction m i
+>         v1 = mkIdent "f"; v2 = mkIdent "x"
+>         ty = foldr1 TypeArrow (map TypeVariable [0..i])
+>         ty' = TypeArrow ty (transformFunType 1 ty)
+>         e = debugBuildPairExp (wrapPartial m (i - 1) (apply v1 v2)) void
+>         apply v1 v2 = Apply (Variable v1) (Variable v2)
 
-> qidAuxiliaryFunction :: QualIdent -> Int -> QualIdent
-> qidAuxiliaryFunction f n = debugRenameqId ('#':show n) f
+> wrapPartial :: ModuleIdent -> Int -> Expression -> Expression
+> wrapPartial m d
+>   | d > 0 = Apply (Function (qIdAuxiliaryFunction m d) 2)
+>   | otherwise = id
 
-> extractApply :: Expression -> [Expression] -> (Expression,[Expression])
-> extractApply (Apply e1 e2) l = extractApply e1 (e2:l)
-> extractApply e1 l = (e1,l)
+> qIdAuxiliaryFunction :: ModuleIdent -> Int -> QualIdent
+> qIdAuxiliaryFunction m n =
+>   qualifyWith m (debugRenameId (mkIdent (if n == 1 then "@" else '@':show n)))
 
-> createApply :: Expression -> [Expression] -> Expression
-> createApply exp lExp = foldl Apply exp lExp
+\end{verbatim}
+
+The compiler determines the needed auxiliary functions by looking for
+applications of the form $(@_n \, e)$ in the transformed code and
+computing the maximum index $n$ being used.
+
+\begin{verbatim}
+
+> numAuxFuncs :: ModuleIdent -> [Decl] -> Int
+> numAuxFuncs m ds =
+>   maximum (0 : usedAuxFuncs (qualName (qIdAuxiliaryFunction m 1)) ds)
+
+> class AuxFuncs a where
+>   usedAuxFuncs :: String -> a -> [Int]
+
+> instance AuxFuncs a => AuxFuncs [a] where
+>   usedAuxFuncs pre = concatMap (usedAuxFuncs pre)
+
+> instance AuxFuncs Decl where
+>   usedAuxFuncs _ (DataDecl _ _ _) = []
+>   usedAuxFuncs _ (TypeDecl _ _ _) = []
+>   usedAuxFuncs pre (FunctionDecl _ _ _ e) = usedAuxFuncs pre e
+>   usedAuxFuncs _ (ForeignDecl _ _ _ _) = []
+>   usedAuxFuncs _ SplitAnnot = []
+
+> instance AuxFuncs Expression where
+>   usedAuxFuncs _ (Literal _) = []
+>   usedAuxFuncs _ (Variable _) = []
+>   usedAuxFuncs pre (Function f n) =
+>     [index (drop (length pre) f') | n == 2 && pre `isPrefixOf` f']
+>     where f' = qualName f
+>           index cs = if null cs then 1 else read cs
+>   usedAuxFuncs _ (Constructor _ _) = []
+>   usedAuxFuncs pre (Apply e1 e2) = usedAuxFuncs pre e1 ++ usedAuxFuncs pre e2
+>   usedAuxFuncs pre (Case _ e as) = usedAuxFuncs pre e ++ usedAuxFuncs pre as
+>   usedAuxFuncs pre (Choice es) = usedAuxFuncs pre es
+>   usedAuxFuncs pre (Exist _ e) = usedAuxFuncs pre e
+>   usedAuxFuncs pre (Let _ ds e) = usedAuxFuncs pre ds ++ usedAuxFuncs pre e
+>   usedAuxFuncs pre (SrcLoc _ e) = usedAuxFuncs pre e
+
+> instance AuxFuncs Alt where
+>   usedAuxFuncs pre (Alt _ e) = usedAuxFuncs pre e
+
+> instance AuxFuncs Binding where
+>   usedAuxFuncs pre (Binding _ e) = usedAuxFuncs pre e
 
 \end{verbatim}
 
@@ -470,53 +483,51 @@ phases.
 
 \begin{verbatim}
 
-> debugFunction :: (QualIdent -> Bool) -> QualIdent -> [Ident] -> Type
->               -> Expression -> Decl
-> debugFunction trusted f vs ty e = FunctionDecl f' vs ty' e'
+> debugFunction :: (QualIdent -> Bool) -> ModuleIdent
+>               -> QualIdent -> [Ident] -> Type -> Expression -> Decl
+> debugFunction trusted m f vs ty e = FunctionDecl f' vs ty' e'
 >   where f' = changeFunctionqId f
 >         ty' = transformFunType (length vs) ty
->         e' = debugSecondPhase f (trusted f) vs ty' (debugFirstPhase e)
+>         e' = debugSecondPhase m f (trusted f) vs ty' (debugFirstPhase e)
 
 > changeFunctionqId :: QualIdent -> QualIdent
-> changeFunctionqId f = debugRenameqId "" f
+> changeFunctionqId f = debugRenameqId f
 
 \end{verbatim}
 
 The first phase of the transformation process changes the names of all
-function and partial constructor applications.
+function applications.
 
 \begin{verbatim}
 
 > debugFirstPhase :: Expression -> Expression
-> debugFirstPhase e = firstPhase 0 e
+> debugFirstPhase = renameFunction
 
 > class FirstPhase a where
->   firstPhase :: Int -> a -> a
+>   renameFunction :: a -> a
 
 > instance FirstPhase a => FirstPhase [a] where
->   firstPhase d = map (firstPhase d)
+>   renameFunction = map renameFunction
 
 > instance FirstPhase Expression where
->   firstPhase _ (Literal l) = Literal l
->   firstPhase _ (Variable v) = Variable v
->   firstPhase d (Function f n)
->     | d < n-1         = Function (qidAuxiliaryFunction f d) (d+1)
->     | otherwise       = Function (changeFunctionqId f) n
->   firstPhase d (Constructor c n)
->     | d < n     = Function (qidAuxiliaryFunction c d) (d+1)
->     | otherwise = Constructor c n
->   firstPhase d (Apply e1 e2) = Apply (firstPhase (d+1) e1) (firstPhase 0 e2)
->   firstPhase _ (Case rf e as) = Case rf (firstPhase 0 e) (firstPhase 0 as)
->   firstPhase _ (Choice es) = Choice (firstPhase 0 es)
->   firstPhase _ (Exist vs e) = Exist vs (firstPhase 0 e)
->   firstPhase _ (Let rec ds e) = Let rec (firstPhase 0 ds) (firstPhase 0 e)
->   firstPhase _ (SrcLoc p e) = SrcLoc p (firstPhase 0 e)
+>   renameFunction (Literal l) = Literal l
+>   renameFunction (Variable v) = Variable v
+>   renameFunction (Function f n) = Function (changeFunctionqId f) n
+>   renameFunction (Constructor c n) = Constructor c n
+>   renameFunction (Apply e1 e2) = Apply (renameFunction e1) (renameFunction e2)
+>   renameFunction (Case rf e as) =
+>     Case rf (renameFunction e) (renameFunction as)
+>   renameFunction (Choice es) = Choice (renameFunction es)
+>   renameFunction (Exist vs e) = Exist vs (renameFunction e)
+>   renameFunction (Let rec ds e) =
+>     Let rec (renameFunction ds) (renameFunction e)
+>   renameFunction (SrcLoc p e) = SrcLoc p (renameFunction e)
 
 > instance FirstPhase Alt where
->   firstPhase d (Alt t e) = Alt t (firstPhase d e)
+>   renameFunction (Alt t e) = Alt t (renameFunction e)
 
 > instance FirstPhase Binding where
->   firstPhase d (Binding v e) = Binding v (firstPhase d e)
+>   renameFunction (Binding v e) = Binding v (renameFunction e)
 
 \end{verbatim}
 
@@ -552,22 +563,22 @@ The auxiliary function \texttt{ioCTree}, which is also defined in
 the list of subcomputations of the computation tree \texttt{t1}.
 \begin{verbatim}
 
-> debugSecondPhase :: QualIdent -> Bool -> [Ident] -> Type -> Expression
->                  -> Expression
-> debugSecondPhase f trust vs ty e
+> debugSecondPhase :: ModuleIdent -> QualIdent -> Bool -> [Ident] -> Type
+>                  -> Expression -> Expression
+> debugSecondPhase m f trust vs ty e
 >   | isIOType (resultType ty) && length vs > typeArity ty =
->       newLocalDeclarationsEtaIO f trust vs e
->   | otherwise = newLocalDeclarations f trust vs e
+>       newLocalDeclarationsEtaIO m f trust vs e
+>   | otherwise = newLocalDeclarations m f trust vs e
 
-> newLocalDeclarations :: QualIdent -> Bool -> [Ident] -> Expression
->                      -> Expression
-> newLocalDeclarations f trust vs e = snd (newBindings createNode "" [] 0 e)
+> newLocalDeclarations :: ModuleIdent -> QualIdent -> Bool -> [Ident]
+>                      -> Expression -> Expression
+> newLocalDeclarations m f trust vs e = snd (newBindings createNode m "" [] 0 e)
 >   where createNode = if trust then createEmptyNode else createTree f vs
 
-> newLocalDeclarationsEtaIO :: QualIdent -> Bool -> [Ident] -> Expression
->                           -> Expression
-> newLocalDeclarationsEtaIO f trust vs e =
->   etaExpandIO (newLocalDeclarations f trust (init vs) e') v
+> newLocalDeclarationsEtaIO :: ModuleIdent -> QualIdent -> Bool -> [Ident]
+>                           -> Expression -> Expression
+> newLocalDeclarationsEtaIO m f trust vs e =
+>   etaExpandIO (newLocalDeclarations m f trust (init vs) e') v
 >   where (e',v) = etaReduceIO e
 
 > etaExpandIO :: Expression -> Expression -> Expression
@@ -645,40 +656,41 @@ of \texttt{aux$N$}, \texttt{result$N$}, and \texttt{tree$N$}.
 
 > class SecondPhase a where
 >   newBindings :: (String -> Ident -> [Expression] -> Expression)
->               -> String -> [Expression] -> Int -> a -> (Int,a)
+>               -> ModuleIdent -> String -> [Expression] -> Int -> a -> (Int,a)
 
 > instance SecondPhase Expression where
->   newBindings createNode p cts n e@(Literal _) =
+>   newBindings createNode _ p cts n e@(Literal _) =
 >     composeExp createNode p n cts e
->   newBindings createNode p cts n e@(Variable _) =
+>   newBindings createNode _ p cts n e@(Variable _) =
 >     composeExp createNode p n cts e
->   newBindings createNode p cts n f@(Function _ a)
->     | a > 0 = composeExp createNode p n cts f
+>   newBindings createNode m p cts n f@(Function _ a)
+>     | a > 0 = composeExp createNode p n cts (wrapPartial m (a - 1) f)
 >     | otherwise = (n2,lets1 e')
 >     where (n1,cts1,lets1,v) = decomposeExp Strict n f
 >           (n2,e') = composeExp createNode p n1 (cts++cts1) v
->   newBindings createNode p cts n e@(Constructor _ _) =
->     composeExp createNode p n cts e
->   newBindings createNode p cts n e@(Apply _ _) = (n2,lets1 e'')
->     where (n1,cts1,lets1,e') = extractBindings Strict n e
+>   newBindings createNode m p cts n e@(Constructor _ a) =
+>     composeExp createNode p n cts (wrapPartial m a e)
+>   newBindings createNode m p cts n e@(Apply _ _) = (n2,lets1 e'')
+>     where (n1,cts1,lets1,e') = extractBindings Strict m n e
 >           (n2,e'') = composeExp createNode p n1 (cts++cts1) e'
->   newBindings createNode p cts n (Case rf e as) = (n2,lets1 (Case rf e' as'))
->     where (n1,cts1,lets1,e') = extractBindings Strict n e
->           (n2,as') = mapAccumL (newBindings createNode p (cts++cts1)) n1 as
->   newBindings createNode p cts n (Choice es) = (n',Choice es')
->     where (n',es') = mapAccumL (newBindings createNode p cts) n es
->   newBindings createNode p cts n (Exist vs e) = (n',Exist vs e')
->     where (n',e') = newBindings createNode p cts n e
->   newBindings createNode p cts n (Let rec ds e) =
+>   newBindings createNode m p cts n (Case rf e as) =
+>     (n2,lets1 (Case rf e' as'))
+>     where (n1,cts1,lets1,e') = extractBindings Strict m n e
+>           (n2,as') = mapAccumL (newBindings createNode m p (cts++cts1)) n1 as
+>   newBindings createNode m p cts n (Choice es) = (n',Choice es')
+>     where (n',es') = mapAccumL (newBindings createNode m p cts) n es
+>   newBindings createNode m p cts n (Exist vs e) = (n',Exist vs e')
+>     where (n',e') = newBindings createNode m p cts n e
+>   newBindings createNode m p cts n (Let rec ds e) =
 >     (n2,letBindings rec lets1 ds' e')
->     where (n1,cts1,lets1,ds') = extractBindings Lazy n ds
->           (n2,e') = newBindings createNode p (cts++cts1) n1 e
->   newBindings createNode _ cts n (SrcLoc p e) = (n',SrcLoc p e')
->     where (n',e') = newBindings createNode p cts n e
+>     where (n1,cts1,lets1,ds') = extractBindings Lazy m n ds
+>           (n2,e') = newBindings createNode m p (cts++cts1) n1 e
+>   newBindings createNode m _ cts n (SrcLoc p e) = (n',SrcLoc p e')
+>     where (n',e') = newBindings createNode m p cts n e
 
 > instance SecondPhase Alt where
->   newBindings createNode p cts n (Alt t e) = (n',Alt t e')
->     where (n',e') = newBindings createNode p cts n e
+>   newBindings createNode m p cts n (Alt t e) = (n',Alt t e')
+>     where (n',e') = newBindings createNode m p cts n e
 
 > composeExp :: (String -> Ident -> [Expression] -> Expression)
 >            -> String -> Int -> [Expression] -> Expression -> (Int,Expression)
@@ -691,52 +703,54 @@ of \texttt{aux$N$}, \texttt{result$N$}, and \texttt{tree$N$}.
 
 
 > class SecondPhaseArg a where
->   extractBindings :: Mode -> Int -> a -> SecondPhaseResult a
+>   extractBindings :: Mode -> ModuleIdent -> Int -> a -> SecondPhaseResult a
 
 > instance SecondPhaseArg a => SecondPhaseArg [a] where
->   extractBindings _    n []     = (n,[],id,[])
->   extractBindings mode n (x:xs) = (n2,cts1++cts2,lets1 . lets2,x':xs')
->     where (n1,cts1,lets1,x')  = extractBindings mode n x
->           (n2,cts2,lets2,xs') = extractBindings mode n1 xs
+>   extractBindings _    _ n []     = (n,[],id,[])
+>   extractBindings mode m n (x:xs) = (n2,cts1++cts2,lets1 . lets2,x':xs')
+>     where (n1,cts1,lets1,x')  = extractBindings mode m n x
+>           (n2,cts2,lets2,xs') = extractBindings mode m n1 xs
 
 > instance SecondPhaseArg Expression where
->   extractBindings mode n e = (n2,cts1++cts2,lets1 . lets2,e')
+>   extractBindings mode m n e = (n2,cts1++cts2,lets1 . lets2,e')
 >     where (f,es) = extractApply e []
->           (n1,cts1,lets1,es') = extractBindings Lazy n es
->           (n2,cts2,lets2,e') = extractBindingsApply mode n1 f es'
+>           (n1,cts1,lets1,es') = extractBindings Lazy m n es
+>           (n2,cts2,lets2,e') = extractBindingsApply mode m n1 f es'
 
 > instance SecondPhaseArg Binding where
->   extractBindings _ n (Binding v e) = (n',cts',lets',Binding v e')
->     where (n',cts',lets',e') = extractBindings Lazy n e
+>   extractBindings _ m n (Binding v e) = (n',cts',lets',Binding v e')
+>     where (n',cts',lets',e') = extractBindings Lazy m n e
 
 
-> extractBindingsApply :: Mode -> Int -> Expression -> [Expression]
->                      -> SecondPhaseResult Expression
+> extractBindingsApply :: Mode -> ModuleIdent -> Int -> Expression
+>                      -> [Expression] -> SecondPhaseResult Expression
 
-> extractBindingsApply mode n e@(Literal _) args = applyValue mode n e args
-> extractBindingsApply mode n e@(Variable _) args = applyValue mode n e args
-> extractBindingsApply mode n e@(Constructor _ _) args =
->   applyValue mode n (createApply e args) []
-> extractBindingsApply mode n f@(Function _ arity) args
->   | length args < arity = applyValue mode n (createApply f args) []
+> extractBindingsApply mode _ n e@(Literal _) args = applyValue mode n e args
+> extractBindingsApply mode _ n e@(Variable _) args = applyValue mode n e args
+> extractBindingsApply mode m n e@(Constructor _ arity) args =
+>   applyValue mode n (wrapPartial m d (createApply e args)) []
+>   where d = arity - length args
+> extractBindingsApply mode m n f@(Function _ arity) args
+>   | d > 0 = applyValue mode n (wrapPartial m (d - 1) (createApply f args)) []
 >   | otherwise = applyExp mode n (createApply f nArgs) extraArgs
->   where (nArgs,extraArgs) = splitAt arity args
-> extractBindingsApply mode n e@(Case _ _ _) args = applyExp mode n' e' args
->   where (n',e') = newBindings createEmptyNode "" [] n e
-> extractBindingsApply mode n e@(Choice _) args = applyExp mode n' e' args
->   where (n',e') = newBindings createEmptyNode "" [] n e
-> extractBindingsApply mode n (Exist vs e) args =
+>   where d = arity - length args
+>         (nArgs,extraArgs) = splitAt arity args
+> extractBindingsApply mode m n e@(Case _ _ _) args = applyExp mode n' e' args
+>   where (n',e') = newBindings createEmptyNode m "" [] n e
+> extractBindingsApply mode m n e@(Choice _) args = applyExp mode n' e' args
+>   where (n',e') = newBindings createEmptyNode m "" [] n e
+> extractBindingsApply mode m n (Exist vs e) args =
 >   (n2,cts1++cts2,Exist vs . lets1 . lets2,e'')
->   where (n1,cts1,lets1,e') = extractBindings mode n e
+>   where (n1,cts1,lets1,e') = extractBindings mode m n e
 >         (n2,cts2,lets2,e'') = applyValue mode n1 e' args
-> extractBindingsApply mode n (Let rec ds e) args =
+> extractBindingsApply mode m n (Let rec ds e) args =
 >   (n3,cts1++cts2++cts3,letBindings rec lets1 ds' . lets2 . lets3,e'')
->   where (n1,cts1,lets1,ds') = extractBindings Lazy n ds
->         (n2,cts2,lets2,e') = extractBindings mode n1 e
+>   where (n1,cts1,lets1,ds') = extractBindings Lazy m n ds
+>         (n2,cts2,lets2,e') = extractBindings mode m n1 e
 >         (n3,cts3,lets3,e'') = applyValue mode n2 e' args
-> extractBindingsApply mode n (SrcLoc p e) args =
+> extractBindingsApply mode m n (SrcLoc p e) args =
 >   (n2,cts1++cts2,lets1 . lets2,e'')
->   where (n1,cts1,lets1,e') = extractBindings mode n e
+>   where (n1,cts1,lets1,e') = extractBindings mode m n e
 >         (n2,cts2,lets2,e'') = applyValue mode n1 (SrcLoc p e') args
 
 > applyValue :: Mode -> Int -> Expression -> [Expression]
@@ -749,6 +763,14 @@ of \texttt{aux$N$}, \texttt{result$N$}, and \texttt{tree$N$}.
 > applyExp mode n e es = (n2,cts1++cts2,lets1 . lets2,e')
 >   where (n1,cts1,lets1,v) = decomposeExp mode n e
 >         (n2,cts2,lets2,e') = applyValue mode n1 v es
+
+
+> extractApply :: Expression -> [Expression] -> (Expression,[Expression])
+> extractApply (Apply e1 e2) l = extractApply e1 (e2:l)
+> extractApply e1 l = (e1,l)
+
+> createApply :: Expression -> [Expression] -> Expression
+> createApply exp lExp = foldl Apply exp lExp
 
 
 > createTree :: QualIdent -> [Ident] -> String -> Ident -> [Expression]

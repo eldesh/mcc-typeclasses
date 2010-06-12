@@ -1,8 +1,8 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2888 2009-08-05 15:55:47Z wlux $
+% $Id: DTransform.lhs 2954 2010-06-12 22:38:47Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
-% Copyright (c) 2003-2009, Wolfgang Lux
+% Copyright (c) 2003-2010, Wolfgang Lux
 %
 % 2002/04/10 19:00:00 Added emptyNode as constructor in type cTree
 \nwfilename{DTransform.lhs}
@@ -639,6 +639,20 @@ local declarations of \texttt{aux$N$}, \texttt{result$N$}, and
 >               -> String -> [Expression] -> Int -> a -> (Int,a)
 
 > instance SecondPhase Expression where
+>   newBindings createNode p cts n e@(Literal _) =
+>     composeExp createNode p n cts e
+>   newBindings createNode p cts n e@(Variable _) =
+>     composeExp createNode p n cts e
+>   newBindings createNode p cts n f@(Function _ a)
+>     | a > 0 = composeExp createNode p n cts f
+>     | otherwise = (n2,lets1 e')
+>     where (n1,cts1,lets1,v) = decomposeExp n f
+>           (n2,e') = composeExp createNode p n1 (cts++cts1) v
+>   newBindings createNode p cts n e@(Constructor _ _) =
+>     composeExp createNode p n cts e
+>   newBindings createNode p cts n e@(Apply _ _) = (n2,lets1 e'')
+>     where (n1,cts1,lets1,e') = extractBindings n e
+>           (n2,e'') = composeExp createNode p n1 (cts++cts1) e'
 >   newBindings createNode p cts n (Case rf e as) = (n2,lets1 (Case rf e' as'))
 >     where (n1,cts1,lets1,e') = extractBindings n e
 >           (n2,as') = mapAccumL (newBindings createNode p (cts++cts1)) n1 as
@@ -652,17 +666,19 @@ local declarations of \texttt{aux$N$}, \texttt{result$N$}, and
 >           (n2,e') = newBindings createNode p (cts++cts1) n1 e
 >   newBindings createNode _ cts n (SrcLoc p e) = (n',SrcLoc p e')
 >     where (n',e') = newBindings createNode p cts n e
->   newBindings createNode p cts n e = (n1+1,lets1 (lets2 rhs))
->     where (n1,cts1,lets1,e') = extractBindings n e
->           rid   = newIdName n1 "result"
->           tid   = newIdName n1 "tree"
->           ct    = createNode p rid (cts++cts1)
->           lets2 = Let NonRec [Binding rid e'] . Let NonRec [Binding tid ct]
->           rhs   = debugBuildPairExp (Variable rid) (Variable tid)
 
 > instance SecondPhase Alt where
 >   newBindings createNode p cts n (Alt t e) = (n',Alt t e')
 >     where (n',e') = newBindings createNode p cts n e
+
+> composeExp :: (String -> Ident -> [Expression] -> Expression)
+>            -> String -> Int -> [Expression] -> Expression -> (Int,Expression)
+> composeExp createNode p n cts e = (n+1,e')
+>   where rid = newIdName n "result"
+>         tid = newIdName n "tree"
+>         ct  = createNode p rid cts
+>         e'  = Let NonRec [Binding rid e] $ Let NonRec [Binding tid ct] $
+>               debugBuildPairExp (Variable rid) (Variable tid)
 
 
 > class SecondPhaseArg a where
@@ -675,26 +691,10 @@ local declarations of \texttt{aux$N$}, \texttt{result$N$}, and
 >           (n2,cts2,lets2,xs') = extractBindings n1 xs
 
 > instance SecondPhaseArg Expression where
->   extractBindings n e@(Function _ a)
->     | a > 0     = (n,[],id,e)
->     | otherwise = decomposeExp n e
->   extractBindings n e@(Case _ _ _) = decomposeExp n' e'
->     where (n',e') = newBindings createEmptyNode "" [] n e
->   extractBindings n e@(Choice _) = decomposeExp n' e'
->     where (n',e') = newBindings createEmptyNode "" [] n e
->   extractBindings n (Exist vs e) = (n',cts',Exist vs . lets',e')
->     where (n',cts',lets',e') = extractBindings n e
->   extractBindings n (Let rec ds e) =
->     (n2,cts1++cts2,letBindings rec lets1 ds' . lets2,e')
->     where (n1,cts1,lets1,ds') = extractBindings n ds
->           (n2,cts2,lets2,e') = extractBindings n1 e
->   extractBindings n (SrcLoc p e) = (n',cts',lets',SrcLoc p e')
->     where (n',cts',lets',e') = extractBindings n e
->   extractBindings n e@(Apply _ _) = (n2,cts1++cts2,lets1 . lets2,e')
+>   extractBindings n e = (n2,cts1++cts2,lets1 . lets2,e')
 >     where (f,es) = extractApply e []
->           (n1,cts1,lets1,f':es') = extractBindings n (f:es)
->           (n2,cts2,lets2,e') = extractBindingsApply n1 f' es'
->   extractBindings n e = (n,[],id,e)
+>           (n1,cts1,lets1,es') = extractBindings n es
+>           (n2,cts2,lets2,e') = extractBindingsApply n1 f es'
 
 > instance SecondPhaseArg Binding where
 >   extractBindings n (Binding v e) = (n',cts',lets',Binding v e')
@@ -704,20 +704,40 @@ local declarations of \texttt{aux$N$}, \texttt{result$N$}, and
 > extractBindingsApply :: Int -> Expression -> [Expression]
 >                      -> SecondPhaseResult Expression
 
-> extractBindingsApply n e@(Constructor _ _) args = (n,[],id,createApply e args)
-> extractBindingsApply n f@(Function qId arity) args
->   | length args == arity-1 = (n,[],id,partialApp)
->   | otherwise = (n2,cts1++cts2,lets1 . lets2,e)
+> extractBindingsApply n e@(Literal _) args = applyValue n e args
+> extractBindingsApply n e@(Variable _) args = applyValue n e args
+> extractBindingsApply n e@(Constructor _ _) args =
+>   applyValue n (createApply e args) []
+> extractBindingsApply n f@(Function _ arity) args
+>   | length args < arity = applyValue n (createApply f args) []
+>   | otherwise = applyExp n (createApply f nArgs) extraArgs
 >   where (nArgs,extraArgs) = splitAt arity args
->         app = createApply f nArgs
->         partialApp = createApply f args --05-12-2001
->         (n1,cts1,lets1,v) = decomposeExp n app
->         (n2,cts2,lets2,e) = extractBindingsApply n1 v extraArgs
+> extractBindingsApply n e@(Case _ _ _) args = applyExp n' e' args
+>   where (n',e') = newBindings createEmptyNode "" [] n e
+> extractBindingsApply n e@(Choice _) args = applyExp n' e' args
+>   where (n',e') = newBindings createEmptyNode "" [] n e
+> extractBindingsApply n (Exist vs e) args =
+>   (n2,cts1++cts2,Exist vs . lets1 . lets2,e'')
+>   where (n1,cts1,lets1,e') = extractBindings n e
+>         (n2,cts2,lets2,e'') = applyValue n1 e' args
+> extractBindingsApply n (Let rec ds e) args =
+>   (n3,cts1++cts2++cts3,letBindings rec lets1 ds' . lets2 . lets3,e'')
+>   where (n1,cts1,lets1,ds') = extractBindings n ds
+>         (n2,cts2,lets2,e') = extractBindings n1 e
+>         (n3,cts3,lets3,e'') = applyValue n2 e' args
+> extractBindingsApply n (SrcLoc p e) args = (n2,cts1++cts2,lets1 . lets2,e'')
+>   where (n1,cts1,lets1,e') = extractBindings n e
+>         (n2,cts2,lets2,e'') = applyValue n1 (SrcLoc p e') args
 
-> extractBindingsApply n f []     = (n,[],id,f)
-> extractBindingsApply n f (e:es) = (n2,cts1++cts2,lets1 . lets2,e')
->   where (n1,cts1,lets1,v) = decomposeExp n (Apply f e)
->         (n2,cts2,lets2,e') = extractBindingsApply n1 v es
+> applyValue :: Int -> Expression -> [Expression]
+>            -> SecondPhaseResult Expression
+> applyValue n f []     = (n,[],id,f)
+> applyValue n f (e:es) = applyExp n (Apply f e) es
+
+> applyExp :: Int -> Expression -> [Expression] -> SecondPhaseResult Expression
+> applyExp n e es = (n2,cts1++cts2,lets1 . lets2,e')
+>   where (n1,cts1,lets1,v) = decomposeExp n e
+>         (n2,cts2,lets2,e') = applyValue n1 v es
 
 
 > createTree :: QualIdent -> [Ident] -> String -> Ident -> [Expression]

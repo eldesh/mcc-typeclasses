@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2903 2009-08-24 15:29:21Z wlux $
+% $Id: Modules.lhs 2957 2010-06-12 22:43:11Z wlux $
 %
-% Copyright (c) 1999-2009, Wolfgang Lux
+% Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Modules.lhs}
@@ -73,7 +73,7 @@ declaration to the module.
 >     liftErr $ mapM_ (doDump opts) dumps
 >     let (il,dumps) = ilTransModule dbg tcEnv'' tyEnv'' trEnv Nothing m''
 >     liftErr $ mapM_ (doDump opts) dumps
->     let (ccode,dumps) = genCodeModule split tcEnv'' il
+>     let (ccode,dumps) = genCodeModule split dbg tcEnv'' il
 >     liftErr $ mapM_ (doDump opts) dumps >>
 >               writeCode (output opts) fn ccode
 >   where paths = importPath opts

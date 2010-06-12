@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Common.lhs 2885 2009-08-05 15:50:32Z wlux $
+% $Id: Common.lhs 2957 2010-06-12 22:43:11Z wlux $
 %
-% Copyright (c) 1999-2009, Wolfgang Lux
+% Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Common.lhs}
@@ -126,15 +126,24 @@ code into abstract machine code and then generate C code. If a module
 is compiled with the \texttt{--split-code} option, the code is split
 along the split pragmas inserted implicitly or explicitly into source
 code.
+
+If the module in addition is compiled with the debugging
+transformation, the compiler strips all data and top level foreign
+function declarations from the code. This is a workaround to prevent
+name conflicts between the untransformed and transformed code of the
+standard library, which could otherwise occur for programs compiled
+for debugging because they are linked with the transformed standard
+library \emph{and} the untransformed library. The latter is needed by
+the small top level program that controls the debugger at runtime.
 \begin{verbatim}
 
-> genCodeModule :: Bool -> TCEnv -> IL.Module
+> genCodeModule :: Bool -> Bool -> TCEnv -> IL.Module
 >               -> (Either CFile [CFile],[(Dump,Doc)])
-> genCodeModule False tcEnv il = (Left ccode,dumps)
+> genCodeModule False _ tcEnv il = (Left ccode,dumps)
 >   where (ccode,dumps) = genCode (dataTypes tcEnv) il
-> genCodeModule True tcEnv il = (Right ccode,concat (transpose dumps))
->   where (ccode,dumps) =
->           unzip $ map (genCode (dataTypes tcEnv)) (splitModule il)
+> genCodeModule True debug tcEnv il = (Right ccode,concat (transpose dumps))
+>   where (ccode,dumps) = unzip $
+>           map (genCode (dataTypes tcEnv) . cleanDebug debug) (splitModule il)
 
 > genCodeGoal :: TCEnv -> QualIdent -> Maybe [Ident] -> IL.Module
 >             -> (CFile,[(Dump,Doc)])
@@ -159,6 +168,14 @@ code.
 >         isCodeDecl (IL.TypeDecl _ _ _) = False
 >         isCodeDecl (IL.FunctionDecl _ _ _ _) = True
 >         isCodeDecl (IL.ForeignDecl _ _ _ _) = True
+
+> cleanDebug :: Bool -> IL.Module -> IL.Module
+> cleanDebug True (IL.Module m is ds) = IL.Module m is (filter isUnique ds)
+>   where isUnique (IL.DataDecl _ _ _) = False
+>         isUnique (IL.TypeDecl _ _ _) = True
+>         isUnique (IL.FunctionDecl _ _ _ _) = True
+>         isUnique (IL.ForeignDecl f _ _ _) = isRenamed (unqualify f)
+> cleanDebug False m = m
 
 > dataTypes :: TCEnv -> [(Cam.Name,[Cam.Name])]
 > dataTypes tcEnv = [dataType tc cs | DataType tc _ cs <- allEntities tcEnv]

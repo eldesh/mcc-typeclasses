@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 2941 2010-06-02 12:13:22Z wlux $
+% $Id: CaseMatch.lhs 2958 2010-06-14 12:39:34Z wlux $
 %
 % Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -686,11 +686,11 @@ where the default alternative is redundant.
 >           rigidMatch m ty prefix vs (map (matchVar (snd v)) as)
 >       | otherwise -> rigidMatch m ty (prefix . (v:)) vs (map skipArg as)
 >     t'@(LiteralPattern _ l')
->       | fst v `elem` (charType:numTypes) ->
+>       | fst v `elem` charType:numTypes ->
 >           liftM (Case (uncurry mkVar v))
 >                 (mapM (matchCaseAlt m ty prefix v vs as') (lts ++ vts))
 >       | otherwise ->
->           liftM (Case (eqNum (fst v) v l'))
+>           liftM (Case (eqNum (fst v) v l') . catMaybes)
 >                 (sequence [matchLitAlt True m ty prefix v vs as' t',
 >                            matchLitAlt False m ty prefix v vs as' t'])
 >     ConstructorPattern _ _ _
@@ -748,10 +748,12 @@ where the default alternative is redundant.
 > matchLitAlt :: Bool -> ModuleIdent -> Type
 >             -> ([(Type,Ident)] -> [(Type,Ident)]) -> (Type,Ident)
 >             -> [(Type,Ident)] -> [(ConstrTerm (),Match' Type)]
->             -> ConstrTerm () -> CaseMatchState (Alt Type)
-> matchLitAlt eq m ty prefix v vs as t =
->   liftM (caseAlt (pos (head as')) t')
->         (rigidMatch m ty id (prefix (v:vs)) (map resetArgs as'))
+>             -> ConstrTerm () -> CaseMatchState (Maybe (Alt Type))
+> matchLitAlt eq m ty prefix v vs as t
+>   | null as' = return Nothing
+>   | otherwise =
+>       liftM (Just . caseAlt (pos (head as')) t')
+>             (rigidMatch m ty id (prefix (v:vs)) (map resetArgs as'))
 >   where t' = if eq then truePattern else falsePattern
 >         as'
 >           | eq = [if t == t' then matchArg v a else a | (t',a) <- as]

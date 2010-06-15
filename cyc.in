@@ -3,7 +3,7 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 2945 2010-06-11 10:39:16Z wlux $
+# $Id: cyc.in 2960 2010-06-15 13:57:51Z wlux $
 #
 # Copyright (c) 2002-2010, Wolfgang Lux
 # See LICENSE for the full license.
@@ -304,7 +304,7 @@ for f in "$@"; do
 	  target=$stem.c
 	else
           target=/tmp/cyc$$_$i.c
-	  temps="$temps "`quote "$target"`
+	  temps="$temps $target"
 	fi
       fi
       # Cygpath workaround: converts paths to Windows-style
@@ -340,7 +340,7 @@ for f in "$@"; do
 	  target=$stem.o
 	else
           target=/tmp/cyc$$_$i.o
-	  temps="$temps "`quote "$target"`
+	  temps="$temps $target"
 	fi
       fi
       target2=`quote "$target"`
@@ -373,8 +373,8 @@ if test -n "$typeIt"; then
   eval $echo "$cycc" "$imports" "$cyccopts" -t"\\\"$typeIt2\\\"" "$modules" "$target" || exit $?
   eval $exec "$cycc" "$imports" "$cyccopts" -t"$typeIt2" "$modules" "$target" || exit $? || exit $?
 elif test -z "$toC$toS$toO"; then
-  test -n "$debug$saveTemps" || temps="$temps /tmp/cyc$$.c"
   target=/tmp/cyc$$.c
+  test -n "$debug$saveTemps" || temps="$temps $target"
   # Cygpath workaround: converts path to Windows-style
   if test -n "@CYGPATH@"; then
     target2=`@CYGPATH@ -w $target`

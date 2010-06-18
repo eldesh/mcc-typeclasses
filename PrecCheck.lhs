@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 2921 2009-12-02 21:22:18Z wlux $
+% $Id: PrecCheck.lhs 2967 2010-06-18 16:27:02Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -51,18 +51,14 @@ precedence of $M'.f$ while checking the left hand side of $M.f$, in
 particular if $M$ does not contain a fixity declaration for $f$. To
 this end, the compiler removes all precedences from the precedence
 environment which could conflict with a local function declaration
-before adding the local fixity declarations. Note that the problem
-does not apply to the right hand side of a function declaration
-because all occurrences of the unqualified identifier $f$ would be
-ambiguous in that case, except if the global declarations are shadowed
-by a local declaration of $f$.
+before adding the local fixity declarations.
 \begin{verbatim}
 
 > cleanPrecs :: Decl a -> PEnv -> PEnv
 > cleanPrecs (InfixDecl _ _ _ _) pEnv = pEnv
 > cleanPrecs (TypeSig _ fs _) pEnv = foldr localUnimportTopEnv pEnv fs
 > cleanPrecs (FunctionDecl _ f _) pEnv = localUnimportTopEnv f pEnv
-> cleanPrecs (ForeignDecl _ _ _ _ f _) pEnv = localUnimportTopEnv f pEnv
+> cleanPrecs (ForeignDecl _ _ f _) pEnv = localUnimportTopEnv f pEnv
 > cleanPrecs (PatternDecl _ t _) pEnv = foldr localUnimportTopEnv pEnv (bv t)
 > cleanPrecs (FreeDecl _ vs) pEnv = foldr localUnimportTopEnv pEnv vs
 > cleanPrecs (TrustAnnot _ _ _) pEnv = pEnv
@@ -141,8 +137,7 @@ because it is used for constructing the module's interface.
 > checkDecl _ _ (TypeSig p fs ty) = return (TypeSig p fs ty)
 > checkDecl m pEnv (FunctionDecl p f eqs) =
 >   liftE (FunctionDecl p f) (mapE (checkEqn m pEnv) eqs)
-> checkDecl _ _ (ForeignDecl p cc s ie f ty) =
->   return (ForeignDecl p cc s ie f ty)
+> checkDecl _ _ (ForeignDecl p fi f ty) = return (ForeignDecl p fi f ty)
 > checkDecl m pEnv (PatternDecl p t rhs) =
 >   liftE2 (PatternDecl p) (checkConstrTerm p pEnv t) (checkRhs m pEnv rhs)
 > checkDecl _ _ (FreeDecl p vs) = return (FreeDecl p vs)

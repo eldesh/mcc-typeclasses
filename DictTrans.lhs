@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2899 2009-08-24 09:52:45Z wlux $
+% $Id: DictTrans.lhs 2967 2010-06-18 16:27:02Z wlux $
 %
 % Copyright (c) 2006-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -788,7 +788,7 @@ which map instance dictionary functions onto instance method names.
 >   dictSpecialize _ (TypeSig p fs ty) = TypeSig p fs ty
 >   dictSpecialize mEnv (FunctionDecl p f eqs) =
 >     FunctionDecl p f (map (dictSpecialize mEnv) eqs)
->   dictSpecialize _ (ForeignDecl p cc s ie f ty) = ForeignDecl p cc s ie f ty
+>   dictSpecialize _ (ForeignDecl p fi f ty) = ForeignDecl p fi f ty
 >   dictSpecialize mEnv (PatternDecl p t rhs) =
 >     PatternDecl p t (dictSpecialize mEnv rhs)
 >   dictSpecialize _ (FreeDecl p vs) = FreeDecl p vs

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Lift.lhs 2684 2008-04-23 17:46:29Z wlux $
+% $Id: Lift.lhs 2967 2010-06-18 16:27:02Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See LICENSE for the full license.
@@ -101,7 +101,7 @@ declarations are left unchanged except for abstracting their right
 hand sides.
 
 The abstraction of a recursive declaration group is complicated by the
-fact that not all functions need to call each in a recursive
+fact that not all functions need to call each other in a recursive
 declaration group. E.g., in the following example neither g nor h
 call each other.
 \begin{verbatim}
@@ -224,8 +224,8 @@ variables in order to avoid an inadvertent name capturing.
 >   where f' = liftIdent pre f
 >         addVars f (Equation p (FunLhs _ ts) rhs) =
 >           Equation p (FunLhs f (map (uncurry VariablePattern) fvs ++ ts)) rhs
-> abstractFunDecl m pre _ lvs env (ForeignDecl p cc s ie f ty) =
->   return (ForeignDecl p cc s ie (liftIdent pre f) ty)
+> abstractFunDecl _ pre _ _ _ (ForeignDecl p fi f ty) =
+>   return (ForeignDecl p fi (liftIdent pre f) ty)
 
 > abstractExpr :: ModuleIdent -> String -> [Ident] -> AbstractEnv
 >              -> Expression Type -> AbstractState (Expression Type)
@@ -256,7 +256,6 @@ variables in order to avoid an inadvertent name capturing.
 >     e' <- abstractExpr m pre lvs env e
 >     alts' <- mapM (abstractAlt m pre lvs env) alts
 >     return (Fcase e' alts')
-> abstractExpr m _ _ _ _ = internalError "abstractExpr"
 
 > abstractAlt :: ModuleIdent -> String -> [Ident] -> AbstractEnv -> Alt Type
 >             -> AbstractState (Alt Type)
@@ -312,7 +311,6 @@ to the top-level.
 > liftExpr (Fcase e alts) = (Fcase e' alts',concat (ds':dss'))
 >   where (e',ds') = liftExpr e
 >         (alts',dss') = unzip (map liftAlt alts)
-> liftExpr _ = internalError "liftExpr"
 
 > liftAlt :: Alt a -> (Alt a,[Decl a])
 > liftAlt (Alt p t rhs) = (Alt p t rhs',ds')

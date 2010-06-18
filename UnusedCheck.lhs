@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: UnusedCheck.lhs 2931 2010-03-24 09:14:11Z wlux $
+% $Id: UnusedCheck.lhs 2967 2010-06-18 16:27:02Z wlux $
 %
 % Copyright (c) 2005-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -107,7 +107,7 @@ by a traversal of the syntax tree.
 >   used _ (InfixDecl _ _ _ _) = id
 >   used _ (TypeSig _ _ _) = id
 >   used m (FunctionDecl _ f eqs) = nest (apFst (deleteFromSet f) . used m eqs)
->   used _ (ForeignDecl _ _ _ _ _ _) = id
+>   used _ (ForeignDecl _ _ _ _) = id
 >   used m (PatternDecl _ t rhs) =
 >     case t of
 >       VariablePattern _ v -> nest (apFst (deleteFromSet v) . used m rhs)
@@ -245,7 +245,7 @@ unused variables of pattern $t$.
 >   unused _ _ (InfixDecl _ _ _ _) = id
 >   unused _ _ (TypeSig _ _ _) = id
 >   unused used _ (FunctionDecl p f _) = unusedVars Decl used p [f]
->   unused used _ (ForeignDecl p _ _ _ f _) = unusedVars Decl used p [f]
+>   unused used _ (ForeignDecl p _ f _) = unusedVars Decl used p [f]
 >   unused used _ (PatternDecl p t rhs) =
 >     case t of
 >       VariablePattern _ v

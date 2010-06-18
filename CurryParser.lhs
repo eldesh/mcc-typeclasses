@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2921 2009-12-02 21:22:18Z wlux $
+% $Id: CurryParser.lhs 2967 2010-06-18 16:27:02Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -329,7 +329,7 @@ directory path to the module is ignored.
 > foreignDecl =
 >   mkDecl <$> position <*-> token KW_foreign <*-> token KW_import
 >          <*> callConv <*> entitySpec <*-> token DoubleColon <*> type0
->   where mkDecl p cc (s,ie,f) ty = ForeignDecl p cc s ie f ty
+>   where mkDecl p cc (s,ie,f) ty = ForeignDecl p (cc,s,ie) f ty
 >         callConv = CallConvPrimitive <$-> token Id_primitive
 >                <|> CallConvCCall <$-> token Id_ccall
 >                <|> CallConvRawCall <$-> token Id_rawcall

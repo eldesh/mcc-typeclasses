@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2921 2009-12-02 21:22:18Z wlux $
+% $Id: Base.lhs 2967 2010-06-18 16:27:02Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -69,7 +69,7 @@ variables cannot be computed independently for each declaration.
 
 > instance QuantExpr (Decl a) where
 >   bv (FunctionDecl _ f _) = [f]
->   bv (ForeignDecl _ _ _ _ f _) = [f]
+>   bv (ForeignDecl _ _ f _) = [f]
 >   bv (PatternDecl _ t _) = bv t
 >   bv (FreeDecl _ vs) = vs
 >   bv _ = []

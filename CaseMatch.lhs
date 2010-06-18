@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 2958 2010-06-14 12:39:34Z wlux $
+% $Id: CaseMatch.lhs 2967 2010-06-18 16:27:02Z wlux $
 %
 % Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -121,7 +121,7 @@ For instance, \texttt{Just x = unknown} becomes \texttt{x = fcase
 >       (vs,e) <-
 >         matchFlex m p [(p,ts,rhs) | Equation p (FunLhs _ ts) rhs <- eqs]
 >       return (funDecl p f (map (uncurry VariablePattern) vs) e)
->   match _ _ (ForeignDecl p cc s ie f ty) = return (ForeignDecl p cc s ie f ty)
+>   match _ _ (ForeignDecl p fi f ty) = return (ForeignDecl p fi f ty)
 >   match m _ (PatternDecl p t rhs) =
 >     match m p rhs >>= liftM (uncurry (PatternDecl p)) . matchLhs m t
 >   match _ _ (FreeDecl p vs) = return (FreeDecl p vs)

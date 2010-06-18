@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 2905 2009-08-24 16:16:35Z wlux $
+% $Id: ShadowCheck.lhs 2967 2010-06-18 16:27:02Z wlux $
 %
 % Copyright (c) 2005-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -114,7 +114,7 @@ those method definitions.
 >   shadow _ (InfixDecl _ _ _ _) = id
 >   shadow _ (TypeSig _ _ _) = id
 >   shadow _ (FunctionDecl p _ eqs) = shadow p eqs
->   shadow _ (ForeignDecl _ _ _ _ _ _) = id
+>   shadow _ (ForeignDecl _ _ _ _) = id
 >   shadow _ (PatternDecl p _ rhs) = shadow p rhs
 >   shadow _ (FreeDecl _ _) = id
 >   shadow _ (TrustAnnot _ _ _) = id
@@ -206,7 +206,7 @@ positions.
 > vars (InfixDecl _ _ _ _) = []
 > vars (TypeSig _ _ _) = []
 > vars (FunctionDecl p f _) = [P p f]
-> vars (ForeignDecl p _ _ _ f _) = [P p f]
+> vars (ForeignDecl p _ f _) = [P p f]
 > vars (PatternDecl p t _) = map (P p) (bv t)
 > vars (FreeDecl p vs) = map (P p) vs
 > vars (TrustAnnot _ _ _) = []

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2921 2009-12-02 21:22:18Z wlux $
+% $Id: Qual.lhs 2967 2010-06-18 16:27:02Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -113,8 +113,8 @@ order to compile this module with hbc.
 >     TypeSig p fs (qual phase tEnv vEnv ty)
 >   qual phase tEnv vEnv (FunctionDecl p f eqs) =
 >     FunctionDecl p f (qual phase tEnv vEnv eqs)
->   qual phase tEnv vEnv (ForeignDecl p cc s ie f ty) =
->     ForeignDecl p cc s ie f (qual phase tEnv vEnv ty)
+>   qual phase tEnv vEnv (ForeignDecl p fi f ty) =
+>     ForeignDecl p fi f (qual phase tEnv vEnv ty)
 >   qual phase tEnv vEnv (PatternDecl p t rhs) =
 >     PatternDecl p (qual phase tEnv vEnv t) (qual phase tEnv vEnv rhs)
 >   qual _ _ _ (FreeDecl p vs) = FreeDecl p vs

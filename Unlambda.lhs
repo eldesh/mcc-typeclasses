@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Unlambda.lhs 2953 2010-06-12 22:37:29Z wlux $
+% $Id: Unlambda.lhs 2967 2010-06-18 16:27:02Z wlux $
 %
 % Copyright (c) 2007-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -57,8 +57,7 @@ lambda abstraction is recorded in the type environment.
 >   nameLambdas _ (TypeSig p fs ty) = return (TypeSig p fs ty)
 >   nameLambdas m (FunctionDecl p f eqs) =
 >     liftM (FunctionDecl p f) (mapM (nameLambdas m) eqs)
->   nameLambdas _ (ForeignDecl p cc s ie f ty) =
->     return (ForeignDecl p cc s ie f ty)
+>   nameLambdas _ (ForeignDecl p fi f ty) = return (ForeignDecl p fi f ty)
 >   nameLambdas m (PatternDecl p t rhs) =
 >     liftM (PatternDecl p t) (nameLambdas m rhs)
 >   nameLambdas _ (FreeDecl p vs) = return (FreeDecl p vs)

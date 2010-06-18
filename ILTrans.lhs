@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2888 2009-08-05 15:55:47Z wlux $
+% $Id: ILTrans.lhs 2967 2010-06-18 16:27:02Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -57,8 +57,7 @@ annotations are inserted in IL code at the correct places.
 
 > translDecl :: ModuleIdent -> ValueEnv -> Decl Type -> [IL.Decl]
 > translDecl m tyEnv (FunctionDecl _ _ eqs) = map (translFunction m tyEnv) eqs
-> translDecl m tyEnv (ForeignDecl _ cc _ ie f _) =
->   [translForeign m tyEnv f cc (fromJust ie)]
+> translDecl m tyEnv (ForeignDecl _ fi f _) = [translForeign m tyEnv f fi]
 > translDecl _ _ _ = []
 
 > translData :: ModuleIdent -> ValueEnv -> Ident -> [Ident] -> [ConstrDecl]
@@ -76,10 +75,9 @@ annotations are inserted in IL code at the correct places.
 >   where c = qualifyWith m (constr d)
 >         ty = rawType (thd3 (conType c tyEnv))
 
-> translForeign :: ModuleIdent -> ValueEnv -> Ident -> CallConv -> String
->               -> IL.Decl
-> translForeign m tyEnv f cc ie =
->   IL.ForeignDecl (qualifyWith m f) (callConv cc) ie
+> translForeign :: ModuleIdent -> ValueEnv -> Ident -> ForeignImport -> IL.Decl
+> translForeign m tyEnv f (cc,_,ie) =
+>   IL.ForeignDecl (qualifyWith m f) (callConv cc) (fromJust ie)
 >                  (translType (rawType (varType f tyEnv)))
 >   where callConv CallConvPrimitive = IL.Primitive
 >         callConv CallConvCCall = IL.CCall

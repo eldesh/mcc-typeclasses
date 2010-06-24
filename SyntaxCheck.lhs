@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: SyntaxCheck.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 1999-2009, Wolfgang Lux
+% Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{SyntaxCheck.lhs}
@@ -196,15 +196,15 @@ declarations are passed to \texttt{checkMethodDecls}.
 > disambBlockDecl :: VarEnv -> Decl a -> Error (Decl a)
 > disambBlockDecl _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
 > disambBlockDecl _ (TypeSig p vs ty) = return (TypeSig p vs ty)
-> disambBlockDecl env (FunctionDecl p _ [Equation p' lhs rhs]) =
->   case disambLhs env lhs of
->     Left (f',lhs') -> return (funDecl f' lhs')
+> disambBlockDecl env (FunctionDecl p a _ [Equation p' lhs rhs]) =
+>   case disambLhs env a lhs of
+>     Left (a',f',lhs') -> return (funDecl a' f' lhs')
 >     Right t' ->
 >       case msum (map toFunLhs (terms t')) of
->         Just (f',lhs') -> return (funDecl f' lhs')
+>         Just (f',lhs') -> return (funDecl a f' lhs')
 >         Nothing -> errorAt p noToplevelPattern
->   where funDecl f lhs = FunctionDecl p f [Equation p' lhs rhs]
-> disambBlockDecl _ (ForeignDecl p fi f ty) = return (ForeignDecl p fi f ty)
+>   where funDecl a f lhs = FunctionDecl p a f [Equation p' lhs rhs]
+> disambBlockDecl _ (ForeignDecl p fi a f ty) = return (ForeignDecl p fi a f ty)
 > --disambBlockDecl _ (PatternDecl p _ _) = errorAt p noToplevelPattern
 > --disambBlockDecl _ (FreeDecl p _) = errorAt p noToplevelFree
 > disambBlockDecl _ (TrustAnnot p t fs) = return (TrustAnnot p t fs)
@@ -296,40 +296,38 @@ declarations. The final environment can be discarded.
 > disambDecl :: VarEnv -> Decl a -> Decl a
 > disambDecl _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops
 > disambDecl _ (TypeSig p vs ty) = TypeSig p vs ty
-> disambDecl env (FunctionDecl p _ [Equation p' lhs rhs]) =
->   case disambLhs env lhs of
->     Left (f',lhs') -> FunctionDecl p f' [Equation p' lhs' rhs]
+> disambDecl env (FunctionDecl p a _ [Equation p' lhs rhs]) =
+>   case disambLhs env a lhs of
+>     Left (a',f',lhs') -> FunctionDecl p a' f' [Equation p' lhs' rhs]
 >     Right t' -> PatternDecl p' (disambTerm env t') rhs
-> disambDecl _ (ForeignDecl p fi f ty) = ForeignDecl p fi f ty
+> disambDecl _ (ForeignDecl p fi a f ty) = ForeignDecl p fi a f ty
 > disambDecl env (PatternDecl p t rhs) = PatternDecl p (disambTerm env t) rhs
 > disambDecl _ (FreeDecl p vs) = FreeDecl p vs
 > disambDecl _ (TrustAnnot p t fs) = TrustAnnot p t fs
 
-> disambLhs :: VarEnv -> Lhs a -> Either (Ident,Lhs a) (ConstrTerm a)
-> disambLhs env (FunLhs f ts)
->   | isDataConstr env f = Right (ConstructorPattern undefined (qualify f) ts)
->       -- FIXME: need a better attribute value above
->   | otherwise = Left (f,FunLhs f ts)
-> disambLhs env (OpLhs t1 op t2)
+> disambLhs :: VarEnv -> a -> Lhs a -> Either (a,Ident,Lhs a) (ConstrTerm a)
+> disambLhs env a (FunLhs f ts)
+>   | isDataConstr env f = Right (ConstructorPattern a (qualify f) ts)
+>   | otherwise = Left (a,f,FunLhs f ts)
+> disambLhs env a (OpLhs t1 op t2)
 >   | isDataConstr env op =
 >       disambOpLhs env (infixPattern t1 (InfixConstr () (qualify op))) t2
->   | otherwise = Left (op,OpLhs t1 op t2)
+>   | otherwise = Left (a,op,OpLhs t1 op t2)
 >   where infixPattern (InfixPattern a t1 op1 t2) op2 t3 =
 >           InfixPattern a t1 op1 (infixPattern t2 op2 t3)
->         infixPattern t1 op t2 = InfixPattern undefined t1 op t2
->           -- FIXME: need a better attribute value above
-> disambLhs env (ApLhs lhs ts) =
->   case disambLhs env lhs of
->     Left (f',lhs') -> Left (f',ApLhs lhs' ts)
->     Right _ -> Left (f,ApLhs lhs ts)
+>         infixPattern t1 op t2 = InfixPattern a t1 op t2
+> disambLhs env a (ApLhs lhs ts) =
+>   case disambLhs env a lhs of
+>     Left (a',f',lhs') -> Left (a',f',ApLhs lhs' ts)
+>     Right _ -> Left (a,f,ApLhs lhs ts)
 >   where (f,_) = flatLhs lhs
 
 > disambOpLhs :: VarEnv -> (ConstrTerm a -> ConstrTerm a) -> ConstrTerm a
->             -> Either (Ident,Lhs a) (ConstrTerm a)
+>             -> Either (a,Ident,Lhs a) (ConstrTerm a)
 > disambOpLhs env f (InfixPattern a t1 op t2)
 >   | isJust m || isDataConstr env op' =
 >       disambOpLhs env (f . InfixPattern a t1 op) t2
->   | otherwise = Left (op',OpLhs (f t1) op' t2)
+>   | otherwise = Left (a,op',OpLhs (f t1) op' t2)
 >   where (m,op') = splitQualIdent (opName op)
 > disambOpLhs _ f t = Right (f t)
 
@@ -390,13 +388,13 @@ declarations. The final environment can be discarded.
 > checkDecl :: VarEnv -> Decl a -> Error (Decl a)
 > checkDecl _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
 > checkDecl _ (TypeSig p fs ty) = return (TypeSig p fs ty)
-> checkDecl env (FunctionDecl p f eqs) =
+> checkDecl env (FunctionDecl p a f eqs) =
 >   checkArity p f eqs &&>
->   liftE (FunctionDecl p f) (mapE (checkEquation env) eqs)
-> checkDecl _ (ForeignDecl p fi f ty) =
+>   liftE (FunctionDecl p a f) (mapE (checkEquation env) eqs)
+> checkDecl _ (ForeignDecl p fi a f ty) =
 >   do
 >     fi' <- checkForeign p f fi
->     return (ForeignDecl p fi' f ty)
+>     return (ForeignDecl p fi' a f ty)
 > checkDecl env (PatternDecl p t rhs) =
 >   liftE2 (PatternDecl p) (checkConstrTerm p env t) (checkRhs env rhs)
 > checkDecl _ (FreeDecl p vs) = return (FreeDecl p vs)
@@ -408,8 +406,8 @@ declarations. The final environment can be discarded.
 
 > joinEquations :: [Decl a] -> [Decl a]
 > joinEquations [] = []
-> joinEquations (FunctionDecl p f eqs : FunctionDecl p' f' [eq] : ds)
->   | f == f' = joinEquations (FunctionDecl p f (eqs ++ [eq]) : ds)
+> joinEquations (FunctionDecl p a f eqs : FunctionDecl p' _ f' [eq] : ds)
+>   | f == f' = joinEquations (FunctionDecl p a f (eqs ++ [eq]) : ds)
 > joinEquations (d : ds) = d : joinEquations ds
 
 > checkEquation :: VarEnv -> Equation a -> Error (Equation a)
@@ -450,7 +448,7 @@ report~\cite{PeytonJones03:Haskell}).
 >   mapE_ (\(P p f) -> errorAt p (undefinedMethod cls f))
 >         (filter (`notElem` fs) (ops' ++ fs')) &&>
 >     mapE_ (\(P p f) -> errorAt p (noBody f)) (filter (`notElem` fs') trs)
->   where fs' = [P p f | FunctionDecl p f _ <- ds]
+>   where fs' = [P p f | FunctionDecl p _ f _ <- ds]
 >         ops' = concatMap vars (filter isInfixDecl ds)
 >         trs = concatMap vars (filter isTrustAnnot ds)
 
@@ -830,10 +828,10 @@ Auxiliary definitions.
 > vars :: Decl a -> [P Ident]
 > vars (InfixDecl p _ _ ops) = map (P p) ops
 > vars (TypeSig p fs _) = map (P p) fs
-> vars (FunctionDecl p f _) = [P p f]
-> vars (ForeignDecl p _ f _) = [P p f]
+> vars (FunctionDecl p _ f _) = [P p f]
+> vars (ForeignDecl p _ _ f _) = [P p f]
 > vars (PatternDecl p t _) = map (P p) (bv t)
-> vars (FreeDecl p vs) = map (P p) vs
+> vars (FreeDecl p vs) = map (P p) (bv vs)
 > vars (TrustAnnot p _ fs) = map (P p) fs
 
 \end{verbatim}

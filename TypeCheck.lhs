@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: TypeCheck.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
 % Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -22,7 +22,11 @@ type annotation is present.
 The result of type checking is a (flat) top-level environment
 containing the types of all constructors, variables, and functions
 defined in a program. In addition, a type annotated source module or
-goal is returned.
+goal is returned. Note that type annotations on the left hand side of
+a declaration hold the function or variable's generalized type with
+the type scheme's for all qualifier left implicit. Type annotations on
+the right hand side of a declaration hold the particular instance at
+which a polymorphic function or variable is used.
 \begin{verbatim}
 
 > module TypeCheck(typeCheck,typeCheckGoal) where
@@ -82,6 +86,7 @@ current module to the type environment.
 > typeCheck m tcEnv iEnv tyEnv ds =
 >   sequenceE [tcDataDecl tcEnv tvs cs | DataDecl _ _ _ tvs cs _ <- tds] >>
 >   run (do
+>          mapM_ (defaultTypes tcEnv) (filter isDefaultDecl tds)
 >          (cx,vds') <- tcDecls m tcEnv [d | BlockDecl d <- vds]
 >          unless (null cx) (internalError ("typeCheck " ++ show cx))
 >          tds' <- mapM (tcTopDecl m tcEnv) tds
@@ -89,7 +94,6 @@ current module to the type environment.
 >          theta <- liftSt fetchSt
 >          return (subst theta tyEnv',
 >                  map (fmap (subst theta)) (tds' ++ map BlockDecl vds')))
->       (defaultTypes tcEnv (filter isDefaultDecl tds))
 >       iEnv
 >       (foldr (bindTypeValues m tcEnv) tyEnv tds)
 >   where (vds,tds) = partition isBlockDecl ds
@@ -109,7 +113,6 @@ non-empty context for the goal's type or not.
 >          tyEnv' <- fetchSt
 >          theta <- liftSt fetchSt
 >          return (subst theta tyEnv',cx,fmap (subst theta) g'))
->       (defaultTypes tcEnv [])
 >       iEnv
 >       tyEnv
 
@@ -135,9 +138,10 @@ in the extended instance environment.
 >   StateT ValueEnv (StateT TypeSubst (StateT InstEnv' (StateT Int Error))) a
 > type InstEnv' = ([Type],Env QualIdent [Type],InstEnv)
 
-> run :: TcState a -> [Type] -> InstEnv -> ValueEnv -> Error a
-> run m tys iEnv tyEnv =
+> run :: TcState a -> InstEnv -> ValueEnv -> Error a
+> run m iEnv tyEnv =
 >   callSt (callSt (callSt (callSt m tyEnv) idSubst) (tys,emptyEnv,iEnv)) 1
+>   where tys = defaultDefaultTypes
 
 \end{verbatim}
 The list of default types is given either by a default declaration in
@@ -146,14 +150,26 @@ types, which at present includes the types \texttt{Integer} and
 \texttt{Float}. This list is always used when type checking goal
 expressions because a goal has no top-level declarations.
 
+Note that it is possible to declare polymorphic default types, e.g.,
+\texttt{default (T a)}. Since defaults are used only to disambiguate
+ambiguous type variables, i.e., type variables which the type
+inference algorithm cannot constrain to a more specific type, it is
+safe to use a single instance of a polymorphic default type for the
+whole module.
+
 \ToDo{Provide a way to set the default types for a goal, e.g. via
   a command line switch.}
 \begin{verbatim}
 
-> defaultTypes :: TCEnv -> [TopDecl a] -> [Type]
-> defaultTypes _ [] = [integerType,floatType]
-> defaultTypes tcEnv (DefaultDecl _ tys : _) =
->   map (unqualType . expandPolyType tcEnv . QualTypeExpr []) tys
+> defaultTypes :: TCEnv -> TopDecl a -> TcState ()
+> defaultTypes tcEnv (DefaultDecl _ tys) =
+>   do
+>     tys' <- mapM (liftM snd . inst . typeScheme . defaultType) tys
+>     liftSt (liftSt (updateSt_ (apFst3 (const tys'))))
+>   where defaultType = expandPolyType tcEnv . QualTypeExpr []
+
+> defaultDefaultTypes :: [Type]
+> defaultDefaultTypes = [integerType,floatType]
 
 \end{verbatim}
 \paragraph{Defining Data Constructors and Methods}
@@ -188,7 +204,7 @@ their types are expanded.
 >   where cls' = qualifyWith m cls
 >         bind (InfixDecl _ _ _ _) = id
 >         bind (TypeSig _ fs ty) = bindMethods m tcEnv cls' tv fs ty
->         bind (FunctionDecl _ _ _) = id
+>         bind (FunctionDecl _ _ _ _) = id
 >         bind (TrustAnnot _ _ _) = id
 > bindTypeValues _ _ (InstanceDecl _ _ _ _ _) tyEnv = tyEnv
 > bindTypeValues _ _ (DefaultDecl _ _) tyEnv = tyEnv
@@ -422,14 +438,16 @@ general than the type signature.
 
 > tcDeclGroup :: ModuleIdent -> TCEnv -> SigEnv -> Context -> [Decl a]
 >             -> TcState (Context,[Decl Type])
-> tcDeclGroup m tcEnv _ cx [ForeignDecl p fi f ty] =
+> tcDeclGroup m tcEnv _ cx [ForeignDecl p fi _ f ty] =
 >   do
->     tcForeignFunct m tcEnv p fi f ty
->     return (cx,[ForeignDecl p fi f ty])
+>     ty' <- tcForeignFunct m tcEnv p fi f ty
+>     return (cx,[ForeignDecl p fi ty' f ty])
 > tcDeclGroup m tcEnv sigs cx [FreeDecl p vs] =
 >   do
->     bindDeclVars m tcEnv sigs p vs
->     return (cx,[FreeDecl p vs])
+>     bindDeclVars m tcEnv sigs p vs'
+>     tyEnv <- fetchSt
+>     return (cx,[FreeDecl p [FreeVar (rawType (varType v tyEnv)) v | v <- vs']])
+>   where vs' = bv vs
 > tcDeclGroup m tcEnv sigs cx ds =
 >   do
 >     tyEnv0 <- fetchSt
@@ -445,10 +463,9 @@ general than the type signature.
 >         (gcx,lcx) = splitContext fvs cx'
 >     lcx' <- foldM (uncurry . dfltDecl tcEnv fvs) lcx impDs'
 >     theta <- liftSt fetchSt
->     mapM_ (uncurry (genDecl m . gen fvs lcx' . subst theta)) impDs'
->     (cx''',expDs') <-
->       mapAccumM (uncurry . tcCheckDecl m tcEnv tyEnv) gcx expDs
->     return (cx''',map snd impDs' ++ expDs')
+>     impDs'' <- mapM (uncurry (genDecl m . gen fvs lcx' . subst theta)) impDs'
+>     (cx'',expDs') <- mapAccumM (uncurry . tcCheckDecl m tcEnv tyEnv) gcx expDs
+>     return (cx'',impDs'' ++ expDs')
 >   where (impDs,expDs) = partDecls sigs ds
 
 > partDecls :: SigEnv -> [Decl a] -> ([Decl a],[(QualTypeExpr,Decl a)])
@@ -458,14 +475,14 @@ general than the type signature.
 >         explicit d ty ~(impDs,expDs) = (impDs,(ty,d):expDs)
 
 > declTypeSig :: SigEnv -> Decl a -> Maybe QualTypeExpr
-> declTypeSig sigs (FunctionDecl _ f _) = lookupEnv f sigs
+> declTypeSig sigs (FunctionDecl _ _ f _) = lookupEnv f sigs
 > declTypeSig sigs (PatternDecl _ t _) =
 >   case t of
 >     VariablePattern _ v -> lookupEnv v sigs
 >     _ -> Nothing
 
 > bindDecl :: ModuleIdent -> TCEnv -> SigEnv -> Decl a -> TcState ()
-> bindDecl m tcEnv sigs (FunctionDecl p f eqs) =
+> bindDecl m tcEnv sigs (FunctionDecl p _ f eqs) =
 >   case lookupEnv f sigs of
 >     Just ty ->
 >       updateSt_ (bindFun m f n (typeScheme (expandPolyType tcEnv ty)))
@@ -494,7 +511,7 @@ general than the type signature.
 
 > tcDecl :: ModuleIdent -> TCEnv -> ValueEnv -> Context -> Decl a
 >        -> TcState (Context,(Type,Decl Type))
-> tcDecl m tcEnv tyEnv0 cx (FunctionDecl p f eqs) =
+> tcDecl m tcEnv tyEnv0 cx (FunctionDecl p _ f eqs) =
 >   tcFunctionDecl "function" m tcEnv cx (varType f tyEnv0) p f eqs
 > tcDecl m tcEnv tyEnv0 cx d@(PatternDecl p t rhs) =
 >   do
@@ -514,9 +531,10 @@ general than the type signature.
 >     (_,ty') <- inst ty
 >     (cxs,eqs') <- liftM unzip $
 >       mapM (tcEquation m tcEnv (fsEnv (subst theta tyEnv0)) ty' f) eqs
->     cx' <- reduceContext p what' (ppDecl (FunctionDecl p f eqs)) tcEnv
->                          (cx ++ concat cxs)
->     return (cx',(ty',FunctionDecl p f eqs'))
+>     cx' <-
+>       reduceContext p what' (ppDecl (FunctionDecl p undefined f eqs)) tcEnv
+>                     (cx ++ concat cxs)
+>     return (cx',(ty',FunctionDecl p (rawType ty) f eqs'))
 >   where what' = what ++ " declaration"
 
 > tcEquation :: ModuleIdent -> TCEnv -> Set Int -> Type -> Ident -> Equation a
@@ -621,7 +639,7 @@ to make use of this fact.
 
 > dfltDecl :: TCEnv -> Set Int -> Context -> Type -> Decl Type
 >          -> TcState Context
-> dfltDecl tcEnv fvs cx ty (FunctionDecl p f _) =
+> dfltDecl tcEnv fvs cx ty (FunctionDecl p _ f _) =
 >   applyDefaultsDecl p ("function " ++ name f) tcEnv fvs cx ty
 > dfltDecl tcEnv fvs cx ty (PatternDecl p t _) =
 >   case t of
@@ -645,13 +663,16 @@ environment. The type has been generalized already by
 \texttt{tcDeclGroup}.
 \begin{verbatim}
 
-> genDecl :: ModuleIdent -> TypeScheme -> Decl a -> TcState ()
-> genDecl m ty (FunctionDecl _ f eqs) =
->   updateSt_ (rebindFun m f (eqnArity (head eqs)) ty)
-> genDecl m ty (PatternDecl _ t _) =
+> genDecl :: ModuleIdent -> TypeScheme -> Decl Type -> TcState (Decl Type)
+> genDecl m ty (FunctionDecl p _ f eqs) =
+>   updateSt_ (rebindFun m f (eqnArity (head eqs)) ty) >>
+>   return (FunctionDecl p (rawType ty) f eqs)
+> genDecl m ty (PatternDecl p t rhs) =
 >   case t of
->     VariablePattern _ v -> updateSt_ (rebindFun m v 0 ty)
->     _ -> return ()
+>     VariablePattern _ v ->
+>       updateSt_ (rebindFun m v 0 ty) >>
+>       return (PatternDecl p (VariablePattern (rawType ty) v) rhs)
+>     _ -> return (PatternDecl p t rhs)
 
 \end{verbatim}
 The function \texttt{tcCheckDecl} checks the type of an explicitly
@@ -676,19 +697,21 @@ context because the context of a function's type signature is
 >         (gcx,lcx) = splitContext fvs cx'
 >         ty' = subst theta ty
 >         sigma = if poly then gen fvs lcx ty' else monoType ty'
->     checkDeclSig tcEnv sigTy sigma d'
->     return (gcx,d')
+>     checkDeclSig tcEnv sigTy gcx sigma d'
 >   where poly = isNonExpansive tcEnv tyEnv d
 
-> checkDeclSig :: TCEnv -> QualTypeExpr -> TypeScheme -> Decl a -> TcState ()
-> checkDeclSig tcEnv sigTy sigma (FunctionDecl p f eqs)
->   | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma = return ()
+> checkDeclSig :: TCEnv -> QualTypeExpr -> Context -> TypeScheme -> Decl Type
+>              -> TcState (Context,Decl Type)
+> checkDeclSig tcEnv sigTy cx sigma (FunctionDecl p _ f eqs)
+>   | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma =
+>       return (cx,FunctionDecl p (rawType sigma) f eqs)
 >   | otherwise = errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
 >   where what = text "Function:" <+> ppIdent f
-> checkDeclSig tcEnv sigTy sigma (PatternDecl p t rhs)
->   | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma = return ()
+> checkDeclSig tcEnv sigTy cx sigma (PatternDecl p (VariablePattern _ v) rhs)
+>   | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma =
+>       return (cx,PatternDecl p (VariablePattern (rawType sigma) v) rhs)
 >   | otherwise = errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
->   where what = text "Variable:" <+> ppConstrTerm 0 t
+>   where what = text "Variable:" <+> ppIdent v
 
 > checkTypeSig :: TCEnv -> QualType -> TypeScheme -> Bool
 > checkTypeSig tcEnv (QualType sigCx sigTy) (ForAll _ (QualType cx ty)) =
@@ -703,8 +726,8 @@ context because the context of a function's type signature is
 > instance Binding (Decl a) where
 >   isNonExpansive _ _ (InfixDecl _ _ _ _) = True
 >   isNonExpansive _ _ (TypeSig _ _ _) = True
->   isNonExpansive _ _ (FunctionDecl _ _ _) = True
->   isNonExpansive _ _ (ForeignDecl _ _ _ _) = True
+>   isNonExpansive _ _ (FunctionDecl _ _ _ _) = True
+>   isNonExpansive _ _ (ForeignDecl _ _ _ _ _) = True
 >   isNonExpansive tcEnv tyEnv (PatternDecl _ t rhs) =
 >     isVariablePattern t && isNonExpansive tcEnv tyEnv rhs
 >   isNonExpansive _ _ (FreeDecl _ _) = False
@@ -759,12 +782,12 @@ context because the context of a function's type signature is
 > bindDeclArity :: TCEnv -> Decl a -> ValueEnv -> ValueEnv
 > bindDeclArity _ (InfixDecl _ _ _ _) tyEnv = tyEnv
 > bindDeclArity _ (TypeSig _ _ _) tyEnv = tyEnv
-> bindDeclArity _ (FunctionDecl _ f eqs) tyEnv =
+> bindDeclArity _ (FunctionDecl _ _ f eqs) tyEnv =
 >   bindArity f (eqnArity (head eqs)) tyEnv
-> bindDeclArity tcEnv (ForeignDecl _ _ f ty) tyEnv =
+> bindDeclArity tcEnv (ForeignDecl _ _ _ f ty) tyEnv =
 >   bindArity f (foreignArity (expandPolyType tcEnv (QualTypeExpr [] ty))) tyEnv
 > bindDeclArity _ (PatternDecl _ t _) tyEnv = foldr bindVarArity tyEnv (bv t)
-> bindDeclArity _ (FreeDecl _ vs) tyEnv = foldr bindVarArity tyEnv vs
+> bindDeclArity _ (FreeDecl _ vs) tyEnv = foldr bindVarArity tyEnv (bv vs)
 > bindDeclArity _ (TrustAnnot _ _ _) tyEnv = tyEnv
 
 > bindVarArity :: Ident -> ValueEnv -> ValueEnv
@@ -832,14 +855,14 @@ case of \texttt{tcTopDecl}.
 >     methTy <- liftM (classMethodType (qualifyWith m) d) fetchSt
 >     (ty',d') <- tcMethodDecl m tcEnv methTy d
 >     checkClassMethodType tcEnv (clsType cls tv (classMethodSig sigs d)) ty' d'
->     return d'
 >   where clsType cls tv (QualTypeExpr cx ty) =
 >           QualTypeExpr (ClassAssert cls (VariableType tv) : cx) ty
 
 > checkClassMethodType :: TCEnv -> QualTypeExpr -> TypeScheme -> Decl Type
->                      -> TcState ()
-> checkClassMethodType tcEnv sigTy sigma (FunctionDecl p f _)
->   | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma = return ()
+>                      -> TcState (Decl Type)
+> checkClassMethodType tcEnv sigTy sigma (FunctionDecl p ty f eqs)
+>   | checkTypeSig tcEnv (expandPolyType tcEnv sigTy) sigma =
+>       return (FunctionDecl p ty f eqs)
 >   | otherwise = errorAt p (typeSigTooGeneral tcEnv what sigTy sigma)
 >   where what = text "Method:" <+> ppIdent f
 
@@ -850,18 +873,17 @@ case of \texttt{tcTopDecl}.
 >     methTy <- liftM (instMethodType (qualifyLike cls) instTy d) fetchSt
 >     (ty',d') <- tcMethodDecl m tcEnv (typeScheme methTy) d
 >     checkInstMethodType tcEnv (normalize 0 methTy) ty' d'
->     return d'
 
 > checkInstMethodType :: TCEnv -> QualType -> TypeScheme -> Decl Type
->                     -> TcState ()
-> checkInstMethodType tcEnv methTy sigma (FunctionDecl p f _)
->   | checkTypeSig tcEnv methTy sigma = return ()
+>                     -> TcState (Decl Type)
+> checkInstMethodType tcEnv methTy sigma (FunctionDecl p ty f eqs)
+>   | checkTypeSig tcEnv methTy sigma = return (FunctionDecl p ty f eqs)
 >   | otherwise = errorAt p (methodSigTooGeneral tcEnv what methTy sigma)
 >   where what = text "Method:" <+> ppIdent f
 
 > tcMethodDecl :: ModuleIdent -> TCEnv -> TypeScheme -> Decl a
 >              -> TcState (TypeScheme,Decl Type)
-> tcMethodDecl m tcEnv methTy (FunctionDecl p f eqs) =
+> tcMethodDecl m tcEnv methTy (FunctionDecl p _ f eqs) =
 >   do
 >     updateSt_ (bindFun m f (eqnArity (head eqs)) methTy)
 >     (cx,(ty,d')) <- tcFunctionDecl "method" m tcEnv [] methTy p f eqs
@@ -869,11 +891,11 @@ case of \texttt{tcTopDecl}.
 >     return (gen zeroSet cx (subst theta ty),d')
 
 > classMethodSig :: SigEnv -> Decl a -> QualTypeExpr
-> classMethodSig sigs (FunctionDecl _ f _) =
+> classMethodSig sigs (FunctionDecl _ _ f _) =
 >   fromJust (lookupEnv (unRenameIdent f) sigs)
 
 > classMethodType :: (Ident -> QualIdent) -> Decl a -> ValueEnv -> TypeScheme
-> classMethodType qualify (FunctionDecl _ f _) tyEnv =
+> classMethodType qualify (FunctionDecl _ _ f _) tyEnv =
 >   funType (qualify (unRenameIdent f)) tyEnv
 
 > instMethodType :: (Ident -> QualIdent) -> QualType -> Decl a -> ValueEnv
@@ -909,12 +931,14 @@ equivalent to $\emph{World}\rightarrow(t,\emph{World})$.
 \begin{verbatim}
 
 > tcForeignFunct :: ModuleIdent -> TCEnv -> Position -> ForeignImport -> Ident
->                -> TypeExpr -> TcState ()
+>                -> TypeExpr -> TcState Type
 > tcForeignFunct m tcEnv p (cc,_,ie) f ty =
 >   do
->     checkForeignType cc (unqualType ty')
+>     checkForeignType cc ty''
 >     updateSt_ (bindFun m f (foreignArity ty') (typeScheme ty'))
+>     return ty''
 >   where ty' = expandPolyType tcEnv (QualTypeExpr [] ty)
+>         ty'' = unqualType ty'
 >         checkForeignType cc ty
 >           | cc == CallConvPrimitive = return ()
 >           | ie == Just "dynamic" = checkCDynCallType tcEnv p cc ty

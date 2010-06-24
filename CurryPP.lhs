@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: CurryPP.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 1999-2009, Wolfgang Lux
+% Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryPP.lhs}
@@ -135,8 +135,8 @@ Declarations
 > ppDecl :: Decl a -> Doc
 > ppDecl (InfixDecl _ fix p ops) = ppPrec fix p <+> list (map ppInfixOp ops)
 > ppDecl (TypeSig _ fs ty) = ppIdentList fs <+> text "::" <+> ppQualTypeExpr ty
-> ppDecl (FunctionDecl _ _ eqs) = vcat (map ppEquation eqs)
-> ppDecl (ForeignDecl p fi f ty) =
+> ppDecl (FunctionDecl _ _ _ eqs) = vcat (map ppEquation eqs)
+> ppDecl (ForeignDecl p fi _ f ty) =
 >   sep [text "foreign import" <+> ppForeignImport fi,
 >        indent (ppDecl (TypeSig p [f] (QualTypeExpr [] ty)))]
 >   where ppForeignImport (cc,s,ie) =
@@ -147,7 +147,7 @@ Declarations
 >         ppSafety Unsafe = text "unsafe"
 >         ppSafety Safe = text "safe"
 > ppDecl (PatternDecl _ t rhs) = ppRule (ppConstrTerm 0 t) equals rhs
-> ppDecl (FreeDecl _ vs) = ppIdentList vs <+> text "free"
+> ppDecl (FreeDecl _ vs) = ppIdentList [v | FreeVar _ v <- vs] <+> text "free"
 > ppDecl (TrustAnnot _ t fs) = ppPragma (trust t) (ppIdentList fs)
 >   where trust Suspect = "SUSPECT"
 >         trust Trust = "TRUST"

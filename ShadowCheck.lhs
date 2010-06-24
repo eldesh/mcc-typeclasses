@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: ShadowCheck.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 2005-2009, Wolfgang Lux
+% Copyright (c) 2005-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ShadowCheck.lhs}
@@ -100,9 +100,9 @@ those method definitions.
 >   shadow _ (NewtypeDecl _ _ _ _ _ _) = id
 >   shadow _ (TypeDecl _ _ _ _) = id
 >   shadow _ (ClassDecl p _ _ _ ds) =
->     foldr (&&&) id [shadow p eqs | FunctionDecl p _ eqs <- ds]
+>     foldr (&&&) id [shadow p eqs | FunctionDecl p _ _ eqs <- ds]
 >   shadow _ (InstanceDecl p _ _ _ ds) =
->     foldr (&&&) id [shadow p eqs | FunctionDecl p _ eqs <- ds]
+>     foldr (&&&) id [shadow p eqs | FunctionDecl p _ _ eqs <- ds]
 >   shadow _ (DefaultDecl _ _) = id
 >   shadow p (BlockDecl d) = shadow p d
 >   shadow _ (SplitAnnot _) = id
@@ -113,8 +113,8 @@ those method definitions.
 > instance SyntaxTree (Decl a) where
 >   shadow _ (InfixDecl _ _ _ _) = id
 >   shadow _ (TypeSig _ _ _) = id
->   shadow _ (FunctionDecl p _ eqs) = shadow p eqs
->   shadow _ (ForeignDecl _ _ _ _) = id
+>   shadow _ (FunctionDecl p _ _ eqs) = shadow p eqs
+>   shadow _ (ForeignDecl _ _ _ _ _) = id
 >   shadow _ (PatternDecl p _ rhs) = shadow p rhs
 >   shadow _ (FreeDecl _ _) = id
 >   shadow _ (TrustAnnot _ _ _) = id
@@ -205,10 +205,10 @@ positions.
 > vars :: Decl a -> [P Ident]
 > vars (InfixDecl _ _ _ _) = []
 > vars (TypeSig _ _ _) = []
-> vars (FunctionDecl p f _) = [P p f]
-> vars (ForeignDecl p _ f _) = [P p f]
+> vars (FunctionDecl p _ f _) = [P p f]
+> vars (ForeignDecl p _ _ f _) = [P p f]
 > vars (PatternDecl p t _) = map (P p) (bv t)
-> vars (FreeDecl p vs) = map (P p) vs
+> vars (FreeDecl p vs) = map (P p) (bv vs)
 > vars (TrustAnnot _ _ _) = []
 
 \end{verbatim}

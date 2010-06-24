@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Newtype.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: Newtype.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 2009, Wolfgang Lux
+% Copyright (c) 2009-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Newtype.lhs}
@@ -80,8 +80,8 @@ value type environment because it is never used in source code.
 >   | otherwise = DataType tc k cs
 >   where ioType' = TypeArrow worldType (tupleType [TypeVariable 0,worldType])
 >         worldType = TypeConstructor qWorldId
-> transTypeInfo tyEnv (RenamingType tc k c) =
->   AliasType tc (kindArity k) k (reprType (qualifyLike tc c) tyEnv)
+> transTypeInfo tyEnv (RenamingType tc k c) = AliasType tc (kindArity k) k ty
+>   where ty = arrowDomain (rawConType (qualifyLike tc c) tyEnv)
 > transTypeInfo _ (AliasType tc n k ty) = AliasType tc n k ty
 > transTypeInfo _ (TypeClass cls k clss fs) = TypeClass cls k clss fs
 
@@ -109,9 +109,10 @@ synonym declaration and a function declaration.
 >   return [DataDecl p cx tc tvs cs clss]
 > transTopDecl m tyEnv (NewtypeDecl p _ tc tvs (NewConstrDecl _ c ty) _) =
 >   do
->     v <- freshVar m "_#v" (reprType (qualifyWith m c) tyEnv)
->     let d = funDecl p c [uncurry VariablePattern v] (uncurry mkVar v)
+>     v <- freshVar m "_#v" (instType (arrowDomain ty'))
+>     let d = funDecl p ty' c [uncurry VariablePattern v] (uncurry mkVar v)
 >     return [TypeDecl p tc tvs ty,BlockDecl d]
+>   where ty' = rawConType (qualifyWith m c) tyEnv
 > transTopDecl _ _ (TypeDecl p tc tvs ty) = return [TypeDecl p tc tvs ty]
 > transTopDecl _ tyEnv (ClassDecl p cx cls tv ds) =
 >   return [ClassDecl p cx cls tv (tds ++ transNewt tyEnv vds)]
@@ -134,9 +135,9 @@ removes newtype constructors in patterns and expressions.
 >   transNewt tyEnv = map (transNewt tyEnv)
 
 > instance SyntaxTree (Decl a) where
->   transNewt tyEnv (FunctionDecl p f eqs) =
->     FunctionDecl p f (transNewt tyEnv eqs)
->   transNewt _ (ForeignDecl p fi f ty) = ForeignDecl p fi f ty
+>   transNewt tyEnv (FunctionDecl p ty f eqs) =
+>     FunctionDecl p ty f (transNewt tyEnv eqs)
+>   transNewt _ (ForeignDecl p fi ty f ty') = ForeignDecl p fi ty f ty'
 >   transNewt tyEnv (PatternDecl p t rhs) =
 >     PatternDecl p (transNewt tyEnv t) (transNewt tyEnv rhs)
 >   transNewt _ (FreeDecl p vs) = FreeDecl p vs
@@ -196,13 +197,30 @@ removes newtype constructors in patterns and expressions.
 >     Alt p (transNewt tyEnv t) (transNewt tyEnv rhs)
 
 \end{verbatim}
-The function \texttt{reprType} returns the representation type of a
-renaming type, which is just the codomain of its constructor's type.
+The function \texttt{rawConType} returns the raw type of a (newtype)
+constructor and the function \texttt{arrowDomain} returns the domain
+of an arrow type, i.e., its argument type.
 \begin{verbatim}
 
-> reprType :: QualIdent -> ValueEnv -> Type
-> reprType c tyEnv = ty
->   where TypeArrow ty _ = rawType (thd3 (conType c tyEnv))
+> rawConType :: QualIdent -> ValueEnv -> Type
+> rawConType c tyEnv = rawType (thd3 (conType c tyEnv))
+
+> arrowDomain :: Type -> Type
+> arrowDomain (TypeArrow ty _) = ty
+
+\end{verbatim}
+The function \texttt{instType} instantiates the universally quantified
+type variables of a type (scheme) with fresh type variables. Since
+this function is used only to instantiate the closed types of newtype
+constructors, the compiler can reuse the same monomorphic type
+variables for every instantiated type.
+\begin{verbatim}
+
+> instType :: Type -> Type
+> instType (TypeConstructor tc) = TypeConstructor tc
+> instType (TypeVariable tv) = TypeVariable (-1 - tv)
+> instType (TypeArrow ty1 ty2) = TypeArrow (instType ty1) (instType ty2)
+> instType (TypeApply ty1 ty2) = TypeApply (instType ty1) (instType ty2)
 
 \end{verbatim}
 Generation of fresh names.

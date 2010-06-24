@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: CurryParser.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 1999-2009, Wolfgang Lux
+% Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryParser.lhs}
@@ -292,8 +292,8 @@ directory path to the module is ignored.
 >         opDecl p f t = PatternDecl p (f t)
 >         isConstrId c = isQualified c || isPrimDataId (unqualify c)
 
-> funDecl :: Position -> (Ident,Lhs a) -> Rhs a -> Decl a
-> funDecl p (f,lhs) rhs = FunctionDecl p f [Equation p lhs rhs]
+> funDecl :: Position -> (Ident,Lhs ()) -> Rhs () -> Decl ()
+> funDecl p (f,lhs) rhs = FunctionDecl p () f [Equation p lhs rhs]
 
 > funLhs :: Parser Token (Ident,Lhs ()) a
 > funLhs = funLhs <$> fun <*> many1 constrTerm2
@@ -323,13 +323,14 @@ directory path to the module is ignored.
 >               <|> GuardedRhs <$> many1 (condExpr eq)
 
 > freeDecl :: Parser Token (Decl ()) a
-> freeDecl = FreeDecl <$> position <*> var `sepBy1` comma <*-> token KW_free
+> freeDecl = FreeDecl <$> position <*> fvar `sepBy1` comma <*-> token KW_free
+>   where fvar = FreeVar () <$> var
 
 > foreignDecl :: Parser Token (Decl ()) a
 > foreignDecl =
 >   mkDecl <$> position <*-> token KW_foreign <*-> token KW_import
 >          <*> callConv <*> entitySpec <*-> token DoubleColon <*> type0
->   where mkDecl p cc (s,ie,f) ty = ForeignDecl p (cc,s,ie) f ty
+>   where mkDecl p cc (s,ie,f) ty = ForeignDecl p (cc,s,ie) () f ty
 >         callConv = CallConvPrimitive <$-> token Id_primitive
 >                <|> CallConvCCall <$-> token Id_ccall
 >                <|> CallConvRawCall <$-> token Id_rawcall

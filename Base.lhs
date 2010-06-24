@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Base.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: Base.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 1999-2009, Wolfgang Lux
+% Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Base.lhs}
@@ -63,16 +63,19 @@ variables cannot be computed independently for each declaration.
 >   bv _ = []
 
 > instance QualExpr (Decl a) where
->   qfv m (FunctionDecl _ _ eqs) = qfv m eqs
+>   qfv m (FunctionDecl _ _ _ eqs) = qfv m eqs
 >   qfv m (PatternDecl _ t rhs) = qfv m t ++ qfv m rhs
 >   qfv _ _ = []
 
 > instance QuantExpr (Decl a) where
->   bv (FunctionDecl _ f _) = [f]
->   bv (ForeignDecl _ _ f _) = [f]
+>   bv (FunctionDecl _ _ f _) = [f]
+>   bv (ForeignDecl _ _ _ f _) = [f]
 >   bv (PatternDecl _ t _) = bv t
->   bv (FreeDecl _ vs) = vs
+>   bv (FreeDecl _ vs) = bv vs
 >   bv _ = []
+
+> instance QuantExpr (FreeVar a) where
+>   bv (FreeVar _ v) = [v]
 
 > instance QualExpr (Equation a) where
 >   qfv m (Equation _ lhs rhs) = qfv m lhs ++ filterBv lhs (qfv m rhs)

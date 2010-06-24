@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2815 2009-05-04 13:59:57Z wlux $
+% $Id: Deriving.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 2006-2009, Wolfgang Lux
+% Copyright (c) 2006-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Deriving.lhs}
@@ -201,21 +201,23 @@ like \verb|[False ..]| well defined.
 >         enumFromThen = deriveEnumFromThen nameSupply p (head cs) (last cs)
 
 > deriveSucc :: Position -> [Constr] -> Decl ()
-> deriveSucc p cs = FunctionDecl p f (if null eqs then [failedEqn p f] else eqs)
+> deriveSucc p cs =
+>   FunctionDecl p () f (if null eqs then [failedEqn p f] else eqs)
 >   where f = succId
 >         eqs = zipWith (succEqn p f) cs (tail cs)
 
 > derivePred :: Position -> [Constr] -> Decl ()
-> derivePred p cs = FunctionDecl p f (if null eqs then [failedEqn p f] else eqs)
+> derivePred p cs =
+>   FunctionDecl p () f (if null eqs then [failedEqn p f] else eqs)
 >   where f = predId
 >         eqs = zipWith (predEqn p f) (tail cs) cs
 
 > deriveFromEnum :: Position -> [Constr] -> Decl ()
-> deriveFromEnum p cs = FunctionDecl p f (zipWith (fromEnumEqn p f) cs [0..])
+> deriveFromEnum p cs = FunctionDecl p () f (zipWith (fromEnumEqn p f) cs [0..])
 >   where f = fromEnumId
 
 > deriveToEnum :: Position -> [Constr] -> Decl ()
-> deriveToEnum p cs = FunctionDecl p f (zipWith (toEnumEqn p f) [0..] cs)
+> deriveToEnum p cs = FunctionDecl p () f (zipWith (toEnumEqn p f) [0..] cs)
 >   where f = toEnumId
 
 > deriveEnumFrom :: [Ident] -> Position -> Constr -> Decl ()
@@ -305,7 +307,7 @@ respectively.
 
 > deriveShowsPrec :: PEnv -> [Ident] -> Position -> [Constr] -> Decl ()
 > deriveShowsPrec pEnv vs p cs =
->   FunctionDecl p showsPrecId (map (showsPrecEqn pEnv vs p showsPrecId) cs)
+>   FunctionDecl p () showsPrecId (map (showsPrecEqn pEnv vs p showsPrecId) cs)
 
 > showsPrecEqn :: PEnv -> [Ident] -> Position -> Ident -> Constr -> Equation ()
 > showsPrecEqn pEnv (v:vs) p f (c,n,ls) =
@@ -382,7 +384,7 @@ respectively.
 
 > funDecl :: Position -> Ident -> [Ident] -> Expression () -> Decl ()
 > funDecl p f vs e =
->   FunctionDecl p f [equation p f (map (VariablePattern ()) vs) e]
+>   FunctionDecl p () f [equation p f (map (VariablePattern ()) vs) e]
 
 > equation :: Position -> Ident -> [ConstrTerm a] -> Expression a -> Equation a
 > equation p f ts e = Equation p (FunLhs f ts) (SimpleRhs p e [])

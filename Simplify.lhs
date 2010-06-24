@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: Simplify.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
 % Copyright (c) 2003-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -74,17 +74,18 @@ Currently, the following optimizations are implemented:
 
 > simplifyDecl :: ModuleIdent -> InlineEnv -> Decl Type
 >              -> SimplifyState [Decl Type]
-> simplifyDecl m env (FunctionDecl p f eqs) =
->   liftM (return . FunctionDecl p f) (mapM (simplifyEquation m env) eqs)
-> simplifyDecl _ _ (ForeignDecl p fi f ty) = return [ForeignDecl p fi f ty]
+> simplifyDecl m env (FunctionDecl p ty f eqs) =
+>   liftM (return . FunctionDecl p ty f) (mapM (simplifyEquation m env) eqs)
+> simplifyDecl _ _ (ForeignDecl p fi ty f ty') =
+>   return [ForeignDecl p fi ty f ty']
 > simplifyDecl m env (PatternDecl p t rhs) =
 >   do
 >     rhs' <- simplifyRhs m env rhs >>= etaExpand m
 >     case (t,rhs') of
->       (VariablePattern _ f,SimpleRhs _ (Lambda _ ts e) _) ->
+>       (VariablePattern ty f,SimpleRhs _ (Lambda _ ts e) _) ->
 >         do
 >           updateSt_ (changeArity m f (length ts))
->           return [funDecl p f ts e]
+>           return [funDecl p ty f ts e]
 >       (TuplePattern ts,SimpleRhs p' e _) -> return (match p' e)
 >         where match _ (Variable _ v) =
 >                 [patDecl p t (Variable (typeOf t) v) | t <- ts]
@@ -230,8 +231,8 @@ body is a non-expansive expression.
 > isNonExpansive _ _ (Fcase _ _) = False
 
 > isNonExpansiveDecl :: ValueEnv -> Decl a -> Bool
-> isNonExpansiveDecl _ (FunctionDecl _ _ _) = True
-> isNonExpansiveDecl _ (ForeignDecl _ _ _ _) = True
+> isNonExpansiveDecl _ (FunctionDecl _ _ _ _) = True
+> isNonExpansiveDecl _ (ForeignDecl _ _ _ _ _) = True
 > isNonExpansiveDecl tyEnv (PatternDecl _ _ (SimpleRhs _ e _)) =
 >   isNonExpansive tyEnv 0 e
 > isNonExpansiveDecl _ (FreeDecl _ _) = False
@@ -485,7 +486,7 @@ variable declarations (see \texttt{simplifyDecl} above).
 > inlineVars :: ModuleIdent -> ValueEnv -> TrustEnv -> [Decl Type] -> InlineEnv
 >            -> InlineEnv
 > inlineVars m tyEnv trEnv
->            [FunctionDecl _ f [Equation p (FunLhs _ ts) (SimpleRhs _ e _)]]
+>            [FunctionDecl _ _ f [Equation p (FunLhs _ ts) (SimpleRhs _ e _)]]
 >            env
 >   | f `notElem` qfv m e && trustedFun trEnv f =
 >       case etaReduce m tyEnv p ts e of
@@ -524,8 +525,8 @@ variable declarations (see \texttt{simplifyDecl} above).
 > mkSimplLet m _ [FreeDecl p vs] (fvs,e)
 >   | null vs' = (fvs,e)
 >   | otherwise = (fvs',Let [FreeDecl p vs'] e)
->   where vs' = filter (`elem` fvs) vs
->         fvs' = filter (`notElem` vs) fvs
+>   where vs' = [FreeVar ty v | FreeVar ty v <- vs, v `elem` fvs]
+>         fvs' = filter (`notElem` bv vs) fvs
 > mkSimplLet m tcEnv [PatternDecl _ (VariablePattern _ v) (SimpleRhs _ e _)]
 >       (_,Variable ty' v')
 >   | v' == qualify v && v `notElem` fvs = (fvs,withType tcEnv ty' e)

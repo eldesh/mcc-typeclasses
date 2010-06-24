@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Lift.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: Lift.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 2001-2008, Wolfgang Lux
+% Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Lift.lhs}
@@ -76,8 +76,8 @@ variables.
 
 > abstractDecl :: ModuleIdent -> String -> [Ident] -> AbstractEnv -> Decl Type
 >              -> AbstractState (Decl Type)
-> abstractDecl m _ lvs env (FunctionDecl p f eqs) =
->   liftM (FunctionDecl p f) (mapM (abstractEquation m lvs env) eqs)
+> abstractDecl m _ lvs env (FunctionDecl p ty f eqs) =
+>   liftM (FunctionDecl p ty f) (mapM (abstractEquation m lvs env) eqs)
 > abstractDecl m pre lvs env (PatternDecl p t rhs) =
 >   liftM (PatternDecl p t) (abstractRhs m pre lvs env rhs)
 > abstractDecl _ _ _ _ d = return d
@@ -219,13 +219,15 @@ variables in order to avoid an inadvertent name capturing.
 
 > abstractFunDecl :: ModuleIdent -> String -> [(Type,Ident)] -> [Ident]
 >                 -> AbstractEnv -> Decl Type -> AbstractState (Decl Type)
-> abstractFunDecl m pre fvs lvs env (FunctionDecl p f eqs) =
->   abstractDecl m pre lvs env (FunctionDecl p f' (map (addVars f') eqs))
+> abstractFunDecl m pre fvs lvs env (FunctionDecl p ty f eqs) =
+>   do
+>     ty' <- liftM (rawType . varType f') fetchSt
+>     abstractDecl m pre lvs env (FunctionDecl p ty' f' (map (addVars f') eqs))
 >   where f' = liftIdent pre f
 >         addVars f (Equation p (FunLhs _ ts) rhs) =
 >           Equation p (FunLhs f (map (uncurry VariablePattern) fvs ++ ts)) rhs
-> abstractFunDecl _ pre _ _ _ (ForeignDecl p fi f ty) =
->   return (ForeignDecl p fi (liftIdent pre f) ty)
+> abstractFunDecl _ pre _ _ _ (ForeignDecl p fi ty f ty') =
+>   return (ForeignDecl p fi ty (liftIdent pre f) ty')
 
 > abstractExpr :: ModuleIdent -> String -> [Ident] -> AbstractEnv
 >              -> Expression Type -> AbstractState (Expression Type)
@@ -273,7 +275,8 @@ to the top-level.
 > liftTopDecl d = [d]
 
 > liftFunDecl :: Decl a -> [Decl a]
-> liftFunDecl (FunctionDecl p f eqs) = (FunctionDecl p f eqs' : concat dss')
+> liftFunDecl (FunctionDecl p ty f eqs) =
+>   (FunctionDecl p ty f eqs' : concat dss')
 >   where (eqs',dss') = unzip (map liftEquation eqs)
 > liftFunDecl d = [d]
 

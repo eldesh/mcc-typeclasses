@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: ILTrans.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 1999-2009, Wolfgang Lux
+% Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ILTrans.lhs}
@@ -56,8 +56,9 @@ annotations are inserted in IL code at the correct places.
 > translTopDecl _ _ _ (SplitAnnot _) = [IL.SplitAnnot]
 
 > translDecl :: ModuleIdent -> ValueEnv -> Decl Type -> [IL.Decl]
-> translDecl m tyEnv (FunctionDecl _ _ eqs) = map (translFunction m tyEnv) eqs
-> translDecl m tyEnv (ForeignDecl _ fi f _) = [translForeign m tyEnv f fi]
+> translDecl m tyEnv (FunctionDecl _ ty _ eqs) =
+>   map (translFunction m tyEnv ty) eqs
+> translDecl m _ (ForeignDecl _ fi ty f _) = [translForeign m f fi ty]
 > translDecl _ _ _ = []
 
 > translData :: ModuleIdent -> ValueEnv -> Ident -> [Ident] -> [ConstrDecl]
@@ -75,10 +76,9 @@ annotations are inserted in IL code at the correct places.
 >   where c = qualifyWith m (constr d)
 >         ty = rawType (thd3 (conType c tyEnv))
 
-> translForeign :: ModuleIdent -> ValueEnv -> Ident -> ForeignImport -> IL.Decl
-> translForeign m tyEnv f (cc,_,ie) =
->   IL.ForeignDecl (qualifyWith m f) (callConv cc) (fromJust ie)
->                  (translType (rawType (varType f tyEnv)))
+> translForeign :: ModuleIdent -> Ident -> ForeignImport -> Type -> IL.Decl
+> translForeign m f (cc,_,ie) ty =
+>   IL.ForeignDecl (qualifyWith m f) (callConv cc) (fromJust ie) (translType ty)
 >   where callConv CallConvPrimitive = IL.Primitive
 >         callConv CallConvCCall = IL.CCall
 >         callConv CallConvRawCall = IL.RawCall
@@ -115,12 +115,11 @@ intermediate language. Recall that every function has only a single
 equation and all arguments are variables at this point.
 \begin{verbatim}
 
-> translFunction :: ModuleIdent -> ValueEnv -> Equation Type -> IL.Decl
-> translFunction m tyEnv (Equation _ (FunLhs f ts) rhs) =
+> translFunction :: ModuleIdent -> ValueEnv -> Type -> Equation Type -> IL.Decl
+> translFunction m tyEnv ty (Equation _ (FunLhs f ts) rhs) =
 >   IL.FunctionDecl (qualifyWith m f) vs (translType ty)
 >                   (translRhs tyEnv vs rhs)
 >   where vs = [v | VariablePattern _ v <- ts]
->         ty = rawType (varType f tyEnv)
 
 > translRhs :: ValueEnv -> [Ident] -> Rhs Type -> IL.Expression
 > translRhs tyEnv vs (SimpleRhs p e _) =
@@ -189,7 +188,7 @@ further possibilities to apply this transformation.
 >   IL.Apply (translExpr tyEnv vs e1) (translExpr tyEnv vs e2)
 > translExpr tyEnv vs (Let ds e) =
 >   case ds of
->     [FreeDecl _ vs'] -> IL.Exist vs' e'
+>     [FreeDecl _ vs'] -> IL.Exist (bv vs') e'
 >     [d] -> IL.Let (rec d) [translBinding vs' d] e'
 >     _ -> IL.Let IL.Rec (map (translBinding vs') ds) e'
 >   where e' = translExpr tyEnv vs' e
@@ -204,7 +203,7 @@ further possibilities to apply this transformation.
 >   where (vss',as') = unzip (map (translAlt tyEnv vs) as)
 > translExpr tyEnv vs (Fcase e as) =
 >   case e of
->     Let [FreeDecl _ [v]] (Variable _ v')
+>     Let [FreeDecl _ [FreeVar _ v]] (Variable _ v')
 >       | qualify v == v' && all isChoice as ->
 >           IL.Choice [translRhs tyEnv vs rhs | Alt _ _ rhs <- as]
 >     _ -> caseExpr IL.Flex (translExpr tyEnv vs e) (nub (concat vss')) as'

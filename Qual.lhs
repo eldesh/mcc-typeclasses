@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Qual.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: Qual.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 2001-2009, Wolfgang Lux
+% Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Qual.lhs}
@@ -111,10 +111,10 @@ order to compile this module with hbc.
 >   qual _ _ _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops
 >   qual phase tEnv vEnv (TypeSig p fs ty) =
 >     TypeSig p fs (qual phase tEnv vEnv ty)
->   qual phase tEnv vEnv (FunctionDecl p f eqs) =
->     FunctionDecl p f (qual phase tEnv vEnv eqs)
->   qual phase tEnv vEnv (ForeignDecl p fi f ty) =
->     ForeignDecl p fi f (qual phase tEnv vEnv ty)
+>   qual phase tEnv vEnv (FunctionDecl p a f eqs) =
+>     FunctionDecl p a f (qual phase tEnv vEnv eqs)
+>   qual phase tEnv vEnv (ForeignDecl p fi a f ty) =
+>     ForeignDecl p fi a f (qual phase tEnv vEnv ty)
 >   qual phase tEnv vEnv (PatternDecl p t rhs) =
 >     PatternDecl p (qual phase tEnv vEnv t) (qual phase tEnv vEnv rhs)
 >   qual _ _ _ (FreeDecl p vs) = FreeDecl p vs

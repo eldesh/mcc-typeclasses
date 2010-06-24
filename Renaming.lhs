@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: Renaming.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 1999-2009, Wolfgang Lux
+% Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Renaming.lhs}
@@ -139,7 +139,7 @@ syntax tree and renames all type and expression variables.
 > renameTopDecl (ClassDecl p cx cls tv ds) =
 >   do
 >     env <- bindVars emptyEnv [tv]
->     env' <- bindVars emptyEnv [f | FunctionDecl _ f _ <- ds]
+>     env' <- bindVars emptyEnv [f | FunctionDecl _ _ f _ <- ds]
 >     liftM3 (flip (ClassDecl p) cls)
 >            (mapM (renameClassAssert env) cx)
 >            (renameVar env tv)
@@ -147,7 +147,7 @@ syntax tree and renames all type and expression variables.
 > renameTopDecl (InstanceDecl p cx cls ty ds) =
 >   do
 >     env <- bindVars emptyEnv (fv ty)
->     env' <- bindVars emptyEnv [f | FunctionDecl _ f _ <- ds]
+>     env' <- bindVars emptyEnv [f | FunctionDecl _ _ f _ <- ds]
 >     liftM3 (flip (InstanceDecl p) cls)
 >            (mapM (renameClassAssert env) cx)
 >            (renameType env ty)
@@ -209,10 +209,10 @@ class method.
 >   return (InfixDecl p fix pr ops)
 > renameMethodDecl env _ (TypeSig p fs ty) =
 >   liftM (TypeSig p fs) (renameTypeSig env ty)
-> renameMethodDecl _ env' (FunctionDecl p f eqs) =
+> renameMethodDecl _ env' (FunctionDecl p a f eqs) =
 >   do
 >     f' <- renameVar env' f
->     liftM (FunctionDecl p f') (mapM (renameEqn f' emptyEnv) eqs)
+>     liftM (FunctionDecl p a f') (mapM (renameEqn f' emptyEnv) eqs)
 > renameMethodDecl _ env' (TrustAnnot p tr fs) =
 >   liftM (TrustAnnot p tr) (mapM (renameVar env') fs)
 
@@ -246,21 +246,24 @@ class method.
 >   liftM (InfixDecl p fix pr) (mapM (renameVar env) ops)
 > renameDecl env (TypeSig p fs ty) =
 >   liftM2 (TypeSig p) (mapM (renameVar env) fs) (renameTypeSig emptyEnv ty)
-> renameDecl env (FunctionDecl p f eqs) =
+> renameDecl env (FunctionDecl p a f eqs) =
 >   do
 >     f' <- renameVar env f
->     liftM (FunctionDecl p f') (mapM (renameEqn f' env) eqs)
-> renameDecl env (ForeignDecl p fi f ty) =
+>     liftM (FunctionDecl p a f') (mapM (renameEqn f' env) eqs)
+> renameDecl env (ForeignDecl p fi a f ty) =
 >   do
 >     f' <- renameVar env f
 >     QualTypeExpr _ ty' <- renameTypeSig emptyEnv (QualTypeExpr [] ty)
->     return (ForeignDecl p fi f' ty')
+>     return (ForeignDecl p fi a f' ty')
 > renameDecl env (PatternDecl p t rhs) =
 >   liftM2 (PatternDecl p) (renameConstrTerm env env t) (renameRhs env rhs)
 > renameDecl env (FreeDecl p vs) =
->   liftM (FreeDecl p) (mapM (renameVar env) vs)
+>   liftM (FreeDecl p) (mapM (renameFreeVar env) vs)
 > renameDecl env (TrustAnnot p t fs) =
 >   liftM (TrustAnnot p t) (mapM (renameVar env) fs)
+
+> renameFreeVar :: RenameEnv -> FreeVar a -> RenameState (FreeVar a)
+> renameFreeVar env (FreeVar a v) = liftM (FreeVar a) (renameVar env v)
 
 \end{verbatim}
 Note that the root of the left hand side term of an equation must be

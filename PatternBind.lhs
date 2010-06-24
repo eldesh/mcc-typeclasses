@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: PatternBind.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: PatternBind.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 2003-2009, Wolfgang Lux
+% Copyright (c) 2003-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{PatternBind.lhs}
@@ -97,8 +97,9 @@ were introduced in the code by the transformation.
 >   pbt _ (SplitAnnot p) = return (SplitAnnot p)
 
 > instance SyntaxTree Decl where
->   pbt m (FunctionDecl p f eqs) = liftM (FunctionDecl p f) (mapM (pbt m) eqs)
->   pbt _ (ForeignDecl p fi f ty) = return (ForeignDecl p fi f ty)
+>   pbt m (FunctionDecl p ty f eqs) =
+>     liftM (FunctionDecl p ty f) (mapM (pbt m) eqs)
+>   pbt _ (ForeignDecl p fi ty f ty') = return (ForeignDecl p fi ty f ty')
 >   pbt m (PatternDecl p t rhs) = liftM (PatternDecl p t) (pbt m rhs)
 >   pbt _ (FreeDecl p vs) = return (FreeDecl p vs)
 
@@ -235,9 +236,9 @@ Generation of fresh names.
 Auxiliary functions.
 \begin{verbatim}
 
-> foreignDecl :: Position -> String -> QualIdent -> Type -> Decl a
+> foreignDecl :: Position -> String -> QualIdent -> Type -> Decl Type
 > foreignDecl p ie f ty =
->   ForeignDecl p (CallConvPrimitive,Just Safe,Just ie) (unqualify f)
+>   ForeignDecl p (CallConvPrimitive,Just Safe,Just ie) ty (unqualify f)
 >               (fromType nameSupply ty)
 
 > bindForeign :: QualIdent -> Type -> ValueEnv -> ValueEnv

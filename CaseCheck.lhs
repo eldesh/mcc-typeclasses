@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CaseCheck.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: CaseCheck.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 2003-2009, Wolfgang Lux
+% Copyright (c) 2003-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CaseCheck.lhs}
@@ -184,16 +184,16 @@ collect all defined identifiers.
 > methodNames :: Decl a -> [Definition] -> [Definition]
 > methodNames (InfixDecl _ _ _ _) xs = xs
 > methodNames (TypeSig p fs ty) xs = map (D p MethodId) fs ++ names p ty xs
-> methodNames (FunctionDecl p _ eqs) xs = names p eqs xs
+> methodNames (FunctionDecl p _ _ eqs) xs = names p eqs xs
 > methodNames (TrustAnnot _ _ _) xs = xs
 
 > instance SyntaxTree (Decl a) where
 >   names _ (InfixDecl _ _ _ _) xs = xs
 >   names _ (TypeSig p _ ty) xs = names p ty xs
->   names _ (FunctionDecl p f eqs) xs = D p FunctionId f : names p eqs xs
->   names _ (ForeignDecl p _ f ty) xs = D p FunctionId f : names p ty xs
+>   names _ (FunctionDecl p _ f eqs) xs = D p FunctionId f : names p eqs xs
+>   names _ (ForeignDecl p _ _ f ty) xs = D p FunctionId f : names p ty xs
 >   names _ (PatternDecl p t rhs) xs = names p t (names p rhs xs)
->   names _ (FreeDecl p vs) xs = map (D p VariableId) vs ++ xs
+>   names _ (FreeDecl p vs) xs = map (D p VariableId) (bv vs) ++ xs
 >   names _ (TrustAnnot _ _ _) xs = xs
 
 > instance SyntaxTree (Equation a) where

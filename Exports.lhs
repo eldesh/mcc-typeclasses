@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2901 2009-08-24 15:12:43Z wlux $
+% $Id: Exports.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 2000-2009, Wolfgang Lux
+% Copyright (c) 2000-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Exports.lhs}
@@ -211,14 +211,14 @@ same class.
 > functions (NewtypeDecl _ _ _ _ _ _) = []
 > functions (TypeDecl _ _ _ _) = []
 > functions (ClassDecl _ _ _ _ ds) =
->   [(dfltMethodId (unRenameIdent f),eqs) | FunctionDecl _ f eqs <- ds]
+>   [(dfltMethodId (unRenameIdent f),eqs) | FunctionDecl _ _ f eqs <- ds]
 > functions (InstanceDecl _ _ _ ty ds) =
->   [(instMethodId tc (unRenameIdent f),eqs) | FunctionDecl _ f eqs <- ds]
+>   [(instMethodId tc (unRenameIdent f),eqs) | FunctionDecl _ _ f eqs <- ds]
 >   where tc = typeConstr ty
 > functions (DefaultDecl _ _) = []
 > functions (BlockDecl d) =
 >   case d of
->     FunctionDecl _ f eqs -> [(f,eqs)]
+>     FunctionDecl _ _ f eqs -> [(f,eqs)]
 >     _ -> []
 > functions (SplitAnnot _) = []
 

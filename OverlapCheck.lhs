@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: OverlapCheck.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: OverlapCheck.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 2006-2009, Wolfgang Lux
+% Copyright (c) 2006-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{OverlapCheck.lhs}
@@ -68,10 +68,10 @@ traversal of the syntax tree.
 > instance Syntax (Decl a) where
 >   overlap _ _ (InfixDecl _ _ _ _) = id
 >   overlap _ _ (TypeSig _ _ _) = id
->   overlap tyEnv _ (FunctionDecl p f eqs) =
+>   overlap tyEnv _ (FunctionDecl p _ f eqs) =
 >     ([P p (Just f) | isNonDet tyEnv tss] ++) . overlap tyEnv p eqs
 >     where tss = [snd (flatLhs lhs) | (Equation _ lhs _) <- eqs]
->   overlap _ _ (ForeignDecl _ _ _ _) = id
+>   overlap _ _ (ForeignDecl _ _ _ _ _) = id
 >   overlap tyEnv _ (PatternDecl p _ rhs) = overlap tyEnv p rhs
 >   overlap _ _ (FreeDecl _ _) = id
 >   overlap _ _ (TrustAnnot _ _ _) = id

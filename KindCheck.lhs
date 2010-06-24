@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: KindCheck.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 1999-2009, Wolfgang Lux
+% Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{KindCheck.lhs}
@@ -129,8 +129,8 @@ declarations.
 > instance HasType (Decl a) where
 >   fts _ (InfixDecl _ _ _ _) = id
 >   fts m (TypeSig _ _ ty) = fts m ty
->   fts m (FunctionDecl _ _ eqs) = fts m eqs
->   fts m (ForeignDecl _ _ _ ty) = fts m ty
+>   fts m (FunctionDecl _ _ _ eqs) = fts m eqs
+>   fts m (ForeignDecl _ _ _ _ ty) = fts m ty
 >   fts m (PatternDecl _ _ rhs) = fts m rhs
 >   fts m (FreeDecl _ _) = id
 >   fts _ (TrustAnnot _ _ _) = id
@@ -409,8 +409,8 @@ have kind $\star$.
 > kcDecl :: TCEnv -> [Ident] -> Decl a -> KcState ()
 > kcDecl _ _ (InfixDecl _ _ _ _) = return ()
 > kcDecl tcEnv tvs (TypeSig p _ ty) = kcTypeSig tcEnv tvs p ty
-> kcDecl tcEnv _ (FunctionDecl _ _ eqs) = mapM_ (kcEquation tcEnv) eqs
-> kcDecl tcEnv tvs (ForeignDecl p _ _ ty) =
+> kcDecl tcEnv _ (FunctionDecl _ _ _ eqs) = mapM_ (kcEquation tcEnv) eqs
+> kcDecl tcEnv tvs (ForeignDecl p _ _ _ ty) =
 >   kcTypeSig tcEnv tvs p (QualTypeExpr [] ty)
 > kcDecl tcEnv _ (PatternDecl _ _ rhs) = kcRhs tcEnv rhs
 > kcDecl _ _ (FreeDecl _ _) = return ()

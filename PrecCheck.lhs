@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: PrecCheck.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 2001-2009, Wolfgang Lux
+% Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{PrecCheck.lhs}
@@ -55,13 +55,7 @@ before adding the local fixity declarations.
 \begin{verbatim}
 
 > cleanPrecs :: Decl a -> PEnv -> PEnv
-> cleanPrecs (InfixDecl _ _ _ _) pEnv = pEnv
-> cleanPrecs (TypeSig _ fs _) pEnv = foldr localUnimportTopEnv pEnv fs
-> cleanPrecs (FunctionDecl _ f _) pEnv = localUnimportTopEnv f pEnv
-> cleanPrecs (ForeignDecl _ _ f _) pEnv = localUnimportTopEnv f pEnv
-> cleanPrecs (PatternDecl _ t _) pEnv = foldr localUnimportTopEnv pEnv (bv t)
-> cleanPrecs (FreeDecl _ vs) pEnv = foldr localUnimportTopEnv pEnv vs
-> cleanPrecs (TrustAnnot _ _ _) pEnv = pEnv
+> cleanPrecs d pEnv = foldr localUnimportTopEnv pEnv (bv d)
 
 \end{verbatim}
 We must also be careful with the left hand sides of class and instance
@@ -80,7 +74,7 @@ appropriate qualification (see the \texttt{ClassDecl} and
 > bindMethodPrecs :: ModuleIdent -> (Ident -> QualIdent) -> [Decl a] -> PEnv
 >                 -> PEnv
 > bindMethodPrecs m qual ds pEnv =
->   foldr bindPrec pEnv [f | FunctionDecl _ f _ <- ds]
+>   foldr bindPrec pEnv [f | FunctionDecl _ _ f _ <- ds]
 >   where bindPrec f pEnv =
 >           maybe id (bindTopEnv m f)
 >                 (listToMaybe (qualLookupTopEnv (qual (unRenameIdent f)) pEnv))
@@ -135,9 +129,9 @@ because it is used for constructing the module's interface.
 > checkDecl :: ModuleIdent -> PEnv -> Decl a -> Error (Decl a)
 > checkDecl _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
 > checkDecl _ _ (TypeSig p fs ty) = return (TypeSig p fs ty)
-> checkDecl m pEnv (FunctionDecl p f eqs) =
->   liftE (FunctionDecl p f) (mapE (checkEqn m pEnv) eqs)
-> checkDecl _ _ (ForeignDecl p fi f ty) = return (ForeignDecl p fi f ty)
+> checkDecl m pEnv (FunctionDecl p a f eqs) =
+>   liftE (FunctionDecl p a f) (mapE (checkEqn m pEnv) eqs)
+> checkDecl _ _ (ForeignDecl p fi a f ty) = return (ForeignDecl p fi a f ty)
 > checkDecl m pEnv (PatternDecl p t rhs) =
 >   liftE2 (PatternDecl p) (checkConstrTerm p pEnv t) (checkRhs m pEnv rhs)
 > checkDecl _ _ (FreeDecl p vs) = return (FreeDecl p vs)

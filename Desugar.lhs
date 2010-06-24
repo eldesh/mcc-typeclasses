@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: Desugar.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 2001-2009, Wolfgang Lux
+% Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Desugar.lhs}
@@ -129,10 +129,10 @@ and the name of the imported function.
 > desugarDeclGroup m ds = mapM (desugarDecl m) (filter isValueDecl ds)
 
 > desugarDecl :: ModuleIdent -> Decl Type -> DesugarState (Decl Type)
-> desugarDecl m (FunctionDecl p f eqs) =
->   liftM (FunctionDecl p f) (mapM (desugarEquation m) eqs)
-> desugarDecl _ (ForeignDecl p (cc,s,ie) f ty) =
->   return (ForeignDecl p (cc,s `mplus` Just Safe,desugarImpEnt cc ie) f ty)
+> desugarDecl m (FunctionDecl p ty f eqs) =
+>   liftM (FunctionDecl p ty f) (mapM (desugarEquation m) eqs)
+> desugarDecl _ (ForeignDecl p (cc,s,ie) ty f ty') =
+>   return (ForeignDecl p (cc,s `mplus` Just Safe,desugarImpEnt cc ie) ty f ty')
 >   where desugarImpEnt cc ie
 >           | cc == CallConvPrimitive = ie `mplus` Just (name f)
 >           | otherwise = Just (unwords (kind (maybe [] words ie)))
@@ -271,7 +271,7 @@ not be replaced.
 >   | isRenamed v' && unRenameIdent v' == anonId =
 >       do
 >         v'' <- freshVar m "_#var" ty
->         return (Let [FreeDecl p [snd v'']] (uncurry mkVar v''))
+>         return (Let [FreeDecl p [uncurry FreeVar v'']] (uncurry mkVar v''))
 >   | otherwise = return (Variable ty v)
 >   where v' = unqualify v
 > desugarExpr _ _ (Constructor ty c) = return (Constructor ty c)

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Goals.lhs 2905 2009-08-24 16:16:35Z wlux $
+% $Id: Goals.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
-% Copyright (c) 1999-2009, Wolfgang Lux
+% Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Goals.lhs}
@@ -233,29 +233,28 @@ showing the bindings of the goal's free variables.
 > goalModule debug tyEnv m g (Goal p e ds)
 >   | isIO ty =
 >       (Nothing,
->        mkModule m p g [] (mkLet ds e),
+>        mkModule m p ty g [] (mkLet ds e),
 >        bindFun m g 0 (polyType ty) tyEnv)
 >   | otherwise =
->       (if debug then Nothing else Just vs,
->        mkModule m p g (zip tys vs ++ [(ty,v)])
->                 (apply (prelUnif ty) [mkVar ty v,e']),
+>       (if debug then Nothing else Just [v | FreeVar _ v <- vs],
+>        mkModule m p ty' g vs' (apply (prelUnif ty) [mkVar ty v,e']),
 >        bindFun m v 0 (monoType ty) (bindFun m g n (polyType ty') tyEnv))
 >   where ty = typeOf e
 >         v = anonId
 >         (vs,e') = liftGoalVars debug (mkLet ds e)
->         tys = [rawType (varType v tyEnv) | v <- vs]
->         ty' = foldr TypeArrow (TypeArrow ty successType) tys
->         n = length vs + 1
+>         vs' = vs ++ [FreeVar ty v]
+>         ty' = foldr TypeArrow successType [ty | FreeVar ty _ <- vs']
+>         n = length vs'
 >         isIO (TypeApply (TypeConstructor tc) _) = tc == qIOId
 >         isIO _ = False
 
-> mkModule :: ModuleIdent -> Position -> Ident -> [(a,Ident)] -> Expression a
->          -> Module a
-> mkModule m p g vs e =
->    Module m Nothing []
->           [BlockDecl (funDecl p g (map (uncurry VariablePattern) vs) e)]
+> mkModule :: ModuleIdent -> Position -> a -> Ident -> [FreeVar a]
+>          -> Expression a -> Module a
+> mkModule m p ty g vs e =
+>    Module m Nothing [] [BlockDecl (funDecl p ty g (map varPattern vs) e)]
+>    where varPattern (FreeVar ty v) = VariablePattern ty v
 
-> liftGoalVars :: Bool -> Expression a -> ([Ident],Expression a)
+> liftGoalVars :: Bool -> Expression a -> ([FreeVar a],Expression a)
 > liftGoalVars debug (Let ds e)
 >   | not debug = (concat [vs | FreeDecl _ vs <- vds],mkLet ds' e)
 >   where (vds,ds') = partition isFreeDecl ds

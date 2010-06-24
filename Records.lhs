@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Records.lhs 2967 2010-06-18 16:27:02Z wlux $
+% $Id: Records.lhs 2968 2010-06-24 14:39:50Z wlux $
 %
 % Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -95,8 +95,10 @@ selector function for each field label.
 > selectorDecl :: ModuleIdent -> ValueEnv -> Position -> [QualIdent] -> Ident
 >              -> UnlabelState (TopDecl Type)
 > selectorDecl m tyEnv p cs l =
->   liftM (BlockDecl . matchDecl p l . concat) (mapM (selectorEqn m tyEnv l) cs)
->   where matchDecl p f eqs = FunctionDecl p f [funEqn p f [t] e | (t,e) <- eqs]
+>   liftM (BlockDecl . matchDecl p (rawType (varType l tyEnv)) l . concat)
+>         (mapM (selectorEqn m tyEnv l) cs)
+>   where matchDecl p ty f eqs =
+>           FunctionDecl p ty f [funEqn p f [t] e | (t,e) <- eqs]
 
 > selectorEqn :: ModuleIdent -> ValueEnv -> Ident -> QualIdent
 >             -> UnlabelState [(ConstrTerm Type,Expression Type)]
@@ -108,7 +110,7 @@ selector function for each field label.
 >         return [(constrPattern ty0 c vs,uncurry mkVar (vs!!n))]
 >     Nothing -> return []
 >   where (ls,_,ty) = conType c tyEnv
->         (tys,ty0) = arrowUnapply (rawType ty)
+>         (tys,ty0) = arrowUnapply (instType ty)
 
 \end{verbatim}
 Within block level declarations, the compiler replaces record patterns
@@ -116,9 +118,9 @@ and expressions.
 \begin{verbatim}
 
 > unlabelDecl :: ModuleIdent -> Decl Type -> UnlabelState (Decl Type)
-> unlabelDecl m (FunctionDecl p f eqs) =
->   liftM (FunctionDecl p f) (mapM (unlabelEquation m) eqs)
-> unlabelDecl _ (ForeignDecl p fi f ty) = return (ForeignDecl p fi f ty)
+> unlabelDecl m (FunctionDecl p ty f eqs) =
+>   liftM (FunctionDecl p ty f) (mapM (unlabelEquation m) eqs)
+> unlabelDecl _ (ForeignDecl p fi ty f ty') = return (ForeignDecl p fi ty f ty')
 > unlabelDecl m (PatternDecl p t rhs) =
 >   liftM2 (PatternDecl p) (unlabelTerm m t) (unlabelRhs m rhs)
 > unlabelDecl _ (FreeDecl p vs) = return (FreeDecl p vs)
@@ -245,6 +247,22 @@ solution.
 > unlabelAlt :: ModuleIdent -> Alt Type -> UnlabelState (Alt Type)
 > unlabelAlt m (Alt p t rhs) =
 >   liftM2 (Alt p) (unlabelTerm m t) (unlabelRhs m rhs)
+
+\end{verbatim}
+The function \texttt{instType} instantiates the universally quantified
+type variables of a type scheme with fresh type variables. Since this
+function is used only to instantiate the closed types of record
+constructors\footnote{Recall that no existentially quantified type
+  variables are allowed for records}, the compiler can reuse the same
+monomorphic type variables for every instantiated type.
+\begin{verbatim}
+
+> instType :: TypeScheme -> Type
+> instType ty = inst (rawType ty)
+>   where inst (TypeConstructor tc) = TypeConstructor tc
+>         inst (TypeVariable tv) = TypeVariable (-1 - tv)
+>         inst (TypeArrow ty1 ty2) = TypeArrow (inst ty1) (inst ty2)
+>         inst (TypeApply ty1 ty2) = TypeApply (inst ty1) (inst ty2)
 
 \end{verbatim}
 Generation of fresh names.

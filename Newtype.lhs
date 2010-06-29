@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Newtype.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: Newtype.lhs 2969 2010-06-29 13:00:29Z wlux $
 %
 % Copyright (c) 2009-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -36,8 +36,8 @@ recursive type synonyms, which are not allowed in source code.
 > import Utils
 > import ValueInfo
 
-> transNewtype :: TCEnv -> ValueEnv -> Module Type
->              -> (Module Type,TCEnv,ValueEnv)
+> transNewtype :: TCEnv -> ValueEnv -> Module QualType
+>              -> (Module QualType,TCEnv,ValueEnv)
 > transNewtype tcEnv tyEnv (Module m es is ds) =
 >   (Module m es is ds',bindWorld (fmap (transTypeInfo tyEnv) tcEnv),tyEnv')
 >   where (ds',tyEnv') =
@@ -95,22 +95,24 @@ At the top-level, each newtype declaration is replaced by a type
 synonym declaration and a function declaration.
 \begin{verbatim}
 
-> transModule :: ModuleIdent -> ValueEnv -> [TopDecl Type]
->             -> NewtypeState ([TopDecl Type],ValueEnv)
+> transModule :: ModuleIdent -> ValueEnv -> [TopDecl QualType]
+>             -> NewtypeState ([TopDecl QualType],ValueEnv)
 > transModule m tyEnv ds =
 >   do
 >     dss' <- mapM (transTopDecl m tyEnv) ds
 >     tyEnv' <- fetchSt
 >     return (concat dss',tyEnv')
 
-> transTopDecl :: ModuleIdent -> ValueEnv -> TopDecl Type
->              -> NewtypeState [TopDecl Type]
+> transTopDecl :: ModuleIdent -> ValueEnv -> TopDecl QualType
+>              -> NewtypeState [TopDecl QualType]
 > transTopDecl _ _ (DataDecl p cx tc tvs cs clss) =
 >   return [DataDecl p cx tc tvs cs clss]
 > transTopDecl m tyEnv (NewtypeDecl p _ tc tvs (NewConstrDecl _ c ty) _) =
 >   do
 >     v <- freshVar m "_#v" (instType (arrowDomain ty'))
->     let d = funDecl p ty' c [uncurry VariablePattern v] (uncurry mkVar v)
+>     let d =
+>           funDecl p (qualType ty') c [uncurry VariablePattern v]
+>                   (uncurry mkVar v)
 >     return [TypeDecl p tc tvs ty,BlockDecl d]
 >   where ty' = rawConType (qualifyWith m c) tyEnv
 > transTopDecl _ _ (TypeDecl p tc tvs ty) = return [TypeDecl p tc tvs ty]
@@ -226,12 +228,12 @@ variables for every instantiated type.
 Generation of fresh names.
 \begin{verbatim}
 
-> freshVar :: ModuleIdent -> String -> Type -> NewtypeState (Type,Ident)
+> freshVar :: ModuleIdent -> String -> Type -> NewtypeState (QualType,Ident)
 > freshVar m prefix ty =
 >   do
 >     v <- liftM (mkName prefix) (liftSt (updateSt (1 +)))
 >     updateSt_ (bindFun m v 0 (monoType ty))
->     return (ty,v)
+>     return (qualType ty,v)
 >   where mkName pre n = mkIdent (pre ++ show n)
 
 \end{verbatim}

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: PredefTypes.lhs 2692 2008-05-02 13:22:41Z wlux $
+% $Id: PredefTypes.lhs 2969 2010-06-29 13:00:29Z wlux $
 %
-% Copyright (c) 2002-2008, Wolfgang Lux
+% Copyright (c) 2002-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{PredefTypes.lhs}
@@ -34,6 +34,23 @@ compiler.
 
 > tupleType :: [Type] -> Type
 > tupleType tys = foldl TypeApply (TypeConstructor (qTupleId (length tys))) tys
+
+> qualUnitType,qualBoolType,qualCharType,qualIntType,qualIntegerType :: QualType
+> qualFloatType,qualRationalType :: QualType
+> qualUnitType = QualType [] unitType
+> qualBoolType = QualType [] boolType
+> qualCharType = QualType [] charType
+> qualIntType = QualType [] intType
+> qualIntegerType = QualType [] integerType
+> qualFloatType = QualType [] floatType
+> qualRationalType = qualRatioType qualIntegerType
+> qualStringType = qualListType qualCharType
+> qualSuccessType = QualType [] successType
+
+> qualListType,qualIOType,qualRatioType :: QualType -> QualType
+> qualListType (QualType cx ty) = QualType cx (listType ty)
+> qualIOType (QualType cx ty) = QualType cx (ioType ty)
+> qualRatioType (QualType cx ty) = QualType cx (ratioType ty)
 
 \end{verbatim}
 The variable \texttt{guardTypes} maintains the list of types

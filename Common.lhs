@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Common.lhs 2957 2010-06-12 22:43:11Z wlux $
+% $Id: Common.lhs 2969 2010-06-29 13:00:29Z wlux $
 %
 % Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -60,8 +60,8 @@ simplifying the code and naming lambda abstractions in order to
 eventually update the module's interface.
 \begin{verbatim}
 
-> transModule :: Bool -> Trust -> TCEnv -> ValueEnv -> Module Type
->             -> (TCEnv,ValueEnv,TrustEnv,Module Type,[(Dump,Doc)])
+> transModule :: Bool -> Trust -> TCEnv -> ValueEnv -> Module QualType
+>             -> (TCEnv,ValueEnv,TrustEnv,Module QualType,[(Dump,Doc)])
 > transModule debug tr tcEnv tyEnv m =
 >   (tcEnv',tyEnv'''''''',trEnv,nolambda,dumps)
 >   where trEnv = if debug then trustEnv tr m else emptyEnv
@@ -90,7 +90,7 @@ After creating the module's interface, the compiler introduces
 explicit dictionary arguments for overloaded functions and methods.
 \begin{verbatim}
 
-> dictTrans :: TCEnv -> InstEnv -> ValueEnv -> Module Type
+> dictTrans :: TCEnv -> InstEnv -> ValueEnv -> Module QualType
 >           -> (TCEnv,ValueEnv,Module Type,[(Dump,Doc)])
 > dictTrans tcEnv iEnv tyEnv m = (tcEnv',tyEnv',spec,dumps)
 >   where (tcEnv',tyEnv',dict) = dictTransModule tcEnv iEnv tyEnv m

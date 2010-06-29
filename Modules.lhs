@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2957 2010-06-12 22:43:11Z wlux $
+% $Id: Modules.lhs 2969 2010-06-29 13:00:29Z wlux $
 %
 % Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -85,7 +85,7 @@ declaration to the module.
 >         ws = warn opts
 
 > loadModule :: [FilePath] -> Bool -> CaseMode -> [Warn] -> Bool -> FilePath
->            -> ErrorT IO (PEnv,TCEnv,InstEnv,ValueEnv,Module Type)
+>            -> ErrorT IO (PEnv,TCEnv,InstEnv,ValueEnv,Module QualType)
 > loadModule paths debug caseMode warn autoSplit fn =
 >   do
 >     Module m es is ds <- liftErr (readFile fn) >>= okM . parseModule fn
@@ -113,7 +113,7 @@ declaration to the module.
 >     return (tEnv',vEnv',Module m (Just es') is' ds'')
 
 > checkModule :: Bool -> ModuleEnv -> TypeEnv -> FunEnv -> Module ()
->             -> Error (PEnv,TCEnv,InstEnv,ValueEnv,Module Type)
+>             -> Error (PEnv,TCEnv,InstEnv,ValueEnv,Module QualType)
 > checkModule autoSplit mEnv tEnv vEnv (Module m es is ds) =
 >   do
 >     let (k1,ds') = rename k0 (autoSplitDecls autoSplit ds)

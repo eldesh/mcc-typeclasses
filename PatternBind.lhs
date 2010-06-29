@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PatternBind.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: PatternBind.lhs 2969 2010-06-29 13:00:29Z wlux $
 %
 % Copyright (c) 2003-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -59,10 +59,10 @@ were introduced in the code by the transformation.
 
 > type PatternBindState a = StateT ValueEnv (StateT Int Id) a
 
-> pbTrans :: ValueEnv -> Module Type -> (Module Type,ValueEnv)
+> pbTrans :: ValueEnv -> Module QualType -> (Module QualType,ValueEnv)
 > pbTrans tyEnv m = runSt (callSt (pbtModule m) tyEnv) 1
 
-> pbtModule :: Module Type -> PatternBindState (Module Type,ValueEnv)
+> pbtModule :: Module QualType -> PatternBindState (Module QualType,ValueEnv)
 > pbtModule (Module m es is ds) =
 >   do
 >     n <- liftSt fetchSt
@@ -80,7 +80,7 @@ were introduced in the code by the transformation.
 >            BlockDecl (foreignDecl p0 "pbReturn" pbRet tyRet)]
 
 > class SyntaxTree a where
->   pbt :: ModuleIdent -> a Type -> PatternBindState (a Type)
+>   pbt :: ModuleIdent -> a QualType -> PatternBindState (a QualType)
 
 > instance SyntaxTree TopDecl where
 >   pbt _ (DataDecl p cx tc tvs cs clss) = return (DataDecl p cx tc tvs cs clss)
@@ -172,8 +172,8 @@ that the lazy application bound to $v_i$ is already updated by the
 constraint $v_0$.
 \begin{verbatim}
 
-> expandPatternBindings :: ModuleIdent -> [Ident] -> Decl Type
->                       -> PatternBindState [Decl Type]
+> expandPatternBindings :: ModuleIdent -> [Ident] -> Decl QualType
+>                       -> PatternBindState [Decl QualType]
 > expandPatternBindings m fvs (PatternDecl p t rhs) =
 >   case (t,rhs) of
 >     (VariablePattern _ _,_) -> return [PatternDecl p t rhs]
@@ -185,8 +185,8 @@ constraint $v_0$.
 >       where vs = [(ty,v) | VariablePattern ty v <- ts]
 > expandPatternBindings _ _ d = return [d]
 
-> updateDecl :: ModuleIdent -> Position -> (Type,Ident) -> [(Type,Ident)]
->            -> Expression Type -> Decl Type
+> updateDecl :: ModuleIdent -> Position -> (QualType,Ident)
+>            -> [(QualType,Ident)] -> Expression QualType -> Decl QualType
 > updateDecl m p v0 vs e = uncurry (varDecl p) v0 (fixBody vs e)
 >   where fixBody vs (Tuple es) = foldr1 (cond p) (zipWith (update m) vs es)
 >         fixBody vs (Let ds e) = Let ds (fixBody vs e)
@@ -194,55 +194,58 @@ constraint $v_0$.
 >         fixBody vs (Fcase e [Alt p t rhs]) = Fcase e [Alt p t (fixRhs vs rhs)]
 >         fixRhs vs (SimpleRhs p e _) = SimpleRhs p (fixBody vs e) []
 
-> cond :: Position -> Expression Type -> Expression Type -> Expression Type
+> cond :: Position -> Expression QualType -> Expression QualType
+>      -> Expression QualType
 > cond p c e = Case c [caseAlt p successPattern e]
->   where successPattern = ConstructorPattern successType qSuccessId []
+>   where successPattern = ConstructorPattern qualSuccessType qSuccessId []
 
-> update :: ModuleIdent -> (Type,Ident) -> Expression Type -> Expression Type
-> update m v = Apply (Apply (pbUpdate m (fst v)) (uncurry mkVar v))
+> update :: ModuleIdent -> (QualType,Ident) -> Expression QualType
+>        -> Expression QualType
+> update m v = Apply (Apply (pbUpdate m (unqualType (fst v))) (uncurry mkVar v))
 
-> selectorDecl :: ModuleIdent -> Position -> Expression Type -> (Type,Ident)
->              -> Decl Type
+> selectorDecl :: ModuleIdent -> Position -> Expression QualType
+>              -> (QualType,Ident) -> Decl QualType
 > selectorDecl m p e v = uncurry (varDecl p) v (ret m e v)
 
-> ret :: ModuleIdent -> Expression Type -> (Type,Ident) -> Expression Type
-> ret m e v = apply (pbReturn m (fst v)) [e,uncurry mkVar v]
+> ret :: ModuleIdent -> Expression QualType -> (QualType,Ident)
+>     -> Expression QualType
+> ret m e v = apply (pbReturn m (unqualType (fst v))) [e,uncurry mkVar v]
 
 \end{verbatim}
 Pattern binding primitives.
 \begin{verbatim}
 
-> pbUpdate, pbReturn :: ModuleIdent -> Type -> Expression Type
+> pbUpdate, pbReturn :: ModuleIdent -> Type -> Expression QualType
 > pbUpdate m ty = pbFun m [ty,ty] successType "_#update"
 > pbReturn m ty = pbFun m [successType,ty] ty "_#return"
 
-> pbFun :: ModuleIdent -> [Type] -> Type -> String -> Expression Type
+> pbFun :: ModuleIdent -> [Type] -> Type -> String -> Expression QualType
 > pbFun m tys ty f =
->   Variable (foldr TypeArrow ty tys) (qualifyWith m (mkIdent f))
+>   Variable (qualType (foldr TypeArrow ty tys)) (qualifyWith m (mkIdent f))
 
 \end{verbatim}
 Generation of fresh names.
 \begin{verbatim}
 
-> freshVar :: ModuleIdent -> String -> Type -> PatternBindState (Type,Ident)
+> freshVar :: ModuleIdent -> String -> Type -> PatternBindState (QualType,Ident)
 > freshVar m prefix ty =
 >   do
 >     v <- liftM mkName (liftSt (updateSt (1 +)))
 >     updateSt_ (bindFun m v 0 (monoType ty))
->     return (ty,v)
+>     return (qualType ty,v)
 >   where mkName n = mkIdent (prefix ++ show n)
 
 \end{verbatim}
 Auxiliary functions.
 \begin{verbatim}
 
-> foreignDecl :: Position -> String -> QualIdent -> Type -> Decl Type
+> foreignDecl :: Position -> String -> QualIdent -> QualType -> Decl QualType
 > foreignDecl p ie f ty =
 >   ForeignDecl p (CallConvPrimitive,Just Safe,Just ie) ty (unqualify f)
->               (fromType nameSupply ty)
+>               (fromType nameSupply (unqualType ty))
 
-> bindForeign :: QualIdent -> Type -> ValueEnv -> ValueEnv
-> bindForeign f ty = bindFun m f' (arrowArity ty) (polyType ty)
+> bindForeign :: QualIdent -> QualType -> ValueEnv -> ValueEnv
+> bindForeign f ty = bindFun m f' (arrowArity (unqualType ty)) (typeScheme ty)
 >   where (Just m,f') = splitQualIdent f
 
 \end{verbatim}

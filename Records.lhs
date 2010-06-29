@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Records.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: Records.lhs 2969 2010-06-29 13:00:29Z wlux $
 %
 % Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -41,12 +41,12 @@ type and the latter is augmented with the types of the new variables.
 > run :: UnlabelState a -> TCEnv -> ValueEnv -> a
 > run m tcEnv tyEnv = runSt (callRt (callSt m tyEnv) tcEnv) 1
 
-> unlabel :: TCEnv -> ValueEnv -> Module Type -> (Module Type,ValueEnv)
+> unlabel :: TCEnv -> ValueEnv -> Module QualType -> (Module QualType,ValueEnv)
 > unlabel tcEnv tyEnv (Module m es is ds) = (Module m es is ds',tyEnv')
 >   where (ds',tyEnv') = run (unlabelModule m tyEnv ds) tcEnv tyEnv
 
-> unlabelModule :: ModuleIdent -> ValueEnv -> [TopDecl Type]
->               -> UnlabelState ([TopDecl Type],ValueEnv)
+> unlabelModule :: ModuleIdent -> ValueEnv -> [TopDecl QualType]
+>               -> UnlabelState ([TopDecl QualType],ValueEnv)
 > unlabelModule m tyEnv ds =
 >   do
 >     dss' <- mapM (unlabelTopDecl m tyEnv) ds
@@ -62,8 +62,8 @@ selector function for each field label.
   arguments of the selector functions with fresh type variables.}
 \begin{verbatim}
 
-> unlabelTopDecl :: ModuleIdent -> ValueEnv -> TopDecl Type
->                -> UnlabelState [TopDecl Type]
+> unlabelTopDecl :: ModuleIdent -> ValueEnv -> TopDecl QualType
+>                -> UnlabelState [TopDecl QualType]
 > unlabelTopDecl m tyEnv (DataDecl p cx tc tvs cs clss) =
 >   do
 >     ds' <-
@@ -93,21 +93,21 @@ selector function for each field label.
 > unlabelTopDecl _ _ (SplitAnnot p) = return [SplitAnnot p]
 
 > selectorDecl :: ModuleIdent -> ValueEnv -> Position -> [QualIdent] -> Ident
->              -> UnlabelState (TopDecl Type)
+>              -> UnlabelState (TopDecl QualType)
 > selectorDecl m tyEnv p cs l =
->   liftM (BlockDecl . matchDecl p (rawType (varType l tyEnv)) l . concat)
+>   liftM (BlockDecl . matchDecl p (varType l tyEnv) l . concat)
 >         (mapM (selectorEqn m tyEnv l) cs)
->   where matchDecl p ty f eqs =
+>   where matchDecl p (ForAll _ ty) f eqs =
 >           FunctionDecl p ty f [funEqn p f [t] e | (t,e) <- eqs]
 
 > selectorEqn :: ModuleIdent -> ValueEnv -> Ident -> QualIdent
->             -> UnlabelState [(ConstrTerm Type,Expression Type)]
+>             -> UnlabelState [(ConstrTerm QualType,Expression QualType)]
 > selectorEqn m tyEnv l c =
 >   case elemIndex l ls of
 >     Just n ->
 >       do
 >         vs <- mapM (freshVar m "_#rec") tys
->         return [(constrPattern ty0 c vs,uncurry mkVar (vs!!n))]
+>         return [(constrPattern (qualType ty0) c vs,uncurry mkVar (vs!!n))]
 >     Nothing -> return []
 >   where (ls,_,ty) = conType c tyEnv
 >         (tys,ty0) = arrowUnapply (instType ty)
@@ -117,7 +117,7 @@ Within block level declarations, the compiler replaces record patterns
 and expressions.
 \begin{verbatim}
 
-> unlabelDecl :: ModuleIdent -> Decl Type -> UnlabelState (Decl Type)
+> unlabelDecl :: ModuleIdent -> Decl QualType -> UnlabelState (Decl QualType)
 > unlabelDecl m (FunctionDecl p ty f eqs) =
 >   liftM (FunctionDecl p ty f) (mapM (unlabelEquation m) eqs)
 > unlabelDecl _ (ForeignDecl p fi ty f ty') = return (ForeignDecl p fi ty f ty')
@@ -125,8 +125,8 @@ and expressions.
 >   liftM2 (PatternDecl p) (unlabelTerm m t) (unlabelRhs m rhs)
 > unlabelDecl _ (FreeDecl p vs) = return (FreeDecl p vs)
 
-> unlabelEquation :: ModuleIdent -> Equation Type
->                 -> UnlabelState (Equation Type)
+> unlabelEquation :: ModuleIdent -> Equation QualType
+>                 -> UnlabelState (Equation QualType)
 > unlabelEquation m (Equation p lhs rhs) =
 >   liftM2 (Equation p) (unlabelLhs m lhs) (unlabelRhs m rhs)
 
@@ -145,11 +145,11 @@ left to right, which is not the case in Curry except for rigid case
 expressions.
 \begin{verbatim}
 
-> unlabelLhs :: ModuleIdent -> Lhs Type -> UnlabelState (Lhs Type)
+> unlabelLhs :: ModuleIdent -> Lhs QualType -> UnlabelState (Lhs QualType)
 > unlabelLhs m (FunLhs f ts) = liftM (FunLhs f) (mapM (unlabelTerm m) ts)
 
-> unlabelTerm :: ModuleIdent -> ConstrTerm Type
->             -> UnlabelState (ConstrTerm Type)
+> unlabelTerm :: ModuleIdent -> ConstrTerm QualType
+>             -> UnlabelState (ConstrTerm QualType)
 > unlabelTerm _ (LiteralPattern ty l) = return (LiteralPattern ty l)
 > unlabelTerm _ (VariablePattern ty v) = return (VariablePattern ty v)
 > unlabelTerm m (ConstructorPattern ty c ts) =
@@ -159,7 +159,7 @@ expressions.
 > unlabelTerm m (RecordPattern ty c fs) =
 >   do
 >     tcEnv <- liftSt envRt
->     (ls,tys) <- liftM (argumentTypes tcEnv ty c) fetchSt
+>     (ls,tys) <- liftM (argumentTypes tcEnv (unqualType ty) c) fetchSt
 >     ts <- zipWithM argument tys (orderFields fs ls)
 >     unlabelTerm m (ConstructorPattern ty c ts)
 >   where argument ty = maybe (fresh ty) return
@@ -185,7 +185,7 @@ solution.
 \ToDo{Reconsider failing with a runtime error.}
 \begin{verbatim}
 
-> unlabelRhs :: ModuleIdent -> Rhs Type -> UnlabelState (Rhs Type)
+> unlabelRhs :: ModuleIdent -> Rhs QualType -> UnlabelState (Rhs QualType)
 > unlabelRhs m (SimpleRhs p e ds) =
 >   do
 >     ds' <- mapM (unlabelDecl m) ds
@@ -197,20 +197,20 @@ solution.
 >     es' <- mapM (unlabelCondExpr m) es
 >     return (GuardedRhs es' ds')
 
-> unlabelCondExpr :: ModuleIdent -> CondExpr Type
->                 -> UnlabelState (CondExpr Type)
+> unlabelCondExpr :: ModuleIdent -> CondExpr QualType
+>                 -> UnlabelState (CondExpr QualType)
 > unlabelCondExpr m (CondExpr p g e) =
 >   liftM2 (CondExpr p) (unlabelExpr m p g) (unlabelExpr m p e)
 
-> unlabelExpr :: ModuleIdent -> Position -> Expression Type
->             -> UnlabelState (Expression Type)
+> unlabelExpr :: ModuleIdent -> Position -> Expression QualType
+>             -> UnlabelState (Expression QualType)
 > unlabelExpr _ _ (Literal ty l) = return (Literal ty l)
 > unlabelExpr _ _ (Variable ty v) = return (Variable ty v)
 > unlabelExpr _ _ (Constructor ty c) = return (Constructor ty c)
 > unlabelExpr m p (Record ty c fs) =
 >   do
 >     tcEnv <- liftSt envRt
->     (ls,tys) <- liftM (argumentTypes tcEnv ty c) fetchSt
+>     (ls,tys) <- liftM (argumentTypes tcEnv (unqualType ty) c) fetchSt
 >     let es = zipWith argument tys (orderFields fs ls)
 >     unlabelExpr m p (applyConstr ty c tys es)
 >   where argument ty = maybe (prelFailed ty) id
@@ -229,9 +229,10 @@ solution.
 >               do
 >                 vs <- mapM (freshVar m "_#rec") tys
 >                 let es = zipWith argument vs (orderFields fs ls')
->                 return [(constrPattern ty c vs,applyConstr ty c tys es)]
+>                 return [(constrPattern ty' c vs,applyConstr ty' c tys es)]
 >           | otherwise = return []
 >           where (ls',tys) = argumentTypes tcEnv ty c tyEnv
+>                 ty' = qualType ty
 >         argument v = maybe (uncurry mkVar v) id
 > unlabelExpr m p (Apply e1 e2) =
 >   liftM2 Apply (unlabelExpr m p e1) (unlabelExpr m p e2)
@@ -244,7 +245,7 @@ solution.
 > unlabelExpr m p (Fcase e as) =
 >   liftM2 Fcase (unlabelExpr m p e) (mapM (unlabelAlt m) as)
 
-> unlabelAlt :: ModuleIdent -> Alt Type -> UnlabelState (Alt Type)
+> unlabelAlt :: ModuleIdent -> Alt QualType -> UnlabelState (Alt QualType)
 > unlabelAlt m (Alt p t rhs) =
 >   liftM2 (Alt p) (unlabelTerm m t) (unlabelRhs m rhs)
 
@@ -268,20 +269,21 @@ monomorphic type variables for every instantiated type.
 Generation of fresh names.
 \begin{verbatim}
 
-> freshVar :: ModuleIdent -> String -> Type -> UnlabelState (Type,Ident)
+> freshVar :: ModuleIdent -> String -> Type -> UnlabelState (QualType,Ident)
 > freshVar m prefix ty =
 >   do
 >     v <- liftM (mkName prefix) (liftSt (liftRt (updateSt (1 +))))
 >     updateSt_ (bindFun m v 0 (monoType ty))
->     return (ty,v)
+>     return (qualType ty,v)
 >   where mkName pre n = mkIdent (pre ++ show n)
 
 \end{verbatim}
 Prelude entities.
 \begin{verbatim}
 
-> prelFailed :: a -> Expression a
-> prelFailed a = Variable a (qualifyWith preludeMIdent (mkIdent "failed"))
+> prelFailed :: Type -> Expression QualType
+> prelFailed ty =
+>   Variable (qualType ty) (qualifyWith preludeMIdent (mkIdent "failed"))
 
 \end{verbatim}
 Auxiliary definitions.
@@ -291,8 +293,9 @@ Auxiliary definitions.
 > constrPattern ty c vs =
 >   ConstructorPattern ty c (map (uncurry VariablePattern) vs)
 
-> applyConstr :: Type -> QualIdent -> [Type] -> [Expression Type]
->             -> Expression Type
-> applyConstr ty c tys = apply (Constructor (foldr TypeArrow ty tys) c)
+> applyConstr :: QualType -> QualIdent -> [Type] -> [Expression QualType]
+>             -> Expression QualType
+> applyConstr ty c tys =
+>   apply (Constructor (qualType (foldr TypeArrow (unqualType ty) tys)) c)
 
 \end{verbatim}

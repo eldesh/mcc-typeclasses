@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Goals.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: Goals.lhs 2969 2010-06-29 13:00:29Z wlux $
 %
 % Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -90,7 +90,7 @@ interfaces are in scope with their qualified names.
 
 > loadGoal :: Task -> [FilePath] -> Bool -> CaseMode -> [Warn]
 >          -> ModuleIdent -> Maybe String -> [FilePath]
->          -> ErrorT IO (TCEnv,InstEnv,ValueEnv,Context,Goal Type)
+>          -> ErrorT IO (TCEnv,InstEnv,ValueEnv,Context,Goal QualType)
 > loadGoal task paths debug caseMode warn m g fns =
 >   do
 >     (mEnv,m',ds) <- loadGoalModules paths debug fns
@@ -129,7 +129,7 @@ interfaces are in scope with their qualified names.
 
 > checkGoal :: Task -> ModuleEnv -> ModuleIdent -> [ImportDecl]
 >           -> TypeEnv -> FunEnv -> Goal a
->           -> Error (TCEnv,InstEnv,ValueEnv,Context,Goal Type)
+>           -> Error (TCEnv,InstEnv,ValueEnv,Context,Goal QualType)
 > checkGoal task mEnv m ds tEnv vEnv g =
 >   do
 >     let (k1,g') = renameGoal k0 g
@@ -228,22 +228,23 @@ primitive. In addition, the debugger currently lacks support for
 showing the bindings of the goal's free variables.
 \begin{verbatim}
 
-> goalModule :: Bool -> ValueEnv -> ModuleIdent -> Ident -> Goal Type
->            -> (Maybe [Ident],Module Type,ValueEnv)
+> goalModule :: Bool -> ValueEnv -> ModuleIdent -> Ident -> Goal QualType
+>            -> (Maybe [Ident],Module QualType,ValueEnv)
 > goalModule debug tyEnv m g (Goal p e ds)
 >   | isIO ty =
 >       (Nothing,
->        mkModule m p ty g [] (mkLet ds e),
+>        mkModule m p (qualType ty) g [] (mkLet ds e),
 >        bindFun m g 0 (polyType ty) tyEnv)
 >   | otherwise =
 >       (if debug then Nothing else Just [v | FreeVar _ v <- vs],
->        mkModule m p ty' g vs' (apply (prelUnif ty) [mkVar ty v,e']),
->        bindFun m v 0 (monoType ty) (bindFun m g n (polyType ty') tyEnv))
+>        mkModule m p ty' g vs' (apply (prelUnif ty) [mkVar (qualType ty) v,e']),
+>        bindFun m v 0 (monoType ty) (bindFun m g n (typeScheme ty') tyEnv))
 >   where ty = typeOf e
 >         v = anonId
 >         (vs,e') = liftGoalVars debug (mkLet ds e)
->         vs' = vs ++ [FreeVar ty v]
->         ty' = foldr TypeArrow successType [ty | FreeVar ty _ <- vs']
+>         vs' = vs ++ [FreeVar (qualType ty) v]
+>         ty' = qualType $
+>           foldr TypeArrow successType [unqualType ty | FreeVar ty _ <- vs']
 >         n = length vs'
 >         isIO (TypeApply (TypeConstructor tc) _) = tc == qIOId
 >         isIO _ = False
@@ -260,9 +261,9 @@ showing the bindings of the goal's free variables.
 >   where (vds,ds') = partition isFreeDecl ds
 > liftGoalVars _ e = ([],e)
 
-> prelUnif :: Type -> Expression Type
+> prelUnif :: Type -> Expression QualType
 > prelUnif ty =
->   Variable (foldr TypeArrow successType [ty,ty])
+>   Variable (qualType (foldr TypeArrow successType [ty,ty]))
 >            (qualifyWith preludeMIdent (mkIdent "=:="))
 
 \end{verbatim}

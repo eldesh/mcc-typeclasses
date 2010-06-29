@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: CaseMatch.lhs 2969 2010-06-29 13:00:29Z wlux $
 %
 % Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -83,12 +83,13 @@ For instance, \texttt{Just x = unknown} becomes \texttt{x = fcase
   unknown of \lb{} Just a1 -> a1 \rb{}}.
 \begin{verbatim}
 
-> caseMatch :: TCEnv -> ValueEnv -> Module Type -> (Module Type,ValueEnv)
+> caseMatch :: TCEnv -> ValueEnv -> Module QualType
+>           -> (Module QualType,ValueEnv)
 > caseMatch tcEnv tyEnv (Module m es is ds) = (Module m es is ds',tyEnv')
 >   where (ds',tyEnv') = run (caseMatchModule m ds) tcEnv tyEnv
 
-> caseMatchModule :: ModuleIdent -> [TopDecl Type]
->                 -> CaseMatchState ([TopDecl Type],ValueEnv)
+> caseMatchModule :: ModuleIdent -> [TopDecl QualType]
+>                 -> CaseMatchState ([TopDecl QualType],ValueEnv)
 > caseMatchModule m ds =
 >   do
 >     ds' <- mapM (match m noPos) ds
@@ -97,7 +98,8 @@ For instance, \texttt{Just x = unknown} becomes \texttt{x = fcase
 >   where noPos = internalError "caseMatch: no position"
 
 > class CaseMatch a where
->   match :: ModuleIdent -> Position -> a Type -> CaseMatchState (a Type)
+>   match :: ModuleIdent -> Position -> a QualType
+>         -> CaseMatchState (a QualType)
 
 > instance CaseMatch TopDecl where
 >   match _ _ (DataDecl p cx tc tvs cs clss) =
@@ -127,13 +129,13 @@ For instance, \texttt{Just x = unknown} becomes \texttt{x = fcase
 >   match _ _ (FreeDecl p vs) = return (FreeDecl p vs)
 >   match _ _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
 
-> matchLhs :: ModuleIdent -> ConstrTerm Type -> Rhs Type
->          -> CaseMatchState (ConstrTerm Type,Rhs Type)
+> matchLhs :: ModuleIdent -> ConstrTerm QualType -> Rhs QualType
+>          -> CaseMatchState (ConstrTerm QualType,Rhs QualType)
 > matchLhs m t (SimpleRhs p e _)
 >   | isVarPattern t = return (t,mkRhs p e)
 >   | otherwise =
 >       do
->         vs' <- mapM (freshVar m "_#case" . fst) vs
+>         vs' <- mapM (freshVar m "_#case" . unqualType . fst) vs
 >         let t' = rename (zip (map snd vs) (map snd vs')) t
 >             rhs' = mkRhs p (tupleExpr (map (uncurry mkVar) vs'))
 >         ([v],e') <- matchFlex m p [(p,[t'],rhs')]
@@ -162,16 +164,16 @@ if it is not restricted by the guard expression.
 > instance CaseMatch Rhs where
 >   match m p rhs = liftM (mkRhs p) (matchRhs m p rhs Nothing)
 
-> matchRhs :: ModuleIdent -> Position -> Rhs Type
->          -> Maybe (CaseMatchState (Expression Type))
->          -> CaseMatchState (Expression Type)
+> matchRhs :: ModuleIdent -> Position -> Rhs QualType
+>          -> Maybe (CaseMatchState (Expression QualType))
+>          -> CaseMatchState (Expression QualType)
 > matchRhs m _ (SimpleRhs p e ds) _ = match m p (mkLet ds e)
 > matchRhs m p (GuardedRhs es ds) e0 =
 >   liftM2 mkLet (mapM (match m p) ds) (expandRhs m p es e0)
 
-> expandRhs :: ModuleIdent -> Position -> [CondExpr Type]
->           -> Maybe (CaseMatchState (Expression Type))
->           -> CaseMatchState (Expression Type)
+> expandRhs :: ModuleIdent -> Position -> [CondExpr QualType]
+>           -> Maybe (CaseMatchState (Expression QualType))
+>           -> CaseMatchState (Expression QualType)
 > expandRhs m p es e0
 >   | booleanGuards es =
 >       liftM2 expandBooleanGuards (mapM (match m p) es) (liftMaybe e0)
@@ -180,8 +182,8 @@ if it is not restricted by the guard expression.
 >         liftMaybe (Just e0) = liftM Just e0
 >         liftMaybe Nothing = return Nothing
 
-> expandBooleanGuards :: [CondExpr Type] -> Maybe (Expression Type)
->                     -> Expression Type
+> expandBooleanGuards :: [CondExpr QualType] -> Maybe (Expression QualType)
+>                     -> Expression QualType
 > expandBooleanGuards [] (Just e0) = e0
 > expandBooleanGuards (CondExpr p g e1:es) e0 =
 >   Case g (caseAlt p truePattern e1 :
@@ -190,7 +192,7 @@ if it is not restricted by the guard expression.
 >           | null es = maybeToList e0
 >           | otherwise = [expandBooleanGuards es e0]
 
-> booleanGuards :: [CondExpr Type] -> Bool
+> booleanGuards :: [CondExpr QualType] -> Bool
 > booleanGuards [] = False
 > booleanGuards (CondExpr _ g _ : es) = not (null es) || typeOf g == boolType
 
@@ -237,8 +239,8 @@ declarations that define the variables occurring in $t_i$.
 > type Match' a =
 >   (Position,[ConstrTerm a] -> [ConstrTerm a],[ConstrTerm a],Rhs a)
 
-> matchFlex :: ModuleIdent -> Position -> [Match Type]
->           -> CaseMatchState ([(Type,Ident)],Expression Type)
+> matchFlex :: ModuleIdent -> Position -> [Match QualType]
+>           -> CaseMatchState ([(QualType,Ident)],Expression QualType)
 > matchFlex m p as =
 >   do
 >     as' <- mapM (elimFP m) as
@@ -250,8 +252,8 @@ declarations that define the variables occurring in $t_i$.
 >             (ts',fpss) <- mapAndUnzipM (liftFP m) ts
 >             return (p,ts',inject id p (concat fpss) rhs)
 
-> matchRigid :: ModuleIdent -> Type -> [Match Type]
->            -> CaseMatchState ([(Type,Ident)],Expression Type)
+> matchRigid :: ModuleIdent -> Type -> [Match QualType]
+>            -> CaseMatchState ([(QualType,Ident)],Expression QualType)
 > matchRigid m ty as =
 >   do
 >     as' <- mapM (elimFP m) as
@@ -288,8 +290,9 @@ expression was \texttt{[]}.
   comprehensions may expand into case expressions, too.}
 \begin{verbatim}
 
-> liftFP :: ModuleIdent -> ConstrTerm Type
->        -> CaseMatchState (ConstrTerm Type,[((Type,Ident),ConstrTerm Type)])
+> liftFP :: ModuleIdent -> ConstrTerm QualType
+>        -> CaseMatchState (ConstrTerm QualType,
+>                           [((QualType,Ident),ConstrTerm QualType)])
 > liftFP _ t@(LiteralPattern _ _) = return (t,[])
 > liftFP _ t@(VariablePattern _ _) = return (t,[])
 > liftFP m (ConstructorPattern ty c ts) =
@@ -298,47 +301,53 @@ expression was \texttt{[]}.
 >     return (ConstructorPattern ty c ts',concat fpss)
 > liftFP m t@(FunctionPattern ty _ _) =
 >   do
->     v <- freshVar m "_#fpat" ty
+>     v <- freshVar m "_#fpat" (unqualType ty)
 >     return (uncurry VariablePattern v,[(v,t)])
 > liftFP m (AsPattern v t) =
 >   do
 >     (t',fps) <- liftFP m t
 >     return (AsPattern v t',fps)
 
-> inject :: (Expression Type -> Expression Type) -> Position
->        -> [((Type,Ident),ConstrTerm Type)] -> Rhs Type -> Rhs Type
+> inject :: (Expression QualType -> Expression QualType) -> Position
+>        -> [((QualType,Ident),ConstrTerm QualType)] -> Rhs QualType
+>        -> Rhs QualType
 > inject f p fps rhs
 >   | null fps = rhs
 >   | otherwise = injectRhs cs ds rhs
->   where cs = [apply (unify ty) [toExpr t,f (mkVar ty v)] | ((ty,v),t) <- fps]
+>   where cs = [apply (unify' ty) [toExpr t,f (mkVar ty v)] | ((ty,v),t) <- fps]
 >         ds = concatMap (decls p . snd) fps
+>         unify' = unify . unqualType
 
-> injectRhs :: [Expression Type] -> [Decl Type] -> Rhs Type -> Rhs Type
+> injectRhs :: [Expression QualType] -> [Decl QualType] -> Rhs QualType
+>           -> Rhs QualType
 > injectRhs cs ds (SimpleRhs p e ds') = injectCond p cs e ds ds'
 > injectRhs cs ds (GuardedRhs es@(CondExpr p g e : _) ds')
 >   | booleanGuards es = injectCond p cs (expandBooleanGuards es Nothing) ds ds'
 >   | otherwise = injectCond p (cs ++ [g]) e ds ds'
 
-> injectCond :: Position -> [Expression Type] -> Expression Type -> [Decl Type]
->            -> [Decl Type] -> Rhs Type
+> injectCond :: Position -> [Expression QualType] -> Expression QualType
+>            -> [Decl QualType] -> [Decl QualType] -> Rhs QualType
 > injectCond p cs e ds ds' =
 >   GuardedRhs [CondExpr p (foldr1 (Apply . Apply prelConj) cs) e] (ds ++ ds')
 
-> toExpr :: ConstrTerm Type -> Expression Type
+> toExpr :: ConstrTerm QualType -> Expression QualType
 > toExpr (LiteralPattern ty l) = Literal ty l
 > toExpr (VariablePattern ty v) = mkVar ty v
 > toExpr (ConstructorPattern ty c ts) =
->   apply (Constructor (foldr (TypeArrow . typeOf) ty ts) c) (map toExpr ts)
+>   apply (Constructor (qualType ty') c) (map toExpr ts)
+>   where ty' = foldr (TypeArrow . typeOf) (unqualType ty) ts
 > toExpr (FunctionPattern ty f ts) =
->   apply (Variable (foldr (TypeArrow . typeOf) ty ts) f) (map toExpr ts)
-> toExpr (AsPattern v t) = mkVar (typeOf t) v
+>   apply (Variable (qualType ty') f) (map toExpr ts)
+>   where ty' = foldr (TypeArrow . typeOf) (unqualType ty) ts
+> toExpr (AsPattern v t) = mkVar (qualType (typeOf t)) v
 
-> decls :: Position -> ConstrTerm Type -> [Decl Type]
+> decls :: Position -> ConstrTerm QualType -> [Decl QualType]
 > decls _ (LiteralPattern _ _) = []
 > decls p (VariablePattern ty v) = [FreeDecl p [FreeVar ty v]]
 > decls p (ConstructorPattern _ _ ts) = concatMap (decls p) ts
 > decls p (FunctionPattern _ _ ts) = concatMap (decls p) ts
-> decls p (AsPattern v t) = varDecl p (typeOf t) v (toExpr t) : decls p t
+> decls p (AsPattern v t) =
+>   varDecl p (qualType (typeOf t)) v (toExpr t) : decls p t
 
 \end{verbatim}
 Our pattern matching algorithm is based on the notions of demanded and
@@ -403,19 +412,21 @@ comprehensible.
 > arguments (ConstructorPattern _ _ ts) = ts
 > arguments (AsPattern _ t) = arguments t
 
-> bindVars :: Position -> Ident -> ConstrTerm Type -> Rhs Type -> Rhs Type
+> bindVars :: Position -> Ident -> ConstrTerm QualType -> Rhs QualType
+>          -> Rhs QualType
 > bindVars _ _ (LiteralPattern _ _) = id
 > bindVars p v' (VariablePattern ty v) = bindVar p ty v v'
 > bindVars _ _ (ConstructorPattern _ _ _) = id
-> bindVars p v' (AsPattern v t) = bindVar p (typeOf t) v v' . bindVars p v' t
+> bindVars p v' (AsPattern v t) =
+>   bindVar p (qualType (typeOf t)) v v' . bindVars p v' t
 
 > bindVar :: Position -> a -> Ident -> Ident -> Rhs a -> Rhs a
 > bindVar p ty v v'
 >   | v /= v' = addDecl (varDecl p ty v (mkVar ty v'))
 >   | otherwise = id
 
-> flexMatch :: ModuleIdent -> Position -> [(Type,Ident)] -> [Match Type]
->           -> CaseMatchState (Expression Type)
+> flexMatch :: ModuleIdent -> Position -> [(QualType,Ident)] -> [Match QualType]
+>           -> CaseMatchState (Expression QualType)
 > flexMatch m p []     as = mapM (match m p . thd3) as >>= matchChoice m p
 > flexMatch m p (v:vs) as
 >   | null vars = e1
@@ -429,9 +440,9 @@ comprehensible.
 >         skipArg (p,t:ts,rhs) = (p,(t:),ts,rhs)
 >         matchVar v (p,_,t:ts,rhs) = (p,ts,bindVars p v t rhs)
 
-> optMatch :: ModuleIdent -> CaseMatchState (Expression Type)
->          -> ([(Type,Ident)] -> [(Type,Ident)]) -> [(Type,Ident)]
->          -> [Match' Type] -> CaseMatchState (Expression Type)
+> optMatch :: ModuleIdent -> CaseMatchState (Expression QualType)
+>          -> ([(QualType,Ident)] -> [(QualType,Ident)]) -> [(QualType,Ident)]
+>          -> [Match' QualType] -> CaseMatchState (Expression QualType)
 > optMatch _ e _      []     _ = e
 > optMatch m e prefix (v:vs) as
 >   | null vars = matchInductive m prefix v vs nonVars
@@ -442,32 +453,33 @@ comprehensible.
 >         skipArg (p,prefix,t:ts,rhs) = (p,prefix . (t:),ts,rhs)
 >         matchVar v (p,prefix,t:ts,rhs) = (p,prefix,ts,bindVars p v t rhs)
 
-> matchInductive :: ModuleIdent -> ([(Type,Ident)] -> [(Type,Ident)])
->                -> (Type,Ident) -> [(Type,Ident)]
->                -> [(ConstrTerm (),Match' Type)]
->                -> CaseMatchState (Expression Type)
+> matchInductive :: ModuleIdent -> ([(QualType,Ident)] -> [(QualType,Ident)])
+>                -> (QualType,Ident) -> [(QualType,Ident)]
+>                -> [(ConstrTerm (),Match' QualType)]
+>                -> CaseMatchState (Expression QualType)
 > matchInductive m prefix v vs as =
 >   liftM (Fcase (uncurry mkVar v)) (matchAlts m prefix v vs as)
 
-> matchChoice :: ModuleIdent -> Position -> [Rhs Type]
->             -> CaseMatchState (Expression Type)
+> matchChoice :: ModuleIdent -> Position -> [Rhs QualType]
+>             -> CaseMatchState (Expression QualType)
 > matchChoice m p (rhs:rhss)
 >   | null rhss = return (expr rhs)
 >   | otherwise =
 >       do
 >         v <- freshVar m "_#choice" (typeOf (head ts))
 >         return (Fcase (freeVar p v) (zipWith (Alt p) ts (rhs:rhss)))
->   where ts = map (LiteralPattern intType . Integer) [0..]
+>   where ts = map (LiteralPattern qualIntType . Integer) [0..]
 >         freeVar p (ty,v) = Let [FreeDecl p [FreeVar ty v]] (mkVar ty v)
 >         expr (SimpleRhs _ e _) = e
 
-> matchOr :: ModuleIdent -> Position -> Expression Type -> Expression Type
->         -> CaseMatchState (Expression Type)
+> matchOr :: ModuleIdent -> Position -> Expression QualType
+>         -> Expression QualType -> CaseMatchState (Expression QualType)
 > matchOr m p e1 e2 = matchChoice m p [mkRhs p e1,mkRhs p e2]
 
-> matchAlts :: ModuleIdent -> ([(Type,Ident)] -> [(Type,Ident)]) -> (Type,Ident)
->           -> [(Type,Ident)] -> [(ConstrTerm (),Match' Type)]
->           -> CaseMatchState [Alt Type]
+> matchAlts :: ModuleIdent -> ([(QualType,Ident)] -> [(QualType,Ident)])
+>           -> (QualType,Ident) -> [(QualType,Ident)]
+>           -> [(ConstrTerm (),Match' QualType)]
+>           -> CaseMatchState [Alt QualType]
 > matchAlts _ _      _ _  [] = return []
 > matchAlts m prefix v vs ((t,a):as) =
 >   do
@@ -476,8 +488,9 @@ comprehensible.
 >     return (a' : as')
 >   where (same,others) = partition ((t ==) . fst) as
 
-> matchAlt :: ModuleIdent -> ([(Type,Ident)] -> [(Type,Ident)]) -> (Type,Ident)
->          -> [(Type,Ident)] -> [Match' Type] -> CaseMatchState (Alt Type)
+> matchAlt :: ModuleIdent -> ([(QualType,Ident)] -> [(QualType,Ident)])
+>          -> (QualType,Ident) -> [(QualType,Ident)] -> [Match' QualType]
+>          -> CaseMatchState (Alt QualType)
 > matchAlt m prefix v vs as@((p,_,t:_,_) : _) =
 >   do
 >     vs' <- matchVars m [arguments t | (_,_,t:_,_) <- as]
@@ -486,11 +499,11 @@ comprehensible.
 >   where expandArg (p,prefix,t:ts,rhs) =
 >           (p,prefix (arguments t ++ ts),bindVars p (snd v) t rhs)
 
-> matchVars :: ModuleIdent -> [[ConstrTerm Type]]
->           -> CaseMatchState [(Type,Ident)]
+> matchVars :: ModuleIdent -> [[ConstrTerm QualType]]
+>           -> CaseMatchState [(QualType,Ident)]
 > matchVars m tss = mapM argName (transpose tss)
 >   where argName [VariablePattern ty v] = return (ty,v)
->         argName [AsPattern v t] = return (typeOf t,v)
+>         argName [AsPattern v t] = return (qualType (typeOf t),v)
 >         argName (t:_) = freshVar m "_#case" (typeOf t)
 
 > renameArgs :: Ident -> [(a,Ident)] -> ConstrTerm a -> ConstrTerm a
@@ -668,9 +681,9 @@ where the default alternative is redundant.
 > asConstrApp _ t@(ConstructorPattern _ _ _) = t
 > asConstrApp v (AsPattern v' t) = AsPattern v' (asConstrApp v t)
 
-> rigidMatch :: ModuleIdent -> Type -> ([(Type,Ident)] -> [(Type,Ident)])
->            -> [(Type,Ident)] -> [Match' Type]
->            -> CaseMatchState (Expression Type)
+> rigidMatch :: ModuleIdent -> Type
+>            -> ([(QualType,Ident)] -> [(QualType,Ident)]) -> [(QualType,Ident)]
+>            -> [Match' QualType] -> CaseMatchState (Expression QualType)
 > rigidMatch m ty prefix [] (a:as) = matchAlt vs a (matchFail vs as)
 >   where vs = prefix []
 >         resetArgs (p,prefix,ts,rhs) = (p,id,prefix ts,rhs)
@@ -686,13 +699,14 @@ where the default alternative is redundant.
 >           rigidMatch m ty prefix vs (map (matchVar (snd v)) as)
 >       | otherwise -> rigidMatch m ty (prefix . (v:)) vs (map skipArg as)
 >     t'@(LiteralPattern _ l')
->       | fst v `elem` charType:numTypes ->
+>       | ty' `elem` charType:numTypes ->
 >           liftM (Case (uncurry mkVar v))
 >                 (mapM (matchCaseAlt m ty prefix v vs as') (lts ++ vts))
 >       | otherwise ->
->           liftM (Case (eqNum (fst v) v l') . catMaybes)
+>           liftM (Case (eqNum ty' v l') . catMaybes)
 >                 (sequence [matchLitAlt True m ty prefix v vs as' t',
 >                            matchLitAlt False m ty prefix v vs as' t'])
+>       where ty' = unqualType (fst v)
 >     ConstructorPattern _ _ _
 >       | null lts ->
 >           do
@@ -711,11 +725,11 @@ where the default alternative is redundant.
 >           (p,prefix . (asLiteral v t :),asConstrApp v t:ts,rhs)
 >         eqNum ty v l = apply (prelEq ty) [uncurry mkVar v,numLit ty l]
 >         numLit ty (Integer i) =
->           Apply (prelFromInteger ty) (Literal integerType (Integer i))
+>           Apply (prelFromInteger ty) (Literal qualIntegerType (Integer i))
 >         numLit ty (Rational r) =
->           Apply (prelFromRational ty) (Literal rationalType (Rational r))
+>           Apply (prelFromRational ty) (Literal qualRationalType (Rational r))
 >         allCases tcEnv (ty,_) ts = length cs == length ts
->           where cs = constructors (rootOfType ty) tcEnv
+>           where cs = constructors (rootOfType (unqualType ty)) tcEnv
 
 > partitionPatterns :: [ConstrTerm a]
 >                   -> ([ConstrTerm a],[ConstrTerm a],[ConstrTerm a])
@@ -725,10 +739,10 @@ where the default alternative is redundant.
 >         partition t@(ConstructorPattern _ _ _) ~(lts,cts,vts) =
 >           (lts,t:cts,vts)
 
-> matchCaseAlt :: ModuleIdent -> Type -> ([(Type,Ident)] -> [(Type,Ident)])
->              -> (Type,Ident) -> [(Type,Ident)]
->              -> [(ConstrTerm (),Match' Type)] -> ConstrTerm ()
->              -> CaseMatchState (Alt Type)
+> matchCaseAlt :: ModuleIdent -> Type
+>              -> ([(QualType,Ident)] -> [(QualType,Ident)]) -> (QualType,Ident)
+>              -> [(QualType,Ident)] -> [(ConstrTerm (),Match' QualType)]
+>              -> ConstrTerm () -> CaseMatchState (Alt QualType)
 > matchCaseAlt m ty prefix v vs as t =
 >   do
 >     vs' <- matchVars m (map arguments ts)
@@ -746,9 +760,9 @@ where the default alternative is redundant.
 >         arguments' ts' t = if isVarPattern t then ts' else arguments t
 
 > matchLitAlt :: Bool -> ModuleIdent -> Type
->             -> ([(Type,Ident)] -> [(Type,Ident)]) -> (Type,Ident)
->             -> [(Type,Ident)] -> [(ConstrTerm (),Match' Type)]
->             -> ConstrTerm () -> CaseMatchState (Maybe (Alt Type))
+>             -> ([(QualType,Ident)] -> [(QualType,Ident)]) -> (QualType,Ident)
+>             -> [(QualType,Ident)] -> [(ConstrTerm (),Match' QualType)]
+>             -> ConstrTerm () -> CaseMatchState (Maybe (Alt QualType))
 > matchLitAlt eq m ty prefix v vs as t
 >   | null as' = return Nothing
 >   | otherwise =
@@ -766,38 +780,39 @@ where the default alternative is redundant.
 Generation of fresh names
 \begin{verbatim}
 
-> freshVar :: ModuleIdent -> String -> Type -> CaseMatchState (Type,Ident)
+> freshVar :: ModuleIdent -> String -> Type -> CaseMatchState (QualType,Ident)
 > freshVar m prefix ty =
 >   do
 >     v <- liftM (mkName prefix) (liftSt (liftRt (updateSt (1 +))))
 >     updateSt_ (bindFun m v 0 (monoType ty))
->     return (ty,v)
+>     return (qualType ty,v)
 >   where mkName pre n = mkIdent (pre ++ show n)
 
 \end{verbatim}
 Prelude entities
 \begin{verbatim}
 
-> prelConj :: Expression Type
+> prelConj :: Expression QualType
 > prelConj = preludeFun [successType,successType] successType "&"
 
-> prelEq, prelFromInteger, prelFromRational :: Type -> Expression Type
+> prelEq, prelFromInteger, prelFromRational :: Type -> Expression QualType
 > prelEq ty = preludeFun [ty,ty] boolType "=="
 > prelFromInteger ty = preludeFun [integerType] ty "fromInteger"
 > prelFromRational ty = preludeFun [rationalType] ty "fromRational"
 
-> unify, prelEnsure :: Type -> Expression Type
+> unify, prelEnsure :: Type -> Expression QualType
 > unify ty = preludeFun [ty,ty] successType "=:<="
 > prelEnsure ty = preludeFun [ty] ty "ensureNotFree"
 
-> preludeFun :: [Type] -> Type -> String -> Expression Type
+> preludeFun :: [Type] -> Type -> String -> Expression QualType
 > preludeFun tys ty f =
->   Variable (foldr TypeArrow ty tys) (qualifyWith preludeMIdent (mkIdent f))
+>   Variable (qualType (foldr TypeArrow ty tys))
+>            (qualifyWith preludeMIdent (mkIdent f))
 
-> truePattern, falsePattern, successPattern :: ConstrTerm Type
-> truePattern = ConstructorPattern boolType qTrueId []
-> falsePattern = ConstructorPattern boolType qFalseId []
-> successPattern = ConstructorPattern successType qSuccessId []
+> truePattern, falsePattern, successPattern :: ConstrTerm QualType
+> truePattern = ConstructorPattern qualBoolType qTrueId []
+> falsePattern = ConstructorPattern qualBoolType qFalseId []
+> successPattern = ConstructorPattern qualSuccessType qSuccessId []
 
 \end{verbatim}
 Auxiliary definitions
@@ -818,24 +833,24 @@ Auxiliary definitions
 > addDecl d (SimpleRhs p e ds) = SimpleRhs p e (d : ds)
 > addDecl d (GuardedRhs es ds) = GuardedRhs es (d : ds)
 
-> vars :: ConstrTerm Type -> [(Type,Ident)]
+> vars :: ConstrTerm QualType -> [(QualType,Ident)]
 > vars (LiteralPattern _ _) = []
 > vars (VariablePattern ty v) = [(ty,v) | unRenameIdent v /= anonId]
 > vars (ConstructorPattern _ _ ts) = concatMap vars ts
 > vars (FunctionPattern _ _ ts) = concatMap vars ts
-> vars (AsPattern v t) = (typeOf t,v) : vars t
+> vars (AsPattern v t) = (qualType (typeOf t),v) : vars t
 
-> tuplePattern :: [ConstrTerm Type] -> ConstrTerm Type
+> tuplePattern :: [ConstrTerm QualType] -> ConstrTerm QualType
 > tuplePattern ts =
 >   case ts of
->     [] -> ConstructorPattern unitType qUnitId []
+>     [] -> ConstructorPattern qualUnitType qUnitId []
 >     [t] -> t
 >     _ -> TuplePattern ts
 
-> tupleExpr :: [Expression Type] -> Expression Type
+> tupleExpr :: [Expression QualType] -> Expression QualType
 > tupleExpr es =
 >   case es of
->     [] -> Constructor unitType qUnitId
+>     [] -> Constructor qualUnitType qUnitId
 >     [e] -> e
 >     _ -> Tuple es
 

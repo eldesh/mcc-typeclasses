@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 2921 2009-12-02 21:22:18Z wlux $
+% $Id: Typing.lhs 2969 2010-06-29 13:00:29Z wlux $
 %
-% Copyright (c) 2003-2009, Wolfgang Lux
+% Copyright (c) 2003-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Typing.lhs}
@@ -35,6 +35,9 @@ perform any (non-trivial) unifications.
 
 > instance Typeable Type where
 >   typeOf = id
+
+> instance Typeable QualType where
+>   typeOf = unqualType
 
 > instance Typeable a => Typeable (ConstrTerm a) where
 >   typeOf (LiteralPattern a _) = typeOf a
@@ -143,7 +146,8 @@ removed newtypes.
   constrained type is a type variable.}
 \begin{verbatim}
 
-> withType :: TCEnv -> Type -> Expression Type -> Expression Type
+> withType :: (SubstType t,Typeable t) => TCEnv -> Type
+>          -> Expression t -> Expression t
 > withType tcEnv ty x = fmap (subst (matchType tcEnv (typeOf x) ty idSubst)) x
 
 > matchType :: TCEnv -> Type -> Type -> TypeSubst -> TypeSubst

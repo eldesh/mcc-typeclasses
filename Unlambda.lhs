@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Unlambda.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: Unlambda.lhs 2969 2010-06-29 13:00:29Z wlux $
 %
 % Copyright (c) 2007-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -28,7 +28,7 @@ lambda abstraction is recorded in the type environment.
 
 > type UnlambdaState a = StateT ValueEnv Id a
 
-> unlambda :: ValueEnv -> Module Type -> (Module Type,ValueEnv)
+> unlambda :: ValueEnv -> Module QualType -> (Module QualType,ValueEnv)
 > unlambda tyEnv (Module m es is ds) = runSt doUnlambda tyEnv
 >   where doUnlambda =
 >           do
@@ -37,7 +37,7 @@ lambda abstraction is recorded in the type environment.
 >             return (Module m es is ds',tyEnv')
 
 > class SyntaxTree a where
->   nameLambdas :: ModuleIdent -> a Type -> UnlambdaState (a Type)
+>   nameLambdas :: ModuleIdent -> a QualType -> UnlambdaState (a QualType)
 
 > instance SyntaxTree TopDecl where
 >   nameLambdas _ (DataDecl p cx tc tvs cs clss) =
@@ -82,9 +82,10 @@ lambda abstraction is recorded in the type environment.
 >       updateSt_ (bindLambda m f (length ts) ty)
 >       nameLambdas m (Let [funDecl p ty f ts e] (mkVar ty f))
 >     where f = lambdaId p
->           ty = typeOf (Lambda p ts e)
+>           ty = qualType (typeOf (Lambda p ts e))
 >           bindLambda m f n ty tyEnv
->             | null (lookupTopEnv f tyEnv) = bindFun m f n (polyType ty) tyEnv
+>             | null (lookupTopEnv f tyEnv) =
+>                 bindFun m f n (typeScheme ty) tyEnv
 >             | otherwise = tyEnv
 >   nameLambdas m (Let ds e) =
 >     liftM2 Let (mapM (nameLambdas m) ds) (nameLambdas m e)

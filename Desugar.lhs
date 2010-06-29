@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: Desugar.lhs 2969 2010-06-29 13:00:29Z wlux $
 %
 % Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -81,12 +81,12 @@ declarations. The top-level function declarations are treated like a
 global declaration group.
 \begin{verbatim}
 
-> desugar :: ValueEnv -> Module Type -> (Module Type,ValueEnv)
+> desugar :: ValueEnv -> Module QualType -> (Module QualType,ValueEnv)
 > desugar tyEnv (Module m es is ds) = (Module m es is ds',tyEnv')
 >   where (ds',tyEnv') = run (desugarModule m ds) tyEnv
 
-> desugarModule :: ModuleIdent -> [TopDecl Type]
->               -> DesugarState ([TopDecl Type],ValueEnv)
+> desugarModule :: ModuleIdent -> [TopDecl QualType]
+>               -> DesugarState ([TopDecl QualType],ValueEnv)
 > desugarModule m ds =
 >   do
 >     tds' <- mapM (desugarTopDecl m) tds
@@ -95,7 +95,8 @@ global declaration group.
 >     return (tds' ++ map BlockDecl vds',tyEnv')
 >   where (vds,tds) = partition isBlockDecl ds
 
-> desugarTopDecl :: ModuleIdent -> TopDecl Type -> DesugarState (TopDecl Type)
+> desugarTopDecl :: ModuleIdent -> TopDecl QualType
+>                -> DesugarState (TopDecl QualType)
 > desugarTopDecl m (DataDecl p cx tc tvs cs clss) =
 >   return (DataDecl p cx tc tvs (map desugarConstrDecl cs) clss)
 >   where desugarConstrDecl (ConstrDecl p evs cx c tys) =
@@ -125,10 +126,11 @@ kind of the declaration (either \texttt{static} or \texttt{dynamic})
 and the name of the imported function.
 \begin{verbatim}
 
-> desugarDeclGroup :: ModuleIdent -> [Decl Type] -> DesugarState [Decl Type]
+> desugarDeclGroup :: ModuleIdent -> [Decl QualType]
+>                  -> DesugarState [Decl QualType]
 > desugarDeclGroup m ds = mapM (desugarDecl m) (filter isValueDecl ds)
 
-> desugarDecl :: ModuleIdent -> Decl Type -> DesugarState (Decl Type)
+> desugarDecl :: ModuleIdent -> Decl QualType -> DesugarState (Decl QualType)
 > desugarDecl m (FunctionDecl p ty f eqs) =
 >   liftM (FunctionDecl p ty f) (mapM (desugarEquation m) eqs)
 > desugarDecl _ (ForeignDecl p (cc,s,ie) ty f ty') =
@@ -154,8 +156,8 @@ and the name of the imported function.
 >   liftM2 (PatternDecl p) (desugarTerm m t) (desugarRhs m rhs)
 > desugarDecl _ (FreeDecl p vs) = return (FreeDecl p vs)
 
-> desugarEquation :: ModuleIdent -> Equation Type
->                 -> DesugarState (Equation Type)
+> desugarEquation :: ModuleIdent -> Equation QualType
+>                 -> DesugarState (Equation QualType)
 > desugarEquation m (Equation p lhs rhs) =
 >   liftM2 (Equation p . FunLhs f) (mapM (desugarTerm m) ts) (desugarRhs m rhs)
 >   where (f,ts) = flatLhs lhs
@@ -165,21 +167,22 @@ We expand each string literal in a pattern or expression into a list
 of characters.
 \begin{verbatim}
 
-> desugarLiteralTerm :: Type -> Literal
->                    -> Either (ConstrTerm Type) (ConstrTerm Type)
+> desugarLiteralTerm :: QualType -> Literal
+>                    -> Either (ConstrTerm QualType) (ConstrTerm QualType)
 > desugarLiteralTerm ty (Char c) = Right (LiteralPattern ty (Char c))
 > desugarLiteralTerm ty (Integer i) =
->   Right (LiteralPattern ty (fixLiteral ty i))
+>   Right (LiteralPattern ty (fixLiteral (unqualType ty) i))
 >   where fixLiteral (TypeConstrained tys _) = fixLiteral (head tys)
 >         fixLiteral ty
 >           | ty == floatType = Rational . toRational
 >           | otherwise = Integer
 > desugarLiteralTerm ty (Rational r) = Right (LiteralPattern ty (Rational r))
 > desugarLiteralTerm ty (String cs) =
->   Left (ListPattern ty (map (LiteralPattern (elemType ty) . Char) cs))
+>   Left (ListPattern ty (map (LiteralPattern ty' . Char) cs))
+>   where ty' = qualType (elemType (unqualType ty))
 
-> desugarTerm :: ModuleIdent -> ConstrTerm Type
->             -> DesugarState (ConstrTerm Type)
+> desugarTerm :: ModuleIdent -> ConstrTerm QualType
+>             -> DesugarState (ConstrTerm QualType)
 > desugarTerm m (LiteralPattern ty l) =
 >   either (desugarTerm m) return (desugarLiteralTerm ty l)
 > desugarTerm m (NegativePattern ty l) =
@@ -201,7 +204,7 @@ of characters.
 >   liftM (RecordPattern ty c) (mapM (desugarField (desugarTerm m)) fs)
 > desugarTerm m (TuplePattern ts) =
 >   desugarTerm m (ConstructorPattern ty (qTupleId (length ts)) ts)
->   where ty = tupleType (map typeOf ts)
+>   where ty = qualType (tupleType (map typeOf ts))
 > desugarTerm m (ListPattern ty ts) =
 >   liftM (foldr cons nil) (mapM (desugarTerm m) ts)
 >   where nil = ConstructorPattern ty qNilId []
@@ -219,7 +222,7 @@ must remain a free variable of the goal expression and therefore must
 not be replaced.
 \begin{verbatim}
 
-> desugarRhs :: ModuleIdent -> Rhs Type -> DesugarState (Rhs Type)
+> desugarRhs :: ModuleIdent -> Rhs QualType -> DesugarState (Rhs QualType)
 > desugarRhs m (SimpleRhs p e ds) =
 >   do
 >     ds' <- desugarDeclGroup m ds
@@ -231,38 +234,40 @@ not be replaced.
 >     es' <- mapM (desugarCondExpr m) es
 >     return (GuardedRhs es' ds')
 
-> desugarCondExpr :: ModuleIdent -> CondExpr Type
->                 -> DesugarState (CondExpr Type)
+> desugarCondExpr :: ModuleIdent -> CondExpr QualType
+>                 -> DesugarState (CondExpr QualType)
 > desugarCondExpr m (CondExpr p g e) =
 >   liftM2 (CondExpr p) (desugarExpr m p g) (desugarExpr m p e)
 
-> desugarLiteral :: Type -> Literal
->                -> Either (Expression Type) (Expression Type)
+> desugarLiteral :: QualType -> Literal
+>                -> Either (Expression QualType) (Expression QualType)
 > desugarLiteral ty (Char c) = Right (Literal ty (Char c))
-> desugarLiteral ty (Integer i) = Right (fixLiteral ty i)
+> desugarLiteral ty (Integer i) = Right (fixLiteral (unqualType ty) i)
 >   where fixLiteral (TypeConstrained tys _) = fixLiteral (head tys)
 >         fixLiteral ty'
 >           | ty' `elem` [intType,integerType] = Literal ty . Integer
 >           | ty' == floatType = Literal ty . Rational . fromInteger
 >           | ty' == rationalType = desugarRatio . fromInteger
 >           | otherwise =
->               Apply (prelFromInteger ty) . Literal integerType . Integer
-> desugarLiteral ty (Rational r) = Right (fixLiteral ty r)
+>               Apply (prelFromInteger (unqualType ty)) .
+>               Literal qualIntegerType . Integer
+> desugarLiteral ty (Rational r) = Right (fixLiteral (unqualType ty) r)
 >   where fixLiteral (TypeConstrained tys _) = fixLiteral (head tys)
 >         fixLiteral ty'
 >           | ty' == floatType = Literal ty . Rational
 >           | ty' == rationalType = desugarRatio
->           | otherwise = Apply (prelFromRational ty) . desugarRatio
-> desugarLiteral ty (String cs) =
->   Left (List ty (map (Literal (elemType ty) . Char) cs))
+>           | otherwise =
+>               Apply (prelFromRational (unqualType ty)) . desugarRatio
+> desugarLiteral ty (String cs) = Left (List ty (map (Literal ty' . Char) cs))
+>   where ty' = qualType (elemType (unqualType ty))
 
-> desugarRatio :: Rational -> Expression Type
+> desugarRatio :: Rational -> Expression QualType
 > desugarRatio r =
 >   foldl applyToInteger (ratioConstr integerType) [numerator r,denominator r]
->   where applyToInteger e = Apply e . Literal integerType . Integer
+>   where applyToInteger e = Apply e . Literal qualIntegerType . Integer
 
-> desugarExpr :: ModuleIdent -> Position -> Expression Type
->             -> DesugarState (Expression Type)
+> desugarExpr :: ModuleIdent -> Position -> Expression QualType
+>             -> DesugarState (Expression QualType)
 > desugarExpr m p (Literal ty l) =
 >   either (desugarExpr m p) return (desugarLiteral ty l)
 > desugarExpr m p (Variable ty v)
@@ -270,7 +275,7 @@ not be replaced.
 >   --    in module Goals) and must not be changed
 >   | isRenamed v' && unRenameIdent v' == anonId =
 >       do
->         v'' <- freshVar m "_#var" ty
+>         v'' <- freshVar m "_#var" (unqualType ty)
 >         return (Let [FreeDecl p [uncurry FreeVar v'']] (uncurry mkVar v''))
 >   | otherwise = return (Variable ty v)
 >   where v' = unqualify v
@@ -286,22 +291,24 @@ not be replaced.
 > desugarExpr m p (Tuple es) =
 >   liftM (apply (Constructor ty (qTupleId (length es))))
 >         (mapM (desugarExpr m p) es)
->   where ty = foldr TypeArrow (tupleType tys) tys
+>   where ty = qualType (foldr TypeArrow (tupleType tys) tys)
 >         tys = map typeOf es
 > desugarExpr m p (List ty es) =
 >   liftM (foldr cons nil) (mapM (desugarExpr m p) es)
 >   where nil = Constructor ty qNilId
->         cons = Apply . Apply (Constructor (consType (elemType ty)) qConsId)
+>         cons = Apply . Apply (Constructor ty' qConsId)
+>         ty' = qualType (consType (elemType (unqualType ty)))
 > desugarExpr m p (ListCompr e qs) =
 >   desugarListCompr m e qs z >>= desugarExpr m p
->   where z = List (typeOf (ListCompr e qs)) []
+>   where z = List (qualType (typeOf (ListCompr e qs))) []
 > desugarExpr m p (EnumFrom e) =
 >   liftM (Apply (prelEnumFrom (typeOf e))) (desugarExpr m p e)
 > desugarExpr m p (EnumFromThen e1 e2) =
 >   liftM (apply (prelEnumFromThen (typeOf e1)))
 >         (mapM (desugarExpr m p) [e1,e2])
 > desugarExpr m p (EnumFromTo e1 e2) =
->   liftM (apply (prelEnumFromTo (typeOf e1))) (mapM (desugarExpr m p) [e1,e2])
+>   liftM (apply (prelEnumFromTo (typeOf e1)))
+>         (mapM (desugarExpr m p) [e1,e2])
 > desugarExpr m p (EnumFromThenTo e1 e2 e3) =
 >   liftM (apply (prelEnumFromThenTo (typeOf e1)))
 >         (mapM (desugarExpr m p) [e1,e2,e3])
@@ -346,7 +353,7 @@ not be replaced.
 > desugarExpr m p (Fcase e as) =
 >   liftM2 Fcase (desugarExpr m p e) (mapM (desugarAlt m) as)
 
-> desugarAlt :: ModuleIdent -> Alt Type -> DesugarState (Alt Type)
+> desugarAlt :: ModuleIdent -> Alt QualType -> DesugarState (Alt QualType)
 > desugarAlt m (Alt p t rhs) =
 >   liftM2 (Alt p) (desugarTerm m t) (desugarRhs m rhs)
 
@@ -385,23 +392,24 @@ qualifiers generate fresh instances of $t$ that do not contribute to
 the list at all.
 \begin{verbatim}
 
-> desugarListCompr :: ModuleIdent -> Expression Type -> [Statement Type]
->                  -> Expression Type -> DesugarState (Expression Type)
+> desugarListCompr :: ModuleIdent -> Expression QualType -> [Statement QualType]
+>                  -> Expression QualType -> DesugarState (Expression QualType)
 > desugarListCompr _ e [] z =
->   return (apply (Constructor (consType (typeOf e)) qConsId) [e,z])
+>   return (apply (Constructor (qualType (consType (typeOf e))) qConsId) [e,z])
 > desugarListCompr m e (q:qs) z =
 >   desugarQual m q z >>= \(y,f) -> desugarListCompr m e qs y >>= return . f
 
-> desugarQual :: ModuleIdent -> Statement Type -> Expression Type
->             -> DesugarState (Expression Type,
->                              Expression Type -> Expression Type)
+> desugarQual :: ModuleIdent -> Statement QualType -> Expression QualType
+>             -> DesugarState (Expression QualType,
+>                              Expression QualType -> Expression QualType)
 > desugarQual _ (StmtExpr b) z = return (z,\e -> IfThenElse b e z)
 > desugarQual m (StmtBind p t l) z =
 >   do
 >     v <- freshVar m "_#var" (typeOf t)
 >     y <- freshVar m "_#var" (typeOf z)
 >     return (uncurry mkVar y,
->             \e -> apply (prelFoldr (fst v) (fst y)) [foldFunct v y e,z,l])
+>             \e -> apply (prelFoldr (unqualType (fst v)) (unqualType (fst y)))
+>                         [foldFunct v y e,z,l])
 >   where foldFunct v l e =
 >           Lambda p [uncurry VariablePattern v,uncurry VariablePattern l]
 >             (Case (uncurry mkVar v)
@@ -413,12 +421,12 @@ the list at all.
 Generation of fresh names.
 \begin{verbatim}
 
-> freshVar :: ModuleIdent -> String -> Type -> DesugarState (Type,Ident)
+> freshVar :: ModuleIdent -> String -> Type -> DesugarState (QualType,Ident)
 > freshVar m prefix ty =
 >   do
 >     v <- liftM (mkName prefix) (liftSt (updateSt (1 +)))
 >     updateSt_ (bindFun m v 0 (monoType ty))
->     return (ty,v)
+>     return (qualType ty,v)
 >   where mkName pre n = mkIdent (pre ++ show n)
 
 \end{verbatim}
@@ -438,18 +446,19 @@ Prelude entities.
 >   preludeFun [a `TypeArrow` (b `TypeArrow` b),b,listType a] b "foldr"
 > prelNegate a = preludeFun [a] a "negate"
 
-> preludeFun :: [Type] -> Type -> String -> Expression Type
+> preludeFun :: [Type] -> Type -> String -> Expression QualType
 > preludeFun tys ty f =
->   Variable (foldr TypeArrow ty tys) (qualifyWith preludeMIdent (mkIdent f))
+>   Variable (qualType (foldr TypeArrow ty tys))
+>            (qualifyWith preludeMIdent (mkIdent f))
 
-> ratioConstr :: Type -> Expression Type
-> ratioConstr a =
->   Constructor (TypeArrow a (TypeArrow a (ratioType a)))
+> ratioConstr :: Type -> Expression QualType
+> ratioConstr ty =
+>   Constructor (qualType (TypeArrow ty (TypeArrow ty (ratioType ty))))
 >               (qualifyWith ratioMIdent (mkIdent ":%"))
 
-> truePattern, falsePattern :: ConstrTerm Type
-> truePattern = ConstructorPattern boolType qTrueId []
-> falsePattern = ConstructorPattern boolType qFalseId []
+> truePattern, falsePattern :: ConstrTerm QualType
+> truePattern = ConstructorPattern qualBoolType qTrueId []
+> falsePattern = ConstructorPattern qualBoolType qFalseId []
 
 \end{verbatim}
 Auxiliary definitions.

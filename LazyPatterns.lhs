@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: LazyPatterns.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: LazyPatterns.lhs 2969 2010-06-29 13:00:29Z wlux $
 %
 % Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -26,7 +26,7 @@ variables are in scope.
 > import Utils
 > import ValueInfo
 
-> unlazy :: ValueEnv -> Module Type -> (Module Type,ValueEnv)
+> unlazy :: ValueEnv -> Module QualType -> (Module QualType,ValueEnv)
 > unlazy tyEnv (Module m es is ds) = (Module m es is ds',tyEnv')
 >   where (ds',tyEnv') = run (unlazyModule m tyEnv ds) tyEnv
 
@@ -42,8 +42,8 @@ variables.
 > run :: UnlazyState a -> ValueEnv -> a
 > run m tyEnv = runSt (callSt m tyEnv) 1
 
-> unlazyModule :: ModuleIdent -> ValueEnv -> [TopDecl Type]
->              -> UnlazyState ([TopDecl Type],ValueEnv)
+> unlazyModule :: ModuleIdent -> ValueEnv -> [TopDecl QualType]
+>              -> UnlazyState ([TopDecl QualType],ValueEnv)
 > unlazyModule m tyEnv ds = 
 >   do
 >     dss' <- mapM (unlazyTopDecl m) ds
@@ -57,7 +57,8 @@ bindings are evaluated lazily, their patterns are transformed like
 lazy patterns.
 \begin{verbatim}
 
-> unlazyTopDecl :: ModuleIdent -> TopDecl Type -> UnlazyState [TopDecl Type]
+> unlazyTopDecl :: ModuleIdent -> TopDecl QualType
+>               -> UnlazyState [TopDecl QualType]
 > unlazyTopDecl _ (DataDecl p cx tc tvs cs clss) =
 >   return [DataDecl p cx tc tvs cs clss]
 > unlazyTopDecl _ (NewtypeDecl p cx tc tvs nc clss) =
@@ -73,7 +74,7 @@ lazy patterns.
 > unlazyTopDecl m (BlockDecl d) = liftM (map BlockDecl) (unlazyDecl m d)
 > unlazyTopDecl _ (SplitAnnot p) = return [SplitAnnot p]
 
-> unlazyDecl :: ModuleIdent -> Decl Type -> UnlazyState [Decl Type]
+> unlazyDecl :: ModuleIdent -> Decl QualType -> UnlazyState [Decl QualType]
 > unlazyDecl m (FunctionDecl p ty f eqs) =
 >   liftM (return . FunctionDecl p ty f) (mapM (unlazyEquation m) eqs)
 > unlazyDecl _ (ForeignDecl p fi ty f ty') = return [ForeignDecl p fi ty f ty']
@@ -84,8 +85,8 @@ lazy patterns.
 >     return (PatternDecl p t' rhs' : ds')
 > unlazyDecl _ (FreeDecl p vs) = return [FreeDecl p vs]
 
-> unlazyEquation :: ModuleIdent -> Equation Type
->                -> UnlazyState (Equation Type)
+> unlazyEquation :: ModuleIdent -> Equation QualType
+>                -> UnlazyState (Equation QualType)
 > unlazyEquation m (Equation p (FunLhs f ts) rhs) =
 >   do
 >     (ds',ts') <- mapAccumM (liftLazy m p) [] (map unlazyTerm ts)
@@ -145,8 +146,8 @@ must introduce a fresh variable when transforming a pattern of the
 form \texttt{\char`\~($v$@$t$)}.
 \begin{verbatim}
 
-> liftLazy :: ModuleIdent -> Position -> [Decl Type] -> ConstrTerm Type
->          -> UnlazyState ([Decl Type],ConstrTerm Type)
+> liftLazy :: ModuleIdent -> Position -> [Decl QualType] -> ConstrTerm QualType
+>          -> UnlazyState ([Decl QualType],ConstrTerm QualType)
 > liftLazy _ _ ds (LiteralPattern ty l) = return (ds,LiteralPattern ty l)
 > liftLazy _ _ ds (VariablePattern ty v) = return (ds,VariablePattern ty v)
 > liftLazy m p ds (ConstructorPattern ty c ts) =
@@ -155,7 +156,8 @@ form \texttt{\char`\~($v$@$t$)}.
 >   liftM (apSnd (FunctionPattern ty f)) (mapAccumM (liftLazy m p) ds ts)
 > liftLazy m p ds (AsPattern v t) =
 >   case t of
->     LazyPattern t' -> liftM (liftPattern p (typeOf t',v)) (liftLazy m p ds t')
+>     LazyPattern t' -> liftM (liftPattern p (ty,v)) (liftLazy m p ds t')
+>       where ty = qualType (typeOf t')
 >     _ -> liftM (apSnd (AsPattern v)) (liftLazy m p ds t)
 > liftLazy m p ds (LazyPattern t) =
 >   liftM2 (liftPattern p) (freshVar m "_#lazy" (typeOf t)) (liftLazy m p ds t)
@@ -170,7 +172,7 @@ Lifted declarations for lazy patterns in lambda expressions and case
 alternatives are added to the body of the expression.
 \begin{verbatim}
 
-> unlazyRhs :: ModuleIdent -> Rhs Type -> UnlazyState (Rhs Type)
+> unlazyRhs :: ModuleIdent -> Rhs QualType -> UnlazyState (Rhs QualType)
 > unlazyRhs m (SimpleRhs p e ds) =
 >   do
 >     dss' <- mapM (unlazyDecl m) ds
@@ -182,11 +184,13 @@ alternatives are added to the body of the expression.
 >     es' <- mapM (unlazyCondExpr m) es
 >     return (GuardedRhs es' (concat dss'))
 
-> unlazyCondExpr :: ModuleIdent -> CondExpr Type -> UnlazyState (CondExpr Type)
+> unlazyCondExpr :: ModuleIdent -> CondExpr QualType
+>                -> UnlazyState (CondExpr QualType)
 > unlazyCondExpr m (CondExpr p g e) =
 >   liftM2 (CondExpr p) (unlazyExpr m g) (unlazyExpr m e)
 
-> unlazyExpr :: ModuleIdent -> Expression Type -> UnlazyState (Expression Type)
+> unlazyExpr :: ModuleIdent -> Expression QualType
+>            -> UnlazyState (Expression QualType)
 > unlazyExpr _ (Literal ty l) = return (Literal ty l)
 > unlazyExpr _ (Variable ty v) = return (Variable ty v)
 > unlazyExpr _ (Constructor ty c) = return (Constructor ty c)
@@ -203,7 +207,7 @@ alternatives are added to the body of the expression.
 > unlazyExpr m (Fcase e as) =
 >   liftM2 Fcase (unlazyExpr m e) (mapM (unlazyAlt m) as)
 
-> unlazyAlt :: ModuleIdent -> Alt Type -> UnlazyState (Alt Type)
+> unlazyAlt :: ModuleIdent -> Alt QualType -> UnlazyState (Alt QualType)
 > unlazyAlt m (Alt p t rhs) =
 >   do
 >     (ds',t') <- liftLazy m p [] (unlazyTerm t)
@@ -214,12 +218,12 @@ alternatives are added to the body of the expression.
 Generation of fresh names.
 \begin{verbatim}
 
-> freshVar :: ModuleIdent -> String -> Type -> UnlazyState (Type,Ident)
+> freshVar :: ModuleIdent -> String -> Type -> UnlazyState (QualType,Ident)
 > freshVar m prefix ty =
 >   do
 >     v <- liftM (mkName prefix) (liftSt (updateSt (1 +)))
 >     updateSt_ (bindFun m v 0 (monoType ty))
->     return (ty,v)
+>     return (qualType ty,v)
 >   where mkName pre n = mkIdent (pre ++ show n)
 
 \end{verbatim}

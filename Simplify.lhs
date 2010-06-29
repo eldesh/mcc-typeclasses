@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: Simplify.lhs 2969 2010-06-29 13:00:29Z wlux $
 %
 % Copyright (c) 2003-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -40,21 +40,22 @@ Currently, the following optimizations are implemented:
 
 > type SimplifyState a =
 >   StateT ValueEnv (ReaderT TCEnv (ReaderT TrustEnv (StateT Int Id))) a
-> type InlineEnv = Env Ident (Expression Type)
+> type InlineEnv = Env Ident (Expression QualType)
 
-> simplify :: TCEnv -> ValueEnv -> TrustEnv -> Module Type
->          -> (Module Type,ValueEnv)
+> simplify :: TCEnv -> ValueEnv -> TrustEnv -> Module QualType
+>          -> (Module QualType,ValueEnv)
 > simplify tcEnv tyEnv trEnv m =
 >   runSt (callRt (callRt (callSt (simplifyModule m) tyEnv) tcEnv) trEnv) 1
 
-> simplifyModule :: Module Type -> SimplifyState (Module Type,ValueEnv)
+> simplifyModule :: Module QualType -> SimplifyState (Module QualType,ValueEnv)
 > simplifyModule (Module m es is ds) =
 >   do
 >     dss' <- mapM (simplifyTopDecl m) ds
 >     tyEnv <- fetchSt
 >     return (Module m es is (concat dss'),tyEnv)
 
-> simplifyTopDecl :: ModuleIdent -> TopDecl Type -> SimplifyState [TopDecl Type]
+> simplifyTopDecl :: ModuleIdent -> TopDecl QualType
+>                 -> SimplifyState [TopDecl QualType]
 > simplifyTopDecl _ (DataDecl p cx tc tvs cs clss) =
 >   return [DataDecl p cx tc tvs cs clss]
 > simplifyTopDecl _ (NewtypeDecl p cx tc tvs nc clss) =
@@ -72,8 +73,8 @@ Currently, the following optimizations are implemented:
 >   liftM (map BlockDecl) (simplifyDecl m emptyEnv d)
 > simplifyTopDecl _ (SplitAnnot p) = return [SplitAnnot p]
 
-> simplifyDecl :: ModuleIdent -> InlineEnv -> Decl Type
->              -> SimplifyState [Decl Type]
+> simplifyDecl :: ModuleIdent -> InlineEnv -> Decl QualType
+>              -> SimplifyState [Decl QualType]
 > simplifyDecl m env (FunctionDecl p ty f eqs) =
 >   liftM (return . FunctionDecl p ty f) (mapM (simplifyEquation m env) eqs)
 > simplifyDecl _ _ (ForeignDecl p fi ty f ty') =
@@ -88,7 +89,7 @@ Currently, the following optimizations are implemented:
 >           return [funDecl p ty f ts e]
 >       (TuplePattern ts,SimpleRhs p' e _) -> return (match p' e)
 >         where match _ (Variable _ v) =
->                 [patDecl p t (Variable (typeOf t) v) | t <- ts]
+>                 [patDecl p t (Variable (qualType (typeOf t)) v) | t <- ts]
 >               match _ (Tuple es) = zipWith (patDecl p) ts es
 >               match p' (Let ds e) = ds ++ match p' e
 >               match p' e@(Case _ _) = [PatternDecl p t (SimpleRhs p' e [])]
@@ -96,8 +97,8 @@ Currently, the following optimizations are implemented:
 >       _ -> return [PatternDecl p t rhs']
 > simplifyDecl _ _ (FreeDecl p vs) = return [FreeDecl p vs]
 
-> simplifyEquation :: ModuleIdent -> InlineEnv -> Equation Type
->                  -> SimplifyState (Equation Type)
+> simplifyEquation :: ModuleIdent -> InlineEnv -> Equation QualType
+>                  -> SimplifyState (Equation QualType)
 > simplifyEquation m env (Equation p lhs rhs) =
 >   do
 >     rhs' <- simplifyRhs m env rhs >>= etaExpand m
@@ -106,8 +107,8 @@ Currently, the following optimizations are implemented:
 > simplifyLhs :: [Ident] -> Lhs a -> Lhs a
 > simplifyLhs fvs (FunLhs f ts) = FunLhs f (map (simplifyPattern fvs) ts)
 
-> simplifyRhs :: ModuleIdent -> InlineEnv -> Rhs Type
->             -> SimplifyState (Rhs Type)
+> simplifyRhs :: ModuleIdent -> InlineEnv -> Rhs QualType
+>             -> SimplifyState (Rhs QualType)
 > simplifyRhs m env (SimpleRhs p e _) =
 >   do
 >     e' <- simplifyApp m p e [] >>= simplifyExpr m env
@@ -177,8 +178,8 @@ A function or variable definition can be $\eta$-expanded safely if its
 body is a non-expansive expression.
 \begin{verbatim}
 
-> etaExpandEqn :: ModuleIdent -> Position -> Lhs Type -> Rhs Type
->              -> SimplifyState (Equation Type)
+> etaExpandEqn :: ModuleIdent -> Position -> Lhs QualType -> Rhs QualType
+>              -> SimplifyState (Equation QualType)
 > etaExpandEqn m p lhs rhs =
 >   case rhs of
 >     SimpleRhs p' (Lambda _ ts' e') _ ->
@@ -188,7 +189,7 @@ body is a non-expansive expression.
 >       where FunLhs f ts = lhs
 >     _ -> return (Equation p lhs rhs)
 
-> etaExpand :: ModuleIdent -> Rhs Type -> SimplifyState (Rhs Type)
+> etaExpand :: ModuleIdent -> Rhs QualType -> SimplifyState (Rhs QualType)
 > etaExpand m rhs@(SimpleRhs p e _) =
 >   do
 >     tyEnv <- fetchSt
@@ -196,8 +197,8 @@ body is a non-expansive expression.
 >     (ts',e') <- etaExpr m tcEnv tyEnv e
 >     return (if null ts' then rhs else SimpleRhs p (Lambda p ts' e') [])
 
-> etaExpr :: ModuleIdent -> TCEnv -> ValueEnv -> Expression Type
->         -> SimplifyState ([ConstrTerm Type],Expression Type)
+> etaExpr :: ModuleIdent -> TCEnv -> ValueEnv -> Expression QualType
+>         -> SimplifyState ([ConstrTerm QualType],Expression QualType)
 > etaExpr _ _ _ (Lambda _ ts e) = return (ts,e)
 > etaExpr m tcEnv tyEnv e
 >   | isNonExpansive tyEnv 0 e && not (null tys) =
@@ -271,17 +272,18 @@ that this may fail when the newtype's definition is not visible in the
 current module.
 \begin{verbatim}
 
-> expandTypeAnnot :: TCEnv -> Int -> Expression Type -> (Type,Expression Type)
+> expandTypeAnnot :: TCEnv -> Int -> Expression QualType
+>                 -> (Type,Expression QualType)
 > expandTypeAnnot tcEnv n e
 >   | n <= arrowArity ty = (ty,e)
 >   | otherwise = (ty',fixType ty' e)
 >   where ty = typeOf e
 >         ty' = etaType tcEnv n ty
 
-> fixType :: Type -> Expression Type -> Expression Type
-> fixType ty (Literal _ l) = Literal ty l
-> fixType ty (Variable _ v) = Variable ty v
-> fixType ty (Constructor _ c) = Constructor ty c
+> fixType :: Type -> Expression QualType -> Expression QualType
+> fixType ty (Literal _ l) = Literal (qualType ty) l
+> fixType ty (Variable _ v) = Variable (qualType ty) v
+> fixType ty (Constructor _ c) = Constructor (qualType ty) c
 > fixType _ (Tuple es) = Tuple es
 > fixType ty (Apply e1 e2) = Apply (fixType (TypeArrow (typeOf e2) ty) e1) e2
 > fixType ty (Lambda p ts e) = Lambda p ts (fixType (foldr match ty ts) e)
@@ -290,10 +292,10 @@ current module.
 > fixType ty (Case e as) = Case e (map (fixTypeAlt ty) as)
 > fixType ty (Fcase e as) = Fcase e (map (fixTypeAlt ty) as)
 
-> fixTypeAlt :: Type -> Alt Type -> Alt Type
+> fixTypeAlt :: Type -> Alt QualType -> Alt QualType
 > fixTypeAlt ty (Alt p t rhs) = Alt p t (fixTypeRhs ty rhs)
 
-> fixTypeRhs :: Type -> Rhs Type -> Rhs Type
+> fixTypeRhs :: Type -> Rhs QualType -> Rhs QualType
 > fixTypeRhs ty (SimpleRhs p e _) = SimpleRhs p (fixType ty e) []
 
 \end{verbatim}
@@ -312,8 +314,8 @@ these values and the let declarations will be removed.
   performing a compile time $\beta$-reduction.}
 \begin{verbatim}
 
-> simplifyApp :: ModuleIdent -> Position -> Expression Type -> [Expression Type]
->             -> SimplifyState (Expression Type)
+> simplifyApp :: ModuleIdent -> Position -> Expression QualType
+>             -> [Expression QualType] -> SimplifyState (Expression QualType)
 > simplifyApp _ _ (Literal ty l) _ = return (Literal ty l)
 > simplifyApp _ _ (Variable ty v) es = return (apply (Variable ty v) es)
 > simplifyApp _ _ (Constructor ty c) es = return (apply (Constructor ty c) es)
@@ -334,8 +336,9 @@ these values and the let declarations will be removed.
 >     e' <- simplifyApp m p e []
 >     mkCase m p (Fcase e') es as
 
-> mkCase :: ModuleIdent -> Position -> ([Alt Type] -> Expression Type)
->        -> [Expression Type] -> [Alt Type] -> SimplifyState (Expression Type)
+> mkCase :: ModuleIdent -> Position -> ([Alt QualType] -> Expression QualType)
+>        -> [Expression QualType] -> [Alt QualType]
+>        -> SimplifyState (Expression QualType)
 > mkCase m p f es as
 >   | length as == 1 = return (f (map (applyToAlt es) as))
 >   | otherwise =
@@ -377,8 +380,8 @@ transformation avoids the creation of some redundant lifted functions
 in later phases of the compiler.
 \begin{verbatim}
 
-> simplifyExpr :: ModuleIdent -> InlineEnv -> Expression Type
->              -> SimplifyState (Expression Type)
+> simplifyExpr :: ModuleIdent -> InlineEnv -> Expression QualType
+>              -> SimplifyState (Expression QualType)
 > simplifyExpr _ _ (Literal ty l) = return (Literal ty l)
 > simplifyExpr m env (Variable ty v)
 >   | isQualified v = return (Variable ty v)
@@ -386,7 +389,7 @@ in later phases of the compiler.
 >       do
 >         tcEnv <- liftSt envRt
 >         maybe (return (Variable ty v))
->               (simplifyExpr m env . substExpr tcEnv ty)
+>               (simplifyExpr m env . substExpr tcEnv (unqualType ty))
 >               (lookupEnv (unqualify v) env)
 >   where substExpr tcEnv ty =
 >           snd . expandTypeAnnot tcEnv (arrowArity ty) . withType tcEnv ty
@@ -420,8 +423,8 @@ in later phases of the compiler.
 >           (simplifyExpr m env)
 >           (simplifyMatch e' as)
 
-> simplifyAlt :: ModuleIdent -> InlineEnv -> Alt Type
->             -> SimplifyState (Alt Type)
+> simplifyAlt :: ModuleIdent -> InlineEnv -> Alt QualType
+>             -> SimplifyState (Alt QualType)
 > simplifyAlt m env (Alt p t rhs) =
 >   do
 >     rhs' <- simplifyRhs m env rhs
@@ -470,8 +473,8 @@ case compile time matching of pattern bindings did introduce new
 variable declarations (see \texttt{simplifyDecl} above).
 \begin{verbatim}
 
-> simplifyLet :: ModuleIdent -> InlineEnv -> [[Decl Type]] -> Expression Type
->             -> SimplifyState (Expression Type)
+> simplifyLet :: ModuleIdent -> InlineEnv -> [[Decl QualType]]
+>             -> Expression QualType -> SimplifyState (Expression QualType)
 > simplifyLet m env [] e = simplifyExpr m env e
 > simplifyLet m env (ds:dss) e =
 >   do
@@ -483,8 +486,8 @@ variable declarations (see \texttt{simplifyDecl} above).
 >     e' <- simplifyLet m (foldr (inlineVars m tyEnv trEnv) env dss'') dss e
 >     return (snd (foldr (mkSimplLet m tcEnv) (qfv m e',e') dss''))
 
-> inlineVars :: ModuleIdent -> ValueEnv -> TrustEnv -> [Decl Type] -> InlineEnv
->            -> InlineEnv
+> inlineVars :: ModuleIdent -> ValueEnv -> TrustEnv -> [Decl QualType]
+>            -> InlineEnv -> InlineEnv
 > inlineVars m tyEnv trEnv
 >            [FunctionDecl _ _ f [Equation p (FunLhs _ ts) (SimpleRhs _ e _)]]
 >            env
@@ -498,8 +501,8 @@ variable declarations (see \texttt{simplifyDecl} above).
 >   | canInline tyEnv e && v `notElem` qfv m e = bindEnv v e env
 > inlineVars _ _ _ _ env = env
 
-> etaReduce :: ModuleIdent -> ValueEnv -> Position -> [ConstrTerm Type]
->           -> Expression Type -> Expression Type
+> etaReduce :: ModuleIdent -> ValueEnv -> Position -> [ConstrTerm QualType]
+>           -> Expression QualType -> Expression QualType
 > etaReduce m tyEnv p ts e
 >   | all isVarPattern ts && funArity e' >= n && length ts <= n &&
 >     all (canInline tyEnv) es' && map (uncurry mkVar) vs == es'' &&
@@ -520,8 +523,8 @@ variable declarations (see \texttt{simplifyDecl} above).
 > canInline tyEnv (Variable _ v) = not (isQualified v) || arity v tyEnv > 0
 > canInline _ _ = False
 
-> mkSimplLet :: ModuleIdent -> TCEnv -> [Decl Type] -> ([Ident],Expression Type)
->            -> ([Ident],Expression Type)
+> mkSimplLet :: ModuleIdent -> TCEnv -> [Decl QualType]
+>            -> ([Ident],Expression QualType) -> ([Ident],Expression QualType)
 > mkSimplLet m _ [FreeDecl p vs] (fvs,e)
 >   | null vs' = (fvs,e)
 >   | otherwise = (fvs',Let [FreeDecl p vs'] e)
@@ -529,7 +532,8 @@ variable declarations (see \texttt{simplifyDecl} above).
 >         fvs' = filter (`notElem` bv vs) fvs
 > mkSimplLet m tcEnv [PatternDecl _ (VariablePattern _ v) (SimpleRhs _ e _)]
 >       (_,Variable ty' v')
->   | v' == qualify v && v `notElem` fvs = (fvs,withType tcEnv ty' e)
+>   | v' == qualify v && v `notElem` fvs =
+>       (fvs,withType tcEnv (unqualType ty') e)
 >   where fvs = qfv m e
 > mkSimplLet m _ ds (fvs,e)
 >   | null (filter (`elem` fvs) bvs) = (fvs,e)
@@ -538,7 +542,7 @@ variable declarations (see \texttt{simplifyDecl} above).
 >   where fvs' = qfv m ds ++ fvs
 >         bvs = bv ds
 
-> simplifyPatternDecl :: [Ident] -> Decl Type -> Decl Type
+> simplifyPatternDecl :: [Ident] -> Decl QualType -> Decl QualType
 > simplifyPatternDecl fvs (PatternDecl p (TuplePattern ts) rhs) =
 >   PatternDecl p (tuplePattern (filterUsed ts)) (filterRhs rhs)
 >   where bs = [v `elem` fvs | VariablePattern ty v <- ts]
@@ -582,7 +586,8 @@ in general only when the program were transformed into a normalized
 form where the arguments of all applications would be variables.
 \begin{verbatim}
 
-> simplifyMatch :: Expression Type -> [Alt Type] -> Maybe (Expression Type)
+> simplifyMatch :: Expression QualType -> [Alt QualType]
+>               -> Maybe (Expression QualType)
 > simplifyMatch (Let ds e) = fmap (Let ds) . simplifyMatch e
 > simplifyMatch e =
 >   case unapply e [] of
@@ -601,11 +606,11 @@ form where the arguments of all applications would be variables.
 > unapply (Case e as) es = (Case e as,es)
 > unapply (Fcase e as) es = (Fcase e as,es)
 
-> match :: Either (Type,Literal) (Type,QualIdent,[Expression Type])
->       -> [Alt Type] -> Expression Type
+> match :: Either (QualType,Literal) (QualType,QualIdent,[Expression QualType])
+>       -> [Alt QualType] -> Expression QualType
 > match e as =
 >   head ([expr p t rhs | Alt p t rhs <- as, t `matches` e] ++
->         [prelFailed (typeOf (Case (matchExpr e) as))])
+>         [prelFailed (qualType (typeOf (Case (matchExpr e) as)))])
 >   where expr p t (SimpleRhs _ e' _) = bindPattern p e t e'
 
 > matches :: ConstrTerm a -> Either (a,Literal) (a,QualIdent,[Expression a])
@@ -620,8 +625,10 @@ form where the arguments of all applications would be variables.
 > matchExpr (Right (ty,c,es)) = apply (Constructor ty c) es
 
 > bindPattern :: Position
->             -> Either (Type,Literal) (Type,QualIdent,[Expression Type])
->             -> ConstrTerm Type -> Expression Type -> Expression Type
+>             -> Either (QualType,Literal)
+>                       (QualType,QualIdent,[Expression QualType])
+>             -> ConstrTerm QualType -> Expression QualType
+>             -> Expression QualType
 > bindPattern _ (Left _) (LiteralPattern _ _) e' = e'
 > bindPattern p (Right (_,_,es)) (ConstructorPattern _ _ ts) e' =
 >   foldr Let e' [zipWith (patDecl p) ts es]
@@ -629,14 +636,16 @@ form where the arguments of all applications would be variables.
 >   Let [varDecl p ty v (matchExpr e)] e'
 > bindPattern p e (AsPattern v t) e' = bindPattern p e t (Let [bindAs p v t] e')
 
-> bindAs :: Position -> Ident -> ConstrTerm Type -> Decl Type
+> bindAs :: Position -> Ident -> ConstrTerm QualType -> Decl QualType
 > bindAs p v (LiteralPattern ty l) = varDecl p ty v (Literal ty l)
 > bindAs p v (VariablePattern ty v') = varDecl p ty v (mkVar ty v')
-> bindAs p v (ConstructorPattern ty c ts) = varDecl p ty v e'
->   where e' = apply (Constructor (foldr (TypeArrow . typeOf) ty ts) c)
->                    [mkVar ty v | VariablePattern ty v <- ts]
+> bindAs p v (ConstructorPattern ty c ts) =
+>   varDecl p ty v (apply (Constructor (toExprType ty ts) c) (map toExpr ts))
+>   where toExpr (VariablePattern ty v) = mkVar ty v
+>         toExprType ty ts =
+>           qualType (foldr (TypeArrow . typeOf) (unqualType ty) ts)
 > bindAs p v (AsPattern v' t') = varDecl p ty v (mkVar ty v')
->   where ty = typeOf t'
+>   where ty = qualType (typeOf t')
 
 > prelFailed :: a -> Expression a
 > prelFailed ty = Variable ty (qualifyWith preludeMIdent (mkIdent "failed"))
@@ -645,29 +654,29 @@ form where the arguments of all applications would be variables.
 Generation of fresh names.
 \begin{verbatim}
 
-> freshVar :: ModuleIdent -> String -> Type -> SimplifyState (Type,Ident)
+> freshVar :: ModuleIdent -> String -> Type -> SimplifyState (QualType,Ident)
 > freshVar m prefix ty =
 >   do
 >     v <- liftM mkName (liftSt (liftRt (liftRt (updateSt (1 +)))))
 >     updateSt_ (bindFun m v 0 (monoType ty))
->     return (ty,v)
+>     return (qualType ty,v)
 >   where mkName n = mkIdent (prefix ++ show n)
 
 \end{verbatim}
 Auxiliary functions.
 \begin{verbatim}
 
-> tuplePattern :: [ConstrTerm Type] -> ConstrTerm Type
+> tuplePattern :: [ConstrTerm QualType] -> ConstrTerm QualType
 > tuplePattern ts =
 >   case ts of
->     [] -> ConstructorPattern unitType qUnitId []
+>     [] -> ConstructorPattern qualUnitType qUnitId []
 >     [t] -> t
 >     _ -> TuplePattern ts
 
-> tupleExpr :: [Expression Type] -> Expression Type
+> tupleExpr :: [Expression QualType] -> Expression QualType
 > tupleExpr es =
 >   case es of
->     [] -> Constructor unitType qUnitId
+>     [] -> Constructor qualUnitType qUnitId
 >     [e] -> e
 >     _ -> Tuple es
 

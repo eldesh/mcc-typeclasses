@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Common.lhs 2970 2010-07-01 09:11:20Z wlux $
+% $Id: Common.lhs 2971 2010-07-01 09:44:53Z wlux $
 %
 % Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -49,7 +49,6 @@ well as goals.
 > import Types
 > import TypeInfo
 > import TypeTrans
-> import Unlambda
 > import Utils
 > import ValueInfo
 
@@ -62,7 +61,7 @@ eventually update the module's interface.
 
 > transModule :: Bool -> Trust -> TCEnv -> ValueEnv -> Module QualType
 >             -> (TCEnv,ValueEnv,TrustEnv,Module QualType,[(Dump,Doc)])
-> transModule debug tr tcEnv tyEnv m = (tcEnv',tyEnv''',trEnv,nolambda,dumps)
+> transModule debug tr tcEnv tyEnv m = (tcEnv',tyEnv''',trEnv,pbu,dumps)
 >   where trEnv = if debug then trustEnv tr m else emptyEnv
 >         desugared = desugar m
 >         unlabeled = unlabel tcEnv tyEnv desugared
@@ -71,7 +70,6 @@ eventually update the module's interface.
 >         flatCase = caseMatch tcEnv' nolazy
 >         (tyEnv'',simplified) = simplify tcEnv' tyEnv' trEnv flatCase
 >         (tyEnv''',pbu) = pbTrans tyEnv'' simplified
->         nolambda = unlambda pbu
 >         dumps =
 >           [(DumpRenamed,ppModule m),
 >            (DumpTypes,ppTypes tcEnv (localBindings tyEnv)),
@@ -81,8 +79,7 @@ eventually update the module's interface.
 >            (DumpUnlazy,ppModule nolazy),
 >            (DumpFlatCase,ppModule flatCase),
 >            (DumpSimplified,ppModule simplified),
->            (DumpPBU,ppModule pbu),
->            (DumpUnlambda,ppModule nolambda)]
+>            (DumpPBU,ppModule pbu)]
 
 \end{verbatim}
 After creating the module's interface, the compiler introduces
@@ -222,7 +219,6 @@ standard output.
 > dumpHeader DumpFlatCase = "Source code after case flattening"
 > dumpHeader DumpSimplified = "Source code after simplification"
 > dumpHeader DumpPBU = "Source code with pattern binding updates"
-> dumpHeader DumpUnlambda = "Source code after naming lambdas"
 > dumpHeader DumpDict = "Source code with dictionaries"
 > dumpHeader DumpSpecialize = "Source code after specialization"
 > dumpHeader DumpLifted = "Source code after lifting"

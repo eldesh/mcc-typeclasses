@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Options.lhs 2803 2009-04-26 17:14:20Z wlux $
+% $Id: Options.lhs 2971 2010-07-01 09:44:53Z wlux $
 %
-% Copyright (c) 2001-2009, Wolfgang Lux
+% Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Options.lhs}
@@ -75,7 +75,6 @@ all compiler options.
 >   | DumpFlatCase                      -- dump source after case flattening
 >   | DumpSimplified                    -- dump source after simplification
 >   | DumpPBU                           -- dump source with pattern updates
->   | DumpUnlambda                      -- dump source after naming lambdas
 >   | DumpDict                          -- dump source with dictionaries
 >   | DumpSpecialize                    -- dump source after specialization
 >   | DumpLifted                        -- dump source after lambda-lifting
@@ -163,8 +162,6 @@ recognized by the compiler.
 >            "dump source code after simplification",
 >     Option "" ["dump-pbu"] (NoArg (Dump [DumpPBU]))
 >            "dump source code with pattern binding updates",
->     Option "" ["dump-unlambda"] (NoArg (Dump [DumpUnlambda]))
->            "dump source code after naming lambdas",
 >     Option "" ["dump-dict"] (NoArg (Dump [DumpDict]))
 >            "dump source code with dictionaries",
 >     Option "" ["dump-specialize"] (NoArg (Dump [DumpSpecialize]))

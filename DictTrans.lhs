@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2970 2010-07-01 09:11:20Z wlux $
+% $Id: DictTrans.lhs 2971 2010-07-01 09:44:53Z wlux $
 %
 % Copyright (c) 2006-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -657,6 +657,11 @@ similarly.
 >     liftM2 Apply
 >            (dictTrans tcEnv iEnv tyEnv dictEnv e1)
 >            (dictTrans tcEnv iEnv tyEnv dictEnv e2)
+>   dictTrans tcEnv iEnv tyEnv dictEnv (Lambda p ts e) =
+>     do
+>       (dictEnv',ts') <- mapAccumM (dictTransTerm tcEnv tyEnv) dictEnv ts
+>       e' <- dictTrans tcEnv iEnv (bindTerms ts' tyEnv) dictEnv' e
+>       return (Lambda p ts' e')
 >   dictTrans tcEnv iEnv tyEnv dictEnv (Let ds e) =
 >     liftM2 Let
 >            (mapM (dictTrans tcEnv iEnv tyEnv' dictEnv) ds)
@@ -848,6 +853,8 @@ dictionaries as its instance creation function.
 > dictSpecializeApp _ (Constructor ty c) es = apply (Constructor ty c) es
 > dictSpecializeApp mEnv (Apply e1 e2) es =
 >   dictSpecializeApp mEnv e1 (dictSpecialize mEnv e2 : es)
+> dictSpecializeApp mEnv (Lambda p ts e) es =
+>   apply (Lambda p ts (dictSpecialize mEnv e)) es
 > dictSpecializeApp mEnv (Let ds e) es =
 >   apply (Let (map (dictSpecialize mEnv) ds) (dictSpecialize mEnv e)) es
 > dictSpecializeApp mEnv (Case e as) es =
@@ -860,6 +867,7 @@ dictionaries as its instance creation function.
 > unapply (Variable ty x) es = (Variable ty x,es)
 > unapply (Constructor ty c) es = (Constructor ty c,es)
 > unapply (Apply e1 e2) es = unapply e1 (e2:es)
+> unapply (Lambda p ts e) es = (Lambda p ts e,es)
 > unapply (Let ds e) es = (Let ds e,es)
 > unapply (Case e as) es = (Case e as,es)
 > unapply (Fcase e as) es = (Fcase e as,es)

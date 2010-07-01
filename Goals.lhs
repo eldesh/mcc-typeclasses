@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Goals.lhs 2969 2010-06-29 13:00:29Z wlux $
+% $Id: Goals.lhs 2970 2010-07-01 09:11:20Z wlux $
 %
 % Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -136,11 +136,11 @@ interfaces are in scope with their qualified names.
 >     let (pEnv,tcEnv,iEnv,tyEnv) = importModules mEnv ds
 >     let (pEnv',tcEnv',tyEnv') = qualifyEnv1 mEnv ds pEnv tcEnv tyEnv
 >     g'' <- precCheckGoal m pEnv' (qual1 tEnv vEnv g')
->     (tyEnv'',cx,g''') <-
+>     (cx,g''') <-
 >       kindCheckGoal tcEnv' g'' >>
 >       typeCheckGoal (task == EvalGoal) m tcEnv' iEnv tyEnv' g''
->     let (_,tcEnv'',tyEnv''') = qualifyGoalEnv task mEnv m pEnv' tcEnv' tyEnv''
->     return (tcEnv'',iEnv,tyEnv''',cx,qualifyGoal task tEnv vEnv g''')
+>     let (_,tcEnv'',tyEnv'') = qualifyGoalEnv task mEnv m pEnv' tcEnv' tyEnv'
+>     return (tcEnv'',iEnv,tyEnv'',cx,qualifyGoal task tEnv vEnv g''')
 
 > qualifyGoalEnv :: Task -> ModuleEnv -> ModuleIdent
 >                -> PEnv -> TCEnv -> ValueEnv -> (PEnv,TCEnv,ValueEnv)
@@ -238,7 +238,7 @@ showing the bindings of the goal's free variables.
 >   | otherwise =
 >       (if debug then Nothing else Just [v | FreeVar _ v <- vs],
 >        mkModule m p ty' g vs' (apply (prelUnif ty) [mkVar (qualType ty) v,e']),
->        bindFun m v 0 (monoType ty) (bindFun m g n (typeScheme ty') tyEnv))
+>        bindFun m g n (typeScheme ty') tyEnv)
 >   where ty = typeOf e
 >         v = anonId
 >         (vs,e') = liftGoalVars debug (mkLet ds e)

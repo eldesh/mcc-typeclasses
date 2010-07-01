@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PatternBind.lhs 2969 2010-06-29 13:00:29Z wlux $
+% $Id: PatternBind.lhs 2970 2010-07-01 09:11:20Z wlux $
 %
 % Copyright (c) 2003-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -57,20 +57,20 @@ were introduced in the code by the transformation.
 > import Typing
 > import ValueInfo
 
-> type PatternBindState a = StateT ValueEnv (StateT Int Id) a
+> type PatternBindState a = StateT Int Id a
 
-> pbTrans :: ValueEnv -> Module QualType -> (Module QualType,ValueEnv)
-> pbTrans tyEnv m = runSt (callSt (pbtModule m) tyEnv) 1
+> pbTrans :: ValueEnv -> Module QualType -> (ValueEnv,Module QualType)
+> pbTrans tyEnv m = runSt (pbtModule tyEnv m) 1
 
-> pbtModule :: Module QualType -> PatternBindState (Module QualType,ValueEnv)
-> pbtModule (Module m es is ds) =
+> pbtModule :: ValueEnv -> Module QualType
+>           -> PatternBindState (ValueEnv,Module QualType)
+> pbtModule tyEnv (Module m es is ds) =
 >   do
->     n <- liftSt fetchSt
+>     n <- fetchSt
 >     ds' <- mapM (pbt m) ds
->     tyEnv <- fetchSt
->     n' <- liftSt fetchSt
+>     n' <- fetchSt
 >     let ap = if n == n' then const id else ($)
->     return (Module m es is (ap (prims ++) ds'),ap bindPrims tyEnv)
+>     return (ap bindPrims tyEnv,Module m es is (ap (prims ++) ds'))
 >   where p0 = first (file (head (map pos ds)))
 >         Variable tyUpd pbUpd = pbUpdate m (TypeVariable 0)
 >         Variable tyRet pbRet = pbReturn m (TypeVariable 0)
@@ -179,7 +179,7 @@ constraint $v_0$.
 >     (VariablePattern _ _,_) -> return [PatternDecl p t rhs]
 >     (TuplePattern ts,SimpleRhs _ e _) ->
 >       do
->         v0 <- freshVar m "_#pbt" successType
+>         v0 <- freshVar "_#pbt" successType
 >         return (updateDecl m p v0 vs e :
 >                 map (selectorDecl m p (uncurry mkVar v0)) vs)
 >       where vs = [(ty,v) | VariablePattern ty v <- ts]
@@ -227,11 +227,10 @@ Pattern binding primitives.
 Generation of fresh names.
 \begin{verbatim}
 
-> freshVar :: ModuleIdent -> String -> Type -> PatternBindState (QualType,Ident)
-> freshVar m prefix ty =
+> freshVar :: String -> Type -> PatternBindState (QualType,Ident)
+> freshVar prefix ty =
 >   do
->     v <- liftM mkName (liftSt (updateSt (1 +)))
->     updateSt_ (bindFun m v 0 (monoType ty))
+>     v <- liftM mkName (updateSt (1 +))
 >     return (qualType ty,v)
 >   where mkName n = mkIdent (prefix ++ show n)
 

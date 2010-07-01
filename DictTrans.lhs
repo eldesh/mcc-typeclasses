@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2969 2010-06-29 13:00:29Z wlux $
+% $Id: DictTrans.lhs 2970 2010-07-01 09:11:20Z wlux $
 %
 % Copyright (c) 2006-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -33,17 +33,6 @@ derived from the type class and instance declarations in the module.
 > import Typing
 > import Utils
 > import ValueInfo
-
-\end{verbatim}
-In order to generate unique names for the implicit dictionary
-arguments and add their types to the type environment, we use a nested
-state monad.
-\begin{verbatim}
-
-> type DictState a = StateT ValueEnv (StateT Int Id) a
-
-> run :: DictState a -> ValueEnv -> a
-> run m tyEnv = runSt (callSt m tyEnv) 1
 
 \end{verbatim}
 The introduction of dictionaries proceeds in three phases. In the
@@ -88,6 +77,9 @@ The first two phases are implemented in function
 implemented in \texttt{dictSpecializeModule} on
 p.~\pageref{dict-specialize}.
 
+In order to generate unique names for the implicit dictionary
+arguments introduced in the second phase we use a state monad.
+
 \textbf{Note:} The \texttt{InstanceDecl} equation of function
 \texttt{liftDecls} deliberately uses \texttt{toQualType} instead of
 \texttt{expandPolyType} when converting the instance type. Since
@@ -98,20 +90,21 @@ defined only for data and renaming types and all arguments must be
 type variables (cf.\ Sect.~4.3.2 of~\cite{PeytonJones03:Haskell}).
 \begin{verbatim}
 
+> type DictState a = StateT Int Id a
+
 > dictTransModule :: TCEnv -> InstEnv -> ValueEnv -> Module QualType
 >                 -> (TCEnv,ValueEnv,Module Type)
-> dictTransModule tcEnv iEnv tyEnv (Module m es is ds) =
->   run (do
->          ds' <- mapM (dictTrans m tcEnv'' iEnv' tyEnv' [])
->                      (concatMap (liftDecls m tcEnv tyEnv) ds)
->          dss <- mapM (methodStubs m tcEnv tyEnv) ds
->          tyEnv'' <- fetchSt
->          return (tcEnv'',tyEnv'',Module m es is (ds' ++ concat dss)))
->       (dictTransValues tyEnv')
+> dictTransModule tcEnv iEnv tyEnv (Module m es is ds) = flip runSt 1 $
+>   do
+>     ds' <- mapM (dictTrans tcEnv'' iEnv' tyEnv' [])
+>                 (concatMap (liftDecls m tcEnv tyEnv) ds)
+>     dss <- mapM (methodStubs m tcEnv tyEnv) ds
+>     return (tcEnv'',tyEnv'',Module m es is (ds' ++ concat dss))
 >   where tcEnv' = foldr (updateDefaultArities m) tcEnv ds
 >         iEnv' = foldr updateInstArities iEnv ds
->         tcEnv'' = bindDictTypes m tcEnv'
 >         tyEnv' = bindClassDecls m tcEnv' (bindInstDecls m tcEnv iEnv' tyEnv)
+>         tcEnv'' = bindDictTypes m tcEnv'
+>         tyEnv'' = dictTransValues tyEnv'
 
 > liftDecls :: ModuleIdent -> TCEnv -> ValueEnv -> TopDecl QualType
 >           -> [TopDecl QualType]
@@ -327,10 +320,10 @@ method's class can be shared among all method stubs of that class.
 >             -> DictState [TopDecl Type]
 > methodStubs m tcEnv tyEnv (ClassDecl p _ cls tv ds) =
 >   do
->     u <- freshVar m "_#dict" (instType (dictType tp))
->     uss <- mapM (mapM (freshVar m "_#dict" . instType)) tyss
->     vsD <- mapM (freshVar m "_#dict" . instType) tysD
->     vsM <- mapM (freshVar m "_#meth" . instType) tysM
+>     u <- freshVar "_#dict" (instType (dictType tp))
+>     uss <- mapM (mapM (freshVar "_#dict" . instType)) tyss
+>     vsD <- mapM (freshVar "_#dict" . instType) tysD
+>     vsM <- mapM (freshVar "_#meth" . instType) tysM
 >     let t = dictPattern (instType ty') cls' (vsD ++ vsM)
 >     return (zipWith3 (superDictDecl u t p cls') tysD' clss vsD ++
 >             zipWith5 (methodStubDecl u t) ps tysM' fs vsM uss)
@@ -560,72 +553,72 @@ the implicit dictionary arguments to the declaration.
 > transformConstrType ci ty = transformType (constrTypeRhs ci ty)
 
 > class DictTrans a where
->   dictTrans :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv -> DictEnv
->             -> a QualType -> DictState (a Type)
+>   dictTrans :: TCEnv -> InstEnv -> ValueEnv -> DictEnv -> a QualType
+>             -> DictState (a Type)
 
 > instance DictTrans TopDecl where
->   dictTrans _ tcEnv iEnv tyEnv dictEnv (DataDecl p cxL tc tvs cs clss) =
+>   dictTrans tcEnv iEnv tyEnv dictEnv (DataDecl p cxL tc tvs cs clss) =
 >     return (DataDecl p [] tc tvs (map dictTransConstrDecl cs) clss)
 >     where dictTransConstrDecl (ConstrDecl p evs cxR c tys) =
 >             ConstrDecl p evs [] c $
 >             map (fromType (tvs ++ evs)) . arrowArgs $
 >             uncurry transformConstrType $
 >             expandConstrType tcEnv cxL (qualify tc) tvs cxR tys
->   dictTrans _ _ _ _ _ (NewtypeDecl p cx tc tvs nc clss) =
+>   dictTrans _ _ _ _ (NewtypeDecl p cx tc tvs nc clss) =
 >     return (NewtypeDecl p [] tc tvs nc clss)
->   dictTrans _ _ _ _ _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
->   dictTrans m tcEnv iEnv tyEnv dictEnv (BlockDecl d) =
->     liftM BlockDecl (dictTrans m tcEnv iEnv tyEnv dictEnv d)
->   dictTrans _ _ _ _ _ (SplitAnnot p) = return (SplitAnnot p)
+>   dictTrans _ _ _ _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
+>   dictTrans tcEnv iEnv tyEnv dictEnv (BlockDecl d) =
+>     liftM BlockDecl (dictTrans tcEnv iEnv tyEnv dictEnv d)
+>   dictTrans _ _ _ _ (SplitAnnot p) = return (SplitAnnot p)
 
 > instance DictTrans Decl where
->   dictTrans _ _ _ _ _ (InfixDecl p fix pr ops) =
->     return (InfixDecl p fix pr ops)
->   dictTrans _ tcEnv _ _ _ (TypeSig p fs ty) =
+>   dictTrans _ _ _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
+>   dictTrans tcEnv _ _ _ (TypeSig p fs ty) =
 >     return (TypeSig p fs (QualTypeExpr [] ty'))
 >     where ty' = fromType nameSupply (transformType (expandPolyType tcEnv ty))
->   dictTrans m tcEnv iEnv tyEnv dictEnv (FunctionDecl p ty f eqs) =
+>   dictTrans tcEnv iEnv tyEnv dictEnv (FunctionDecl p ty f eqs) =
 >     liftM (FunctionDecl p (transformType ty) f)
->           (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) eqs)
->   dictTrans _ _ _ _ _ (ForeignDecl p fi ty f ty') =
+>           (mapM (dictTrans tcEnv iEnv tyEnv dictEnv) eqs)
+>   dictTrans _ _ _ _ (ForeignDecl p fi ty f ty') =
 >     return (ForeignDecl p fi (unqualType ty) f ty')
->   dictTrans m tcEnv iEnv tyEnv dictEnv (PatternDecl p t rhs) =
+>   dictTrans tcEnv iEnv tyEnv dictEnv (PatternDecl p t rhs) =
 >     case t of
 >       VariablePattern (QualType cx ty) v
 >         | not (null cx) ->
->             dictTrans m tcEnv iEnv tyEnv dictEnv $
+>             dictTrans tcEnv iEnv tyEnv dictEnv $
 >             FunctionDecl p (QualType cx ty) v [Equation p (FunLhs v []) rhs]
 >       _ ->
 >         do
->           (dictEnv',t') <- dictTransTerm m tcEnv tyEnv dictEnv t
->           rhs' <- dictTrans m tcEnv iEnv tyEnv dictEnv' rhs
+>           (dictEnv',t') <- dictTransTerm tcEnv tyEnv dictEnv t
+>           rhs' <- dictTrans tcEnv iEnv tyEnv dictEnv' rhs
 >           return (PatternDecl p t' rhs')
->   dictTrans _ _ _ _ _ (FreeDecl p vs) =
+>   dictTrans _ _ _ _ (FreeDecl p vs) =
 >     return (FreeDecl p (map (fmap unqualType) vs))
->   dictTrans _ _ _ _ _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
+>   dictTrans _ _ _ _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
 
 > instance DictTrans Equation where
->   dictTrans m tcEnv iEnv tyEnv dictEnv (Equation p (FunLhs f ts) rhs) =
+>   dictTrans tcEnv iEnv tyEnv dictEnv (Equation p (FunLhs f ts) rhs) =
 >     do
->       (dictEnv',ts') <- addDictArgs m tcEnv tyEnv dictEnv cx ts
->       rhs' <- dictTrans m tcEnv iEnv tyEnv dictEnv' rhs
+>       (dictEnv',ts') <- addDictArgs tcEnv tyEnv dictEnv cx ts
+>       rhs' <- dictTrans tcEnv iEnv (bindTerms ts' tyEnv) dictEnv' rhs
 >       return (Equation p (FunLhs f ts') rhs')
 >     where cx = matchContext tcEnv (varType f tyEnv) $
 >                foldr (TypeArrow . typeOf) (typeOf rhs) ts
 
 > instance DictTrans Rhs where
->   dictTrans m tcEnv iEnv tyEnv dictEnv (SimpleRhs p e ds) =
+>   dictTrans tcEnv iEnv tyEnv dictEnv (SimpleRhs p e ds) =
 >     liftM2 (SimpleRhs p)
->            (dictTrans m tcEnv iEnv tyEnv dictEnv e)
->            (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) ds)
+>            (dictTrans tcEnv iEnv tyEnv' dictEnv e)
+>            (mapM (dictTrans tcEnv iEnv tyEnv' dictEnv) ds)
+>     where tyEnv' = bindDecls ds tyEnv
 
-> addDictArgs :: ModuleIdent -> TCEnv -> ValueEnv -> DictEnv -> Context
+> addDictArgs :: TCEnv -> ValueEnv -> DictEnv -> Context
 >             -> [ConstrTerm QualType] -> DictState (DictEnv,[ConstrTerm Type])
-> addDictArgs m tcEnv tyEnv dictEnv cx ts =
+> addDictArgs tcEnv tyEnv dictEnv cx ts =
 >   do
->     xs <- mapM (freshVar m "_#dict" . dictType) cx
+>     xs <- mapM (freshVar "_#dict" . dictType) cx
 >     let dictEnv' = dicts (zip cx (map (uncurry mkVar) xs)) ++ dictEnv
->     (dictEnv'',ts') <- mapAccumM (dictTransTerm m tcEnv tyEnv) dictEnv' ts
+>     (dictEnv'',ts') <- mapAccumM (dictTransTerm tcEnv tyEnv) dictEnv' ts
 >     return (dictEnv'',map (uncurry VariablePattern) xs ++ ts')
 >   where dicts ds
 >           | null ds = ds
@@ -649,56 +642,57 @@ similarly.
 \begin{verbatim}
 
 > instance DictTrans Expression where
->   dictTrans _ _ _ _ _ (Literal ty l) = return (Literal (unqualType ty) l)
->   dictTrans _ tcEnv iEnv tyEnv dictEnv (Variable ty v) =
+>   dictTrans _ _ _ _ (Literal ty l) = return (Literal (unqualType ty) l)
+>   dictTrans tcEnv iEnv tyEnv dictEnv (Variable ty v) =
 >     return (apply (Variable ty' v) xs)
 >     where ty' = foldr (TypeArrow . typeOf) (unqualType ty) xs
 >           xs = map (dictArg iEnv dictEnv) cx
 >           cx = matchContext tcEnv (funType v tyEnv) (unqualType ty)
->   dictTrans _ tcEnv iEnv tyEnv dictEnv (Constructor ty c) =
+>   dictTrans tcEnv iEnv tyEnv dictEnv (Constructor ty c) =
 >     return (apply (Constructor ty' c) xs)
 >     where ty' = foldr (TypeArrow . typeOf) (unqualType ty) xs
 >           xs = map (dictArg iEnv dictEnv) cx
 >           cx = matchContext tcEnv (conTypeRhs c tyEnv) (unqualType ty)
->   dictTrans m tcEnv iEnv tyEnv dictEnv (Apply e1 e2) =
+>   dictTrans tcEnv iEnv tyEnv dictEnv (Apply e1 e2) =
 >     liftM2 Apply
->            (dictTrans m tcEnv iEnv tyEnv dictEnv e1)
->            (dictTrans m tcEnv iEnv tyEnv dictEnv e2)
->   dictTrans m tcEnv iEnv tyEnv dictEnv (Let ds e) =
+>            (dictTrans tcEnv iEnv tyEnv dictEnv e1)
+>            (dictTrans tcEnv iEnv tyEnv dictEnv e2)
+>   dictTrans tcEnv iEnv tyEnv dictEnv (Let ds e) =
 >     liftM2 Let
->            (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) ds)
->            (dictTrans m tcEnv iEnv tyEnv dictEnv e)
->   dictTrans m tcEnv iEnv tyEnv dictEnv (Case e as) =
+>            (mapM (dictTrans tcEnv iEnv tyEnv' dictEnv) ds)
+>            (dictTrans tcEnv iEnv tyEnv' dictEnv e)
+>     where tyEnv' = bindDecls ds tyEnv
+>   dictTrans tcEnv iEnv tyEnv dictEnv (Case e as) =
 >     liftM2 Case
->            (dictTrans m tcEnv iEnv tyEnv dictEnv e)
->            (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) as)
->   dictTrans m tcEnv iEnv tyEnv dictEnv (Fcase e as) =
+>            (dictTrans tcEnv iEnv tyEnv dictEnv e)
+>            (mapM (dictTrans tcEnv iEnv tyEnv dictEnv) as)
+>   dictTrans tcEnv iEnv tyEnv dictEnv (Fcase e as) =
 >     liftM2 Fcase
->            (dictTrans m tcEnv iEnv tyEnv dictEnv e)
->            (mapM (dictTrans m tcEnv iEnv tyEnv dictEnv) as)
+>            (dictTrans tcEnv iEnv tyEnv dictEnv e)
+>            (mapM (dictTrans tcEnv iEnv tyEnv dictEnv) as)
 
 > instance DictTrans Alt where
->   dictTrans m tcEnv iEnv tyEnv dictEnv (Alt p t rhs) =
+>   dictTrans tcEnv iEnv tyEnv dictEnv (Alt p t rhs) =
 >     do
->       (dictEnv',t') <- dictTransTerm m tcEnv tyEnv dictEnv t
->       rhs' <- dictTrans m tcEnv iEnv tyEnv dictEnv' rhs
+>       (dictEnv',t') <- dictTransTerm tcEnv tyEnv dictEnv t
+>       rhs' <- dictTrans tcEnv iEnv (bindTerm t' tyEnv) dictEnv' rhs
 >       return (Alt p t' rhs')
 
-> dictTransTerm :: ModuleIdent -> TCEnv -> ValueEnv -> DictEnv
->               -> ConstrTerm QualType -> DictState (DictEnv,ConstrTerm Type)
-> dictTransTerm _ _ _ dictEnv (LiteralPattern ty l) =
+> dictTransTerm :: TCEnv -> ValueEnv -> DictEnv -> ConstrTerm QualType
+>               -> DictState (DictEnv,ConstrTerm Type)
+> dictTransTerm _ _ dictEnv (LiteralPattern ty l) =
 >   return (dictEnv,LiteralPattern (unqualType ty) l)
-> dictTransTerm _ _ _ dictEnv (VariablePattern ty v) =
+> dictTransTerm _ _ dictEnv (VariablePattern ty v) =
 >   return (dictEnv,VariablePattern (unqualType ty) v)
-> dictTransTerm m tcEnv tyEnv dictEnv (ConstructorPattern ty c ts) =
+> dictTransTerm tcEnv tyEnv dictEnv (ConstructorPattern ty c ts) =
 >   do
->     (dictEnv',ts') <- addDictArgs m tcEnv tyEnv dictEnv cx ts
+>     (dictEnv',ts') <- addDictArgs tcEnv tyEnv dictEnv cx ts
 >     return (dictEnv',ConstructorPattern (unqualType ty) c ts')
 >   where cx = matchContext tcEnv (conTypeRhs c tyEnv) $
 >              foldr (TypeArrow . typeOf) (unqualType ty) ts
-> dictTransTerm m tcEnv tyEnv dictEnv (AsPattern v t) =
+> dictTransTerm tcEnv tyEnv dictEnv (AsPattern v t) =
 >   do
->     (dictEnv',t') <- dictTransTerm m tcEnv tyEnv dictEnv t
+>     (dictEnv',t') <- dictTransTerm tcEnv tyEnv dictEnv t
 >     return (dictEnv',AsPattern v t')
 
 \end{verbatim}
@@ -1020,11 +1014,10 @@ The monad transformer \texttt{freshVar} returns a new identifier and
 records it in the type environment.
 \begin{verbatim}
 
-> freshVar :: ModuleIdent -> String -> Type -> DictState (Type,Ident)
-> freshVar m pre ty =
+> freshVar :: String -> Type -> DictState (Type,Ident)
+> freshVar pre ty =
 >   do
->     x <- liftM (mkIdent . (pre ++) . show) (liftSt (updateSt (1 +)))
->     updateSt_ (localBindTopEnv x (Value (qualifyWith m x) 0 (monoType ty)))
+>     x <- liftM (mkIdent . (pre ++) . show) (updateSt (1 +))
 >     return (ty,x)
 
 \end{verbatim}

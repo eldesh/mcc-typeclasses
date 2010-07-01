@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Common.lhs 2969 2010-06-29 13:00:29Z wlux $
+% $Id: Common.lhs 2970 2010-07-01 09:11:20Z wlux $
 %
 % Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -62,17 +62,16 @@ eventually update the module's interface.
 
 > transModule :: Bool -> Trust -> TCEnv -> ValueEnv -> Module QualType
 >             -> (TCEnv,ValueEnv,TrustEnv,Module QualType,[(Dump,Doc)])
-> transModule debug tr tcEnv tyEnv m =
->   (tcEnv',tyEnv'''''''',trEnv,nolambda,dumps)
+> transModule debug tr tcEnv tyEnv m = (tcEnv',tyEnv''',trEnv,nolambda,dumps)
 >   where trEnv = if debug then trustEnv tr m else emptyEnv
->         (desugared,tyEnv') = desugar tyEnv m
->         (unlabeled,tyEnv'') = unlabel tcEnv tyEnv' desugared
->         (nonewtype,tcEnv',tyEnv''') = transNewtype tcEnv tyEnv'' unlabeled
->         (nolazy,tyEnv'''') = unlazy tyEnv''' nonewtype
->         (flatCase,tyEnv''''') = caseMatch tcEnv' tyEnv'''' nolazy
->         (simplified,tyEnv'''''') = simplify tcEnv' tyEnv''''' trEnv flatCase
->         (pbu,tyEnv''''''') = pbTrans tyEnv'''''' simplified
->         (nolambda,tyEnv'''''''') = unlambda tyEnv''''''' pbu
+>         desugared = desugar m
+>         unlabeled = unlabel tcEnv tyEnv desugared
+>         (tcEnv',tyEnv',nonewtype) = transNewtype tcEnv tyEnv unlabeled
+>         nolazy = unlazy nonewtype
+>         flatCase = caseMatch tcEnv' nolazy
+>         (tyEnv'',simplified) = simplify tcEnv' tyEnv' trEnv flatCase
+>         (tyEnv''',pbu) = pbTrans tyEnv'' simplified
+>         nolambda = unlambda pbu
 >         dumps =
 >           [(DumpRenamed,ppModule m),
 >            (DumpTypes,ppTypes tcEnv (localBindings tyEnv)),
@@ -108,7 +107,7 @@ transformation.
 > ilTransModule :: Bool -> TCEnv -> ValueEnv -> TrustEnv -> Maybe Ident
 >               -> Module Type -> (IL.Module,[(Dump,Doc)])
 > ilTransModule debug tcEnv tyEnv trEnv g m = (ilDbg,dumps)
->   where (lifted,tyEnv',trEnv') = lift tyEnv trEnv m
+>   where (tyEnv',trEnv',lifted) = lift tyEnv trEnv m
 >         il = ilTrans tcEnv tyEnv' lifted
 >         ilDbg
 >           | debug =

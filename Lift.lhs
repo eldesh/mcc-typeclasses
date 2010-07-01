@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Lift.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: Lift.lhs 2970 2010-07-01 09:11:20Z wlux $
 %
 % Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -36,10 +36,10 @@ lifted to the top-level.
 > import Utils
 > import ValueInfo
 
-> lift :: ValueEnv -> TrustEnv -> Module Type -> (Module Type,ValueEnv,TrustEnv)
+> lift :: ValueEnv -> TrustEnv -> Module Type -> (ValueEnv,TrustEnv,Module Type)
 > lift tyEnv trEnv (Module m es is ds) =
->   (Module m es is (concatMap liftTopDecl ds'),tyEnv',trEnv')
->   where (ds',tyEnv',trEnv') = runSt (callSt (abstractModule m ds) tyEnv) trEnv
+>   (tyEnv',trEnv',Module m es is (concatMap liftTopDecl ds'))
+>   where (tyEnv',trEnv',ds') = runSt (callSt (abstractModule m ds) tyEnv) trEnv
 
 \end{verbatim}
 \paragraph{Abstraction}
@@ -61,35 +61,35 @@ variables.
 > type AbstractEnv = Env Ident (Expression Type)
 
 > abstractModule :: ModuleIdent -> [TopDecl Type]
->                -> AbstractState ([TopDecl Type],ValueEnv,TrustEnv)
+>                -> AbstractState (ValueEnv,TrustEnv,[TopDecl Type])
 > abstractModule m ds =
 >   do
 >     ds' <- mapM (abstractTopDecl m) ds
 >     tyEnv' <- fetchSt
 >     trEnv' <- liftSt fetchSt
->     return (ds',tyEnv',trEnv')
+>     return (tyEnv',trEnv',ds')
 
 > abstractTopDecl :: ModuleIdent -> TopDecl Type -> AbstractState (TopDecl Type)
 > abstractTopDecl m (BlockDecl d) =
 >   liftM BlockDecl (abstractDecl m "" [] emptyEnv d)
 > abstractTopDecl _ d = return d
 
-> abstractDecl :: ModuleIdent -> String -> [Ident] -> AbstractEnv -> Decl Type
->              -> AbstractState (Decl Type)
+> abstractDecl :: ModuleIdent -> String -> [(Type,Ident)] -> AbstractEnv
+>              -> Decl Type -> AbstractState (Decl Type)
 > abstractDecl m _ lvs env (FunctionDecl p ty f eqs) =
 >   liftM (FunctionDecl p ty f) (mapM (abstractEquation m lvs env) eqs)
 > abstractDecl m pre lvs env (PatternDecl p t rhs) =
 >   liftM (PatternDecl p t) (abstractRhs m pre lvs env rhs)
 > abstractDecl _ _ _ _ d = return d
 
-> abstractEquation :: ModuleIdent -> [Ident] -> AbstractEnv -> Equation Type
->                  -> AbstractState (Equation Type)
+> abstractEquation :: ModuleIdent -> [(Type,Ident)] -> AbstractEnv
+>                  -> Equation Type -> AbstractState (Equation Type)
 > abstractEquation m lvs env (Equation p lhs@(FunLhs f ts) rhs) =
->   liftM (Equation p lhs)
->         (abstractRhs m (name f ++ ".") (lvs ++ bv ts) env rhs)
+>   liftM (Equation p lhs) (abstractRhs m (name f ++ ".") lvs' env rhs)
+>   where lvs' = lvs `addVars` concatMap termVars ts
 
-> abstractRhs :: ModuleIdent -> String -> [Ident] -> AbstractEnv -> Rhs Type
->             -> AbstractState (Rhs Type)
+> abstractRhs :: ModuleIdent -> String -> [(Type,Ident)] -> AbstractEnv
+>             -> Rhs Type -> AbstractState (Rhs Type)
 > abstractRhs m pre lvs env (SimpleRhs p e _) =
 >   liftM (flip (SimpleRhs p) []) (abstractExpr m pre lvs env e)
 
@@ -146,14 +146,15 @@ checking whether an entry for its untransformed name is still present
 in the type environment.
 \begin{verbatim}
 
-> abstractDeclGroup :: ModuleIdent -> String -> [Ident] -> AbstractEnv
+> abstractDeclGroup :: ModuleIdent -> String -> [(Type,Ident)] -> AbstractEnv
 >                   -> [Decl Type] -> Expression Type
 >                   -> AbstractState (Expression Type)
 > abstractDeclGroup m pre lvs env ds e =
->   abstractFunDecls m pre (lvs ++ bv vds) env (scc bv (qfv m) fds) vds e
+>   abstractFunDecls m pre lvs' env (scc bv (qfv m) fds) vds e
 >   where (fds,vds) = partition isFunDecl ds
+>         lvs' = lvs `addVars` concatMap declVars vds
 
-> abstractFunDecls :: ModuleIdent -> String -> [Ident] -> AbstractEnv
+> abstractFunDecls :: ModuleIdent -> String -> [(Type,Ident)] -> AbstractEnv
 >                  -> [[Decl Type]] -> [Decl Type] -> Expression Type
 >                  -> AbstractState (Expression Type)
 > abstractFunDecls m pre lvs env [] vds e =
@@ -164,23 +165,21 @@ in the type environment.
 > abstractFunDecls m pre lvs env (fds:fdss) vds e =
 >   do
 >     tyEnv <- fetchSt
->     let fs' = filter (not . isLifted tyEnv) fs
->     -- update type environment
->     updateSt_ (abstractFunTypes m pre fvs fs')
->     -- update trust annotation environment
->     liftSt (updateSt_ (abstractFunAnnots m pre fs'))
->     let tys = map (rawType . flip varType tyEnv) fvs
->         env' = foldr (bindF (zipWith mkVar tys fvs)) env fs
->     fds' <- mapM (abstractFunDecl m pre (zip tys fvs) lvs env')
->                  [d | d <- fds, any (`elem` fs') (bv d)]
+>     let fs' = filter (not . isLifted tyEnv pre) fs
+>         fds' = [d | d <- fds, any (`elem` fs') (bv d)]
+>         env' = foldr (bindF (map (uncurry mkVar) fvs)) env fs
+>     fds'' <-
+>       mapM (abstractFunDecl m pre fvs) fds' >>=
+>       mapM (abstractDecl m pre lvs env')
 >     e' <- abstractFunDecls m pre lvs env' fdss vds e
->     return (Let fds' e')
+>     return (Let fds'' e')
 >   where fs = bv fds
->         fvs = filter (`elem` lvs) (toListSet fvsRhs)
+>         fvs = filter ((`elemSet` fvsRhs) . snd) lvs
 >         fvsRhs = fromListSet $
 >           concat [maybe [v] (qfv m) (lookupEnv v env) | v <- qfv m fds]
 >         bindF fvs f = bindEnv f (apply (mkFun m pre undefined f) fvs)
->         isLifted tyEnv f = null (lookupTopEnv f tyEnv)
+>         isLifted tyEnv pre f =
+>           not (null (lookupTopEnv (liftIdent pre f) tyEnv))
 
 \end{verbatim}
 When the free variables of a function are abstracted, the type of the
@@ -195,41 +194,35 @@ we do not need to rename $\tau$'s universally quantified type
 variables in order to avoid an inadvertent name capturing.
 \begin{verbatim}
 
-> abstractFunTypes :: ModuleIdent -> String -> [Ident] -> [Ident]
->                  -> ValueEnv -> ValueEnv
-> abstractFunTypes m pre fvs fs tyEnv = foldr abstractFunType tyEnv fs
->   where tys = map (rawType . flip varType tyEnv) fvs
->         abstractFunType f tyEnv =
->           globalBindFun m (liftIdent pre f) n (genType ty) (unbindFun f tyEnv)
->           where n = length tys + arity (qualify f) tyEnv
->                 ty = foldr TypeArrow (rawType (varType f tyEnv)) tys
->         genType ty =
->           ForAll (length tvs)
->                  (qualType (subst (foldr2 bindSubst idSubst tvs tvs') ty))
->           where tvs = nub (typeVars ty)
->                 tvs' = map TypeVariable [0..]
-
-> abstractFunAnnots :: ModuleIdent -> String -> [Ident]
->                   -> Env Ident a -> Env Ident a
-> abstractFunAnnots m pre fs env = foldr abstractFunAnnot env fs
->   where abstractFunAnnot f env =
->           case lookupEnv f env of
->             Just ev -> bindEnv (liftIdent pre f) ev (unbindEnv f env)
->             Nothing -> env
-
-> abstractFunDecl :: ModuleIdent -> String -> [(Type,Ident)] -> [Ident]
->                 -> AbstractEnv -> Decl Type -> AbstractState (Decl Type)
-> abstractFunDecl m pre fvs lvs env (FunctionDecl p ty f eqs) =
+> abstractFunDecl :: ModuleIdent -> String -> [(Type,Ident)] -> Decl Type
+>                 -> AbstractState (Decl Type)
+> abstractFunDecl m pre fvs (FunctionDecl p ty f eqs) =
 >   do
->     ty' <- liftM (rawType . varType f') fetchSt
->     abstractDecl m pre lvs env (FunctionDecl p ty' f' (map (addVars f') eqs))
+>     updateSt_ (globalBindFun m f' (eqnArity (head eqs')) (polyType ty'))
+>     liftSt (updateSt_ (abstractFunAnnot pre f))
+>     return (FunctionDecl p ty' f' eqs')
 >   where f' = liftIdent pre f
+>         ty' = genType (foldr (TypeArrow . fst) ty fvs)
+>         eqs' = map (addVars f') eqs
 >         addVars f (Equation p (FunLhs _ ts) rhs) =
 >           Equation p (FunLhs f (map (uncurry VariablePattern) fvs ++ ts)) rhs
-> abstractFunDecl _ pre _ _ _ (ForeignDecl p fi ty f ty') =
->   return (ForeignDecl p fi ty (liftIdent pre f) ty')
+>         genType ty = subst (foldr2 bindSubst idSubst tvs tvs') ty
+>           where tvs = nub (typeVars ty)
+>                 tvs' = map TypeVariable [0..]
+> abstractFunDecl m pre _ (ForeignDecl p fi ty f ty') =
+>   do
+>     updateSt_ (globalBindFun m f' (foreignArity ty) (polyType ty))
+>     liftSt (updateSt_ (abstractFunAnnot pre f))
+>     return (ForeignDecl p fi ty f' ty')
+>   where f' = liftIdent pre f
 
-> abstractExpr :: ModuleIdent -> String -> [Ident] -> AbstractEnv
+> abstractFunAnnot :: String -> Ident -> Env Ident a -> Env Ident a
+> abstractFunAnnot pre f env =
+>   case lookupEnv f env of
+>     Just ev -> bindEnv (liftIdent pre f) ev (unbindEnv f env)
+>     Nothing -> env
+
+> abstractExpr :: ModuleIdent -> String -> [(Type,Ident)] -> AbstractEnv
 >              -> Expression Type -> AbstractState (Expression Type)
 > abstractExpr _ _ _ _ (Literal ty l) = return (Literal ty l)
 > abstractExpr m pre lvs env (Variable ty v)
@@ -259,10 +252,11 @@ variables in order to avoid an inadvertent name capturing.
 >     alts' <- mapM (abstractAlt m pre lvs env) alts
 >     return (Fcase e' alts')
 
-> abstractAlt :: ModuleIdent -> String -> [Ident] -> AbstractEnv -> Alt Type
->             -> AbstractState (Alt Type)
+> abstractAlt :: ModuleIdent -> String -> [(Type,Ident)] -> AbstractEnv
+>             -> Alt Type -> AbstractState (Alt Type)
 > abstractAlt m pre lvs env (Alt p t rhs) =
->   liftM (Alt p t) (abstractRhs m pre (lvs ++ bv t) env rhs)
+>   liftM (Alt p t) (abstractRhs m pre lvs' env rhs)
+>   where lvs' = lvs `addVars` termVars t
 
 \end{verbatim}
 \paragraph{Lifting}
@@ -330,10 +324,11 @@ to the top-level.
 >               -> ValueEnv -> ValueEnv
 > globalBindFun m f n ty = globalBindTopEnv m f (Value (qualifyWith m f) n ty)
 
-> unbindFun :: Ident -> ValueEnv -> ValueEnv
-> unbindFun = localUnbindTopEnv
-
 > liftIdent :: String -> Ident -> Ident
 > liftIdent prefix x = renameIdent (mkIdent (prefix ++ name x)) (uniqueId x)
+
+> addVars :: [(a,Ident)] -> [(Ident,b,a)] -> [(a,Ident)]
+> addVars vs lvs = vs ++ [(ty,v) | (v,_,ty) <- lvs, v `notElem` vs']
+>   where vs' = map snd vs
 
 \end{verbatim}

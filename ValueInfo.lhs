@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ValueInfo.lhs 2725 2008-06-14 17:24:48Z wlux $
+% $Id: ValueInfo.lhs 2970 2010-07-01 09:11:20Z wlux $
 %
-% Copyright (c) 1999-2008, Wolfgang Lux
+% Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ValueInfo.lhs}
@@ -28,6 +28,7 @@ information.
 > module ValueInfo where
 > import Base
 > import Ident
+> import PredefIdent
 > import TopEnv
 > import Types
 
@@ -79,6 +80,31 @@ and change the type of a function in the value type environment.
 
 > rebindFun :: ModuleIdent -> Ident -> Int -> TypeScheme -> ValueEnv -> ValueEnv
 > rebindFun m f n ty = rebindTopEnv m f (Value (qualifyWith m f) n ty)
+
+\end{verbatim}
+The functions \texttt{bindLocalVar} and \texttt{bindLocalVars} add the
+type of one or many local variables or functions to the type
+environment. In contrast to global functions, we do not care about the
+name of the module containing the variable or function's definition.
+\begin{verbatim}
+
+> class ValueType t where
+>   toValueType :: Type -> t
+>   fromValueType :: t -> QualType
+
+> instance ValueType Type where
+>   toValueType = id
+>   fromValueType = qualType
+> instance ValueType QualType where
+>   toValueType = qualType
+>   fromValueType = id
+
+> bindLocalVars :: ValueType t => [(Ident,Int,t)] -> ValueEnv -> ValueEnv
+> bindLocalVars vs tyEnv = foldr bindLocalVar tyEnv vs
+
+> bindLocalVar :: ValueType t => (Ident,Int,t) -> ValueEnv -> ValueEnv
+> bindLocalVar (v,n,ty) =
+>   localBindTopEnv v (Value (qualify v) n (typeScheme (fromValueType ty)))
 
 \end{verbatim}
 For a data constructor declaration
@@ -173,6 +199,22 @@ function and the function \texttt{changeArity} changes the arity of a
 >   case lookupTopEnv f tyEnv of
 >     Value _ n' ty : _ -> if n /= n' then rebindFun m f n ty tyEnv else tyEnv
 >     _ -> internalError ("changeArity " ++ show f)
+
+\end{verbatim}
+The arity of a foreign function is equal to the arity of its type,
+except for functions with result type \texttt{IO}~$t$. Such functions
+receive an additional implicit argument that semantically represents
+the current state of the external world.
+\begin{verbatim}
+
+> foreignArity :: Type -> Int
+> foreignArity (TypeConstructor _) = 0
+> foreignArity (TypeVariable _) = 0
+> foreignArity (TypeApply ty _) =
+>   case ty of
+>     TypeConstructor tc | tc == qIOId -> 1
+>     _ -> 0
+> foreignArity (TypeArrow _ ty) = 1 + foreignArity ty
 
 \end{verbatim}
 The function \texttt{isNewtypeConstr} uses the value type environment

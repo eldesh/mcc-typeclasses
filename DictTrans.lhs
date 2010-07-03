@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2971 2010-07-01 09:44:53Z wlux $
+% $Id: DictTrans.lhs 2976 2010-07-03 15:16:01Z wlux $
 %
 % Copyright (c) 2006-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -116,7 +116,8 @@ type variables (cf.\ Sect.~4.3.2 of~\cite{PeytonJones03:Haskell}).
 >   classDecls tcEnv tyEnv p (qualifyWith m cls) tv ds
 > liftDecls m tcEnv tyEnv (InstanceDecl p cx cls ty ds) =
 >   -- NB Don't use expandPolyType tcEnv (QualTypeExpr cx ty) here!
->   instDecls m tcEnv tyEnv p cls (toQualType (QualTypeExpr cx ty)) ds
+>   instDecls m tcEnv tyEnv p cls (contextMap (sort . minContext tcEnv) ty') ds
+>   where ty' = toQualType (QualTypeExpr cx ty)
 > liftDecls _ _ _ (DefaultDecl _ _) = []
 > liftDecls _ _ _ (BlockDecl d) = [BlockDecl d]
 > liftDecls _ _ _ (SplitAnnot p) = [SplitAnnot p]

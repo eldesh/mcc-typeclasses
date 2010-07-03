@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2974 2010-07-03 14:22:29Z wlux $
+% $Id: TypeCheck.lhs 2978 2010-07-03 20:18:08Z wlux $
 %
 % Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1095,9 +1095,9 @@ in \texttt{tcFunctionDecl} above.
 >       tcConstrTerm poly tcEnv tyEnv p t' >>-
 >       unify p "pattern" (ppConstrTerm 0 t) tcEnv ty
 >     return (cx,ty,AsPattern v t'')
-> tcConstrTerm poly tcEnv tyEnv p (LazyPattern t) =
+> tcConstrTerm _ tcEnv tyEnv p (LazyPattern t) =
 >   do
->     (cx,ty,t') <- tcConstrTerm poly tcEnv tyEnv p t
+>     (cx,ty,t') <- tcConstrTerm False tcEnv tyEnv p t
 >     return (cx,ty,LazyPattern t')
 
 > tcConstrApp :: Bool -> TCEnv -> ValueEnv -> Position -> Doc -> QualIdent

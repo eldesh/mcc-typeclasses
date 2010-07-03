@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 2970 2010-07-01 09:11:20Z wlux $
+% $Id: CaseMatch.lhs 2975 2010-07-03 14:29:49Z wlux $
 %
 % Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -193,9 +193,8 @@ if it is not restricted by the guard expression.
 >   match m p (Case e as) =
 >     do
 >       e' <- match m p e
->       ([v],e'') <- matchRigid m ty [(p,[t],rhs) | Alt p t rhs <- as]
+>       ([v],e'') <- matchRigid m [(p,[t],rhs) | Alt p t rhs <- as]
 >       return (mkCase m p v e' e'')
->     where ty = typeOf (Case e as)
 >   match m p (Fcase e as) =
 >     do
 >       e' <- match m p e
@@ -232,13 +231,13 @@ declarations that define the variables occurring in $t_i$.
 >             (ts',fpss) <- mapAndUnzipM liftFP ts
 >             return (p,ts',inject id p (concat fpss) rhs)
 
-> matchRigid :: ModuleIdent -> Type -> [Match QualType]
+> matchRigid :: ModuleIdent -> [Match QualType]
 >            -> CaseMatchState ([(QualType,Ident)],Expression QualType)
-> matchRigid m ty as =
+> matchRigid m as =
 >   do
 >     as' <- mapM elimFP as
 >     vs <- matchVars [ts | (_,_,ts,_) <- as']
->     e <- rigidMatch m ty id vs as'
+>     e <- rigidMatch m id vs as'
 >     return (vs,e)
 >   where elimFP (p,ts,rhs) =
 >           do
@@ -660,40 +659,40 @@ where the default alternative is redundant.
 > asConstrApp _ t@(ConstructorPattern _ _ _) = t
 > asConstrApp v (AsPattern v' t) = AsPattern v' (asConstrApp v t)
 
-> rigidMatch :: ModuleIdent -> Type
->            -> ([(QualType,Ident)] -> [(QualType,Ident)]) -> [(QualType,Ident)]
->            -> [Match' QualType] -> CaseMatchState (Expression QualType)
-> rigidMatch m ty prefix [] (a:as) = matchAlt vs a (matchFail vs as)
+> rigidMatch :: ModuleIdent -> ([(QualType,Ident)] -> [(QualType,Ident)])
+>            -> [(QualType,Ident)] -> [Match' QualType]
+>            -> CaseMatchState (Expression QualType)
+> rigidMatch m prefix [] (a:as) = matchAlt vs a (matchFail vs as)
 >   where vs = prefix []
 >         resetArgs (p,prefix,ts,rhs) = (p,id,prefix ts,rhs)
 >         matchAlt vs (p,prefix,_,rhs) =
 >           matchRhs m p (foldr2 (bindVars p . snd) rhs vs (prefix []))
 >         matchFail vs as
 >           | null as = Nothing
->           | otherwise = Just (rigidMatch m ty id vs (map resetArgs as))
-> rigidMatch m ty prefix (v:vs) as =
+>           | otherwise = Just (rigidMatch m id vs (map resetArgs as))
+> rigidMatch m prefix (v:vs) as =
 >   case fst (head as') of
 >     VariablePattern _ _
 >       | all (isVarPattern . fst) (tail as') ->
->           rigidMatch m ty prefix vs (map (matchVar (snd v)) as)
->       | otherwise -> rigidMatch m ty (prefix . (v:)) vs (map skipArg as)
+>           rigidMatch m prefix vs (map (matchVar (snd v)) as)
+>       | otherwise -> rigidMatch m (prefix . (v:)) vs (map skipArg as)
 >     t'@(LiteralPattern _ l')
->       | ty' `elem` charType:numTypes ->
+>       | ty `elem` charType:numTypes ->
 >           liftM (Case (uncurry mkVar v))
->                 (mapM (matchCaseAlt m ty prefix v vs as') (lts ++ vts))
+>                 (mapM (matchCaseAlt m prefix v vs as') (lts ++ vts))
 >       | otherwise ->
->           liftM (Case (eqNum ty' v l') . catMaybes)
->                 (sequence [matchLitAlt True m ty prefix v vs as' t',
->                            matchLitAlt False m ty prefix v vs as' t'])
->       where ty' = unqualType (fst v)
+>           liftM (Case (eqNum ty v l') . catMaybes)
+>                 (sequence [matchLitAlt True m prefix v vs as' t',
+>                            matchLitAlt False m prefix v vs as' t'])
+>       where ty = unqualType (fst v)
 >     ConstructorPattern _ _ _
 >       | null lts ->
 >           do
 >             tcEnv <- envRt
 >             liftM (Case (uncurry mkVar v))
->                   (mapM (matchCaseAlt m ty prefix v vs as')
+>                   (mapM (matchCaseAlt m prefix v vs as')
 >                         (cts ++ if allCases tcEnv v cts then [] else vts))
->       | otherwise -> rigidMatch m ty (prefix . (v:)) (v:vs) (map dupArg as)
+>       | otherwise -> rigidMatch m (prefix . (v:)) (v:vs) (map dupArg as)
 >   where as' = map tagAlt as
 >         (lts,cts,vts) = partitionPatterns (nub (map fst as'))
 >         tagAlt (p,prefix,t:ts,rhs) = (pattern t,(p,prefix,t:ts,rhs))
@@ -717,15 +716,15 @@ where the default alternative is redundant.
 >         partition t@(ConstructorPattern _ _ _) ~(lts,cts,vts) =
 >           (lts,t:cts,vts)
 
-> matchCaseAlt :: ModuleIdent -> Type
->              -> ([(QualType,Ident)] -> [(QualType,Ident)]) -> (QualType,Ident)
->              -> [(QualType,Ident)] -> [(ConstrTerm (),Match' QualType)]
->              -> ConstrTerm () -> CaseMatchState (Alt QualType)
-> matchCaseAlt m ty prefix v vs as t =
+> matchCaseAlt :: ModuleIdent -> ([(QualType,Ident)] -> [(QualType,Ident)])
+>              -> (QualType,Ident) -> [(QualType,Ident)]
+>              -> [(ConstrTerm (),Match' QualType)] -> ConstrTerm ()
+>              -> CaseMatchState (Alt QualType)
+> matchCaseAlt m prefix v vs as t =
 >   do
 >     vs' <- matchVars (map arguments ts)
 >     let ts' = map (uncurry VariablePattern) vs'
->     e' <- rigidMatch m ty id (prefix (vs' ++ vs)) (map (expandArg ts') as')
+>     e' <- rigidMatch m id (prefix (vs' ++ vs)) (map (expandArg ts') as')
 >     return (caseAlt (pos (head as')) (renameArgs (snd v) vs' t') e')
 >   where t'
 >           | isVarPattern t = uncurry VariablePattern v
@@ -737,15 +736,15 @@ where the default alternative is redundant.
 >           (p,id,prefix (arguments' ts' t ++ ts),bindVars p (snd v) t rhs)
 >         arguments' ts' t = if isVarPattern t then ts' else arguments t
 
-> matchLitAlt :: Bool -> ModuleIdent -> Type
+> matchLitAlt :: Bool -> ModuleIdent 
 >             -> ([(QualType,Ident)] -> [(QualType,Ident)]) -> (QualType,Ident)
 >             -> [(QualType,Ident)] -> [(ConstrTerm (),Match' QualType)]
 >             -> ConstrTerm () -> CaseMatchState (Maybe (Alt QualType))
-> matchLitAlt eq m ty prefix v vs as t
+> matchLitAlt eq m prefix v vs as t
 >   | null as' = return Nothing
 >   | otherwise =
 >       liftM (Just . caseAlt (pos (head as')) t')
->             (rigidMatch m ty id (prefix (v:vs)) (map resetArgs as'))
+>             (rigidMatch m id (prefix (v:vs)) (map resetArgs as'))
 >   where t' = if eq then truePattern else falsePattern
 >         as'
 >           | eq = [if t == t' then matchArg v a else a | (t',a) <- as]

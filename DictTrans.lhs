@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2976 2010-07-03 15:16:01Z wlux $
+% $Id: DictTrans.lhs 2977 2010-07-03 16:47:05Z wlux $
 %
 % Copyright (c) 2006-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -929,7 +929,7 @@ functions that transform qualified names.
 \begin{verbatim}
 
 > dictTypeId :: QualIdent -> Ident
-> dictTypeId cls = mkIdent ("_Dict#" ++ qualName cls)
+> dictTypeId cls = mkIdent ("_Dict#" ++ name (unqualify cls))
 
 > qDictTypeId :: QualIdent -> QualIdent
 > qDictTypeId cls = qualifyLike cls (dictTypeId cls)
@@ -946,21 +946,24 @@ return the (qualified) name of a lifted default type class method.
 \begin{verbatim}
 
 > defaultMethodId :: QualIdent -> Ident -> Ident
-> defaultMethodId cls f = mkIdent ("_meth#" ++ qualName cls ++ '#' : name f)
+> defaultMethodId cls f = mkIdent (name f ++ '#' : qualName cls)
 
 > qDefaultMethodId :: QualIdent -> Ident -> QualIdent
 > qDefaultMethodId cls = qualifyLike cls . defaultMethodId cls
 
 \end{verbatim}
 The functions \texttt{superDictId} and \texttt{qSuperDictId} return
-the (qualified) name of the global function which returns a superclass
-dictionary from the dictionary of a class. The first argument is the
-name of the class and the second the name of its superclass.
+the (qualified) name of the global function which returns a super
+class dictionary from the dictionary of a class. The first argument is
+the name of the class and the second the name of its super class. Note
+that constructing these names in the same way as those of the
+functions returning the dictionary of a particular C-T instance is
+safe because type constructors and type classes share a common name
+space.
 \begin{verbatim}
 
 > superDictId :: QualIdent -> QualIdent -> Ident
-> superDictId cls super =
->   mkIdent ("_Dict#" ++ qualName cls ++ '#' : qualName super)
+> superDictId cls super = instFunId super (TypeConstructor cls)
 
 > qSuperDictId :: QualIdent -> QualIdent -> QualIdent
 > qSuperDictId cls = qualifyLike cls . superDictId cls
@@ -985,8 +988,8 @@ the (qualified) name of a lifted type class instance method.
 
 > instMethodId :: QualIdent -> Type -> Ident -> Ident
 > instMethodId cls ty = instMethodId' cls (rootOfType ty)
->   where instMethodId' cls tc f = mkIdent $
->           "_meth#" ++ qualName cls ++ '#' : qualName tc ++ '#' : name f
+>   where instMethodId' cls tc f =
+>           mkIdent (name f ++ '#' : qualName cls ++ '#' : qualName tc)
 
 > qInstMethodId :: ModuleIdent -> QualIdent -> Type -> Ident -> QualIdent
 > qInstMethodId m cls ty = qualifyWith m . instMethodId cls ty

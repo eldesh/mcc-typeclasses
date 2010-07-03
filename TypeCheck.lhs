@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2978 2010-07-03 20:18:08Z wlux $
+% $Id: TypeCheck.lhs 2979 2010-07-03 20:33:26Z wlux $
 %
 % Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1194,11 +1194,12 @@ in \texttt{tcFunctionDecl} above.
 >       unifyDecl p "explicitly typed expression" (ppExpr 0 e) tcEnv tyEnv [] ty
 >     theta <- fetchSt
 >     let fvs = fvEnv (subst theta tyEnv)
->         sigma = gen fvs (snd (splitContext fvs cx')) (subst theta ty)
+>         (gcx,lcx) = splitContext fvs cx'
+>         sigma = gen fvs lcx (subst theta ty)
 >     unless (checkTypeSig tcEnv sigTy sigma)
 >       (errorAt p (typeSigTooGeneral tcEnv (text "Expression:" <+> ppExpr 0 e)
 >                                     sig sigma))
->     return (cx ++ cx',ty,Typed e' sig)
+>     return (cx ++ gcx,ty,Typed e' sig)
 >   where sigTy = expandPolyType tcEnv sig
 > tcExpr m tcEnv tyEnv p (Paren e) =
 >   do

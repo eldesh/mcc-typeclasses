@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: LazyPatterns.lhs 2970 2010-07-01 09:11:20Z wlux $
+% $Id: LazyPatterns.lhs 2981 2010-07-09 14:00:25Z wlux $
 %
 % Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -203,7 +203,7 @@ Generation of fresh names.
 >   do
 >     v <- liftM (mkName prefix) (updateSt (1 +))
 >     return (qualType ty,v)
->   where mkName pre n = mkIdent (pre ++ show n)
+>   where mkName pre n = renameIdent (mkIdent (pre ++ show n)) n
 
 \end{verbatim}
 Auxiliary definitions.

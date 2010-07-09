@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Records.lhs 2970 2010-07-01 09:11:20Z wlux $
+% $Id: Records.lhs 2981 2010-07-09 14:00:25Z wlux $
 %
 % Copyright (c) 2001-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -50,9 +50,6 @@ labels.
 At the top-level of a module, we change record constructor
 declarations into normal declarations and introduce the implicit
 selector function for each field label.
-
-\ToDo{Instantiate quantified type variables in the types of the
-  arguments of the selector functions with fresh type variables.}
 \begin{verbatim}
 
 > unlabelTopDecl :: ModuleIdent -> ValueEnv -> TopDecl QualType
@@ -81,8 +78,7 @@ selector function for each field label.
 > unlabelTopDecl _ _ (InstanceDecl p cx cls ty ds)=
 >   liftM (return . InstanceDecl p cx cls ty) (mapM unlabelDecl ds)
 > unlabelTopDecl _ _ (DefaultDecl p tys) = return [DefaultDecl p tys]
-> unlabelTopDecl _ _ (BlockDecl d) =
->   liftM (return . BlockDecl) (unlabelDecl d)
+> unlabelTopDecl _ _ (BlockDecl d) = liftM (return . BlockDecl) (unlabelDecl d)
 > unlabelTopDecl _ _ (SplitAnnot p) = return [SplitAnnot p]
 
 > selectorDecl :: ValueEnv -> Position -> [QualIdent] -> Ident
@@ -261,7 +257,7 @@ Generation of fresh names.
 >   do
 >     v <- liftM (mkName prefix) (liftRt (liftRt (updateSt (1 +))))
 >     return (qualType ty,v)
->   where mkName pre n = mkIdent (pre ++ show n)
+>   where mkName pre n = renameIdent (mkIdent (pre ++ show n)) n
 
 \end{verbatim}
 Prelude entities.

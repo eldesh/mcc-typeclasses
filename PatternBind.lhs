@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PatternBind.lhs 2970 2010-07-01 09:11:20Z wlux $
+% $Id: PatternBind.lhs 2981 2010-07-09 14:00:25Z wlux $
 %
 % Copyright (c) 2003-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -232,7 +232,7 @@ Generation of fresh names.
 >   do
 >     v <- liftM mkName (updateSt (1 +))
 >     return (qualType ty,v)
->   where mkName n = mkIdent (prefix ++ show n)
+>   where mkName n = renameIdent (mkIdent (prefix ++ show n)) n
 
 \end{verbatim}
 Auxiliary functions.

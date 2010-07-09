@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2977 2010-07-03 16:47:05Z wlux $
+% $Id: DictTrans.lhs 2981 2010-07-09 14:00:25Z wlux $
 %
 % Copyright (c) 2006-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1027,10 +1027,11 @@ records it in the type environment.
 \begin{verbatim}
 
 > freshVar :: String -> Type -> DictState (Type,Ident)
-> freshVar pre ty =
+> freshVar prefix ty =
 >   do
->     x <- liftM (mkIdent . (pre ++) . show) (updateSt (1 +))
->     return (ty,x)
+>     v <- liftM mkName (updateSt (1 +))
+>     return (ty,v)
+>   where mkName n = renameIdent (mkIdent (prefix ++ show n)) n
 
 \end{verbatim}
 The functions \texttt{constrTypeRhs} and \texttt{conTypeRhs} return

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Newtype.lhs 2981 2010-07-09 14:00:25Z wlux $
+% $Id: Newtype.lhs 2982 2010-07-09 14:16:22Z wlux $
 %
 % Copyright (c) 2009-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -82,7 +82,8 @@ value type environment because it is never used in source code.
 
 > transValueInfo :: ValueInfo -> ValueInfo
 > transValueInfo (DataConstructor c ls ci ty) = DataConstructor c ls ci ty
-> transValueInfo (NewtypeConstructor c _ ty) = Value c 1 ty
+> transValueInfo (NewtypeConstructor c _ ty) =
+>   Value c 1 (tmap (contextMap (const [])) ty)
 > transValueInfo (Value f n ty) = Value f n ty
 
 \end{verbatim}

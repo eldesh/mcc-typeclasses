@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2984 2010-07-12 07:48:34Z wlux $
+% $Id: TypeCheck.lhs 2985 2010-07-12 11:58:18Z wlux $
 %
 % Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -519,7 +519,7 @@ general than the type signature.
 > tcDecl :: ModuleIdent -> TCEnv -> ValueEnv -> Context -> Decl a
 >        -> TcState (Context,(Type,Decl QualType))
 > tcDecl m tcEnv tyEnv cx (FunctionDecl p _ f eqs) =
->   tcFunctionDecl "function" m tcEnv tyEnv cx (varType f tyEnv) p f eqs
+>   tcFunctionDecl m tcEnv tyEnv cx (varType f tyEnv) p f eqs
 > tcDecl m tcEnv tyEnv cx d@(PatternDecl p t rhs) =
 >   do
 >     (cx',ty',t') <- tcConstrTerm False tcEnv tyEnv p t
@@ -528,26 +528,23 @@ general than the type signature.
 >       unifyDecl p "pattern declaration" (ppDecl d) tcEnv tyEnv (cx++cx') ty'
 >     return (cx'',(ty',PatternDecl p t' rhs'))
 
-> tcFunctionDecl :: String -> ModuleIdent -> TCEnv -> ValueEnv -> Context
+> tcFunctionDecl :: ModuleIdent -> TCEnv -> ValueEnv -> Context
 >                -> TypeScheme -> Position -> Ident -> [Equation a]
 >                -> TcState (Context,(Type,Decl QualType))
-> tcFunctionDecl what m tcEnv tyEnv cx (ForAll n ty) p f eqs =
+> tcFunctionDecl m tcEnv tyEnv cx (ForAll n ty) p f eqs =
 >   do
 >     theta <- fetchSt
 >     (_,ty') <- inst (ForAll n ty)
->     (cxs,eqs') <- liftM unzip $
->       mapM (tcEquation m tcEnv tyEnv (fsEnv (subst theta tyEnv)) ty' f) eqs
->     cx' <-
->       reduceContext p what' (ppDecl (FunctionDecl p undefined f eqs)) tcEnv
->                     (cx ++ concat cxs)
+>     (cx',eqs') <-
+>       mapAccumM (tcEquation m tcEnv tyEnv (fsEnv (subst theta tyEnv)) ty' f)
+>                 cx eqs
 >     return (cx',(ty',FunctionDecl p ty f eqs'))
->   where what' = what ++ " declaration"
 
 > tcEquation :: ModuleIdent -> TCEnv -> ValueEnv -> Set Int -> Type -> Ident
->            -> Equation a -> TcState (Context,Equation QualType)
-> tcEquation m tcEnv tyEnv fs ty f eq@(Equation p lhs rhs) =
+>            -> Context -> Equation a -> TcState (Context,Equation QualType)
+> tcEquation m tcEnv tyEnv fs ty f cx eq@(Equation p lhs rhs) =
 >   tcEqn m tcEnv tyEnv fs p lhs rhs >>-
->   unifyDecl p "equation" (ppEquation eq) tcEnv tyEnv [] ty
+>   unifyDecl p "equation" (ppEquation eq) tcEnv tyEnv cx ty
 
 > tcEqn :: ModuleIdent -> TCEnv -> ValueEnv -> Set Int -> Position
 >       -> Lhs a -> Rhs a -> TcState (Context,Type,Equation QualType)
@@ -582,7 +579,7 @@ general than the type signature.
 >           -> Context -> Type -> TcState Context
 > unifyDecl p what doc tcEnv tyEnv cxLhs tyLhs cxRhs tyRhs =
 >   do
->     cx <- unify p what doc tcEnv tyLhs (cxLhs ++ cxRhs) tyRhs
+>     cx <- unify p what doc tcEnv cxLhs tyLhs cxRhs tyRhs
 >     theta <- fetchSt
 >     let ty = subst theta tyLhs
 >         fvs = foldr addToSet (fvEnv (subst theta tyEnv)) (typeVars ty)
@@ -893,7 +890,7 @@ case of \texttt{tcTopDecl}.
 >              -> TcState (TypeScheme,Decl QualType)
 > tcMethodDecl m tcEnv tyEnv methTy (FunctionDecl p _ f eqs) =
 >   do
->     (cx,(ty,d')) <- tcFunctionDecl "method" m tcEnv tyEnv' [] methTy p f eqs
+>     (cx,(ty,d')) <- tcFunctionDecl m tcEnv tyEnv' [] methTy p f eqs
 >     theta <- fetchSt
 >     return (gen zeroSet cx (subst theta ty),d')
 >   where tyEnv' = bindFun m f (eqnArity (head eqs)) methTy tyEnv
@@ -1066,9 +1063,9 @@ in \texttt{tcFunctionDecl} above.
 >     (alpha,beta,gamma) <-
 >       tcBinary p "infix pattern" (doc $-$ text "Operator:" <+> ppOp op)
 >                tcEnv ty
->     (cx',t1') <- tcConstrArg poly tcEnv tyEnv p doc t1 alpha
->     (cx'',t2') <- tcConstrArg poly tcEnv tyEnv p doc t2 beta
->     return (cx ++ cx' ++ cx'',gamma,InfixPattern (qualType gamma) t1' op t2')
+>     (cx',t1') <- tcConstrArg poly tcEnv tyEnv p doc cx t1 alpha
+>     (cx'',t2') <- tcConstrArg poly tcEnv tyEnv p doc cx' t2 beta
+>     return (cx'',gamma,InfixPattern (qualType gamma) t1' op t2')
 >   where doc = ppConstrTerm 0 t
 > tcConstrTerm poly tcEnv tyEnv p (ParenPattern t) =
 >   do
@@ -1077,9 +1074,10 @@ in \texttt{tcFunctionDecl} above.
 > tcConstrTerm poly tcEnv tyEnv p t@(RecordPattern _ c fs) =
 >   do
 >     (cx,ty) <- liftM (apSnd arrowBase) (skol tcEnv (conType c tyEnv))
->     (cxs,fs') <- liftM unzip $
->       mapM (tcField (tcConstrTerm poly) "pattern" doc tcEnv tyEnv p ty) fs
->     return (cx ++ concat cxs,ty,RecordPattern (qualType ty) c fs')
+>     (cx',fs') <-
+>       mapAccumM (tcField (tcConstrTerm poly) "pattern" doc tcEnv tyEnv p ty)
+>                 cx fs
+>     return (cx',ty,RecordPattern (qualType ty) c fs')
 >   where doc t1 = ppConstrTerm 0 t $-$ text "Term:" <+> ppConstrTerm 0 t1
 > tcConstrTerm poly tcEnv tyEnv p (TuplePattern ts) =
 >   do
@@ -1088,18 +1086,18 @@ in \texttt{tcFunctionDecl} above.
 > tcConstrTerm poly tcEnv tyEnv p t@(ListPattern _ ts) =
 >   do
 >     ty <- freshTypeVar
->     (cxs,ts') <- liftM unzip $ mapM (tcElem (ppConstrTerm 0 t) ty) ts
->     return (concat cxs,listType ty,ListPattern (qualType (listType ty)) ts')
->   where tcElem doc ty t =
+>     (cx,ts') <- mapAccumM (tcElem (ppConstrTerm 0 t) ty) [] ts
+>     return (cx,listType ty,ListPattern (qualType (listType ty)) ts')
+>   where tcElem doc ty cx t =
 >           tcConstrTerm poly tcEnv tyEnv p t >>-
 >           unify p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t)
->                 tcEnv ty
+>                 tcEnv cx ty
 > tcConstrTerm poly tcEnv tyEnv p t@(AsPattern v t') =
 >   do
 >     (_,ty) <- inst (varType v tyEnv)
 >     (cx,t'') <-
 >       tcConstrTerm poly tcEnv tyEnv p t' >>-
->       unify p "pattern" (ppConstrTerm 0 t) tcEnv ty
+>       unify p "pattern" (ppConstrTerm 0 t) tcEnv [] ty
 >     return (cx,ty,AsPattern v t'')
 > tcConstrTerm _ tcEnv tyEnv p (LazyPattern t) =
 >   do
@@ -1112,9 +1110,9 @@ in \texttt{tcFunctionDecl} above.
 > tcConstrApp poly tcEnv tyEnv p doc c cx ty ts =
 >   do
 >     unless (length tys == n) (errorAt p (wrongArity c (length tys) n))
->     (cxs,ts') <-
->       liftM unzip $ zipWithM (tcConstrArg poly tcEnv tyEnv p doc) ts tys
->     return (cx ++ concat cxs,ty',ConstructorPattern (qualType ty') c ts')
+>     (cx',ts') <-
+>       mapAccumM (uncurry . tcConstrArg poly tcEnv tyEnv p doc) cx (zip ts tys)
+>     return (cx',ty',ConstructorPattern (qualType ty') c ts')
 >   where (tys,ty') = arrowUnapply ty
 >         n = length ts
 
@@ -1128,15 +1126,15 @@ in \texttt{tcFunctionDecl} above.
 >   do
 >     (alpha,beta) <-
 >       tcArrow p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t) tcEnv ty
->     (cx',t'') <- tcConstrArg poly tcEnv tyEnv p doc t' alpha
->     tcFunctPattern poly tcEnv tyEnv p doc f (ts . (t'':)) (cx ++ cx') beta ts'
+>     (cx',t'') <- tcConstrArg poly tcEnv tyEnv p doc cx t' alpha
+>     tcFunctPattern poly tcEnv tyEnv p doc f (ts . (t'':)) cx' beta ts'
 >   where t = FunctionPattern (qualType ty) f (ts [])
 
-> tcConstrArg :: Bool -> TCEnv -> ValueEnv -> Position -> Doc -> ConstrTerm a
->             -> Type -> TcState (Context,ConstrTerm QualType)
-> tcConstrArg poly tcEnv tyEnv p doc t ty =
+> tcConstrArg :: Bool -> TCEnv -> ValueEnv -> Position -> Doc -> Context
+>             -> ConstrTerm a -> Type -> TcState (Context,ConstrTerm QualType)
+> tcConstrArg poly tcEnv tyEnv p doc cx t ty =
 >   tcConstrTerm poly tcEnv tyEnv p t >>-
->   unify p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t) tcEnv ty
+>   unify p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t) tcEnv cx ty
 
 > tcPatternOp :: TCEnv -> ValueEnv -> Position -> InfixOp a
 >             -> TcState (Context,Type)
@@ -1153,27 +1151,29 @@ in \texttt{tcFunctionDecl} above.
 >   do
 >     (tyEnv',cx,ds') <- tcDecls m tcEnv tyEnv ds
 >     (cx',ty,e') <- tcExpr m tcEnv tyEnv' p e
->     return (cx ++ cx',ty,SimpleRhs p e' ds')
+>     cx'' <- reduceContext p "expression" (ppExpr 0 e') tcEnv (cx ++ cx')
+>     return (cx'',ty,SimpleRhs p e' ds')
 > tcRhs m tcEnv tyEnv (GuardedRhs es ds) =
 >   do
 >     (tyEnv',cx,ds') <- tcDecls m tcEnv tyEnv ds
 >     gty <- guardType es
 >     ty <- freshTypeVar
->     (cxs,es') <- liftM unzip $ mapM (tcCondExpr m tcEnv tyEnv' gty ty) es
->     return (cx ++ concat cxs,ty,GuardedRhs es' ds')
+>     (cx',es') <- mapAccumM (tcCondExpr m tcEnv tyEnv' gty ty) cx es
+>     return (cx',ty,GuardedRhs es' ds')
 >   where guardType es
 >           | length es > 1 = return boolType
 >           | otherwise = freshConstrained guardTypes
 
-> tcCondExpr :: ModuleIdent -> TCEnv -> ValueEnv -> Type -> Type -> CondExpr a
->            -> TcState (Context,CondExpr QualType)
-> tcCondExpr m tcEnv tyEnv gty ty (CondExpr p g e) =
+> tcCondExpr :: ModuleIdent -> TCEnv -> ValueEnv -> Type -> Type -> Context
+>            -> CondExpr a -> TcState (Context,CondExpr QualType)
+> tcCondExpr m tcEnv tyEnv gty ty cx (CondExpr p g e) =
 >   do
->     (cx,g') <-
->       tcExpr m tcEnv tyEnv p g >>- unify p "guard" (ppExpr 0 g) tcEnv gty
->     (cx',e') <-
->       tcExpr m tcEnv tyEnv p e >>- unify p "expression" (ppExpr 0 e) tcEnv ty
->     return (cx ++ cx',CondExpr p g' e')
+>     (cx',g') <-
+>       tcExpr m tcEnv tyEnv p g >>- unify p "guard" (ppExpr 0 g) tcEnv cx gty
+>     (cx'',e') <-
+>       tcExpr m tcEnv tyEnv p e >>-
+>       unify p "expression" (ppExpr 0 e) tcEnv cx' ty
+>     return (cx'',CondExpr p g' e')
 
 > tcExpr :: ModuleIdent -> TCEnv -> ValueEnv -> Position -> Expression a
 >        -> TcState (Context,Type,Expression QualType)
@@ -1213,16 +1213,16 @@ in \texttt{tcFunctionDecl} above.
 > tcExpr m tcEnv tyEnv p e@(Record _ c fs) =
 >   do
 >     (cx,ty) <- liftM (apSnd arrowBase) (inst (thd3 (conType c tyEnv)))
->     (cxs,fs') <- liftM unzip $
->       mapM (tcField (tcExpr m) "construction" doc tcEnv tyEnv p ty) fs
->     return (cx ++ concat cxs,ty,Record (qualType ty) c fs')
+>     (cx',fs') <-
+>       mapAccumM (tcField (tcExpr m) "construction" doc tcEnv tyEnv p ty) cx fs
+>     return (cx',ty,Record (qualType ty) c fs')
 >   where doc e1 = ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1
 > tcExpr m tcEnv tyEnv p e@(RecordUpdate e1 fs) =
 >   do
 >     (cx,ty,e1') <- tcExpr m tcEnv tyEnv p e1
->     (cxs,fs') <-
->       liftM unzip $ mapM (tcField (tcExpr m) "update" doc tcEnv tyEnv p ty) fs
->     return (cx ++ concat cxs,ty,RecordUpdate e1' fs')
+>     (cx',fs') <-
+>       mapAccumM (tcField (tcExpr m) "update" doc tcEnv tyEnv p ty) cx fs
+>     return (cx',ty,RecordUpdate e1' fs')
 >   where doc e1 = ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1
 > tcExpr m tcEnv tyEnv p (Tuple es) =
 >   do
@@ -1231,19 +1231,20 @@ in \texttt{tcFunctionDecl} above.
 > tcExpr m tcEnv tyEnv p e@(List _ es) =
 >   do
 >     ty <- freshTypeVar
->     (cxs,es') <- liftM unzip $ mapM (tcElem (ppExpr 0 e) ty) es
->     return (concat cxs,listType ty,List (qualType (listType ty)) es')
->   where tcElem doc ty e =
+>     (cx,es') <- mapAccumM (tcElem (ppExpr 0 e) ty) [] es
+>     return (cx,listType ty,List (qualType (listType ty)) es')
+>   where tcElem doc ty cx e =
 >           tcExpr m tcEnv tyEnv p e >>-
->           unify p "expression" (doc $-$ text "Term:" <+> ppExpr 0 e) tcEnv ty
+>           unify p "expression" (doc $-$ text "Term:" <+> ppExpr 0 e) tcEnv
+>                 cx ty
 > tcExpr m tcEnv tyEnv p (ListCompr e qs) =
 >   do
 >     fs <- liftM (fsEnv . flip subst tyEnv) fetchSt
->     (tyEnv',(cxs,qs')) <-
->       liftM (apSnd unzip) $ mapAccumM (flip (tcQual m tcEnv) p) tyEnv qs
->     (cx,ty,e') <- tcExpr m tcEnv tyEnv' p e
->     cx' <- reduceContext p "expression" (ppExpr 0 e') tcEnv (concat cxs ++ cx)
->     checkSkolems p "Expression" (ppExpr 0) tcEnv tyEnv fs cx' (listType ty)
+>     ((tyEnv',cx),qs') <-
+>       mapAccumM (uncurry (flip (tcQual m tcEnv) p)) (tyEnv,[]) qs
+>     (cx',ty,e') <- tcExpr m tcEnv tyEnv' p e
+>     cx'' <- reduceContext p "expression" (ppExpr 0 e') tcEnv (cx ++ cx')
+>     checkSkolems p "Expression" (ppExpr 0) tcEnv tyEnv fs cx'' (listType ty)
 >                  (ListCompr e' qs')
 > tcExpr m tcEnv tyEnv p e@(EnumFrom e1) =
 >   do
@@ -1251,56 +1252,56 @@ in \texttt{tcFunctionDecl} above.
 >     (cx',e1') <-
 >       tcExpr m tcEnv tyEnv p e1 >>-
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) tcEnv ty
->     return (cx ++ cx',listType ty,EnumFrom e1')
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) tcEnv cx ty
+>     return (cx',listType ty,EnumFrom e1')
 > tcExpr m tcEnv tyEnv p e@(EnumFromThen e1 e2) =
 >   do
 >     (cx,ty) <- freshEnumType
 >     (cx',e1') <-
 >       tcExpr m tcEnv tyEnv p e1 >>-
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) tcEnv ty
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) tcEnv cx ty
 >     (cx'',e2') <-
 >       tcExpr m tcEnv tyEnv p e2 >>-
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) tcEnv ty
->     return (cx ++ cx' ++ cx'',listType ty,EnumFromThen e1' e2')
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) tcEnv cx' ty
+>     return (cx'',listType ty,EnumFromThen e1' e2')
 > tcExpr m tcEnv tyEnv p e@(EnumFromTo e1 e2) =
 >   do
 >     (cx,ty) <- freshEnumType
 >     (cx',e1') <-
 >       tcExpr m tcEnv tyEnv p e1 >>-
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) tcEnv ty
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) tcEnv cx ty
 >     (cx'',e2') <-
 >       tcExpr m tcEnv tyEnv p e2 >>-
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) tcEnv ty
->     return (cx ++ cx' ++ cx'',listType ty,EnumFromTo e1' e2')
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) tcEnv cx' ty
+>     return (cx'',listType ty,EnumFromTo e1' e2')
 > tcExpr m tcEnv tyEnv p e@(EnumFromThenTo e1 e2 e3) =
 >   do
 >     (cx,ty) <- freshEnumType
 >     (cx',e1') <-
 >       tcExpr m tcEnv tyEnv p e1 >>-
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) tcEnv ty
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) tcEnv cx ty
 >     (cx'',e2') <-
 >       tcExpr m tcEnv tyEnv p e2 >>-
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) tcEnv ty
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) tcEnv cx' ty
 >     (cx''',e3') <-
 >       tcExpr m tcEnv tyEnv p e3 >>-
 >       unify p "arithmetic sequence"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e3) tcEnv ty
->     return (cx ++ cx' ++ cx'' ++ cx''',listType ty,EnumFromThenTo e1' e2' e3')
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e3) tcEnv cx'' ty
+>     return (cx''',listType ty,EnumFromThenTo e1' e2' e3')
 > tcExpr m tcEnv tyEnv p e@(UnaryMinus e1) =
 >   do
 >     (cx,ty) <- freshNumType
 >     (cx',e1') <-
 >       tcExpr m tcEnv tyEnv p e1 >>-
 >       unify p "unary negation" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1)
->             tcEnv ty
->     return (cx ++ cx',ty,UnaryMinus e1')
+>             tcEnv cx ty
+>     return (cx',ty,UnaryMinus e1')
 > tcExpr m tcEnv tyEnv p e@(Apply e1 e2) =
 >   do
 >     (cx,(alpha,beta),e1') <-
@@ -1310,8 +1311,8 @@ in \texttt{tcFunctionDecl} above.
 >     (cx',e2') <-
 >       tcExpr m tcEnv tyEnv p e2 >>-
 >       unify p "application" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2)
->             tcEnv alpha
->     return (cx ++ cx',beta,Apply e1' e2')
+>             tcEnv cx alpha
+>     return (cx',beta,Apply e1' e2')
 > tcExpr m tcEnv tyEnv p e@(InfixApply e1 op e2) =
 >   do
 >     (cx,(alpha,beta,gamma),op') <-
@@ -1321,12 +1322,12 @@ in \texttt{tcFunctionDecl} above.
 >     (cx',e1') <-
 >       tcExpr m tcEnv tyEnv p e1 >>-
 >       unify p "infix application"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) tcEnv alpha
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1) tcEnv cx alpha
 >     (cx'',e2') <-
 >       tcExpr m tcEnv tyEnv p e2 >>-
 >       unify p "infix application"
->             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) tcEnv beta
->     return (cx ++ cx' ++ cx'',gamma,InfixApply e1' op' e2')
+>             (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e2) tcEnv cx' beta
+>     return (cx'',gamma,InfixApply e1' op' e2')
 > tcExpr m tcEnv tyEnv p e@(LeftSection e1 op) =
 >   do
 >     (cx,(alpha,beta),op') <-
@@ -1336,8 +1337,8 @@ in \texttt{tcFunctionDecl} above.
 >     (cx',e1') <-
 >       tcExpr m tcEnv tyEnv p e1 >>-
 >       unify p "left section" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1)
->             tcEnv alpha
->     return (cx ++ cx',beta,LeftSection e1' op')
+>             tcEnv cx alpha
+>     return (cx',beta,LeftSection e1' op')
 > tcExpr m tcEnv tyEnv p e@(RightSection op e1) =
 >   do
 >     (cx,(alpha,beta,gamma),op') <-
@@ -1347,8 +1348,8 @@ in \texttt{tcFunctionDecl} above.
 >     (cx',e1') <-
 >       tcExpr m tcEnv tyEnv p e1 >>-
 >       unify p "right section" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1)
->             tcEnv beta
->     return (cx ++ cx',TypeArrow alpha gamma,RightSection op' e1')
+>             tcEnv cx beta
+>     return (cx',TypeArrow alpha gamma,RightSection op' e1')
 > tcExpr m tcEnv tyEnv _ (Lambda p ts e) =
 >   do
 >     fs <- liftM (fsEnv . flip subst tyEnv) fetchSt
@@ -1370,49 +1371,46 @@ in \texttt{tcFunctionDecl} above.
 >   do
 >     fs <- liftM (fsEnv . flip subst tyEnv) fetchSt
 >     (cx,mTy) <- freshMonadType
->     (tyEnv',(cxs,sts')) <- liftM (apSnd unzip) $
->       mapAccumM (\tyEnv -> tcStmt m tcEnv tyEnv p mTy) tyEnv sts
+>     ((tyEnv',cx'),sts') <-
+>       mapAccumM (uncurry (\tyEnv -> tcStmt m tcEnv tyEnv p mTy)) (tyEnv,cx)
+>                 sts
 >     ty <- liftM (TypeApply mTy) freshTypeVar
->     (cx',e') <-
->       tcExpr m tcEnv tyEnv' p e >>- unify p "statement" (ppExpr 0 e) tcEnv ty
->     cx'' <-
->       reduceContext p "expression" (ppExpr 0 e') tcEnv
->                     (cx ++ concat cxs ++ cx')
+>     (cx'',e') <-
+>       tcExpr m tcEnv tyEnv' p e >>-
+>       unify p "statement" (ppExpr 0 e) tcEnv cx' ty
 >     checkSkolems p "Expression" (ppExpr 0) tcEnv tyEnv fs cx'' ty (Do sts' e')
 > tcExpr m tcEnv tyEnv p e@(IfThenElse e1 e2 e3) =
 >   do
 >     (cx,e1') <-
 >       tcExpr m tcEnv tyEnv p e1 >>-
 >       unify p "expression" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1)
->             tcEnv boolType
+>             tcEnv [] boolType
 >     (cx',ty,e2') <- tcExpr m tcEnv tyEnv p e2
 >     (cx'',e3') <-
 >       tcExpr m tcEnv tyEnv p e3 >>-
 >       unify p "expression" (ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e3)
->             tcEnv ty
->     return (cx ++ cx' ++ cx'',ty,IfThenElse e1' e2' e3')
+>             tcEnv (cx ++ cx') ty
+>     return (cx'',ty,IfThenElse e1' e2' e3')
 > tcExpr m tcEnv tyEnv p (Case e as) =
 >   do
 >     (cx,tyLhs,e') <- tcExpr m tcEnv tyEnv p e
 >     tyRhs <- freshTypeVar
 >     fs <- liftM (fsEnv . flip subst tyEnv) fetchSt
->     (cxs,as') <-
->       liftM unzip $ mapM (tcAlt True m tcEnv tyEnv fs tyLhs tyRhs) as
->     return (cx ++ concat cxs,tyRhs,Case e' as')
+>     (cx',as') <- mapAccumM (tcAlt True m tcEnv tyEnv fs tyLhs tyRhs) cx as
+>     return (cx',tyRhs,Case e' as')
 > tcExpr m tcEnv tyEnv p (Fcase e as) =
 >   do
 >     (cx,tyLhs,e') <- tcExpr m tcEnv tyEnv p e
 >     tyRhs <- freshTypeVar
 >     fs <- liftM (fsEnv . flip subst tyEnv) fetchSt
->     (cxs,as') <-
->       liftM unzip $ mapM (tcAlt False m tcEnv tyEnv fs tyLhs tyRhs) as
->     return (cx ++ concat cxs,tyRhs,Fcase e' as')
+>     (cx',as') <- mapAccumM (tcAlt False m tcEnv tyEnv fs tyLhs tyRhs) cx as
+>     return (cx',tyRhs,Fcase e' as')
 
 > tcAlt :: Bool -> ModuleIdent -> TCEnv -> ValueEnv -> Set Int -> Type -> Type
->       -> Alt a -> TcState (Context,Alt QualType)
-> tcAlt poly m tcEnv tyEnv fs tyLhs tyRhs a@(Alt p t rhs) =
+>       -> Context -> Alt a -> TcState (Context,Alt QualType)
+> tcAlt poly m tcEnv tyEnv fs tyLhs tyRhs cx a@(Alt p t rhs) =
 >   tcAltern poly m tcEnv tyEnv fs tyLhs tyRhs p t rhs >>- 
->   unify p "case alternative" (ppAlt a) tcEnv tyRhs
+>   unify p "case alternative" (ppAlt a) tcEnv cx tyRhs
 
 > tcAltern :: Bool -> ModuleIdent -> TCEnv -> ValueEnv -> Set Int
 >          -> Type -> Type -> Position -> ConstrTerm a -> Rhs a
@@ -1422,7 +1420,7 @@ in \texttt{tcFunctionDecl} above.
 >     tyEnv' <- bindLambdaVars m tyEnv t
 >     (cx,t') <-
 >       tcConstrTerm poly tcEnv tyEnv' p t >>-
->       unify p "case pattern" doc tcEnv tyLhs
+>       unify p "case pattern" doc tcEnv [] tyLhs
 >     (cx',ty',rhs') <- tcRhs m tcEnv tyEnv' rhs
 >     cx'' <-
 >       reduceContext p "alternative" (ppAlt (Alt p t' rhs')) tcEnv (cx ++ cx')
@@ -1430,49 +1428,50 @@ in \texttt{tcFunctionDecl} above.
 >                  (Alt p t' rhs')
 >   where doc = ppAlt (Alt p t rhs) $-$ text "Term:" <+> ppConstrTerm 0 t
 
-> tcQual :: ModuleIdent -> TCEnv -> ValueEnv -> Position -> Statement a
->        -> TcState (ValueEnv,(Context,Statement QualType))
-> tcQual m tcEnv tyEnv p (StmtExpr e) =
+> tcQual :: ModuleIdent -> TCEnv -> ValueEnv -> Position -> Context
+>        -> Statement a -> TcState ((ValueEnv,Context),Statement QualType)
+> tcQual m tcEnv tyEnv p cx (StmtExpr e) =
 >   do
->     (cx,e') <-
->       tcExpr m tcEnv tyEnv p e >>- unify p "guard" (ppExpr 0 e) tcEnv boolType
->     return (tyEnv,(cx,StmtExpr e'))
-> tcQual m tcEnv tyEnv _ q@(StmtBind p t e) =
->   do
->     tyEnv' <- bindLambdaVars m tyEnv t
->     (cx,ty,t') <- tcConstrTerm False tcEnv tyEnv' p t
 >     (cx',e') <-
 >       tcExpr m tcEnv tyEnv p e >>-
->       unify p "generator" (ppStmt q $-$ text "Term:" <+> ppExpr 0 e)
->             tcEnv (listType ty)
->     return (tyEnv',(cx ++ cx',StmtBind p t' e'))
-> tcQual m tcEnv tyEnv _ (StmtDecl ds) =
+>       unify p "guard" (ppExpr 0 e) tcEnv cx boolType
+>     return ((tyEnv,cx'),StmtExpr e')
+> tcQual m tcEnv tyEnv _ cx q@(StmtBind p t e) =
 >   do
->     (tyEnv',cx,ds') <- tcDecls m tcEnv tyEnv ds
->     return (tyEnv',(cx,StmtDecl ds'))
+>     tyEnv' <- bindLambdaVars m tyEnv t
+>     (cx',ty,t') <- tcConstrTerm False tcEnv tyEnv' p t
+>     (cx'',e') <-
+>       tcExpr m tcEnv tyEnv p e >>-
+>       unify p "generator" (ppStmt q $-$ text "Term:" <+> ppExpr 0 e)
+>             tcEnv (cx ++ cx') (listType ty)
+>     return ((tyEnv',cx''),StmtBind p t' e')
+> tcQual m tcEnv tyEnv _ cx (StmtDecl ds) =
+>   do
+>     (tyEnv',cx',ds') <- tcDecls m tcEnv tyEnv ds
+>     return ((tyEnv',cx ++ cx'),StmtDecl ds')
 
-> tcStmt :: ModuleIdent -> TCEnv -> ValueEnv -> Position -> Type -> Statement a
->        -> TcState (ValueEnv,(Context,Statement QualType))
-> tcStmt m tcEnv tyEnv p mTy (StmtExpr e) =
+> tcStmt :: ModuleIdent -> TCEnv -> ValueEnv -> Position -> Type -> Context
+>        -> Statement a -> TcState ((ValueEnv,Context),Statement QualType)
+> tcStmt m tcEnv tyEnv p mTy cx (StmtExpr e) =
 >   do
 >     alpha <- freshTypeVar
 >     (cx',e') <-
 >       tcExpr m tcEnv tyEnv p e >>-
->       unify p "statement" (ppExpr 0 e) tcEnv (TypeApply mTy alpha)
->     return (tyEnv,(cx',StmtExpr e'))
-> tcStmt m tcEnv tyEnv _ mTy st@(StmtBind p t e) =
+>       unify p "statement" (ppExpr 0 e) tcEnv cx (TypeApply mTy alpha)
+>     return ((tyEnv,cx'),StmtExpr e')
+> tcStmt m tcEnv tyEnv _ mTy cx st@(StmtBind p t e) =
 >   do
 >     tyEnv' <- bindLambdaVars m tyEnv t
->     (cx,ty,t') <- tcConstrTerm False tcEnv tyEnv' p t
->     (cx',e') <-
+>     (cx',ty,t') <- tcConstrTerm False tcEnv tyEnv' p t
+>     (cx'',e') <-
 >       tcExpr m tcEnv tyEnv p e >>-
 >       unify p "statement" (ppStmt st $-$ text "Term:" <+> ppExpr 0 e)
->             tcEnv (TypeApply mTy ty)
->     return (tyEnv',(cx ++ cx',StmtBind p t' e'))
-> tcStmt m tcEnv tyEnv _ _ (StmtDecl ds) =
+>             tcEnv (cx ++ cx') (TypeApply mTy ty)
+>     return ((tyEnv',cx''),StmtBind p t' e')
+> tcStmt m tcEnv tyEnv _ _ cx (StmtDecl ds) =
 >   do
->     (tyEnv',cx,ds') <- tcDecls m tcEnv tyEnv ds
->     return (tyEnv',(cx,StmtDecl ds'))
+>     (tyEnv',cx',ds') <- tcDecls m tcEnv tyEnv ds
+>     return ((tyEnv',cx ++ cx'),StmtDecl ds')
 
 > tcInfixOp :: ValueEnv -> InfixOp a -> TcState (Context,Type,InfixOp QualType)
 > tcInfixOp tyEnv (InfixOp _ op) =
@@ -1487,16 +1486,17 @@ in \texttt{tcFunctionDecl} above.
 > tcField :: (TCEnv -> ValueEnv -> Position -> a b
 >             -> TcState (Context,Type,a QualType))
 >         -> String -> (a b -> Doc) -> TCEnv -> ValueEnv -> Position -> Type
->         -> Field (a b) -> TcState (Context,Field (a QualType))
-> tcField tc what doc tcEnv tyEnv p ty (Field l x) =
+>         -> Context -> Field (a b) -> TcState (Context,Field (a QualType))
+> tcField tc what doc tcEnv tyEnv p ty cx (Field l x) =
 >   do
->     (cx,TypeArrow ty1 ty2) <- inst (funType l tyEnv)
+>     (cx',TypeArrow ty1 ty2) <- inst (funType l tyEnv)
 >     -- NB the following unification cannot fail; it serves only for
 >     --    instantiating the type variables in the field label's type
->     unify p "field label" empty tcEnv ty [] ty1
->     (cx',x') <-
->       tc tcEnv tyEnv p x >>- unify p ("record " ++ what) (doc x) tcEnv ty2
->     return (cx ++ cx',Field l x')
+>     unify p "field label" empty tcEnv [] ty [] ty1
+>     (cx'',x') <-
+>       tc tcEnv tyEnv p x >>-
+>       unify p ("record " ++ what) (doc x) tcEnv (cx ++ cx') ty2
+>     return (cx'',Field l x')
 
 \end{verbatim}
 The function \texttt{tcArrow} checks that its argument can be used as
@@ -1540,9 +1540,9 @@ The unification uses Robinson's algorithm (cf., e.g., Chap.~9
 of~\cite{PeytonJones87:Book}).
 \begin{verbatim}
 
-> unify :: Position -> String -> Doc -> TCEnv -> Type -> Context -> Type
->       -> TcState Context
-> unify p what doc tcEnv ty1 cx ty2 =
+> unify :: Position -> String -> Doc -> TCEnv -> Context -> Type
+>       -> Context -> Type -> TcState Context
+> unify p what doc tcEnv cx1 ty1 cx2 ty2 =
 >   do
 >     theta <- fetchSt
 >     let ty1' = subst theta ty1
@@ -1550,7 +1550,7 @@ of~\cite{PeytonJones87:Book}).
 >     either (errorAt p . typeMismatch what doc tcEnv ty1' ty2')
 >            (updateSt_ . compose)
 >            (unifyTypes tcEnv ty1' ty2')
->     reduceContext p what doc tcEnv cx
+>     reduceContext p what doc tcEnv (cx1 ++ cx2)
 
 > unifyTypes :: TCEnv -> Type -> Type -> Either Doc TypeSubst
 > unifyTypes _ (TypeVariable tv1) (TypeVariable tv2)

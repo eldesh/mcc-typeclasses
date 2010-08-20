@@ -1,10 +1,10 @@
--- $Id: Parser.curry 1744 2005-08-23 16:17:12Z wlux $
+-- $Id: Parser.curry 2992 2010-08-20 09:37:53Z wlux $
 -- 
 -- Copyright (c) 2004, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 -- Functional logic parsing combinators based on
--- Rafael Caballero, Francisco J. López-Fraguas. A Functional-Logic
+-- Rafael Caballero, Francisco J. LÃ³pez-Fraguas. A Functional-Logic
 -- Perspective on Parsing. In: Proc. FLOPS'99, Springer LNCS 1722,
 -- pp. 85-99.
 

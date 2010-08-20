@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2969 2010-06-29 13:00:29Z wlux $
+% $Id: Modules.lhs 2990 2010-08-20 09:28:04Z wlux $
 %
 % Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -69,9 +69,10 @@ declaration to the module.
 >     liftErr $ mapM_ (doDump opts) dumps
 >     let intf = exportInterface m' pEnv tcEnv iEnv tyEnv
 >     liftErr $ unless (noInterface opts) (updateInterface fn intf)
->     let (tcEnv'',tyEnv'',m'',dumps) = dictTrans tcEnv' iEnv tyEnv' m'
+>     let (tcEnv'',tyEnv'',trEnv',m'',dumps) =
+>           dictTrans tcEnv' iEnv tyEnv' trEnv m'
 >     liftErr $ mapM_ (doDump opts) dumps
->     let (il,dumps) = ilTransModule dbg tcEnv'' tyEnv'' trEnv Nothing m''
+>     let (il,dumps) = ilTransModule dbg tcEnv'' tyEnv'' trEnv' Nothing m''
 >     liftErr $ mapM_ (doDump opts) dumps
 >     let (ccode,dumps) = genCodeModule split dbg tcEnv'' il
 >     liftErr $ mapM_ (doDump opts) dumps >>

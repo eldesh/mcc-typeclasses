@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Common.lhs 2971 2010-07-01 09:44:53Z wlux $
+% $Id: Common.lhs 2990 2010-08-20 09:28:04Z wlux $
 %
 % Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -86,10 +86,10 @@ After creating the module's interface, the compiler introduces
 explicit dictionary arguments for overloaded functions and methods.
 \begin{verbatim}
 
-> dictTrans :: TCEnv -> InstEnv -> ValueEnv -> Module QualType
->           -> (TCEnv,ValueEnv,Module Type,[(Dump,Doc)])
-> dictTrans tcEnv iEnv tyEnv m = (tcEnv',tyEnv',spec,dumps)
->   where (tcEnv',tyEnv',dict) = dictTransModule tcEnv iEnv tyEnv m
+> dictTrans :: TCEnv -> InstEnv -> ValueEnv -> TrustEnv -> Module QualType
+>           -> (TCEnv,ValueEnv,TrustEnv,Module Type,[(Dump,Doc)])
+> dictTrans tcEnv iEnv tyEnv trEnv m = (tcEnv',tyEnv',trEnv',spec,dumps)
+>   where (tcEnv',tyEnv',trEnv',dict) = dictTransModule tcEnv iEnv tyEnv trEnv m
 >         spec = dictSpecializeModule tcEnv' iEnv dict
 >         dumps =
 >           [(DumpDict,ppModule dict),

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2981 2010-07-09 14:00:25Z wlux $
+% $Id: DictTrans.lhs 2990 2010-08-20 09:28:04Z wlux $
 %
 % Copyright (c) 2006-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -26,6 +26,7 @@ derived from the type class and instance declarations in the module.
 > import Monad
 > import PredefIdent
 > import TopEnv
+> import TrustInfo
 > import Types
 > import TypeInfo
 > import TypeSubst
@@ -92,19 +93,20 @@ type variables (cf.\ Sect.~4.3.2 of~\cite{PeytonJones03:Haskell}).
 
 > type DictState a = StateT Int Id a
 
-> dictTransModule :: TCEnv -> InstEnv -> ValueEnv -> Module QualType
->                 -> (TCEnv,ValueEnv,Module Type)
-> dictTransModule tcEnv iEnv tyEnv (Module m es is ds) = flip runSt 1 $
+> dictTransModule :: TCEnv -> InstEnv -> ValueEnv -> TrustEnv -> Module QualType
+>                 -> (TCEnv,ValueEnv,TrustEnv,Module Type)
+> dictTransModule tcEnv iEnv tyEnv trEnv (Module m es is ds) = flip runSt 1 $
 >   do
 >     ds' <- mapM (dictTrans tcEnv'' iEnv' tyEnv' [])
 >                 (concatMap (liftDecls m tcEnv tyEnv) ds)
 >     dss <- mapM (methodStubs m tcEnv tyEnv) ds
->     return (tcEnv'',tyEnv'',Module m es is (ds' ++ concat dss))
+>     return (tcEnv'',tyEnv'',trEnv',Module m es is (ds' ++ concat dss))
 >   where tcEnv' = foldr (updateDefaultArities m) tcEnv ds
 >         iEnv' = foldr updateInstArities iEnv ds
 >         tyEnv' = bindClassDecls m tcEnv' (bindInstDecls m tcEnv iEnv' tyEnv)
 >         tcEnv'' = bindDictTypes m tcEnv'
 >         tyEnv'' = dictTransValues tyEnv'
+>         trEnv' = foldr (liftTrustAnnots m) trEnv ds
 
 > liftDecls :: ModuleIdent -> TCEnv -> ValueEnv -> TopDecl QualType
 >           -> [TopDecl QualType]
@@ -489,6 +491,34 @@ of method $f_i$ in class $C$.
 
 > methodMap :: [Decl a] -> [(Ident,Decl a)]
 > methodMap ds = [(unRenameIdent f,d) | d@(FunctionDecl _ _ f _) <- ds]
+
+\end{verbatim}
+\paragraph{Trust Annotations}
+Method implementations are lifted to the top-level effectively by
+renaming them (see \texttt{methodDecl} above). In order to facilitate
+debugging of method implementations, this renaming must be applied to
+the trust annotation environment as well.
+\begin{verbatim}
+
+> liftTrustAnnots :: ModuleIdent -> TopDecl QualType -> TrustEnv -> TrustEnv
+> liftTrustAnnots _ (DataDecl _ _ _ _ _ _) trEnv = trEnv
+> liftTrustAnnots _ (NewtypeDecl _ _ _ _ _ _) trEnv = trEnv
+> liftTrustAnnots _ (TypeDecl _ _ _ _) trEnv = trEnv
+> liftTrustAnnots m (ClassDecl _ _ cls _ ds) trEnv =
+>   foldr (liftMethodAnnot (defaultMethodId (qualifyWith m cls))) trEnv
+>         [f | FunctionDecl _ _ f _ <- ds]
+> liftTrustAnnots _ (InstanceDecl _ _ cls ty ds) trEnv =
+>   foldr (liftMethodAnnot (instMethodId cls (toType [] ty))) trEnv
+>         [f | FunctionDecl _ _ f _ <- ds]
+> liftTrustAnnots _ (DefaultDecl _ _) trEnv = trEnv
+> liftTrustAnnots _ (BlockDecl _) trEnv = trEnv
+> liftTrustAnnots _ (SplitAnnot _) trEnv = trEnv
+
+> liftMethodAnnot :: (Ident -> Ident) -> Ident -> TrustEnv -> TrustEnv
+> liftMethodAnnot methodId f trEnv =
+>   case lookupEnv f trEnv of
+>     Just tr -> bindEnv (methodId f) tr (unbindEnv f trEnv)
+>     Nothing -> trEnv
 
 \end{verbatim}
 \paragraph{Adding Dictionary Arguments}

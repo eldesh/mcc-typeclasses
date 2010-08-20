@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Goals.lhs 2970 2010-07-01 09:11:20Z wlux $
+% $Id: Goals.lhs 2990 2010-08-20 09:28:04Z wlux $
 %
 % Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -62,10 +62,11 @@ interfaces are in scope with their qualified names.
 >     let (vs,m',tyEnv') = goalModule dbg tyEnv m mainId g'
 >     let (tcEnv',tyEnv'',trEnv,m'',dumps) = transModule dbg tr tcEnv tyEnv' m'
 >     liftErr $ mapM_ (doDump opts) dumps
->     let (tcEnv'',tyEnv''',m''',dumps) = dictTrans tcEnv' iEnv tyEnv'' m''
+>     let (tcEnv'',tyEnv''',trEnv',m''',dumps) =
+>           dictTrans tcEnv' iEnv tyEnv'' trEnv m''
 >     liftErr $ mapM_ (doDump opts) dumps
 >     let (il,dumps) =
->           ilTransModule dbg tcEnv'' tyEnv''' trEnv (Just mainId) m'''
+>           ilTransModule dbg tcEnv'' tyEnv''' trEnv' (Just mainId) m'''
 >     liftErr $ mapM_ (doDump opts) dumps
 >     let (ccode,dumps) = genCodeGoal tcEnv'' (qualifyWith m mainId) vs il
 >     liftErr $ mapM_ (doDump opts) dumps >>

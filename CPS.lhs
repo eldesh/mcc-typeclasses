@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CPS.lhs 2997 2010-08-30 19:16:14Z wlux $
+% $Id: CPS.lhs 2998 2010-08-30 19:18:17Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -9,7 +9,7 @@
 \begin{verbatim}
 
 > module CPS(CPSFunction(..), CPSContinuation(..),
->            CPSFun(..), CPSPrim(..), CPSCont(..),
+>            CPSFun(..), CPSPrim(..), CPSCont(..), CPSContFun(..),
 >            BindC(..), BindPapp(..), CaseBlock(..), CPSTag(..), CPSStmt(..),
 >            cpsFunction, cpsApply, cpsInst, continuations) where
 > import Cam
@@ -74,7 +74,7 @@ arguments with a \texttt{CPSLetPapp} statement.
 
 > data CPSFunction = CPSFunction Name [Name] CPSStmt deriving Show
 > data CPSContinuation =
->   CPSContinuation Name Int [Name] [Name] CPSStmt
+>   CPSContinuation CPSContFun [Name] [Name] CPSStmt
 >   deriving Show
 > data CPSStmt =
 >     CPSFail
@@ -92,11 +92,12 @@ arguments with a \texttt{CPSLetPapp} statement.
 
 > data CPSFun = CPSFun Name | CPSPrim CPSPrim deriving Show
 > data CPSPrim = CPSEval Bool Name | CPSUnify | CPSDelay deriving Show
-> data CPSCont =
->     CPSReturn
->   | CPSCont Name Int [Name] CPSCont
->   | CPSInst Name Tag CPSCont
->   | CPSApply Name [Name] CPSCont
+> data CPSCont = CPSReturn | CPSCont CPSContFun [Name] CPSCont deriving Show
+> data CPSContFun =
+>     CPSContFun Name Int
+>   | CPSInst Tag
+>   | CPSApply Name
+>   | CPSUpdate
 >   deriving Show
 
 > data BindC = BindC Name CRetType CCall deriving Show
@@ -120,27 +121,27 @@ arguments with a \texttt{CPSLetPapp} statement.
 > cpsApply f (v:vs) =
 >   CPSFunction f (v:vs) $
 >   CPSLetCont f' (CPSExec (CPSPrim (CPSEval False v)) k' [v])
->   where f' = CPSContinuation f 1 [v] vs (CPSSwitchArity v cases)
+>   where f' = CPSContinuation (CPSContFun f 1) [v] vs (CPSSwitchArity v cases)
 >         k' = cpsCont f'
 >         cases =
 >           cpsRigidCase k' v :
 >           [CPSExecCont (apply v i vs CPSReturn) [v] | i <- [1..length vs]] ++
 >           [CPSLetPapp (BindPapp tmp v vs) (CPSExecCont CPSReturn [tmp])]
->         apply v i vs = CPSApply v vs' . applyCont vs''
+>         apply v i vs = CPSCont (CPSApply v) vs' . applyCont vs''
 >           where (vs',vs'') = splitAt i vs
 >         applyCont vs
 >           | null vs = id
->           | otherwise = CPSCont (apName (length vs)) 1 vs
+>           | otherwise = CPSCont (CPSContFun (apName (length vs)) 1) vs
 >         apName n = mangle ('@' : if n == 1 then "" else show n)
 
-> cpsInst :: Name -> Name -> Tag -> CPSContinuation
-> cpsInst f v t =
->   CPSContinuation f 0 [] [v] $
+> cpsInst :: Name -> Tag -> CPSContinuation
+> cpsInst v t =
+>   CPSContinuation (CPSInst t) [] [v] $
 >   foldr (CPSLet . return) (CPSExec (CPSPrim CPSUnify) CPSReturn [v,tmp])
 >         (cpsFresh tmp t)
 
 > cpsCont :: CPSContinuation -> CPSCont
-> cpsCont (CPSContinuation f n _ ws _) = CPSCont f n ws CPSReturn
+> cpsCont (CPSContinuation f _ ws _) = CPSCont f ws CPSReturn
 
 \end{verbatim}
 The transformation into CPS code is implemented by a top-down
@@ -174,7 +175,7 @@ does not need to construct separate closures for each of them.
 > cps :: Name -> (Bool,CPSCont) -> [Name] -> Int -> Stmt
 >     -> (Int,CPSContinuation)
 > cps f k vs n st = (n',f')
->   where f' = CPSContinuation f n vs ws st'
+>   where f' = CPSContinuation (CPSContFun f n) vs ws st'
 >         ws = filter (`notElem` vs) (freeVars st (snd k))
 >         (n',st') = cpsStmt f (Just (cpsCont f')) k (n + 1) st
 
@@ -208,9 +209,9 @@ does not need to construct separate closures for each of them.
 >     v :<- st -> (n'',CPSLetCont f' st1')
 >       where (n',st1') = cpsStmt f k0 (tagged f',cpsCont f') n st
 >             (n'',f') = cps f k [v] n' st2
->             tagged (CPSContinuation _ _ vs _ (CPSSwitch tagged v _)) =
+>             tagged (CPSContinuation _ vs _ (CPSSwitch tagged v _)) =
 >               vs /= [v] || tagged
->             tagged (CPSContinuation _ _ vs _ (CPSSwitchArity v _)) = vs /= [v]
+>             tagged (CPSContinuation _ vs _ (CPSSwitchArity v _)) = vs /= [v]
 >             tagged _ = True
 >     Let ds -> (n',foldr CPSLet st2' (scc bound free ds))
 >       where (n',st2') = cpsStmt f Nothing k n st2
@@ -225,12 +226,12 @@ does not need to construct separate closures for each of them.
 >     _ -> (n',foldr CPSLetCont (CPSChoice Nothing (map cpsCont ks')) ks')
 >   where (n',ks) = mapAccumL (cps f k []) n alts
 >         ks' = map (updEnv (freeVars (Choices alts) (snd k))) ks
->         updEnv ws (CPSContinuation f n vs _ st) = CPSContinuation f n vs ws st
+>         updEnv ws (CPSContinuation f vs _ st) = CPSContinuation f vs ws st
 
 > cpsJumpSwitch :: Name -> (Bool,CPSCont) -> Int -> RF -> Name -> [Case]
 >               -> (Int,CPSStmt)
 > cpsJumpSwitch f k n rf v cases = (n',CPSLetCont f' (CPSExecCont k' [v]))
->   where f' = CPSContinuation f n [v] ws st'
+>   where f' = CPSContinuation (CPSContFun f n) [v] ws st'
 >         k' = cpsCont f'
 >         ws = filter (v /=) (freeVars (Switch rf v cases) (snd k))
 >         (n',st') = cpsSwitch f k' k (n + 1) rf v cases
@@ -252,7 +253,7 @@ does not need to construct separate closures for each of them.
 > cpsRigidCase k v = CPSExec (CPSPrim CPSDelay) k [v]
 
 > cpsFlexCase :: CPSCont -> Name -> [Tag] -> CPSStmt
-> cpsFlexCase k v ts = cpsFlexChoice v [CPSInst v t k | t <- ts]
+> cpsFlexCase k v ts = cpsFlexChoice v [CPSCont (CPSInst t) [v] k | t <- ts]
 
 > cpsFlexChoice :: Name -> [CPSCont] -> CPSStmt
 > cpsFlexChoice _ [k] = CPSExecCont k []
@@ -277,9 +278,13 @@ does not need to construct separate closures for each of them.
 
 > contVars :: CPSCont -> [Name]
 > contVars CPSReturn = []
-> contVars (CPSCont _ _ ws k) = ws ++ contVars k
-> contVars (CPSInst v _ k) = v : contVars k
-> contVars (CPSApply v vs k) = v : vs ++ contVars k
+> contVars (CPSCont f ws k) = contFunVars f ++ ws ++ contVars k
+
+> contFunVars :: CPSContFun -> [Name]
+> contFunVars (CPSContFun _ _) = []
+> contFunVars (CPSInst _) = []
+> contFunVars (CPSApply v) = [v]
+> contFunVars CPSUpdate = []
 
 > stmtVars :: Stmt -> [Name] -> [Name]
 > stmtVars (Return e) vs = exprVars e ++ vs
@@ -331,7 +336,7 @@ functions defined in a transformed function.
 > continuations (CPSFunction _ _ st) = contsStmt st
 
 > contsCont :: CPSContinuation -> [CPSContinuation]
-> contsCont (CPSContinuation _ _ _ _ st) = contsStmt st
+> contsCont (CPSContinuation _ _ _ st) = contsStmt st
 
 > contsStmt :: CPSStmt -> [CPSContinuation]
 > contsStmt CPSFail = []

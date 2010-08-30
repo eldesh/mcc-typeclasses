@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2997 2010-08-30 19:16:14Z wlux $
+% $Id: CGen.lhs 2998 2010-08-30 19:18:17Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -479,30 +479,31 @@ the suspend node associated with the abstract machine code function.
 >   where vs = [Name ('v' : show i) | i <- [1..n]]
 
 > instFunction :: Name -> Int -> CTopDecl
-> instFunction c n = instDef CPublic (instFunc c) v (ConstrCase c vs)
+> instFunction c n = funcDef CPublic (cpsInst v (ConstrCase c vs))
 >   where v:vs = [Name ('v' : show i) | i <- [0..n]]
 
 > litInstFunction :: Literal -> CTopDecl
-> litInstFunction l = instDef CPrivate (litInstFunc l) (Name "v0") (LitCase l)
-
-> instDef :: CVisibility -> String -> Name -> Tag -> CTopDecl
-> instDef vb f v t = CFuncDef vb f (funCode f' (vs,ws,Just CPSReturn) st)
->   where CPSContinuation f' _ vs ws st = cpsInst (Name "") v t
+> litInstFunction l = funcDef CPrivate (cpsInst (Name "v0") (LitCase l))
 
 > funcDefs :: CVisibility -> CPSFunction -> [CTopDecl]
-> funcDefs vb f = map privFuncDecl ks ++ entryDef vb f : map funcDef ks
+> funcDefs vb f =
+>   map privFuncDecl ks ++ entryDef vb f : map (funcDef CPrivate) ks
 >   where ks = continuations f
 
 > privFuncDecl :: CPSContinuation -> CTopDecl
-> privFuncDecl (CPSContinuation f n _ _ _) = CFuncDecl CPrivate (cPrivName f n)
+> privFuncDecl (CPSContinuation f _ _ _) = CFuncDecl CPrivate (contName f)
 
 > entryDef :: CVisibility -> CPSFunction -> CTopDecl
 > entryDef vb (CPSFunction f vs st) =
->   CFuncDef vb (cName f) (entryCode f vs ++ funCode f (vs,[],Nothing) st)
+>   CFuncDef vb (cName f) (entryCode f vs ++ funCode f (vs,CPSReturn) st)
 
-> funcDef :: CPSContinuation -> CTopDecl
-> funcDef (CPSContinuation f n vs ws st) =
->   CFuncDef CPrivate (cPrivName f n) (funCode f (vs,ws,Just CPSReturn) st)
+> funcDef :: CVisibility -> CPSContinuation -> CTopDecl
+> funcDef vb (CPSContinuation f vs ws st) =
+>   CFuncDef vb (contName f) (funCode (name f) (vs,CPSCont f ws CPSReturn) st)
+>   where name (CPSContFun f _) = f
+>         name (CPSInst _) = Name ""
+>         name (CPSApply _) = Name ""
+>         name CPSUpdate = Name ""
 
 > entryCode :: Name -> [Name] -> [CStmt]
 > entryCode f vs =
@@ -519,7 +520,7 @@ except that we avoid loading the matched variable again -- unless a
 heap check is performed.
 \begin{verbatim}
 
-> funCode :: Name -> ([Name],[Name],Maybe CPSCont) -> CPSStmt -> [CStmt]
+> funCode :: Name -> ([Name],CPSCont) -> CPSStmt -> [CStmt]
 > funCode f vs st =
 >   elimUnused (concatMap prepAlloc ds' ++ stackCheck vs st ++ heapCheck vs n ++
 >               loadVars vs ++ constDefs consts ds ++ cCode f consts vs st)
@@ -528,8 +529,7 @@ heap check is performed.
 >         consts = constants dss
 >         n = allocSize consts ds ds' tys
 
-> caseCode :: Name -> ([Name],[Name],Maybe CPSCont) -> Name -> CPSTag -> CPSStmt
->          -> [CStmt]
+> caseCode :: Name -> ([Name],CPSCont) -> Name -> CPSTag -> CPSStmt -> [CStmt]
 > caseCode f vs v t st =
 >   concatMap prepAlloc ds' ++ stackCheck vs st ++ heapCheck vs n ++
 >   skip (n == CInt 0) v (loadVars vs) ++ fetchArgs v t ++
@@ -595,13 +595,13 @@ into their respective argument registers.
 >       (localVar v' (Just (stk 0)) : lockIndir v v')
 >       (stackCheck vs0 (CPSExec (CPSPrim (CPSEval False v)) k [v]) ++
 >        saveVars vs0 (contVars vs0 [] [] k) ++
->        setRet (CExpr "update") :
+>        setRet (retAddr vs0 k) :
 >        lock v) :
 >   [goto "entry"]
 >   where v = Name "susp"
 >         v' = Name "que"
->         vs0 = ([v],[],Nothing)
->         k = CPSCont (Name (lazyFunc n)) 0 [v] CPSReturn
+>         vs0 = ([v],CPSReturn)
+>         k = CPSCont CPSUpdate [v] CPSReturn
 >         arg = element (field v "c.args")
 
 \end{verbatim}
@@ -620,14 +620,15 @@ Note that \texttt{saveVars} never sets the return address register,
 since this is not necessary when calling the return continuation.
 \begin{verbatim}
 
-> loadVars :: ([Name],[Name],Maybe CPSCont) -> [CStmt]
-> loadVars (vs,ws,k) =
->   zipWith (loadVar reg) vs [0..] ++
->   zipWith (loadVar stk) ws [0..] ++
->   [CLocalVar labelType (show retIpName) (Just (retIp k))]
+> loadVars :: ([Name],CPSCont) -> [CStmt]
+> loadVars (vs,k) = loadArgs vs ++ loadEnv k
 >   where loadVar f v i = localVar v (Just (f i))
->         retIp Nothing = regRet
->         retIp (Just _) = CCast labelType (stk (length ws))
+>         loadRet ret = CLocalVar labelType (show retIpName) (Just ret)
+>         loadArgs vs = zipWith (loadVar reg) vs [0..]
+>         loadEnv CPSReturn = [loadRet regRet]
+>         loadEnv (CPSCont _ ws _) =
+>           zipWith (loadVar stk) ws [0..] ++
+>           [loadRet (CCast labelType (stk (length ws)))]
 
 > fetchArgs :: Name -> CPSTag -> [CStmt]
 > fetchArgs _ (CPSLitCase _) = []
@@ -639,26 +640,26 @@ since this is not necessary when calling the return continuation.
 > fetchArgs _ CPSFreeCase = []
 > fetchArgs _ CPSDefaultCase = []
 
-> saveVars :: ([Name],[Name],Maybe CPSCont) -> ([Name],[Name],Maybe CPSCont)
->          -> [CStmt]
-> saveVars (vs0,ws0,k0) (vs,ws,k) =
+> saveVars :: ([Name],CPSCont) -> ([Name],CPSCont) -> [CStmt]
+> saveVars (vs0,k0) (vs,k) =
 >   [incrSp d | d /= 0] ++
 >   [setReg i v | (i,v0,v) <- zip3 [0..] vs0' vs', v0 /= v] ++
->   [setStk i w | (i,w0,w) <- zip3 [0..] ws0'' ws', w0 /= w]
->   where d = length ws0' - length ws'
+>   [setStk i w | (i,w0,w) <- zip3 [0..] ws0' ws, w0 /= w]
+>   where d = length ws0 - length ws
 >         vs' = map var vs
 >         vs0' = map var vs0 ++ repeat (CExpr "")
->         ws' = map var ws ++ contFrame k
->         ws0' = map var ws0 ++ contFrame k0
->         ws0'' =
->           if d >= 0 then drop d ws0' else replicate (-d) (CExpr "") ++ ws0'
+>         ws = contFrame k
+>         ws0 = contFrame k0
+>         ws0' = if d >= 0 then drop d ws0 else replicate (-d) (CExpr "") ++ ws0
 
-> updVar :: ([Name],[Name],Maybe CPSCont) -> Name -> CStmt
-> updVar (vs,ws,_) v =
->   case (elemIndex v vs,elemIndex v ws) of
+> updVar :: ([Name],CPSCont) -> Name -> CStmt
+> updVar (vs,k) v =
+>   case (elemIndex v vs,elemIndex v (envVars k)) of
 >     (Just n,_) -> setReg n (var v)
 >     (_,Just n) -> setStk n (var v)
 >     _ -> error ("updVar " ++ show v)
+>   where envVars CPSReturn = []
+>         envVars (CPSCont _ ws _) = ws
 
 \end{verbatim}
 When computing the allocation requirements of a function, we have to
@@ -670,8 +671,8 @@ we handle the dynamic allocation of partial application nodes by a
 \texttt{CPSLetPapp} statement here.
 \begin{verbatim}
 
-> heapCheck :: ([Name],[Name],Maybe CPSCont) -> CExpr -> [CStmt]
-> heapCheck (vs,_,_) n =
+> heapCheck :: ([Name],CPSCont) -> CExpr -> [CStmt]
+> heapCheck (vs,_) n =
 >   [CProcCall "CHECK_HEAP" [int (length vs),n] | n /= CInt 0]
 
 > allocSize :: FM Name CExpr -> [Bind] -> [BindPapp] -> [CArgType] -> CExpr
@@ -732,9 +733,9 @@ statements, each alternative is responsible for performing a stack
 check.
 \begin{verbatim}
 
-> stackCheck :: ([Name],[Name],Maybe CPSCont) -> CPSStmt -> [CStmt]
-> stackCheck (_,ws,k) st = [CProcCall "CHECK_STACK" [int depth] | depth > 0]
->   where depth = stackDepth st - length (map var ws ++ contFrame k)
+> stackCheck :: ([Name],CPSCont) -> CPSStmt -> [CStmt]
+> stackCheck (_,k) st = [CProcCall "CHECK_STACK" [int depth] | depth > 0]
+>   where depth = stackDepth st - stackDepthCont k
 
 > stackDepth :: CPSStmt -> Int
 > stackDepth CPSFail = 0
@@ -750,8 +751,7 @@ check.
 > stackDepth (CPSChoice _ ks) = 1 + stackDepthCont (head ks)
 
 > stackDepthCont :: CPSCont -> Int
-> stackDepthCont k = length vs + length (contFrame k')
->   where (vs,k') = contEnv k
+> stackDepthCont k = length (contFrame k)
 
 \end{verbatim}
 All constants that are used in a function are preallocated in a static
@@ -924,8 +924,7 @@ Every abstract machine code statement is translated by its own
 translation function.
 \begin{verbatim}
 
-> cCode :: Name -> FM Name CExpr -> ([Name],[Name],Maybe CPSCont) -> CPSStmt
->       -> [CStmt]
+> cCode :: Name -> FM Name CExpr -> ([Name],CPSCont) -> CPSStmt -> [CStmt]
 > cCode f _ _ CPSFail = failAndBacktrack (undecorate (demangle f))
 > cCode _ _ vs0 (CPSExecCont k vs) = execCont vs0 vs k
 > cCode _ _ vs0 (CPSExec f k vs) = exec vs0 f vs k
@@ -946,12 +945,11 @@ translation function.
 >   switchOnArity f vs0 v (map (caseCode f vs0 v CPSDefaultCase) sts)
 > cCode _ _ vs0 (CPSChoice v ks) = choice vs0 v ks
 
-> execCont :: ([Name],[Name],Maybe CPSCont) -> [Name] -> CPSCont -> [CStmt]
+> execCont :: ([Name],CPSCont) -> [Name] -> CPSCont -> [CStmt]
 > execCont vs0 vs k =
 >   saveVars vs0 (contVars vs0 vs [] k) ++ [gotoExpr (retAddr vs0 k)]
 
-> exec :: ([Name],[Name],Maybe CPSCont) -> CPSFun -> [Name] -> CPSCont
->      -> [CStmt]
+> exec :: ([Name],CPSCont) -> CPSFun -> [Name] -> CPSCont -> [CStmt]
 > exec vs0 f vs k =
 >   saveVars vs0 vs0' ++
 >   case f of
@@ -966,15 +964,18 @@ translation function.
 >           | tagged = CIf (isTaggedPtr v) [switch] []
 >           | otherwise = switch
 
-> contVars :: ([Name],[Name],Maybe CPSCont) -> [Name] -> [Name] -> CPSCont
->          -> ([Name],[Name],Maybe CPSCont)
-> contVars vs0 vs ws k = (vs ++ drop (length vs) (fst3 vs0),ws ++ vs',k')
->   where (vs',k') = contEnv k
+> contVars :: ([Name],CPSCont) -> [Name] -> [Name] -> CPSCont
+>          -> ([Name],CPSCont)
+> contVars vs0 vs ws k = (vs ++ drop (length vs) (fst vs0),addVars ws k)
+>   where addVars vs CPSReturn | null vs = CPSReturn
+>         addVars vs (CPSCont f ws k) = CPSCont f (vs ++ ws) k
 
-> retAddr :: ([Name],[Name],Maybe CPSCont) -> CPSCont -> CExpr
-> retAddr vs0 k
->   | isNothing (snd (contEnv k)) && isNothing (thd3 vs0) = regRet
->   | otherwise = contAddr k
+> retAddr :: ([Name],CPSCont) -> CPSCont -> CExpr
+> retAddr vs0 CPSReturn =
+>   case snd vs0 of
+>     CPSReturn -> regRet
+>     CPSCont _ _ _ -> contAddr CPSReturn
+> retAddr _ (CPSCont f ws k) = contAddr (CPSCont f ws k)
 
 > entry :: CPSFun -> CExpr
 > entry (CPSFun f) = CExpr (cName f)
@@ -982,23 +983,19 @@ translation function.
 > entry (CPSPrim CPSUnify) = CExpr "bind_var"
 > entry (CPSPrim CPSDelay) = CExpr "sync_var"
 
-> contFrame :: Maybe CPSCont -> [CExpr]
-> contFrame Nothing = []
-> contFrame (Just k) = asNode (contAddr k) : map var vs ++ contFrame k'
->   where (vs,k') = contEnv k
+> contFrame :: CPSCont -> [CExpr]
+> contFrame CPSReturn = []
+> contFrame (CPSCont _ ws k) = map var ws ++ asNode (contAddr k) : contFrame k
 
 > contAddr :: CPSCont -> CExpr
 > contAddr CPSReturn = var retIpName
-> contAddr (CPSCont f n _ _) = CExpr (cPrivName f n)
-> contAddr (CPSInst _ (LitCase l) _) = CExpr (litInstFunc l)
-> contAddr (CPSInst _ (ConstrCase c _) _) = CExpr (instFunc c)
-> contAddr (CPSApply v _ _) = field v "info->apply"
+> contAddr (CPSCont f _ _) = contEntry f
 
-> contEnv :: CPSCont -> ([Name],Maybe CPSCont)
-> contEnv CPSReturn = ([],Nothing)
-> contEnv (CPSCont _ _ ws k) = (ws,Just k)
-> contEnv (CPSInst v _ k) = ([v],Just k)
-> contEnv (CPSApply _ vs k) = (vs,Just k)
+> contEntry :: CPSContFun -> CExpr
+> contEntry (CPSContFun f n) = CExpr (contName (CPSContFun f n))
+> contEntry (CPSInst t) = CExpr (contName (CPSInst t))
+> contEntry (CPSApply v) = field v "info->apply"
+> contEntry CPSUpdate = CExpr (contName CPSUpdate)
 
 > lock :: Name -> [CStmt]
 > lock v =
@@ -1026,7 +1023,7 @@ translation function.
 > assertLazyNode v kind =
 >   rtsAssertList [isTaggedPtr v,CRel (nodeKind v) "==" (CExpr kind)]
 
-> choice :: ([Name],[Name],Maybe CPSCont) -> Maybe Name -> [CPSCont] -> [CStmt]
+> choice :: ([Name],CPSCont) -> Maybe Name -> [CPSCont] -> [CStmt]
 > choice vs0 v ks =
 >   CStaticArray constLabelType choices
 >                (map (CInit . contAddr) ks ++ [CInit CNull]) :
@@ -1060,8 +1057,8 @@ depending on their value and the setting of the preprocessor constant
 literals when set to a non-zero value.
 \begin{verbatim}
 
-> switchOnTerm :: Name -> Bool -> ([Name],[Name],Maybe CPSCont) -> Name
->              -> [(CPSTag,[CStmt])] -> [CStmt]
+> switchOnTerm :: Name -> Bool -> ([Name],CPSCont) -> Name -> [(CPSTag,[CStmt])]
+>              -> [CStmt]
 > switchOnTerm f tagged vs0 v cases =
 >   tagSwitch vs0 v taggedSwitch (varCase ++ litCases ++ constrCases) :
 >   head (dflts ++ [failAndBacktrack (undecorate (demangle f) ++ ": no match")])
@@ -1156,8 +1153,8 @@ literals when set to a non-zero value.
 >           | otherwise =
 >               CppCondStmts condLP64 [intSwitch e ints64] [intSwitch e ints32]
 
-> tagSwitch :: ([Name],[Name],Maybe CPSCont) -> Name -> (Name -> CStmt -> CStmt)
->           -> [CCase] -> CStmt
+> tagSwitch :: ([Name],CPSCont) -> Name -> (Name -> CStmt -> CStmt) -> [CCase]
+>           -> CStmt
 > tagSwitch vs0 v taggedSwitch cases =
 >   CLoop [taggedSwitch v (CSwitch (nodeTag v) allCases),CBreak]
 >   where allCases =
@@ -1214,8 +1211,7 @@ and that the last alternative acts as default case that is selected if
 too few arguments are supplied.
 \begin{verbatim}
 
-> switchOnArity :: Name -> ([Name],[Name],Maybe CPSCont) -> Name -> [[CStmt]]
->               -> [CStmt]
+> switchOnArity :: Name -> ([Name],CPSCont) -> Name -> [[CStmt]] -> [CStmt]
 > switchOnArity f vs0 v (sts0:stss) =
 >   tagSwitch vs0 v taggedSwitch cases : last stss
 >   where cases = cCase "LVAR_TAG" sts0 : zipWith cCaseInt [1..] (init stss)
@@ -1410,6 +1406,13 @@ used for constant constructors and functions, respectively.
 
 > cPrivName :: Name -> Int -> String
 > cPrivName f n = cName f ++ '_' : show n
+
+> contName :: CPSContFun -> String
+> contName (CPSContFun f n) = cPrivName f n
+> contName (CPSInst (LitCase l)) = litInstFunc l
+> contName (CPSInst (ConstrCase c _)) = instFunc c
+> --contName (CPSApply _) = error "internal error: contName (CPSApply)"
+> contName CPSUpdate = "update"
 
 > constArray :: String
 > constArray = "constants"

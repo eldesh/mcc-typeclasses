@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2998 2010-08-30 19:18:17Z wlux $
+% $Id: CGen.lhs 2999 2010-08-30 19:20:33Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -591,11 +591,11 @@ into their respective argument registers.
 >   loadVars vs0 ++
 >   CLocalVar labelType "entry" (Just (field v "info->entry")) :
 >   [setReg i (arg i) | i <- [0..n-1]] ++
->   CIf (CRel (var retIpName) "==" (CExpr "update"))
+>   CIf (CRel (contAddr vs0 CPSReturn) "==" (CExpr "update"))
 >       (localVar v' (Just (stk 0)) : lockIndir v v')
 >       (stackCheck vs0 (CPSExec (CPSPrim (CPSEval False v)) k [v]) ++
 >        saveVars vs0 (contVars vs0 [] [] k) ++
->        setRet (retAddr vs0 k) :
+>        setRet (contAddr vs0 k) :
 >        lock v) :
 >   [goto "entry"]
 >   where v = Name "susp"
@@ -605,19 +605,19 @@ into their respective argument registers.
 >         arg = element (field v "c.args")
 
 \end{verbatim}
-The CPS entry function of an abstract machine code function receives
-its return address in the return address register, whereas all
-continuation functions must load the return address from the stack. In
-order to hide this difference from the remaining code, we load the
-return address into a local variable when the function's arguments are
-loaded.
+At the beginning of a function or switch alternative, all arguments
+and environment variables are loaded into local variables so that the
+compiler can freely use the argument registers and stack slots. If the
+return address is saved on the stack, it is loaded into a temporary
+variable, too.
 
-When saving the arguments and local variables before leaving a
-function, we avoid saving variables that were loaded from the same
-register or the same offset in the stack because the optimizer of the
-C compiler may be unable to detect such redundant save operations.
-Note that \texttt{saveVars} never sets the return address register,
-since this is not necessary when calling the return continuation.
+When saving the arguments and environment variables of a continuation
+before leaving a function, we avoid saving variables that were loaded
+from the same register or the same offset in the stack because the
+optimizer of the C compiler may be unable to detect such redundant
+operations. Note that \texttt{saveVars} never sets the return address
+register, since this is not necessary when calling the return
+continuation.
 \begin{verbatim}
 
 > loadVars :: ([Name],CPSCont) -> [CStmt]
@@ -625,7 +625,7 @@ since this is not necessary when calling the return continuation.
 >   where loadVar f v i = localVar v (Just (f i))
 >         loadRet ret = CLocalVar labelType (show retIpName) (Just ret)
 >         loadArgs vs = zipWith (loadVar reg) vs [0..]
->         loadEnv CPSReturn = [loadRet regRet]
+>         loadEnv CPSReturn = []
 >         loadEnv (CPSCont _ ws _) =
 >           zipWith (loadVar stk) ws [0..] ++
 >           [loadRet (CCast labelType (stk (length ws)))]
@@ -648,8 +648,8 @@ since this is not necessary when calling the return continuation.
 >   where d = length ws0 - length ws
 >         vs' = map var vs
 >         vs0' = map var vs0 ++ repeat (CExpr "")
->         ws = contFrame k
->         ws0 = contFrame k0
+>         ws = contFrame (vs0,k0) k
+>         ws0 = contFrame (vs0,k0) k0
 >         ws0' = if d >= 0 then drop d ws0 else replicate (-d) (CExpr "") ++ ws0
 
 > updVar :: ([Name],CPSCont) -> Name -> CStmt
@@ -751,7 +751,7 @@ check.
 > stackDepth (CPSChoice _ ks) = 1 + stackDepthCont (head ks)
 
 > stackDepthCont :: CPSCont -> Int
-> stackDepthCont k = length (contFrame k)
+> stackDepthCont k = length (contFrame undefined k)
 
 \end{verbatim}
 All constants that are used in a function are preallocated in a static
@@ -947,7 +947,7 @@ translation function.
 
 > execCont :: ([Name],CPSCont) -> [Name] -> CPSCont -> [CStmt]
 > execCont vs0 vs k =
->   saveVars vs0 (contVars vs0 vs [] k) ++ [gotoExpr (retAddr vs0 k)]
+>   saveVars vs0 (contVars vs0 vs [] k) ++ [gotoExpr (contAddr vs0 k)]
 
 > exec :: ([Name],CPSCont) -> CPSFun -> [Name] -> CPSCont -> [CStmt]
 > exec vs0 f vs k =
@@ -958,7 +958,7 @@ translation function.
 >        gotoExpr ret]
 >     _ -> sts'
 >   where vs0' = contVars vs0 vs [] k
->         ret = retAddr vs0 k
+>         ret = contAddr vs0 k
 >         sts' = [setRet ret | ret /= regRet] ++ [gotoExpr (entry f)]
 >         taggedSwitch tagged v switch
 >           | tagged = CIf (isTaggedPtr v) [switch] []
@@ -970,26 +970,23 @@ translation function.
 >   where addVars vs CPSReturn | null vs = CPSReturn
 >         addVars vs (CPSCont f ws k) = CPSCont f (vs ++ ws) k
 
-> retAddr :: ([Name],CPSCont) -> CPSCont -> CExpr
-> retAddr vs0 CPSReturn =
->   case snd vs0 of
->     CPSReturn -> regRet
->     CPSCont _ _ _ -> contAddr CPSReturn
-> retAddr _ (CPSCont f ws k) = contAddr (CPSCont f ws k)
-
 > entry :: CPSFun -> CExpr
 > entry (CPSFun f) = CExpr (cName f)
 > entry (CPSPrim (CPSEval _ v)) = field v "info->eval"
 > entry (CPSPrim CPSUnify) = CExpr "bind_var"
 > entry (CPSPrim CPSDelay) = CExpr "sync_var"
 
-> contFrame :: CPSCont -> [CExpr]
-> contFrame CPSReturn = []
-> contFrame (CPSCont _ ws k) = map var ws ++ asNode (contAddr k) : contFrame k
+> contFrame :: ([Name],CPSCont) -> CPSCont -> [CExpr]
+> contFrame _ CPSReturn = []
+> contFrame vs0 (CPSCont _ ws k) =
+>   map var ws ++ asNode (contAddr vs0 k) : contFrame vs0 k
 
-> contAddr :: CPSCont -> CExpr
-> contAddr CPSReturn = var retIpName
-> contAddr (CPSCont f _ _) = contEntry f
+> contAddr :: ([Name],CPSCont) -> CPSCont -> CExpr
+> contAddr vs0 CPSReturn =
+>   case snd vs0 of
+>     CPSReturn -> regRet
+>     CPSCont _ _ _ -> var retIpName
+> contAddr _ (CPSCont f _ _) = contEntry f
 
 > contEntry :: CPSContFun -> CExpr
 > contEntry (CPSContFun f n) = CExpr (contName (CPSContFun f n))
@@ -1026,7 +1023,7 @@ translation function.
 > choice :: ([Name],CPSCont) -> Maybe Name -> [CPSCont] -> [CStmt]
 > choice vs0 v ks =
 >   CStaticArray constLabelType choices
->                (map (CInit . contAddr) ks ++ [CInit CNull]) :
+>                (map (CInit . contAddr vs0) ks ++ [CInit CNull]) :
 >   localVar ips (Just (asNode (CExpr choices))) :
 >   saveVars vs0 vs0' ++
 >   [CppCondStmts "!NO_STABILITY" (yieldCall v) [goto "regs.handlers->choices"]]

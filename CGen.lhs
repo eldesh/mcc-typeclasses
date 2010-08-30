@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2999 2010-08-30 19:20:33Z wlux $
+% $Id: CGen.lhs 3000 2010-08-30 19:33:17Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -96,56 +96,52 @@ function because there is not much chance for them to be shared.
 
 > genModule :: [(Name,[Name])] -> Module -> CFile
 > genModule ts cam =
->   map CppInclude (nub ("curry.h" : [h | CCall (Just h) _ _ <- sts])) ++
->   genTypes ts ds sts ns ++
->   genFunctions ds fs sts ns
+>   map CppInclude (nub ("curry.h" : [h | CCall (Just h) _ _ <- sts'])) ++
+>   genTypes ts ds sts' ns ++
+>   genFunctions ds fs sts' ns
 >   where (_,ds,fs) = splitCam cam
->         (sts0,sts) = foldr linStmts ([],[]) (map thd3 fs)
->         ns = nodes sts ++ letNodes sts0 ++ ccallNodes sts ++
->              rigidNodes sts ++ flexNodes sts
+>         sts = map thd3 fs
+>         sts' = foldr linStmts [] sts
+>         ns = foldr nodes [] sts
 
-> linStmts :: Stmt -> ([Stmt0],[Stmt]) -> ([Stmt0],[Stmt])
-> linStmts st sts = addStmt st (linStmts' st sts)
->   where addStmt st ~(sts0,sts) = (sts0,st:sts)
+> linStmts :: Stmt -> [Stmt] -> [Stmt]
+> linStmts st sts = st : linStmts' st sts
 
-> linStmts' :: Stmt -> ([Stmt0],[Stmt]) -> ([Stmt0],[Stmt])
+> linStmts' :: Stmt -> [Stmt] -> [Stmt]
 > linStmts' (Return _) sts = sts
-> linStmts' (Enter _) sts = sts
+> linStmts' (Eval _) sts = sts
 > linStmts' (Exec _ _) sts = sts
 > linStmts' (CCall _ _ _) sts = sts
-> linStmts' (Seq st1 st2) sts = addStmt st1 $ linStmts0 st1 $ linStmts st2 sts
->   where addStmt st ~(sts0,sts) = (st:sts0,sts)
->         linStmts0 (_ :<- st) sts = linStmts st sts
->         linStmts0 _ sts = sts
+> linStmts' (Seq (_ :<- st1) st2) sts = linStmts st1 $ linStmts st2 sts
+> linStmts' (Let _ st) sts = linStmts st sts
 > linStmts' (Switch rf x cs) sts = foldr linStmts sts [st | Case _ st <- cs]
-> linStmts' (Choices sts) sts' = foldr linStmts sts' sts
+> linStmts' (Choice sts) sts' = foldr linStmts sts' sts
 
 > switchTags :: [Stmt] -> [(Name,Int)]
 > switchTags sts =
 >   [(c,length vs) | Switch _ _ cs <- sts, Case (ConstrCase c vs) _ <- cs]
 
-> nodes :: [Stmt] -> [Expr]
-> nodes sts = [n | Return n <- sts]
-
-> letNodes :: [Stmt0] -> [Expr]
-> letNodes sts0 = [n | Let bds <- sts0, Bind _ n <- bds]
-
-> ccallNodes :: [Stmt] -> [Expr]
-> ccallNodes sts = concatMap nodes (nub [ty | CCall _ ty _ <- sts])
->   where nodes (Just TypeBool) = [Constr prelTrue [],Constr prelFalse []]
->         nodes (Just _) = []
->         nodes Nothing = [Constr prelUnit []]
-
-> rigidNodes :: [Stmt] -> [Expr]
-> rigidNodes sts =
->   [Lit (Integer i) | Switch Rigid _ cs <- sts,
->                      Case (LitCase (Integer i)) _ <- cs,
->                      not (fits32bits i)]
-
-> flexNodes :: [Stmt] -> [Expr]
-> flexNodes sts = [node t | Switch Flex _ cs <- sts, Case t _ <- cs]
->   where node (LitCase l) = Lit l
+> nodes :: Stmt -> [Expr] -> [Expr]
+> nodes (Return n) ns = n : ns
+> nodes (Eval _) ns = ns
+> nodes (Exec _ _) ns = ns
+> nodes (CCall _ ty _) ns =
+>   case ty of
+>     Just TypeBool -> Constr prelTrue [] : Constr prelFalse [] : ns
+>     Just _ -> ns
+>     Nothing -> Constr prelUnit [] : ns
+> nodes (Seq (_ :<- st1) st2) ns = nodes st1 $ nodes st2 ns
+> nodes (Let ds st) ns = [n | Bind _ n <- ds] ++ nodes st ns
+> nodes (Switch rf x cs) ns =
+>   case rf of
+>     Flex -> [node t | Case t _ <- cs] ++ ns'
+>     Rigid ->
+>       [Lit l | Case (LitCase l@(Integer i)) _ <- cs, not (fits32bits i)] ++
+>       ns'
+>   where ns' = foldr nodes ns [st | Case _ st <- cs]
+>         node (LitCase l) = Lit l
 >         node (ConstrCase c vs) = Constr c vs
+> nodes (Choice sts) ns = foldr nodes ns sts
 
 \end{verbatim}
 \subsection{Data Types and Constants}

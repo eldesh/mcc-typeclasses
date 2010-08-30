@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Cam.lhs 2806 2009-04-26 17:30:18Z wlux $
+% $Id: Cam.lhs 3000 2010-08-30 19:33:17Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -48,19 +48,12 @@ contrast to these abstract machines and similar to GRIN
 code~\cite{BoquistJohnsson96:GRIN, Boquist99:Thesis}, evaluation of
 nodes is made explicit in the Curry abstract machine.
 
-In our abstract machine language, we distinguish two kinds of
-statements. The statements \texttt{return}, \texttt{enter},
-\texttt{exec}, \texttt{ccall}, \texttt{switch}, and \texttt{choices}
-compute a value. The remaining statements do not compute a value. The
-body of a function and the last statement of a statement sequence are
-always value computing statements.
-
 \texttt{Return} $e$ allocates a fresh node for the expression $e$ and
 returns its address.
 
-\texttt{Enter} $x$ evaluates the node bound to $x$ to head normal form
+\texttt{Eval} $x$ evaluates the node bound to $x$ to head normal form
 and returns its address. If the node is already in head normal form,
-\texttt{enter}~$x$ is equivalent to \texttt{return}~$x$.
+\texttt{eval}~$x$ is equivalent to \texttt{return}~$x$.
 
 \texttt{Exec} $f(x_1,\dots,x_n)$, where $n$ is the arity of $f$,
 enters the global function $f$ and passes the nodes referenced by
@@ -80,10 +73,23 @@ return no result and the constant \texttt{()} is returned instead. The
 optional file name $h$ specifies the name of a C header file, which
 contains a prototype of $f$ or a declaration of $x$, respectively.
 
-\emph{St$_1$}\texttt{;} \emph{st$_2$} first executes \emph{st$_1$} and
-then executes \emph{st$_2$}. \emph{St$_1$} must not compute a value.
-However, it may introduce new variables (see \texttt{<-} and
-\texttt{let} below).
+A statement sequence $x$ \texttt{<-} \emph{st$_1$}\texttt{;}
+\emph{st$_2$} first executes \emph{st$_1$} and binds the (fresh)
+variable $x$ to the computed result. It then executes \emph{st$_2$} in
+the extended environment.
+
+\texttt{Let} \texttt{\lb}~$x_1$\texttt{=}$e_1$\texttt{;}
+\dots\texttt{;} $x_n$\texttt{=}$e_n$~\texttt{\rb} \texttt{in}
+\emph{st} allocates new nodes for the expressions $e_1,\dots,e_n$,
+binds the variables $x_1,\dots,x_n$ to the respective nodes, and then
+executes \emph{st} in the extended environment. The bindings in a
+\texttt{let} statement may be mutually recursive. Note that the
+possibility to introduce mutually recursive bindings is the only
+raison d'\^etre for \texttt{let} statements. Non-recursive
+\texttt{let} bindings can be removed using \texttt{let}
+\texttt{\lb}~$x$ \texttt{=} $e$~\texttt{\rb} \texttt{in} \emph{st}
+$\null\equiv\null$ $x$ \texttt{<-} \texttt{return} $e$\texttt{;}
+\emph{st}.
 
 \texttt{Switch} \emph{rf} $x$
 \texttt{\lb}~$t_1$\texttt{:}\emph{st$_1$} \texttt{|} $\dots$
@@ -98,37 +104,22 @@ $\emph{rf}=\texttt{rigid}$, the current thread is suspended until the
 variable is instantiated and then the matching alternative is
 selected.
 
-\texttt{Choices} \texttt{\lb}~\emph{st$_1$} \texttt{|} $\dots$
+\texttt{Choice} \texttt{\lb}~\emph{st$_1$} \texttt{|} $\dots$
 \texttt{|} \emph{st$_n$}~\texttt{\rb} non-deterministically executes a
 statement from $\emph{st$_1$},\dots,\emph{st$_n$}$.
-
-$x$ \texttt{<-} \emph{st} executes the (value computing) statement
-\emph{st} and binds its result to the (fresh) variable $x$.
-
-\texttt{Let} \texttt{\lb}~$x_1$\texttt{=}$e_1$\texttt{;}
-\dots\texttt{;} $x_n$\texttt{=}$e_n$~\texttt{\rb} allocates new nodes
-for the expressions $e_1,\dots,e_n$ and binds them to the variables
-$x_1,\dots,x_n$. The bindings in a \texttt{let} statement may be
-mutually recursive. Note that the possibility to introduce mutually
-recursive bindings is the only raison d'\^etre for \texttt{let}
-statements. Non-recursive \texttt{let} bindings can be removed using
-\texttt{let} \texttt{\lb}~$x$ \texttt{=} $e$~\texttt{\rb}
-$\null\equiv\null$ $x$ \texttt{<-} \texttt{return} $e$.
 \begin{verbatim}
 
 > data Stmt =
 >     Return Expr
->   | Enter Name
+>   | Eval Name
 >   | Exec Name [Name]
 >   | CCall (Maybe String) CRetType CCall
 >   | Seq Stmt0 Stmt
+>   | Let [Bind] Stmt
 >   | Switch RF Name [Case]
->   | Choices [Alt]
+>   | Choice [Alt]
 >   deriving (Eq,Show)
-> data Stmt0 =
->     Name :<- Stmt
->   | Let [Bind]
->   deriving (Eq,Show)
+> data Stmt0 = Name :<- Stmt deriving (Eq,Show)
 
 > type Alt = Stmt
 > data Bind = Bind Name Expr deriving (Eq,Show)

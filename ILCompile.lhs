@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 2888 2009-08-05 15:55:47Z wlux $
+% $Id: ILCompile.lhs 3000 2010-08-30 19:33:17Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -122,9 +122,8 @@ world.
 >     "unsafePerformIO" -> unsafePerformIO
 >     "fixIO" -> fixIO
 >     _ -> const . (Cam.Exec (Cam.mangle f))
->   where failed _ _ = Cam.Choices []
->         seq (v1:v2:_) (w1:_) =
->           Cam.Seq (w1 Cam.:<- Cam.Enter v1) (Cam.Enter v2)
+>   where failed _ _ = Cam.Choice []
+>         seq (v1:v2:_) (w1:_) = Cam.Seq (w1 Cam.:<- Cam.Eval v1) (Cam.Eval v2)
 >         ensureNotFree (v1:_) (w1:_) = rigidArg v1 w1 (Cam.Return (Cam.Var w1))
 >         return (v1:_) _ = Cam.Return (Cam.Var v1)
 >         (>>) (v1:v2:v3:_) (w1:_) =
@@ -136,14 +135,13 @@ world.
 >         unsafePerformIO (v1:_) (w1:w2:_) =
 >           Cam.Seq (w1 Cam.:<- Cam.Return (Cam.Constr (con qUnitId) [])) $
 >           Cam.Seq (w2 Cam.:<- Cam.Exec (apFun 1) [v1,w1]) $
->           Cam.Enter w2
+>           Cam.Eval w2
 >         fixIO (v1:v2:_) (w1:_) =
->           Cam.Seq (Cam.Let [Cam.Bind w1 (Cam.Lazy (apFun 2) [v1,w1,v2])])
->                   (Cam.Enter w1)
+>           Cam.Let [Cam.Bind w1 (Cam.Lazy (apFun 2) [v1,w1,v2])] (Cam.Eval w1)
 
 > rigidArg :: Cam.Name -> Cam.Name -> Cam.Stmt -> Cam.Stmt
 > rigidArg v1 v2 st =
->   Cam.Seq (v2 Cam.:<- Cam.Enter v1)
+>   Cam.Seq (v2 Cam.:<- Cam.Eval v1)
 >           (Cam.Switch Cam.Rigid v2 [Cam.Case Cam.DefaultCase st])
 
 > foreignCCall :: CallConv -> Type -> String -> [Type] -> [Cam.Name] -> Cam.Stmt
@@ -199,7 +197,7 @@ normal form, is passed as an additional argument to
 > compileStrict _ (Literal l) vs = compileLazy (Literal l) vs
 > compileStrict hnfs (Variable v) vs
 >   | null vs =
->       return ((if v `elem` hnfs then Cam.Return . Cam.Var else Cam.Enter)
+>       return ((if v `elem` hnfs then Cam.Return . Cam.Var else Cam.Eval)
 >               (var v))
 >   | otherwise = return (Cam.Exec (apFun (length vs)) (var v:vs))
 > compileStrict _ (Function f arity) vs
@@ -236,16 +234,15 @@ normal form, is passed as an additional argument to
 > compileStrict hnfs (Choice es) vs =
 >   do
 >     sts <- sequence [compileStrict hnfs e vs | e <- es]
->     return (Cam.Choices sts)
+>     return (Cam.Choice sts)
 > compileStrict hnfs (Exist us e) vs =
 >   do
 >     st <- compileStrict (us ++ hnfs) e vs
 >     return (foldr Cam.Seq st [var u Cam.:<- Cam.Return Cam.Free | u <- us])
-> compileStrict hnfs (Let rec bs e) vs =
->   do
->     sts <- mapM compileBinding bs
->     st <- compileStrict (addHnfs bs hnfs) e vs
->     return (foldr Cam.Seq st (recBindings rec sts))
+> compileStrict hnfs (Let rec ds e) vs =
+>   liftM2 (letBindings rec)
+>          (mapM compileBinding ds)
+>          (compileStrict (addHnfs ds hnfs) e vs)
 > compileStrict hnfs (SrcLoc _ e) vs = compileStrict hnfs e vs
 
 > literal :: Literal -> Cam.Literal
@@ -267,7 +264,7 @@ normal form, is passed as an additional argument to
 > noteHnf (SrcLoc _ e) hnfs = noteHnf e hnfs
 
 > addHnfs :: [Binding] -> [Ident] -> [Ident]
-> addHnfs bs hnfs = [v | Binding v e <- bs, isHnf hnfs e] ++ hnfs
+> addHnfs ds hnfs = [v | Binding v e <- ds, isHnf hnfs e] ++ hnfs
 
 > isHnf :: [Ident] -> Expression -> Bool
 > isHnf _ (Literal _) = True
@@ -276,7 +273,7 @@ normal form, is passed as an additional argument to
 > isHnf _ (Constructor _ _) = True
 > isHnf _ (Apply e1 e2) = isHnfApp e1 [e2]
 > isHnf hnfs (Exist vs e) = isHnf (vs ++ hnfs) e
-> isHnf hnfs (Let _ bs e) = isHnf (addHnfs bs hnfs) e
+> isHnf hnfs (Let _ ds e) = isHnf (addHnfs ds hnfs) e
 > isHnf hnfs (SrcLoc _ e) = isHnf hnfs e
 > isHnf _ _ = internalError "isHnf"
 
@@ -323,13 +320,14 @@ functions before compiling into abstract machine code.
 >     st <- compileLazy e []
 >     return (var v Cam.:<- st)
 
-> recBindings :: Rec -> [Cam.Stmt0] -> [Cam.Stmt0]
-> recBindings NonRec sts = sts
-> recBindings Rec sts = map Cam.Let (scc bound free (concatMap binds sts))
+> letBindings :: Rec -> [Cam.Stmt0] -> Cam.Stmt -> Cam.Stmt
+> letBindings NonRec sts st = foldr Cam.Seq st sts
+> letBindings Rec sts st =
+>   foldr Cam.Let st (scc bound free (concatMap binds sts))
 >   where binds (v Cam.:<- Cam.Return e) = [Cam.Bind v e]
 >         binds (v Cam.:<- Cam.Seq st1 st2) = binds st1 ++ binds (v Cam.:<- st2)
->         binds (Cam.Let bs) = bs
->         binds st = internalError ("compileRecBindings " ++ show st)
+>         binds (v Cam.:<- Cam.Let ds st) = ds ++ binds (v Cam.:<- st)
+>         binds st = internalError ("letBindings " ++ show st)
 >         bound (Cam.Bind v _) = [v]
 >         free (Cam.Bind _ e) = vars e
 
@@ -368,11 +366,8 @@ functions before compiling into abstract machine code.
 >   do
 >     st <- compileLazy e vs
 >     return (foldr Cam.Seq st [var u Cam.:<- Cam.Return Cam.Free | u <- us])
-> compileLazy (Let rec bs e) vs =
->   do
->     sts <- mapM compileBinding bs
->     st <- compileLazy e vs
->     return (foldr Cam.Seq st (recBindings rec sts))
+> compileLazy (Let rec ds e) vs =
+>   liftM2 (letBindings rec) (mapM compileBinding ds) (compileLazy e vs)
 > compileLazy (SrcLoc _ e) vs = compileLazy e vs
 > compileLazy e _ = internalError ("compileLazy: " ++ show e)
 
@@ -383,21 +378,22 @@ the code is transformed such that \texttt{let} statements are used
 only to create recursive bindings. All other nodes are allocated with
 statements of the form $x$ \texttt{<-} \texttt{return} $e$. Note that
 non-recursive \texttt{let} bindings can be introduced in
-\texttt{compileRecBindings} when the bindings of an intermediate
-language \texttt{letrec} expression are split into minimal recursive
-groups.
+\texttt{letBindings} when the bindings of an intermediate language
+\texttt{letrec} expression are split into minimal recursive groups.
 
 In order to simplify the generated code, we make use of the following
 equivalences.
 \begin{quote}\def\lb{\char`\{}\def\rb{\char`\}}
   \begin{tabular}{r@{$\null\equiv\null$}ll}
-    \texttt{let} \texttt{\lb} $x$ \texttt{=} $e$ \texttt{\rb;} \emph{st} &
+    \texttt{let} \texttt{\lb} $x$ \texttt{=} $e$ \texttt{\rb} \texttt{in} \emph{st} &
       $x$ \texttt{<-} \texttt{return} $e$\texttt{;} \emph{st} & $(x \not\in \textrm{vars}(e))$ \\
     $x$ \texttt{<-} \emph{st}\texttt{;} \texttt{return} $x$ & \emph{st} \\
     $x$ \texttt{<-} \texttt{return} $y$\texttt{;} \emph{st} &
-      $\emph{st}[y/x]$ \\
-    $x$ \texttt{<-} \texttt{\lb} \emph{st$_1$}\texttt{;} \emph{st$_2$} \texttt{\rb} &
-    \emph{st$_1$}; $x$ \texttt{<-} \emph{st$_2$}
+      $\emph{st}[x/y]$ \\
+    $y$ \texttt{<-} \texttt{\lb} $x$ \texttt{<-} \emph{st$_1$}\texttt{;} \emph{st$_2$} \texttt{\rb}\texttt{;} \emph{st$_3$} &
+      $x$ \texttt{<-} \emph{st$_1$}\texttt{;} $y$ \texttt{<-} \emph{st$_2$}\texttt{;} \emph{st$_3$} \\
+    $x$ \texttt{<-} \texttt{\lb} \texttt{let} \texttt{\lb} \emph{ds} \texttt{\rb} \texttt{in} \emph{st$_1$} \texttt{\rb}\texttt{;} \emph{st$_2$} &
+      \texttt{let} \texttt{\lb} \emph{ds} \texttt{\rb} \texttt{in} $x$ \texttt{<-} \emph{st$_1$}\texttt{;} \emph{st$_2$}
   \end{tabular}
 \end{quote}
 \begin{verbatim}
@@ -408,42 +404,39 @@ equivalences.
 
 > unaliasStmt :: AliasMap -> Cam.Stmt -> Cam.Stmt
 > unaliasStmt aliases (Cam.Return e) = Cam.Return (unaliasExpr aliases e)
-> unaliasStmt aliases (Cam.Enter v) = Cam.Enter (unaliasVar aliases v)
-> unaliasStmt aliases (Cam.Exec f vs) =
->   Cam.Exec f (map (unaliasVar aliases) vs)
+> unaliasStmt aliases (Cam.Eval v) = Cam.Eval (unaliasVar aliases v)
+> unaliasStmt aliases (Cam.Exec f vs) = Cam.Exec f (map (unaliasVar aliases) vs)
 > unaliasStmt aliases (Cam.CCall h ty cc) =
 >   Cam.CCall h ty (unaliasCCall aliases cc)
 > unaliasStmt aliases (Cam.Seq (v Cam.:<- Cam.Seq st1 st2) st3) =
 >   unaliasStmt aliases (Cam.Seq st1 (Cam.Seq (v Cam.:<- st2) st3))
-> unaliasStmt aliases (Cam.Seq (Cam.Let [Cam.Bind v e]) st)
+> unaliasStmt aliases (Cam.Seq (v Cam.:<- Cam.Let ds st1) st2) =
+>   unaliasStmt aliases (Cam.Let ds (Cam.Seq (v Cam.:<- st1) st2))
+> unaliasStmt aliases (Cam.Seq (v Cam.:<- st1) st2) =
+>   case unaliasStmt aliases st1 of
+>     Cam.Return (Cam.Var v') -> unaliasStmt (addToFM v v' aliases) st2
+>     st1' ->
+>       case unaliasStmt aliases st2 of
+>         Cam.Return (Cam.Var v') | v == v' -> st1'
+>         st2' -> Cam.Seq (v Cam.:<- st1') st2'
+> unaliasStmt aliases (Cam.Let [Cam.Bind v e] st)
 >   | v `notElem` vars e =
 >       unaliasStmt aliases (Cam.Seq (v Cam.:<- Cam.Return e) st)
-> unaliasStmt aliases (Cam.Seq st1 st2) =
->   case f (unaliasStmt aliases' st2) of
->     Cam.Seq (v1' Cam.:<- st') (Cam.Return (Cam.Var v2')) | v1' == v2' -> st'
->     st' -> st'
->   where (aliases',f) = unaliasStmt0 aliases st1
-> unaliasStmt aliases (Cam.Switch rf v cases) =
->   Cam.Switch rf (unaliasVar aliases v) (map (unaliasCase aliases) cases)
-> unaliasStmt aliases (Cam.Choices alts) =
->   Cam.Choices (map (unaliasStmt aliases) alts)
-
-> unaliasStmt0 :: AliasMap -> Cam.Stmt0 -> (AliasMap,Cam.Stmt -> Cam.Stmt)
-> unaliasStmt0 aliases (v Cam.:<- st) =
->   case unaliasStmt aliases st of
->     Cam.Return (Cam.Var v') -> (addToFM v v' aliases,id)
->     st'                     -> (aliases,Cam.Seq (v Cam.:<- st'))
-> unaliasStmt0 aliases (Cam.Let bs) = (aliases',Cam.Seq (Cam.Let bs'''))
->   where (bs',bs'') =
->           case partition isAlias bs of
->             (b':bs',[]) -> (bs',[b'])        -- cyclic chain of variable defs
->             (bs',bs'') -> (bs',bs'')
->         bs''' = [Cam.Bind v (unaliasExpr aliases' e) | Cam.Bind v e <- bs'']
+> unaliasStmt aliases (Cam.Let ds st) = Cam.Let ds''' (unaliasStmt aliases' st)
+>   where (ds',ds'') =
+>           case partition isAlias ds of
+>             (d':ds',[]) -> (ds',[d'])        -- cyclic chain of variable defs
+>             (ds',ds'') -> (ds',ds'')
+>         ds''' = [Cam.Bind v (unaliasExpr aliases' e) | Cam.Bind v e <- ds'']
 >         aliases' = foldr (uncurry addToFM) aliases
 >                          [(v,unaliasVar aliases' v')
->                          | Cam.Bind v (Cam.Var v') <- bs']
+>                          | Cam.Bind v (Cam.Var v') <- ds']
 >         isAlias (Cam.Bind _ (Cam.Var _)) = True
 >         isAlias (Cam.Bind _ _) = False
+> unaliasStmt aliases (Cam.Switch rf v cases) =
+>   Cam.Switch rf (unaliasVar aliases v) (map (unaliasCase aliases) cases)
+> unaliasStmt aliases (Cam.Choice alts) =
+>   Cam.Choice (map (unaliasStmt aliases) alts)
 
 > unaliasCCall :: AliasMap -> Cam.CCall -> Cam.CCall
 > unaliasCCall aliases (Cam.StaticCall f xs) =

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachInterp.lhs 2887 2009-08-05 15:54:11Z wlux $
+% $Id: MachInterp.lhs 3000 2010-08-30 19:33:17Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -154,7 +154,7 @@ which initialize fresh nodes directly.
 
 \end{verbatim}
 \subsubsection{Evaluation of Nodes}
-An \texttt{enter} statement starts the evaluation of the referenced
+An \texttt{eval} statement starts the evaluation of the referenced
 node to weak head normal form. When the node is already in weak head
 normal form it is returned to the caller. If the node is a suspended
 application, it will be overwritten with a queue-me node that is later
@@ -353,14 +353,14 @@ application.
 >                       updateState (saveBinding vptr var)
 >                       updateNode vptr (VarNode cs (thd:wq) space)
 >                       switchContext
->                   Nothing -> choices vptr
+>                   Nothing -> choice vptr
 >           else
 >             suspendSearch vptr var cont
 >         resume ptr = deref ptr >>= resumeNode ptr
 >         resumeNode _ (IndirNode ptr) = resume ptr
->         resumeNode ptr (VarNode _ _ _) = choices ptr
+>         resumeNode ptr (VarNode _ _ _) = choice ptr
 >         resumeNode _ _ = cont
->         choices vptr = tryChoices (map ($ vptr) (alt:alts))
+>         choice vptr = tryChoice (map ($ vptr) (alt:alts))
 
 > instantiate ::(NodeTag,NodePtr -> Instruction) -> NodePtr -> Instruction
 > instantiate (tag,body) vptr =
@@ -458,28 +458,28 @@ application.
 
 \end{verbatim}
 \subsubsection{Non-deterministic Evaluation}
-A \texttt{choices} statement executes its alternatives
+A \texttt{choice} statement executes its alternatives
 non-deterministically. If there are other threads which can proceed
 with a deterministic computation, the current thread is suspended
 until these threads either finish or suspend.
 \begin{verbatim}
 
-> choices :: [Instruction] -> Instruction
-> choices [] = failAndBacktrack
-> choices (alt:alts)
+> choice :: [Instruction] -> Instruction
+> choice [] = failAndBacktrack
+> choice (alt:alts)
 >   | null alts = alt
 >   | otherwise = read'updateState (yieldThread try) >>= \so ->
 >                 if so then switchContext else try
->   where try = tryChoices (alt:alts)
+>   where try = tryChoice (alt:alts)
 
-> tryChoices :: [Instruction] -> Instruction
-> tryChoices (alt:alts) = readState curContext >>= try
+> tryChoice :: [Instruction] -> Instruction
+> tryChoice (alt:alts) = readState curContext >>= try
 >   where try IOContext = fail "Cannot duplicate the world"
 >         try GlobalContext =
 >           do
 >             updateState (pushChoicepoint (tryNext alts))
 >             alt
->         try _ = choicesSearch (alt:alts)
+>         try _ = choiceSearch (alt:alts)
 >         tryNext (alt:alts) =
 >           do
 >             updateState (updChoicepoint alts)
@@ -1195,7 +1195,7 @@ for the disequality \texttt{(0:xs) =/= [0]}.}
 > diseqArgs [] = failAndBacktrack
 > diseqArgs ((ptr1,ptr2) : ptrs)
 >   | null ptrs = diseqFirst
->   | otherwise = choices [diseqFirst,diseqArgs ptrs]
+>   | otherwise = choice [diseqFirst,diseqArgs ptrs]
 >   where diseqFirst = updateState (pushNodes [ptr1,ptr2]) >> diseqCode
 
 > diseqSuccess :: Instruction
@@ -1364,7 +1364,7 @@ evaluated.
 \ToDo{Find a way to restore a search space within an arbitrary other
   search space.}
 
-If a \texttt{choices} statement is executed in a local search space,
+If a \texttt{choice} statement is executed in a local search space,
 the current computation is interrupted and a list with one search
 continuation for each alternative is returned from \texttt{try}.
 \begin{verbatim}
@@ -1372,8 +1372,8 @@ continuation for each alternative is returned from \texttt{try}.
 > list :: [NodePtr] -> MachStateT NodePtr
 > list = foldr (\x m -> m >>= cons x) nil
 
-> choicesSearch :: [Instruction] -> Instruction
-> choicesSearch alts =
+> choiceSearch :: [Instruction] -> Instruction
+> choiceSearch alts =
 >   do
 >     updateState (interruptThread undefined)
 >     rq <- readState saveContinuation

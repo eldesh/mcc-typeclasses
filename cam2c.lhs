@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: cam2c.lhs 2785 2009-04-10 09:58:03Z wlux $
+% $Id: cam2c.lhs 3000 2010-08-30 19:33:17Z wlux $
 %
 % Copyright (c) 2005-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -148,7 +148,7 @@ constructor tags in the code.
 > genGoal f (Just vs) =
 >   genModule []
 >             [FunctionDecl (Name "curry_eval") (Name "_1" : map Name vs)
->               (Seq (Let [Bind (Name "_2") (Closure (Name f) (map Name vs))])
+>               (Seq (Name "_2" :<- Return (Closure (Name f) (map Name vs)))
 >                    (Exec (mangle "=:=") [Name "_1",Name "_2"]))] ++
 >   genMain (Name "curry_eval") (Just vs)
 > genGoal f Nothing = genMain (Name f) Nothing

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CamPP.lhs 2806 2009-04-26 17:30:18Z wlux $
+% $Id: CamPP.lhs 3000 2010-08-30 19:33:17Z wlux $
 %
 % Copyright (c) 2002-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -44,26 +44,28 @@
 
 > ppStmt :: Stmt -> Doc
 > ppStmt (Return e) = ppKW "return" <+> ppExpr e
-> ppStmt (Enter v) = ppKW "enter" <+> ppName v
+> ppStmt (Eval v) = ppKW "eval" <+> ppName v
 > ppStmt (Exec f vs) = ppKW "exec" <+> ppName f <> ppNames vs
 > ppStmt (CCall h ty cc) =
 >   ppKW "ccall" <+> maybe empty ppHeader h <+> ppCRetType ty <> ppCCall cc
 >   where ppHeader h = char '"' <> text h <> char '"'
 > ppStmt (Seq st1 st2) = ppStmt0 st1 <> semi $$ ppStmt st2
+> ppStmt (Let ds st) =
+>   sep [ppKW "let" <+> ppBindings (map ppBinding ds) <+> ppKW "in",ppStmt st]
+>   where ppBinding (Bind v n) = ppName v <+> equals <+> ppExpr n
 > ppStmt (Switch rf v cases) =
 >   ppBlock (ppKW "switch" <+> ppName v <+> ppRF rf) (ppAlts ppCase cases)
 >   where ppRF Rigid = ppKW "rigid"
 >         ppRF Flex = ppKW "flex"
-> ppStmt (Choices alts) = ppBlock (ppKW "choices") (ppAlts ppAlt alts)
+> ppStmt (Choice alts) = ppBlock (ppKW "choice") (ppAlts ppAlt alts)
 
 > ppStmt0 :: Stmt0 -> Doc
 > ppStmt0 (v :<- st) =
 >   case st of
 >     Seq _ _ -> ppBlock prefix (ppStmt st)
+>     Let _ _ -> ppBlock prefix (ppStmt st)
 >     _       -> prefix <+> ppStmt st
 >   where prefix = ppName v <+> text "<-"
-> ppStmt0 (Let bds) = ppKW "let" <+> ppBindings (map ppBinding bds)
->   where ppBinding (Bind v n) = ppName v <+> equals <+> ppExpr n
 
 > ppBindings :: [Doc] -> Doc
 > ppBindings bds = lbrace <+> vcat (punctuate semi bds) <+> rbrace

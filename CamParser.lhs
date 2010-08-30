@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CamParser.lhs 2806 2009-04-26 17:30:18Z wlux $
+% $Id: CamParser.lhs 3000 2010-08-30 19:33:17Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -70,16 +70,17 @@ in appendix~\ref{sec:ll-parsecomb}.
 >     KW_bool
 >   | KW_ccall
 >   | KW_char
->   | KW_choices
+>   | KW_choice
 >   | KW_data
 >   | KW_default
->   | KW_enter
+>   | KW_eval
 >   | KW_exec
 >   | KW_flex
 >   | KW_float
 >   | KW_free
 >   | KW_function
 >   | KW_import
+>   | KW_in
 >   | KW_int
 >   | KW_integer
 >   | KW_lazy
@@ -125,16 +126,17 @@ in appendix~\ref{sec:ll-parsecomb}.
 >   showsPrec _ KW_bool = showKeyword "bool"
 >   showsPrec _ KW_ccall = showKeyword "ccall"
 >   showsPrec _ KW_char = showKeyword "char"
->   showsPrec _ KW_choices = showKeyword "choices"
+>   showsPrec _ KW_choice = showKeyword "choice"
 >   showsPrec _ KW_data = showKeyword "data"
 >   showsPrec _ KW_default = showKeyword "default"
->   showsPrec _ KW_enter = showKeyword "enter"
+>   showsPrec _ KW_eval = showKeyword "eval"
 >   showsPrec _ KW_exec = showKeyword "exec"
 >   showsPrec _ KW_flex = showKeyword "flex"
 >   showsPrec _ KW_float = showKeyword "float"
 >   showsPrec _ KW_free = showKeyword "free"
 >   showsPrec _ KW_function = showKeyword "function"
 >   showsPrec _ KW_import = showKeyword "import"
+>   showsPrec _ KW_in = showKeyword "in"
 >   showsPrec _ KW_int = showKeyword "int"
 >   showsPrec _ KW_integer = showKeyword "integer"
 >   showsPrec _ KW_lazy = showKeyword "lazy"
@@ -161,16 +163,17 @@ in appendix~\ref{sec:ll-parsecomb}.
 >     ("bool",     KW_bool),
 >     ("ccall",    KW_ccall),
 >     ("char",     KW_char),
->     ("choices",  KW_choices),
+>     ("choice",   KW_choice),
 >     ("data",     KW_data),
 >     ("default",  KW_default),
->     ("enter",    KW_enter),
+>     ("eval",     KW_eval),
 >     ("exec",     KW_exec),
 >     ("flex",     KW_flex),
 >     ("float",    KW_float),
 >     ("free",     KW_free),
 >     ("function", KW_function),
 >     ("import",   KW_import),
+>     ("in",       KW_in),
 >     ("int",      KW_int),
 >     ("integer",  KW_integer),
 >     ("lazy",     KW_lazy),
@@ -327,20 +330,21 @@ in appendix~\ref{sec:ll-parsecomb}.
 
 > stmt :: Parser Token Stmt a
 > stmt = Return <$-> keyword KW_return <*> node
->    <|> Enter <$-> keyword KW_enter <*> checkName
+>    <|> Eval <$-> keyword KW_eval <*> checkName
 >    <|> Exec <$-> keyword KW_exec <*> checkName <*> nameList
 >    <|> CCall <$-> keyword KW_ccall <*> (Just <$> string `opt` Nothing)
 >              <*> (parens cRetType `opt` Just TypeNodePtr) <*> cCall
 >    <|> Seq <$> stmt0 <*-> checkSemi <*> stmt
+>    <|> Let <$-> keyword KW_let <*> braces (binding `sepBy1` semi)
+>            <*-> keyword KW_in <*> stmt
 >    <|> flip Switch <$-> keyword KW_switch <*> checkName <*> rf
 >                    <*> braces cases
->    <|> Choices <$-> keyword KW_choices <*> braces (block `sepBy1` bar)
+>    <|> Choice <$-> keyword KW_choice <*> braces (block `sepBy1` bar)
 >    <|> block
 >    where rf = Rigid <$-> keyword KW_rigid <|> Flex <$-> keyword KW_flex
 
 > stmt0 :: Parser Token Stmt0 a
 > stmt0 = (:<-) <$> name <*-> checkLeftArrow <*> stmt <\> stmt0
->     <|> Let <$-> keyword KW_let <*> braces (binding `sepBy1` semi)
 
 > binding :: Parser Token Bind a
 > binding = Bind <$> name <*-> checkEquals <*> node

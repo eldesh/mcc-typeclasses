@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CPS.lhs 2998 2010-08-30 19:18:17Z wlux $
+% $Id: CPS.lhs 3000 2010-08-30 19:33:17Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -146,7 +146,7 @@ arguments with a \texttt{CPSLetPapp} statement.
 \end{verbatim}
 The transformation into CPS code is implemented by a top-down
 algorithm. The abstract machine code statements \texttt{return},
-\texttt{enter}, \texttt{exec}, and \texttt{ccall} are transformed
+\texttt{eval}, \texttt{exec}, and \texttt{ccall} are transformed
 directly into their CPS equivalents. Statement sequences $x$
 \texttt{<-} \emph{st$_1$}\texttt{;} \emph{st$_2$}, where \emph{st$_1$}
 is neither a \texttt{return} nor a \texttt{ccall} statement, are
@@ -167,7 +167,7 @@ Otherwise \texttt{cpsJumpSwitch} is used, which generates a new
 function that performs the switch, and the \texttt{switch} statement is
 transformed into a jump to that function.
 
-The translation of a \texttt{choices} statement has to ensure that all
+The translation of a \texttt{choice} statement has to ensure that all
 alternatives use the same input variables so that the runtime system
 does not need to construct separate closures for each of them.
 \begin{verbatim}
@@ -194,38 +194,39 @@ does not need to construct separate closures for each of them.
 >   case e of
 >     Var v -> (n,CPSExecCont (snd k) [v])
 >     _ -> (n,CPSLet [Bind tmp e] (CPSExecCont (snd k) [tmp]))
-> cpsStmt _ _ k n (Enter v) =
+> cpsStmt _ _ k n (Eval v) =
 >   (n,CPSExec (CPSPrim (CPSEval (fst k) v)) (snd k) [v])
 > cpsStmt _ _ k n (Exec f vs) = (n,CPSExec (CPSFun f) (snd k) vs)
 > cpsStmt _ _ k n (CCall _ ty cc) =
 >   (n,CPSLetC (BindC tmp ty cc) (CPSExecCont (snd k) [tmp]))
-> cpsStmt f k0 k n (Seq st1 st2) =
+> cpsStmt f k0 k n (Seq (v :<- st1) st2) =
 >   case st1 of
->     v :<- Seq st1' st2' -> cpsStmt f k0 k n (Seq st1' (Seq (v :<- st2') st2))
->     v :<- Return e -> (n',CPSLet [Bind v e] st2')
+>     Seq st1' st2' -> cpsStmt f k0 k n (Seq st1' (Seq (v :<- st2') st2))
+>     Let ds st1' -> cpsStmt f k0 k n (Let ds (Seq (v :<- st1') st2))
+>     Return e -> (n',CPSLet [Bind v e] st2')
 >       where (n',st2') = cpsStmt f Nothing k n st2
->     v :<- CCall _ ty cc -> (n',CPSLetC (BindC v ty cc) st2')
+>     CCall _ ty cc -> (n',CPSLetC (BindC v ty cc) st2')
 >       where (n',st2') = cpsStmt f Nothing k n st2
->     v :<- st -> (n'',CPSLetCont f' st1')
->       where (n',st1') = cpsStmt f k0 (tagged f',cpsCont f') n st
+>     _ -> (n'',CPSLetCont f' st1')
+>       where (n',st1') = cpsStmt f k0 (tagged f',cpsCont f') n st1
 >             (n'',f') = cps f k [v] n' st2
 >             tagged (CPSContinuation _ vs _ (CPSSwitch tagged v _)) =
 >               vs /= [v] || tagged
 >             tagged (CPSContinuation _ vs _ (CPSSwitchArity v _)) = vs /= [v]
 >             tagged _ = True
->     Let ds -> (n',foldr CPSLet st2' (scc bound free ds))
->       where (n',st2') = cpsStmt f Nothing k n st2
->             bound (Bind v _) = [v]
->             free (Bind _ n) = exprVars n
+> cpsStmt f _ k n (Let ds st) = (n',foldr CPSLet st' (scc bound free ds))
+>   where (n',st') = cpsStmt f Nothing k n st
+>         bound (Bind v _) = [v]
+>         free (Bind _ n) = exprVars n
 > cpsStmt f k0 k n (Switch rf v cases) =
 >   maybe (cpsJumpSwitch f) (cpsSwitch f) k0 k n rf v cases
-> cpsStmt f k0 k n (Choices alts) =
+> cpsStmt f k0 k n (Choice alts) =
 >   case alts of
 >     [] -> (n,CPSFail)
 >     [st] -> cpsStmt f k0 k n st
 >     _ -> (n',foldr CPSLetCont (CPSChoice Nothing (map cpsCont ks')) ks')
 >   where (n',ks) = mapAccumL (cps f k []) n alts
->         ks' = map (updEnv (freeVars (Choices alts) (snd k))) ks
+>         ks' = map (updEnv (freeVars (Choice alts) (snd k))) ks
 >         updEnv ws (CPSContinuation f vs _ st) = CPSContinuation f vs ws st
 
 > cpsJumpSwitch :: Name -> (Bool,CPSCont) -> Int -> RF -> Name -> [Case]
@@ -288,18 +289,16 @@ does not need to construct separate closures for each of them.
 
 > stmtVars :: Stmt -> [Name] -> [Name]
 > stmtVars (Return e) vs = exprVars e ++ vs
-> stmtVars (Enter v) vs = v : vs
+> stmtVars (Eval v) vs = v : vs
 > stmtVars (Exec _ vs) vs' = vs ++ vs'
 > stmtVars (CCall _ _ cc) vs = ccallVars cc ++ vs
-> stmtVars (Seq st1 st2) vs = stmt0Vars st1 (stmtVars st2 vs)
-> stmtVars (Switch _ v cases) vs = v : concatMap caseVars cases ++ vs
-> stmtVars (Choices alts) vs = concatMap (flip stmtVars []) alts ++ vs
-
-> stmt0Vars :: Stmt0 -> [Name] -> [Name]
-> stmt0Vars (v :<- st) vs = stmtVars st (filter (v /=) vs)
-> stmt0Vars (Let ds) vs = filter (`notElemSet` bvs) (fvs ++ vs)
+> stmtVars (Seq (v :<- st1) st2) vs =
+>   stmtVars st1 [] ++ filter (v /=) (stmtVars st2 vs)
+> stmtVars (Let ds st) vs = filter (`notElemSet` bvs) (fvs ++ stmtVars st vs)
 >   where bvs = fromListSet [v | Bind v _ <- ds]
 >         fvs = concat [exprVars n | Bind _ n <- ds]
+> stmtVars (Switch _ v cases) vs = v : concatMap caseVars cases ++ vs
+> stmtVars (Choice alts) vs = concatMap (flip stmtVars []) alts ++ vs
 
 > caseVars :: Case -> [Name]
 > caseVars (Case t st) =

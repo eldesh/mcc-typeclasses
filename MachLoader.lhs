@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachLoader.lhs 2887 2009-08-05 15:54:11Z wlux $
+% $Id: MachLoader.lhs 3000 2010-08-30 19:33:17Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -68,18 +68,18 @@ in order to allow mutual recursion between functions.
 >   where transl = maybe translStmt translInstrumented instrument
 >         translInstrumented instrument st = instrument st (translStmt st)
 >         translStmt (Return e) = returnNode (translExpr Nothing e)
->         translStmt (Enter v) = enter (show v)
+>         translStmt (Eval v) = enter (show v)
 >         translStmt (Exec f vs) = exec (lookupFun f fEnv) (map show vs)
 >         translStmt (CCall _ _ cc) = translCCall cc
->         translStmt (Seq st1 st2) = translStmt0 st1 (transl st2)
+>         translStmt (Seq (v :<- st1) st2) =
+>           seqStmts (show v) (transl st1) (transl st2)
+>         translStmt (Let ds st) = letNodes ns (transl st)
+>           where ns = [(show v,translExpr (Just v) n) | Bind v n <- ds]
 >         translStmt (Switch rf v cases) =
 >           uncurry (switch rf (show v)) (translCases cases)
 >           where switch Rigid = switchRigid
 >                 switch Flex = switchFlex
->         translStmt (Choices alts) = choices (map transl alts)
->         translStmt0 (v :<- st) = seqStmts (show v) (transl st)
->         translStmt0 (Let bds) =
->           letNodes [(show v,translExpr (Just v) n) | Bind v n <- bds]
+>         translStmt (Choice alts) = choice (map transl alts)
 >         translCCall (StaticCall f vs) =
 >           cCall (lookupPrim f primEnv) (map (show . snd) vs)
 >         translCCall (DynamicCall _ _) =

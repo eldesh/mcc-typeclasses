@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CamParser.lhs 3000 2010-08-30 19:33:17Z wlux $
+% $Id: CamParser.lhs 3001 2010-08-30 19:39:16Z wlux $
 %
 % Copyright (c) 1999-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -74,11 +74,10 @@ in appendix~\ref{sec:ll-parsecomb}.
 >   | KW_data
 >   | KW_default
 >   | KW_eval
->   | KW_exec
 >   | KW_flex
 >   | KW_float
 >   | KW_free
->   | KW_function
+>   | KW_fun
 >   | KW_import
 >   | KW_in
 >   | KW_int
@@ -130,11 +129,10 @@ in appendix~\ref{sec:ll-parsecomb}.
 >   showsPrec _ KW_data = showKeyword "data"
 >   showsPrec _ KW_default = showKeyword "default"
 >   showsPrec _ KW_eval = showKeyword "eval"
->   showsPrec _ KW_exec = showKeyword "exec"
 >   showsPrec _ KW_flex = showKeyword "flex"
 >   showsPrec _ KW_float = showKeyword "float"
 >   showsPrec _ KW_free = showKeyword "free"
->   showsPrec _ KW_function = showKeyword "function"
+>   showsPrec _ KW_fun = showKeyword "fun"
 >   showsPrec _ KW_import = showKeyword "import"
 >   showsPrec _ KW_in = showKeyword "in"
 >   showsPrec _ KW_int = showKeyword "int"
@@ -167,11 +165,10 @@ in appendix~\ref{sec:ll-parsecomb}.
 >     ("data",     KW_data),
 >     ("default",  KW_default),
 >     ("eval",     KW_eval),
->     ("exec",     KW_exec),
 >     ("flex",     KW_flex),
 >     ("float",    KW_float),
 >     ("free",     KW_free),
->     ("function", KW_function),
+>     ("fun",      KW_fun),
 >     ("import",   KW_import),
 >     ("in",       KW_in),
 >     ("int",      KW_int),
@@ -322,29 +319,28 @@ in appendix~\ref{sec:ll-parsecomb}.
 > atyp = name <**> (flip TypeApp <$> parenList typ `opt` TypeVar)
 
 > funcDecl :: Parser Token Decl a
-> funcDecl =
->   FunctionDecl <$-> keyword KW_function <*> checkName <*> nameList <*> block
-
-> block :: Parser Token Stmt a
-> block = braces stmt
+> funcDecl = FunctionDecl <$> name <*> nameList <*> braces stmt
 
 > stmt :: Parser Token Stmt a
-> stmt = Return <$-> keyword KW_return <*> node
->    <|> Eval <$-> keyword KW_eval <*> checkName
->    <|> Exec <$-> keyword KW_exec <*> checkName <*> nameList
->    <|> CCall <$-> keyword KW_ccall <*> (Just <$> string `opt` Nothing)
->              <*> (parens cRetType `opt` Just TypeNodePtr) <*> cCall
->    <|> Seq <$> stmt0 <*-> checkSemi <*> stmt
+> stmt = name <**> nameStmt
 >    <|> Let <$-> keyword KW_let <*> braces (binding `sepBy1` semi)
 >            <*-> keyword KW_in <*> stmt
->    <|> flip Switch <$-> keyword KW_switch <*> checkName <*> rf
->                    <*> braces cases
->    <|> Choice <$-> keyword KW_choice <*> braces (block `sepBy1` bar)
->    <|> block
->    where rf = Rigid <$-> keyword KW_rigid <|> Flex <$-> keyword KW_flex
+>    <|> astmt <\> name
+>  where nameStmt = flip Exec <$> nameList
+>               <|> stmtSeq <$-> leftArrow <*> astmt <*-> checkSemi <*> stmt
+>        stmtSeq st1 st2 v = Seq (v :<- st1) st2
 
-> stmt0 :: Parser Token Stmt0 a
-> stmt0 = (:<-) <$> name <*-> checkLeftArrow <*> stmt <\> stmt0
+> astmt :: Parser Token Stmt a
+> astmt = Return <$-> keyword KW_return <*> node
+>     <|> Eval <$-> keyword KW_eval <*> checkName
+>     <|> Exec <$> name <*> nameList
+>     <|> CCall <$-> keyword KW_ccall <*> (Just <$> string `opt` Nothing)
+>               <*> (parens cRetType `opt` Just TypeNodePtr) <*> cCall
+>     <|> flip Switch <$-> keyword KW_switch <*> checkName <*> rf
+>                     <*> braces cases
+>     <|> Choice <$-> keyword KW_choice <*> braces (stmt `sepBy` bar)
+>     <|> leftBrace <-*> stmt <*-> rightBrace
+>   where rf = Rigid <$-> keyword KW_rigid <|> Flex <$-> keyword KW_flex
 
 > binding :: Parser Token Bind a
 > binding = Bind <$> name <*-> checkEquals <*> node
@@ -353,7 +349,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 > node = Lit <$> literal
 >    <|> Constr <$-> keyword KW_data <*> checkName <*> nameList
 >    <|> Papp <$-> keyword KW_papp <*> checkName <*> nameList
->    <|> Closure <$-> keyword KW_function <*> checkName <*> nameList
+>    <|> Closure <$-> keyword KW_fun <*> checkName <*> nameList
 >    <|> Lazy <$-> keyword KW_lazy <*> checkName <*> nameList
 >    <|> Free <$-> keyword KW_free
 >    <|> Var <$> name
@@ -361,7 +357,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 > cases :: Parser Token [Case] a
 > cases = return <$> switchCase defaultTag
 >     <|> (:) <$> switchCase caseTag <*> (bar <-*> cases `opt` [])
->   where switchCase tag = Case <$> tag <*-> checkColon <*> block
+>   where switchCase tag = Case <$> tag <*-> checkColon <*> stmt
 
 > literal :: Parser Token Literal a
 > literal = Char . toEnum . fromInteger <$-> keyword KW_char <*> checkInt
@@ -386,7 +382,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 >        <|> TypeInt <$-> keyword KW_int
 >        <|> TypeFloat <$-> keyword KW_float
 >        <|> TypePtr <$-> keyword KW_pointer
->        <|> TypeFunPtr <$-> keyword KW_function
+>        <|> TypeFunPtr <$-> keyword KW_fun
 >        <|> TypeStablePtr <$-> keyword KW_stable
 
 > name, checkName :: Parser Token Name a
@@ -449,11 +445,8 @@ in appendix~\ref{sec:ll-parsecomb}.
 > asterisk = token Asterisk
 > checkAsterisk = asterisk <?> "* expected"
 
-> leftArrow, checkLeftArrow :: Parser Token Attributes a
+> leftArrow, rightArrow :: Parser Token Attributes a
 > leftArrow = token LeftArrow
-> checkLeftArrow = leftArrow <?> "<- expected"
-
-> rightArrow :: Parser Token Attributes a
 > rightArrow = token RightArrow
 
 > leftParen, rightParen :: Parser Token Attributes a

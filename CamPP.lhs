@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CamPP.lhs 3000 2010-08-30 19:33:17Z wlux $
+% $Id: CamPP.lhs 3001 2010-08-30 19:39:16Z wlux $
 %
 % Copyright (c) 2002-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -22,10 +22,10 @@
 > ppDecl :: Decl -> Doc
 > ppDecl (ImportDecl m) = ppKW "import" <+> ppName m
 > ppDecl (DataDecl tc vs cs) =
->   ppKW "data" <+> ppName tc <> (if null vs then empty else ppNames vs)
->               <+> sep (zipWith (<+>) (equals : repeat bar) (map ppConstr cs))
-> ppDecl (FunctionDecl f vs st) =
->   ppCode (ppKW "function" <+> ppName f <> ppNames vs) st
+>   sep (ppKW "data" <+> ppName tc <> (if null vs then empty else ppNames vs) :
+>        zipWith ppConstrDecl (equals : repeat bar) cs)
+>   where ppConstrDecl sep c = nest blockIndent (sep <+> ppConstr c)
+> ppDecl (FunctionDecl f vs st) = ppBlock (ppName f <> ppNames vs) (ppStmt st)
 
 > ppConstr :: ConstrDecl -> Doc
 > ppConstr (ConstrDecl c tys) =
@@ -36,39 +36,38 @@
 > ppType (TypeApp tc tys) = ppName tc <> ppList ppType tys
 > ppType (TypeArr ty1 ty2) = ppType ty1 <+> text "->" <+> ppType ty2
 
-> ppCode :: Doc -> Stmt -> Doc
-> ppCode prefix = ppBlock prefix . ppStmt
-
 > ppBlock :: Doc -> Doc -> Doc
 > ppBlock prefix x = sep [prefix <+> lbrace,nest blockIndent x,rbrace]
 
 > ppStmt :: Stmt -> Doc
 > ppStmt (Return e) = ppKW "return" <+> ppExpr e
 > ppStmt (Eval v) = ppKW "eval" <+> ppName v
-> ppStmt (Exec f vs) = ppKW "exec" <+> ppName f <> ppNames vs
+> ppStmt (Exec f vs) = ppName f <> ppNames vs
 > ppStmt (CCall h ty cc) =
 >   ppKW "ccall" <+> maybe empty ppHeader h <+> ppCRetType ty <> ppCCall cc
 >   where ppHeader h = char '"' <> text h <> char '"'
 > ppStmt (Seq st1 st2) = ppStmt0 st1 <> semi $$ ppStmt st2
 > ppStmt (Let ds st) =
->   sep [ppKW "let" <+> ppBindings (map ppBinding ds) <+> ppKW "in",ppStmt st]
->   where ppBinding (Bind v n) = ppName v <+> equals <+> ppExpr n
+>   sep [ppKW "let" <+> ppBindings ds <+> ppKW "in",ppStmt st]
 > ppStmt (Switch rf v cases) =
->   ppBlock (ppKW "switch" <+> ppName v <+> ppRF rf) (ppAlts ppCase cases)
+>   ppAlts (ppKW "switch" <+> ppName v <+> ppRF rf) ppCase cases
 >   where ppRF Rigid = ppKW "rigid"
 >         ppRF Flex = ppKW "flex"
-> ppStmt (Choice alts) = ppBlock (ppKW "choice") (ppAlts ppAlt alts)
+> ppStmt (Choice alts) = ppAlts (ppKW "choice") ppStmt alts
 
 > ppStmt0 :: Stmt0 -> Doc
 > ppStmt0 (v :<- st) =
 >   case st of
 >     Seq _ _ -> ppBlock prefix (ppStmt st)
 >     Let _ _ -> ppBlock prefix (ppStmt st)
->     _       -> prefix <+> ppStmt st
+>     _       -> sep [prefix,nest blockIndent (ppStmt st)]
 >   where prefix = ppName v <+> text "<-"
 
-> ppBindings :: [Doc] -> Doc
-> ppBindings bds = lbrace <+> vcat (punctuate semi bds) <+> rbrace
+> ppBindings :: [Bind] -> Doc
+> ppBindings ds = lbrace <+> vcat (punctuate semi (map ppBinding ds)) <+> rbrace
+
+> ppBinding :: Bind -> Doc
+> ppBinding (Bind v n) = sep [ppName v <+> equals,nest blockIndent (ppExpr n)]
 
 > ppLiteral :: Literal -> Doc
 > ppLiteral (Char c) = ppKW "char" <+> int (ord c)
@@ -80,22 +79,22 @@
 > ppExpr (Lit c) = ppLiteral c
 > ppExpr (Constr c vs) = ppKW "data" <+> ppName c <> ppNames vs
 > ppExpr (Papp f vs) = ppKW "papp" <+> ppName f <> ppNames vs
-> ppExpr (Closure f vs) = ppKW "function" <+> ppName f <> ppNames vs
+> ppExpr (Closure f vs) = ppKW "fun" <+> ppName f <> ppNames vs
 > ppExpr (Lazy f vs) = ppKW "lazy" <+> ppName f <> ppNames vs
 > ppExpr Free = ppKW "free"
 > ppExpr (Var v) = ppName v
 
-> ppAlts :: (a -> Doc) -> [a] -> Doc
-> ppAlts ppAlt = vcat . zipWith (<+>) (space : repeat bar) . map ppAlt
+> ppAlts :: Doc -> (a -> Doc) -> [a] -> Doc
+> ppAlts prefix ppAlt as =
+>   sep [prefix <+> lbrace,
+>        vcat (zipWith ($) (nest 2 : repeat ((<+>) bar)) (map ppAlt as)),
+>        rbrace]
 
 > ppCase :: Case -> Doc
-> ppCase (Case t st) = ppCode (ppTag t <> colon) st
+> ppCase (Case t st) = sep [ppTag t <> colon,nest blockIndent (ppStmt st)]
 >   where ppTag (LitCase c) = ppLiteral c
 >         ppTag (ConstrCase c vs) = ppKW "data" <+> ppName c <> ppNames vs
 >         ppTag DefaultCase = ppKW "default"
-
-> ppAlt :: Stmt -> Doc
-> ppAlt = ppCode empty
 
 > ppCCall :: CCall -> Doc
 > ppCCall (StaticCall f xs) = ppCFunCall (text f) xs
@@ -112,7 +111,7 @@
 > ppCArgType TypeInt = parens (ppKW "int")
 > ppCArgType TypeFloat = parens (ppKW "float")
 > ppCArgType TypePtr = parens (ppKW "pointer")
-> ppCArgType TypeFunPtr = parens (ppKW "function")
+> ppCArgType TypeFunPtr = parens (ppKW "fun")
 > ppCArgType TypeStablePtr = parens (ppKW "stable")
 > ppCArgType TypeNodePtr = text ""          -- Do not replace text "" by empty!
 

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachResult.lhs 3002 2010-08-30 19:41:06Z wlux $
+% $Id: MachResult.lhs 3003 2010-08-30 19:42:53Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -19,6 +19,7 @@ used in the answer expression.
 > module MachResult where
 > import MachTypes
 > import MachNode
+> import Char
 > import List
 > import Set
 > import Monad
@@ -65,7 +66,8 @@ used in the answer expression.
 >         case mbCs of
 >           Just cs -> return (shows cs)
 >           Nothing -> liftM showsList (browseList names args)
->   | otherwise = liftM (showsTerm p name) (mapM (browseArg names) args)
+>   | otherwise =
+>       liftM (showsTerm p (unqualify name)) (mapM (browseArg names) args)
 >   where ConstructorTag _ cons _ = consTag
 > browseExpression p names adr (VarNode _ _) =
 >   liftM showString (varName names adr)
@@ -237,5 +239,27 @@ variable names here, too.
 >   where names = map fst freeVars
 >         genVars = [genName c i | i <- [0..], c <- ['a'..'z']]
 >         genName c i = '_' : c : if i == 0 then "" else show i
+
+\end{verbatim}
+When (saturated) data constructor applications are shown in the
+result, we strip the module prefixes from the data constructor names
+to make the output more readable. Stripping is implemented in function
+\texttt{unqualify}, which assumes that a module identifier starts with
+an alphabetic character and continues up to the next period.
+\begin{verbatim}
+
+> unqualify :: String -> String
+> unqualify [] = []
+> unqualify (c:cs)
+>   | isAlpha c =
+>       case break ('.' ==) cs of
+>         (_,[]) -> c:cs
+>         (prefix,'.':cs')
+>           | null cs' || isDigit (head cs') -> c:cs
+>           | otherwise -> unqualify cs'
+>           where sep cs1 cs2
+>                   | null cs2 = cs1
+>                   | otherwise = cs1 ++ '.':cs2
+>   | otherwise = c:cs
 
 \end{verbatim}

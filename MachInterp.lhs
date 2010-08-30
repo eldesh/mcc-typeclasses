@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachInterp.lhs 3000 2010-08-30 19:33:17Z wlux $
+% $Id: MachInterp.lhs 3002 2010-08-30 19:41:06Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -49,7 +49,7 @@ context.
 \end{verbatim}
 A \texttt{let} statement allocates and initializes a group of nodes.
 In order to handle mutually recursive nodes, allocation and
-initialization of nodes have to be separated.
+initialization of nodes are separated.
 \begin{verbatim}
 
 > letNodes :: [(String,NodePtr -> MachStateT ())] -> Instruction -> Instruction
@@ -75,48 +75,32 @@ initialization of nodes have to be separated.
 > initConstr :: NodeTag -> [String] -> NodePtr -> MachStateT ()
 > initConstr (ConstructorTag t c n) vs ptr
 >   | length vs == n =
->       do
->         ptrs <- readState (getVars vs)
->         updateNode ptr (ConstructorNode t c ptrs)
+>       readState (getVars vs) >>= updateNode ptr . ConstructorNode t c
 >   | otherwise = fail "Type error in initConstr"
 
 > initClosure :: Function -> [String] -> NodePtr -> MachStateT ()
 > initClosure (f,code,n) vs ptr
 >   | length vs <= n =
->       do
->         ptrs <- readState (getVars vs)
->         updateNode ptr (ClosureNode f n code ptrs)
+>       readState (getVars vs) >>= updateNode ptr . ClosureNode f n code
 >   | otherwise = fail "Type error in initClosure"
 
 > initLazy :: Function -> [String] -> NodePtr -> MachStateT ()
 > initLazy (f,code,n) vs ptr
 >   | length vs == n =
->       do
->         ptrs <- readState (getVars vs)
->         space <- readState curSpace
->         updateNode ptr (LazyNode f n code ptrs space)
+>       readState (getVars vs) >>= updateNode ptr . LazyNode f n code
 >   | otherwise = fail "Type error in initLazy"
 
 > initFree :: NodePtr -> MachStateT ()
-> initFree ptr =
->   do
->     space <- readState curSpace
->     updateNode ptr (VarNode [] [] space)
+> initFree ptr = updateNode ptr (VarNode [] [])
 
 > initIndir :: String -> NodePtr -> MachStateT ()
-> initIndir v ptr =
->   do
->     ptr' <- readState (getVar v)
->     updateNode ptr (IndirNode ptr')
+> initIndir v ptr = readState (getVar v) >>= updateNode ptr . IndirNode
 
 > initQueueMe :: NodePtr -> MachStateT ()
-> initQueueMe ptr =
->   do
->     space <- readState curSpace
->     updateNode ptr (QueueMeNode [] space)
+> initQueueMe ptr = updateNode ptr (QueueMeNode [])
 
 \end{verbatim}
-As a matter of convenience, we provide also some allocation functions,
+As a matter of convenience, we also provide some allocation functions,
 which initialize fresh nodes directly.
 \begin{verbatim}
 
@@ -133,10 +117,7 @@ which initialize fresh nodes directly.
 > allocData t c ptrs = read'updateState (allocNode (ConstructorNode t c ptrs))
 
 > allocVariables :: Int -> MachStateT [NodePtr]
-> allocVariables n =
->   do
->     space <- readState curSpace
->     read'updateState (allocNodes (replicate n (VarNode [] [] space)))
+> allocVariables n = read'updateState (allocNodes (replicate n (VarNode [] [])))
 
 > allocClosure :: Function -> [NodePtr] -> MachStateT NodePtr
 > allocClosure (f,code,n) ptrs
@@ -146,19 +127,18 @@ which initialize fresh nodes directly.
 
 > allocLazy :: Function -> [NodePtr] -> MachStateT NodePtr
 > allocLazy (f,code,n) ptrs
->   | length ptrs == n =
->       do
->         space <- readState curSpace
->         read'updateState (allocNode (LazyNode f n code ptrs space))
+>   | length ptrs == n = read'updateState (allocNode (LazyNode f n code ptrs))
 >   | otherwise = fail "Type error in allocLazy"
 
 \end{verbatim}
 \subsubsection{Evaluation of Nodes}
 An \texttt{eval} statement starts the evaluation of the referenced
 node to weak head normal form. When the node is already in weak head
-normal form it is returned to the caller. If the node is a suspended
+normal form it is returned to the caller. If the node is a lazy
 application, it will be overwritten with a queue-me node that is later
-overwritten with the result of the application.
+overwritten with the result of the application. If the node is a
+global application, the current search is suspended and the global
+node is evaluated by the enclosing computation.
 \begin{verbatim}
 
 > enter :: String -> Instruction
@@ -169,65 +149,55 @@ overwritten with the result of the application.
 >               do
 >                 updateState (pushNodes ptrs)
 >                 code
->         enterNode ptr lazy@(LazyNode f n code ptrs space)
+>         enterNode ptr lazy@(LazyNode f n code ptrs)
 >           | length ptrs == n =
->               readState (isALocalSpace space) >>= \so ->
->               if so then
->                 do
->                   updateState (saveBinding ptr lazy)
->                   updateNode ptr (QueueMeNode [] space)
->                   updateState (pushNode ptr)
->                   updateState (pushCont update)
->                   updateState (pushNodes ptrs)
->                   code
->               else
->                 suspendSearch ptr lazy (resume ptr)
+>               do
+>                 updateState (saveBinding ptr lazy)
+>                 updateNode ptr (QueueMeNode [])
+>                 updateState (pushNode ptr)
+>                 updateState (pushCont update)
+>                 updateState (pushNodes ptrs)
+>                 code
 >           | otherwise = fail "Wrong number of arguments in lazy application"
->         enterNode ptr lazy@(QueueMeNode wq space) =
->           readState (isALocalSpace space) >>= \so ->
->           if so then
->             do
->               thd <- readState (suspendThread (resume ptr))
->               updateState (saveBinding ptr lazy)
->               updateNode ptr (QueueMeNode (thd:wq) space)
->               switchContext
->           else
->             suspendSearch ptr lazy (resume ptr)
+>         enterNode ptr lazy@(QueueMeNode wq) =
+>           do
+>             thd <- readState (suspendThread (resume ptr))
+>             updateState (saveBinding ptr lazy)
+>             updateNode ptr (QueueMeNode (thd:wq))
+>             switchContext
 >         enterNode _ (IndirNode ptr) = deref ptr >>= enterNode ptr
+>         enterNode ptr lazy@(GlobalAppNode _ _) =
+>           suspendSearch ptr lazy (resume ptr)
 >         enterNode ptr _ = retNode ptr
 >         resume ptr = deref ptr >>= resumeNode ptr
->         resumeNode _ (LazyNode _ _ _ _ _) =
+>         resumeNode _ (LazyNode _ _ _ _) =
 >           fail "Indirection to unevaluated lazy application node"
->         resumeNode _ (QueueMeNode _ _) =
+>         resumeNode _ (QueueMeNode _) =
 >           fail "Indirection to locked lazy application node"
 >         resumeNode _ (IndirNode ptr) = deref ptr >>= resumeNode ptr
 >         resumeNode ptr _ = retNode ptr
 >         update = read'updateState popNodes2 >>= uncurry update'
 >         update' ptr lptr = deref lptr >>= updateLazy ptr lptr
->         updateLazy ptr lptr lazy@(QueueMeNode wq space) =
->           readState (isALocalSpace space) >>= \so ->
->           if so then
->             do
->               updateState (saveBinding lptr lazy)
->               updateNode lptr (IndirNode ptr)
->               updateState (pushNode ptr)
->               updateState (wakeThreads wq)
->               ret
->           else
->             fail "Attempt to update non-local lazy application node"
->         updateLazy _ _ (LazyNode _ _ _ _ _) =
+>         updateLazy ptr lptr lazy@(QueueMeNode wq) =
+>           do
+>             updateState (saveBinding lptr lazy)
+>             updateNode lptr (IndirNode ptr)
+>             updateState (pushNode ptr)
+>             updateState (wakeThreads wq)
+>             ret
+>         updateLazy _ _ (LazyNode _ _ _ _) =
 >           fail "Unlocked lazy application in update frame"
 >         updateLazy _ _ _ = fail "No lazy application in update frame"
 
 \end{verbatim}
 \subsubsection{Function Evaluation}
-An \texttt{exec} statement pushes the referenced nodes onto the data
-stack and enters the specified function. Upon entry, this functions
-initializes a fresh local environment with the nodes from the data
-stack and then executes its code. At the end, the function returns to
-the current context from either the return or the update stack. If
-both stacks are empty, the current thread terminates which eventually
-may cause a deadlock.
+A function call pushes the arguments onto the data stack and enters
+the specified function. Upon entry, the called function initializes a
+fresh local environment with the nodes from the data stack and then
+executes its code. At the end, the function returns to the current
+context from either the return or the update stack. If both stacks are
+empty, the current thread terminates which eventually may cause a
+deadlock.
 \begin{verbatim}
 
 > exec :: Function -> [String] -> Instruction
@@ -281,8 +251,10 @@ A \texttt{switch} statement selects the code branch matched by
 the tag of the specified node. Depending on the mode of the switch
 statement, an unbound variable either suspends the current thread
 until the variable is instantiated (\texttt{rigid}) or instantiates
-the variable non-deterministically (\texttt{flex}).  If no case
-matches, the default actions is chosen.
+the variable non-deterministically (\texttt{flex}). If no case
+matches, the default action is chosen. Global variables are never
+instantiated. Instead, the current search is suspended until the
+variable is instantiated in the enclosing computation.
 
 After instantiating a variable, the abstract machine checks that all
 constraints on the variable are still entailed and then wakes all
@@ -290,10 +262,10 @@ threads from the variable's wait queue. If the variable is bound to
 another variable, the wait queues are concatenated instead of waking
 the suspended threads. In addition, we must check the constraints of
 the other variable as well because both constraint lists can include a
-disequality between the variables. If the other variable is not a
-local variable and there are constraints on the bound variable or it
-has a non-empty wait-queue, we must suspend the current search until
-the variable is bound.
+disequality between the variables. If a variable is bound to a global
+variable and the local variable has constraints or blocked threads, we
+must suspend the current search until the global variable is
+instantiated.
 
 Note that \texttt{bindVar} must check whether the variable node has
 been bound already. This may happen if a search strategy restricts the
@@ -304,7 +276,7 @@ non-variable term. For instance, in
   goal xs = length xs =:= 1
   nonNull (_:_) = success
 \end{verbatim}
-the goal variable is bound to a cons node before the search
+the goal variable is bound to a list node before the search
 continuations are resumed that were returned by the inner \texttt{try}
 application.
 \begin{verbatim}
@@ -312,21 +284,20 @@ application.
 > switchRigid :: String -> [(NodeTag,NodePtr -> Instruction)]
 >             -> (NodePtr -> Instruction) -> Instruction
 > switchRigid v dispatchTable dflt = rigidSwitch
->   where rigidSwitch =
->           switch v ((VariableTag,delay rigidSwitch) : dispatchTable) dflt
+>   where rigidSwitch = switch v dispatchTable' dflt
+>         dispatchTable' =
+>           (VariableTag,delay rigidSwitch) :
+>           (GlobalVarTag,delaySearch rigidSwitch) :
+>           dispatchTable
 
 > delay :: Instruction -> NodePtr -> Instruction
 > delay cont vptr = deref vptr >>= delayNode vptr
->   where delayNode vptr var@(VarNode cs wq space) =
->           readState (isALocalSpace space) >>= \so ->
->           if so then
->             do
->               thd <- readState (suspendThread cont)
->               updateState (saveBinding vptr var)
->               updateNode vptr (VarNode cs (thd:wq) space)
->               switchContext
->           else
->             suspendSearch vptr var cont
+>   where delayNode vptr var@(VarNode cs wq) =
+>           do
+>             thd <- readState (suspendThread cont)
+>             updateState (saveBinding vptr var)
+>             updateNode vptr (VarNode cs (thd:wq))
+>             switchContext
 
 > switchFlex :: String -> [(NodeTag,NodePtr -> Instruction)]
 >            -> (NodePtr -> Instruction) -> Instruction
@@ -334,33 +305,34 @@ application.
 >   where flexSwitch = switch v dispatchTable' dflt
 >         dispatchTable'
 >           | null alts = dispatchTable
->           | otherwise = (VariableTag,tryBind alts flexSwitch) : dispatchTable
+>           | otherwise =
+>               (VariableTag,tryBind alts flexSwitch) :
+>               (GlobalVarTag,delaySearch flexSwitch) :
+>               dispatchTable
 >         alts = map instantiate dispatchTable
 
 > tryBind :: [NodePtr -> Instruction] -> Instruction -> NodePtr -> Instruction
 > tryBind (alt:alts) cont vptr = deref vptr >>= tryBindNode vptr
->   where tryBindNode vptr var@(VarNode cs wq space) =
->           readState (isALocalSpace space) >>= \so ->
->           if so then
->             if null alts then
->               alt vptr
->             else
+>   where tryBindNode vptr var@(VarNode cs wq)
+>           | null alts = alt vptr
+>           | otherwise =
 >               do
 >                 thd <- read'updateState (yieldSuspendThread (resume vptr))
 >                 case thd of
 >                   Just thd ->
 >                     do
 >                       updateState (saveBinding vptr var)
->                       updateNode vptr (VarNode cs (thd:wq) space)
+>                       updateNode vptr (VarNode cs (thd:wq))
 >                       switchContext
 >                   Nothing -> choice vptr
->           else
->             suspendSearch vptr var cont
 >         resume ptr = deref ptr >>= resumeNode ptr
 >         resumeNode _ (IndirNode ptr) = resume ptr
->         resumeNode ptr (VarNode _ _ _) = choice ptr
+>         resumeNode ptr (VarNode _ _) = choice ptr
 >         resumeNode _ _ = cont
 >         choice vptr = tryChoice (map ($ vptr) (alt:alts))
+
+> delaySearch :: Instruction -> NodePtr -> Instruction
+> delaySearch cont vptr = deref vptr >>= flip (suspendSearch vptr) cont
 
 > instantiate ::(NodeTag,NodePtr -> Instruction) -> NodePtr -> Instruction
 > instantiate (tag,body) vptr =
@@ -374,23 +346,17 @@ application.
 >         freshNode (ConstructorTag t c n) = allocVariables n >>= allocData t c
 
 > bindVar :: NodePtr -> Node -> NodePtr -> Instruction -> Instruction
-> bindVar vptr var@(VarNode cs wq space) ptr next =
->   readState (isALocalSpace space) >>= \so ->
->   if so then
->     deref ptr >>= bindVarNode ptr
->   else
->     bindUnify vptr ptr next
+> bindVar vptr var@(VarNode cs wq) ptr next = deref ptr >>= bindVarNode ptr
 >   where bindVarNode _ (IndirNode ptr) = deref ptr >>= bindVarNode ptr
->         bindVarNode ptr node@(VarNode cs2 wq2 space2) =
->           readState (isALocalSpace space2) >>= \so ->
->           if so then
->             do
->               updateState (saveBinding vptr var)
->               updateNode vptr (IndirNode ptr)
->               updateState (saveBinding ptr node)
->               updateNode ptr (VarNode [] (wq ++ wq2) space2)
->               checkConstraints ptr (cs ++ cs2) next
->           else if (null cs && null wq) then
+>         bindVarNode ptr node@(VarNode cs2 wq2) =
+>           do
+>             updateState (saveBinding vptr var)
+>             updateNode vptr (IndirNode ptr)
+>             updateState (saveBinding ptr node)
+>             updateNode ptr (VarNode [] (wq ++ wq2))
+>             checkConstraints ptr (cs ++ cs2) next
+>         bindVarNode ptr node@(GlobalVarNode _ _) =
+>           if null cs && null wq then
 >             do
 >               updateState (saveBinding vptr var)
 >               updateNode vptr (IndirNode ptr)
@@ -894,7 +860,7 @@ is always satisfied.
 The concurrent conjunction operator \texttt{\&} evaluates two
 constraints concurrently. It tries to avoid the creation of a
 new thread whenever this is possible. Note that the result of
-\texttt{\&} may still be an unbound variable.
+\texttt{\&} may be an unbound variable.
 \begin{verbatim}
 
 > concConjFunction :: Function
@@ -904,26 +870,41 @@ new thread whenever this is possible. Note that the result of
 > concConjCode =
 >   entry ["c1","c2"] $
 >   switch "c1"
->          [(LazyTag,suspension),(QueueMeTag,queueMe),(VariableTag,variable)]
+>          [(LazyTag,suspension),(QueueMeTag,queueMe),(VariableTag,variable),
+>           (GlobalAppTag,globalApp),(GlobalVarTag,variable)]
 >          (const (enter "c2"))
 >   where suspension ptr1 =
 >           switch "c2"
 >                  [(LazyTag,const (concurrent ptr1)),
 >                   (QueueMeTag,const sequential),
->                   (VariableTag,const sequential)]
+>                   (VariableTag,const sequential),
+>                   (GlobalAppTag,const (concurrent ptr1)),
+>                   (GlobalVarTag,const sequential)]
 >                  (const (enter "c1"))
 >         queueMe ptr1 =
 >           switch "c2"
 >                  [(LazyTag,const (flipArguments >> sequential)),
 >                   (QueueMeTag,const sequential),
->                   (VariableTag,const sequential)]
+>                   (VariableTag,const sequential),
+>                   (GlobalAppTag,const (flipArguments >> sequential)),
+>                   (GlobalVarTag,const sequential)]
 >                  (const (enter "c1"))
 >         variable ptr1 =
 >           switch "c2"
 >                  [(LazyTag,const (flipArguments >> sequential)),
 >                   (QueueMeTag,const (flipArguments >> sequential)),
->                   (VariableTag,wait ptr1)]
+>                   (VariableTag,wait ptr1),
+>                   (GlobalAppTag,const (flipArguments >> sequential)),
+>                   (GlobalVarTag,wait ptr1)]
 >                  (const (retNode ptr1))
+>         globalApp ptr1 =
+>           switch "c2"
+>                  [(LazyTag,const sequential),
+>                   (QueueMeTag,const sequential),
+>                   (VariableTag,const sequential),
+>                   (GlobalAppTag,const sequential),
+>                   (GlobalVarTag,const sequential)]
+>                  (const (enter "c1"))
 >         concurrent ptr1 =
 >           do
 >             updateState (interruptThread (flipArguments >> sequential))
@@ -935,7 +916,9 @@ new thread whenever this is possible. Note that the result of
 >           switch "_c1"
 >                  [(LazyTag,const (fail "This cannot happen")),
 >                   (QueueMeTag,const (fail "This cannot happen")),
->                   (VariableTag,variable)]
+>                   (VariableTag,variable),
+>                   (GlobalAppTag,const (fail "This cannot happen")),
+>                   (GlobalVarTag,variable)]
 >                  (const (enter "c2"))
 >         wait ptr1 ptr2 =
 >           do
@@ -953,9 +936,8 @@ Unification of two arbitrary arguments is a very complex process.
 Following the semantics, we have to ensure that both arguments are
 evaluated to weak head normal before we actually unify the arguments.
 When we have to unify two data constructors or a data constructor and
-a variable, we also have to start the unification of the data
-constructors' arguments, where these unifications can proceed
-concurrently.
+a variable, we also have to unify of the arguments of the data
+constructors, which can proceed concurrently.
 \begin{verbatim}
 
 > unifyFunction :: Function
@@ -981,31 +963,25 @@ concurrently.
 >     unifyNodes ptr1 node1 ptr2 node2
 
 > unifyNodes :: NodePtr -> Node -> NodePtr -> Node -> Instruction
-> unifyNodes ptr1 var1@(VarNode _ _ space1) ptr2 var2@(VarNode _ _ space2)
+> unifyNodes ptr1 var1@(VarNode _ _) ptr2 var2@(VarNode _ _)
 >   | ptr1 == ptr2 = unifySuccess
->   | otherwise =
->       readState (isALocalSpace space1) >>= \so ->
->       if so then
->         bindVar ptr1 var1 ptr2 unifySuccess
->       else
->         readState (isALocalSpace space2) >>= \so ->
->         if so then
->           bindVar ptr2 var2 ptr1 unifySuccess
->         else
->           suspendSearch ptr1 var1 (unifyTerms ptr1 ptr2)
-> unifyNodes ptr1 var@(VarNode _ _ space) ptr2 node =
->   readState (isALocalSpace space) >>= \so ->
->   if so then
->     occursCheck ptr1 node >>= \occurs ->
->     if occurs then
->       failAndBacktrack
->     else
->       do
->         (ptr',ptrs) <- freshTerm ptr2 node
->         bindVar ptr1 var ptr' (unifyArgs ptrs)
+>   | otherwise = bindVar ptr1 var1 ptr2 unifySuccess
+> unifyNodes ptr1 var1@(VarNode _ _) ptr2 var2@(GlobalVarNode _ _) =
+>   bindVar ptr1 var1 ptr2 unifySuccess
+> unifyNodes ptr1 var1@(GlobalVarNode _ _) ptr2 var2@(VarNode _ _) =
+>   bindVar ptr2 var2 ptr1 unifySuccess
+> unifyNodes ptr1 var1@(GlobalVarNode _ _) ptr2 var2@(GlobalVarNode _ _)
+>   | ptr1 == ptr2 = unifySuccess
+>   | otherwise = suspendSearch ptr1 var1 (unifyTerms ptr1 ptr2)
+> unifyNodes ptr1 var@(VarNode _ _) ptr2 node =
+>   occursCheck ptr1 node >>= \occurs ->
+>   if occurs then
+>     failAndBacktrack
 >   else
->     suspendSearch ptr1 var (unifyTerms ptr1 ptr2)
-> unifyNodes ptr1 node ptr2 var@(VarNode _ _ _) =
+>     do
+>       (ptr',ptrs) <- freshTerm ptr2 node
+>       bindVar ptr1 var ptr' (unifyArgs ptrs)
+> unifyNodes ptr1 node ptr2 var@(VarNode _ _) =
 >   unifyNodes ptr2 var ptr1 node
 > unifyNodes _ (CharNode c) _ (CharNode d)
 >   | c == d = unifySuccess
@@ -1097,7 +1073,7 @@ concurrently.
 \subsubsection{Disequality Constraints}
 Disequality constraints are implemented by the primitive function
 \texttt{=/=}. This function evaluates both arguments to head normal
-form, first. If one argument is a local variable node, the other
+form, first. If one argument is a (local) variable node, the other
 argument is evaluated to normal form and added as a constraint to the
 variable. Otherwise the tags of both arguments are compared and if
 they match the disequality is distributed over the arguments of the
@@ -1135,41 +1111,38 @@ for the disequality \texttt{(0:xs) =/= [0]}.}
 >     diseqNodes ptr1 node ptr2 node'
 
 > diseqNodes :: NodePtr -> Node -> NodePtr -> Node -> Instruction
-> diseqNodes ptr1 var1@(VarNode cs1 wq1 space1)
->            ptr2 var2@(VarNode cs2 wq2 space2)
+> diseqNodes ptr1 var1@(VarNode cs1 wq1) ptr2 var2@(VarNode cs2 wq2)
 >   | ptr1 == ptr2 = failAndBacktrack
 >   | otherwise =
->       readState (isALocalSpace space1) >>= \so ->
->       if so then
->         do
->           updateState (saveBinding ptr1 var1)
->           updateNode ptr1 (VarNode (DisEq ptr2 : cs1) wq1 space1)
->           diseqSuccess
->       else
->         readState (isALocalSpace space2) >>= \so ->
->         if so then
->           do
->             updateState (saveBinding ptr2 var2)
->             updateNode ptr1 (VarNode (DisEq ptr1 : cs2) wq2 space2)
->             diseqSuccess
->         else
->           suspendSearch ptr1 var1 (diseqTerms ptr1 ptr2)
-> diseqNodes ptr1 var@(VarNode cs wq space) ptr2 node =
->   readState (isALocalSpace space) >>= \so ->
->   if so then
->     occursCheck ptr1 node >>= \occurs ->
->     if occurs then
->       diseqSuccess
->     else
 >       do
->         updateState (saveBinding ptr1 var)
->         (ptr',ptrs) <- freshTerm ptr2 node
->         updateNode ptr1 (VarNode (DisEq ptr2 : cs) wq space)
->         -- force evaluation of arguments to data terms!
->         unifyArgs (map (\(_,ptr) -> (ptr,ptr)) ptrs)
+>         updateState (saveBinding ptr1 var1)
+>         updateNode ptr1 (VarNode (DisEq ptr2 : cs1) wq1)
+>         diseqSuccess
+> diseqNodes ptr1 var1@(VarNode cs1 wq1) ptr2 var2@(GlobalVarNode _ _) =
+>   do
+>     updateState (saveBinding ptr1 var1)
+>     updateNode ptr1 (VarNode (DisEq ptr2 : cs1) wq1)
+>     diseqSuccess
+> diseqNodes ptr1 var1@(GlobalVarNode _ _) ptr2 var2@(VarNode cs2 wq2) =
+>   do
+>     updateState (saveBinding ptr2 var2)
+>     updateNode ptr1 (VarNode (DisEq ptr1 : cs2) wq2)
+>     diseqSuccess
+> diseqNodes ptr1 var1@(GlobalVarNode _ _) ptr2 var2@(GlobalVarNode _ _)
+>   | ptr1 == ptr2 = failAndBacktrack
+>   | otherwise = suspendSearch ptr1 var1 (diseqTerms ptr1 ptr2)
+> diseqNodes ptr1 var@(VarNode cs wq) ptr2 node =
+>   occursCheck ptr1 node >>= \occurs ->
+>   if occurs then
+>     diseqSuccess
 >   else
->     suspendSearch ptr1 var (diseqTerms ptr1 ptr2)
-> diseqNodes ptr1 node ptr2 var@(VarNode _ _ _) =
+>     do
+>       updateState (saveBinding ptr1 var)
+>       (ptr',ptrs) <- freshTerm ptr2 node
+>       updateNode ptr1 (VarNode (DisEq ptr2 : cs) wq)
+>       -- force evaluation of arguments to data terms!
+>       unifyArgs (map (\(_,ptr) -> (ptr,ptr)) ptrs)
+> diseqNodes ptr1 node ptr2 var@(VarNode _ _) =
 >   diseqNodes ptr2 var ptr1 node
 > diseqNodes _ (CharNode c) _ (CharNode d)
 >   | c /= d = diseqSuccess
@@ -1225,25 +1198,17 @@ update frame.
 > pbUpdateCode :: Instruction
 > pbUpdateCode = read'updateState popNodes2 >>= uncurry update
 >   where update lptr ptr = deref lptr >>= updateLazy lptr ptr
->         updateLazy lptr ptr lazy@(LazyNode _ _ _ _ space) =
->           readState (isALocalSpace space) >>= \so ->
->           if so then
->             do
->               updateState (saveBinding lptr lazy)
->               updateNode lptr (IndirNode ptr)
->               success >>= retNode
->           else
->             fail "Attempt to update non-local lazy application node"
->         updateLazy lptr ptr lazy@(QueueMeNode wq space) =
->           readState (isALocalSpace space) >>= \so ->
->           if so then
->             do
->               updateState (saveBinding lptr lazy)
->               updateNode lptr (IndirNode ptr)
->               updateState (wakeThreads wq)
->               success >>= retNode
->           else
->             fail "Attempt to update non-local lazy application node"
+>         updateLazy lptr ptr lazy@(LazyNode _ _ _ _) =
+>           do
+>             updateState (saveBinding lptr lazy)
+>             updateNode lptr (IndirNode ptr)
+>             success >>= retNode
+>         updateLazy lptr ptr lazy@(QueueMeNode wq) =
+>           do
+>             updateState (saveBinding lptr lazy)
+>             updateNode lptr (IndirNode ptr)
+>             updateState (wakeThreads wq)
+>             success >>= retNode
 >         updateLazy _ ptr lazy@(IndirNode lptr) = update lptr ptr
 >         updateLazy _ _ _ = fail "Invalid pattern binding update"
 
@@ -1260,7 +1225,12 @@ The primitive function \texttt{try} starts the reduction of a search
 goal in a new local search space. After evaluating the argument to a
 closure (of arity 1), the code creates a new empty search space and an
 unbound (goal) variable, applies the search goal to that variable,
-and starts the reduction of this application.
+and starts the reduction of this application. All arguments of the
+closure are wrapped in global application nodes, since these nodes
+correspond to free variables of the search goal.
+
+\ToDo{Do not wrap atomic nodes at all and use global variable nodes
+  for all closure arguments which are in head normal form already.}
 \begin{verbatim}
 
 > tryFunction :: Function
@@ -1270,21 +1240,25 @@ and starts the reduction of this application.
 > tryCode =
 >   entry ["g"] $ seqStmts "_g" (enter "g")
 >               $ switchRigid "_g" [(ClosureTag,solve)]
->                             (const (fail "try: bad argument type!"))
+>               $ const (fail "try: bad argument type!")
 >   where solve ptr = deref ptr >>= solveNode
 >         solveNode goal =
 >           do
 >             space <- read'updateState newSearchSpace
->             goalVar <- read'updateState (allocNode (VarNode [] [] space))
->             goalApp <- applyGoal goal goalVar space
+>             goalVar <- read'updateState (allocNode (VarNode [] []))
+>             goalApp <- applyGoal goal goalVar
 >             updateState (pushSearchContext goalApp goalVar space)
 >             updateState newThread
 >             updateState (setVar "c" goalApp)
->             enter "c"
->         applyGoal (ClosureNode f n code ptrs) var space
+>             seqStmts "_c" (enter "c")
+>                      $ switchRigid "_c" [(successTag,retNode)]
+>                      $ const (fail "try: bad goal result type!")
+>         applyGoal (ClosureNode f n code ptrs) var
 >           | length ptrs + 1 == n =
->               read'updateState
->                 (allocNode (LazyNode f n code (ptrs ++ [var]) space))
+>               do
+>                 ptrs' <- globalArgs ptrs
+>                 read'updateState
+>                   (allocNode (LazyNode f n code (ptrs' ++ [var])))
 >           | otherwise = fail "try: invalid search goal"
 
 \end{verbatim}
@@ -1301,13 +1275,13 @@ returns an empty list.
 >     nil >>= retNode
 
 \end{verbatim}
-When the ready queue inside the encapsulated search becomes empty,
-this may be either due to the fact that goal has been successfully
-evaluated or because a deadlock has occurred. These cases can be
-distinguished by looking at the lazy application created for the goal.
-If it is in head normal form and ground, the goal has been solved. In
-this case, a singleton list containing a solved goal continuation is
-returned to the caller, otherwise the calling thread is suspended.
+When the ready queue becomes empty inside an encapsulated search, this
+may be either due to the goal being successfully evaluated or because
+a deadlock has occurred. These cases can be distinguished by looking
+at the lazy application created for the goal. If it is in head normal
+form and ground, the goal has been solved. In this case, a singleton
+list containing a solved goal continuation is returned to the caller,
+otherwise the calling thread is suspended.
 
 Because we cannot restore search continuations into an arbitrary
 search space, the value bound to the goal variable is copied into the
@@ -1325,12 +1299,8 @@ evaluated.
 >     (goalApp,goalVar) <- read'updateState popSearchContext
 >     node <- derefPtr goalApp >>= deref
 >     case node of
->       LazyNode _ _ _ _ _ -> fail "Search goal not locked!"
->       QueueMeNode _ _ ->
->         do
->           readState (suspendThread undefined)
->           switchContext
->       VarNode _ _ _ ->
+>       LazyNode _ _ _ _ -> fail "Search goal not locked!"
+>       QueueMeNode _ ->
 >         do
 >           readState (suspendThread undefined)
 >           switchContext
@@ -1348,12 +1318,7 @@ evaluated.
 >             arg <- read'updateState popNode
 >             node <- deref arg
 >             case node of
->               VarNode _ _ space ->
->                 readState (isALocalSpace space) >>= \so ->
->                 if so then
->                   bindVar arg node solution successCode
->                 else
->                   unify arg solution
+>               VarNode _ _ -> bindVar arg node solution successCode
 >               _ -> unify arg solution
 >         unify arg solution =
 >           do
@@ -1401,12 +1366,8 @@ continuation for each alternative is returned from \texttt{try}.
 >                   arg <- read'updateState popNode
 >                   node <- deref arg
 >                   case node of
->                     VarNode _ _ space ->
->                       readState (isALocalSpace space) >>= \so ->
->                       if so then
->                         bindVar arg node goalVar (continueGoal goalApp)
->                       else
->                         unify arg goalVar (continueGoal goalApp)
+>                     VarNode _ _ ->
+>                       bindVar arg node goalVar (continueGoal goalApp)
 >                     _ -> unify arg goalVar (continueGoal goalApp)
 >               else
 >                 fail "Cannot restore search continuation in non-root space"
@@ -1422,15 +1383,15 @@ continuation for each alternative is returned from \texttt{try}.
 >             enter "c"
 
 \end{verbatim}
-When the search goal was solved, the solution of the goal is copied
-into the current search space using \texttt{copyGraph}. We must be
-careful to preserve the sharing of variable nodes when they are
-copied. In addition, we must copy only local variables. The same would
-hold for unevaluated lazy applications. However, the result bound to
-the goal variable cannot contain any unevaluated applications. In
-order to preserve the sharing of local variables, every copied
-variable is temporarily bound to its copy. This binding is recorded on
-the trail and is undone after the graph has been copied.
+When a search goal was solved, the solution of the goal is copied into
+the current search space using \texttt{copyGraph}. We must be careful
+to preserve the sharing of variable nodes when they are copied. In
+addition, we must copy only local variables. The same would hold for
+unevaluated lazy applications. However, the result bound to the goal
+variable cannot contain any unevaluated applications. In order to
+preserve the sharing of local variables, every copied variable is
+temporarily bound to its copy. This binding is recorded on the trail
+and is undone after the graph has been copied.
 
 Note that we use a temporary search context here to be able to undo
 the bindings performed during copying.
@@ -1454,40 +1415,41 @@ the bindings performed during copying.
 >                 args' <- mapM (copy goalSpace curSpace) args
 >                 read'updateState
 >                   (allocNode (ConstructorNode tag cName args'))
->         copyNode goalSpace curSpace ptr var@(VarNode cs wq space) =
->           space `isLocalSpaceOf` goalSpace >>= \so ->
->           if so then
->             if null wq then
->               do
->                 cs' <- mapM (copyConstraint goalSpace curSpace) cs
->                 ptr' <-
->                   read'updateState (allocNode (VarNode cs' [] curSpace))
->                 updateState (saveBinding ptr var)
->                 updateNode ptr (IndirNode ptr')
->                 return ptr'
->             else
->               fail "cannot copy variable with non-empty waitlist"
+>         copyNode goalSpace curSpace ptr var@(VarNode cs wq) =
+>           if null wq then
+>             do
+>               cs' <- mapM (copyConstraint goalSpace curSpace) cs
+>               ptr' <- read'updateState (allocNode (VarNode cs' []))
+>               updateState (saveBinding ptr var)
+>               updateNode ptr (IndirNode ptr')
+>               return ptr'
 >           else
->             return ptr
+>             fail "cannot copy variable with non-empty waitlist"
 >         copyNode goalSpace curSpace ptr (ClosureNode name arity code args)
 >           | not (null args) =
 >               do
 >                 args' <- mapM (copy goalSpace curSpace) args
 >                 read'updateState
 >                   (allocNode (ClosureNode name arity code args'))
->         copyNode _ _ _ (LazyNode _ _ _ _ _) =
+>         copyNode _ _ _ (LazyNode _ _ _ _) =
 >           fail "cannot copy unevaluated lazy application node"
->         copyNode _ _ _ (QueueMeNode _ _) =
+>         copyNode _ _ _ (QueueMeNode _) =
 >           fail "cannot copy locked lazy application node"
 >         copyNode goalSpace curSpace ptr (IndirNode ptr') =
 >           copy goalSpace curSpace ptr'
+>         copyNode goalSpace curSpace ptr (GlobalAppNode ptr' space) =
+>           space `isLocalSpaceOf` curSpace >>= \so ->
+>           return (if so then ptr' else ptr)
+>         copyNode goalSpace curSpace ptr (GlobalVarNode ptr' space) =
+>           space `isLocalSpaceOf` curSpace >>= \so ->
+>           return (if so then ptr' else ptr)
 >         copyNode _ _ ptr _ = return ptr
 >         copyConstraint goalSpace curSpace (DisEq ptr) =
 >           liftM DisEq (copy goalSpace curSpace ptr)
 
 \end{verbatim}
-Inside an encapsulated search, non-local variables must not be bound
-and non-local lazy applications must not be evaluated. Otherwise,
+Inside an encapsulated search, free variables of the search goal must
+not be bound nor evaluated within the encapsulated search. Otherwise,
 the program could become unsound. For instance, consider the program
 \begin{verbatim}
   coin = 0
@@ -1497,38 +1459,94 @@ the program could become unsound. For instance, consider the program
 If \texttt{x} were evaluated in the local search space, either the
 global choicepoint for the evaluation of \texttt{coin} would be lost
 (because it occurs inside the encapsulated search), or the pair
-\texttt{(0,[0,1])} would be computed. For that reason, an
-encapsulated search and its calling thread are suspended until a
-non-local variable is instantiated and a non-local lazy application is
-evaluated outside the local search space, respectively.
+\texttt{(0,[0,1])} would be computed. For that reason, all free
+variables are wrapped in global application and gloal variable nodes
+and the current search is suspended when a global application node
+must be evaluted or a global variable node is matched. After the
+application has been evaluated or the variable has been instantiated,
+the global reference node is overwritten with a shallow copy of the
+result or bound variable whose arguments are wrapped in global
+application nodes. If the result of evaluating a global application is
+an unbound logical variable, a global variable node is returned
+instead.
+
+\ToDo{Do not wrap atomic arguments at all and use global variable
+  nodes for all arguments which are in head normal form already.}
 \begin{verbatim}
 
 > suspendSearch :: NodePtr -> Node -> Instruction -> Instruction
 > suspendSearch ptr node next =
 >   do
+>     assertGlobalRef node
 >     updateState (interruptThread next)
 >     cont <- readState saveContinuation
 >     space <- read'updateState saveSearchSpace
 >     (goalApp,goalVar) <- read'updateState popSearchContext
->     updateState (pushCont (resumeSearch goalApp goalVar cont space))
+>     updateState (pushCont (resumeSearch ptr goalApp goalVar cont space))
 >     updateState initEnv
->     updateState (setVar "x" ptr)
->     suspend node
->   where suspend (VarNode _ _ _) = switchRigid "x" [] retNode
->         suspend (LazyNode _ _ _ _ _) = enter "x"
->         suspend (QueueMeNode _ _) = enter "x"
->         suspend _ = fail "Bad node in suspendSearch"
+>     suspend ptr node
+>   where assertGlobalRef (GlobalAppNode _ space) =
+>           readState (isALocalSpace space) >>= \so ->
+>           when so (fail "suspendSearch: global application is not global")
+>         assertGlobalRef (GlobalVarNode _ space) =
+>           readState (isALocalSpace space) >>= \so ->
+>           when so (fail "suspendSearch: Global variable is not global")
+>         assertGlobalRef _ = fail "suspendSearch: Not a global reference"
+>         suspend ptr node@(GlobalAppNode ptr' space) =
+>           readState (isALocalSpace space) >>= \so ->
+>           if so then
+>             updateState (setVar "x" ptr') >> enter "x"
+>           else
+>             suspendSearch ptr node (retNode ptr)
+>         suspend ptr node@(GlobalVarNode ptr' space) =
+>           readState (isALocalSpace space) >>= \so ->
+>           if so then
+>             updateState (setVar "x" ptr') >> switchRigid "x" [] retNode
+>           else
+>             suspendSearch ptr node (retNode ptr)
 
 > resumeSearch ::
->     NodePtr -> NodePtr -> ThreadQueue -> SearchSpace -> Instruction
-> resumeSearch goalApp goalVar cont space =
+>     NodePtr -> NodePtr -> NodePtr -> ThreadQueue -> SearchSpace -> Instruction
+> resumeSearch gptr goalApp goalVar cont space =
 >   do
->     read'updateState popNode
+>     ptr <- read'updateState popNode
+>     deref gptr >>= updateState . saveBinding gptr
+>     deref ptr >>= globalNode ptr >>= updateNode gptr
 >     space' <- read'updateState newSearchSpace
 >     updateState (pushSearchContext goalApp goalVar space')
 >     updateState (restoreSearchSpace space)
 >     updateState (resumeContinuation cont)
 >     switchContext
+>   where globalNode ptr (CharNode _) = return (IndirNode ptr)
+>         globalNode ptr (IntNode _) = return (IndirNode ptr)
+>         globalNode ptr (FloatNode _) = return (IndirNode ptr)
+>         globalNode _ (ConstructorNode t c ptrs) =
+>           do
+>             ptrs' <- globalArgs ptrs
+>             ptr <- read'updateState (allocNode (ConstructorNode t c ptrs'))
+>             return (IndirNode ptr)
+>         globalNode ptr (VarNode _ _) =
+>           readState curSpace >>= return . GlobalVarNode ptr
+>         globalNode _ (ClosureNode f n code ptrs)
+>           | length ptrs < n =
+>               do
+>                 ptrs' <- globalArgs ptrs
+>                 ptr <-
+>                   read'updateState (allocNode (ClosureNode f n code ptrs'))
+>                 return (IndirNode ptr)
+>         globalNode _ (IndirNode ptr) = deref ptr >>= globalNode ptr
+>         globalNode ptr (SearchContinuation _ _ _ _) = return (IndirNode ptr)
+>         globalNode _ (GlobalAppNode ptr space) =
+>           return (GlobalAppNode ptr space)
+>         globalNode _ (GlobalVarNode ptr space) =
+>           return (GlobalVarNode ptr space)
+>         globalNode _ _ = fail "resumeSearch: non-hnf result"
+
+> globalArgs :: [NodePtr] -> MachStateT [NodePtr]
+> globalArgs ptrs =
+>   do
+>     space <- readState curSpace
+>     mapM (\ptr -> read'updateState (allocNode (GlobalAppNode ptr space))) ptrs
 
 \end{verbatim}
 \subsubsection{Monadic I/O Operations}

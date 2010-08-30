@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachLoader.lhs 3000 2010-08-30 19:33:17Z wlux $
+% $Id: MachLoader.lhs 3002 2010-08-30 19:41:06Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -47,7 +47,7 @@ to the functions.
 > function = lookupEnv
 
 \end{verbatim}
-In the translation of the statements, we provide the possibility to
+As part of the translation of statements, we provide the option to
 instrument the code, e.g., for tracing purposes. The optional
 instrumenting function is inserted before each statement. Note the use
 of a circular environment to lookup function names. This is necessary
@@ -174,21 +174,24 @@ argument function passed to \texttt{traceStack}.
 >           putStr ("data@" ++ show adr) >>
 >           when (d > 0)
 >                (putStr ('(' : name) >> dumpArgs (d-1) args >> putChar ')')
->         dumpNode d adr (VarNode cs wq space) =
->           putStr ("var@" ++ show adr ++ showSpace space)
+>         dumpNode d adr (VarNode cs wq) = putStr ("var@" ++ show adr)
 >         dumpNode d adr (ClosureNode name _ _ args) =
 >           putStr ("clos@" ++ show adr) >>
 >           when (d > 0)
 >                (putStr ('(' : name) >> dumpArgs (d-1) args >> putChar ')')
->         dumpNode d adr (LazyNode name _ _ args space) =
+>         dumpNode d adr (LazyNode name _ _ args) =
 >           putStr ("lazy@" ++ show adr) >>
 >           when (d > 0)
->                (putStr ('(' : name) >> dumpArgs (d-1) args >> putChar ')') >>
->           putStr (showSpace space)
->         dumpNode d adr (QueueMeNode wq space) =
->           putStr ("lock@" ++ show adr ++ showSpace space)
+>                (putStr ('(' : name) >> dumpArgs (d-1) args >> putChar ')')
+>         dumpNode d adr (QueueMeNode wq) = putStr ("lock@" ++ show adr)
 >         dumpNode d adr (IndirNode ptr) =
 >           putStr ("indir@" ++ show adr) >>
+>           when (d > 0) (putChar '(' >> dumpPtr (d-1) ptr >> putChar ')')
+>         dumpNode d adr (GlobalAppNode ptr space) =
+>           putStr ("gapp@" ++ show adr ++ showSpace space) >>
+>           when (d > 0) (putChar '(' >> dumpPtr (d-1) ptr >> putChar ')')
+>         dumpNode d adr (GlobalVarNode ptr space) =
+>           putStr ("gvar@" ++ show adr ++ showSpace space) >>
 >           when (d > 0) (putChar '(' >> dumpPtr (d-1) ptr >> putChar ')')
 >         dumpNode d adr (SearchContinuation _ _ _ _) =
 >           putStr ("cont@" ++ show adr)
@@ -286,7 +289,7 @@ names to node tags and function names to function triples.
 >         tupleArity ('P':'r':'e':'l':'u':'d':'e':'.':'(':cs) = length cs
 
 \end{verbatim}
-The environment holding the \verb|ccall|able primitives does not change.
+The environment holding the \verb|ccall|able primitives is fixed.
 \begin{verbatim}
 
 > primEnv :: PrimEnv

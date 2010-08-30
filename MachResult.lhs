@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: MachResult.lhs 1889 2006-04-06 16:55:47Z wlux $
+% $Id: MachResult.lhs 3002 2010-08-30 19:41:06Z wlux $
 %
-% Copyright (c) 1998-2006, Wolfgang Lux
+% Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{MachResult.lhs}
@@ -9,11 +9,11 @@
 When we construct the answer expression from the final state of the
 computation, all (free) variables are given unique names. For the
 global free variables, these are the names which where specified at
-the program startup. The other variables are assigned fresh names. For
-the answer part of the result, we will consider only those variables
-which have been bound to some value (even if it is another unbound
-variable). As a side effect, the process shown below constructs the
-list of variables used in the answer expression.
+program startup. The other variables are assigned fresh names. For the
+answer part of the result, we will consider only those variables which
+have been bound to some value (even if it is another variable). As a
+side effect, the process shown below constructs the list of variables
+used in the answer expression.
 \begin{verbatim}
 
 > module MachResult where
@@ -67,16 +67,20 @@ list of variables used in the answer expression.
 >           Nothing -> liftM showsList (browseList names args)
 >   | otherwise = liftM (showsTerm p name) (mapM (browseArg names) args)
 >   where ConstructorTag _ cons _ = consTag
-> browseExpression p names adr (VarNode _ _ _) =
+> browseExpression p names adr (VarNode _ _) =
 >   liftM showString (varName names adr)
 > browseExpression p names adr (ClosureNode name _ _ args) =
 >   liftM (showsTerm p name) (mapM (browseArg names) args)
-> browseExpression p names adr (LazyNode name arity code args _) =
+> browseExpression p names adr (LazyNode name arity code args) =
 >   browseExpression p names adr (ClosureNode name arity code args)
-> browseExpression p names adr (QueueMeNode _ _) =
+> browseExpression p names adr (QueueMeNode _) =
 >   return (showString "Suspended")
-> browseExpression p names adr (IndirNode (Ptr adr' ref)) =
->   readRef ref >>= browseExpression p names adr'
+> browseExpression p names _ (IndirNode (Ptr adr ref)) =
+>   readRef ref >>= browseExpression p names adr
+> browseExpression p names _ (GlobalAppNode (Ptr adr ref) _) =
+>   readRef ref >>= browseExpression p names adr
+> browseExpression p names _ (GlobalVarNode (Ptr adr ref) _) =
+>   readRef ref >>= browseExpression p names adr
 > browseExpression p names adr (SearchContinuation _ _ _ _) =
 >   return (showString "<search>")
 
@@ -143,7 +147,7 @@ list of variables used in the answer expression.
 >   mapM readVar freeVars >>= mapM (browseSubst names) . filter isBound
 >   where readVar (name,Ptr adr ref) =
 >           readRef ref >>= \node -> return (name,adr,node)
->         isBound (_,_,VarNode _ _ _) = False
+>         isBound (_,_,VarNode _ _) = False
 >         isBound _ = True
 
 > browseSubst :: [String] -> (String,Integer,Node) -> BrowseState ShowS
@@ -158,7 +162,7 @@ list of variables used in the answer expression.
 >   mapM (browseConstraint names) . concat
 >   where constraints (Ptr adr ref) =
 >           varName names adr >>= \name ->
->           readRef ref >>= \(VarNode cs _ _) ->
+>           readRef ref >>= \(VarNode cs _) ->
 >           return [(name,c) | c <- cs]
 
 > browseConstraint :: [String] -> (String,Constraint) -> BrowseState ShowS
@@ -171,12 +175,12 @@ list of variables used in the answer expression.
 >   readRef ref >>= \node ->
 >   case node of
 >     ConstructorNode _ _ args -> foldM constrainedVars vars args
->     VarNode cstrs _ _
+>     VarNode cstrs _
 >       | ptr `notElemSet` vars && not (null cstrs) ->
 >           foldM constrainedVars (addToSet ptr vars) [ptr | DisEq ptr <- cstrs]
 >       | otherwise -> return vars
 >     ClosureNode _ _ _ args -> foldM constrainedVars vars args
->     LazyNode _ _ _ args _ -> foldM constrainedVars vars args
+>     LazyNode _ _ _ args -> foldM constrainedVars vars args
 >     IndirNode ptr -> constrainedVars vars ptr
 >     _ -> return vars
 
@@ -222,7 +226,7 @@ returned and the list of known addresses may be updated. The function
 \end{verbatim}
 The list of variable names is initialized with the names of the global
 variables, followed by a supply of generated names. This generator
-is just a copy of the function used to generate fresh variables names
+is just a copy of the function used to generate fresh variable names
 in the interpreter \ToDo{So they should probably be joined into a
 single utility function}. Note that we use lowercase letters for
 variable names here, too.

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: MachTypes.lhs 2691 2008-05-01 22:08:36Z wlux $
+% $Id: MachTypes.lhs 3002 2010-08-30 19:41:06Z wlux $
 %
-% Copyright (c) 1998-2008, Wolfgang Lux
+% Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \subsection{Basic Types}
@@ -43,8 +43,8 @@ derivable.}
 
 In order to implement the heap we use mutable references, which are
 provided by most Haskell implementations. Every node allocated in the
-heap is also assigned an ``address''. We use a simple counter for that
-purpose.
+heap is also assigned an ``address''. We use a simple allocation
+counter for that purpose, which is part of the machine's state.
 \subsubsection{Functions}
 A function is described by its name, entry point, and arity.
 \begin{verbatim}
@@ -56,23 +56,14 @@ A function is described by its name, entry point, and arity.
 The heap contains nodes which are used to build a graph corresponding
 to the final result of the goal being evaluated.
 
-Integer and floating-point numbers are represented by the
-corresponding cases in the \texttt{Node} type and consists of the
-number's value.
+Integer and floating-point numbers are represented by the respective
+cases of the \texttt{Node} type and comprise only the number's value.
 
-A variable node represents an unbound variable. It has three fields,
-the first contains a list of constraints for the variable, the second
-contains the list of threads that have been delayed for that variable,
-and the third contains the search space in which the variable was
-created. Once the variable is instantiated the node will be
-overwritten destructively.
-
-Indirection nodes are used when a variable or a lazy application node
-is overwritten in order to preserve the sharing of nodes. An
-indirection node solely consists of a pointer to the new node.
-
-Partial applications nodes represent partial applications of data
-constructors and functions.
+A variable node represents an unbound variable and has two fields. The
+first field holds a list of constraints for the variable and the
+second holds the list of threads that are blocked by the variable.
+Once the variable is instantiated the node is overwritten
+destructively.
 
 Closure and lazy application nodes represent functions and their
 applications. A plain function corresponds to a closure node without
@@ -80,33 +71,50 @@ arguments. A closure node consists of the code to be executed for the
 function, the arity, and the list of arguments to which the function
 has been applied. In addition, the name of the function is included in
 order to make the output more readable. Besides that it has no
-semantic meaning.
+semantic meaning. In contrast to closure nodes, lazy application nodes
+are overwritten with their result after they have been
+evaluated.
 
-In contrast to closure nodes, lazy application nodes are overwritten
-with their result after they have been evaluated. In addition to the
-fields of a closure node, lazy application nodes also include the
-search space in which the node was constructed.
+Partial applications of functions are represented by closure nodes as
+well using fewer arguments than the function's arity. Partial
+applications of data constructors cannot be represented directly.
+However, when a program is loaded an auxiliary function with the same
+name is implicitly defined for each data constructor for this purpose.
 
 In order to prevent multiple threads from evaluating the same
 application, lazy application nodes are overwritten by a queue-me node
 when a thread starts their evaluation. A wait queue similar to
-variable nodes is used to collect the threads that have been delayed
-on this node. Once evaluation of a lazy application completes
-successfully, the queue-me node is overwritten by the result of the
-evaluation.
+variable nodes is used to collect the threads that wait for the
+application's result becoming available. Once evaluation of a lazy
+application completes successfully, the queue-me node is overwritten
+with (an indirection pointing to) the result of the application.
 
-Search continuation nodes are used to represent the alternative
-continuations returned by the \texttt{try} operator. A search
-continuation saves the goal application and variable of the goal being
-evaluated. In addition, the state of all local threads and the
-corresponding search space are saved in this node.
+Indirection nodes are used when a variable or a lazy application node
+is overwritten in order to preserve the sharing of nodes. An
+indirection node solely consists of a pointer to the new node.
+
+Global application and global variable nodes represent (possibly
+unevaluated) applications and (possible unbound) logical variables,
+respectively, that are passed as free variables to search goals. These
+global reference nodes combine a pointer to the referenced node and
+the search space in which that node is defined. \\
+\textbf{Invariant:} \emph{The interpreter maintains the invariant that
+  the search space field of a global reference node to which a search
+  goal has direct access never refers to the goal's local search
+  space.}
+
+Search continuation nodes represent the alternative continuations
+returned by an encapsulated search. A search continuation saves the
+goal application and variable of the goal being evaluated. In
+addition, the state of all local threads and the corresponding search
+space are saved.
 \begin{verbatim}
 
 > data NodeTag =
 >     CharTag Char | IntTag Integer | FloatTag Double
 >   | ConstructorTag Int String Int | VariableTag
 >   | ClosureTag | LazyTag | QueueMeTag
->   | IndirTag | SearchTag
+>   | IndirTag | GlobalAppTag | GlobalVarTag | SearchTag
 >   deriving Show
 > instance Eq NodeTag where
 >   CharTag c == CharTag d = c == d
@@ -118,17 +126,21 @@ corresponding search space are saved in this node.
 >   LazyTag == LazyTag = True
 >   QueueMeTag == QueueMeTag = True
 >   IndirTag == IndirTag = True
+>   GlobalAppTag == GlobalAppTag = True
+>   GlobalVarTag == GlobalVarTag = True
 >   SearchTag == SearchTag = True
 >   _ == _ = False
 
 > data Node =
 >     CharNode Char | IntNode Integer | FloatNode Double
 >   | ConstructorNode Int String [NodePtr]
->   | VarNode [Constraint] ThreadQueue SearchSpace
+>   | VarNode [Constraint] ThreadQueue
 >   | ClosureNode String Int Instruction [NodePtr]
->   | LazyNode String Int Instruction [NodePtr] SearchSpace
->   | QueueMeNode ThreadQueue SearchSpace
+>   | LazyNode String Int Instruction [NodePtr]
+>   | QueueMeNode ThreadQueue
 >   | IndirNode NodePtr
+>   | GlobalAppNode NodePtr SearchSpace
+>   | GlobalVarNode NodePtr SearchSpace
 >   | SearchContinuation NodePtr NodePtr ThreadQueue SearchSpace
 
 > instance Show Node where
@@ -141,28 +153,31 @@ corresponding search space are saved in this node.
 >   showsPrec p (ConstructorNode tag name args) = showParen (p >= 10) $
 >     showString "ConstructorNode " . shows tag . showChar ' ' .
 >       showString name . flip (foldr showArg) args
->     where showArg arg = showChar ' ' . showsPrec 1 arg
->   showsPrec p (VarNode constraints waitqueue space) = showParen (p >= 10) $
->     showString "VarNode " . showsPrec 1 constraints . showChar ' ' .
->       showsPrec 1 waitqueue . showChar ' ' . showsPrec 1 space
+>     where showArg arg = showChar ' ' . shows arg
+>   showsPrec p (VarNode constraints waitqueue) = showParen (p >= 10) $
+>     showString "VarNode " . shows constraints . showChar ' ' . shows waitqueue
 >   showsPrec p (ClosureNode name arity code args) = showParen (p >= 10) $
 >     showString "ClosureNode " . showString name . showChar ' ' .
 >       shows arity . flip (foldr showArg) args
->     where showArg arg = showChar ' ' . showsPrec 1 arg
->   showsPrec p (LazyNode name arity code args space) = showParen (p >= 10) $
+>     where showArg arg = showChar ' ' . shows arg
+>   showsPrec p (LazyNode name arity code args) = showParen (p >= 10) $
 >     showString "LazyNode " . showString name . showChar ' ' .
->       shows arity . flip (foldr showArg) args . showChar ' ' .
->         showsPrec 1 space
->     where showArg arg = showChar ' ' . showsPrec 1 arg
->   showsPrec p (QueueMeNode waitqueue space) = showParen (p >= 10) $
->     showString "QueueMeNode " . showsPrec 1 waitqueue . showChar ' ' .
->       showsPrec 1 space
+>       shows arity . flip (foldr showArg) args
+>     where showArg arg = showChar ' ' . shows arg
+>   showsPrec p (QueueMeNode waitqueue) =
+>     showParen (p >= 10) $ showString "QueueMeNode " . shows waitqueue
 >   showsPrec p (IndirNode ptr) =
->     showParen (p >= 10) $ showString "IndirNode " . showsPrec 1 ptr
+>     showParen (p >= 10) $ showString "IndirNode " . shows ptr
+>   showsPrec p (GlobalAppNode ptr space) = showParen (p >= 10) $
+>     showString "GlobalAppNode " . shows ptr . showChar ' ' .
+>       showsPrec 10 space
+>   showsPrec p (GlobalVarNode ptr space) = showParen (p >= 10) $
+>     showString "GlobalVarNode " . shows ptr . showChar ' ' .
+>       showsPrec 10 space
 >   showsPrec p (SearchContinuation app var rq space) = showParen (p >= 10) $
->     showString "SearchContinuation " . showsPrec 1 app . showChar ' ' .
->       showsPrec 1 var . showChar ' ' . showsPrec 1 rq . showChar ' ' .
->         showsPrec 1 space
+>     showString "SearchContinuation " . shows app . showChar ' ' .
+>       shows var . showChar ' ' . shows rq . showChar ' ' .
+>         showsPrec 10 space
 
 > data NodePtr = Ptr Integer (Ref Node)
 > instance Eq NodePtr where
@@ -177,11 +192,13 @@ corresponding search space are saved in this node.
 > nodeTag (IntNode i) = IntTag i
 > nodeTag (FloatNode f) = FloatTag f
 > nodeTag (ConstructorNode t c xs) = ConstructorTag t c (length xs)
-> nodeTag (VarNode _ _ _) = VariableTag
+> nodeTag (VarNode _ _) = VariableTag
 > nodeTag (ClosureNode _ _ _ _) = ClosureTag
-> nodeTag (LazyNode _ _ _ _ _) = LazyTag
-> nodeTag (QueueMeNode _ _) = QueueMeTag
+> nodeTag (LazyNode _ _ _ _) = LazyTag
+> nodeTag (QueueMeNode _) = QueueMeTag
 > nodeTag (IndirNode _) = IndirTag
+> nodeTag (GlobalAppNode _ _) = GlobalAppTag
+> nodeTag (GlobalVarNode _ _) = GlobalVarTag
 > nodeTag (SearchContinuation _ _ _ _) = SearchTag
 
 > nilTag, consTag, unitTag, successTag :: NodeTag

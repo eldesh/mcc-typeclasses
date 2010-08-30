@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CPS.lhs 2996 2010-08-30 19:14:25Z wlux $
+% $Id: CPS.lhs 2997 2010-08-30 19:16:14Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -74,7 +74,7 @@ arguments with a \texttt{CPSLetPapp} statement.
 
 > data CPSFunction = CPSFunction Name [Name] CPSStmt deriving Show
 > data CPSContinuation =
->   CPSContinuation Name Int [Name] [Name] CPSCont CPSStmt
+>   CPSContinuation Name Int [Name] [Name] CPSStmt
 >   deriving Show
 > data CPSStmt =
 >     CPSFail
@@ -111,16 +111,17 @@ arguments with a \texttt{CPSLetPapp} statement.
 
 > cpsFunction :: Name -> [Name] -> Stmt -> CPSFunction
 > cpsFunction f vs st
->   | null (filter (`notElem` vs) (nub (freeVars st))) = CPSFunction f vs st'
+>   | null ws = CPSFunction f vs st'
 >   | otherwise = error ("internal error: cpsFunction " ++ demangle f)
->   where (_,st') = cpsStmt f Nothing (True,CPSReturn) 1 st
+>   where ws = filter (`notElem` vs) (freeVars st CPSReturn)
+>         (_,st') = cpsStmt f Nothing (True,CPSReturn) 1 st
 
 > cpsApply :: Name -> [Name] -> CPSFunction
 > cpsApply f (v:vs) =
 >   CPSFunction f (v:vs) $
->   CPSLetCont k (CPSExec (CPSPrim (CPSEval False v)) k' [v])
->   where k = CPSContinuation f 1 [v] vs CPSReturn (CPSSwitchArity v cases)
->         k' = cpsCont k
+>   CPSLetCont f' (CPSExec (CPSPrim (CPSEval False v)) k' [v])
+>   where f' = CPSContinuation f 1 [v] vs (CPSSwitchArity v cases)
+>         k' = cpsCont f'
 >         cases =
 >           cpsRigidCase k' v :
 >           [CPSExecCont (apply v i vs CPSReturn) [v] | i <- [1..length vs]] ++
@@ -134,12 +135,12 @@ arguments with a \texttt{CPSLetPapp} statement.
 
 > cpsInst :: Name -> Name -> Tag -> CPSContinuation
 > cpsInst f v t =
->   CPSContinuation f 0 [] [v] CPSReturn $
+>   CPSContinuation f 0 [] [v] $
 >   foldr (CPSLet . return) (CPSExec (CPSPrim CPSUnify) CPSReturn [v,tmp])
 >         (cpsFresh tmp t)
 
 > cpsCont :: CPSContinuation -> CPSCont
-> cpsCont (CPSContinuation f n _ ws k _) = CPSCont f n ws k
+> cpsCont (CPSContinuation f n _ ws _) = CPSCont f n ws CPSReturn
 
 \end{verbatim}
 The transformation into CPS code is implemented by a top-down
@@ -173,8 +174,8 @@ does not need to construct separate closures for each of them.
 > cps :: Name -> (Bool,CPSCont) -> [Name] -> Int -> Stmt
 >     -> (Int,CPSContinuation)
 > cps f k vs n st = (n',f')
->   where f' = CPSContinuation f n vs ws (snd k) st'
->         ws = filter (`notElem` vs) (nub (freeVars st))
+>   where f' = CPSContinuation f n vs ws st'
+>         ws = filter (`notElem` vs) (freeVars st (snd k))
 >         (n',st') = cpsStmt f (Just (cpsCont f')) k (n + 1) st
 
 > cpsCase :: Name -> (Bool,CPSCont) -> Int -> Case -> (Int,CaseBlock)
@@ -204,13 +205,12 @@ does not need to construct separate closures for each of them.
 >       where (n',st2') = cpsStmt f Nothing k n st2
 >     v :<- CCall _ ty cc -> (n',CPSLetC (BindC v ty cc) st2')
 >       where (n',st2') = cpsStmt f Nothing k n st2
->     v :<- st -> (n'',CPSLetCont k' st1')
->       where (n',st1') = cpsStmt f k0 (tagged k',cpsCont k') n st
->             (n'',k') = cps f k [v] n' st2
->             tagged (CPSContinuation _ _ vs _ _ (CPSSwitch tagged v _)) =
+>     v :<- st -> (n'',CPSLetCont f' st1')
+>       where (n',st1') = cpsStmt f k0 (tagged f',cpsCont f') n st
+>             (n'',f') = cps f k [v] n' st2
+>             tagged (CPSContinuation _ _ vs _ (CPSSwitch tagged v _)) =
 >               vs /= [v] || tagged
->             tagged (CPSContinuation _ _ vs _ _ (CPSSwitchArity v _)) =
->               vs /= [v]
+>             tagged (CPSContinuation _ _ vs _ (CPSSwitchArity v _)) = vs /= [v]
 >             tagged _ = True
 >     Let ds -> (n',foldr CPSLet st2' (scc bound free ds))
 >       where (n',st2') = cpsStmt f Nothing k n st2
@@ -224,17 +224,16 @@ does not need to construct separate closures for each of them.
 >     [st] -> cpsStmt f k0 k n st
 >     _ -> (n',foldr CPSLetCont (CPSChoice Nothing (map cpsCont ks')) ks')
 >   where (n',ks) = mapAccumL (cps f k []) n alts
->         ks' = map (updEnv (nub (freeVars (Choices alts)))) ks
->         updEnv ws (CPSContinuation f n vs _ k st) =
->           CPSContinuation f n vs ws k st
+>         ks' = map (updEnv (freeVars (Choices alts) (snd k))) ks
+>         updEnv ws (CPSContinuation f n vs _ st) = CPSContinuation f n vs ws st
 
 > cpsJumpSwitch :: Name -> (Bool,CPSCont) -> Int -> RF -> Name -> [Case]
 >               -> (Int,CPSStmt)
-> cpsJumpSwitch f k n rf v cases = (n',CPSLetCont k' (CPSExecCont k'' [v]))
->   where k' = CPSContinuation f n [v] ws (snd k) st'
->         k'' = cpsCont k'
->         ws = filter (v /=) (nub (freeVars (Switch rf v cases)))
->         (n',st') = cpsSwitch f k'' k (n + 1) rf v cases
+> cpsJumpSwitch f k n rf v cases = (n',CPSLetCont f' (CPSExecCont k' [v]))
+>   where f' = CPSContinuation f n [v] ws st'
+>         k' = cpsCont f'
+>         ws = filter (v /=) (freeVars (Switch rf v cases) (snd k))
+>         (n',st') = cpsSwitch f k' k (n + 1) rf v cases
 
 > cpsSwitch :: Name -> CPSCont -> (Bool,CPSCont) -> Int -> RF -> Name -> [Case]
 >           -> (Int,CPSStmt)
@@ -273,8 +272,14 @@ does not need to construct separate closures for each of them.
 >         tagged (ConstrCase _ _) _ = False
 >         tagged DefaultCase t = t
 
-> freeVars :: Stmt -> [Name]
-> freeVars st = stmtVars st []
+> freeVars :: Stmt -> CPSCont -> [Name]
+> freeVars st k = nub (stmtVars st (contVars k))
+
+> contVars :: CPSCont -> [Name]
+> contVars CPSReturn = []
+> contVars (CPSCont _ _ ws k) = ws ++ contVars k
+> contVars (CPSInst v _ k) = v : contVars k
+> contVars (CPSApply v vs k) = v : vs ++ contVars k
 
 > stmtVars :: Stmt -> [Name] -> [Name]
 > stmtVars (Return e) vs = exprVars e ++ vs
@@ -282,7 +287,7 @@ does not need to construct separate closures for each of them.
 > stmtVars (Exec _ vs) vs' = vs ++ vs'
 > stmtVars (CCall _ _ cc) vs = ccallVars cc ++ vs
 > stmtVars (Seq st1 st2) vs = stmt0Vars st1 (stmtVars st2 vs)
-> stmtVars (Switch _ v cases) vs = v : concatMap (flip caseVars vs) cases
+> stmtVars (Switch _ v cases) vs = v : concatMap caseVars cases ++ vs
 > stmtVars (Choices alts) vs = concatMap (flip stmtVars []) alts ++ vs
 
 > stmt0Vars :: Stmt0 -> [Name] -> [Name]
@@ -291,9 +296,9 @@ does not need to construct separate closures for each of them.
 >   where bvs = fromListSet [v | Bind v _ <- ds]
 >         fvs = concat [exprVars n | Bind _ n <- ds]
 
-> caseVars :: Case -> [Name] -> [Name]
-> caseVars (Case t st) vs =
->   filter (`notElemSet` fromListSet (tagVars t)) (stmtVars st vs)
+> caseVars :: Case -> [Name]
+> caseVars (Case t st) =
+>   filter (`notElemSet` fromListSet (tagVars t)) (stmtVars st [])
 
 > ccallVars :: CCall -> [Name]
 > ccallVars (StaticCall _ xs) = map snd xs
@@ -326,7 +331,7 @@ functions defined in a transformed function.
 > continuations (CPSFunction _ _ st) = contsStmt st
 
 > contsCont :: CPSContinuation -> [CPSContinuation]
-> contsCont (CPSContinuation _ _ _ _ _ st) = contsStmt st
+> contsCont (CPSContinuation _ _ _ _ st) = contsStmt st
 
 > contsStmt :: CPSStmt -> [CPSContinuation]
 > contsStmt CPSFail = []

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CPS.lhs 2995 2010-08-30 19:02:58Z wlux $
+% $Id: CPS.lhs 2996 2010-08-30 19:14:25Z wlux $
 %
 % Copyright (c) 2003-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -8,9 +8,10 @@
 \section{Continuation Passing Style}\label{sec:cps}
 \begin{verbatim}
 
-> module CPS(CPSFunction(..), CPSFun(..), CPSPrim(..), CPSCont(..),
+> module CPS(CPSFunction(..), CPSContinuation(..),
+>            CPSFun(..), CPSPrim(..), CPSCont(..),
 >            BindC(..), BindPapp(..), CaseBlock(..), CPSTag(..), CPSStmt(..),
->            cpsFunction, cpsApply, cpsInst, cpsEnv, contVars) where
+>            cpsFunction, cpsApply, cpsInst, continuations) where
 > import Cam
 > import List
 > import Set
@@ -40,16 +41,18 @@ arguments.
 
 An abstract machine code function may be transformed into more than
 one CPS function. In order to avoid name conflicts, the compiler
-assigns distinct integer keys to all CPS functions generated from an
-abstract machine code function. By convention, the CPS function that
-corresponds to the entry point of an abstract machine code function is
-always assigned key 0.
+assigns a distinct integer key to each continuation defined in a CPS
+function.
 
-A CPS function has two argument lists. The first contains the proper
-arguments of the function and the second the free variables of the
-function's body. Note that \texttt{CPSChoice} does not allow passing
-arguments to its continuations, so these continuations must not have
-proper function arguments (cf. \texttt{cpsInst} below).
+A CPS continuation function has two argument lists. The first contains
+the proper arguments of the function and the second the free variables
+of the function's body. Note that \texttt{CPSChoice} does not allow
+passing arguments to its continuations, so these continuations must
+not have proper function arguments (cf. \texttt{cpsInst} below). The
+continuation argument of a continuation function provides the context
+in which it is defined and called. At present, we make use of this
+feature only to provide a more efficient calling sequence for the code
+that instantiates variables in a flexible switch.
 
 The idiosyncratic \texttt{CPSSwitchVar} statement allows
 distinguishing local and global unbound logical variables of a search
@@ -69,15 +72,18 @@ node combining the arguments of the matched node and the supplied
 arguments with a \texttt{CPSLetPapp} statement.
 \begin{verbatim}
 
-> data CPSFunction = CPSFunction Name Int [Name] [Name] CPSStmt deriving Show
+> data CPSFunction = CPSFunction Name [Name] CPSStmt deriving Show
+> data CPSContinuation =
+>   CPSContinuation Name Int [Name] [Name] CPSCont CPSStmt
+>   deriving Show
 > data CPSStmt =
 >     CPSFail
->   | CPSReturn [Name]
->   | CPSExec CPSFun [Name]
+>   | CPSExecCont CPSCont [Name]
+>   | CPSExec CPSFun CPSCont [Name]
 >   | CPSLet [Bind] CPSStmt
 >   | CPSLetC BindC CPSStmt
 >   | CPSLetPapp BindPapp CPSStmt
->   | CPSWithCont CPSCont CPSStmt
+>   | CPSLetCont CPSContinuation CPSStmt
 >   | CPSSwitch Bool Name [CaseBlock]
 >   | CPSSwitchVar Name CPSStmt CPSStmt
 >   | CPSSwitchArity Name [CPSStmt]
@@ -85,8 +91,13 @@ arguments with a \texttt{CPSLetPapp} statement.
 >   deriving Show
 
 > data CPSFun = CPSFun Name | CPSPrim CPSPrim deriving Show
-> data CPSPrim = CPSEval Name | CPSUnify | CPSDelay deriving Show
-> data CPSCont = CPSCont CPSFunction | CPSInst Name Tag | CPSApply Name [Name]
+> data CPSPrim = CPSEval Bool Name | CPSUnify | CPSDelay deriving Show
+> data CPSCont =
+>     CPSReturn
+>   | CPSCont Name Int [Name] CPSCont
+>   | CPSInst Name Tag CPSCont
+>   | CPSApply Name [Name] CPSCont
+>   deriving Show
 
 > data BindC = BindC Name CRetType CCall deriving Show
 > data BindPapp = BindPapp Name Name [Name] deriving Show
@@ -98,53 +109,37 @@ arguments with a \texttt{CPSLetPapp} statement.
 >   | CPSDefaultCase
 >   deriving Show
 
-> instance Eq CPSFunction where
->   CPSFunction f1 n1 _ _ _ == CPSFunction f2 n2 _ _ _ = f1 == f2 && n1 == n2
-> instance Ord CPSFunction where
->   CPSFunction f1 n1 _ _ _ `compare` CPSFunction f2 n2 _ _ _ =
->     case f1 `compare` f2 of
->       EQ -> n1 `compare` n2
->       ne -> ne
+> cpsFunction :: Name -> [Name] -> Stmt -> CPSFunction
+> cpsFunction f vs st
+>   | null (filter (`notElem` vs) (nub (freeVars st))) = CPSFunction f vs st'
+>   | otherwise = error ("internal error: cpsFunction " ++ demangle f)
+>   where (_,st') = cpsStmt f Nothing (True,CPSReturn) 1 st
 
-> instance Show CPSCont where
->   showsPrec p (CPSCont (CPSFunction f n _ ws _)) = showParen (p > 10) $
->     showString "CPSCont " . shows f . showChar ' ' . shows n .
->     showChar ' ' . showList ws
->   showsPrec p (CPSInst v t) = showParen (p > 10) $
->     showString "CPSInst " . shows v . showChar ' ' . showsPrec 11 t
->   showsPrec p (CPSApply v vs) = showParen (p > 10) $
->     showString "CPSApply " . shows v . showChar ' ' . showList vs
-
-> cpsFunction :: Name -> [Name] -> Stmt -> [CPSFunction]
-> cpsFunction f vs st = linearize (snd (cps f Nothing vs 0 st))
-
-> cpsApply :: Name -> [Name] -> [CPSFunction]
-> cpsApply f (v:vs) = [k0,k1]
->   where k0 =
->           CPSFunction f 0 (v:vs) []
->             (CPSWithCont (CPSCont k1) (CPSExec (CPSPrim (CPSEval v)) [v]))
->         k1 = CPSFunction f 1 [v] vs (CPSSwitchArity v cases)
+> cpsApply :: Name -> [Name] -> CPSFunction
+> cpsApply f (v:vs) =
+>   CPSFunction f (v:vs) $
+>   CPSLetCont k (CPSExec (CPSPrim (CPSEval False v)) k' [v])
+>   where k = CPSContinuation f 1 [v] vs CPSReturn (CPSSwitchArity v cases)
+>         k' = cpsCont k
 >         cases =
->           CPSWithCont (CPSCont k1) (cpsRigidCase v) :
->           [apply v i vs | i <- [1..length vs]] ++
->           [CPSLetPapp (BindPapp tmp v vs) (CPSReturn [tmp])]
->         apply v i vs =
->           applyCont vs'' (CPSWithCont (CPSApply v vs') (CPSReturn [v]))
+>           cpsRigidCase k' v :
+>           [CPSExecCont (apply v i vs CPSReturn) [v] | i <- [1..length vs]] ++
+>           [CPSLetPapp (BindPapp tmp v vs) (CPSExecCont CPSReturn [tmp])]
+>         apply v i vs = CPSApply v vs' . applyCont vs''
 >           where (vs',vs'') = splitAt i vs
 >         applyCont vs
 >           | null vs = id
->           | otherwise = CPSWithCont (apCont (apName (length vs)) v vs)
->         apCont f v vs = CPSCont (CPSFunction f 1 [v] vs undefined)
+>           | otherwise = CPSCont (apName (length vs)) 1 vs
 >         apName n = mangle ('@' : if n == 1 then "" else show n)
 
-> cpsInst :: Name -> Name -> Tag -> CPSFunction
+> cpsInst :: Name -> Name -> Tag -> CPSContinuation
 > cpsInst f v t =
->   CPSFunction f 0 [] [v] $
->   foldr (CPSLet . return) (CPSExec (CPSPrim CPSUnify) [v,tmp])
+>   CPSContinuation f 0 [] [v] CPSReturn $
+>   foldr (CPSLet . return) (CPSExec (CPSPrim CPSUnify) CPSReturn [v,tmp])
 >         (cpsFresh tmp t)
 
-> cpsEnv :: CPSFunction -> [Name]
-> cpsEnv (CPSFunction _ _ _ ws _) = ws
+> cpsCont :: CPSContinuation -> CPSCont
+> cpsCont (CPSContinuation f n _ ws k _) = CPSCont f n ws k
 
 \end{verbatim}
 The transformation into CPS code is implemented by a top-down
@@ -173,19 +168,16 @@ transformed into a jump to that function.
 The translation of a \texttt{choices} statement has to ensure that all
 alternatives use the same input variables so that the runtime system
 does not need to construct separate closures for each of them.
-
-Note that the transformation ensures that the unique key of every CPS
-function is greater than that of its predecessor. This is used below
-when transforming a CPS graph into a linear sequence of CPS functions.
 \begin{verbatim}
 
-> cps :: Name -> Maybe CPSCont -> [Name] -> Int -> Stmt -> (Int,CPSFunction)
+> cps :: Name -> (Bool,CPSCont) -> [Name] -> Int -> Stmt
+>     -> (Int,CPSContinuation)
 > cps f k vs n st = (n',f')
->   where f' = CPSFunction f n vs ws st'
->         ws = filter (`notElem` vs) (nub (freeVars st k))
->         (n',st') = cpsStmt f (Just (CPSCont f')) k (n + 1) st
+>   where f' = CPSContinuation f n vs ws (snd k) st'
+>         ws = filter (`notElem` vs) (nub (freeVars st))
+>         (n',st') = cpsStmt f (Just (cpsCont f')) k (n + 1) st
 
-> cpsCase :: Name -> Maybe CPSCont -> Int -> Case -> (Int,CaseBlock)
+> cpsCase :: Name -> (Bool,CPSCont) -> Int -> Case -> (Int,CaseBlock)
 > cpsCase f k n (Case t st) = (n',CaseBlock (cpsTag t) st')
 >   where (n',st') = cpsStmt f Nothing k n st
 
@@ -194,18 +186,17 @@ when transforming a CPS graph into a linear sequence of CPS functions.
 > cpsTag (ConstrCase c vs) = CPSConstrCase c vs
 > cpsTag DefaultCase = CPSDefaultCase
 
-> cpsStmt :: Name -> Maybe CPSCont -> Maybe CPSCont -> Int -> Stmt
+> cpsStmt :: Name -> Maybe CPSCont -> (Bool,CPSCont) -> Int -> Stmt
 >         -> (Int,CPSStmt)
 > cpsStmt _ _ k n (Return e) =
 >   case e of
->     Var v -> (n,maybe id CPSWithCont k (CPSReturn [v]))
->     _ -> (n,maybe id CPSWithCont k (CPSLet [Bind tmp e] (CPSReturn [tmp])))
+>     Var v -> (n,CPSExecCont (snd k) [v])
+>     _ -> (n,CPSLet [Bind tmp e] (CPSExecCont (snd k) [tmp]))
 > cpsStmt _ _ k n (Enter v) =
->   (n,maybe id CPSWithCont k (CPSExec (CPSPrim (CPSEval v)) [v]))
-> cpsStmt _ _ k n (Exec f vs) =
->   (n,maybe id CPSWithCont k (CPSExec (CPSFun f) vs))
+>   (n,CPSExec (CPSPrim (CPSEval (fst k) v)) (snd k) [v])
+> cpsStmt _ _ k n (Exec f vs) = (n,CPSExec (CPSFun f) (snd k) vs)
 > cpsStmt _ _ k n (CCall _ ty cc) =
->   (n,maybe id CPSWithCont k (CPSLetC (BindC tmp ty cc) (CPSReturn [tmp])))
+>   (n,CPSLetC (BindC tmp ty cc) (CPSExecCont (snd k) [tmp]))
 > cpsStmt f k0 k n (Seq st1 st2) =
 >   case st1 of
 >     v :<- Seq st1' st2' -> cpsStmt f k0 k n (Seq st1' (Seq (v :<- st2') st2))
@@ -213,9 +204,14 @@ when transforming a CPS graph into a linear sequence of CPS functions.
 >       where (n',st2') = cpsStmt f Nothing k n st2
 >     v :<- CCall _ ty cc -> (n',CPSLetC (BindC v ty cc) st2')
 >       where (n',st2') = cpsStmt f Nothing k n st2
->     v :<- st -> (n'',st1')
->       where (n',st1') = cpsStmt f k0 (Just (CPSCont f')) n st
->             (n'',f') = cps f k [v] n' st2
+>     v :<- st -> (n'',CPSLetCont k' st1')
+>       where (n',st1') = cpsStmt f k0 (tagged k',cpsCont k') n st
+>             (n'',k') = cps f k [v] n' st2
+>             tagged (CPSContinuation _ _ vs _ _ (CPSSwitch tagged v _)) =
+>               vs /= [v] || tagged
+>             tagged (CPSContinuation _ _ vs _ _ (CPSSwitchArity v _)) =
+>               vs /= [v]
+>             tagged _ = True
 >     Let ds -> (n',foldr CPSLet st2' (scc bound free ds))
 >       where (n',st2') = cpsStmt f Nothing k n st2
 >             bound (Bind v _) = [v]
@@ -226,38 +222,42 @@ when transforming a CPS graph into a linear sequence of CPS functions.
 >   case alts of
 >     [] -> (n,CPSFail)
 >     [st] -> cpsStmt f k0 k n st
->     _ -> (n',CPSChoice Nothing (map (CPSCont . updEnv ws) ks))
+>     _ -> (n',foldr CPSLetCont (CPSChoice Nothing (map cpsCont ks')) ks')
 >   where (n',ks) = mapAccumL (cps f k []) n alts
->         ws = nub (freeVars (Choices alts) k)
->         updEnv ws (CPSFunction f n vs _ st) = CPSFunction f n vs ws st
+>         ks' = map (updEnv (nub (freeVars (Choices alts)))) ks
+>         updEnv ws (CPSContinuation f n vs _ k st) =
+>           CPSContinuation f n vs ws k st
 
-> cpsJumpSwitch :: Name -> Maybe CPSCont -> Int -> RF -> Name -> [Case]
+> cpsJumpSwitch :: Name -> (Bool,CPSCont) -> Int -> RF -> Name -> [Case]
 >               -> (Int,CPSStmt)
-> cpsJumpSwitch f k n rf v cases = (n',CPSWithCont k' (CPSReturn [v]))
->   where k' = CPSCont (CPSFunction f n [v] ws st')
->         ws = filter (v /=) (nub (freeVars (Switch rf v cases) k))
->         (n',st') = cpsSwitch f k' k (n + 1) rf v cases
+> cpsJumpSwitch f k n rf v cases = (n',CPSLetCont k' (CPSExecCont k'' [v]))
+>   where k' = CPSContinuation f n [v] ws (snd k) st'
+>         k'' = cpsCont k'
+>         ws = filter (v /=) (nub (freeVars (Switch rf v cases)))
+>         (n',st') = cpsSwitch f k'' k (n + 1) rf v cases
 
-> cpsSwitch :: Name -> CPSCont -> Maybe CPSCont -> Int -> RF -> Name -> [Case]
+> cpsSwitch :: Name -> CPSCont -> (Bool,CPSCont) -> Int -> RF -> Name -> [Case]
 >           -> (Int,CPSStmt)
 > cpsSwitch f k0 k n rf v cases = (n',CPSSwitch tagged v (vcase ++ cases'))
->   where vcase =
->           map (CaseBlock CPSFreeCase . CPSWithCont k0) (cpsVarCase rf v ts)
+>   where vcase = map (CaseBlock CPSFreeCase) (cpsVarCase rf k0 v ts)
 >         (n',cases') = mapAccumL (cpsCase f k) n cases
 >         ts = [t | Case t _ <- cases, t /= DefaultCase]
 >         tagged = taggedSwitch ts
 
-> cpsVarCase :: RF -> Name -> [Tag] -> [CPSStmt]
-> cpsVarCase Rigid v _ = [cpsRigidCase v]
-> cpsVarCase Flex v ts =
->   [CPSSwitchVar v (cpsRigidCase v) (cpsFlexCase v ts) | not (null ts)]
+> cpsVarCase :: RF -> CPSCont -> Name -> [Tag] -> [CPSStmt]
+> cpsVarCase Rigid k v _ = [cpsRigidCase k v]
+> cpsVarCase Flex k v ts =
+>   [CPSSwitchVar v (cpsRigidCase k v) (cpsFlexCase k v ts) | not (null ts)]
 
-> cpsRigidCase :: Name -> CPSStmt
-> cpsRigidCase v = CPSExec (CPSPrim CPSDelay) [v]
+> cpsRigidCase :: CPSCont -> Name -> CPSStmt
+> cpsRigidCase k v = CPSExec (CPSPrim CPSDelay) k [v]
 
-> cpsFlexCase :: Name -> [Tag] -> CPSStmt
-> cpsFlexCase v [t] = CPSWithCont (CPSInst v t) (CPSReturn [])
-> cpsFlexCase v ts = CPSChoice (Just v) (map (CPSInst v) ts)
+> cpsFlexCase :: CPSCont -> Name -> [Tag] -> CPSStmt
+> cpsFlexCase k v ts = cpsFlexChoice v [CPSInst v t k | t <- ts]
+
+> cpsFlexChoice :: Name -> [CPSCont] -> CPSStmt
+> cpsFlexChoice _ [k] = CPSExecCont k []
+> cpsFlexChoice v ks = CPSChoice (Just v) ks
 
 > cpsFresh :: Name -> Tag -> [Bind]
 > cpsFresh v (LitCase l) = [Bind v (Lit l)]
@@ -273,13 +273,8 @@ when transforming a CPS graph into a linear sequence of CPS functions.
 >         tagged (ConstrCase _ _) _ = False
 >         tagged DefaultCase t = t
 
-> contVars :: CPSCont -> [Name]
-> contVars (CPSCont k) = cpsEnv k
-> contVars (CPSInst v _) = [v]
-> contVars (CPSApply _ vs) = vs
-
-> freeVars :: Stmt -> Maybe CPSCont -> [Name]
-> freeVars st k = stmtVars st (maybe [] contVars k)
+> freeVars :: Stmt -> [Name]
+> freeVars st = stmtVars st []
 
 > stmtVars :: Stmt -> [Name] -> [Name]
 > stmtVars (Return e) vs = exprVars e ++ vs
@@ -288,7 +283,7 @@ when transforming a CPS graph into a linear sequence of CPS functions.
 > stmtVars (CCall _ _ cc) vs = ccallVars cc ++ vs
 > stmtVars (Seq st1 st2) vs = stmt0Vars st1 (stmtVars st2 vs)
 > stmtVars (Switch _ v cases) vs = v : concatMap (flip caseVars vs) cases
-> stmtVars (Choices alts) vs = concatMap (flip stmtVars vs) alts
+> stmtVars (Choices alts) vs = concatMap (flip stmtVars []) alts ++ vs
 
 > stmt0Vars :: Stmt0 -> [Name] -> [Name]
 > stmt0Vars (v :<- st) vs = stmtVars st (filter (v /=) vs)
@@ -323,46 +318,28 @@ when transforming a CPS graph into a linear sequence of CPS functions.
 > tmp = Name "_"
 
 \end{verbatim}
-After computing the CPS graph, the CPS functions are linearized in
-ascending order. The code uses the unique identifier in order to avoid
-duplication of shared continuations.
+The function \texttt{continuations} returns all local continuation
+functions defined in a transformed function.
 \begin{verbatim}
 
-> linearize :: CPSFunction -> [CPSFunction]
-> linearize = linearizeFun minBound
+> continuations :: CPSFunction -> [CPSContinuation]
+> continuations (CPSFunction _ _ st) = contsStmt st
 
-> linearizeFun :: Int -> CPSFunction -> [CPSFunction]
-> linearizeFun n0 (CPSFunction f n vs ws st)
->   | n > n0 = CPSFunction f n vs ws st : linearizeStmt n st
->   | otherwise = []
+> contsCont :: CPSContinuation -> [CPSContinuation]
+> contsCont (CPSContinuation _ _ _ _ _ st) = contsStmt st
 
-> linearizeCont :: Int -> CPSCont -> [CPSFunction]
-> linearizeCont n (CPSCont f) = linearizeFun n f
-> linearizeCont _ (CPSInst _ _) = []
-> linearizeCont _ (CPSApply _ _) = []
-
-> linearizeStmt :: Int -> CPSStmt -> [CPSFunction]
-> linearizeStmt _ CPSFail = []
-> linearizeStmt _ (CPSReturn _) = []
-> linearizeStmt _ (CPSExec _ _) = []
-> linearizeStmt n (CPSLet _ st) = linearizeStmt n st
-> linearizeStmt n (CPSLetC _ st) = linearizeStmt n st
-> linearizeStmt n (CPSLetPapp _ st) = linearizeStmt n st
-> linearizeStmt n (CPSWithCont k st) =
->   linMerge [linearizeCont n k,linearizeStmt n st]
-> linearizeStmt n (CPSSwitch _ _ cases) =
->   linMerge [linearizeStmt n st | CaseBlock _ st <- cases]
-> linearizeStmt n (CPSSwitchVar _ st1 st2) =
->   linearizeStmt n st1 ++ linearizeStmt n st2
-> linearizeStmt n (CPSSwitchArity _ sts) = linMerge (map (linearizeStmt n) sts)
-> linearizeStmt n (CPSChoice _ ks) = linMerge (map (linearizeCont n) ks)
-
-> linMerge :: [[CPSFunction]] -> [CPSFunction]
-> linMerge kss = merge (sort kss)
->   where merge [] = []
->         merge [ks] = ks
->         merge ([] : kss) = merge kss
->         merge ((k:ks) : kss) =
->           k : merge (sort (ks : filter ((k /=) . head) kss))
+> contsStmt :: CPSStmt -> [CPSContinuation]
+> contsStmt CPSFail = []
+> contsStmt (CPSExecCont _ _) = []
+> contsStmt (CPSExec _ _ _) = []
+> contsStmt (CPSLet _ st) = contsStmt st
+> contsStmt (CPSLetC _ st) = contsStmt st
+> contsStmt (CPSLetPapp _ st) = contsStmt st
+> contsStmt (CPSLetCont k st) = k : contsCont k ++ contsStmt st
+> contsStmt (CPSSwitch _ _ cases) =
+>   concat [contsStmt st | CaseBlock _ st <- cases]
+> contsStmt (CPSSwitchVar _ st1 st2) = contsStmt st1 ++ contsStmt st2
+> contsStmt (CPSSwitchArity _ sts) = concatMap contsStmt sts
+> contsStmt (CPSChoice _ _) = []
 
 \end{verbatim}

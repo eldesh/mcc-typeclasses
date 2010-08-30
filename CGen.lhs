@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 2994 2010-08-30 18:57:17Z wlux $
+% $Id: CGen.lhs 2995 2010-08-30 19:02:58Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -522,22 +522,24 @@ heap check is performed.
 
 > funCode :: Bool -> CPSFunction -> [CStmt]
 > funCode ent (CPSFunction f _ vs ws st) =
->   elimUnused (stackCheck us st ++ heapCheck us (allocSize consts ds tys) ++
+>   elimUnused (concatMap prepAlloc ds' ++ stackCheck us st ++ heapCheck us n ++
 >               loadVars us ++ constDefs consts ds ++ cCode f consts us st [])
 >   where us = (ent,vs,ws)
 >         ds = concat dss
->         (tys,dss) = allocs st
+>         (tys,ds',dss) = allocs st
 >         consts = constants dss
+>         n = allocSize consts ds ds' tys
 
 > caseCode :: Name -> (Bool,[Name],[Name]) -> Name -> CPSTag -> CPSStmt
 >          -> [CStmt]
 > caseCode f vs v t st =
->   stackCheck vs st ++ heapCheck vs n ++ skip (n == CInt 0) v (loadVars vs) ++
->   fetchArgs v t ++ constDefs consts ds ++ cCode f consts vs st []
+>   concatMap prepAlloc ds' ++ stackCheck vs st ++ heapCheck vs n ++
+>   skip (n == CInt 0) v (loadVars vs) ++ fetchArgs v t ++
+>   constDefs consts ds ++ cCode f consts vs st []
 >   where ds = concat dss
->         (tys,dss) = allocs st
+>         (tys,ds',dss) = allocs st
 >         consts = constants dss
->         n = allocSize consts ds tys
+>         n = allocSize consts ds ds' tys
 >         skip True v = filter (\(CLocalVar _ v' _) -> show v /= v')
 >         skip False _ = id
 
@@ -592,7 +594,7 @@ applied to exactly its missing arguments.
 >   [setReg i (arg i) | i <- [0..n-1]] ++
 >   CIf (CRel (var retIpName) "==" (CExpr "update"))
 >       (localVar v' (Just (stk 0)) : lockIndir v v')
->       (stackCheck vs0 (CPSWithCont k (CPSEnter v)) ++
+>       (stackCheck vs0 (CPSWithCont k (CPSExec (CPSPrim (CPSEval v)) [v])) ++
 >        saveCont vs0 [] [] [k] ++
 >        [setRet (CExpr "update")] ++
 >        lock v) :
@@ -635,7 +637,6 @@ to the stack and keeping it on the stack as appropriate.
 >   zipWith fetchArg vs [0..]
 >   where arg = element (field v "c.args")
 >         fetchArg v i = localVar v (Just (arg i))
-> fetchArgs _ (CPSPappCase _) = []
 > fetchArgs _ CPSFreeCase = []
 > fetchArgs _ CPSDefaultCase = []
 
@@ -660,40 +661,35 @@ to the stack and keeping it on the stack as appropriate.
 >     _ -> error ("updVar " ++ show v)
 
 \end{verbatim}
-When computing the heap requirements of a function, we have to take
-into account nodes that are allocated explicitly in \texttt{return}
-and \texttt{let} statements and implicitly for the results of
-\texttt{ccall} statements, but can ignore nodes which are allocated
-outside of the heap, i.e., literal constants and character nodes.
-
-Note that we use the same temporary name for the node allocated in
-\texttt{CPSReturn} and \texttt{CPSUnify} statements. This is safe
-because constants are allocated per block, not per CPS function.
+When computing the allocation requirements of a function, we have to
+take nodes into account that are allocated explicitly in
+\texttt{return} and \texttt{let} statements and implicitly for the
+results of \texttt{ccall} statements, but can ignore nodes which are
+allocated outside of the heap, i.e., all constant nodes. In addition,
+we handle the dynamic allocation of partial application nodes by a
+\texttt{CPSLetPapp} statement here.
 \begin{verbatim}
 
 > heapCheck :: (Bool,[Name],[Name]) -> CExpr -> [CStmt]
 > heapCheck (_,vs,_) n =
 >   [CProcCall "CHECK_HEAP" [int (length vs),n] | n /= CInt 0]
 
-> allocSize :: FM Name CExpr -> [Bind] -> [CArgType] -> CExpr
-> allocSize consts ds tys =
+> allocSize :: FM Name CExpr -> [Bind] -> [BindPapp] -> [CArgType] -> CExpr
+> allocSize consts ds ds' tys =
 >   foldr add (CInt 0)
 >         ([ctypeSize ty | ty <- tys] ++
->          [nodeSize n | Bind v n <- ds, not (isConstant consts v)])
+>          [nodeSize n | Bind v n <- ds, not (isConstant consts v)] ++
+>          [partialNodeSize v vs | BindPapp _ v vs <- ds'])
 
-> allocs :: CPSStmt -> ([CArgType],[[Bind]])
-> allocs (CPSReturn e) = ([],[[Bind resName e]])
-> allocs (CPSCCall (Just ty) _) = ([ty],[])
-> allocs (CPSUnify _ e) = ([],[[Bind resName e]])
-> allocs (CPSDelayNonLocal _ st) = allocs st
-> allocs (CPSSeq st1 st2) = allocs0 st1 (allocs st2)
->   where allocs0 (v :<- Return e) ~(tys,dss) = (tys,[Bind v e]:dss)
->         allocs0 (_ :<- CCall _ (Just ty) _) ~(tys,dss) = (ty:tys,dss)
->         allocs0 (v :<- Seq st1 st2) as = allocs0 st1 (allocs0 (v :<- st2) as)
->         allocs0 (Let ds) ~(tys,dss) = (tys,ds:dss)
->         allocs0 _ as = as
+> allocs :: CPSStmt -> ([CArgType],[BindPapp],[[Bind]])
+> allocs (CPSLet ds st) = (tys,ds',ds:dss)
+>   where (tys,ds',dss) = allocs st
+> allocs (CPSLetC (BindC _ ty _) st) = (maybe id (:) ty tys,ds,dss)
+>   where (tys,ds,dss) = allocs st
+> allocs (CPSLetPapp d st) = (tys,d:ds,dss)
+>   where (tys,ds,dss) = allocs st
 > allocs (CPSWithCont _ st) = allocs st
-> allocs _ = ([],[])
+> allocs _ = ([],[],[])
 
 > nodeSize :: Expr -> CExpr
 > nodeSize (Lit _) = CInt 0
@@ -703,6 +699,15 @@ because constants are allocated per block, not per CPS function.
 > nodeSize (Lazy f vs) = suspendNodeSize (length vs)
 > nodeSize Free = CExpr "variable_node_size"
 > nodeSize (Var _) = CInt 0
+
+> prepAlloc :: BindPapp -> [CStmt]
+> prepAlloc (BindPapp _ v _) =
+>   [assertRel (nodeTag v) ">" (CInt 0),
+>    CLocalVar uintType (argcVar v) (Just (CFunCall "closure_argc" [var v])),
+>    CLocalVar uintType (szVar v) (Just (CFunCall "node_size" [var v]))]
+
+> partialNodeSize :: Name -> [Name] -> CExpr
+> partialNodeSize v vs = CExpr (szVar v) `CAdd` CInt (toInteger (length vs))
 
 > ctypeSize :: CArgType -> CExpr
 > ctypeSize TypeBool = CInt 0
@@ -724,9 +729,9 @@ the number of variables saved on the stack when the function is
 entered and the number of variables pushed onto the stack when calling
 the continuation. Note that the stack check must take the return
 address into account, which is saved on the stack except in the CPS
-entry function of an abstract machine code function. In case of a
-\texttt{CPSSwitch} statement, every alternative is responsible for
-performing a stack check.
+entry function of an abstract machine code function. In case of the
+various \texttt{CPSSwitch} statements, each alternative is responsible
+for performing a stack check.
 \begin{verbatim}
 
 > stackCheck :: (Bool,[Name],[Name]) -> CPSStmt -> [CStmt]
@@ -734,21 +739,17 @@ performing a stack check.
 >   where depth = stackDepth st - length (ws ++ [retIpName | not ent])
 
 > stackDepth :: CPSStmt -> Int
-> stackDepth (CPSJump k) = stackDepthCont k
+> stackDepth CPSFail = 0
 > stackDepth (CPSReturn _) = 0
-> stackDepth (CPSRetPapp _ _) = 0
-> stackDepth (CPSEnter _) = 0
 > stackDepth (CPSExec _ _) = 0
-> stackDepth (CPSApply _ vs) = 1 + length vs
-> stackDepth (CPSCCall _ _) = 0
-> stackDepth (CPSUnify _ _) = 0
-> stackDepth (CPSDelay _) = 0
-> stackDepth (CPSDelayNonLocal _ st) = stackDepth st
-> stackDepth (CPSSeq _ st) = stackDepth st
+> stackDepth (CPSLet _ st) = stackDepth st
+> stackDepth (CPSLetC _ st) = stackDepth st
+> stackDepth (CPSLetPapp _ st) = stackDepth st
 > stackDepth (CPSWithCont k st) = stackDepthCont k + stackDepth st
 > stackDepth (CPSSwitch _ _ _) = 0
-> stackDepth (CPSChoices _ ks) =
->   if null ks then 0 else 1 + stackDepthCont (head ks)
+> stackDepth (CPSSwitchVar _ st1 st2) = 0
+> stackDepth (CPSSwitchArity _ _) = 0
+> stackDepth (CPSChoice _ ks) = 1 + stackDepthCont (head ks)
 
 > stackDepthCont :: CPSCont -> Int
 > stackDepthCont k = 1 + length (contVars k)
@@ -828,10 +829,6 @@ split into minimal binding groups.
 >         constInit _ is = is
 >         arg v = fromJust (lookupFM v consts)
 
-> freshNode :: FM Name CExpr -> Name -> Expr -> [CStmt]
-> freshNode consts v n = allocNode consts d ++ initNode consts d
->   where d = Bind v n
-
 > allocNode :: FM Name CExpr -> Bind -> [CStmt]
 > allocNode consts (Bind v n) =
 >   case lookupFM v consts of
@@ -841,6 +838,10 @@ split into minimal binding groups.
 >         Lit c -> [localVar v (Just (literal c))]
 >         Var v' -> [localVar v (Just (var v'))]
 >         _ -> [localVar v (Just alloc),incrAlloc (nodeSize n)]
+
+> allocPartial :: BindPapp -> [CStmt]
+> allocPartial (BindPapp r v vs) =
+>   [localVar r (Just alloc),incrAlloc (partialNodeSize v vs)]
 
 > initNode :: FM Name CExpr -> Bind -> [CStmt]
 > initNode _ (Bind _ (Lit l)) =
@@ -908,6 +909,13 @@ split into minimal binding groups.
 >    setField v "v.wq" CNull,
 >    setField v "v.cstrs" CNull]
 
+> initPartial :: BindPapp -> [CStmt]
+> initPartial (BindPapp r v vs) =
+>   wordCopy (var r) (var v) (szVar v) :
+>   CIncrBy (lfield r "info") (CInt (toInteger (length vs))) :
+>   zipWith (initArg (lfield r "c.args") (CExpr (argcVar v))) [0..] vs
+>   where initArg v1 n i v2 = CAssign (LElem v1 (n `add` int i)) (var v2)
+
 > initArgs :: Name -> String -> [Name] -> [CStmt]
 > initArgs v f vs = zipWith (initArg (lfield v f)) [0..] vs
 >   where initArg v1 i v2 = setElem v1 i (var v2)
@@ -919,77 +927,73 @@ translation function.
 
 > cCode :: Name -> FM Name CExpr -> (Bool,[Name],[Name]) -> CPSStmt -> [CPSCont]
 >       -> [CStmt]
-> cCode _ _ vs0 (CPSJump k) ks = jump vs0 k ks
-> cCode _ consts vs0 (CPSReturn e) ks =
->   case e of
->     Var v -> ret vs0 v ks
->     _ -> freshNode consts resName e ++ ret vs0 resName ks
-> cCode _ _ vs0 (CPSRetPapp v vs) ks =
->   allocPartial vs0 resName v vs ++ ret vs0 resName ks
-> cCode _ _ vs0 (CPSEnter v) ks = enter vs0 v ks
+> cCode f _ _ CPSFail _ = failAndBacktrack (undecorate (demangle f))
+> cCode _ _ vs0 (CPSReturn vs) ks = ret vs0 vs ks
 > cCode _ _ vs0 (CPSExec f vs) ks = exec vs0 f vs ks
-> cCode _ _ vs0 (CPSApply v vs) ks = apply vs0 v vs ks
-> cCode _ _ vs0 (CPSCCall ty cc) ks = cCall ty resName cc ++ ret vs0 resName ks
-> cCode _ consts vs0 (CPSUnify v e) ks =
->   case e of
->     Var v' -> unifyVar vs0 v v' ks
->     _ -> freshNode consts resName e ++ unifyVar vs0 v resName ks
-> cCode _ _ vs0 (CPSDelay v) ks = delay vs0 v ks
-> cCode f consts vs0 (CPSDelayNonLocal v st) ks =
->   delayNonLocal vs0 v ks ++ cCode f consts vs0 st ks
-> cCode f consts vs0 (CPSSeq st1 st2) ks =
->   cCode0 consts st1 ++ cCode f consts vs0 st2 ks
+> cCode f consts vs0 (CPSLet ds st) ks =
+>   concatMap (allocNode consts) ds ++ concatMap (initNode consts) ds ++
+>   cCode f consts vs0 st ks
+> cCode f consts vs0 (CPSLetC d st) ks = cCall d ++ cCode f consts vs0 st ks
+> cCode f consts vs0 (CPSLetPapp d st) ks =
+>   allocPartial d ++ initPartial d ++ cCode f consts vs0 st ks
 > cCode f consts vs0 (CPSWithCont k st) ks = cCode f consts vs0 st (k:ks)
 > cCode f _ vs0 (CPSSwitch tagged v cases) [] =
 >   switchOnTerm f tagged vs0 v
 >                [(t,caseCode f vs0 v t st) | CaseBlock t st <- cases]
-> cCode f _ vs0 (CPSChoices v ks) ks' = choices f vs0 v ks ks'
+> cCode f consts vs0 (CPSSwitchVar v st1 st2) ks = switchOnVar v sts1' sts2'
+>   where sts1' = caseCode f vs0 v CPSFreeCase (foldr CPSWithCont st1 ks)
+>         sts2' = caseCode f vs0 v CPSFreeCase (foldr CPSWithCont st2 ks)
+> cCode f consts vs0 (CPSSwitchArity v sts) [] =
+>   switchOnArity f vs0 v (map (caseCode f vs0 v CPSDefaultCase) sts)
+> cCode _ _ vs0 (CPSChoice v ks) ks' = choice vs0 v ks ks'
 
-> cCode0 :: FM Name CExpr -> Stmt0 -> [CStmt]
-> cCode0 consts (v :<- Return e) = freshNode consts v e
-> cCode0 consts (v :<- CCall _ ty cc) = cCall ty v cc
-> cCode0 consts (v :<- Seq st1 st2) =
->   cCode0 consts st1 ++ cCode0 consts (v :<- st2)
-> cCode0 consts (Let ds) =
->   concatMap (allocNode consts) ds ++ concatMap (initNode consts) ds
+> ret :: (Bool,[Name],[Name]) -> [Name] -> [CPSCont] -> [CStmt]
+> ret vs0 vs ks = saveCont vs0 vs [] ks ++ [gotoRet ks]
 
-> jump :: (Bool,[Name],[Name]) -> CPSCont -> [CPSCont] -> [CStmt]
-> jump vs0 k ks = saveCont vs0 [] [] (k:ks) ++ [gotoRet (k:ks)]
-
-> ret :: (Bool,[Name],[Name]) -> Name -> [CPSCont] -> [CStmt]
-> ret vs0 v ks = saveCont vs0 [v] [] ks ++ [gotoRet ks]
-
-> enter :: (Bool,[Name],[Name]) -> Name -> [CPSCont] -> [CStmt]
-> enter vs0 v ks =
->   saveCont vs0 [v] [] ks ++
->   [tagSwitch (null ks,[v],[]) v taggedSwitch
->              [cCase "EVAL_TAG"
->                     (saveRet vs0 ks ++ [gotoExpr (field v "info->eval")])],
->    gotoRet ks]
->   where taggedSwitch v switch
+> exec :: (Bool,[Name],[Name]) -> CPSFun -> [Name] -> [CPSCont] -> [CStmt]
+> exec vs0 f vs ks =
+>   saveCont vs0 vs [] ks ++
+>   case f of
+>     CPSPrim (CPSEval v) ->
+>       [tagSwitch (null ks,vs,[]) v taggedSwitch [cCase "EVAL_TAG" sts'],
+>        gotoRet ks]
+>     _ -> sts'
+>   where sts' = saveRet vs0 ks ++ [gotoExpr (entry f)]
+>         taggedSwitch v switch
 >           | tagged ks = CIf (isTaggedPtr v) [switch] []
 >           | otherwise = switch
 >         tagged (CPSCont (CPSFunction _ _ vs _ (CPSSwitch tagged v _)) : _)
 >           | vs == [v] = tagged
 >         tagged _ = True
 
-> exec :: (Bool,[Name],[Name]) -> Name -> [Name] -> [CPSCont] -> [CStmt]
-> exec vs0 f vs ks = saveCont vs0 vs [] ks ++ saveRet vs0 ks ++ [goto (cName f)]
+> entry :: CPSFun -> CExpr
+> entry (CPSFun f) = CExpr (cName f)
+> entry (CPSPrim (CPSEval v)) = field v "info->eval"
+> entry (CPSPrim CPSUnify) = CExpr "bind_var"
+> entry (CPSPrim CPSDelay) = CExpr "sync_var"
 
 > saveCont :: (Bool,[Name],[Name]) -> [Name] -> [Name] -> [CPSCont] -> [CStmt]
 > saveCont vs0 vs ws ks =
 >   saveVars vs0 (null ks) (map var vs) (map var ws ++ drop 1 ws')
 >   where ws' = concatMap contFrame ks
->         contFrame k = asNode (CExpr (contName k)) : map var (contVars k)
 
 > saveRet :: (Bool,[Name],[Name]) -> [CPSCont] -> [CStmt]
 > saveRet (ent,_,_) [] = [setRet (var retIpName) | not ent]
-> saveRet _ (k:_) = [setRet (CExpr (contName k))]
+> saveRet _ (k:_) = [setRet (contAddr k)]
 
 > gotoRet :: [CPSCont] -> CStmt
-> gotoRet ks = goto (contIp ks)
->   where contIp [] = show retIpName
->         contIp (k:_) = contName k
+> gotoRet ks = gotoExpr (contIp ks)
+>   where contIp [] = var retIpName
+>         contIp (k:_) = contAddr k
+
+> contFrame :: CPSCont -> [CExpr]
+> contFrame k = asNode (contAddr k) : map var (contVars k)
+
+> contAddr :: CPSCont -> CExpr
+> contAddr (CPSCont f) = CExpr (cpsName f)
+> contAddr (CPSInst _ (LitCase l)) = CExpr (litInstFunc l)
+> contAddr (CPSInst _ (ConstrCase c _)) = CExpr (instFunc c)
+> contAddr (CPSApply v vs) = field v "info->apply"
 
 > lock :: Name -> [CStmt]
 > lock v =
@@ -1017,32 +1021,14 @@ translation function.
 > assertLazyNode v kind =
 >   rtsAssertList [isTaggedPtr v,CRel (nodeKind v) "==" (CExpr kind)]
 
-> unifyVar :: (Bool,[Name],[Name]) -> Name -> Name -> [CPSCont] -> [CStmt]
-> unifyVar vs0 v n ks =
->   saveCont vs0 [v,n] [] ks ++ saveRet vs0 ks ++ [goto "bind_var"]
-
-> delay :: (Bool,[Name],[Name]) -> Name -> [CPSCont] -> [CStmt]
-> delay vs0 v ks = saveCont vs0 [v] [] ks ++ saveRet vs0 ks ++ [goto "sync_var"]
-
-> delayNonLocal :: (Bool,[Name],[Name]) -> Name -> [CPSCont] -> [CStmt]
-> delayNonLocal vs0 v ks =
->   [CIf (CRel (nodeKind v) "==" (CExpr "GVAR_KIND"))
->        (CProcCall "assert" [CFunCall "!is_local_space" [field v "g.spc"]] :
->         delay vs0 v ks)
->        []]
-
-> choices :: Name -> (Bool,[Name],[Name]) -> Maybe Name -> [CPSCont]
->         -> [CPSCont] -> [CStmt]
-> choices f vs0 v ks ks'
->   | null ks = failAndBacktrack (undecorate (demangle f))
->   | otherwise =
->       CStaticArray constLabelType choices
->                    (map (CInit . CExpr . contName) ks ++ [CInit CNull]) :
->       localVar ips (Just (asNode (CExpr choices))) :
->       saveCont vs0 [] [ips] (head ks : ks') ++
->       [CppCondStmts "!NO_STABILITY"
->                     (yieldCall v)
->                     [goto "regs.handlers->choices"]]
+> choice :: (Bool,[Name],[Name]) -> Maybe Name -> [CPSCont] -> [CPSCont]
+>        -> [CStmt]
+> choice vs0 v ks ks' =
+>   CStaticArray constLabelType choices
+>                (map (CInit . contAddr) ks ++ [CInit CNull]) :
+>   localVar ips (Just (asNode (CExpr choices))) :
+>   saveCont vs0 [] [ips] (head ks : ks') ++
+>   [CppCondStmts "!NO_STABILITY" (yieldCall v) [goto "regs.handlers->choices"]]
 >   where ips = Name "_choice_ips"
 >         choices = "_choices"
 >         yieldCall (Just v) =
@@ -1072,10 +1058,9 @@ literals when set to a non-zero value.
 > switchOnTerm :: Name -> Bool -> (Bool,[Name],[Name]) -> Name
 >              -> [(CPSTag,[CStmt])] -> [CStmt]
 > switchOnTerm f tagged vs0 v cases =
->   tagSwitch vs0 v taggedSwitch otherCases :
+>   tagSwitch vs0 v taggedSwitch (varCase ++ litCases ++ constrCases) :
 >   head (dflts ++ [failAndBacktrack (undecorate (demangle f) ++ ": no match")])
->   where (lits,constrs,papps,vars,dflts) =
->           foldr partition ([],[],[],[],[]) cases
+>   where (lits,constrs,vars,dflts) = foldr partition ([],[],[],[]) cases
 >         (chars,ints,integers,floats) = foldr litPartition ([],[],[],[]) lits
 >         taggedSwitch v switch
 >           | tagged && null chars && null ints && null integers =
@@ -1084,7 +1069,6 @@ literals when set to a non-zero value.
 >               taggedCharSwitch v chars $
 >               taggedIntSwitch v ints $
 >               taggedIntegerSwitch v integers switch
->         otherCases = varCase ++ litCases ++ constrCases ++ pappCases
 >         varCase = map (cCase "LVAR_TAG") vars
 >         litCases = map cCaseDefault $
 >           [charCase | not (null chars)] ++
@@ -1111,14 +1095,12 @@ literals when set to a non-zero value.
 >           floatSwitch v floats ++
 >           [CBreak]
 >         constrCases = [cCase (dataTag c) stmts | (c,stmts) <- constrs]
->         pappCases = [cCaseInt n stmts | (n,stmts) <- papps]
->         partition (t,stmts) ~(lits,constrs,papps,vars,dflts) =
+>         partition (t,stmts) ~(lits,constrs,vars,dflts) =
 >           case t of
->              CPSLitCase l -> ((l,stmts) : lits,constrs,papps,vars,dflts)
->              CPSConstrCase c _ -> (lits,(c,stmts) : constrs,papps,vars,dflts)
->              CPSPappCase n -> (lits,constrs,(n,stmts) : papps,vars,dflts)
->              CPSFreeCase -> (lits,constrs,papps,stmts : vars,dflts)
->              CPSDefaultCase -> (lits,constrs,papps,vars,stmts : dflts)
+>              CPSLitCase l -> ((l,stmts) : lits,constrs,vars,dflts)
+>              CPSConstrCase c _ -> (lits,(c,stmts) : constrs,vars,dflts)
+>              CPSFreeCase -> (lits,constrs,stmts : vars,dflts)
+>              CPSDefaultCase -> (lits,constrs,vars,stmts : dflts)
 >         litPartition (Char c,stmts) ~(chars,ints,integers,floats) =
 >           ((c,stmts):chars,ints,integers,floats)
 >         litPartition (Int i,stmts) ~(chars,ints,integers,floats) =
@@ -1205,33 +1187,33 @@ literals when set to a non-zero value.
 >   where match v (f,stmts) rest = [CIf (CRel v "==" (CFloat f)) stmts rest]
 
 \end{verbatim}
-Note that the application entry point of a partial application node is
-called with the additional arguments and return address on the stack.
-Only the partial application node itself is passed in a register.
+The idiosyncratic \texttt{CPSSwitchVar} statement is used for
+distinguishing global and local free variable nodes. We assume that
+neither the code for the global variable case (first alternative) nor
+that for the local variable case (second alternative) falls through.
 \begin{verbatim}
 
-> apply :: (Bool,[Name],[Name]) -> Name -> [Name] -> [CPSCont] -> [CStmt]
-> apply vs0 v vs ks =
->   saveCont vs0 [v] [] (apEntry : ks) ++ [gotoExpr (field v "info->apply")]
->   where apEntry = CPSCont (CPSFunction undefined 0 [v] vs undefined)
+> switchOnVar :: Name -> [CStmt] -> [CStmt] -> [CStmt]
+> switchOnVar v sts1 sts2 =
+>   CIf (CRel (nodeKind v) "==" (CExpr "GVAR_KIND"))
+>       (CProcCall "assert" [CFunCall "!is_local_space" [field v "g.spc"]] :
+>        sts1)
+>       [] :
+>   sts2
 
-> allocPartial :: (Bool,[Name],[Name]) -> Name -> Name -> [Name] -> [CStmt]
-> allocPartial vs0 r v vs =
->   [localVar r Nothing,
->    assertRel (nodeTag v) ">" (CInt 0),
->    CLocalVar uintType "argc" (Just (CFunCall "closure_argc" [var v])),
->    CLocalVar uintType "sz" (Just (CFunCall "node_size" [var v]))] ++
->   heapCheck vs0 size ++
->   [CBlock (loadVars vs0 ++
->            setVar r alloc :
->            incrAlloc size :
->            wordCopy (var r) (var v) "sz" :
->            CIncrBy (lfield r "info") (CInt n) :
->            zipWith (setArg (lfield r "c.args")) [0..] vs)]
->   where n = toInteger (length vs)
->         size = CExpr "sz" `CAdd` CInt n
->         setArg base i v =
->           CAssign (LElem base (CExpr "argc" `add` int i)) (var v)
+\end{verbatim}
+The \texttt{CPSSwitchArity} statement dispatches on the arity of a
+partial application node. Recall that the first alternative,
+corresponding to arity 0, applies to an unbound logical variable node
+and that the last alternative acts as default case that is selected if
+too few arguments are supplied.
+\begin{verbatim}
+
+> switchOnArity :: Name -> (Bool,[Name],[Name]) -> Name -> [[CStmt]] -> [CStmt]
+> switchOnArity f vs0 v (sts0:stss) =
+>   tagSwitch vs0 v taggedSwitch cases : last stss
+>   where cases = cCase "LVAR_TAG" sts0 : zipWith cCaseInt [1..] (init stss)
+>         taggedSwitch _ = id
 
 \end{verbatim}
 For a foreign function call, the generated code first unboxes all
@@ -1240,8 +1222,8 @@ the call. When taking the address of a foreign variable, the code
 first loads this address into a temporary variable and then boxes it.
 \begin{verbatim}
 
-> cCall :: CRetType -> Name -> CCall -> [CStmt]
-> cCall ty v cc = cEval ty v' cc ++ box ty v (CExpr v')
+> cCall :: BindC -> [CStmt]
+> cCall (BindC v ty cc) = cEval ty v' cc ++ box ty v (CExpr v')
 >   where v' = cRetVar v
 
 > cEval :: CRetType -> String -> CCall -> [CStmt]
@@ -1429,11 +1411,6 @@ used for constant constructors and functions, respectively.
 > cpsName :: CPSFunction -> String
 > cpsName (CPSFunction f n _ _ _) = cPrivName f n
 
-> contName :: CPSCont -> String
-> contName (CPSCont f) = cpsName f
-> contName (CPSInst _ (LitCase l)) = litInstFunc l
-> contName (CPSInst _ (ConstrCase c _)) = instFunc c
-
 > constArray :: String
 > constArray = "constants"
 
@@ -1464,17 +1441,16 @@ used for constant constructors and functions, respectively.
 > closVar :: Name -> String
 > closVar v = show v ++ "_clos"
 
-> cArgVar :: Name -> String
-> cArgVar v = "_carg" ++ "_" ++ show v
+> argcVar, szVar :: Name -> String
+> argcVar v = show v ++ "_argc"
+> szVar v = show v ++ "_sz"
 
-> cRetVar :: Name -> String
+> cArgVar, cRetVar :: Name -> String
+> cArgVar v = "_carg" ++ "_" ++ show v
 > cRetVar v = "_cret" ++ "_" ++ show v
 
 > retIpName :: Name
 > retIpName = Name "_ret_ip"
-
-> resName :: Name
-> resName = Name "_"
 
 \end{verbatim}
 The function \texttt{apArity} returns the arity of an application

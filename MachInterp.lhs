@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachInterp.lhs 3002 2010-08-30 19:41:06Z wlux $
+% $Id: MachInterp.lhs 3004 2010-08-30 19:44:01Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -480,67 +480,7 @@ executes \emph{st$_2$} in the extended environment.
 
 \end{verbatim}
 \subsection{Primitives}
-\subsubsection{Basic functions}
-The primitive \texttt{failed} causes an explicit failure in the
-program.
-\begin{verbatim}
-
-> failedFunction :: Function
-> failedFunction = ("failed",entry [] failAndBacktrack,0)
-
-\end{verbatim}
-The primitive \texttt{seq} evaluates both of its arguments
-sequentially to head normal form. The result of the first argument is
-discarded and the result of the second is returned.
-\begin{verbatim}
-
-> seqFunction :: Function
-> seqFunction = ("seq",seqCode,2)
-
-> seqCode :: Instruction
-> seqCode =
->   entry ["x","y"] $
->   seqStmts "_" (enter "x") (enter "y")
-
-\end{verbatim}
-The primitive \texttt{ensureNotFree} evaluates its argument to head
-normal form. If the result is an unbound variable, the current thread
-is suspended until the variable is instantiated.
-\begin{verbatim}
-
-> ensureNotFreeFunction :: Function
-> ensureNotFreeFunction = ("ensureNotFree",ensureNotFreeCode,1)
-
-> ensureNotFreeCode = 
->   entry ["x"] $
->   evalRigid "x" retNode
-
-> evalRigid :: String -> (NodePtr -> Instruction) -> Instruction
-> evalRigid x = seqStmts x' (enter x) . switchRigid x' []
->   where x' = '_':x
-
-\end{verbatim}
-The operator \texttt{:} is implemented in order to handle partial
-applications of the \texttt{:} constructor.
-\begin{verbatim}
-
-> nil :: MachStateT NodePtr
-> nil = read'updateState (atom nilTag)
-
-> cons :: NodePtr -> NodePtr -> MachStateT NodePtr
-> cons hd tl = allocData tag cName [hd,tl]
->   where ConstructorTag tag cName 2 = consTag
-
-> consFunction :: Function
-> consFunction = (":", consCode, 2)
-
-> consCode :: Instruction
-> consCode =
->   entry ["hd","tl"] $
->   letNodes [("cons",initConstr consTag ["hd","tl"])] $
->   enter "cons"
-
-\end{verbatim}
+\subsubsection{Application Functions}
 There is a -- potentially -- unlimited number of functions
 \texttt{@}$i$, which are used by the compiler for implementing
 applications of a function variable to $i$ arguments.\footnote{For
@@ -581,35 +521,19 @@ historical reasons, the compiler uses \texttt{@} instead of
 \end{verbatim}
 In order to handle partial applications of data constructors, the
 compiler provides an auxiliary function for each data constructor,
-which returns a new constructor node from the supplied arguments.
+which returns a new constructor node with the supplied arguments.
 \begin{verbatim}
 
 > constrFunction :: Int -> String -> Int -> Function
 > constrFunction t c n = (c,constrCode t c n,n)
 
 > constrCode :: Int -> String -> Int -> Instruction
-> constrCode t c n =
->   read'updateState (popNodes n) >>= allocData t c >>= retNode
-
-> tupleFunctions :: [Function]
-> tupleFunctions = map tupleFunction [0..]
-
-> tupleFunction :: Int -> Function
-> tupleFunction n
->   | n >= 2 = constrFunction 0 ("Prelude.(" ++ replicate (n - 1) ',' ++ ")") n
->   | otherwise = error "tuples must have arity >= 2"
+> constrCode t c n = read'updateState (popNodes n) >>= allocData t c >>= retNode
 
 \end{verbatim}
 \subsubsection{Arithmetic Operations}\label{sec:mach-arithmetic}
+All arithmetic operations are implemented as primitives.
 \begin{verbatim}
-
-> ordFunction, chrFunction :: Function
-> ordFunction = ("ord", ordCode, 1)
-> chrFunction = ("chr", chrCode, 1)
-
-> ordCode,chrCode :: Instruction
-> ordCode = entry ["c"] $ evalRigid "c" (\c -> primOrd c >>= retNode)
-> chrCode = entry ["i"] $ evalRigid "i" (\i -> primChr i >>= retNode)
 
 > ordPrimitive,chrPrimitive :: Primitive
 > ordPrimitive = ("primOrd",prim1 primOrd)
@@ -618,22 +542,6 @@ which returns a new constructor node from the supplied arguments.
 > primOrd, primChr :: NodePtr -> MachStateT NodePtr
 > primOrd = withChar "ord" (allocInt . toInteger . ord)
 > primChr = withInt "chr" (allocChar . chr . fromInteger)
-
-> addIntFunction, subIntFunction, multIntFunction :: Function
-> quotIntFunction, remIntFunction, divIntFunction, modIntFunction :: Function
-> addIntFunction = ("+", intCode "+" (+), 2)
-> subIntFunction = ("-", intCode "-" (-), 2)
-> multIntFunction = ("*", intCode "*" (*), 2)
-> quotIntFunction = ("quot", intCode "quot" quot, 2)
-> remIntFunction = ("rem", intCode "rem" rem, 2)
-> divIntFunction = ("div", intCode "div" div, 2)
-> modIntFunction = ("mod", intCode "mod" mod, 2)
-
-> intCode :: String -> (Integer -> Integer -> Integer) -> Instruction
-> intCode what op =
->   entry ["x","y"] $ evalRigid "x"
->                   $ \x -> evalRigid "y"
->                   $ \y -> primIntOp what op x y >>= retNode
 
 > addIntPrimitive, subIntPrimitive, mulIntPrimitive :: Primitive
 > quotIntPrimitive, remIntPrimitive :: Primitive
@@ -651,19 +559,6 @@ which returns a new constructor node from the supplied arguments.
 > primIntOp what op x y =
 >   withInt what (\i -> withInt what (\j -> allocInt (i `op` j)) y) x
 
-> addFloatFunction, subFloatFunction :: Function
-> multFloatFunction, divFloatFunction :: Function
-> addFloatFunction = ("+.",floatCode "+." (+),2)
-> subFloatFunction = ("-.",floatCode "-." (-),2)
-> multFloatFunction = ("*.",floatCode "*." (*),2)
-> divFloatFunction = ("/.",floatCode "/." (/),2)
-
-> floatCode :: String -> (Double -> Double -> Double) -> Instruction
-> floatCode what op =
->   entry ["x","y"] $ evalRigid "x"
->                   $ \x -> evalRigid "y"
->                   $ \y -> primFloatOp what op x y >>= retNode
-
 > addFloatPrimitive, subFloatPrimitive :: Primitive
 > mulFloatPrimitive, divFloatPrimitive :: Primitive
 > addFloatPrimitive = ("primAddFloat", prim2 $ primFloatOp "+." (+))
@@ -676,28 +571,11 @@ which returns a new constructor node from the supplied arguments.
 > primFloatOp what op x y =
 >  withFloat what (\e -> withFloat what (\f -> allocFloat (e `op` f)) y) x
 
-> floatFromIntFunction :: Function
-> floatFromIntFunction = ("floatFromInt",floatFromIntCode,1)
-
-> floatFromIntCode :: Instruction
-> floatFromIntCode =
->   entry ["x"] $ evalRigid "x" $ \i -> primFloat i >>= retNode
-
 > floatPrimitive :: Primitive
 > floatPrimitive = ("primFloat", prim1 primFloat)
 
 > primFloat :: NodePtr -> MachStateT NodePtr
 > primFloat = withInt "floatFromInt" (allocFloat . fromIntegral)
-
-> truncateFloatFunction, roundFloatFunction :: Function
-> truncateFloatFunction =
->   ("truncateFloat",intFromFloatCode "truncateFloat" truncate,1)
-> roundFloatFunction = ("roundFloat",intFromFloatCode "roundFloat" round,1)
-
-> intFromFloatCode :: String -> (Double -> Integer) -> Instruction
-> intFromFloatCode what fromDouble =
->   entry ["x"] $ evalRigid "x"
->               $ \f -> primFromFloat what fromDouble f >>= retNode
 
 > truncPrimitive, roundPrimitive :: Primitive
 > truncPrimitive = ("primTrunc", prim1 $ primFromFloat "truncateFloat" truncate)
@@ -725,7 +603,7 @@ which returns a new constructor node from the supplied arguments.
 \end{verbatim}
 \subsubsection{Comparing Nodes}
 The operator \texttt{(==)} compares two data terms for equality and
-returns either \texttt{True} or \texttt{False}. In constrast to
+returns either \texttt{True} or \texttt{False}. In contrast to
 equality constraints, this function is rigid. In addition, we support
 equality checks only for literals and data terms, but not for partial
 applications.
@@ -787,7 +665,7 @@ applications.
 \end{verbatim}
 The \texttt{compare} function compares two data terms and returns one
 of the values \texttt{LT}, \texttt{EQ}, \texttt{GT} defined in the
-\texttt{prelude}.
+\texttt{Prelude}.
 \begin{verbatim}
 
 > compareFunction :: Function
@@ -842,26 +720,15 @@ of the values \texttt{LT}, \texttt{EQ}, \texttt{GT} defined in the
 >     if nodeTag node == eqTag then compareArgs ptrs else retNode ptr
 
 \end{verbatim}
-\subsubsection{Basic Constraint Functions}
-The \texttt{success} function implements the trivial constraint, which
-is always satisfied.
-\begin{verbatim}
-
-> success :: MachStateT NodePtr
-> success = read'updateState (atom successTag)
-
-> successFunction :: Function
-> successFunction = ("success",successCode,0)
-
-> successCode :: Instruction
-> successCode = entry [] (success >>= retNode)
-
-\end{verbatim}
+\subsubsection{Concurrent Conjunction}
 The concurrent conjunction operator \texttt{\&} evaluates two
 constraints concurrently. It tries to avoid the creation of a
 new thread whenever this is possible. Note that the result of
 \texttt{\&} may be an unbound variable.
 \begin{verbatim}
+
+> success :: MachStateT NodePtr
+> success = read'updateState (atom successTag)
 
 > concConjFunction :: Function
 > concConjFunction = ("&",concConjCode,2)
@@ -1034,7 +901,7 @@ constructors, which can proceed concurrently.
 >             enter "c"
 
 > unifySuccess :: Instruction
-> unifySuccess = successCode
+> unifySuccess = success >>= retNode
 
 > occursCheck :: NodePtr -> Node -> MachStateT Bool
 > occursCheck vptr (ConstructorNode _ _ args)
@@ -1172,7 +1039,7 @@ for the disequality \texttt{(0:xs) =/= [0]}.}
 >   where diseqFirst = updateState (pushNodes [ptr1,ptr2]) >> diseqCode
 
 > diseqSuccess :: Instruction
-> diseqSuccess = successCode
+> diseqSuccess = success >>= retNode
 
 \end{verbatim}
 \subsubsection{Pattern Binding Updates}
@@ -1224,10 +1091,10 @@ update frame.
 The primitive function \texttt{try} starts the reduction of a search
 goal in a new local search space. After evaluating the argument to a
 closure (of arity 1), the code creates a new empty search space and an
-unbound (goal) variable, applies the search goal to that variable,
-and starts the reduction of this application. All arguments of the
-closure are wrapped in global application nodes, since these nodes
-correspond to free variables of the search goal.
+unbound (goal) variable, applies the search goal to that variable, and
+starts reduction of this application. All arguments of the closure are
+wrapped in global application nodes, since these nodes correspond to
+free variables of the search goal.
 
 \ToDo{Do not wrap atomic nodes at all and use global variable nodes
   for all closure arguments which are in head normal form already.}
@@ -1267,6 +1134,9 @@ search space is discarded and the corresponding \texttt{try} call
 returns an empty list.
 \begin{verbatim}
 
+> nil :: MachStateT NodePtr
+> nil = read'updateState (atom nilTag)
+
 > failSearch :: Instruction
 > failSearch =
 >   do
@@ -1290,7 +1160,7 @@ evaluated.
 \begin{verbatim}
 
 > list1 :: NodePtr -> MachStateT NodePtr
-> list1 x = nil >>= cons x
+> list1 x = list [x]
 
 > stoppedSearch :: Instruction
 > stoppedSearch =
@@ -1318,7 +1188,7 @@ evaluated.
 >             arg <- read'updateState popNode
 >             node <- deref arg
 >             case node of
->               VarNode _ _ -> bindVar arg node solution successCode
+>               VarNode _ _ -> bindVar arg node solution unifySuccess
 >               _ -> unify arg solution
 >         unify arg solution =
 >           do
@@ -1336,6 +1206,8 @@ continuation for each alternative is returned from \texttt{try}.
 
 > list :: [NodePtr] -> MachStateT NodePtr
 > list = foldr (\x m -> m >>= cons x) nil
+>   where cons hd tl = allocData tag cName [hd,tl]
+>         ConstructorTag tag cName 2 = consTag
 
 > choiceSearch :: [Instruction] -> Instruction
 > choiceSearch alts =
@@ -1383,13 +1255,13 @@ continuation for each alternative is returned from \texttt{try}.
 >             enter "c"
 
 \end{verbatim}
-When a search goal was solved, the solution of the goal is copied into
-the current search space using \texttt{copyGraph}. We must be careful
-to preserve the sharing of variable nodes when they are copied. In
-addition, we must copy only local variables. The same would hold for
-unevaluated lazy applications. However, the result bound to the goal
-variable cannot contain any unevaluated applications. In order to
-preserve the sharing of local variables, every copied variable is
+When a solved search goal is applied, the solution of the goal is
+copied into the current search space using \texttt{copyGraph}. We must
+be careful to preserve sharing of variable nodes when they are copied.
+In addition, we must copy only local variables. The same would hold
+for unevaluated lazy applications. However, the result bound to the
+goal variable cannot contain any unevaluated applications. In order to
+preserve sharing of local variables, every copied variable is
 temporarily bound to its copy. This binding is recorded on the trail
 and is undone after the graph has been copied.
 
@@ -1457,12 +1329,12 @@ the program could become unsound. For instance, consider the program
   main = (x,map unpack (all (\y -> y =:= x))) where x = coin
 \end{verbatim}
 If \texttt{x} were evaluated in the local search space, either the
-global choicepoint for the evaluation of \texttt{coin} would be lost
+global choice point for the evaluation of \texttt{coin} would be lost
 (because it occurs inside the encapsulated search), or the pair
 \texttt{(0,[0,1])} would be computed. For that reason, all free
-variables are wrapped in global application and gloal variable nodes
+variables are wrapped in global application and global variable nodes
 and the current search is suspended when a global application node
-must be evaluted or a global variable node is matched. After the
+must be evaluated or a global variable node is matched. After the
 application has been evaluated or the variable has been instantiated,
 the global reference node is overwritten with a shallow copy of the
 result or bound variable whose arguments are wrapped in global
@@ -1555,41 +1427,6 @@ instead.
 > unit :: MachStateT NodePtr
 > unit = read'updateState (atom unitTag)
 
-> doneFunction,returnFunction,bind'Function,bindFunction :: Function
-> doneFunction = ("done",doneCode,1)
-> returnFunction = ("return",returnCode,2)
-> bind'Function = (">>",bind'Code,3)
-> bindFunction = (">>=",bindCode,3)
-
-> doneCode :: Instruction
-> doneCode = entry ["_"] (unit >>= retNode)
-
-> returnCode :: Instruction
-> returnCode = entry ["x","_"] (readState (getVar "x") >>= retNode)
-
-> bind'Code :: Instruction
-> bind'Code = 
->   entry ["m1","m2","_"]
->         (seqStmts "" (exec applyFunction ["m1","_"])
->                  (exec applyFunction ["m2","_"]))
-
-> bindCode :: Instruction
-> bindCode =
->   entry ["m1","m2","_"]
->         (seqStmts "x" (exec applyFunction ["m1","_"])
->               (seqStmts "f" (exec applyFunction ["m2","x"])
->                     (exec applyFunction ["f","_"])))
-
-> unsafePerformFunction :: Function
-> unsafePerformFunction = ("unsafePerformIO",unsafePerformCode,1)
-
-> unsafePerformCode :: Instruction
-> unsafePerformCode =
->   entry ["m"] $
->   do
->     unit >>= updateState . setVar "_"
->     exec applyFunction ["m","_"]
-
 > getCharFunction,getLineFunction,putCharFunction,putStrFunction :: Function
 > getCharFunction = ("getChar",getCharCode,1)
 > getLineFunction = ("getLine",getLineCode,1)
@@ -1623,7 +1460,7 @@ instead.
 > putStrCode =
 >   entry ["cs","_"]
 >         (seqStmts "_cs" (enter "cs")
->           (switchRigid "_cs" [(nilTag,const (exec doneFunction ["_"])),
+>           (switchRigid "_cs" [(nilTag,const (unit >>= retNode)),
 >                               (consTag,putStrHead)]
 >                        (const (fail "putStr: bad argument type!"))))
 >   where putStrHead ptr = deref ptr >>= putStrNode

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachLoader.lhs 3003 2010-08-30 19:42:53Z wlux $
+% $Id: MachLoader.lhs 3004 2010-08-30 19:44:01Z wlux $
 %
 % Copyright (c) 1998-2009, Wolfgang Lux
 % See LICENSE for the full license.
@@ -211,9 +211,7 @@ names to node tags and function names to function triples.
 \begin{verbatim}
 
 > initConstrEnv :: ConstrEnv
-> initConstrEnv =
->   foldr bindTag emptyEnv [nilTag,consTag,unitTag,successTag]
->   where bindTag (ConstructorTag t c n) = bindEnv c (ConstructorTag t c n)
+> initConstrEnv = emptyEnv
 
 > bindConstr :: (ConstrDecl,Int) -> ConstrEnv -> ConstrEnv
 > bindConstr (ConstrDecl c tys,t) =
@@ -224,9 +222,7 @@ names to node tags and function names to function triples.
 > lookupConstr c env =
 >   case lookupEnv c' env of
 >     Just x -> x
->     Nothing
->       | isTupleName c' -> ConstructorTag 0 c' (length c' - 1)
->       | otherwise -> error ("Undefined constructor: " ++ c')
+>     Nothing -> error ("Undefined constructor: " ++ c')
 >   where c' = demangle c
 
 > tagWithArity :: Name -> Int -> ConstrEnv -> NodeTag
@@ -250,18 +246,11 @@ names to node tags and function names to function triples.
 
 > initFunEnv :: FunEnv
 > initFunEnv = foldr bindFun emptyEnv [
->       consFunction,failedFunction,successFunction,concConjFunction,
->       seqFunction,ensureNotFreeFunction,tryFunction,
+>       concConjFunction,tryFunction,
 >       equalFunction,compareFunction,unifyFunction,diseqFunction,
->       addIntFunction,subIntFunction,multIntFunction,
->       quotIntFunction,remIntFunction,divIntFunction,modIntFunction,
->       ordFunction,chrFunction,
->       addFloatFunction,subFloatFunction,multFloatFunction,divFloatFunction,
->       floatFromIntFunction,roundFloatFunction,truncateFloatFunction,
 >       pbUpdateFunction,pbReturnFunction,
->       doneFunction,returnFunction,bind'Function,bindFunction,
 >       getCharFunction,getLineFunction,putCharFunction,putStrFunction,
->       unsafePerformFunction,curryExitFunction
+>       curryExitFunction
 >     ]
 >   where bindFun fn@(name,_,_) = bindEnv name fn
 
@@ -280,13 +269,11 @@ names to node tags and function names to function triples.
 >     Just f -> f
 >     Nothing
 >       | isApName f' -> applyFunctions !! (apArity f' - 1)
->       | isTupleName f' -> tupleFunctions !! (tupleArity f')
 >       | otherwise -> error ("Undefined function: " ++ f')
 >   where f' = demangle f
 >         isApName ('@':cs) = all isDigit cs
 >         isApName _ = False
 >         apArity ('@':cs) = if null cs then 1 else read cs
->         tupleArity ('P':'r':'e':'l':'u':'d':'e':'.':'(':cs) = length cs
 
 \end{verbatim}
 The environment holding the \verb|ccall|able primitives is fixed.

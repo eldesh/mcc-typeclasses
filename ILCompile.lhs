@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 3000 2010-08-30 19:33:17Z wlux $
+% $Id: ILCompile.lhs 3006 2010-08-30 19:49:09Z wlux $
 %
-% Copyright (c) 1999-2009, Wolfgang Lux
+% Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ILCompile.lhs}
@@ -51,10 +51,8 @@ language into abstract machine code.
 >           Cam.TypeArr (compileType ty1) (compileType ty2)
 
 > compileFun :: QualIdent -> [Ident] -> Expression -> Cam.Decl
-> compileFun f vs e =
->   runSt (compile (Cam.FunctionDecl (fun f)) vs e) (nameSupply "_")
->   where compile f vs e =
->           liftM (f (map var vs) . unalias) (compileStrict [] e [])
+> compileFun f vs e = Cam.FunctionDecl (fun f) (map var vs) (unalias st)
+>   where st = runSt (compileStrict [] e []) (nameSupply "_")
 
 \end{verbatim}
 The code of a few known foreign functions using the \texttt{primitive}
@@ -373,16 +371,23 @@ functions before compiling into abstract machine code.
 
 \end{verbatim}
 In a post-processing step, the generated code is simplified by
-removing alias bindings and nested statement sequences. In addition,
-the code is transformed such that \texttt{let} statements are used
-only to create recursive bindings. All other nodes are allocated with
-statements of the form $x$ \texttt{<-} \texttt{return} $e$. Note that
-non-recursive \texttt{let} bindings can be introduced in
-\texttt{letBindings} when the bindings of an intermediate language
+removing alias bindings and nested statement sequences. Note that $y$
+becomes an alias for $x$ after evaluating the statement $y$
+\texttt{<-} \texttt{eval} $x$ and is used to replace all further
+occurrences of $x$. This is necessary to ensure the validity of the
+optimization to just return variables after they have been evaluated
+once. Otherwise, the code might unexpectedly return an indirection
+node, e.g., for a function like \verb|f xs = case xs of { _:_ -> xs }|.
+
+In addition, the code is transformed such that \texttt{let} statements
+are used only to create recursive bindings. All other nodes are
+allocated with statements of the form $x$ \texttt{<-} \texttt{return}
+$e$. Note that non-recursive \texttt{let} bindings can be introduced
+in \texttt{letBindings} when the bindings of an intermediate language
 \texttt{letrec} expression are split into minimal recursive groups.
 
-In order to simplify the generated code, we make use of the following
-equivalences.
+Here is a summary of the equivalences used to simplify the generated
+code.
 \begin{quote}\def\lb{\char`\{}\def\rb{\char`\}}
   \begin{tabular}{r@{$\null\equiv\null$}ll}
     \texttt{let} \texttt{\lb} $x$ \texttt{=} $e$ \texttt{\rb} \texttt{in} \emph{st} &
@@ -390,6 +395,7 @@ equivalences.
     $x$ \texttt{<-} \emph{st}\texttt{;} \texttt{return} $x$ & \emph{st} \\
     $x$ \texttt{<-} \texttt{return} $y$\texttt{;} \emph{st} &
       $\emph{st}[x/y]$ \\
+    $x$ \texttt{<-} \texttt{eval} $y$\texttt{;} \emph{st} & $\emph{st}[y/x]$ \\
     $y$ \texttt{<-} \texttt{\lb} $x$ \texttt{<-} \emph{st$_1$}\texttt{;} \emph{st$_2$} \texttt{\rb}\texttt{;} \emph{st$_3$} &
       $x$ \texttt{<-} \emph{st$_1$}\texttt{;} $y$ \texttt{<-} \emph{st$_2$}\texttt{;} \emph{st$_3$} \\
     $x$ \texttt{<-} \texttt{\lb} \texttt{let} \texttt{\lb} \emph{ds} \texttt{\rb} \texttt{in} \emph{st$_1$} \texttt{\rb}\texttt{;} \emph{st$_2$} &
@@ -415,6 +421,8 @@ equivalences.
 > unaliasStmt aliases (Cam.Seq (v Cam.:<- st1) st2) =
 >   case unaliasStmt aliases st1 of
 >     Cam.Return (Cam.Var v') -> unaliasStmt (addToFM v v' aliases) st2
+>     Cam.Eval v' ->
+>       Cam.Seq (v Cam.:<- Cam.Eval v') (unaliasStmt (addToFM v' v aliases) st2)
 >     st1' ->
 >       case unaliasStmt aliases st2 of
 >         Cam.Return (Cam.Var v') | v == v' -> st1'

@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 2862 2009-06-03 05:49:47Z wlux $
+% $Id: eval.nw 3008 2010-09-01 09:59:41Z wlux $
 %
-% Copyright (c) 2001-2009, Wolfgang Lux
+% Copyright (c) 2001-2010, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Evaluation}\label{sec:eval}
@@ -463,9 +463,12 @@ FUNCTION(__isVar)
 static
 FUNCTION(__isVar_1)
 {
-    Node *r;
+    Node *node, *r;
  ENTRY_LABEL(static, __isVar_1)
-    if ( is_tagged_ptr(regs.r[0]) && is_variable_node(regs.r[0]) )
+    node = regs.r[0];
+    while ( is_tagged_ptr(node) && is_indir_node(node) )
+	node = node->n.node;
+    if ( is_tagged_ptr(node) && is_variable_node(node) )
 	r = CONST(__Prelude__True);
     else
 	r = CONST(__Prelude__False);

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: funpat.nw 2927 2010-03-23 11:25:01Z wlux $
+% $Id: funpat.nw 3008 2010-09-01 09:59:41Z wlux $
 %
 % Copyright (c) 2009-2010, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -102,6 +102,8 @@ FUNCTION(___61__58__60__61__1)
  ENTRY_LABEL(static, ___61__58__60__61__1)
     arg1 = regs.r[0];
     arg2 = regs.sp[0];
+    while ( is_tagged_ptr(arg1) && is_indir_node(arg1) )
+	arg1 = arg1->n.node;
     if ( is_tagged_ptr(arg1) )
     {
 	if ( is_variable_node(arg1) )
@@ -128,6 +130,7 @@ FUNCTION(___61__58__60__61__1)
 	}
 	else if ( is_global_var_node(arg1) )
 	{
+	    regs.r[0] = arg1;
 	    GOTO(sync_global);
 	}
     }
@@ -156,23 +159,19 @@ FUNCTION(___61__58__60__61__2)
  ENTRY_LABEL(static, ___61__58__60__61__2)
     arg1 = regs.sp[0];
     arg2 = regs.r[0];
-    while ( is_tagged_ptr(arg1) )
+    while ( is_tagged_ptr(arg1) && is_indir_node(arg1) )
+	arg1 = arg1->n.node;
+    while ( is_tagged_ptr(arg2) && is_indir_node(arg2) )
+        arg2 = arg2->n.node;
+    if ( is_tagged_ptr(arg1) && is_variable_node(arg1) )
     {
-	switch ( node_kind(arg1) )
-	{
-	case INDIR_KIND:
-	    arg1 = arg1->n.node;
-	    continue;
-	case LVAR_KIND:
-	    /* check for trivial unification */
-	    if ( arg1 == arg2 )
-		RETURN(Success, 1);
+	/* check for trivial unification */
+	if ( arg1 == arg2 )
+	    RETURN(Success, 1);
 
-	    /* bind the variable to the computed head normal form */
-	    regs.sp += 1;
-	    CALL2(bind_var, funpat_succeed, arg1, arg2);
-	}
-	break;
+	/* bind the variable to the computed head normal form */
+	regs.sp += 1;
+	CALL2(bind_var, funpat_succeed, arg1, arg2);
     }
 
     /* special case: the left argument has been instantiated */
@@ -191,6 +190,8 @@ FUNCTION(___61__58__60__61__3)
 
     while ( is_tagged_ptr(arg1) && is_indir_node(arg1) )
         arg1 = arg1->n.node;
+    while ( is_tagged_ptr(arg2) && is_indir_node(arg2) )
+        arg2 = arg2->n.node;
     assert(!is_tagged_ptr(arg1) ||
 	   (!is_variable_node(arg1) && !is_global_var_node(arg1)));
     if ( is_tagged_ptr(arg2) &&

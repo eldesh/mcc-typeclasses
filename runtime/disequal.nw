@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 2929 2010-03-23 11:26:46Z wlux $
+% $Id: disequal.nw 3008 2010-09-01 09:59:41Z wlux $
 %
 % Copyright (c) 2002-2010, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -89,6 +89,8 @@ FUNCTION(___61__47__61__2)
 
     while ( is_tagged_ptr(arg1) && is_indir_node(arg1) )
 	arg1 = arg1->n.node;
+    while ( is_tagged_ptr(arg2) && is_indir_node(arg2) )
+	arg2 = arg2->n.node;
     if ( is_tagged_ptr(arg1) && is_variable_node(arg1) )
     {
 	/* check for trivial disequality (x=/=x) */

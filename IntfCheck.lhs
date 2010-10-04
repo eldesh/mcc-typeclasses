@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 2815 2009-05-04 13:59:57Z wlux $
+% $Id: IntfCheck.lhs 3012 2010-10-04 11:29:23Z wlux $
 %
-% Copyright (c) 2000-2008, Wolfgang Lux
+% Copyright (c) 2000-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{IntfCheck.lhs}
@@ -99,6 +99,10 @@ error for both.
 >           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' &&
 >             (null cs || map constr cs == cs') =
 >               Just (mapM_ (checkConstrImport tyEnv cx tc tvs) cs)
+>         checkData (RenamingType tc' k' _)
+>           | tc == tc' && maybe (simpleKind (length tvs)) toKind k == k' &&
+>             null cs =
+>               Just (return ())
 >         checkData _ = Nothing
 > checkImport _ tcEnv _ tyEnv (INewtypeDecl p cx tc k tvs nc _) =
 >   checkTypeInfo "newtype" checkNewtype tcEnv p tc

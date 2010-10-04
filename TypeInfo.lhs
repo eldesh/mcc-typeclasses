@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeInfo.lhs 3011 2010-10-04 11:02:46Z wlux $
+% $Id: TypeInfo.lhs 3012 2010-10-04 11:29:23Z wlux $
 %
 % Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -32,11 +32,12 @@ recorded in the environment.
 \ToDo{Sort methods of a type class, too, because their order is not
   relevant?}
 
-Importing and exporting algebraic data types is complicated by the
-fact that the constructors of the type may be (partially) hidden in
-the interface. This facilitates the definition of abstract data types.
-An abstract type is always represented as a data type without
-constructors in the interface.
+Importing and exporting algebraic data types and renaming types is
+complicated by the fact that the constructors of the type may be
+(partially) hidden in the interface. This facilitates the definition
+of abstract data types. An abstract type is always represented as a
+data type without constructors in the interface regardless of whether
+it is defined as a data type or as a renaming type.
 \begin{verbatim}
 
 > module TypeInfo where

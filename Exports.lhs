@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: Exports.lhs 3012 2010-10-04 11:29:23Z wlux $
 %
 % Copyright (c) 2000-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -12,20 +12,20 @@ is imported from another module, its name is qualified with the name
 of the module containing its definition. Instances are exported
 together with their classes and types as explained below.
 
-Data types whose constructors are not exported are exported as
-abstract types, i.e., their data constructors do not appear in the
-interface. If only some data constructors of a data type are not
-exported those constructors appear in the interface together with the
-exported constructors, but a pragma marks them as hidden so that they
-cannot be used in user code. A special case is made for the Prelude's
-\texttt{Success} type, whose only constructor is not exported from the
-Prelude. Since the compiler makes use of this constructor when
-flattening guard expressions (cf.\ Sect.~\ref{sec:flatcase}),
-\texttt{typeDecl}'s \texttt{DataType} case explicitly forces the
-\texttt{Success} constructor to appear as hidden data constructor in
-the interface. For a similar reason, the compiler also forces the
-\verb|:%| constructor of type \texttt{Ratio.Ratio} to appear in
-interfaces.
+Data types and renaming types whose constructors and field labels are
+not exported are exported as abstract types, i.e., their constructors
+do not appear in the interface. If only some constructors or field
+labels of a type are not exported all constructors appear in the
+interface, but a pragma marks the constructors and field labels which
+are not exported as hidden to prevent their use in user code. A
+special case is made for the Prelude's \texttt{Success} type, whose
+only constructor is not exported from the Prelude. Since the compiler
+makes use of this constructor when flattening guard expressions (cf.\
+Sect.~\ref{sec:flatcase}), \texttt{typeDecl}'s \texttt{DataType} case
+explicitly forces the \texttt{Success} constructor to appear as hidden
+data constructor in the interface. For a similar reason, the compiler
+also forces the \verb|:%| constructor of type \texttt{Ratio.Ratio} to
+appear in interfaces.
 
 \textbf{Attention:} The compiler assumes that the environments passed
 to \texttt{exportInterface} reflect the types of the module's entities
@@ -46,7 +46,6 @@ correct arity annotations are written to the interface.
 > import KindTrans
 > import List
 > import Maybe
-> import Monad
 > import PrecInfo
 > import PredefIdent
 > import Set
@@ -89,19 +88,21 @@ correct arity annotations are written to the interface.
 > typeDecl _ _ _ _ (Export _) ds = ds
 > typeDecl tcEnv aEnv tyEnv tvs (ExportTypeWith tc xs) ds =
 >   case qualLookupTopEnv tc tcEnv of
->     [DataType _ k cs] -> iTypeDecl IDataDecl cx'' tc tvs n k constrs xs' : ds
+>     [DataType _ k cs]
+>       | null xs && tc /= qSuccessId && tc /= qRatioId ->
+>           iTypeDecl IDataDecl [] tc tvs n k [] [] : ds
+>       | otherwise -> iTypeDecl IDataDecl cx' tc tvs n k cs' xs' : ds
 >       where n = kindArity k
->             cx'' = guard vis >> cx'
->             constrs = guard vis >> cs'
->             xs' = guard vis >> filter (`notElem` xs) (cs ++ ls)
+>             xs' = filter (`notElem` xs) (cs ++ ls)
 >             QualTypeExpr cx' _ = fromQualType tvs ty'
 >             ty' = canonType (qualInstType (nub (concat cxs)) tc n)
 >             (cxs,cs') = unzip (map (constrDecl tyEnv xs tc tvs) cs)
 >             ls = nub (concatMap labels cs')
->             vis = not (null xs) || tc `elem` [qSuccessId,qRatioId]
->     [RenamingType _ k c] -> iTypeDecl INewtypeDecl cx' tc tvs n k nc' xs' : ds
+>     [RenamingType _ k c]
+>       | null xs -> iTypeDecl IDataDecl [] tc tvs n k [] [] : ds
+>       | otherwise -> iTypeDecl INewtypeDecl cx tc tvs n k nc xs' : ds
 >       where n = kindArity k
->             (cx',nc') = newConstrDecl tyEnv xs tc tvs c
+>             (cx,nc) = newConstrDecl tyEnv xs tc tvs c
 >             xs' = [c | c `notElem` xs]
 >     [AliasType _ n k ty] ->
 >       iTypeDecl (const . ITypeDecl) [] tc tvs n k (fromType tvs ty) : ds

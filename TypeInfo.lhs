@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeInfo.lhs 2815 2009-05-04 13:59:57Z wlux $
+% $Id: TypeInfo.lhs 3011 2010-10-04 11:02:46Z wlux $
 %
-% Copyright (c) 1999-2008, Wolfgang Lux
+% Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeInfo.lhs}
@@ -65,6 +65,10 @@ constructors in the interface.
 >   merge (DataType tc1 k1 cs1) (DataType tc2 k2 cs2)
 >     | tc1 == tc2 && k1 == k2 && (null cs1 || null cs2 || cs1 == cs2) =
 >         Just (DataType tc1 k1 (if null cs1 then cs2 else cs1))
+>   merge (DataType tc1 k1 []) (RenamingType tc2 k2 nc)
+>     | tc1 == tc2 && k1 == k2 = Just (RenamingType tc1 k1 nc)
+>   merge (RenamingType tc1 k1 nc) (DataType tc2 k2 [])
+>     | tc1 == tc2 && k1 == k2 = Just (RenamingType tc1 k1 nc)
 >   merge (RenamingType tc1 k1 nc1) (RenamingType tc2 k2 nc2)
 >     | tc1 == tc2 && k1 == k2 && nc1 == nc2 = Just (RenamingType tc1 k1 nc1)
 >   merge (AliasType tc1 n1 k1 ty1) (AliasType tc2 n2 k2 ty2)

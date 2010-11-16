@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: ILTrans.lhs 3016 2010-11-16 21:15:14Z wlux $
 %
 % Copyright (c) 1999-2010, Wolfgang Lux
 % See LICENSE for the full license.
@@ -32,16 +32,14 @@ module.
 
 \end{verbatim}
 \paragraph{Modules}
-At the top-level, the compiler has to translate data type, newtype,
-function, and foreign declarations. When translating data type and
-newtype declarations, we ignore the types in the declarations and look
-up the types of the constructors in the type environment instead
-because these types are already fully expanded, i.e., they do not
-include any alias types. On the other hand, we introduce new type
-synonyms in place of newtype declarations (see Sect.~\ref{sec:IL}).
-Note that \texttt{ilTrans} first sorts top-level declarations
-according to their textual order in order to ensure that split
-annotations are inserted in IL code at the correct places.
+At the top-level, the compiler has to translate data, type, function,
+and foreign declarations. When translating data type and type synonym
+declarations, we ignore the types in the declarations and look up the
+types of the constructors in the type (constructor) environment
+instead because these types are already fully expanded, i.e., they do
+not include any alias types. Note that \texttt{ilTrans} first sorts
+top-level declarations according to their textual order to ensure that
+split annotations are inserted in IL code at the correct places.
 \begin{verbatim}
 
 > ilTrans :: TCEnv -> ValueEnv -> Module Type -> IL.Module
@@ -170,11 +168,6 @@ actual pattern. We always use a flexible match for the outer case
 expression because the compiler would generate a redundant switch
 statement during the translation of the intermediate language into
 abstract machine code otherwise.
-
-We also replace applications of newtype constructors by their
-arguments. This transformation was performed already during
-desugaring, but $\eta$-expansion and optimization may introduce
-further possibilities to apply this transformation.
 \begin{verbatim}
 
 > translExpr :: ValueEnv -> [Ident] -> Expression Type -> IL.Expression

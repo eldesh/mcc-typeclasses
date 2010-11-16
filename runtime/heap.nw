@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 2887 2009-08-05 15:54:11Z wlux $
+% $Id: heap.nw 3015 2010-11-16 21:13:35Z wlux $
 %
 % Copyright (c) 2001-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -109,7 +109,7 @@ sets the [[NO_POINTER_TAGS]] preprocessor flag.
 # define tag_char(c)		(Node *)(((long)(c) << 2) + 0x02)
 # define untag_char(p)		(int)((long)(p) >> 2)
 
-# define tag_int(i)		(Node *)(((i) << 1) + 0x01)
+# define tag_int(i)		(Node *)(((long)(i) << 1) + 0x01)
 # define untag_int(p)		((long)(p) >> 1)
 #endif
 

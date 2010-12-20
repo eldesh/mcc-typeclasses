@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: stack.nw 2740 2008-08-04 15:27:39Z wlux $
+% $Id: stack.nw 3020 2010-12-20 08:59:18Z wlux $
 %
 % Copyright (c) 2001-2008, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -82,7 +82,7 @@ stack_overflow()
 {
     fprintf(stderr,
 	    "Stack overflow; current size: %u bytes\n"
-	    "Use +RTS -kSIZE to increase stack size\n",
+	    "Use +RTS -kSIZE -RTS to increase stack size\n",
 	    stacksize);
     exit(2);
 }

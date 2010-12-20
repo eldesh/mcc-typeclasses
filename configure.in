@@ -1,4 +1,4 @@
-dnl $Id: configure.in 2750 2008-08-30 13:21:58Z wlux $
+dnl $Id: configure.in 3021 2010-12-20 09:04:30Z wlux $
 dnl
 dnl Copyright (c) 2002-2008, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -347,7 +347,7 @@ Neither the Gnu MP library nor OpenSSL's libcrypto could be
 found.  If they are installed in a non-standard location be
 sure to invoke configure with the correct settings for
 CPPFLAGS and LDFLAGS.  If not installed you can download the
-Gnu MP library from http://www.swox.com/gmp/])
+Gnu MP library from http://gmplib.org/])
 fi
 
 

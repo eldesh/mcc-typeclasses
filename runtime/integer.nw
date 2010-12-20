@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: integer.nw 2877 2009-07-28 14:47:04Z wlux $
+% $Id: integer.nw 3022 2010-12-20 09:10:07Z wlux $
 %
 % Copyright (c) 2007-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -1333,7 +1333,16 @@ primComplBitInteger(Node *x, Node *y)
 #endif
 	mpz_set(mp_tmp, x->bi.mpz);
     if ( n >= 0 )
+#if __GNU_MP_VERSION > 4 || __GNU_MP_VERSION_MINOR >= 2
 	mpz_combit(mp_tmp, n);
+#else
+    {
+	if ( mpz_tstbit(mp_tmp, n) )
+	    mpz_clrbit(mp_tmp, n);
+	else
+	    mpz_setbit(mp_tmp, n);
+    }
+#endif
 
 #if !NO_POINTER_TAGS
     if ( !is_large_mpz(mp_tmp) )

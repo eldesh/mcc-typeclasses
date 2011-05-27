@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Cam.lhs 3000 2010-08-30 19:33:17Z wlux $
+% $Id: Cam.lhs 3024 2011-05-27 07:49:19Z wlux $
 %
-% Copyright (c) 1998-2009, Wolfgang Lux
+% Copyright (c) 1998-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Cam.lhs}
@@ -214,7 +214,7 @@ implemented by the function \texttt{demangle}.
 > mangle cs = Name (mangleIdent cs)
 >   where mangleIdent [] = []
 >         mangleIdent (c:cs)
->           | isAlphaNum c = c : mangleIdent cs
+>           | isAlphaNum c && ord c < 128 = c : mangleIdent cs
 >           | otherwise = '_' : show (ord c) ++ '_' : mangleIdent cs
 
 > mangleQualified :: String -> Name

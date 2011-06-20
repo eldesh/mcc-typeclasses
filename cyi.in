@@ -3,7 +3,7 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 3028 2011-06-20 07:59:00Z wlux $
+# $Id: cyi.in 3029 2011-06-20 08:00:10Z wlux $
 #
 # Copyright (c) 2002-2011, Wolfgang Lux
 # See LICENSE for the full license.
@@ -231,10 +231,15 @@ reload ( ) {
     set_module "$source"
     command=
     dcommand=
-    eval set dummy "`compile_target -a -### | tail -1`"; shift
+    # NB The -e _ option is necessary to force cymake into generating a link
+    #    command for the target, which includes -M options that bring the
+    #    entities of all imported interfaces into scope within the goal. The
+    #    goal expression itself is irrelevant here but must be a non-empty
+    #    string.
+    eval set dummy "`compile_target -e _ -### | tail -1`"; shift
     while test $# -gt 0; do
       case $1 in
-	-o ) shift;;
+	-o | -e ) shift;;
 	* ) command="$command "`quote "$1"`
       esac
       shift

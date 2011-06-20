@@ -3,7 +3,7 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 3029 2011-06-20 08:00:10Z wlux $
+# $Id: cyi.in 3030 2011-06-20 08:01:24Z wlux $
 #
 # Copyright (c) 2002-2011, Wolfgang Lux
 # See LICENSE for the full license.
@@ -205,10 +205,10 @@ load ( ) {
 	      esac
 	      command=
 	      dcommand=
+	      reload
             else
 	      echo "source file $m does not exist"
-	    fi
-	    reload;;
+	    fi;;
 	*.icurry )
 	    srcdir=`pwd`
 	    source=

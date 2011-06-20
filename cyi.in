@@ -3,9 +3,9 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 2945 2010-06-11 10:39:16Z wlux $
+# $Id: cyi.in 3028 2011-06-20 07:59:00Z wlux $
 #
-# Copyright (c) 2002-2010, Wolfgang Lux
+# Copyright (c) 2002-2011, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -45,6 +45,7 @@ srcdir=
 source=
 target=
 cyopts=
+interfaces=
 module=
 command=
 dcommand=
@@ -141,7 +142,7 @@ compile_target ( ) {
   if test -n "$target"; then
     (cd "$srcdir" && "$cymake" -q $cyopts "$@" "$target")
   else
-    (cd "${srcdir:-.}" && "$cymake" -q $cyopts "$@")
+    (cd "${srcdir:-.}" && "$cymake" -q $cyopts $interfaces "$@")
   fi
 }
 
@@ -184,6 +185,7 @@ load ( ) {
       source=
       target=
       module=Prelude
+      interfaces=
       command=
       dcommand=
       prompt="$module> "
@@ -196,6 +198,7 @@ load ( ) {
 	    if test -f "$m"; then
               srcdir=`pwd`
 	      source=$m
+	      interfaces=
 	      case $m in
 		*.curry ) target=`expr "$m" : '\(.*\)\.curry'`;;
 		*.lcurry ) target=`expr "$m" : '\(.*\)\.lcurry'`;;
@@ -209,6 +212,7 @@ load ( ) {
 	*.icurry )
 	    srcdir=`pwd`
 	    source=
+	    interfaces=-M$m
 	    target=
 	    command=
 	    dcommand=

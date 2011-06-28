@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Goals.lhs 2990 2010-08-20 09:28:04Z wlux $
+% $Id: Goals.lhs 3033 2011-06-28 08:52:08Z wlux $
 %
-% Copyright (c) 1999-2010, Wolfgang Lux
+% Copyright (c) 1999-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Goals.lhs}
@@ -110,15 +110,15 @@ interfaces are in scope with their qualified names.
 > loadGoalModules paths debug fns =
 >   do
 >     (mEnv,ms') <- loadGoalInterfaces paths ms fns
->     let ds' = [importDecl p m True [] | m <- ms']
+>     let ds' = [importDecl p m True [] | m <- preludeMIdent : ms']
 >         ms'' = preludeMIdent : if null fns then [] else [last ms']
 >         ds'' = [importDecl p m False xs | (m,xs) <- intfImports mEnv ms'']
 >     return (mEnv,last ms'',ds' ++ ds'')
 >   where p = first ""
 >         ms = map (P p) (preludeMIdent : [debugPreludeMIdent | debug])
->         importDecl p m q xs = ImportDecl p m q Nothing (hiding q xs)
->         hiding True _ = Nothing
->         hiding False xs = Just (Hiding p xs)
+>         importDecl p m q xs = ImportDecl p m q Nothing (hideUnqual q xs)
+>         hideUnqual True _ = Nothing
+>         hideUnqual False xs = Just (Hiding p xs)
 
 > checkGoalSyntax :: ModuleEnv -> [ImportDecl] -> Goal a
 >                 -> Error (TypeEnv,FunEnv,Goal a)

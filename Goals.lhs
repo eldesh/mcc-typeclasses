@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Goals.lhs 3033 2011-06-28 08:52:08Z wlux $
+% $Id: Goals.lhs 3034 2011-06-28 08:57:27Z wlux $
 %
 % Copyright (c) 1999-2011, Wolfgang Lux
 % See LICENSE for the full license.
@@ -46,11 +46,10 @@ This module controls the compilation of goals.
 > import ValueInfo
 
 \end{verbatim}
-A goal is compiled with respect to the interface of a given module. If
-no module is specified, the Curry Prelude is used. All entities
-exported from the main module and the Prelude are in scope with their
-unqualified names. In addition, the entities exported from all loaded
-interfaces are in scope with their qualified names.
+A goal is compiled with respect to the interfaces of the modules
+specified on the command line. The Curry Prelude is implicitly added
+to this set. The entities exported from these modules are in scope
+with their qualified and unqualified names.
 \begin{verbatim}
 
 > data Task = EvalGoal | TypeGoal deriving Eq
@@ -110,8 +109,8 @@ interfaces are in scope with their qualified names.
 > loadGoalModules paths debug fns =
 >   do
 >     (mEnv,ms') <- loadGoalInterfaces paths ms fns
->     let ds' = [importDecl p m True [] | m <- preludeMIdent : ms']
->         ms'' = preludeMIdent : if null fns then [] else [last ms']
+>     let ms'' = preludeMIdent : ms'
+>         ds' = [importDecl p m True [] | m <- ms'']
 >         ds'' = [importDecl p m False xs | (m,xs) <- intfImports mEnv ms'']
 >     return (mEnv,last ms'',ds' ++ ds'')
 >   where p = first ""
@@ -163,18 +162,20 @@ interfaces are in scope with their qualified names.
 > warnGoal warn tyEnv g = overlapCheckGoal warn tyEnv g
 
 \end{verbatim}
-In contrast to source modules, where all imported entities share a
-common scope, we pretend modules are imported into nested scopes when
-compiling a goal. Thus, definitions from the main module can shadow
-definitions from the Prelude in the goal expression. This is achieved
-by carefully crafting appropriate hiding specifications for the import
-declarations computed by \texttt{goalImportDecls}, which hide all
-names that will be brought into scope by a subsequent import.
+When compiling a goal the entities of all modules specified on the
+command line are brought into scope with their qualified and
+unqualified names. Entities exported from the main module, which by
+convention is the last module specified on the command line, are
+treated specially in that they shadow entities exported from other
+modules. This is achieved by adding appropriate hiding specifications
+to the implicit import declarations for all modules except the main
+module in \texttt{intfImport}, which hide all names that will be
+brought into scope by the main module.
 \begin{verbatim}
 
 > intfImports :: ModuleEnv -> [ModuleIdent] -> [(ModuleIdent,[Import])]
-> intfImports mEnv ms = zip ms (scanr (++) [] (tail xss))
->   where xss = [imports (moduleInterface m mEnv) | m <- ms]
+> intfImports mEnv ms = zip ms (replicate (length ms - 1) xs ++ [[]])
+>   where xs = imports (moduleInterface (last ms) mEnv)
 >         imports (Interface _ _ ds) = concatMap intfImport ds
 
 > intfImport :: IDecl -> [Import]

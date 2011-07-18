@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 3039 2011-07-18 09:19:28Z wlux $
+% $Id: Simplify.lhs 3040 2011-07-18 09:22:54Z wlux $
 %
 % Copyright (c) 2003-2011, Wolfgang Lux
 % See LICENSE for the full license.
@@ -121,8 +121,13 @@ Currently, the following optimizations are implemented:
 >             -> SimplifyState (Rhs QualType)
 > simplifyRhs m tyEnv env (SimpleRhs p e _) =
 >   do
->     e' <- simplifyApp p e [] >>= simplifyExpr m tyEnv env
+>     e' <- simplifyAppExpr m tyEnv p env e
 >     return (SimpleRhs p e' [])
+
+> simplifyAppExpr :: ModuleIdent -> ValueEnv -> Position -> InlineEnv
+>                 -> Expression QualType -> SimplifyState (Expression QualType)
+> simplifyAppExpr m tyEnv p env e =
+>   simplifyApp p e [] >>= simplifyExpr m tyEnv p env
 
 \end{verbatim}
 \label{eta-expansion}
@@ -328,11 +333,8 @@ ensures that $x_1,\dots,x_m$ are not free in $e_1,\dots,e_n$.
 > simplifyApp _ (Literal ty l) _ = return (Literal ty l)
 > simplifyApp _ (Variable ty v) es = return (apply (Variable ty v) es)
 > simplifyApp _ (Constructor ty c) es = return (apply (Constructor ty c) es)
-> simplifyApp p (Tuple es) _ = liftM Tuple (mapM (flip (simplifyApp p) []) es)
-> simplifyApp p (Apply e1 e2) es =
->   do
->     e2' <- simplifyApp p e2 []
->     simplifyApp p e1 (e2':es)
+> simplifyApp _ (Tuple es) _ = return (Tuple es)
+> simplifyApp p (Apply e1 e2) es = simplifyApp p e1 (e2:es)
 > simplifyApp p (Lambda p' ts e) es
 >   | n <= length es = simplifyApp p (foldr2 (match p') e ts es1) es2
 >   | otherwise = return (apply (Lambda p' ts e) es)
@@ -340,14 +342,8 @@ ensures that $x_1,\dots,x_m$ are not free in $e_1,\dots,e_n$.
 >         (es1,es2) = splitAt n es
 >         match p (VariablePattern ty v) e1 e2 = Let [varDecl p ty v e1] e2
 > simplifyApp p (Let ds e) es = liftM (Let ds) (simplifyApp p e es)
-> simplifyApp p (Case e as) es =
->   do
->     e' <- simplifyApp p e []
->     mkCase p (Case e') es as
-> simplifyApp p (Fcase e as) es =
->   do
->     e' <- simplifyApp p e []
->     mkCase p (Fcase e') es as
+> simplifyApp p (Case e as) es = mkCase p (Case e) es as
+> simplifyApp p (Fcase e as) es = mkCase p (Fcase e) es as
 
 > mkCase :: Position -> ([Alt QualType] -> Expression QualType)
 >        -> [Expression QualType] -> [Alt QualType]
@@ -393,47 +389,46 @@ transformation avoids the creation of some redundant lifted functions
 in later phases of the compiler.
 \begin{verbatim}
 
-> simplifyExpr :: ModuleIdent -> ValueEnv -> InlineEnv -> Expression QualType
->              -> SimplifyState (Expression QualType)
-> simplifyExpr _ _ _ (Literal ty l) = return (Literal ty l)
-> simplifyExpr m tyEnv env (Variable ty v)
+> simplifyExpr :: ModuleIdent -> ValueEnv -> Position -> InlineEnv
+>              -> Expression QualType -> SimplifyState (Expression QualType)
+> simplifyExpr _ _ _ _ (Literal ty l) = return (Literal ty l)
+> simplifyExpr m tyEnv p env (Variable ty v)
 >   | isQualified v = return (Variable ty v)
 >   | otherwise =
 >       do
 >         tcEnv <- envRt
 >         maybe (return (Variable ty v))
->               (simplifyExpr m tyEnv env . substExpr tcEnv (unqualType ty))
+>               (simplifyExpr m tyEnv p env . substExpr tcEnv (unqualType ty))
 >               (lookupEnv (unqualify v) env)
 >   where substExpr tcEnv ty =
 >           snd . expandTypeAnnot tcEnv (arrowArity ty) . withType tcEnv ty
-> simplifyExpr _ _ _ (Constructor ty c) = return (Constructor ty c)
-> simplifyExpr m tyEnv env (Tuple es) =
->   liftM Tuple (mapM (simplifyExpr m tyEnv env) es)
-> simplifyExpr m tyEnv env (Apply e1 e2) =
+> simplifyExpr _ _ _ _ (Constructor ty c) = return (Constructor ty c)
+> simplifyExpr m tyEnv p env (Tuple es) =
+>   liftM Tuple (mapM (simplifyAppExpr m tyEnv p env) es)
+> simplifyExpr m tyEnv p env (Apply e1 e2) =
 >   do
->     e1' <- simplifyExpr m tyEnv env e1
->     e2' <- simplifyExpr m tyEnv env e2
+>     e1' <- simplifyExpr m tyEnv p env e1
+>     e2' <- simplifyAppExpr m tyEnv p env e2
 >     return (Apply e1' e2')
-> simplifyExpr m tyEnv env (Lambda p ts e) =
+> simplifyExpr m tyEnv _ env (Lambda p ts e) =
 >   do
->     e' <- simplifyApp p e [] >>= simplifyExpr m tyEnv' env
->     (ts',e'') <- etaExpand tyEnv' e'
->     let ts'' = map (simplifyPattern (qfv m (Lambda p ts' e''))) ts ++ ts'
->     return (etaReduce m tyEnv' p ts'' e'')
+>     (ts',e') <- simplifyAppExpr m tyEnv' p env e >>= etaExpand tyEnv'
+>     let ts'' = map (simplifyPattern (qfv m (Lambda p ts' e'))) ts ++ ts'
+>     return (etaReduce m tyEnv' p ts'' e')
 >   where tyEnv' = bindTerms ts tyEnv
-> simplifyExpr m tyEnv env (Let ds e) =
->   simplifyLet m tyEnv env (scc bv (qfv m) (foldr hoistDecls [] ds)) e
-> simplifyExpr m tyEnv env (Case e as) =
+> simplifyExpr m tyEnv p env (Let ds e) =
+>   simplifyLet m tyEnv p env (scc bv (qfv m) (foldr hoistDecls [] ds)) e
+> simplifyExpr m tyEnv p env (Case e as) =
 >   do
->     e' <- simplifyExpr m tyEnv env e
+>     e' <- simplifyAppExpr m tyEnv p env e
 >     maybe (liftM (Case e') (mapM (simplifyAlt m tyEnv env) as))
->           (simplifyExpr m tyEnv env)
+>           (simplifyExpr m tyEnv p env)
 >           (simplifyMatch e' as)
-> simplifyExpr m tyEnv env (Fcase e as) =
+> simplifyExpr m tyEnv p env (Fcase e as) =
 >   do
->     e' <- simplifyExpr m tyEnv env e
+>     e' <- simplifyAppExpr m tyEnv p env e
 >     maybe (liftM (Fcase e') (mapM (simplifyAlt m tyEnv env) as))
->           (simplifyExpr m tyEnv env)
+>           (simplifyExpr m tyEnv p env)
 >           (simplifyMatch e' as)
 
 > simplifyAlt :: ModuleIdent -> ValueEnv -> InlineEnv -> Alt QualType
@@ -487,18 +482,19 @@ case compile time matching of pattern bindings did introduce new
 variable declarations (see \texttt{simplifyDecl} above).
 \begin{verbatim}
 
-> simplifyLet :: ModuleIdent -> ValueEnv -> InlineEnv -> [[Decl QualType]]
->             -> Expression QualType -> SimplifyState (Expression QualType)
-> simplifyLet m tyEnv env [] e = simplifyExpr m tyEnv env e
-> simplifyLet m tyEnv env (ds:dss) e =
+> simplifyLet :: ModuleIdent -> ValueEnv -> Position -> InlineEnv
+>             -> [[Decl QualType]] -> Expression QualType
+>             -> SimplifyState (Expression QualType)
+> simplifyLet m tyEnv p env [] e = simplifyExpr m tyEnv p env e
+> simplifyLet m tyEnv p env (ds:dss) e =
 >   do
 >     (tyEnv',dss') <-
 >       mapAccumM (flip (simplifyDecl m) env) (bindDecls ds tyEnv) ds
 >     tcEnv <- envRt
 >     trEnv <- liftRt envRt
 >     let dss'' = scc bv (qfv m) (concat dss')
->     e' <-
->       simplifyLet m tyEnv' (foldr (inlineVars m tyEnv' trEnv) env dss'') dss e
+>         env' = foldr (inlineVars m tyEnv' trEnv) env dss''
+>     e' <- simplifyLet m tyEnv' p env' dss e
 >     return (snd (foldr (mkSimplLet m tcEnv) (qfv m e',e') dss''))
 
 > inlineVars :: ModuleIdent -> ValueEnv -> TrustEnv -> [Decl QualType]

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 2981 2010-07-09 14:00:25Z wlux $
+% $Id: Simplify.lhs 3038 2011-07-18 09:15:22Z wlux $
 %
-% Copyright (c) 2003-2010, Wolfgang Lux
+% Copyright (c) 2003-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Simplify.lhs}
@@ -88,7 +88,7 @@ Currently, the following optimizations are implemented:
 >   return (tyEnv,[ForeignDecl p fi ty f ty'])
 > simplifyDecl m tyEnv env (PatternDecl p t rhs) =
 >   do
->     rhs' <- simplifyRhs m tyEnv env rhs >>= etaExpand tyEnv
+>     rhs' <- simplifyRhs m tyEnv env rhs >>= etaExpandRhs tyEnv
 >     case (t,rhs') of
 >       (VariablePattern ty f,SimpleRhs _ (Lambda _ ts e) _) ->
 >         return (changeArity m f (length ts) tyEnv,[funDecl p ty f ts e])
@@ -106,7 +106,7 @@ Currently, the following optimizations are implemented:
 >                  -> SimplifyState (ValueEnv,Equation QualType)
 > simplifyEquation m tyEnv env (Equation p lhs rhs) =
 >   do
->     rhs' <- simplifyRhs m tyEnv' env rhs >>= etaExpand tyEnv'
+>     rhs' <- simplifyRhs m tyEnv' env rhs >>= etaExpandRhs tyEnv'
 >     case (simplifyLhs (qfv m rhs') lhs,rhs') of
 >       (FunLhs f ts,SimpleRhs p' (Lambda _ ts' e') _) ->
 >         return (changeArity m f (length ts + length ts') tyEnv,
@@ -188,12 +188,18 @@ A function or variable definition can be $\eta$-expanded safely if its
 body is a non-expansive expression.
 \begin{verbatim}
 
-> etaExpand :: ValueEnv -> Rhs QualType -> SimplifyState (Rhs QualType)
-> etaExpand tyEnv rhs@(SimpleRhs p e _) =
+> etaExpandRhs :: ValueEnv -> Rhs QualType -> SimplifyState (Rhs QualType)
+> etaExpandRhs tyEnv rhs@(SimpleRhs p e _) =
+>   do
+>     (ts',e') <- etaExpand tyEnv e
+>     return (if null ts' then rhs else SimpleRhs p (Lambda p ts' e') [])
+
+> etaExpand :: ValueEnv -> Expression QualType
+>           -> SimplifyState ([ConstrTerm QualType],Expression QualType)
+> etaExpand tyEnv e =
 >   do
 >     tcEnv <- envRt
->     (ts',e') <- etaExpr tcEnv tyEnv e
->     return (if null ts' then rhs else SimpleRhs p (Lambda p ts' e') [])
+>     etaExpr tcEnv tyEnv e
 
 > etaExpr :: TCEnv -> ValueEnv -> Expression QualType
 >         -> SimplifyState ([ConstrTerm QualType],Expression QualType)
@@ -403,9 +409,8 @@ in later phases of the compiler.
 > simplifyExpr m tyEnv env (Lambda p ts e) =
 >   do
 >     e' <- simplifyApp p e [] >>= simplifyExpr m tyEnv' env
->     tcEnv <- envRt
->     (ts',e'') <- etaExpr tcEnv tyEnv' e'
->     let ts'' = map (simplifyPattern (qfv m e'')) ts ++ ts'
+>     (ts',e'') <- etaExpand tyEnv' e'
+>     let ts'' = map (simplifyPattern (qfv m (Lambda p ts' e''))) ts ++ ts'
 >     return (etaReduce m tyEnv' p ts'' e'')
 >   where tyEnv' = bindTerms ts tyEnv
 > simplifyExpr m tyEnv env (Let ds e) =

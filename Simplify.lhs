@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 3038 2011-07-18 09:15:22Z wlux $
+% $Id: Simplify.lhs 3039 2011-07-18 09:19:28Z wlux $
 %
 % Copyright (c) 2003-2011, Wolfgang Lux
 % See LICENSE for the full license.
@@ -314,10 +314,13 @@ alternatives of a (f)case expression by this transformation are bound
 to local variables (unless there is only one alternative). If these
 arguments are just simple variables or literal constants, the
 optimizations performed in \texttt{simplifyExpr} below will substitute
-these values and the let declarations will be removed.
-
-\ToDo{Optimize (saturated) applications of $\lambda$-abstractions by
-  performing a compile time $\beta$-reduction.}
+these values and the let declarations will be removed. In addition,
+beta-reduction is applied to saturated applications of
+$\lambda$-abstractions, changing \texttt{(\bs$x_1 \dots\, x_m$ -> $e$)
+  $e_1 \dots\, e_m \; e_{m+1} \dots\, e_n$} into \texttt{let $x_1$ =
+  $e_1$ in \dots\ let $x_m$ = $e_m$ in $e$ $e_{m+1} \dots\, e_n$}.
+Note that this transformation is correct because the renaming phase
+ensures that $x_1,\dots,x_m$ are not free in $e_1,\dots,e_n$.
 \begin{verbatim}
 
 > simplifyApp :: Position -> Expression QualType -> [Expression QualType]
@@ -330,7 +333,12 @@ these values and the let declarations will be removed.
 >   do
 >     e2' <- simplifyApp p e2 []
 >     simplifyApp p e1 (e2':es)
-> simplifyApp _ (Lambda p ts e) es = return (apply (Lambda p ts e) es)
+> simplifyApp p (Lambda p' ts e) es
+>   | n <= length es = simplifyApp p (foldr2 (match p') e ts es1) es2
+>   | otherwise = return (apply (Lambda p' ts e) es)
+>   where n = length ts
+>         (es1,es2) = splitAt n es
+>         match p (VariablePattern ty v) e1 e2 = Let [varDecl p ty v e1] e2
 > simplifyApp p (Let ds e) es = liftM (Let ds) (simplifyApp p e es)
 > simplifyApp p (Case e as) es =
 >   do

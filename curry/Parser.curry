@@ -1,6 +1,6 @@
--- $Id: Parser.curry 2992 2010-08-20 09:37:53Z wlux $
+-- $Id: Parser.curry 3042 2011-08-06 13:15:42Z wlux $
 -- 
--- Copyright (c) 2004, Wolfgang Lux
+-- Copyright (c) 2004-2011, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 -- Functional logic parsing combinators based on
@@ -69,10 +69,12 @@ satisfy p t (t':ts) | t =:= t' &> p t = ts
     ts@[] | e =:= r -> ts
     ts@(_:_) | e =:= r -> ts
 
+-- NB Compared to the paper, some and star have been eta-expanded to
+--    avoid sharing the free variables between applications of parser p.
 some, star :: ParserRep a b -> ParserRep [a] b
-some p = p x <*> star p xs >>> x:xs where x, xs free
-star p = some p
-    <||> empty >>> []
+some p rep = (p x <*> star p xs >>> x:xs) rep where x, xs free
+star p rep = some p rep
+         <|> (empty >>> []) rep
 
 -- invoking parsers
 -- NB these functions were not defined in the paper

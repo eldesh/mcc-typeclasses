@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 3000 2010-08-30 19:33:17Z wlux $
+% $Id: CGen.lhs 3050 2011-10-03 21:09:15Z wlux $
 %
-% Copyright (c) 1998-2009, Wolfgang Lux
+% Copyright (c) 1998-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CGen.lhs}
@@ -326,7 +326,7 @@ module, is generated.
 >   concat [lazyDef CPrivate f (apArity f) | f <- apLazy] ++
 >   concat [apFunction (apName n) n | n <- [2..maxApArity]] ++
 >   -- auxiliary functions for partial applications of data constructors
->   map (entryDecl CPublic . fst) cs ++
+>   [entryDecl CPublic c | (c,n) <- cs, n > 0] ++
 >   concat [pappDef CPublic c n | (c,n) <- cs, n > 0] ++
 >   concat [fun0Def CPublic c n | (c,n) <- cs, n > 0] ++
 >   concat [conFunction CPublic c n | (c,n) <- cs, n > 0] ++
@@ -572,7 +572,6 @@ into their respective argument registers.
 >    gotoExpr (field v "info->entry")]
 >   where v = Name "clos"
 >         arg = element (field v "c.args")
->         setArg i f j = setReg i (f j)
 
 > evalCode :: Int -> [CStmt]
 > evalCode n =
@@ -693,13 +692,13 @@ we handle the dynamic allocation of partial application nodes by a
 > nodeSize (Constr _ vs) = closureNodeSize (length vs)
 > nodeSize (Papp _ vs) = closureNodeSize (length vs)
 > nodeSize (Closure _ vs) = closureNodeSize (length vs)
-> nodeSize (Lazy f vs) = suspendNodeSize (length vs)
+> nodeSize (Lazy _ vs) = suspendNodeSize (length vs)
 > nodeSize Free = CExpr "variable_node_size"
 > nodeSize (Var _) = CInt 0
 
 > prepAlloc :: BindPapp -> [CStmt]
-> prepAlloc (BindPapp _ v _) =
->   [assertRel (nodeTag v) ">" (CInt 0),
+> prepAlloc (BindPapp _ v vs) =
+>   [assertRel (nodeTag v) ">" (CInt (toInteger (length vs))),
 >    CLocalVar uintType (argcVar v) (Just (CFunCall "closure_argc" [var v])),
 >    CLocalVar uintType (szVar v) (Just (CFunCall "node_size" [var v]))]
 
@@ -742,7 +741,7 @@ check.
 > stackDepth (CPSLetPapp _ st) = stackDepth st
 > stackDepth (CPSLetCont _ st) = stackDepth st
 > stackDepth (CPSSwitch _ _ _) = 0
-> stackDepth (CPSSwitchVar _ st1 st2) = 0
+> stackDepth (CPSSwitchVar _ _ _) = 0
 > stackDepth (CPSSwitchArity _ _) = 0
 > stackDepth (CPSChoice _ ks) = 1 + stackDepthCont (head ks)
 
@@ -781,7 +780,7 @@ split into minimal binding groups.
 >           | null vs = (o,(v,constRef (constFunc f)))
 >           | otherwise = (o + length vs + 1,(v,constant o))
 >         init o (v,Var v') =
->           (o,(v,if v == v then constRef "blackHole" else var v'))
+>           (o,(v,if v == v' then constRef "blackHole" else var v'))
 >         init _ (v,n) = error ("internal error: constants.init" ++ show n)
 >         constant = asNode . add (CExpr constArray) . int
 
@@ -861,7 +860,7 @@ split into minimal binding groups.
 >   | otherwise = initClosure v f vs
 > initNode _ (Bind v (Lazy f vs)) = initLazy v f vs
 > initNode _ (Bind v Free) = initFree v
-> initNode _ (Bind v (Var _)) = []
+> initNode _ (Bind _ (Var _)) = []
 
 > initInteger :: Name -> Integer -> CStmt
 > initInteger v i =
@@ -934,11 +933,11 @@ translation function.
 > cCode f _ vs0 (CPSSwitch tagged v cases) =
 >   switchOnTerm f tagged vs0 v
 >                [(t,caseCode f vs0 v t st) | CaseBlock t st <- cases]
-> cCode f consts vs0 (CPSSwitchVar v st1 st2) = switchOnVar v sts1' sts2'
+> cCode f _ vs0 (CPSSwitchVar v st1 st2) = switchOnVar v sts1' sts2'
 >   where sts1' = caseCode f vs0 v CPSFreeCase st1
 >         sts2' = caseCode f vs0 v CPSFreeCase st2
-> cCode f consts vs0 (CPSSwitchArity v sts) =
->   switchOnArity f vs0 v (map (caseCode f vs0 v CPSDefaultCase) sts)
+> cCode f _ vs0 (CPSSwitchArity v sts) =
+>   switchOnArity vs0 v (map (caseCode f vs0 v CPSDefaultCase) sts)
 > cCode _ _ vs0 (CPSChoice v ks) = choice vs0 v ks
 
 > execCont :: ([Name],CPSCont) -> [Name] -> CPSCont -> [CStmt]
@@ -1204,8 +1203,8 @@ and that the last alternative acts as default case that is selected if
 too few arguments are supplied.
 \begin{verbatim}
 
-> switchOnArity :: Name -> ([Name],CPSCont) -> Name -> [[CStmt]] -> [CStmt]
-> switchOnArity f vs0 v (sts0:stss) =
+> switchOnArity :: ([Name],CPSCont) -> Name -> [[CStmt]] -> [CStmt]
+> switchOnArity vs0 v (sts0:stss) =
 >   tagSwitch vs0 v taggedSwitch cases : last stss
 >   where cases = cCase "LVAR_TAG" sts0 : zipWith cCaseInt [1..] (init stss)
 >         taggedSwitch _ = id
@@ -1235,7 +1234,7 @@ first loads this address into a temporary variable and then boxes it.
 >   where vs = map (cArgVar . snd) xs
 
 > cAddr :: CRetType -> String -> String -> [CStmt]
-> cAddr Nothing v x = []
+> cAddr Nothing _ _ = []
 > cAddr (Just ty) v x =
 >   [CLocalVar (ctype ty) v (Just (CCast (ctype ty) (addr x)))]
 
@@ -1434,9 +1433,6 @@ used for constant constructors and functions, respectively.
 > dataTag :: Name -> String
 > dataTag c = cName c ++ "_tag"
 
-> closVar :: Name -> String
-> closVar v = show v ++ "_clos"
-
 > argcVar, szVar :: Name -> String
 > argcVar v = show v ++ "_argc"
 > szVar v = show v ++ "_sz"
@@ -1561,12 +1557,11 @@ of the abstract syntax tree.
 > setReg n = setElem (LVar "regs.r") n
 > setStk n = setElem (LVar "regs.sp") n
 
-> incrSp, decrSp :: Int -> CStmt
+> incrSp :: Int -> CStmt
 > incrSp n
 >   | n >= 0 = CIncrBy (LVar "regs.sp") (CInt n')
 >   | otherwise = CDecrBy (LVar "regs.sp") (CInt (-n'))
 >   where n' = toInteger n
-> decrSp n = incrSp (-n)
 
 > alloc :: CExpr
 > alloc = asNode (CExpr "regs.hp")

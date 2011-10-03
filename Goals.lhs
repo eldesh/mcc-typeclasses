@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Goals.lhs 3034 2011-06-28 08:57:27Z wlux $
+% $Id: Goals.lhs 3051 2011-10-03 21:10:40Z wlux $
 %
 % Copyright (c) 1999-2011, Wolfgang Lux
 % See LICENSE for the full license.
@@ -253,9 +253,10 @@ showing the bindings of the goal's free variables.
 
 > mkModule :: ModuleIdent -> Position -> a -> Ident -> [FreeVar a]
 >          -> Expression a -> Module a
-> mkModule m p ty g vs e =
->    Module m Nothing [] [BlockDecl (funDecl p ty g (map varPattern vs) e)]
->    where varPattern (FreeVar ty v) = VariablePattern ty v
+> mkModule m p ty g vs e = Module m (Just es) [] ds
+>    where es = Exporting p [Export (qualifyWith m g)]
+>          ds = [BlockDecl (funDecl p ty g (map varPattern vs) e)]
+>          varPattern (FreeVar ty v) = VariablePattern ty v
 
 > liftGoalVars :: Bool -> Expression a -> ([FreeVar a],Expression a)
 > liftGoalVars debug (Let ds e)

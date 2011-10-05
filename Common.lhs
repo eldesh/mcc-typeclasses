@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Common.lhs 2990 2010-08-20 09:28:04Z wlux $
+% $Id: Common.lhs 3052 2011-10-05 19:25:15Z wlux $
 %
-% Copyright (c) 1999-2010, Wolfgang Lux
+% Copyright (c) 1999-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Common.lhs}
@@ -121,7 +121,9 @@ The final transformation phases translate the intermediate language
 code into abstract machine code and then generate C code. If a module
 is compiled with the \texttt{--split-code} option, the code is split
 along the split pragmas inserted implicitly or explicitly into source
-code.
+code. When a module is split this way, all top level (i.e., not
+renamed) declarations are exported because they might be used in a
+different object file.
 
 If the module in addition is compiled with the debugging
 transformation, the compiler strips all data and top level foreign
@@ -157,16 +159,22 @@ the small top level program that controls the debugger at runtime.
 >            (DumpCam,CamPP.ppModule cam)]
 
 > splitModule :: IL.Module -> [IL.Module]
-> splitModule (IL.Module m is ds) =
->   map (IL.Module m is)
+> splitModule (IL.Module m _ is ds) = 
+>   map (IL.Module m (concatMap defs ds) is)
 >       (filter (any isCodeDecl) (wordsBy (IL.SplitAnnot ==) ds))
 >   where isCodeDecl (IL.DataDecl _ _ cs) = not (null cs)
 >         isCodeDecl (IL.TypeDecl _ _ _) = False
 >         isCodeDecl (IL.FunctionDecl _ _ _ _) = True
 >         isCodeDecl (IL.ForeignDecl _ _ _ _) = True
+>         defs (IL.DataDecl _ _ cs) = [c | IL.ConstrDecl c _ <- cs]
+>         defs (IL.TypeDecl _ _ _) = []
+>         defs (IL.FunctionDecl f _ _ _) = [f | not (isRenamed (unqualify f))]
+>         defs (IL.ForeignDecl f _ _ _) = [f | not (isRenamed (unqualify f))]
+>         defs IL.SplitAnnot = []
 
 > cleanDebug :: Bool -> IL.Module -> IL.Module
-> cleanDebug True (IL.Module m is ds) = IL.Module m is (filter isUnique ds)
+> cleanDebug True (IL.Module m es is ds) =
+>   IL.Module m es is (filter isUnique ds)
 >   where isUnique (IL.DataDecl _ _ _) = False
 >         isUnique (IL.TypeDecl _ _ _) = True
 >         isUnique (IL.FunctionDecl _ _ _ _) = True

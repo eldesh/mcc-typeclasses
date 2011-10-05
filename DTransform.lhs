@@ -1,8 +1,8 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 2956 2010-06-12 22:41:10Z wlux $
+% $Id: DTransform.lhs 3052 2011-10-05 19:25:15Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
-% Copyright (c) 2003-2010, Wolfgang Lux
+% Copyright (c) 2003-2011, Wolfgang Lux
 %
 % 2002/04/10 19:00:00 Added emptyNode as constructor in type cTree
 \nwfilename{DTransform.lhs}
@@ -51,12 +51,15 @@ children.
 \begin{verbatim}
 
 > dTransform :: (QualIdent -> Bool) -> Module -> Module
-> dTransform trusted (Module m is ds) =
->   Module m is' (ds' ++ SplitAnnot : generateAuxFuncs m (numAuxFuncs m ds'))
+> dTransform trusted (Module m es is ds) = Module m es' is' ds''
 >   where ms = m:is
+>         es' = map (debugRenameExport (constrs ds)) es
 >         is' = imp preludeMIdent ++ imp debugPreludeMIdent ++ is
 >         ds' = debugDecls trusted m ds
+>         ds'' = ds' ++ SplitAnnot : generateAuxFuncs m (numAuxFuncs m ds')
 >         imp m = [m | m `notElem` ms]
+>         constrs ds = [c | DataDecl _ _ cs <- ds, ConstrDecl c _ <- cs]
+>         debugRenameExport cs x = if x `elem` cs then x else debugRenameqId x
 
 \end{verbatim}
 
@@ -212,8 +215,8 @@ code for the debugger (cf. Sect.~\ref{sec:desugar}).
 \begin{verbatim}
 
 > dAddMain :: Ident -> Module -> Module
-> dAddMain goalId (Module m is ds) =
->   Module m is (FunctionDecl mainId [] mainType mainExpr : ds)
+> dAddMain goalId (Module m es is ds) =
+>   Module m (mainId:es) is (FunctionDecl mainId [] mainType mainExpr : ds)
 >   where (arity,ty) =
 >           head [(length vs,ty) | FunctionDecl f vs ty _ <- ds, f == mainId']
 >         mainId = qualifyWith m goalId

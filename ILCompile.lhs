@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 3006 2010-08-30 19:49:09Z wlux $
+% $Id: ILCompile.lhs 3052 2011-10-05 19:25:15Z wlux $
 %
-% Copyright (c) 1999-2010, Wolfgang Lux
+% Copyright (c) 1999-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ILCompile.lhs}
@@ -25,7 +25,7 @@ language into abstract machine code.
 > type CompState a = StateT [Cam.Name] Id a
 
 > camCompile :: Module -> Cam.Module
-> camCompile (Module m is ds) =
+> camCompile (Module m _ is ds) =
 >   map compileImport is ++ concat (map compileDecl ds)
 >   where compileImport = Cam.ImportDecl . Cam.mangle . moduleName
 

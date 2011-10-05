@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ILLift.lhs 2889 2009-08-05 15:57:07Z wlux $
+% $Id: ILLift.lhs 3052 2011-10-05 19:25:15Z wlux $
 %
-% Copyright (c) 2000-2009, Wolfgang Lux
+% Copyright (c) 2000-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ILLift.lhs}
@@ -21,7 +21,7 @@ positions are lifted into global functions.
 > type LiftState a = St [QualIdent] a
 
 > liftProg :: Module -> Module
-> liftProg (Module m is ds) = Module m is (concatMap liftDecl ds)
+> liftProg (Module m es is ds) = Module m es is (concatMap liftDecl ds)
 
 > liftDecl :: Decl -> [Decl]
 > liftDecl (DataDecl tc n cs) = [DataDecl tc n cs]

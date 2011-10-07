@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: PatternBind.lhs 3056 2011-10-07 16:27:03Z wlux $
+% $Id: PatternBind.lhs 3057 2011-10-07 16:37:43Z wlux $
 %
 % Copyright (c) 2003-2011, Wolfgang Lux
 % See LICENSE for the full license.
@@ -71,13 +71,13 @@ were introduced in the code by the transformation.
 >     n' <- fetchSt
 >     let ap = if n == n' then const id else ($)
 >     return (ap bindPrims tyEnv,Module m es is (ap (prims ++) ds'))
->   where p0 = first (file (head (map pos ds)))
+>   where noPos = internalError "pbtModule: no position"
 >         Variable tyUpd pbUpd = pbUpdate m (TypeVariable 0)
 >         Variable tyRet pbRet = pbReturn m (TypeVariable 0)
 >         bindPrims = bindForeign pbUpd tyUpd . bindForeign pbRet tyRet
 >         prims =
->           [BlockDecl (foreignDecl p0 "pbUpdate" pbUpd tyUpd),
->            BlockDecl (foreignDecl p0 "pbReturn" pbRet tyRet)]
+>           [BlockDecl (foreignDecl noPos "pbUpdate" pbUpd tyUpd),
+>            BlockDecl (foreignDecl noPos "pbReturn" pbRet tyRet)]
 
 > class SyntaxTree a where
 >   pbt :: ModuleIdent -> a QualType -> PatternBindState (a QualType)

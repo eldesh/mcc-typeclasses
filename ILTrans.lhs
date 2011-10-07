@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 3056 2011-10-07 16:27:03Z wlux $
+% $Id: ILTrans.lhs 3057 2011-10-07 16:37:43Z wlux $
 %
 % Copyright (c) 1999-2011, Wolfgang Lux
 % See LICENSE for the full license.
@@ -43,7 +43,7 @@ not include any alias types.
 > ilTrans :: TCEnv -> ValueEnv -> Module Type -> IL.Module
 > ilTrans tcEnv tyEnv (Module m es _ ds) =
 >   IL.Module m (exports es) (imports m ds') ds'
->   where ds' = concatMap (translTopDecl m tcEnv tyEnv) (sortDecls ds)
+>   where ds' = concatMap (translTopDecl m tcEnv tyEnv) ds
 >         exports (Just (Exporting _ es)) =
 >           filter (isJust . localIdent m) (concatMap values es)
 >         values (Export x) = [x]

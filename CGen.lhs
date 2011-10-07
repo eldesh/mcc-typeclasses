@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 3050 2011-10-03 21:09:15Z wlux $
+% $Id: CGen.lhs 3054 2011-10-07 15:19:59Z wlux $
 %
 % Copyright (c) 1998-2011, Wolfgang Lux
 % See LICENSE for the full license.
@@ -100,7 +100,7 @@ function because there is not much chance for them to be shared.
 >   genTypes ts ds sts' ns ++
 >   genFunctions ds fs sts' ns
 >   where (_,ds,fs) = splitCam cam
->         sts = map thd3 fs
+>         sts = [st | (_,_,_,st) <- fs]
 >         sts' = foldr linStmts [] sts
 >         ns = foldr nodes [] sts
 
@@ -186,41 +186,42 @@ initialized upon their first use.
 >   [tagDecl cs | (_,cs) <- ts, any (`elem` usedTs) cs] ++
 >   [dataDecl c n | (c,n) <- usedCs] ++
 >   -- local data declarations
->   [tagDecl (map fst cs) | (_,cs) <- ds'] ++
->   concat [dataDef ex c n | (ex,cs) <- ds', (c,n) <- cs] ++
+>   [tagDecl (map snd3 cs) | (_,cs) <- ds'] ++
+>   concat [dataDef ex vb c n | (ex,cs) <- ds', (vb,c,n) <- cs] ++
 >   -- literal constants
 >   literals [c | Lit c <- ns]
 >   where ds' = [(existType vs cs,map constr cs) | (_,vs,cs) <- ds]
 >         cs = concatMap snd ds'
->         usedTs = map fst (nub (switchTags sts) \\ cs)
->         usedCs = nub [(c,length vs) | Constr c vs <- ns] \\ cs
+>         cs' = [(c,n) | (_,c,n) <- cs]
+>         usedTs = map fst (nub (switchTags sts) \\ cs')
+>         usedCs = nub [(c,length vs) | Constr c vs <- ns] \\ cs'
 
 > existType :: [Name] -> [ConstrDecl] -> Bool
 > existType vs cs = any hasExistType cs
->   where hasExistType (ConstrDecl _ tys) = any hasExistVar tys
+>   where hasExistType (ConstrDecl _ _ tys) = any hasExistVar tys
 >         hasExistVar (TypeVar v) = v `notElem` vs
 >         hasExistVar (TypeApp _ tys) = any hasExistVar tys
 >         hasExistVar (TypeArr ty1 ty2) = hasExistVar ty1 || hasExistVar ty2
 
-> constr :: ConstrDecl -> (Name,Int)
-> constr (ConstrDecl c tys) = (c,length tys)
+> constr :: ConstrDecl -> (Visibility,Name,Int)
+> constr (ConstrDecl vb c tys) = (vb,c,length tys)
 
 > tagDecl :: [Name] -> CTopDecl
 > tagDecl cs = CEnumDecl [CConst (dataTag c) (Just n) | (c,n) <- zip cs [0..]]
 
 > dataDecl :: Name -> Int -> CTopDecl
-> dataDecl c n = head (dataDef undefined c n)
+> dataDecl c n = head (dataDef undefined Exported c n)
 
-> dataDef :: Bool -> Name -> Int -> [CTopDecl]
-> dataDef ex c n
+> dataDef :: Bool -> Visibility -> Name -> Int -> [CTopDecl]
+> dataDef ex vb  c n
 >   | n == 0 =
->       [CExternVarDecl nodeInfoConstPtrType (constNode c),
->        CVarDef CPrivate nodeInfoType (nodeInfo c) (Just nodeinfo),
->        CVarDef CPublic nodeInfoConstPtrType (constNode c)
+>       [CExternVarDecl nodeInfoConstPtrType (constNode c) | vb == Exported] ++
+>       [CVarDef CPrivate nodeInfoType (nodeInfo c) (Just nodeinfo),
+>        CVarDef (cVis vb) nodeInfoConstPtrType (constNode c)
 >                (Just (CInit (addr (nodeInfo c))))]
 >   | otherwise =
->       [CExternVarDecl nodeInfoType (nodeInfo c),
->        CVarDef CPublic nodeInfoType (nodeInfo c) (Just nodeinfo)]
+>       [CExternVarDecl nodeInfoType (nodeInfo c) | vb == Exported] ++
+>       [CVarDef (cVis vb) nodeInfoType (nodeInfo c) (Just nodeinfo)]
 >   where nodeinfo = CStruct (map CInit nodeinfo')
 >         nodeinfo' =
 >           [CExpr (if ex then "EAPP_KIND" else "CAPP_KIND"),CExpr (dataTag c),
@@ -299,12 +300,13 @@ code for those functions \texttt{@}$_n$, which are used in the current
 module, is generated.
 \begin{verbatim}
 
-> genFunctions :: [(Name,[Name],[ConstrDecl])] -> [(Name,[Name],Stmt)]
->              -> [Stmt] -> [Expr] -> [CTopDecl]
+> genFunctions :: [(Name,[Name],[ConstrDecl])]
+>              -> [(Visibility,Name,[Name],Stmt)] -> [Stmt] -> [Expr]
+>              -> [CTopDecl]
 > genFunctions ds fs sts ns =
 >   -- imported functions
->   map instEntryDecl (nonLocalData (map fst flexData)) ++
->   map (entryDecl CPublic) (nonLocal call) ++
+>   map (instEntryDecl Exported) (nonLocal flexData) ++
+>   map (entryDecl Exported) (nonLocal call) ++
 >   map pappDecl (nonLocal papp) ++
 >   map evalDecl (nonLocal clos) ++
 >   map lazyDecl (nonLocal lazy) ++
@@ -315,30 +317,30 @@ module, is generated.
 >   concat [[evalEntryDecl n,evalFunction n] | n <- closArities] ++
 >   concat [[lazyEntryDecl n,lazyFunction n] | n <- lazyArities] ++
 >   -- instantiation functions for data constructors
->   map (instEntryDecl . fst) cs ++
->   [instFunction c n | (c,n) <- cs] ++
+>   [instEntryDecl vb c | (vb,c,_) <- flex'] ++
+>   [instFunction vb c n | (vb,c,n) <- flex'] ++
 >   -- (private) instantiation functions for literals
 >   map litInstEntryDecl flexLits ++
 >   map litInstFunction flexLits ++
 >   -- (private) @ functions
->   [entryDecl CPrivate (apName n) | n <- [2..maxApArity]] ++
->   concat [evalDef CPrivate f (apArity f) | f <- apClos] ++
->   concat [lazyDef CPrivate f (apArity f) | f <- apLazy] ++
+>   [entryDecl Private (apName n) | n <- [2..maxApArity]] ++
+>   concat [evalDef Private f (apArity f) | f <- apClos] ++
+>   concat [lazyDef Private f (apArity f) | f <- apLazy] ++
 >   concat [apFunction (apName n) n | n <- [2..maxApArity]] ++
 >   -- auxiliary functions for partial applications of data constructors
->   [entryDecl CPublic c | (c,n) <- cs, n > 0] ++
->   concat [pappDef CPublic c n | (c,n) <- cs, n > 0] ++
->   concat [fun0Def CPublic c n | (c,n) <- cs, n > 0] ++
->   concat [conFunction CPublic c n | (c,n) <- cs, n > 0] ++
+>   [entryDecl Private c | (_,c,n) <- pcon', n > 0] ++
+>   concat [pappDef vb c n | (vb,c,n) <- pcon', n > 0] ++
+>   concat [fun0Def vb c n | (vb,c,n) <- con0', n > 0] ++
+>   concat [conFunction Private c n | (_,c,n) <- pcon', n > 0] ++
 >   -- local function declarations
->   [entryDecl (public f) f | (f,_,_) <- fs] ++
->   concat [pappDef (public f) f n | (f,n) <- papp', n > 0] ++
->   concat [evalDef (public f) f n | (f,n) <- clos'] ++
->   concat [lazyDef (public f) f n | (f,n) <- lazy'] ++
->   concat [fun0Def (public f) f n | (f,n) <- fun0'] ++
->   concat [function (public f) f vs st | (f,vs,st) <- fs]
->   where nonLocal = filter (`notElem` map fst3 fs)
->         nonLocalData = filter (`notElem` map fst cs)
+>   [entryDecl vb f | (vb,f,_,_) <- fs] ++
+>   concat [pappDef vb f n | (vb,f,n) <- papp', n > 0] ++
+>   concat [evalDef vb f n | (vb,f,n) <- clos'] ++
+>   concat [lazyDef vb f n | (vb,f,n) <- lazy'] ++
+>   concat [fun0Def vb f n | (vb,f,n) <- fun0'] ++
+>   concat [function vb f vs st | (vb,f,vs,st) <- fs]
+>   where nonLocal =
+>           filter (`notElem` [c | (_,c,_) <- cs] ++ [f | (_,f,_,_) <- fs])
 >         papp = nub [f | Papp f _ <- ns]
 >         (apCall,call) = partition isAp (nub [f | Exec f _ <- sts])
 >         (apClos,clos) = partition isAp (nub [f | Closure f _ <- ns])
@@ -346,22 +348,25 @@ module, is generated.
 >         fun0 = nub ([f | Papp f [] <- ns] ++ [f | Closure f [] <- ns])
 >         maxApArity = maximum (0 : map apArity (apCall ++ apClos ++ apLazy))
 >         cs = [constr c | c <- concatMap thd3 ds]
->         fs' = [(f,n) | (f,vs,_) <- fs, let n = length vs, (f,n) `notElem` cs]
->         papp' = filter (used papp . fst) fs'
->         clos' = filter (used clos . fst) fs'
->         lazy' = filter (used lazy . fst) fs'
->         fun0' = filter (used fun0 . fst) fs'
->         pappArities = nub (map snd cs ++ map snd papp')
->         closArities = nub (map apArity apClos ++ map snd clos')
->         lazyArities = nub (map apArity apLazy ++ map snd lazy')
+>         fs' = [(vb,f,length vs) | (vb,f,vs,_) <- fs]
+>         flex' = filter (used flexData) cs
+>         pcon' = filter (used papp) cs
+>         con0' = filter (used fun0) cs
+>         papp' = filter (used papp) fs'
+>         clos' = filter (used clos) fs'
+>         lazy' = filter (used lazy) fs'
+>         fun0' = filter (used fun0) fs'
+>         pappArities = nub (map thd3 (pcon' ++ papp'))
+>         closArities = nub (map apArity apClos ++ map thd3 clos')
+>         lazyArities = nub (map apArity apLazy ++ map thd3 lazy')
 >         ts = [t | Switch Flex _ cs <- sts, Case t _ <- cs]
 >         flexLits = nub [l | LitCase l <- ts]
->         flexData = nub [(c,length vs) | ConstrCase c vs <- ts]
->         used fs f = isPublic f || f `elem` fs
->         public f = if isPublic f then CPublic else CPrivate
+>         flexData = nub [c | ConstrCase c _ <- ts]
+>         used _ (Exported,_,_) = True
+>         used xs (Private,x,_) = x `elem` xs
 
-> entryDecl :: CVisibility -> Name -> CTopDecl
-> entryDecl vb f = CFuncDecl vb (cName f)
+> entryDecl :: Visibility -> Name -> CTopDecl
+> entryDecl vb f = CFuncDecl (cVis vb) (cName f)
 
 > applyEntryDecl :: Int -> Int -> CTopDecl
 > applyEntryDecl m n = CFuncDecl CPrivate (applyFunc m n)
@@ -372,8 +377,8 @@ module, is generated.
 > lazyEntryDecl :: Int -> CTopDecl
 > lazyEntryDecl n = CFuncDecl CPrivate (lazyFunc n)
 
-> instEntryDecl :: Name -> CTopDecl
-> instEntryDecl c = CFuncDecl CPublic (instFunc c)
+> instEntryDecl :: Visibility -> Name -> CTopDecl
+> instEntryDecl vb c = CFuncDecl (cVis vb) (instFunc c)
 
 > litInstEntryDecl :: Literal -> CTopDecl
 > litInstEntryDecl l = CFuncDecl CPrivate (litInstFunc l)
@@ -390,24 +395,24 @@ module, is generated.
 > fun0Decl :: Name -> CTopDecl
 > fun0Decl f = CExternVarDecl (CConstType "struct closure_node") (constFunc f)
 
-> pappDef :: CVisibility -> Name -> Int -> [CTopDecl]
+> pappDef :: Visibility -> Name -> Int -> [CTopDecl]
 > pappDef vb f n =
->   [pappDecl f | vb == CPublic] ++
->   [CArrayDef vb nodeInfoType (pappInfoTable f)
+>   [pappDecl f | vb == Exported] ++
+>   [CArrayDef (cVis vb) nodeInfoType (pappInfoTable f)
 >              [pappInfo f i n | i <- [0..n-1]]]
 
-> evalDef :: CVisibility -> Name -> Int -> [CTopDecl]
+> evalDef :: Visibility -> Name -> Int -> [CTopDecl]
 > evalDef vb f n =
->   [evalDecl f | vb == CPublic] ++
->   [CVarDef vb nodeInfoType (nodeInfo f) (Just (funInfo f n))]
+>   [evalDecl f | vb == Exported] ++
+>   [CVarDef (cVis vb) nodeInfoType (nodeInfo f) (Just (funInfo f n))]
 
-> lazyDef :: CVisibility -> Name -> Int -> [CTopDecl]
+> lazyDef :: Visibility -> Name -> Int -> [CTopDecl]
 > lazyDef vb f n =
->   [lazyDecl f | vb == CPublic] ++
+>   [lazyDecl f | vb == Exported] ++
 >   [CppCondDecls (CExpr "!COPY_SEARCH_SPACE")
->      [CArrayDef vb nodeInfoType (lazyInfoTable f)
+>      [CArrayDef (cVis vb) nodeInfoType (lazyInfoTable f)
 >                 (map (CStruct . map CInit) [suspinfo,queuemeinfo,indirinfo])]
->      [CArrayDef vb nodeInfoType (lazyInfoTable f)
+>      [CArrayDef (cVis vb) nodeInfoType (lazyInfoTable f)
 >                 [CStruct (map CInit suspinfo)]]]
 >   where suspinfo =
 >           [CExpr "SUSPEND_KIND",CExpr "EVAL_TAG",suspendNodeSize n,
@@ -422,10 +427,10 @@ module, is generated.
 >            gcPointerTable,noName,CExpr "eval_indir",noApply,noEntry,
 >            notFinalized]
 
-> fun0Def :: CVisibility -> Name -> Int -> [CTopDecl]
+> fun0Def :: Visibility -> Name -> Int -> [CTopDecl]
 > fun0Def vb f n =
->   [fun0Decl f | vb == CPublic] ++
->   [CVarDef vb (CConstType "struct closure_node") (constFunc f)
+>   [fun0Decl f | vb == Exported] ++
+>   [CVarDef (cVis vb) (CConstType "struct closure_node") (constFunc f)
 >            (Just (CStruct [CInit (info f n),CStruct [CInit CNull]]))]
 >   where info f n
 >           | n == 0 = addr (nodeInfo f)
@@ -454,7 +459,7 @@ generates the evaluation code for the fully applied closure node and
 the suspend node associated with the abstract machine code function.
 \begin{verbatim}
 
-> function :: CVisibility -> Name -> [Name] -> Stmt -> [CTopDecl]
+> function :: Visibility -> Name -> [Name] -> Stmt -> [CTopDecl]
 > function vb f vs st = funcDefs vb (cpsFunction f vs st)
 
 > applyFunction :: Int -> Int -> CTopDecl
@@ -466,36 +471,38 @@ the suspend node associated with the abstract machine code function.
 > lazyFunction :: Int -> CTopDecl
 > lazyFunction n = CFuncDef CPrivate (lazyFunc n) (lazyCode n)
 
-> conFunction :: CVisibility -> Name -> Int -> [CTopDecl]
+> conFunction :: Visibility -> Name -> Int -> [CTopDecl]
 > conFunction vb f n = function vb f vs (Return (Constr f vs))
 >   where vs = [Name ('v' : show i) | i <- [1..n]]
 
 > apFunction :: Name -> Int -> [CTopDecl]
-> apFunction f n = funcDefs CPrivate (cpsApply f vs)
+> apFunction f n = funcDefs Private (cpsApply f vs)
 >   where vs = [Name ('v' : show i) | i <- [1..n]]
 
-> instFunction :: Name -> Int -> CTopDecl
-> instFunction c n = funcDef CPublic (cpsInst v (ConstrCase c vs))
+> instFunction :: Visibility -> Name -> Int -> CTopDecl
+> instFunction vb c n = funcDef vb (cpsInst v (ConstrCase c vs))
 >   where v:vs = [Name ('v' : show i) | i <- [0..n]]
 
 > litInstFunction :: Literal -> CTopDecl
-> litInstFunction l = funcDef CPrivate (cpsInst (Name "v0") (LitCase l))
+> litInstFunction l = funcDef Private (cpsInst (Name "v0") (LitCase l))
 
-> funcDefs :: CVisibility -> CPSFunction -> [CTopDecl]
+> funcDefs :: Visibility -> CPSFunction -> [CTopDecl]
 > funcDefs vb f =
->   map privFuncDecl ks ++ entryDef vb f : map (funcDef CPrivate) ks
+>   map privFuncDecl ks ++ entryDef vb f : map (funcDef Private) ks
 >   where ks = continuations f
 
 > privFuncDecl :: CPSContinuation -> CTopDecl
 > privFuncDecl (CPSContinuation f _ _ _) = CFuncDecl CPrivate (contName f)
 
-> entryDef :: CVisibility -> CPSFunction -> CTopDecl
+> entryDef :: Visibility -> CPSFunction -> CTopDecl
 > entryDef vb (CPSFunction f vs st) =
->   CFuncDef vb (cName f) (entryCode f vs ++ funCode f (vs,CPSReturn) st)
+>   CFuncDef (cVis vb) (cName f)
+>            (entryCode f vs ++ funCode f (vs,CPSReturn) st)
 
-> funcDef :: CVisibility -> CPSContinuation -> CTopDecl
+> funcDef :: Visibility -> CPSContinuation -> CTopDecl
 > funcDef vb (CPSContinuation f vs ws st) =
->   CFuncDef vb (contName f) (funCode (name f) (vs,CPSCont f ws CPSReturn) st)
+>   CFuncDef (cVis vb) (contName f)
+>            (funCode (name f) (vs,CPSCont f ws CPSReturn) st)
 >   where name (CPSContFun f _) = f
 >         name (CPSInst _) = Name ""
 >         name (CPSApply _) = Name ""
@@ -1358,29 +1365,6 @@ appended to the names of local variables and functions.
 >               | otherwise -> cs' ++ '.' : dropSuffix cs''
 
 \end{verbatim}
-The function \texttt{isPublic} is a workaround for distinguishing
-private and exported functions without an explicit export list, which
-is not yet part of the abstract machine code syntax. This function
-uses the following heuristics. All entities whose (demangled) name
-ends with a suffix \texttt{.}$n$, where $n$ is a non-empty sequence of
-decimal digits, are considered private, since that suffix can occur
-only in renamed identifiers. All entities whose (demangled) name
-contains the substring \verb"_#app" are considered private, too. These
-names are used by the compiler for naming the implicit functions
-introduced for lifted argument expressions.
-\begin{verbatim}
-
-> isPublic, isPrivate :: Name -> Bool
-> isPublic x = not (isPrivate x)
-> isPrivate (Name x) =
->   any (app `isPrefixOf`) (tails x) ||
->   case span isDigit (reverse x) of
->     ([],_) -> False
->     (_:_,cs) -> reverse dot `isPrefixOf` cs
->   where Name dot = mangle "."
->         Name app = mangle "_#app"
-
-\end{verbatim}
 In order to avoid some trivial name conflicts with the standard C
 library, the names of all Curry functions are prefixed with two
 underscores. The integer key of each CPS continuation function is
@@ -1392,6 +1376,10 @@ suffixes \texttt{\_info} and \texttt{\_info\_table}, respectively, to
 the name. The suffixes \texttt{\_const} and \texttt{\_function} are
 used for constant constructors and functions, respectively.
 \begin{verbatim}
+
+> cVis :: Visibility -> CVisibility
+> cVis Private = CPrivate
+> cVis Exported = CPublic
 
 > cName :: Name -> String
 > cName x = "__" ++ show x

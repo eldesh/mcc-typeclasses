@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: cam2c.lhs 3000 2010-08-30 19:33:17Z wlux $
+% $Id: cam2c.lhs 3054 2011-10-07 15:19:59Z wlux $
 %
-% Copyright (c) 2005-2009, Wolfgang Lux
+% Copyright (c) 2005-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{cam2c.lhs}
@@ -142,15 +142,16 @@ constructor tags in the code.
 >     let ccode =
 >           maybe id (flip mergeCFile . uncurry genGoal) g (genModule ts cam)
 >     maybe putStr writeFile ofn $ showLn $ ppCFile ccode
->   where constr (ConstrDecl c _) = c
+>   where constr (ConstrDecl _ c _) = c
 
 > genGoal :: String -> Maybe [String] -> CFile
 > genGoal f (Just vs) =
->   genModule []
->             [FunctionDecl (Name "curry_eval") (Name "_1" : map Name vs)
->               (Seq (Name "_2" :<- Return (Closure (Name f) (map Name vs)))
->                    (Exec (mangle "=:=") [Name "_1",Name "_2"]))] ++
->   genMain (Name "curry_eval") (Just vs)
+>   genModule [] [FunctionDecl Exported f' vs' st] ++ genMain f' (Just vs)
+>   where f' = Name "curry_eval"
+>         vs' = Name "_1" : map Name vs
+>         st =
+>           Seq (Name "_2" :<- Return (Closure (Name f) (map Name vs)))
+>               (Exec (mangle "=:=") [Name "_1",Name "_2"])
 > genGoal f Nothing = genMain (Name f) Nothing
 
 > parseInput :: IO Module

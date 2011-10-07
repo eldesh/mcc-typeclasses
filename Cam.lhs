@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Cam.lhs 3024 2011-05-27 07:49:19Z wlux $
+% $Id: Cam.lhs 3054 2011-10-07 15:19:59Z wlux $
 %
 % Copyright (c) 1998-2011, Wolfgang Lux
 % See LICENSE for the full license.
@@ -23,9 +23,10 @@ declaration comprises the function's name, arguments, and code.
 > data Decl =
 >     ImportDecl Name
 >   | DataDecl Name [Name] [ConstrDecl]
->   | FunctionDecl Name [Name] Stmt
+>   | FunctionDecl Visibility Name [Name] Stmt
 >   deriving (Eq,Show)
-> data ConstrDecl = ConstrDecl Name [Type] deriving (Eq,Show)
+> data ConstrDecl = ConstrDecl Visibility Name [Type] deriving (Eq,Show)
+> data Visibility = Private | Exported deriving (Eq,Show)
 > data Type =
 >     TypeVar Name
 >   | TypeApp Name [Type]
@@ -33,11 +34,14 @@ declaration comprises the function's name, arguments, and code.
 >   deriving (Eq,Show)
 
 > splitCam :: Module
->          -> ([Name],[(Name,[Name],[ConstrDecl])],[(Name,[Name],Stmt)])
+>          -> ([Name],
+>              [(Name,[Name],[ConstrDecl])],
+>              [(Visibility,Name,[Name],Stmt)])
 > splitCam = foldr split ([],[],[])
 >   where split (ImportDecl m) ~(ms,ds,fs) = (m:ms,ds,fs)
 >         split (DataDecl t vs cs) ~(ms,ds,fs) = (ms,(t,vs,cs):ds,fs)
->         split (FunctionDecl f vs st) ~(ms,dss,fs) = (ms,dss,(f,vs,st):fs)
+>         split (FunctionDecl vb f vs st) ~(ms,dss,fs) =
+>           (ms,dss,(vb,f,vs,st):fs)
 
 \end{verbatim}
 \subsection{Instruction Set}

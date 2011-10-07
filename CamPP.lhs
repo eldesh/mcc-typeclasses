@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CamPP.lhs 3001 2010-08-30 19:39:16Z wlux $
+% $Id: CamPP.lhs 3054 2011-10-07 15:19:59Z wlux $
 %
-% Copyright (c) 2002-2009, Wolfgang Lux
+% Copyright (c) 2002-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \subsection{Pretty-printing Abstract Machine Code}
@@ -25,11 +25,12 @@
 >   sep (ppKW "data" <+> ppName tc <> (if null vs then empty else ppNames vs) :
 >        zipWith ppConstrDecl (equals : repeat bar) cs)
 >   where ppConstrDecl sep c = nest blockIndent (sep <+> ppConstr c)
-> ppDecl (FunctionDecl f vs st) = ppBlock (ppName f <> ppNames vs) (ppStmt st)
+> ppDecl (FunctionDecl vb f vs st) =
+>   ppBlock (ppVis vb <+> ppName f <> ppNames vs) (ppStmt st)
 
 > ppConstr :: ConstrDecl -> Doc
-> ppConstr (ConstrDecl c tys) =
->   ppName c <> if null tys then empty else ppList ppType tys
+> ppConstr (ConstrDecl vb c tys) =
+>   ppVis vb <+> ppName c <> if null tys then empty else ppList ppType tys
 
 > ppType :: Type -> Doc
 > ppType (TypeVar v) = ppName v
@@ -120,6 +121,10 @@
 
 > ppKW :: String -> Doc
 > ppKW kw = char '.' <> text kw
+
+> ppVis :: Visibility -> Doc
+> ppVis Private = ppKW "private"
+> ppVis Exported = empty
 
 > ppName :: Name -> Doc
 > ppName = text . show

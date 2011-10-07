@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 3052 2011-10-05 19:25:15Z wlux $
+% $Id: ILCompile.lhs 3054 2011-10-07 15:19:59Z wlux $
 %
 % Copyright (c) 1999-2011, Wolfgang Lux
 % See LICENSE for the full license.
@@ -25,33 +25,34 @@ language into abstract machine code.
 > type CompState a = StateT [Cam.Name] Id a
 
 > camCompile :: Module -> Cam.Module
-> camCompile (Module m _ is ds) =
->   map compileImport is ++ concat (map compileDecl ds)
+> camCompile (Module m es is ds) =
+>   map compileImport is ++ concat (map (compileDecl es) ds)
 >   where compileImport = Cam.ImportDecl . Cam.mangle . moduleName
 
-> compileDecl :: Decl -> [Cam.Decl]
-> compileDecl (DataDecl tc n cs) = [compileData tc n cs]
-> compileDecl (TypeDecl _ _ _) = []
-> compileDecl (FunctionDecl f vs _ e) = [compileFun f vs e]
-> compileDecl (ForeignDecl f cc ie ty) = [compileForeign f cc ie ty]
-> compileDecl SplitAnnot = []
+> compileDecl :: [QualIdent] -> Decl -> [Cam.Decl]
+> compileDecl es (DataDecl tc n cs) = [compileData es tc n cs]
+> compileDecl _ (TypeDecl _ _ _) = []
+> compileDecl es (FunctionDecl f vs _ e) = [compileFun es f vs e]
+> compileDecl es (ForeignDecl f cc ie ty) = [compileForeign es f cc ie ty]
+> compileDecl _ SplitAnnot = []
 
-> compileData :: QualIdent -> Int -> [ConstrDecl] -> Cam.Decl
-> compileData tc n cs =
->   Cam.DataDecl (con tc) (take n vs) (map (compileConstr vs) cs)
+> compileData :: [QualIdent] -> QualIdent -> Int -> [ConstrDecl] -> Cam.Decl
+> compileData es tc n cs =
+>   Cam.DataDecl (con tc) (take n vs) (map (compileConstr es vs) cs)
 >   where vs = nameSupply "_"
 
-> compileConstr :: [Cam.Name] -> ConstrDecl -> Cam.ConstrDecl
-> compileConstr vs (ConstrDecl c tys) =
->   Cam.ConstrDecl (con c) (map compileType tys)
+> compileConstr :: [QualIdent] -> [Cam.Name] -> ConstrDecl -> Cam.ConstrDecl
+> compileConstr es vs (ConstrDecl c tys) =
+>   Cam.ConstrDecl (vis es c) (con c) (map compileType tys)
 >   where compileType (TypeConstructor tc tys) =
 >           Cam.TypeApp (con tc) (map compileType tys)
 >         compileType (TypeVariable n) = Cam.TypeVar (vs !! n)
 >         compileType (TypeArrow ty1 ty2) =
 >           Cam.TypeArr (compileType ty1) (compileType ty2)
 
-> compileFun :: QualIdent -> [Ident] -> Expression -> Cam.Decl
-> compileFun f vs e = Cam.FunctionDecl (fun f) (map var vs) (unalias st)
+> compileFun :: [QualIdent] -> QualIdent -> [Ident] -> Expression -> Cam.Decl
+> compileFun es f vs e =
+>   Cam.FunctionDecl (vis es f) (fun f) (map var vs) (unalias st)
 >   where st = runSt (compileStrict [] e []) (nameSupply "_")
 
 \end{verbatim}
@@ -86,9 +87,10 @@ and \texttt{World} is a type representing the state of the external
 world.
 \begin{verbatim}
 
-> compileForeign :: QualIdent -> CallConv -> String -> Type -> Cam.Decl
-> compileForeign f cc fExt ty =
->   Cam.FunctionDecl (fun f) vs (foreignCall cc fExt vs tys ty' vs')
+> compileForeign :: [QualIdent] -> QualIdent -> CallConv -> String -> Type
+>                -> Cam.Decl
+> compileForeign es f cc fExt ty =
+>   Cam.FunctionDecl (vis es f) (fun f) vs (foreignCall cc fExt vs tys ty' vs')
 >   where (tys,ty') = arrowUnapply ty
 >         (vs,vs') = splitAt n (nameSupply "_")
 >         n = if isIO ty' then length tys + 1 else length tys
@@ -488,6 +490,9 @@ external representation used by the abstract machine code.
 
 > con :: QualIdent -> Cam.Name
 > con c = Cam.mangleQualified (show c)
+
+> vis :: [QualIdent] -> QualIdent -> Cam.Visibility
+> vis es x = if x `elem` es then Cam.Exported else Cam.Private
 
 \end{verbatim}
 Auxiliary functions.

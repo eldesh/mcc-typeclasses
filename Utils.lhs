@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Utils.lhs 2785 2009-04-10 09:58:03Z wlux $
+% $Id: Utils.lhs 3055 2011-10-07 15:44:49Z wlux $
 %
-% Copyright (c) 2001-2009, Wolfgang Lux
+% Copyright (c) 2001-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Utils.lhs}
@@ -106,20 +106,5 @@ The function \texttt{mapAccumM} is a generalization of
 >     (s',y) <- f s x
 >     (s'',ys) <- mapAccumM f s' xs
 >     return (s'',y:ys)
-
-\end{verbatim}
-\paragraph{Generalized word splitting}
-The function \texttt{wordsBy} is a natural and useful generalization
-of \texttt{Prelude.words} where the argument predicate identifies
-elements which are the equivalent of white-space. E.g.,
-\texttt{Prelude.words = wordsBy Char.isSpace}.
-\begin{verbatim}
-
-> wordsBy :: (a -> Bool) -> [a] -> [[a]]
-> wordsBy p xs =
->   case dropWhile p xs of
->     [] -> []
->     (x:xs) -> (x:xs') : wordsBy p xs''
->       where (xs',xs'') = break p xs
 
 \end{verbatim}

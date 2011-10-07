@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 2990 2010-08-20 09:28:04Z wlux $
+% $Id: Modules.lhs 3055 2011-10-07 15:44:49Z wlux $
 %
-% Copyright (c) 1999-2010, Wolfgang Lux
+% Copyright (c) 1999-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Modules.lhs}
@@ -64,7 +64,7 @@ declaration to the module.
 > compileModule :: Options -> FilePath -> ErrorT IO ()
 > compileModule opts fn =
 >   do
->     (pEnv,tcEnv,iEnv,tyEnv,m) <- loadModule paths dbg cm ws auto fn
+>     (pEnv,tcEnv,iEnv,tyEnv,m) <- loadModule paths dbg cm ws fn
 >     let (tcEnv',tyEnv',trEnv,m',dumps) = transModule dbg tr tcEnv tyEnv m
 >     liftErr $ mapM_ (doDump opts) dumps
 >     let intf = exportInterface m' pEnv tcEnv iEnv tyEnv
@@ -79,23 +79,21 @@ declaration to the module.
 >               writeCode (output opts) fn ccode
 >   where paths = importPath opts
 >         split = splitCode opts
->         auto = autoSplit opts
 >         dbg = debug opts
 >         tr = if trusted opts then Trust else Suspect
 >         cm = caseMode opts
 >         ws = warn opts
 
-> loadModule :: [FilePath] -> Bool -> CaseMode -> [Warn] -> Bool -> FilePath
+> loadModule :: [FilePath] -> Bool -> CaseMode -> [Warn] -> FilePath
 >            -> ErrorT IO (PEnv,TCEnv,InstEnv,ValueEnv,Module QualType)
-> loadModule paths debug caseMode warn autoSplit fn =
+> loadModule paths debug caseMode warn fn =
 >   do
 >     Module m es is ds <- liftErr (readFile fn) >>= okM . parseModule fn
 >     let is' = importPrelude debug fn m is
 >     mEnv <- loadInterfaces paths m (modules is')
 >     (tEnv,vEnv,m') <- okM $ checkModuleSyntax mEnv (Module m es is' ds)
 >     liftErr $ mapM_ putErrLn $ warnModuleSyntax caseMode warn mEnv m'
->     (pEnv,tcEnv,iEnv,tyEnv,m'') <-
->       okM $ checkModule autoSplit mEnv tEnv vEnv m'
+>     (pEnv,tcEnv,iEnv,tyEnv,m'') <- okM $ checkModule mEnv tEnv vEnv m'
 >     liftErr $ mapM_ putErrLn $ warnModule warn tyEnv m''
 >     return (pEnv,tcEnv,iEnv,tyEnv,m'')
 >   where modules is = [P p m | ImportDecl p m _ _ _ <- is]
@@ -113,19 +111,18 @@ declaration to the module.
 >     es' <- checkExports m is' tEnv' vEnv' es
 >     return (tEnv',vEnv',Module m (Just es') is' ds'')
 
-> checkModule :: Bool -> ModuleEnv -> TypeEnv -> FunEnv -> Module ()
+> checkModule :: ModuleEnv -> TypeEnv -> FunEnv -> Module ()
 >             -> Error (PEnv,TCEnv,InstEnv,ValueEnv,Module QualType)
-> checkModule autoSplit mEnv tEnv vEnv (Module m es is ds) =
+> checkModule mEnv tEnv vEnv (Module m es is ds) =
 >   do
->     let (k1,ds') = rename k0 (autoSplitDecls autoSplit ds)
+>     let (k1,ds') = rename k0 ds
 >     let (pEnv,tcEnv,iEnv,tyEnv) = importModules mEnv is
 >     let (pEnv',tcEnv',tyEnv') = qualifyEnv1 mEnv is pEnv tcEnv tyEnv
 >     (pEnv'',ds'') <- precCheck m tcEnv' pEnv' (qual1 tEnv vEnv ds')
 >     tcEnv'' <- kindCheck m tcEnv' ds''
 >     iEnv' <- instCheck m tcEnv'' iEnv ds''
 >     (k2,deriv) <- liftM (rename k1) (derive m pEnv'' tcEnv'' iEnv' ds'')
->     let deriv' = autoSplitDecls autoSplit deriv
->     (tyEnv'',ds''') <- typeCheck m tcEnv'' iEnv' tyEnv' (ds'' ++ deriv')
+>     (tyEnv'',ds''') <- typeCheck m tcEnv'' iEnv' tyEnv' (ds'' ++ deriv)
 >     let (pEnv''',tcEnv''',tyEnv''') =
 >           qualifyEnv2 mEnv m pEnv'' tcEnv'' tyEnv''
 >     return (pEnv''',tcEnv''',iEnv',tyEnv''',
@@ -143,11 +140,6 @@ declaration to the module.
 
 > warnModule :: [Warn] -> ValueEnv -> Module a -> [String]
 > warnModule warn tyEnv m = overlapCheck warn tyEnv m
-
-> autoSplitDecls :: Bool -> [TopDecl a] -> [TopDecl a]
-> autoSplitDecls True ds = foldr addSplitAnnot [] ds
->   where addSplitAnnot d ds = SplitAnnot (pos d) : d : ds
-> autoSplitDecls False ds = ds
 
 \end{verbatim}
 The Prelude is imported implicitly into every module other than the

@@ -1,8 +1,8 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 2876 2009-07-28 08:46:16Z wlux $
+# $Id: Makefile.in 3055 2011-10-07 15:44:49Z wlux $
 #
-# Copyright (c) 2004-2009, Wolfgang Lux
+# Copyright (c) 2004-2011, Wolfgang Lux
 # See ../LICENSE for the full license.
 #
 
@@ -25,7 +25,7 @@ libdir = @libdir@
 # configuration variables
 # set to stdlib/debug to enable and to no to disable buidling of standard
 # and debugging libraries, resp.
-# note that the prelude is always compiled
+# note that the Prelude is always compiled
 stdlib = @STDLIB@
 debug = @DEBUG@
 
@@ -146,12 +146,12 @@ rts_H = ../runtime/config.h $(rts_H_PATH:@top_srcdir@/runtime/config.h=)
 .curry.c:
 	rm -rf .$*
 	mkdir .$*
-	../cycc $(CYCCFLAGS) $($*_CYCCFLAGS) --auto-split --split-code -o .$*/$* $<
+	../cycc $(CYCCFLAGS) $($*_CYCCFLAGS) --split-code -o .$*/$* $<
 	touch $@
 .curry.d.c:
 	rm -rf .$*.d
 	mkdir .$*.d
-	../cycc -g --trusted $(CYCCFLAGS) $($*_CYCCFLAGS) --auto-split --split-code -o .$*.d/$* $<
+	../cycc -g --trusted $(CYCCFLAGS) $($*_CYCCFLAGS) --split-code -o .$*.d/$* $<
 	touch $@
 .c.icurry:
 	@test -f $@ || (echo "$@ does not exist!"; echo "Remove $< and run make again."; exit 1)

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Common.lhs 3052 2011-10-05 19:25:15Z wlux $
+% $Id: Common.lhs 3055 2011-10-07 15:44:49Z wlux $
 %
 % Copyright (c) 1999-2011, Wolfgang Lux
 % See LICENSE for the full license.
@@ -43,6 +43,7 @@ well as goals.
 > import Pretty
 > import Records
 > import Simplify
+> import SplitModule
 > import TopEnv
 > import Trust
 > import TrustInfo
@@ -120,19 +121,8 @@ transformation.
 The final transformation phases translate the intermediate language
 code into abstract machine code and then generate C code. If a module
 is compiled with the \texttt{--split-code} option, the code is split
-along the split pragmas inserted implicitly or explicitly into source
-code. When a module is split this way, all top level (i.e., not
-renamed) declarations are exported because they might be used in a
-different object file.
-
-If the module in addition is compiled with the debugging
-transformation, the compiler strips all data and top level foreign
-function declarations from the code. This is a workaround to prevent
-name conflicts between the untransformed and transformed code of the
-standard library, which could otherwise occur for programs compiled
-for debugging because they are linked with the transformed standard
-library \emph{and} the untransformed library. The latter is needed by
-the small top level program that controls the debugger at runtime.
+into several independent compilation units by computing minimal
+recursive dependency groups.
 \begin{verbatim}
 
 > genCodeModule :: Bool -> Bool -> TCEnv -> IL.Module
@@ -140,8 +130,8 @@ the small top level program that controls the debugger at runtime.
 > genCodeModule False _ tcEnv il = (Left ccode,dumps)
 >   where (ccode,dumps) = genCode (dataTypes tcEnv) il
 > genCodeModule True debug tcEnv il = (Right ccode,concat (transpose dumps))
->   where (ccode,dumps) = unzip $
->           map (genCode (dataTypes tcEnv) . cleanDebug debug) (splitModule il)
+>   where (ccode,dumps) =
+>           unzip (map (genCode (dataTypes tcEnv)) (splitModule debug il))
 
 > genCodeGoal :: TCEnv -> QualIdent -> Maybe [Ident] -> IL.Module
 >             -> (CFile,[(Dump,Doc)])
@@ -157,29 +147,6 @@ the small top level program that controls the debugger at runtime.
 >         dumps =
 >           [(DumpNormalized,ILPP.ppModule ilNormal),
 >            (DumpCam,CamPP.ppModule cam)]
-
-> splitModule :: IL.Module -> [IL.Module]
-> splitModule (IL.Module m _ is ds) = 
->   map (IL.Module m (concatMap defs ds) is)
->       (filter (any isCodeDecl) (wordsBy (IL.SplitAnnot ==) ds))
->   where isCodeDecl (IL.DataDecl _ _ cs) = not (null cs)
->         isCodeDecl (IL.TypeDecl _ _ _) = False
->         isCodeDecl (IL.FunctionDecl _ _ _ _) = True
->         isCodeDecl (IL.ForeignDecl _ _ _ _) = True
->         defs (IL.DataDecl _ _ cs) = [c | IL.ConstrDecl c _ <- cs]
->         defs (IL.TypeDecl _ _ _) = []
->         defs (IL.FunctionDecl f _ _ _) = [f | not (isRenamed (unqualify f))]
->         defs (IL.ForeignDecl f _ _ _) = [f | not (isRenamed (unqualify f))]
->         defs IL.SplitAnnot = []
-
-> cleanDebug :: Bool -> IL.Module -> IL.Module
-> cleanDebug True (IL.Module m es is ds) =
->   IL.Module m es is (filter isUnique ds)
->   where isUnique (IL.DataDecl _ _ _) = False
->         isUnique (IL.TypeDecl _ _ _) = True
->         isUnique (IL.FunctionDecl _ _ _ _) = True
->         isUnique (IL.ForeignDecl f _ _ _) = isRenamed (unqualify f)
-> cleanDebug False m = m
 
 > dataTypes :: TCEnv -> [(Cam.Name,[Cam.Name])]
 > dataTypes tcEnv = [dataType tc cs | DataType tc _ cs <- allEntities tcEnv]

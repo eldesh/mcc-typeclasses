@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 2990 2010-08-20 09:28:04Z wlux $
+% $Id: DictTrans.lhs 3053 2011-10-07 15:15:05Z wlux $
 %
-% Copyright (c) 2006-2010, Wolfgang Lux
+% Copyright (c) 2006-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{DictTrans.lhs}
@@ -40,7 +40,10 @@ The introduction of dictionaries proceeds in three phases. In the
 first phase, the compiler adds data type declarations for the
 dictionary constructors to the source code, introduces new top-level
 functions for creating instance dictionaries, and lifts class and
-instance method implementations to the top-level.
+instance method implementations to the top-level. The identifiers for
+the dictionary data types and the lifted class and instance methods
+are added to the module's export list, since the compiler may use them
+directly from other modules.
 
 Lifting default class method implementations is necessary so that the
 compiler can use them in place of omitted instance methods. Lifting
@@ -100,13 +103,27 @@ type variables (cf.\ Sect.~4.3.2 of~\cite{PeytonJones03:Haskell}).
 >     ds' <- mapM (dictTrans tcEnv'' iEnv' tyEnv' [])
 >                 (concatMap (liftDecls m tcEnv tyEnv) ds)
 >     dss <- mapM (methodStubs m tcEnv tyEnv) ds
->     return (tcEnv'',tyEnv'',trEnv',Module m es is (ds' ++ concat dss))
->   where tcEnv' = foldr (updateDefaultArities m) tcEnv ds
+>     return (tcEnv'',tyEnv'',trEnv',Module m es' is (ds' ++ concat dss))
+>   where es' = addExports es (concatMap (dictExports m tcEnv) ds)
+>         tcEnv' = foldr (updateDefaultArities m) tcEnv ds
 >         iEnv' = foldr updateInstArities iEnv ds
 >         tyEnv' = bindClassDecls m tcEnv' (bindInstDecls m tcEnv iEnv' tyEnv)
 >         tcEnv'' = bindDictTypes m tcEnv'
 >         tyEnv'' = dictTransValues tyEnv'
 >         trEnv' = foldr (liftTrustAnnots m) trEnv ds
+>         addExports (Just (Exporting p es)) es' =
+>           Just (Exporting p (es ++ es'))
+
+> dictExports :: ModuleIdent -> TCEnv -> TopDecl a -> [Export]
+> dictExports _ _ (DataDecl _ _ _ _ _ _) = []
+> dictExports _ _ (NewtypeDecl _ _ _ _ _ _) = []
+> dictExports _ _ (TypeDecl _ _ _ _) = []
+> dictExports m tcEnv (ClassDecl _ _ cls _ _) = classExports m tcEnv cls
+> dictExports m tcEnv (InstanceDecl _ _ cls ty _) =
+>   instExports m tcEnv cls (toType [] ty)
+> dictExports _ _ (DefaultDecl _ _) = []
+> dictExports _ _ (BlockDecl _) = []
+> dictExports _ _ (SplitAnnot _) = []
 
 > liftDecls :: ModuleIdent -> TCEnv -> ValueEnv -> TopDecl QualType
 >           -> [TopDecl QualType]
@@ -224,6 +241,13 @@ uses a default implementation that is equivalent to
 >                   -> ValueEnv -> ValueEnv
 > bindDefaultMethod m tyEnv cls (f,n) =
 >   bindMethod m (qDefaultMethodId cls f) n (classMethodType tyEnv cls f)
+
+> classExports :: ModuleIdent -> TCEnv -> Ident -> [Export]
+> classExports m tcEnv cls =
+>   ExportTypeWith (qDictTypeId cls') [dictConstrId cls'] :
+>   map (Export . qSuperDictId cls') (superClasses cls' tcEnv) ++
+>   map (Export . qDefaultMethodId cls' . fst) (classMethods cls' tcEnv)
+>   where cls' = qualifyWith m cls
 
 > classDecls :: TCEnv -> ValueEnv -> Position -> QualIdent -> Ident
 >            -> [Decl QualType] -> [TopDecl QualType]
@@ -443,6 +467,11 @@ of method $f_i$ in class $C$.
 > bindMethod :: ModuleIdent -> QualIdent -> Int -> QualType -> ValueEnv
 >            -> ValueEnv
 > bindMethod m f n ty = bindEntity m f (Value f n (typeScheme ty))
+
+> instExports :: ModuleIdent -> TCEnv -> QualIdent -> Type -> [Export]
+> instExports m tcEnv cls ty =
+>   Export (qInstFunId m cls ty) :
+>   map (Export . qInstMethodId m cls ty . fst) (classMethods cls tcEnv)
 
 > instDecls :: ModuleIdent -> TCEnv -> ValueEnv -> Position -> QualIdent
 >           -> QualType -> [Decl QualType] -> [TopDecl QualType]

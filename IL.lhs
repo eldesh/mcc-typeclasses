@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: IL.lhs 3052 2011-10-05 19:25:15Z wlux $
+% $Id: IL.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
 % Copyright (c) 1999-2011 Wolfgang Lux
 % See LICENSE for the full license.
@@ -54,7 +54,6 @@ functions in expressions.
 >   | TypeDecl QualIdent Int Type
 >   | FunctionDecl QualIdent [Ident] Type Expression
 >   | ForeignDecl QualIdent CallConv String Type
->   | SplitAnnot
 >   deriving (Eq,Show)
 
 > data ConstrDecl = ConstrDecl QualIdent [Type] deriving (Eq,Show)

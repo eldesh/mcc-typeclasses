@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 3053 2011-10-07 15:15:05Z wlux $
+% $Id: DictTrans.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
 % Copyright (c) 2006-2011, Wolfgang Lux
 % See LICENSE for the full license.
@@ -123,7 +123,6 @@ type variables (cf.\ Sect.~4.3.2 of~\cite{PeytonJones03:Haskell}).
 >   instExports m tcEnv cls (toType [] ty)
 > dictExports _ _ (DefaultDecl _ _) = []
 > dictExports _ _ (BlockDecl _) = []
-> dictExports _ _ (SplitAnnot _) = []
 
 > liftDecls :: ModuleIdent -> TCEnv -> ValueEnv -> TopDecl QualType
 >           -> [TopDecl QualType]
@@ -139,7 +138,6 @@ type variables (cf.\ Sect.~4.3.2 of~\cite{PeytonJones03:Haskell}).
 >   where ty' = toQualType (QualTypeExpr cx ty)
 > liftDecls _ _ _ (DefaultDecl _ _) = []
 > liftDecls _ _ _ (BlockDecl d) = [BlockDecl d]
-> liftDecls _ _ _ (SplitAnnot p) = [SplitAnnot p]
 
 > updateDefaultArities :: ModuleIdent -> TopDecl a -> TCEnv -> TCEnv
 > updateDefaultArities m (ClassDecl _ _ cls _ ds) tcEnv =
@@ -541,7 +539,6 @@ the trust annotation environment as well.
 >         [f | FunctionDecl _ _ f _ <- ds]
 > liftTrustAnnots _ (DefaultDecl _ _) trEnv = trEnv
 > liftTrustAnnots _ (BlockDecl _) trEnv = trEnv
-> liftTrustAnnots _ (SplitAnnot _) trEnv = trEnv
 
 > liftMethodAnnot :: (Ident -> Ident) -> Ident -> TrustEnv -> TrustEnv
 > liftMethodAnnot methodId f trEnv =
@@ -629,7 +626,6 @@ the implicit dictionary arguments to the declaration.
 >   dictTrans _ _ _ _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
 >   dictTrans tcEnv iEnv tyEnv dictEnv (BlockDecl d) =
 >     liftM BlockDecl (dictTrans tcEnv iEnv tyEnv dictEnv d)
->   dictTrans _ _ _ _ (SplitAnnot p) = return (SplitAnnot p)
 
 > instance DictTrans Decl where
 >   dictTrans _ _ _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
@@ -862,7 +858,6 @@ which map instance dictionary functions onto instance method names.
 >   dictSpecialize _ (TypeDecl p tc tvs ty) = TypeDecl p tc tvs ty
 >   dictSpecialize _ (DefaultDecl p tys) = DefaultDecl p tys
 >   dictSpecialize mEnv (BlockDecl d) = BlockDecl (dictSpecialize mEnv d)
->   dictSpecialize _ (SplitAnnot p) = SplitAnnot p
 
 > instance DictSpecialize Decl where
 >   dictSpecialize _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops

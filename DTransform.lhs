@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 3052 2011-10-05 19:25:15Z wlux $
+% $Id: DTransform.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2011, Wolfgang Lux
@@ -51,12 +51,12 @@ children.
 \begin{verbatim}
 
 > dTransform :: (QualIdent -> Bool) -> Module -> Module
-> dTransform trusted (Module m es is ds) = Module m es' is' ds''
+> dTransform trusted (Module m es is ds) =
+>   Module m es' is' (ds' ++ generateAuxFuncs m (numAuxFuncs m ds'))
 >   where ms = m:is
 >         es' = map (debugRenameExport (constrs ds)) es
 >         is' = imp preludeMIdent ++ imp debugPreludeMIdent ++ is
 >         ds' = debugDecls trusted m ds
->         ds'' = ds' ++ SplitAnnot : generateAuxFuncs m (numAuxFuncs m ds')
 >         imp m = [m | m `notElem` ms]
 >         constrs ds = [c | DataDecl _ _ cs <- ds, ConstrDecl c _ <- cs]
 >         debugRenameExport cs x = if x `elem` cs then x else debugRenameqId x
@@ -87,7 +87,6 @@ each foreign function.
 > debugDecl _ _ (ForeignDecl f cc s ty) = generateForeign f cc s n' ty
 >   where n = typeArity ty
 >         n' = if isIOType (resultType ty) then n + 1 else n
-> debugDecl _ _ SplitAnnot = [SplitAnnot]
 
 \end{verbatim}
 
@@ -370,7 +369,6 @@ computing the maximum index $n$ being used.
 >   usedAuxFuncs _ (TypeDecl _ _ _) = []
 >   usedAuxFuncs pre (FunctionDecl _ _ _ e) = usedAuxFuncs pre e
 >   usedAuxFuncs _ (ForeignDecl _ _ _ _) = []
->   usedAuxFuncs _ SplitAnnot = []
 
 > instance AuxFuncs Expression where
 >   usedAuxFuncs _ (Literal _) = []

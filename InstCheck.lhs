@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 2815 2009-05-04 13:59:57Z wlux $
+% $Id: InstCheck.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
-% Copyright (c) 2006-2009, Wolfgang Lux
+% Copyright (c) 2006-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{InstCheck.lhs}
@@ -60,7 +60,6 @@ instances of class \texttt{Prelude.Num}.
 > hasDerivedInstance (InstanceDecl _ _ _ _ _) = False
 > hasDerivedInstance (DefaultDecl _ _) = False
 > hasDerivedInstance (BlockDecl _) = False
-> hasDerivedInstance (SplitAnnot _) = False
 
 \end{verbatim}
 No instances can be derived for abstract data types as well as

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ShadowCheck.lhs 2987 2010-07-24 14:46:39Z wlux $
+% $Id: ShadowCheck.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
-% Copyright (c) 2005-2010, Wolfgang Lux
+% Copyright (c) 2005-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ShadowCheck.lhs}
@@ -105,7 +105,6 @@ those method definitions.
 >     foldr (&&&) id [shadow p eqs | FunctionDecl p _ _ eqs <- ds]
 >   shadow _ (DefaultDecl _ _) = id
 >   shadow p (BlockDecl d) = shadow p d
->   shadow _ (SplitAnnot _) = id
 
 >   shadowGroup p ds =
 >     bindEnts (concatMap topEnts ds) >>> foldr ((&&&) . shadow p) id ds
@@ -200,7 +199,6 @@ positions.
 > topEnts (InstanceDecl _ _ _ _ _) = []
 > topEnts (DefaultDecl _ _) = []
 > topEnts (BlockDecl d) = vars d
-> topEnts (SplitAnnot _) = []
 
 > vars :: Decl a -> [P Ident]
 > vars (InfixDecl _ _ _ _) = []

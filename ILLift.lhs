@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILLift.lhs 3052 2011-10-05 19:25:15Z wlux $
+% $Id: ILLift.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
 % Copyright (c) 2000-2011, Wolfgang Lux
 % See LICENSE for the full license.
@@ -33,7 +33,6 @@ positions are lifted into global functions.
 >         qual m = maybe qualify qualifyWith m
 >         appIdent f n i = renameIdent (mkIdent (f ++ "._#app" ++ show i)) n
 > liftDecl (ForeignDecl f cc ie ty) = [ForeignDecl f cc ie ty]
-> liftDecl SplitAnnot = [SplitAnnot]
 
 > liftExpr :: Bool -> Expression -> LiftState (Expression,[Decl])
 > liftExpr _ (Literal l) = return (Literal l,[])

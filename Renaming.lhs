@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Renaming.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: Renaming.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
-% Copyright (c) 1999-2010, Wolfgang Lux
+% Copyright (c) 1999-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Renaming.lhs}
@@ -157,7 +157,6 @@ syntax tree and renames all type and expression variables.
 >     tys' <- mapM (renameTypeSig emptyEnv . QualTypeExpr []) tys
 >     return (DefaultDecl p [ty | QualTypeExpr _ ty <- tys'])
 > renameTopDecl (BlockDecl d) = liftM BlockDecl (renameDecl emptyEnv d)
-> renameTopDecl (SplitAnnot p) = return (SplitAnnot p)
 
 > renameConstrDecl :: RenameEnv -> ConstrDecl -> RenameState ConstrDecl
 > renameConstrDecl env (ConstrDecl p evs cx c tys) =

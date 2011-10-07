@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Desugar.lhs 2981 2010-07-09 14:00:25Z wlux $
+% $Id: Desugar.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
-% Copyright (c) 2001-2010, Wolfgang Lux
+% Copyright (c) 2001-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Desugar.lhs}
@@ -105,7 +105,6 @@ global declaration group.
 >   liftM (InstanceDecl p cx cls ty) (desugarDeclGroup ds)
 > desugarTopDecl (DefaultDecl p tys) = return (DefaultDecl p tys)
 > --desugarTopDecl (BlockDecl d) = return (BlockDecl d)
-> desugarTopDecl (SplitAnnot p) = return (SplitAnnot p)
 
 \end{verbatim}
 Within a declaration group, all fixity declarations, type signatures,

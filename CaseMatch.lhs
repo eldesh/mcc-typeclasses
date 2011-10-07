@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 2981 2010-07-09 14:00:25Z wlux $
+% $Id: CaseMatch.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
-% Copyright (c) 2001-2010, Wolfgang Lux
+% Copyright (c) 2001-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CaseMatch.lhs}
@@ -93,7 +93,6 @@ For instance, \texttt{Just x = unknown} becomes \texttt{x = fcase
 >     liftM (InstanceDecl p cx cls ty) (mapM (match m p) ds)
 >   match _ _ (DefaultDecl p tys) = return (DefaultDecl p tys)
 >   match m p (BlockDecl d) = liftM BlockDecl (match m p d)
->   match _ _ (SplitAnnot p) = return (SplitAnnot p)
 
 > instance CaseMatch Decl where
 >   match _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)

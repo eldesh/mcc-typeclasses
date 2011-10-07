@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryPP.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: CurryPP.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
-% Copyright (c) 1999-2010, Wolfgang Lux
+% Copyright (c) 1999-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryPP.lhs}
@@ -79,7 +79,6 @@ Declarations
 > ppTopDecl (DefaultDecl _ tys) =
 >   text "default" <+> parenList (map (ppTypeExpr 0) tys)
 > ppTopDecl (BlockDecl d) = ppDecl d
-> ppTopDecl (SplitAnnot _) = ppPragma "SPLIT" empty
 
 > ppTypeDeclLhs :: String -> [ClassAssert] -> Ident -> [Ident] -> Doc
 > ppTypeDeclLhs kw cx tc tvs =

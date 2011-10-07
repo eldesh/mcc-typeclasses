@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryParser.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: CurryParser.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
-% Copyright (c) 1999-2010, Wolfgang Lux
+% Copyright (c) 1999-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryParser.lhs}
@@ -135,7 +135,7 @@ directory path to the module is ignored.
 > topDecl :: Parser Token (TopDecl ()) a
 > topDecl = dataDecl <|> newtypeDecl <|> typeDecl
 >       <|> classDecl <|> instanceDecl <|> defaultDecl
->       <|> BlockDecl <$> blockDecl <|> splitAnnot
+>       <|> BlockDecl <$> blockDecl
 >   where blockDecl = infixDecl <|> typeSig <|?> functionDecl <|> foreignDecl
 >                 <|> trustAnnotation
 
@@ -253,10 +253,6 @@ directory path to the module is ignored.
 > defaultDecl =
 >   DefaultDecl <$> position <*-> token KW_default
 >               <*> parens (type0 `sepBy` comma)
-
-> splitAnnot :: Parser Token (TopDecl ()) a
-> splitAnnot =
->   SplitAnnot <$> position <*-> pragma SplitPragma (succeed undefined)
 
 > infixDecl :: Parser Token (Decl ()) a
 > infixDecl =

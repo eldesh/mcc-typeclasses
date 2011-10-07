@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 2985 2010-07-12 11:58:18Z wlux $
+% $Id: TypeCheck.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
-% Copyright (c) 1999-2010, Wolfgang Lux
+% Copyright (c) 1999-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeCheck.lhs}
@@ -213,7 +213,6 @@ their types are expanded.
 > bindTypeValues _ _ (InstanceDecl _ _ _ _ _) tyEnv = tyEnv
 > bindTypeValues _ _ (DefaultDecl _ _) tyEnv = tyEnv
 > bindTypeValues _ _ (BlockDecl _) tyEnv = tyEnv
-> bindTypeValues _ _ (SplitAnnot _) tyEnv = tyEnv
 
 > bindConstr :: ModuleIdent -> TCEnv -> [ClassAssert] -> Ident -> [Ident]
 >            -> [ClassAssert] -> Ident -> [(Ident,TypeExpr)] -> ValueEnv
@@ -851,7 +850,6 @@ case of \texttt{tcTopDecl}.
 >         (vds,ods) = partition isValueDecl ds
 > tcTopDecl _ _ _ (DefaultDecl p tys) = return (DefaultDecl p tys)
 > tcTopDecl _ _ _ (BlockDecl _) = internalError "tcTopDecl"
-> tcTopDecl _ _ _ (SplitAnnot p) = return (SplitAnnot p)
 
 > tcClassMethodDecl :: ModuleIdent -> TCEnv -> ValueEnv -> QualIdent -> Ident
 >                   -> SigEnv -> Decl a -> TcState (Decl QualType)

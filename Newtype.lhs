@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Newtype.lhs 2982 2010-07-09 14:16:22Z wlux $
+% $Id: Newtype.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
-% Copyright (c) 2009-2010, Wolfgang Lux
+% Copyright (c) 2009-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Newtype.lhs}
@@ -111,7 +111,6 @@ synonym declaration and a function declaration.
 >   return [InstanceDecl p cx cls ty (transNewt tyEnv ds)]
 > transTopDecl _ _ (DefaultDecl p tys) = return [DefaultDecl p tys]
 > transTopDecl _ tyEnv (BlockDecl d) = return [BlockDecl (transNewt tyEnv d)]
-> transTopDecl _ _ (SplitAnnot p) = return [SplitAnnot p]
 
 \end{verbatim}
 Apart from that, the compiler simply descends the syntax tree and

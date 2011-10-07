@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Curry.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: Curry.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
-% Copyright (c) 1999-2010, Wolfgang Lux
+% Copyright (c) 1999-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Curry.lhs}
@@ -61,7 +61,6 @@ associating types with patterns and expressions after type inference.
 >   | InstanceDecl Position [ClassAssert] QualIdent TypeExpr [Decl a]
 >   | DefaultDecl Position [TypeExpr]
 >   | BlockDecl (Decl a)
->   | SplitAnnot Position
 >   deriving (Eq,Show)
 
 > data DClass = DClass Position QualIdent deriving (Eq,Show)
@@ -290,7 +289,6 @@ The abstract syntax tree is a functor with respect to its attributes.
 >     InstanceDecl p cx cls ty (map (fmap f) ds)
 >   fmap _ (DefaultDecl p tys) = DefaultDecl p tys
 >   fmap f (BlockDecl d) = BlockDecl (fmap f d)
->   fmap _ (SplitAnnot p) = SplitAnnot p
 
 > instance Functor Decl where
 >   fmap _ (InfixDecl p fix pr ops) = InfixDecl p fix pr ops

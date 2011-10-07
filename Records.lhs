@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Records.lhs 2981 2010-07-09 14:00:25Z wlux $
+% $Id: Records.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
-% Copyright (c) 2001-2010, Wolfgang Lux
+% Copyright (c) 2001-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Records.lhs}
@@ -79,7 +79,6 @@ selector function for each field label.
 >   liftM (return . InstanceDecl p cx cls ty) (mapM unlabelDecl ds)
 > unlabelTopDecl _ _ (DefaultDecl p tys) = return [DefaultDecl p tys]
 > unlabelTopDecl _ _ (BlockDecl d) = liftM (return . BlockDecl) (unlabelDecl d)
-> unlabelTopDecl _ _ (SplitAnnot p) = return [SplitAnnot p]
 
 > selectorDecl :: ValueEnv -> Position -> [QualIdent] -> Ident
 >              -> UnlabelState (TopDecl QualType)

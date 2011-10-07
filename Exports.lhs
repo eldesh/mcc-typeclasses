@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 3012 2010-10-04 11:29:23Z wlux $
+% $Id: Exports.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
-% Copyright (c) 2000-2010, Wolfgang Lux
+% Copyright (c) 2000-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Exports.lhs}
@@ -221,7 +221,6 @@ same class.
 >   case d of
 >     FunctionDecl _ _ f eqs -> [(f,eqs)]
 >     _ -> []
-> functions (SplitAnnot _) = []
 
 > dfltMethodId  :: Ident -> Ident
 > dfltMethodId = instMethodId (qualify anonId)

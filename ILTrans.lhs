@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILTrans.lhs 3052 2011-10-05 19:25:15Z wlux $
+% $Id: ILTrans.lhs 3056 2011-10-07 16:27:03Z wlux $
 %
 % Copyright (c) 1999-2011, Wolfgang Lux
 % See LICENSE for the full license.
@@ -37,9 +37,7 @@ and foreign declarations. When translating data type and type synonym
 declarations, we ignore the types in the declarations and look up the
 types of the constructors in the type (constructor) environment
 instead because these types are already fully expanded, i.e., they do
-not include any alias types. Note that \texttt{ilTrans} first sorts
-top-level declarations according to their textual order to ensure that
-split annotations are inserted in IL code at the correct places.
+not include any alias types.
 \begin{verbatim}
 
 > ilTrans :: TCEnv -> ValueEnv -> Module Type -> IL.Module
@@ -56,7 +54,6 @@ split annotations are inserted in IL code at the correct places.
 >   [translData m tyEnv tc tvs cs]
 > translTopDecl m tcEnv _ (TypeDecl _ tc _ _) = [translAlias m tcEnv tc]
 > translTopDecl m _ tyEnv (BlockDecl d) = translDecl m tyEnv d
-> translTopDecl _ _ _ (SplitAnnot _) = [IL.SplitAnnot]
 
 > translDecl :: ModuleIdent -> ValueEnv -> Decl Type -> [IL.Decl]
 > translDecl m tyEnv (FunctionDecl _ ty _ eqs) =
@@ -269,7 +266,6 @@ module.
 >   modules (IL.TypeDecl _ _ ty) = modules ty
 >   modules (IL.FunctionDecl _ _ ty e) = modules ty . modules e
 >   modules (IL.ForeignDecl _ _ _ ty) = modules ty
->   modules IL.SplitAnnot = id
 
 > instance HasModule IL.ConstrDecl where
 >   modules (IL.ConstrDecl _ tys) = modules tys

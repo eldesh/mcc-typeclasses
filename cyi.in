@@ -3,7 +3,7 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 3030 2011-06-20 08:01:24Z wlux $
+# $Id: cyi.in 3059 2011-10-20 07:01:17Z wlux $
 #
 # Copyright (c) 2002-2011, Wolfgang Lux
 # See LICENSE for the full license.
@@ -129,7 +129,7 @@ help ( ) {
 
 quote ( ) {
   case $1 in
-    *\'* ) echo "$1" | sed "s/'/'\\\\''/g;s/^/'/;s/$/'/";;
+    *\'* ) echo "$1" | sed "s/'/'\\\\''/g;1s/^/'/;\$s/$/'/";;
     * ) echo "'$1'";;
   esac
 }

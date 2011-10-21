@@ -3,7 +3,7 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 3059 2011-10-20 07:01:17Z wlux $
+# $Id: cymake.in 3061 2011-10-21 16:19:24Z wlux $
 #
 # Copyright (c) 2002-2011, Wolfgang Lux
 # See LICENSE for the full license.
@@ -97,8 +97,8 @@ remove ( ) {
 }
 
 compile ( ) {
-  i=$1 n=$2 source=$3 object=$4; shift 4
-  if "$newer" "$object" "$source" "$@"; then
+  i=$1 n=$2 source=$3 interf=$4 object=$5; shift 5
+  if test -f "$interf" && "$newer" "$object" "$source" "$@"; then
     $progress $i $n skipping "$source"
   else
     $progress $i $n compiling "$source"

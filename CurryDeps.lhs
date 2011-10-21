@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryDeps.lhs 2945 2010-06-11 10:39:16Z wlux $
+% $Id: CurryDeps.lhs 3061 2011-10-21 16:19:24Z wlux $
 %
-% Copyright (c) 2002-2010, Wolfgang Lux
+% Copyright (c) 2002-2011, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryDeps.lhs}
@@ -215,19 +215,20 @@ The function \texttt{makeBuildScript} returns a shell script that
 rebuilds a program given a sorted list of module informations. The
 generated script uses commands of the form
 \begin{quote}
-  \texttt{compile} $i$ $n$ \emph{source} \emph{object}
-  \emph{interface$_1$} \dots{} \emph{interface$_k$}
+  \texttt{compile} $i$ $n$ \emph{source} \emph{interface}
+  \emph{object} \emph{interface$_1$} \dots{} \emph{interface$_k$}
 \end{quote}
 and
 \begin{quote}
   \texttt{link} $i$ $n$ \emph{target} \emph{module-list}
   \emph{object$_1$} \dots{} \emph{object$_l$}
 \end{quote}
-where \emph{source} is a source file, \emph{object} is the object file
-to be generated, \emph{interface$_1$}, \dots, \emph{interface$_k$} are
-the interface files on which \emph{source} depends, \emph{target} is
-the executable, and \emph{object$_1$}, \dots, \emph{object$_l$} are
-the object files to be linked. The \emph{module-list} is equal to
+where \emph{source} is a source file, \emph{interface} and
+\emph{object} are the interface and object files to be generated,
+\emph{interface$_1$}, \dots, \emph{interface$_k$} are the interface
+files on which \emph{source} depends, \emph{target} is the executable,
+and \emph{object$_1$}, \dots, \emph{object$_l$} are the object files
+to be linked. The \emph{module-list} is equal to
 \texttt{-M}\emph{target} if no explicit goal has been specified on the
 commmand line and equal to \texttt{-M}\emph{module$_1$} \dots{}
 \texttt{-M}\emph{module$_m$}, where \emph{module$_1$}, \dots,
@@ -253,8 +254,9 @@ the first error.
 >         sources = [(fn,ms) | (_,Source fn ms) <- mEnv]
 >         cmds = zipWith compile [1..] sources ++ map link (maybeToList target)
 >         compile i (fn,ms) =
->           command ("compile" : show i : show n : fn : ofn : ifns)
->           where ofn = objectName debug fn
+>           command ("compile" : show i : show n : fn : ifn : ofn : ifns)
+>           where ifn = interfName fn
+>                 ofn = objectName debug fn
 >                 ifns = catMaybes (map interf ms)
 >         link fn = command ("link" : show n : show n : fn : ms ++ os)
 >           where m0 = (undefined,Source fn undefined)

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 3066 2012-03-11 22:14:50Z wlux $
+% $Id: show.nw 3067 2012-03-11 22:15:50Z wlux $
 %
 % Copyright (c) 2001-2012, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -55,6 +55,7 @@ DECLARE_LABEL(static, showList);
 DECLARE_LABEL(static, showList_1);
 DECLARE_LABEL(static, showTail);
 DECLARE_LABEL(static, showTail_1);
+DECLARE_LABEL(static, dvalCons);
 DECLARE_LABEL(static, showString);
 DECLARE_LABEL(static, showString_1);
 DECLARE_LABEL(static, showStringTail);
@@ -72,11 +73,11 @@ static const struct int_node two_node  = { &int_info, 2 };
 # define asc_null (Node *)char_table
 # define space	  (Node *)(char_table + ' ')
 # define comma	  (Node *)(char_table + ',')
+# define colon	  (Node *)(char_table + ':')
 # define lparen	  (Node *)(char_table + '(')
 # define rparen	  (Node *)(char_table + ')')
 # define lbracket (Node *)(char_table + '[')
 # define rbracket (Node *)(char_table + ']')
-# define bar	  (Node *)(char_table + '|')
 # define dblquote (Node *)(char_table + '\"')
 
 #else
@@ -88,11 +89,11 @@ static const struct int_node two_node  = { &int_info, 2 };
 # define asc_null tag_char('\0')
 # define space	  tag_char(' ')
 # define comma	  tag_char(',')
+# define colon	  tag_char(':')
 # define lparen	  tag_char('(')
 # define rparen	  tag_char(')')
 # define lbracket tag_char('[')
 # define rbracket tag_char(']')
-# define bar	  tag_char('|')
 # define dblquote tag_char('\"')
 
 #endif
@@ -108,6 +109,7 @@ static NodeInfo showArgs_lazy_info_table[] = LAZYINFO("showArgs", showArgs, 3);
 static NodeInfo showTupleArgs_lazy_info_table[] =
     LAZYINFO("showTupleArgs", showTupleArgs, 3);
 static NodeInfo showTail_lazy_info_table[] = LAZYINFO("showTail", showTail, 3);
+static NodeInfo dvalCons_lazy_info_table[] = LAZYINFO("dvalCons", dvalCons, 2);
 static NodeInfo showString_lazy_info_table[] =
     LAZYINFO("showString", showString, 4);
 static NodeInfo showStringTail_lazy_info_table[] =
@@ -464,8 +466,8 @@ FUNCTION(showp_1)
 
 	case CAPP_KIND:
 	    if ( node->info == &cons_info )
-		CALL_RET4(showList, 3, node->c.args[0], node->c.args[1],
-			  show, tail);
+		CALL_RET5(showList, 3, node->c.args[0], node->c.args[1],
+			  prec, show, tail);
 	    else if ( is_tuple(node->info) )
 		CALL_RET3(showTuple, 3, node, show, tail);
 	    else
@@ -859,30 +861,29 @@ FUNCTION(showTupleArgs)
 }
 
 @
-Lists are shown using the standard list notation, enclosing the whole
-list in brackets and separating the arguments by commas. Eventually
-the function \texttt{showTail} has to evaluate its tail before it can
-be converted into a string. When being called from \texttt{dvals}, we
-do not evaluate the tail of the list, but print it in the usual Prolog
-notation, i.e., separating the unevaluated or non-ground tail from the
-head of the list with a vertical bar. Unfortunately, this notation is
-not available in source code because of ambiguities with the list
-comprehension syntax. Fortunately, list comprehensions cannot occur in
-the output; thus, there is no ambiguity here.
+When lists are shown with the \texttt{show} function we use the
+standard list notation, enclosing the whole list with square brackets
+and separating elements with commas. As a special case we use string
+notation if \texttt{showTail} detects that the first element of the
+list is a character, assuming that the list is well typed.
 
-When we print a character list whose elements are ground values, we
-make use of the standard string notation. In the case of the
-\texttt{show} function we only need to check the first element of the
-list in order to check whether it is a character. As \texttt{show} is
-rigid we know that the string will be ground. The situation is
-different for \texttt{dvals} because is not rigid. Therefore, we have
-to check every character of the list. In order to prevent entering an
-infinite loop when \texttt{dvals} is applied to a cyclic list -- as can
-be created, for instance, with the function \texttt{repeat x = xs
-where x:xs} -- only strings with less than 10000 characters are
-recognized.
+When lists are shown with \texttt{dvals}, we must be prepared to
+handle closed as well as open lists, i.e., lists with an
+uninstantiated tail. If the list is closed we use the standard list
+notation as well, but if the list is open we show the list as a
+sequence of infix constructor applications. Furthermore, since
+\texttt{dvals} does not evaluate the elements of the list to head
+normal form it is not sufficient to check only the first element of
+the list to make use of the string notation. Instead, we must check
+that every element of the list is a character. To prevent entering an
+infinite loop when applied to a cyclic list -- as can be created, for
+instance, with the function \texttt{repeat x = xs where x:xs} -- we
+impose an arbitrary limit (10000 elements) up to which the list is
+checked and fall back to the open list notation if the list is longer.
 
 <<show.c>>=
+enum list_kind { is_open, is_closed, is_string };
+
 static bool
 is_char(Node *node)
 {
@@ -895,30 +896,32 @@ is_char(Node *node)
 #endif
 }
 
-static bool
-is_string(Node *node)
+static enum list_kind
+list_kind(Node *head, Node *tail)
 {
-    unsigned int n = 0;
+    unsigned int   n;
+    enum list_kind kind;
 
-    while ( is_tagged_ptr(node) && is_indir_node(node) )
-	node = node->n.node;
-    while ( n++ < 10000 && node != nil )
+    kind = is_char(head) ? is_string : is_closed;
+    while ( is_tagged_ptr(tail) && is_indir_node(tail) )
+	tail = tail->n.node;
+    for ( n = 1; tail->info == &cons_info && n < 10000; n++ )
     {
-	if ( node->info != &cons_info || !is_char(node->c.args[0]) )
-	    return false;
-	node = node->c.args[1];
-	while ( is_tagged_ptr(node) && is_indir_node(node) )
-	    node = node->n.node;
+	if ( kind == is_string && !is_char(tail->c.args[0]) )
+	    kind = is_closed;
+	tail = tail->c.args[1];
+	while ( is_tagged_ptr(tail) && is_indir_node(tail) )
+	    tail = tail->n.node;
     }
-    return node == nil;
+    return tail == nil ? kind : is_open;
 }
 
 static
 FUNCTION(showList)
 {
  ENTRY_LABEL(static, showList)
-    SAVE_REGS(3);
-    if ( regs.r[2] == zero )
+    SAVE_REGS(4);
+    if ( regs.r[3] == zero )
 	GOTO(showList_1);
     EVAL(showList_1);
 }
@@ -926,50 +929,56 @@ FUNCTION(showList)
 static
 FUNCTION(showList_1)
 {
-    bool is_str;
-    Node *hd, *tl, *susp, *susp2, *cons, *tail, *show;
+    enum list_kind kind;
+    Node	   *hd, *tl, *susp, *susp2, *cons, *tail, *show, *prec;
  ENTRY_LABEL(static, showList_1)
     hd	 = regs.r[0];
-    show = regs.sp[1];
-    for (;;)
+    show = regs.sp[2];
+    if ( show != zero )
     {
+	for (;;)
+	{
 #if !NO_POINTER_TAGS
-	if ( is_tagged_char(hd) )
-	    is_str = show != zero || is_string(regs.sp[0]);
-	else if ( is_tagged_int(hd) )
-	    is_str = false;
-	else
+	    if ( is_tagged_char(hd) )
+		kind = is_string;
+	    else if ( is_tagged_int(hd) )
+		kind = is_closed;
+	    else
 #endif
-	    switch ( hd->info->kind )
-	    {
-	    case INDIR_KIND:
-		regs.r[0] = hd = hd->n.node;
-		continue;
-	    case LVAR_KIND:
-	    case GVAR_KIND:
-		if ( show != zero )
+		switch ( hd->info->kind )
+		{
+		case INDIR_KIND:
+		    regs.r[0] = hd = hd->n.node;
+		    continue;
+		case LVAR_KIND:
+		case GVAR_KIND:
 		    CALL1(sync_var, showList_1, hd);
-		is_str = false;
-		break;
-	    case CHAR_KIND:
+		case CHAR_KIND:
 #if NO_POINTER_TAGS
-		is_str = show != zero || is_string(regs.sp[0]);
-		break;
+		    kind = is_string;
+		    break;
 #else
-		curry_panic("impossible: showList_1: CHAR_KIND\n");
+		    curry_panic("impossible: showList_1: CHAR_KIND\n");
 #endif
-	    default:
-		is_str = false;
-	    }
-	break;
+		default:
+		    kind = is_closed;
+		}
+	    break;
+	}
+    }
+    else
+    {
+	tl   = regs.sp[0];
+	kind = list_kind(hd, tl);
     }
 
-    if ( is_str )
+    switch ( kind )
     {
+    case is_string:
 	CHECK_HEAP(1, suspend_node_size(4) + 2 * cons_node_size);
 	hd   = regs.r[0];
 	tl   = regs.sp[0];
-	tail = regs.sp[2];
+	tail = regs.sp[3];
 
 	cons		= (Node *)regs.hp;
 	cons->info	= &cons_info;
@@ -990,15 +999,15 @@ FUNCTION(showList_1)
 	cons->c.args[0] = dblquote;
 	cons->c.args[1] = susp;
 	regs.hp	       += cons_node_size;
-    }
-    else
-    {
+	break;
+
+    case is_closed:
 	CHECK_HEAP(1, suspend_node_size(3) + suspend_node_size(4)
 		       + 2 * cons_node_size);
 	hd   = regs.r[0];
 	tl   = regs.sp[0];
-	show = regs.sp[1];
-	tail = regs.sp[2];
+	show = regs.sp[2];
+	tail = regs.sp[3];
 
 	cons		= (Node *)regs.hp;
 	cons->info	= &cons_info;
@@ -1026,9 +1035,68 @@ FUNCTION(showList_1)
 	cons->c.args[0] = lbracket;
 	cons->c.args[1] = susp2;
 	regs.hp	       += cons_node_size;
+	break;
+
+    case is_open:
+	prec = regs.sp[1];
+	show = regs.sp[2];
+	assert(show == zero);
+	if ( long_val(prec) > 0 )
+	{
+	    CHECK_HEAP(1, suspend_node_size(2) + suspend_node_size(4) +
+			  2 * cons_node_size);
+	    hd   = regs.r[0];
+	    tl   = regs.sp[0];
+	    tail = regs.sp[3];
+
+	    cons	    = (Node *)regs.hp;
+	    cons->info	    = &cons_info;
+	    cons->c.args[0] = rparen;
+	    cons->c.args[1] = tail;
+	    regs.hp	   += cons_node_size;
+
+	    susp	    = (Node *)regs.hp;
+	    susp->info	    = dvalCons_lazy_info_table;
+	    susp->c.args[0] = tl;
+	    susp->c.args[1] = cons;
+	    regs.hp	   += suspend_node_size(2);
+
+	    susp2	     = (Node *)regs.hp;
+	    susp2->info	     = showp_lazy_info_table;
+	    susp2->c.args[0] = hd;
+	    susp2->c.args[1] = one;
+	    susp2->c.args[2] = zero;
+	    susp2->c.args[3] = susp;
+	    regs.hp	    += suspend_node_size(4);
+
+	    cons	    = (Node *)regs.hp;
+	    cons->info	    = &cons_info;
+	    cons->c.args[0] = lparen;
+	    cons->c.args[1] = susp2;
+	    regs.hp	   += cons_node_size;
+	}
+	else
+	{
+	    CHECK_HEAP(1, suspend_node_size(2));
+	    hd   = regs.r[0];
+	    tl   = regs.sp[0];
+	    tail = regs.sp[3];
+
+	    susp	    = (Node *)regs.hp;
+	    susp->info	    = dvalCons_lazy_info_table;
+	    susp->c.args[0] = tl;
+	    susp->c.args[1] = tail;
+	    regs.hp	   += suspend_node_size(2);
+
+	    CALL_RET4(showp, 4, hd, one, zero, susp);
+	}
+	break;
+
+    default:
+	curry_panic("impossible: list_kind = %u\n", kind);
     }
 
-    RETURN(cons, 3);
+    RETURN(cons, 4);
 }
 
 static
@@ -1048,47 +1116,12 @@ FUNCTION(showTail_1)
 {
     Node *list, *susp, *susp2, *cons, *tail, *show;
  ENTRY_LABEL(static, showTail_1)
-    list = regs.r[0];
-    show = regs.sp[0];
- again:
-    switch ( node_tag(list) )
-    {
-    case INDIR_TAG:
-	list = list->n.node;
-	goto again;
-
-    case LVAR_TAG:
-	if ( show != zero )
-	    CALL1(sync_var, showTail_1, list);
-	/* FALL THROUGH!!! */
-    case EVAL_TAG:
-	regs.r[0] = list;
-	CHECK_HEAP(1, suspend_node_size(4) + cons_node_size);
-	list = regs.r[0];
-	show = regs.sp[0];
-	tail = regs.sp[1];
-
-	susp		= (Node *)regs.hp;
-	susp->info	= showp_lazy_info_table;
-	susp->c.args[0] = list;
-	susp->c.args[1] = zero;
-	susp->c.args[2] = show;
-	susp->c.args[3] = tail;
-	regs.hp	       += suspend_node_size(4);
-
-	cons		= (Node *)regs.hp;
-	cons->info	= &cons_info;
-	cons->c.args[0] = bar;
-	cons->c.args[1] = susp;
-	regs.hp	       += cons_node_size;
-	break;
-
+    BEGIN_MATCH_RIGID_NODE(showTail_1)
     case NIL_TAG:
 	tail = regs.sp[1];
 	ENTER(tail, 2);
 
     case CONS_TAG:
-	regs.r[0] = list;
 	CHECK_HEAP(1, suspend_node_size(3) + suspend_node_size(4)
 		       + cons_node_size);
 	list = regs.r[0];
@@ -1118,10 +1151,87 @@ FUNCTION(showTail_1)
 	break;
 
     default:
-	unexpected_tag("showTail", node_tag(list));
-    }
+	unexpected_tag("showTail", node_tag(regs.r[0]));
+    END_MATCH_RIGID_NODE
 
     RETURN(cons, 2);
+}
+
+static
+FUNCTION(dvalCons)
+{
+    Node *list, *susp, *susp2, *cons, *tail;
+ ENTRY_LABEL(static, dvalCons)
+    C_STACK_CHECK(dvalCons);
+    TRACE_FUN("dvalCons", 2);
+
+    list = regs.r[0];
+ again:
+    switch ( node_tag(list) )
+    {
+    case INDIR_TAG:
+	list = list->n.node;
+	goto again;
+
+    case LVAR_TAG:
+    case EVAL_TAG:
+	regs.r[0] = list;
+	CHECK_HEAP(2, suspend_node_size(4) + cons_node_size);
+	list = regs.r[0];
+	tail = regs.r[1];
+
+	susp		= (Node *)regs.hp;
+	susp->info	= showp_lazy_info_table;
+	susp->c.args[0] = list;
+	susp->c.args[1] = one;
+	susp->c.args[2] = zero;
+	susp->c.args[3] = tail;
+	regs.hp	       += suspend_node_size(4);
+
+	cons		= (Node *)regs.hp;
+	cons->info	= &cons_info;
+	cons->c.args[0] = colon;
+	cons->c.args[1] = susp;
+	regs.hp	       += cons_node_size;
+	break;
+
+    case NIL_TAG:
+	tail = regs.r[1];
+	ENT(tail);
+
+    case CONS_TAG:
+	regs.r[0] = list;
+	CHECK_HEAP(2, suspend_node_size(2) + suspend_node_size(4)
+		       + cons_node_size);
+	list = regs.r[0];
+	tail = regs.r[1];
+
+	susp		= (Node *)regs.hp;
+	susp->info	= dvalCons_lazy_info_table;
+	susp->c.args[0] = list->c.args[1];
+	susp->c.args[1] = tail;
+	regs.hp	       += suspend_node_size(2);
+
+	susp2		 = (Node *)regs.hp;
+	susp2->info	 = showp_lazy_info_table;
+	susp2->c.args[0] = list->c.args[0];
+	susp2->c.args[1] = one;
+	susp2->c.args[2] = zero;
+	susp2->c.args[3] = susp;
+	regs.hp		+= suspend_node_size(4);
+
+	cons		= (Node *)regs.hp;
+	cons->info	= &cons_info;
+	cons->c.args[0] = colon;
+	cons->c.args[1] = susp2;
+	regs.hp	       += cons_node_size;
+	break;
+
+    default:
+	unexpected_tag("dvalCons", node_tag(list));
+    }
+
+    RET(cons);
 }
 
 @ 

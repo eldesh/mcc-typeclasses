@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cam.nw 2854 2009-05-29 12:33:07Z wlux $
+% $Id: cam.nw 3067 2012-03-11 22:15:50Z wlux $
 %
-% Copyright (c) 2001-2009, Wolfgang Lux
+% Copyright (c) 2001-2012, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Abstract Machine Code Macros}
@@ -18,6 +18,7 @@ contents of the return address register to the stack.
 #define SAVE_RET2(x,y)		SAVE_RET(2, (x,y))
 #define SAVE_RET3(x,y,z)	SAVE_RET(3, (x,y,z))
 #define SAVE_RET4(x,y,z,t)	SAVE_RET(4, (x,y,z,t))
+#define SAVE_RET5(x,y,z,t,u)	SAVE_RET(5, (x,y,z,t,u))
 
 #define SAVE_RET(n,args) {	       \
 	CHECK_STACK(n+1);	       \
@@ -26,11 +27,12 @@ contents of the return address register to the stack.
 	regs.sp[n] = (Node *)regs.ret; \
     }
 
-#define DO_SAVE_RET_0()		/* empty */
-#define DO_SAVE_RET_1(x)	DO_SAVE_RET_0();      regs.sp[0] = (x)
-#define DO_SAVE_RET_2(x,y)	DO_SAVE_RET_1(x);     regs.sp[1] = (y)
-#define DO_SAVE_RET_3(x,y,z)	DO_SAVE_RET_2(x,y);   regs.sp[2] = (z)
-#define DO_SAVE_RET_4(x,y,z,t)	DO_SAVE_RET_3(x,y,z); regs.sp[3] = (t)
+#define DO_SAVE_RET_0()		 /* empty */
+#define DO_SAVE_RET_1(x)	 DO_SAVE_RET_0();	 regs.sp[0] = (x)
+#define DO_SAVE_RET_2(x,y)	 DO_SAVE_RET_1(x);	 regs.sp[1] = (y)
+#define DO_SAVE_RET_3(x,y,z)	 DO_SAVE_RET_2(x,y);	 regs.sp[2] = (z)
+#define DO_SAVE_RET_4(x,y,z,t)	 DO_SAVE_RET_3(x,y,z);	 regs.sp[3] = (t)
+#define DO_SAVE_RET_5(x,y,z,t,u) DO_SAVE_RET_4(x,y,z,t); regs.sp[4] = (u)
 
 @ 
 The frequently used special case of saving the argument registers
@@ -44,6 +46,8 @@ address register is implemented by the macro [[SAVE_REGS]].
 #define SAVE_REGS_2	SAVE_RET2(regs.r[1], regs.r[2])
 #define SAVE_REGS_3	SAVE_RET3(regs.r[1], regs.r[2], regs.r[3])
 #define SAVE_REGS_4	SAVE_RET4(regs.r[1], regs.r[2], regs.r[3], regs.r[4])
+#define SAVE_REGS_5	SAVE_RET5(regs.r[1], regs.r[2], regs.r[3], regs.r[4], \
+				  regs.r[5])
 
 @ 
 The macros [[EXEC]]$n(f,\emph{arg}_1,\dots,\emph{arg}_n)$ implement
@@ -61,17 +65,19 @@ loaded into register \texttt{regs.r[$j$]} when $i<j$.
 #define EXEC2(f,x,y)		DO_EXEC(2,f,(x,y))
 #define EXEC3(f,x,y,z)		DO_EXEC(3,f,(x,y,z))
 #define EXEC4(f,x,y,z,t)	DO_EXEC(4,f,(x,y,z,t))
+#define EXEC5(f,x,y,z,t,u)	DO_EXEC(5,f,(x,y,z,t,u))
 
 #define DO_EXEC(n,f,args) do { \
 	DO_LOAD_REGS_##n args; \
 	GOTO(f);	       \
     } while ( 0 )
 
-#define DO_LOAD_REGS_0()	/* empty */
-#define DO_LOAD_REGS_1(x)	DO_LOAD_REGS_0();      regs.r[0] = (x)
-#define DO_LOAD_REGS_2(x,y)	DO_LOAD_REGS_1(x);     regs.r[1] = (y)
-#define DO_LOAD_REGS_3(x,y,z)   DO_LOAD_REGS_2(x,y);   regs.r[2] = (z)
-#define DO_LOAD_REGS_4(x,y,z,t)	DO_LOAD_REGS_3(x,y,z); regs.r[3] = (t)
+#define DO_LOAD_REGS_0()	  /* empty */
+#define DO_LOAD_REGS_1(x)	  DO_LOAD_REGS_0();        regs.r[0] = (x)
+#define DO_LOAD_REGS_2(x,y)	  DO_LOAD_REGS_1(x);       regs.r[1] = (y)
+#define DO_LOAD_REGS_3(x,y,z)	  DO_LOAD_REGS_2(x,y);     regs.r[2] = (z)
+#define DO_LOAD_REGS_4(x,y,z,t)	  DO_LOAD_REGS_3(x,y,z);   regs.r[3] = (t)
+#define DO_LOAD_REGS_5(x,y,z,t,u) DO_LOAD_REGS_4(x,y,z,t); regs.r[4] = (u)
 
 @ 
 Two important special cases of [[EXEC1]] are implemented by the macros
@@ -98,6 +104,7 @@ return address $k$ to the return address register [[regs.ret]].
 #define CALL2(f,k,x,y)		DO_CALL(2,f,k,(x,y))
 #define CALL3(f,k,x,y,z)	DO_CALL(3,f,k,(x,y,z))
 #define CALL4(f,k,x,y,z,t)	DO_CALL(4,f,k,(x,y,z,t))
+#define CALL5(f,k,x,y,z,t,u)	DO_CALL(5,f,k,(x,y,z,t,u))
 
 #define DO_CALL(n,f,k,args) do { \
 	DO_LOAD_REGS_##n args;	 \
@@ -125,11 +132,12 @@ current stack frame, it is safe to use \texttt{regs.sp[$i$]} in an
 argument expression.
 
 <<cam.h>>=
-#define CALL_RET0(f,m)		DO_CALL_RET(0,f,m,())
-#define CALL_RET1(f,m,x)	DO_CALL_RET(1,f,m,(x))
-#define CALL_RET2(f,m,x,y)	DO_CALL_RET(2,f,m,(x,y))
-#define CALL_RET3(f,m,x,y,z)	DO_CALL_RET(3,f,m,(x,y,z))
-#define CALL_RET4(f,m,x,y,z,t)	DO_CALL_RET(4,f,m,(x,y,z,t))
+#define CALL_RET0(f,m)		 DO_CALL_RET(0,f,m,())
+#define CALL_RET1(f,m,x)	 DO_CALL_RET(1,f,m,(x))
+#define CALL_RET2(f,m,x,y)	 DO_CALL_RET(2,f,m,(x,y))
+#define CALL_RET3(f,m,x,y,z)	 DO_CALL_RET(3,f,m,(x,y,z))
+#define CALL_RET4(f,m,x,y,z,t)	 DO_CALL_RET(4,f,m,(x,y,z,t))
+#define CALL_RET5(f,m,x,y,z,t,u) DO_CALL_RET(5,f,m,(x,y,z,t,u))
 
 #define DO_CALL_RET(n,f,m,args) do {  \
 	DO_LOAD_REGS_##n args;	      \
@@ -141,7 +149,7 @@ argument expression.
 @
 The macros [[RETURN]] and [[ENTER]] implement two special cases of
 [[CALL_RET1]]. [[RETURN(x,n)]] returns [[x]] and [[ENTER(x,n)]] jumps
-to the evaluation method of [[x]]. Both functions restore their return
+to the evaluation method of [[x]]. Both macros restore their return
 address from the stack and drop [[n]] values from the stack.
 
 <<cam.h>>=

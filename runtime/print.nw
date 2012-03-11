@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 2854 2009-05-29 12:33:07Z wlux $
+% $Id: print.nw 3065 2012-03-11 22:12:09Z wlux $
 %
-% Copyright (c) 2001-2009, Wolfgang Lux
+% Copyright (c) 2001-2012, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Printing the Result}
@@ -35,9 +35,10 @@ extern void print_result(const char *var_names[], Node *vars[]);
 
 static void print_node(unsigned int, Node *);
 static void print_app(unsigned int, Node *, unsigned int, Node **);
-static bool is_string(Node *);
+static void print_list(unsigned int, Node *);
 static void print_string(Node *);
-static void print_list(Node *);
+static void print_closed_list(Node *);
+static void print_open_list(unsigned int, Node *);
 static void print_tuple(unsigned int, Node **);
 static void print_constraints(Node *);
 static void print_app_constraints(unsigned int, Node **);
@@ -140,12 +141,7 @@ print_node(unsigned int prec, Node *node)
 	    {
 	    case CAPP_KIND:
 		if ( node->info == &cons_info )
-		{
-		    if ( is_string(node) )
-			print_string(node);
-		    else
-			print_list(node);
-		}
+		    print_list(prec, node);
 		else if ( is_tuple(node->info) )
 		    print_tuple(closure_argc(node), node->c.args);
 		else
@@ -261,22 +257,34 @@ print_app(unsigned int prec, Node *node, unsigned int argc, Node **argv)
 }
 
 @
-The list printer uses the standard list notation. If the tail of the
-list is not empty, it will be shown in Prolog style, i.e., the tail is
-separated from the rest of the list by a vertical bar instead of a
-comma.
-
-If the list is ground and consists of characters only, it is displayed
-as a string. Note that we need to traverse the whole list in order to
-check this property. Fortunately, we know that the printing code is
-applied to finite data terms only.
+The list printer distinguishes three different cases. Closed lists,
+i.e., lists that end with \texttt{[]}, whose elements all are
+characters are displayed as strings. Other closed lists are displayed
+using standard list notation. Open lists are displayed as sequences of
+applications of the infix list constructor. Unfortunately, the list
+printer needs to traverse the whole list to distinguish these three
+cases. But at least we know that the printing code is applied to
+finite data terms only, so the traversal is known to terminate.
 
 <<print.c>>=
+enum list_kind { is_open, is_closed, is_string };
+
 static bool
-is_string(Node *list)
+is_char(Node *node)
 {
-    bool is_string = true;
-    Node *head;
+    while ( is_tagged_ptr(node) && node->info->kind == INDIR_KIND )
+	node = node->n.node;
+#if NO_POINTER_TAGS
+    return node->info->kind == CHAR_KIND;
+#else
+    return is_tagged_char(node);
+#endif
+}
+
+static enum list_kind
+list_kind(Node *list)
+{
+    enum list_kind kind = is_string;
 
     for (;;)
     {
@@ -288,27 +296,34 @@ is_string(Node *list)
 	case NIL_TAG:
 	    break;
 	case CONS_TAG:
-	    head = list->c.args[0];
-	    while ( is_tagged_ptr(head) && head->info->kind == INDIR_KIND )
-		head = head->n.node;
-#if NO_POINTER_TAGS
-	    if ( head->info->kind != CHAR_KIND )
-#else
-	    if ( !is_tagged_char(head) )
-#endif
-	    {
-		is_string = false;
-		break;
-	    }
+	    if ( kind == is_string && !is_char(list->c.args[0]) )
+		kind = is_closed;
 	    list = list->c.args[1];
 	    continue;
 	default:
-	    is_string = false;
+	    kind = is_open;
 	    break;
 	}
 	break;
     }
-    return is_string;
+    return kind;
+}
+
+static void
+print_list(unsigned int prec, Node *list)
+{
+    switch ( list_kind(list) )
+    {
+    case is_open:
+	print_open_list(prec, list);
+	break;
+    case is_closed:
+	print_closed_list(list);
+	break;
+    case is_string:
+	print_string(list);
+	break;
+    }
 }
 
 static void
@@ -352,9 +367,12 @@ print_string(Node *list)
 }
 
 static void
-print_list(Node *list)
+print_closed_list(Node *list)
 {
-    char sep = '[';
+    putchar('[');
+
+    print_node(0, list->c.args[0]);
+    list = list->c.args[1];
 
     for (;;)
     {
@@ -366,20 +384,52 @@ print_list(Node *list)
 	case NIL_TAG:
 	    break;
 	case CONS_TAG:
-	    putchar(sep);
+	    putchar(',');
 	    print_node(0, list->c.args[0]);
-	    sep	 = ',';
 	    list = list->c.args[1];
 	    continue;
 	default:
-	    putchar('|');
-	    print_node(0, list);
-	    break;
+	    unexpected_tag("print_list", list->info->tag);
 	}
 	break;
     }
 
     putchar(']');
+}
+
+static void
+print_open_list(unsigned int prec, Node *cons)
+{
+    if (prec > 0)
+	putchar('(');
+
+    print_node(1, cons->c.args[0]);
+    cons = cons->c.args[1];
+
+    for (;;)
+    {
+	switch ( cons->info->tag )
+	{
+	case INDIR_TAG:
+	    cons = cons->n.node;
+	    continue;
+	case NIL_TAG:
+	    break;
+	case CONS_TAG:
+	    putchar(':');
+	    print_node(1, cons->c.args[0]);
+	    cons = cons->c.args[1];
+	    continue;
+	default:
+	    putchar(':');
+	    print_node(1, cons);
+	    break;
+	}
+	break;
+    }
+
+    if (prec > 0)
+	putchar(')');
 }
 
 static void

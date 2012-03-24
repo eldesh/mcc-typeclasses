@@ -1,4 +1,4 @@
-# $Id: aclocal.m4 3073 2012-03-24 10:05:17Z wlux $
+# $Id: aclocal.m4 3074 2012-03-24 10:06:17Z wlux $
 #
 # Copyright (c) 2002-2012, Wolfgang Lux
 #
@@ -165,7 +165,7 @@ import Char
 main = print (isAlphaNum 'a')
 EOF
 $$1 $HFLAGS conftest.hs -o conftest >&AS_MESSAGE_LOG_FD 2>&1 && curry_cv_prog_$1_haskell98=yes
-rm -f conftest* Main.hi])
+rm -rf conftest* Main.hi])
 case $curry_cv_prog_$1_haskell98 in
   yes ) $2;;
   no ) $3;;
@@ -235,7 +235,7 @@ if curry_hc_version=`./conftest 2>&AS_MESSAGE_LOG_FD`; then
 else
   AC_MSG_ERROR([cannot determine version of $HC])
 fi
-rm -f conftest* Main.hi])
+rm -rf conftest* Main.hi])
 $1=$curry_cv_prog_HC_version])
 
 # CURRY_HC_HLIB(HC,[ACTION-IF-TRUE],[ACTION-IF-FALSE])
@@ -250,7 +250,7 @@ module ConfTest(module Data.IORef) where
 import Data.IORef
 EOF
 $$1 $HFLAGS -c ConfTest.hs >&AS_MESSAGE_LOG_FD 2>&1 && curry_cv_prog_$1_hlib=yes
-rm -f ConfTest*])
+rm -rf ConfTest*])
 case $curry_cv_prog_$1_hlib in
   yes ) $2;;
   no ) $3;;
@@ -275,7 +275,7 @@ for lib in exts lang; do
     break
   fi
 done
-rm -f conftest* Main.hi
+rm -rf conftest* Main.hi
 case $curry_ghc_ioexts_lib in
   "" ) AC_MSG_ERROR([cannot determine how to import IOExts]);;
   * )
@@ -302,7 +302,7 @@ else
    AC_MSG_RESULT([no])
    HC_PATH_STYLE=windows
 fi
-rm -f conftest* Main.hi
+rm -rf conftest* Main.hi
 ])
 
 

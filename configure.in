@@ -1,6 +1,6 @@
-dnl $Id: configure.in 3021 2010-12-20 09:04:30Z wlux $
+dnl $Id: configure.in 3072 2012-03-24 10:04:23Z wlux $
 dnl
-dnl Copyright (c) 2002-2008, Wolfgang Lux
+dnl Copyright (c) 2002-2012, Wolfgang Lux
 dnl See LICENSE for the full license.
 dnl
 
@@ -201,7 +201,7 @@ case $hc in
         cat <<eof >conftest.hs
 main = return ()
 eof
-       if $HC --make $HFLAGS -o conftest conftest >/dev/null 2>&1 && test -f conftest; then
+       if $HC --make $HFLAGS -o conftest conftest >&AS_MESSAGE_LOG_FD 2>&1 && test -f conftest; then
           hc=ghc-make
           AC_MSG_RESULT([yes])
         else

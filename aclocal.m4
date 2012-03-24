@@ -1,6 +1,6 @@
-# $Id: aclocal.m4 2882 2009-08-05 15:45:29Z wlux $
+# $Id: aclocal.m4 3072 2012-03-24 10:04:23Z wlux $
 #
-# Copyright (c) 2002-2009, Wolfgang Lux
+# Copyright (c) 2002-2012, Wolfgang Lux
 #
 
 ########################################################################
@@ -164,7 +164,7 @@ cat <<EOF >conftest.hs
 import Char
 main = print (isAlphaNum 'a')
 EOF
-$$1 $HFLAGS conftest.hs -o conftest 2>/dev/null && curry_cv_prog_$1_haskell98=yes
+$$1 $HFLAGS conftest.hs -o conftest >&AS_MESSAGE_LOG_FD 2>&1 && curry_cv_prog_$1_haskell98=yes
 rm -f conftest* Main.hi])
 case $curry_cv_prog_$1_haskell98 in
   yes ) $2;;
@@ -229,8 +229,8 @@ main = putStr (
 #endif
   )
 EOF
-rm -f conftest; $HC $HFLAGS -cpp conftest.hs -o conftest 2>/dev/null; rm -f Main.hi
-if curry_hc_version=`./conftest 2>/dev/null`; then
+rm -f conftest; $HC $HFLAGS -cpp conftest.hs -o conftest >&AS_MESSAGE_LOG_FD 2>&1; rm -f Main.hi
+if curry_hc_version=`./conftest 2>&AS_MESSAGE_LOG_FD`; then
   curry_cv_prog_HC_version=$curry_hc_version
 else
   AC_MSG_ERROR([cannot determine version of $HC])
@@ -249,7 +249,7 @@ cat <<EOF >ConfTest.hs
 module ConfTest(module Data.IORef) where
 import Data.IORef
 EOF
-$$1 $HFLAGS -c ConfTest.hs 2>/dev/null && curry_cv_prog_$1_hlib=yes
+$$1 $HFLAGS -c ConfTest.hs >&AS_MESSAGE_LOG_FD 2>&1 && curry_cv_prog_$1_hlib=yes
 rm -f ConfTest*])
 case $curry_cv_prog_$1_hlib in
   yes ) $2;;
@@ -270,7 +270,7 @@ main = newIORef () >>= flip writeIORef ()
 EOF
 curry_ghc_ioexts_lib=
 for lib in exts lang; do
-  if $HC $HFLAGS -syslib $lib -c conftest.hs 2>/dev/null; then
+  if $HC $HFLAGS -syslib $lib -c conftest.hs >&AS_MESSAGE_LOG_FD 2>&1; then
     curry_ghc_ioexts_lib="-syslib $lib"
     break
   fi
@@ -294,8 +294,8 @@ cat <<EOF >conftest.hs
 main = readFile "`pwd`/conftest.hs"
 EOF
 rm -f conftest$EXEEXT
-$HC $HFLAGS conftest.hs -o conftest$EXEEXT 2>/dev/null
-if ./conftest$EXEEXT 2>/dev/null; then
+$HC $HFLAGS conftest.hs -o conftest$EXEEXT >&AS_MESSAGE_LOG_FD 2>&1
+if ./conftest$EXEEXT 2>&AS_MESSAGE_LOG_FD; then
    AC_MSG_RESULT([yes])
    HC_PATH_STYLE=unix
 else

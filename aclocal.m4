@@ -1,4 +1,4 @@
-# $Id: aclocal.m4 3072 2012-03-24 10:04:23Z wlux $
+# $Id: aclocal.m4 3073 2012-03-24 10:05:17Z wlux $
 #
 # Copyright (c) 2002-2012, Wolfgang Lux
 #
@@ -364,9 +364,9 @@ AC_DEFUN([CURRY_STACK_GROWSUP],
  AC_CACHE_CHECK([whether stack grows upward],
    [curry_cv_sys_stack_growsup],
    AC_TRY_RUN([#include <stdio.h>
-       void check(unsigned int p_addr) {
-         void *q; if ( (unsigned int)&q > p_addr ) exit(1); }
-       int main() { void *p; check ((unsigned int)&p); exit(0); }],
+       void check(unsigned long p_addr) {
+         void *q; if ( (unsigned long)&q > p_addr ) exit(1); }
+       int main() { void *p; check ((unsigned long)&p); exit(0); }],
      curry_cv_sys_stack_growsup=no,
      curry_cv_sys_stack_growsup=yes,
      curry_cv_sys_stack_growsup=yes))

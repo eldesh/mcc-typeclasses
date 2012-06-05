@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryDeps.lhs 3061 2011-10-21 16:19:24Z wlux $
+% $Id: CurryDeps.lhs 3077 2012-06-05 12:53:44Z wlux $
 %
-% Copyright (c) 2002-2011, Wolfgang Lux
+% Copyright (c) 2002-2012, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryDeps.lhs}
@@ -240,16 +240,14 @@ of building the target. Note that the index of the first command is 1,
 not 0. The number $i$ actually is redundant for a \texttt{link}
 command since it will always be the last command of a build script. Of
 course, the commands \verb|compile| and \verb|link| must be defined in
-the environment where the script is executed. The script deliberately
-uses the \verb|-e| shell option so that the script is terminated upon
-the first error.
+the environment where the script is executed.
 
 \ToDo{Provide support for an equivalent of \texttt{make -k}.}
 \begin{verbatim}
 
 > makeBuildScript :: Bool -> Maybe String -> Maybe FilePath
 >                 -> [(ModuleIdent,Source)] -> String
-> makeBuildScript debug goal target mEnv = unlines ("set -e" : cmds)
+> makeBuildScript debug goal target mEnv = unlines cmds
 >   where n = length cmds
 >         sources = [(fn,ms) | (_,Source fn ms) <- mEnv]
 >         cmds = zipWith compile [1..] sources ++ map link (maybeToList target)

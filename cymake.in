@@ -3,9 +3,9 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 3061 2011-10-21 16:19:24Z wlux $
+# $Id: cymake.in 3077 2012-06-05 12:53:44Z wlux $
 #
-# Copyright (c) 2002-2011, Wolfgang Lux
+# Copyright (c) 2002-2012, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -104,7 +104,7 @@ compile ( ) {
     $progress $i $n compiling "$source"
     source=`quote1 "$source"` object=`quote1 "$object"`
     eval $echo "$cyc" "$cyopts" -c "$source" -o "$object"
-    eval $exec "$cyc" "$cyopts" -c "$source" -o "$object"
+    eval $exec "$cyc" "$cyopts" -c "$source" -o "$object" || exit $?
   fi
 }
 
@@ -115,20 +115,20 @@ link ( ) {
     $progress $i $n linking "$target"
     goal=`quote1 "$goal"` target=`quote1 "$target"`
     eval $echo "$cyc" "$cyopts" "$ldopts" -e "\\\"$goal\\\"" -o "$target" "$objs" "$libs"
-    eval $exec "$cyc" "$cyopts" "$ldopts" -e "$goal" -o "$target" "$objs" "$libs"
+    eval $exec "$cyc" "$cyopts" "$ldopts" -e "$goal" -o "$target" "$objs" "$libs" || exit $?
   elif test -n "$typeIt"; then
     $progress $i $n linking ""
     if test -n "$output"; then objs="-o "`quote1 "$output"`" $objs"; shift; fi
     typeIt=`quote1 "$typeIt"`
     eval $echo "$cyc" "$cyopts" -T "\\\"$typeIt\\\"" "$objs"
-    eval $exec "$cyc" "$cyopts" -T "$typeIt" "$objs"
+    eval $exec "$cyc" "$cyopts" -T "$typeIt" "$objs" || exit $?
   elif test -z "$linkAlways" && "$newer" "$target" "$@"; then
     $progress $i $n skipping ""
   else
     $progress $i $n linking "$target"
     target=`quote1 "$target"`
     eval $echo "$cyc" "$cyopts" "$ldopts" -o "$target" "$objs" "$libs"
-    eval $exec "$cyc" "$cyopts" "$ldopts" -o "$target" "$objs" "$libs"
+    eval $exec "$cyc" "$cyopts" "$ldopts" -o "$target" "$objs" "$libs" || exit $?
   fi
 }
 
@@ -281,7 +281,6 @@ for f in "$@"; do
   fi
 
   . /tmp/cymake$$
-  set +e
 done
 
 # done

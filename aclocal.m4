@@ -1,4 +1,4 @@
-# $Id: aclocal.m4 3074 2012-03-24 10:06:17Z wlux $
+# $Id: aclocal.m4 3081 2012-07-30 20:18:48Z wlux $
 #
 # Copyright (c) 2002-2012, Wolfgang Lux
 #
@@ -359,17 +359,24 @@ AC_DEFUN([CURRY_UNALIGNED_DOUBLE],
 # CURRY_STACK_GROWSUP
 # Check whether the stack grows upward. Define C_STACK_GROWS_UPWARD
 # via AC_DEFINE in this case.
+# NB We must make sure that this test is compiled without optimization.
+# An aggressive optimizer otherwise could include the code of the check
+# function inside the main function, whence the order of the two local
+# variables is no longer an indication of the stack direction.
 AC_DEFUN([CURRY_STACK_GROWSUP],
 [AC_REQUIRE([AC_PROG_CC]) dnl
  AC_CACHE_CHECK([whether stack grows upward],
    [curry_cv_sys_stack_growsup],
-   AC_TRY_RUN([#include <stdio.h>
+   save_CFLAGS=$CFLAGS
+   [CFLAGS=`echo " $CFLAGS " | sed 's/ -O[[0-9]]* //g'`]
+   AC_TRY_RUN([#include <stdlib.h>
        void check(unsigned long p_addr) {
          void *q; if ( (unsigned long)&q > p_addr ) exit(1); }
        int main() { void *p; check ((unsigned long)&p); exit(0); }],
      curry_cv_sys_stack_growsup=no,
      curry_cv_sys_stack_growsup=yes,
-     curry_cv_sys_stack_growsup=yes))
+     curry_cv_sys_stack_growsup=yes)
+     CFLAGS=$save_CFLAGS)
  if test "$curry_cv_sys_stack_growsup" = yes; then
    AC_DEFINE(C_STACK_GROWS_UPWARD)
  fi

@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: funpat.nw 3008 2010-09-01 09:59:41Z wlux $
+% $Id: funpat.nw 3084 2012-07-31 16:32:16Z wlux $
 %
-% Copyright (c) 2009-2010, Wolfgang Lux
+% Copyright (c) 2009-2012, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Function Patterns}
@@ -238,6 +238,7 @@ FUNCTION(___61__58__60__61__3)
 static
 FUNCTION(funpat_succeed)
 {
+ ENTRY_LABEL(static, funpat_succeed)
     RETURN(Success, 0);
 }
 

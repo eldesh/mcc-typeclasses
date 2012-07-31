@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 3056 2011-10-07 16:27:03Z wlux $
+% $Id: CaseMatch.lhs 3085 2012-07-31 16:48:41Z wlux $
 %
-% Copyright (c) 2001-2011, Wolfgang Lux
+% Copyright (c) 2001-2012, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CaseMatch.lhs}
@@ -210,7 +210,18 @@ variable that replaces $t_i$ in $t'$. In a second step the pairs
 $(x_i,t_i)$ are converted into constraints of the form \texttt{$t_i$
   =:<= $x_i$} that are injected into the right hand side of their
 respective function equation or $($f$)$case alternative together with
-declarations that define the variables occurring in $t_i$.
+declarations that define the variables occurring in $t_i$. Note that
+each of those variables is bound to \texttt{Prelude.unknown} instead
+of using a free variable declaration. This is necessary because the
+compiler attempts to avoid redundant evaluation of expressions which
+are known to be in head normal form already. These include literals
+and data constructor applications, but also logical variables, which
+-- apart from on the left hand side of \texttt{(=:<=)} -- can only be
+bound to a (head) normal form.
+
+\ToDo{Use a primitive function instead of \texttt{Prelude.unknown}
+  once the simplifier starts performing inline expansion of (imported)
+  functions.}
 \begin{verbatim}
 
 > type Match a = (Position,[ConstrTerm a],Rhs a)
@@ -321,7 +332,8 @@ expression was \texttt{[]}.
 
 > decls :: Position -> ConstrTerm QualType -> [Decl QualType]
 > decls _ (LiteralPattern _ _) = []
-> decls p (VariablePattern ty v) = [FreeDecl p [FreeVar ty v]]
+> decls p (VariablePattern ty v) =
+>   [varDecl p ty v (prelUnknown (unqualType ty))]
 > decls p (ConstructorPattern _ _ ts) = concatMap (decls p) ts
 > decls p (FunctionPattern _ _ ts) = concatMap (decls p) ts
 > decls p (AsPattern v t) =
@@ -778,6 +790,7 @@ Prelude entities
 > unify, prelEnsure :: Type -> Expression QualType
 > unify ty = preludeFun [ty,ty] successType "=:<="
 > prelEnsure ty = preludeFun [ty] ty "ensureNotFree"
+> prelUnknown ty = preludeFun [] ty "unknown"
 
 > preludeFun :: [Type] -> Type -> String -> Expression QualType
 > preludeFun tys ty f =

@@ -1,6 +1,6 @@
--- $Id: Parser.curry 3042 2011-08-06 13:15:42Z wlux $
+-- $Id: Parser.curry 3087 2012-08-01 18:47:26Z wlux $
 -- 
--- Copyright (c) 2004-2011, Wolfgang Lux
+-- Copyright (c) 2004-2012, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 -- Functional logic parsing combinators based on
@@ -30,7 +30,7 @@ empty s = s
 terminal :: a -> Parser a
 terminal t (t':ts) | t =:= t' = ts
 
--- NB Don't try to simplify the case expression below. It ensures
+-- NB Don't try to simplify the fcase expression below. It ensures
 --    that p1 is evaluated before p2. In contrast to the original
 --    implementation from the paper
 --      (p1 <*> p2) ts | p1 ts =:= ts' = p2 ts' where ts' free
@@ -39,7 +39,7 @@ terminal t (t':ts) | t =:= t' = ts
 --    time complexity in the length of the input list.
 (<*>) :: Parser a -> Parser a -> Parser a
 (p1 <*> p2) ts =
-  case p1 ts of
+  fcase p1 ts of
     ts@[] -> p2 ts
     ts@(_:_) -> p2 ts
 
@@ -58,14 +58,14 @@ satisfy p t (t':ts) | t =:= t' &> p t = ts
 
 -- NB (>>>) is called (>>) in the paper, but was renamed in order
 --    to avoid a conflict with the monadic (>>) operator.
---    Don't try to simplify the case expression below. It serves
+--    Don't try to simplify the fcase expression below. It serves
 --    the same purpose as in (<*>) and avoids the quadratic time
 --    complexity entailed by the first unification in the original
 --    implementation:
 --      (p >>> e) r ts | p ts =:= ts' &> e =:= r = ts' where ts' free
 (>>>) :: Parser a -> b -> ParserRep b a
 (p >>> e) r ts =
-  case p ts of
+  fcase p ts of
     ts@[] | e =:= r -> ts
     ts@(_:_) | e =:= r -> ts
 

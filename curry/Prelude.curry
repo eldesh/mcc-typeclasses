@@ -1,6 +1,6 @@
--- $Id: Prelude.curry 2921 2009-12-02 21:22:18Z wlux $
+-- $Id: Prelude.curry 3094 2012-08-13 09:52:16Z wlux $
 --
--- Copyright (c) 1999-2009, Wolfgang Lux
+-- Copyright (c) 1999-2012, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module Prelude((.), id, const, curry, uncurry, flip, until,
@@ -131,12 +131,12 @@ f $## x		= f $!! ensureGround x
 --- Abort the execution with an error message.
 error :: String -> a
 error msg = unsafePerformIO (abort ("Error: " ++ msg ++ "\n"))
-  where abort msg = hPutStr stderr msg >> curry_exit 1 >> undefined
+  where abort msg = hPutStr stderr msg >> exit_with 1 >> undefined
 	foreign import primitive unsafePerformIO :: IO a -> a
- 	foreign import ccall curry_exit :: Int -> IO ()
-        -- NB curry_exit does not return and therefore should have
-        --    type Int -> IO a, but this type is not a valid foreign
-        --    type for the ccall calling convention.
+ 	foreign import ccall exit_with :: Int -> IO ()
+        -- NB exit_with does not return and therefore should have type
+        --    Int -> IO a, but this type is not a valid foreign type for
+        --    the ccall calling convention.
 
 --- The totally undefined function.
 foreign import primitive "failed" undefined :: a

@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: main.nw 2749 2008-08-30 13:11:27Z wlux $
+% $Id: main.nw 3094 2012-08-13 09:52:16Z wlux $
 %
-% Copyright (c) 2001-2008, Wolfgang Lux
+% Copyright (c) 2001-2012, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 @
@@ -9,8 +9,8 @@
 The [[main]] function of a Curry program must initialize the runtime
 system by calling the function [[curry_init]]. This function parses
 the command line options and initializes the runtime system
-accordingly. At the end, the program should call [[curry_terminate]]
-in order to display the statistics gathered during the run.
+accordingly. At the end, the program should call [[curry_exit]] in
+order to display the statistics gathered during the run.
 
 The main program can provide its own default sizes for the heap, the
 stack, and the trail. To this end, it can set the global variables
@@ -40,7 +40,7 @@ extern int print_fail;
 extern unsigned long pagemask;
 
 extern void curry_init(int *argc, char *argv[]);
-extern void curry_terminate(void);
+extern void curry_exit(void);
 
 @ 
 The function [[curry_init]] extracts the runtime system options from
@@ -159,7 +159,6 @@ rts_options(int argc, char *argv[])
 #if !COPY_SEARCH_SPACE
 		case 't':
 #endif
-
 		    if ( cp[1] != '\0' )
 			arg = cp + 1;
 		    else if ( ++i < argc )
@@ -326,13 +325,13 @@ curry_init(int *p_argc, char *argv[])
 }
 
 @ 
-The function [[curry_terminate]] performs some clean up after the
-program has finished. At present, this function only prints the
-current statistics.
+The function [[curry_exit]] performs some clean up after the program
+has finished. At present, this function only prints the current
+statistics.
 
 <<main.c>>=
 void
-curry_terminate()
+curry_exit()
 {
     stats_terminate();
 }

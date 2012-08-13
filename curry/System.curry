@@ -1,6 +1,6 @@
--- $Id: System.curry 2352 2007-06-23 11:09:53Z wlux $
+-- $Id: System.curry 3094 2012-08-13 09:52:16Z wlux $
 --
--- Copyright (c) 2002-2005, Wolfgang Lux
+-- Copyright (c) 2002-2012, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module System(ExitCode(..),
@@ -43,16 +43,16 @@ system cmd = withCString cmd primSystem >>= return . exitCode
   where exitCode r = if r == 0 then ExitSuccess else ExitFailure r
         foreign import ccall "files.h" primSystem :: CString -> IO Int
 
-curryExit :: Int -> IO a
-curryExit rc = curry_exit rc >> undefined
-  where foreign import ccall curry_exit :: Int -> IO ()
-        -- NB curry_exit does not return and therefore should have
-        --    type Int -> IO a, but this type is not a valid foreign
-        --    type for the ccall calling convention.
+curryExitWith :: Int -> IO a
+curryExitWith rc = exit_with rc >> undefined
+  where foreign import ccall exit_with :: Int -> IO ()
+        -- NB exit_with does not return and therefore should have type
+        --    Int -> IO a, but this type is not a valid foreign type for
+        --    the ccall calling convention.
 
 exitWith :: ExitCode -> IO a
-exitWith ExitSuccess = curryExit 0 >> undefined
-exitWith (ExitFailure n) = curryExit (if n == 0 then 1 else n) >> undefined
+exitWith ExitSuccess = curryExitWith 0
+exitWith (ExitFailure n) = curryExitWith (if n == 0 then 1 else n)
 
 exitFailure :: IO a
 exitFailure = exitWith (ExitFailure 1)

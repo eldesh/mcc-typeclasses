@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: io_monad.nw 3093 2012-08-13 09:51:08Z wlux $
+% $Id: io_monad.nw 3094 2012-08-13 09:52:16Z wlux $
 %
 % Copyright (c) 2001-2012, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -9,8 +9,8 @@ The monadic driver is implemented in the file [[io_monad.c]]. The main
 entry point into this module is the function [[curry_exec]], which
 executes a monadic goal.
 
-The function [[curry_exit]] stops the execution of the program with
-the given return code.
+The function [[exit_with]] stops execution of the program with the
+given return code.
 
 The function [[abort_with]] prints an error message and stops
 execution with return code 1. It is effectively equivalent to calling
@@ -33,8 +33,8 @@ that were passed to [[curry_exec]].
 
 <<io_monad.h>>=
 extern void curry_exec(Node *main, int argc, char **argv);
-extern void curry_exit(int rc) __attribute__((noreturn));
 
+extern void exit_with(int rc) __attribute__((noreturn));
 extern void abort_with(const char *format, ...)
     __attribute__((noreturn, format(printf, 1, 2)));
 extern void fail_with(const char *format, ...)
@@ -164,9 +164,9 @@ curry_exec(Node *main, int argc, char **argv)
 }
 
 void
-curry_exit(int rc)
+exit_with(int rc)
 {
-    curry_terminate();
+    curry_exit();
     exit(rc);
 }
 
@@ -231,7 +231,7 @@ abort_with(const char *format, ...)
     print_error(format, args);
     va_end(args);
 
-    curry_exit(1);
+    exit_with(1);
 }
 
 void
@@ -244,7 +244,7 @@ fail_with(const char *format, ...)
 	va_start(args, format);
 	print_error(format, args);
 	va_end(args);
-	curry_exit(1);
+	exit_with(1);
     }
 
     regs.r[0] = (Node *)format;

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 3093 2012-08-13 09:51:08Z wlux $
+% $Id: CGen.lhs 3094 2012-08-13 09:52:16Z wlux $
 %
 % Copyright (c) 1998-2012, Wolfgang Lux
 % See LICENSE for the full license.
@@ -46,7 +46,7 @@ variables.
 >      [initVar v (defaultValue v) | v <- rtsVars] ++
 >      [procCall "curry_init" ["&argc","argv"],
 >       curry_main fvs f "fv_names" ["argc","argv"],
->       procCall "curry_terminate" [],
+>       procCall "curry_exit" [],
 >       CReturn (CInt 0)])]
 >   where fvDecl v vs =
 >           CStaticArray (CPointerType (CConstType "char")) v

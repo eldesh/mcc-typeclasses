@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: ILCompile.lhs 3056 2011-10-07 16:27:03Z wlux $
+% $Id: ILCompile.lhs 3097 2012-08-13 09:54:38Z wlux $
 %
 % Copyright (c) 1999-2011, Wolfgang Lux
 % See LICENSE for the full license.
@@ -25,7 +25,7 @@ language into abstract machine code.
 > type CompState a = StateT [Cam.Name] Id a
 
 > camCompile :: Module -> Cam.Module
-> camCompile (Module m es is ds) =
+> camCompile (Module _ es is ds) =
 >   map compileImport is ++ concat (map (compileDecl es) ds)
 >   where compileImport = Cam.ImportDecl . Cam.mangle . moduleName
 
@@ -396,7 +396,8 @@ code.
     $x$ \texttt{<-} \emph{st}\texttt{;} \texttt{return} $x$ & \emph{st} \\
     $x$ \texttt{<-} \texttt{return} $y$\texttt{;} \emph{st} &
       $\emph{st}[x/y]$ \\
-    $x$ \texttt{<-} \texttt{eval} $y$\texttt{;} \emph{st} & $\emph{st}[y/x]$ \\
+    $x$ \texttt{<-} \texttt{eval} $y$\texttt{;} \emph{st} &
+      $x$ \texttt{<-} \texttt{eval} $y$\texttt{;} $\emph{st}[y/x]$ \\
     $y$ \texttt{<-} \texttt{\lb} $x$ \texttt{<-} \emph{st$_1$}\texttt{;} \emph{st$_2$} \texttt{\rb}\texttt{;} \emph{st$_3$} &
       $x$ \texttt{<-} \emph{st$_1$}\texttt{;} $y$ \texttt{<-} \emph{st$_2$}\texttt{;} \emph{st$_3$} \\
     $x$ \texttt{<-} \texttt{\lb} \texttt{let} \texttt{\lb} \emph{ds} \texttt{\rb} \texttt{in} \emph{st$_1$} \texttt{\rb}\texttt{;} \emph{st$_2$} &

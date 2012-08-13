@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 2854 2009-05-29 12:33:07Z wlux $
+% $Id: backtrack.nw 3093 2012-08-13 09:51:08Z wlux $
 %
-% Copyright (c) 2002-2009, Wolfgang Lux
+% Copyright (c) 2002-2012, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Global Search}\label{sec:global-search}
@@ -19,8 +19,8 @@ The names of all free variables of the goal are passed to
 [[curry_eval]] via a [[0]]-terminated array in the second argument.
 
 <<backtrack.h>>=
-extern int curry_eval(NodeInfo *goal_info, const char *fv_names[],
-		      int argc, char **argv);
+extern void curry_eval(NodeInfo *goal_info, const char *fv_names[],
+		       int argc, char **argv);
 
 @ 
 <<backtrack.c>>=
@@ -202,7 +202,7 @@ bad_usage(const char *pname)
     exit(1);
 }
 
-int
+void
 curry_eval(NodeInfo *goal_info, const char *fv_names[], int argc, char **argv)
 {
     int	 opt;
@@ -272,8 +272,6 @@ curry_eval(NodeInfo *goal_info, const char *fv_names[], int argc, char **argv)
     /* execute finalization functions of the live objects */
     regs.hlim = heap_base;
     release_mem();
-
-    return 0;
 }
 
 static Node *

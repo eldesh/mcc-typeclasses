@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 3054 2011-10-07 15:19:59Z wlux $
+% $Id: CGen.lhs 3093 2012-08-13 09:51:08Z wlux $
 %
-% Copyright (c) 1998-2011, Wolfgang Lux
+% Copyright (c) 1998-2012, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CGen.lhs}
@@ -45,10 +45,8 @@ variables.
 >     (maybe [] (return . fvDecl "fv_names") fvs ++
 >      [initVar v (defaultValue v) | v <- rtsVars] ++
 >      [procCall "curry_init" ["&argc","argv"],
->       CLocalVar intType "rc"
->         (Just (curry_main fvs f "fv_names" ["argc","argv"])),
+>       curry_main fvs f "fv_names" ["argc","argv"],
 >       procCall "curry_terminate" [],
->       procCall "exit" ["rc"],
 >       CReturn (CInt 0)])]
 >   where fvDecl v vs =
 >           CStaticArray (CPointerType (CConstType "char")) v
@@ -59,9 +57,9 @@ variables.
 >         curry_main (Just _) = curry_eval
 >         curry_main Nothing = const . curry_exec
 >         curry_exec g args =
->           CFunCall "curry_exec" (constRef (constFunc g) : map CExpr args)
+>           CProcCall "curry_exec" (constRef (constFunc g) : map CExpr args)
 >         curry_eval g v args =
->           CFunCall "curry_eval" (addr (nodeInfo g) : map CExpr (v:args))
+>           CProcCall "curry_eval" (addr (nodeInfo g) : map CExpr (v:args))
 
 > rtsVars :: [String]
 > rtsVars = [
@@ -213,7 +211,7 @@ initialized upon their first use.
 > dataDecl c n = head (dataDef undefined Exported c n)
 
 > dataDef :: Bool -> Visibility -> Name -> Int -> [CTopDecl]
-> dataDef ex vb  c n
+> dataDef ex vb c n
 >   | n == 0 =
 >       [CExternVarDecl nodeInfoConstPtrType (constNode c) | vb == Exported] ++
 >       [CVarDef CPrivate nodeInfoType (nodeInfo c) (Just nodeinfo),

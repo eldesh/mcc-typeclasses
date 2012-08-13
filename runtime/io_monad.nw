@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: io_monad.nw 2766 2009-03-26 08:59:48Z wlux $
+% $Id: io_monad.nw 3093 2012-08-13 09:51:08Z wlux $
 %
-% Copyright (c) 2001-2008, Wolfgang Lux
+% Copyright (c) 2001-2012, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Monadic Code}\label{sec:io-monad}
@@ -10,7 +10,7 @@ entry point into this module is the function [[curry_exec]], which
 executes a monadic goal.
 
 The function [[curry_exit]] stops the execution of the program with
-the given return code, which will be returned from [[curry_exec]].
+the given return code.
 
 The function [[abort_with]] prints an error message and stops
 execution with return code 1. It is effectively equivalent to calling
@@ -32,7 +32,7 @@ The functions [[curry_argc]] and [[curry_argv]] return the arguments
 that were passed to [[curry_exec]].
 
 <<io_monad.h>>=
-extern int  curry_exec(Node *main, int argc, char **argv);
+extern void curry_exec(Node *main, int argc, char **argv);
 extern void curry_exit(int rc) __attribute__((noreturn));
 
 extern void abort_with(const char *format, ...)
@@ -67,6 +67,7 @@ DECLARE_LABEL(extern, __ioError);
 #include "eval.h"
 #include "io_monad.h"
 #include "cstring.h"
+#include "main.h"
 #include "trace.h"
 #include "cam.h"
 
@@ -141,9 +142,8 @@ monadic action itself.
 <<io_monad.c>>=
 static int  io_argc;
 static char **io_argv;
-static int  curry_rc = 0;
 
-int
+void
 curry_exec(Node *main, int argc, char **argv)
 {
     io_argc = argc;
@@ -161,15 +161,15 @@ curry_exec(Node *main, int argc, char **argv)
     run(start_io);
     regs.hlim = heap_base;
     release_mem();
-    return curry_rc;
 }
 
 void
 curry_exit(int rc)
 {
-    curry_rc = rc;
-    halt();
+    curry_terminate();
+    exit(rc);
 }
+
 int
 curry_argc()
 {
@@ -211,7 +211,7 @@ static
 FUNCTION(stop_io)
 {
  ENTRY_LABEL(static, stop_io)
-    curry_exit(0);
+    halt();
 }
 
 static void

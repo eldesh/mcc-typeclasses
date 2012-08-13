@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CPS.lhs 3000 2010-08-30 19:33:17Z wlux $
+% $Id: CPS.lhs 3096 2012-08-13 09:53:52Z wlux $
 %
-% Copyright (c) 2003-2009, Wolfgang Lux
+% Copyright (c) 2003-2012, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CPS.lhs}
@@ -9,7 +9,7 @@
 \begin{verbatim}
 
 > module CPS(CPSFunction(..), CPSContinuation(..),
->            CPSFun(..), CPSPrim(..), CPSCont(..), CPSContFun(..),
+>            CPSFun(..), CPSCont(..), CPSContFun(..),
 >            BindC(..), BindPapp(..), CaseBlock(..), CPSTag(..), CPSStmt(..),
 >            cpsFunction, cpsApply, cpsInst, continuations) where
 > import Cam
@@ -90,8 +90,8 @@ arguments with a \texttt{CPSLetPapp} statement.
 >   | CPSChoice (Maybe Name) [CPSCont]
 >   deriving Show
 
-> data CPSFun = CPSFun Name | CPSPrim CPSPrim deriving Show
-> data CPSPrim = CPSEval Bool Name | CPSUnify | CPSDelay deriving Show
+> data CPSFun =
+>   CPSFun Name | CPSEval Bool Name | CPSUnify | CPSDelay deriving Show
 > data CPSCont = CPSReturn | CPSCont CPSContFun [Name] CPSCont deriving Show
 > data CPSContFun =
 >     CPSContFun Name Int
@@ -119,8 +119,7 @@ arguments with a \texttt{CPSLetPapp} statement.
 
 > cpsApply :: Name -> [Name] -> CPSFunction
 > cpsApply f (v:vs) =
->   CPSFunction f (v:vs) $
->   CPSLetCont f' (CPSExec (CPSPrim (CPSEval False v)) k' [v])
+>   CPSFunction f (v:vs) (CPSLetCont f' (CPSExec (CPSEval False v) k' [v]))
 >   where f' = CPSContinuation (CPSContFun f 1) [v] vs (CPSSwitchArity v cases)
 >         k' = cpsCont f'
 >         cases =
@@ -137,14 +136,14 @@ arguments with a \texttt{CPSLetPapp} statement.
 > cpsInst :: Name -> Tag -> CPSContinuation
 > cpsInst v t =
 >   CPSContinuation (CPSInst t) [] [v] $
->   foldr (CPSLet . return) (CPSExec (CPSPrim CPSUnify) CPSReturn [v,tmp])
+>   foldr (CPSLet . return) (CPSExec CPSUnify CPSReturn [v,tmp])
 >         (cpsFresh tmp t)
 
 > cpsCont :: CPSContinuation -> CPSCont
 > cpsCont (CPSContinuation f _ ws _) = CPSCont f ws CPSReturn
 
 \end{verbatim}
-The transformation into CPS code is implemented by a top-down
+The transformation into CPS code is implemented by a one-pass top-down
 algorithm. The abstract machine code statements \texttt{return},
 \texttt{eval}, \texttt{exec}, and \texttt{ccall} are transformed
 directly into their CPS equivalents. Statement sequences $x$
@@ -194,8 +193,7 @@ does not need to construct separate closures for each of them.
 >   case e of
 >     Var v -> (n,CPSExecCont (snd k) [v])
 >     _ -> (n,CPSLet [Bind tmp e] (CPSExecCont (snd k) [tmp]))
-> cpsStmt _ _ k n (Eval v) =
->   (n,CPSExec (CPSPrim (CPSEval (fst k) v)) (snd k) [v])
+> cpsStmt _ _ k n (Eval v) = (n,CPSExec (CPSEval (fst k) v) (snd k) [v])
 > cpsStmt _ _ k n (Exec f vs) = (n,CPSExec (CPSFun f) (snd k) vs)
 > cpsStmt _ _ k n (CCall _ ty cc) =
 >   (n,CPSLetC (BindC tmp ty cc) (CPSExecCont (snd k) [tmp]))
@@ -251,7 +249,7 @@ does not need to construct separate closures for each of them.
 >   [CPSSwitchVar v (cpsRigidCase k v) (cpsFlexCase k v ts) | not (null ts)]
 
 > cpsRigidCase :: CPSCont -> Name -> CPSStmt
-> cpsRigidCase k v = CPSExec (CPSPrim CPSDelay) k [v]
+> cpsRigidCase k v = CPSExec CPSDelay k [v]
 
 > cpsFlexCase :: CPSCont -> Name -> [Tag] -> CPSStmt
 > cpsFlexCase k v ts = cpsFlexChoice v [CPSCont (CPSInst t) [v] k | t <- ts]

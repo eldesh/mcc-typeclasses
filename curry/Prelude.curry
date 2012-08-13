@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 3094 2012-08-13 09:52:16Z wlux $
+-- $Id: Prelude.curry 3095 2012-08-13 09:52:59Z wlux $
 --
 -- Copyright (c) 1999-2012, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -139,7 +139,8 @@ error msg = unsafePerformIO (abort ("Error: " ++ msg ++ "\n"))
         --    the ccall calling convention.
 
 --- The totally undefined function.
-foreign import primitive "failed" undefined :: a
+undefined :: a
+undefined = Prelude.error "Prelude.undefined"
 
 
 --- failed is a non-reducible polymorphic function.

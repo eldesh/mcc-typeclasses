@@ -1,6 +1,6 @@
--- $Id: Bits.curry 2880 2009-08-05 14:34:49Z wlux $
+-- $Id: Bits.curry 3098 2012-10-13 15:11:08Z wlux $
 --
--- Copyright (c) 2005-2009, Wolfgang Lux
+-- Copyright (c) 2005-2012, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module Bits(Bits(..)) where
@@ -29,10 +29,10 @@ class Num a => Bits a where
   clearBit x n = x .&. complement (shift 1 n)
   complementBit x n = x `xor` shift 1 n
   testBit x n = x .&. shift 1 n /= 0
-  shiftL n = shift n
-  shiftR n = shift (-n)
-  rotateL n = rotate n
-  rotateR n = rotate (-n)
+  shiftL x n = shift x n
+  shiftR x n = shift x (-n)
+  rotateL x n = rotate x n
+  rotateR x n = rotate x (-n)
 
 instance Bits Int where
   (.&.) = primAndInt

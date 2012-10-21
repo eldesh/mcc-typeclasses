@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: MachResult.lhs 3003 2010-08-30 19:42:53Z wlux $
+% $Id: MachResult.lhs 3102 2012-10-21 10:49:19Z wlux $
 %
-% Copyright (c) 1998-2009, Wolfgang Lux
+% Copyright (c) 1998-2012, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{MachResult.lhs}
@@ -56,23 +56,24 @@ used in the answer expression.
 
 > browseExpression :: Int -> [String] -> Integer -> Node -> BrowseState ShowS
 > browseExpression p names adr (CharNode c) = return (shows c)
-> browseExpression p names adr (IntNode i) = return (shows i)
-> browseExpression p names adr (FloatNode f) = return (shows f)
+> browseExpression p names adr (IntNode i) = return (showsPrec p i)
+> browseExpression p names adr (FloatNode f) = return (showsPrec p f)
 > browseExpression p names adr (ConstructorNode _ name args)
->   | isTupleName name = liftM showsTuple (mapM (browseElem names) args)
+>   | isTupleName name = liftM showsTuple (mapM (browseArg 0 names) args)
 >   | name == cons =
 >       do
->         mbCs <- getString args
->         case mbCs of
->           Just cs -> return (shows cs)
->           Nothing -> liftM showsList (browseList names args)
+>         kind <- listKind args
+>         case kind of
+>           String cs -> return (shows cs)
+>           ClosedList -> liftM showsList (browseList names args)
+>           OpenList -> liftM (uncurry (showsCons p)) (browseCons names args)
 >   | otherwise =
->       liftM (showsTerm p (unqualify name)) (mapM (browseArg names) args)
+>       liftM (showsTerm p (unqualify name)) (mapM (browseArg 11 names) args)
 >   where ConstructorTag _ cons _ = consTag
 > browseExpression p names adr (VarNode _ _) =
 >   liftM showString (varName names adr)
 > browseExpression p names adr (ClosureNode name _ _ args) =
->   liftM (showsTerm p name) (mapM (browseArg names) args)
+>   liftM (showsTerm p name) (mapM (browseArg 11 names) args)
 > browseExpression p names adr (LazyNode name arity code args) =
 >   browseExpression p names adr (ClosureNode name arity code args)
 > browseExpression p names adr (QueueMeNode _) =
@@ -86,16 +87,20 @@ used in the answer expression.
 > browseExpression p names adr (SearchContinuation _ _ _ _) =
 >   return (showString "<search>")
 
-> browseArg :: [String] -> NodePtr -> BrowseState ShowS
-> browseArg names (Ptr adr ref) = readRef ref >>= browseExpression 1 names adr
+> browseArg :: Int -> [String] -> NodePtr -> BrowseState ShowS
+> browseArg p names (Ptr adr ref) = readRef ref >>= browseExpression p names adr
 
-> browseElem :: [String] -> NodePtr -> BrowseState ShowS
-> browseElem names (Ptr adr ref) = readRef ref >>= browseExpression 0 names adr
+> browseCons :: [String] -> [NodePtr] -> BrowseState (ShowS,ShowS)
+> browseCons names [head,tail] =
+>   do
+>     hd <- browseArg 6 names head
+>     tl <- browseArg 5 names tail
+>     return (hd,tl)
 
 > browseList :: [String] -> [NodePtr] -> BrowseState ShowS
 > browseList names [head,tail] =
 >   do
->     hd <- browseElem names head
+>     hd <- browseArg 0 names head
 >     tl <- derefPtr tail >>= browseTail names
 >     return (hd . tl)
 
@@ -110,18 +115,34 @@ used in the answer expression.
 >   where ConstructorTag _ nil _  = nilTag
 >         ConstructorTag _ cons _ = consTag
 
-> getString :: [NodePtr] -> BrowseState (Maybe String)
-> getString [head,tail] =
+> data ListKind = String String | ClosedList | OpenList
+
+> listKind :: [NodePtr] -> BrowseState ListKind
+> listKind [head,tail] =
 >   do
->     mbC <- getStringHead head
->     case mbC of
->       Just c ->
+>     kind <- tailKind tail
+>     case kind of
+>       String cs ->
 >         do
->           mbCs <- getStringTail tail
->           case mbCs of
->             Just cs -> return (Just (c:cs))
->             Nothing -> return Nothing
->       Nothing -> return Nothing
+>           mbC <- getStringHead head
+>           case mbC of
+>             Just c -> return (String (c:cs))
+>             Nothing -> return ClosedList
+>       ClosedList -> return ClosedList
+>       OpenList -> return OpenList
+
+> tailKind :: NodePtr -> BrowseState ListKind
+> tailKind (Ptr _ ref) =
+>   readRef ref >>= \node ->
+>   case node of
+>     ConstructorNode _ cName args
+>       | cName == nil -> return (String [])
+>       | cName == cons -> listKind args
+>       | otherwise -> return OpenList
+>     IndirNode ptr -> tailKind ptr
+>     _ -> return OpenList
+>   where ConstructorTag _ nil _  = nilTag
+>         ConstructorTag _ cons _ = consTag
 
 > getStringHead :: NodePtr -> BrowseState (Maybe Char)
 > getStringHead (Ptr _ ref) =
@@ -130,19 +151,6 @@ used in the answer expression.
 >     CharNode c -> return (Just c)
 >     IndirNode ptr -> getStringHead ptr
 >     _ -> return Nothing
-
-> getStringTail :: NodePtr -> BrowseState (Maybe String)
-> getStringTail (Ptr _ ref) =
->   readRef ref >>= \node ->
->   case node of
->     ConstructorNode _ cName args
->       | cName == nil -> return (Just [])
->       | cName == cons -> getString args
->       | otherwise -> return Nothing
->     IndirNode ptr -> getStringTail ptr
->     _ -> return Nothing
->   where ConstructorTag _ nil _  = nilTag
->         ConstructorTag _ cons _ = consTag
 
 > browseSubsts :: [String] -> [(String,NodePtr)] -> BrowseState [ShowS]
 > browseSubsts names freeVars =
@@ -194,13 +202,16 @@ used in the answer expression.
 
 > showsTerm :: Int -> String -> [ShowS] -> ShowS
 > showsTerm p root args =
->   showParen (not (null args) && p > 0) (catBy " " (showString root : args))
+>   showParen (not (null args) && p > 10) (catBy " " (showString root : args))
 
 > showsTuple :: [ShowS] -> ShowS
 > showsTuple args = braces ('(',')') (catBy "," args)
 
 > showsList :: ShowS -> ShowS
 > showsList = braces ('[',']')
+
+> showsCons :: Int -> ShowS -> ShowS -> ShowS
+> showsCons p hd tl = showParen (p > 5) (hd . showChar ':' . tl)
 
 > catBy :: String -> [ShowS] -> ShowS
 > catBy sep = cat . intersperse (showString sep)

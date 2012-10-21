@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 3065 2012-03-11 22:12:09Z wlux $
+% $Id: print.nw 3104 2012-10-21 10:51:09Z wlux $
 %
 % Copyright (c) 2001-2012, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -43,6 +43,7 @@ static void print_tuple(unsigned int, Node **);
 static void print_constraints(Node *);
 static void print_app_constraints(unsigned int, Node **);
 static void print_constrained_var(Node *);
+static void print_constraint(const char *, const char *, Node *);
 
 @ 
 The function [[print_result]] prints the computed result of a goal and
@@ -71,16 +72,7 @@ print_result(const char **var_names, Node **vars)
     hasAnswer = false;
     for ( n = 0; var_names[n]; n++ )
 	if ( !is_tagged_ptr(vars[n]) || !is_variable_node(vars[n]) )
-	{
-	    if ( !hasAnswer )
-	    {
-		printf("{%s = ", var_names[n]);
-		hasAnswer = true;
-	    }
-	    else
-		printf(", %s = ", var_names[n]);
-	    print_node(0, vars[n]);
-	}
+	    print_constraint(var_names[n], "=", vars[n]);
 
     result = vars[n];
     print_constraints(result);
@@ -93,8 +85,8 @@ print_result(const char **var_names, Node **vars)
     {
 	while ( is_tagged_ptr(result) && is_indir_node(result) )
 	    result = result->n.node;
-	if ( !is_tagged_ptr(result)
-	     || result->info != CONST(__Prelude__Success)->info )
+	if ( !is_tagged_ptr(result) ||
+	     result->info != CONST(__Prelude__Success)->info )
 	{
 	    printf("} ");
 	    print_node(0, result);
@@ -102,6 +94,7 @@ print_result(const char **var_names, Node **vars)
 	else
 	    printf("}");
     }
+    printf("\n");
 
     release_names(tail);
 }
@@ -512,26 +505,32 @@ print_app_constraints(unsigned int argc, Node **argv)
 static void
 print_constrained_var(Node *var)
 {
+    const char *name;
     Constraint *cstrs;
 
     ASSERT(is_variable_node(var) && var->v.cstrs != 0);
 
+    name  = lookup_name(var);
     cstrs = var->v.cstrs;
     SET_FIELD(var, v.cstrs, 0);
 
     for ( ; cstrs; cstrs = cstrs->cstrs )
     {
-	if ( !hasAnswer )
-	{
-	    printf("{");
-	    hasAnswer = true;
-	}
-	else
-	    printf(", ");
-	print_node(0, var);
-	printf(" /= ");
-	print_node(0, ((Disequality *)cstrs)->node);
-
-	print_constraints(((Disequality *)cstrs)->node);
+	Node *node = ((Disequality *)cstrs)->node;
+	print_constraint(name, "/=", node);
+	print_constraints(node);
     }
+}
+
+static void print_constraint(const char *name, const char *op, Node *node)
+{
+    if ( !hasAnswer )
+    {
+	printf("{");
+	hasAnswer = true;
+    }
+    else
+	printf(", ");
+    printf("%s %s ", name, op);
+    print_node(0, node);
 }

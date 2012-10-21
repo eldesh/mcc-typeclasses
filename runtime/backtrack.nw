@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 3093 2012-08-13 09:51:08Z wlux $
+% $Id: backtrack.nw 3104 2012-10-21 10:51:09Z wlux $
 %
 % Copyright (c) 2002-2012, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -206,7 +206,7 @@ void
 curry_eval(NodeInfo *goal_info, const char *fv_names[], int argc, char **argv)
 {
     int	 opt;
-    bool first = true, interactive;
+    bool interactive;
     Node *goal;
 
 #if !defined(_WIN32) || defined(__CYGWIN__)
@@ -244,17 +244,10 @@ curry_eval(NodeInfo *goal_info, const char *fv_names[], int argc, char **argv)
     if ( goal )
 	for ( ;; )
 	{
-	    if ( !interactive )
-	    {
-		if ( first )
-		    first = false;
-		else
-		    printf(" | ");
-	    }
 	    if ( goal != (Node *)-1 )
 		print_result(fv_names, goal->c.args);
 	    else
-		printf("Suspended");
+		printf("Suspended\n");
 
 	    if ( !eval_continue(&interactive) )
 		break;
@@ -262,7 +255,8 @@ curry_eval(NodeInfo *goal_info, const char *fv_names[], int argc, char **argv)
 	    goal = eval_next();
 	    if ( goal == 0 )
 	    {
-		printf("%s\n", interactive ? "No more solutions" : "");
+		if (interactive)
+		    printf("No more solutions\n");
 		break;
 	    }
 	}
@@ -350,14 +344,11 @@ eval_continue(bool *interactive)
 
     /* terminate the program if no alternatives remain */
     if ( regs.bp == 0 )
-    {
-	printf("\n");
 	return false;
-    }
 
     if ( *interactive )
     {
-	printf("\nMore solutions? [Y(es)/n(o)/a(ll)] ");
+	printf("More solutions? [Y(es)/n(o)/a(ll)] ");
 	fflush(stdout);
 	c = getchar();
 	while ( c != EOF && c != '\n' && isspace(c) )

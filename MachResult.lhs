@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachResult.lhs 3102 2012-10-21 10:49:19Z wlux $
+% $Id: MachResult.lhs 3103 2012-10-21 10:50:16Z wlux $
 %
 % Copyright (c) 1998-2012, Wolfgang Lux
 % See LICENSE for the full license.
@@ -51,8 +51,11 @@ used in the answer expression.
 >     Ptr adr ref <- derefPtr ptr
 >     node <- readRef ref
 >     exp <- browseExpression 0 names adr node
->     return (showsAnswer (nodeTag node == successTag) (answer ++ cstrs) exp)
+>     return (showsAnswer (isSuccess node) (answer ++ cstrs) exp)
 >   where names = variableNames freeVars
+>         isSuccess (ConstructorNode _ cName []) = cName == success
+>           where ConstructorTag _ success _ = successTag
+>         isSuccess _ = False
 
 > browseExpression :: Int -> [String] -> Integer -> Node -> BrowseState ShowS
 > browseExpression p names adr (CharNode c) = return (shows c)

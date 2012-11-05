@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 3008 2010-09-01 09:59:41Z wlux $
+% $Id: eval.nw 3106 2012-11-05 17:49:02Z wlux $
 %
-% Copyright (c) 2001-2010, Wolfgang Lux
+% Copyright (c) 2001-2012, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Evaluation}\label{sec:eval}
@@ -447,11 +447,18 @@ FUNCTION(flex_yield_resume)
 @ 
 The unsafe primitive function \texttt{isVar} returns \texttt{True} if
 its argument evaluates to an unbound variable. This function is
-implemented only for compatibility with PAKCS.
+implemented only for compatibility with PAKCS. To make its result a
+bit more predictable when stability is enabled, \texttt{isVar} is
+implemented like a non-deterministic function, i.e., the
+``variable-ness'' of its argument is checked only when no other
+concurrent deterministic computation is available.
 
 <<eval.c>>=
 DECLARE_LABEL(extern, __isVar);
 DECLARE_LABEL(static, __isVar_1);
+#if !NO_STABILITY
+DECLARE_LABEL(static, __isVar_2);
+#endif
 
 FUNCTION(__isVar)
 {
@@ -469,11 +476,38 @@ FUNCTION(__isVar_1)
     while ( is_tagged_ptr(node) && is_indir_node(node) )
 	node = node->n.node;
     if ( is_tagged_ptr(node) && is_variable_node(node) )
+    {
+#if !NO_STABILITY
+	CHECK_STACK1();
+	regs.sp	 -= 1;
+	regs.r[0] = regs.sp[0] = node;
+	regs.ret  = __isVar_2;
+	GOTO(yield_delay_thread);
+#else
 	r = CONST(__Prelude__True);
+#endif
+    }
     else
 	r = CONST(__Prelude__False);
     RETURN(r, 0);
 }
+
+#if !NO_STABILITY
+static
+FUNCTION(__isVar_2)
+{
+    Node *node, *r;
+ ENTRY_LABEL(static, __isVar_2)
+    node = regs.sp[0];
+    while ( is_tagged_ptr(node) && is_indir_node(node) )
+	node = node->n.node;
+    if ( is_tagged_ptr(node) && is_variable_node(node) )
+	r = CONST(__Prelude__True);
+    else
+	r = CONST(__Prelude__False);
+    RETURN(r, 1);
+}
+#endif
 
 @ 
 The polymorphic function \texttt{ensureGround} ensures that the normal

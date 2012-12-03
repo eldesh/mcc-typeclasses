@@ -1,8 +1,8 @@
 # Makefile for the Curry compiler
 #
-# $Id: Makefile.in 3055 2011-10-07 15:44:49Z wlux $
+# $Id: Makefile.in 3108 2012-12-03 18:26:45Z wlux $
 #
-# Copyright (c) 2000-2011 Wolfgang Lux
+# Copyright (c) 2000-2012 Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -27,6 +27,7 @@ mandir = @mandir@
 HC = @HC@
 HFLAGS = @HFLAGS@
 HC_PATH_STYLE = @HC_PATH_STYLE@
+HASKELL = @HASKELL@
 
 LATEX = latex
 BIBTEX = bibtex
@@ -134,7 +135,11 @@ cycc_SRCS = \
 	GetOpt.hs \
 	Utils.lhs \
 	$(PATHUTILS_LHS) \
-	$(IOEXTS_LHS)
+	$(IOEXTS_LHS) \
+	$(cycc_$(HASKELL)_SRCS)
+cycc_hs2010_SRCS = hs2010/Char.hs hs2010/Directory.hs hs2010/IO.hs \
+	hs2010/List.hs hs2010/Maybe.hs hs2010/Monad.hs hs2010/Ratio.hs \
+	hs2010/System.hs
 cycc_XXX  = $(cycc_SRCS:.hs=.hi)
 cycc_INTF = $(cycc_XXX:.lhs=.hi)
 cycc_OBJS = $(cycc_INTF:.hi=.o)
@@ -157,13 +162,20 @@ cymk_SRCS = \
 	Set.lhs \
 	Position.lhs \
 	GetOpt.hs \
-	$(PATHUTILS_LHS)
+	$(PATHUTILS_LHS) \
+	$(cymk_$(HASKELL)_SRCS)
+cymk_hs2010_SRCS = hs2010/Char.hs hs2010/Directory.hs hs2010/IO.hs \
+	hs2010/List.hs hs2010/Maybe.hs hs2010/Monad.hs hs2010/Ratio.hs \
+	hs2010/System.hs
 cymk_XXX  = $(cymk_SRCS:.hs=.hi)
 cymk_INTF = $(cymk_XXX:.lhs=.hi)
 cymk_OBJS = $(cymk_INTF:.hi=.o)
 
 newer_SRCS = \
-	newer.lhs
+	newer.lhs \
+	$(newer_$(HASKELL)_SRCS)
+newer_hs2010_SRCS = hs2010/Directory.hs hs2010/IO.hs hs2010/List.hs \
+	hs2010/System.hs hs2010/Time.hs
 newer_XXX  = $(newer_SRCS:.hs=.hi)
 newer_INTF = $(newer_XXX:.lhs=.hi)
 newer_OBJS = $(newer_INTF:.hi=.o)
@@ -187,7 +199,11 @@ cam2c_SRCS = \
 	Set.lhs \
 	Position.lhs \
 	Utils.lhs \
-	$(PATHUTILS_LHS)
+	$(PATHUTILS_LHS) \
+	$(cam2c_$(HASKELL)_SRCS)
+cam2c_hs2010_SRCS = hs2010/Char.hs hs2010/Directory.hs hs2010/IO.hs \
+	hs2010/List.hs hs2010/Maybe.hs hs2010/Monad.hs hs2010/Ratio.hs \
+	hs2010/System.hs
 cam2c_XXX  = $(cam2c_SRCS:.hs=.hi)
 cam2c_INTF = $(cam2c_XXX:.lhs=.hi)
 cam2c_OBJS = $(cam2c_INTF:.hi=.o)
@@ -216,7 +232,10 @@ mach_SRCS = \
 	Map.lhs \
 	Set.lhs \
 	Utils.lhs \
-	$(IOEXTS_LHS)
+	$(IOEXTS_LHS) \
+	$(mach_$(HASKELL)_SRCS)
+mach_hs2010_SRCS = hs2010/Char.hs hs2010/IO.hs hs2010/List.hs \
+	hs2010/Maybe.hs hs2010/Monad.hs hs2010/Ratio.hs hs2010/System.hs
 mach_XXX  = $(mach_SRCS:.hs=.hi)
 mach_INTF = $(mach_XXX:.lhs=.hi)
 mach_OBJS = $(mach_INTF:.hi=.o)
@@ -227,6 +246,10 @@ PATHUTILS_SRCS = unix/PathUtils.lhs windows/PathUtils.lhs
 IOEXTS_LHS = @IOExts_lhs@
 IOEXTS_SRCS = ghc/IOExts.lhs hbc/IOExts.lhs nhc/IOExts.lhs
 
+HS2010_SRCS = hs2010/Char.hs hs2010/Directory.hs hs2010/IO.hs hs2010/List.hs \
+	      hs2010/Maybe.hs hs2010/Monad.hs hs2010/Ratio.hs hs2010/System.hs \
+	      hs2010/Time.hs
+
 SRCS = $(cycc_SRCS) $(cymk_SRCS) $(newer_SRCS) $(cam2c_SRCS) $(mach_SRCS)
 INTF = $(cycc_INTF) $(cymk_INTF) $(newer_INTF) $(cam2c_INTF) $(mach_INTF)
 OBJS = $(cycc_OBJS) $(cymk_OBJS) $(newer_OBJS) $(cam2c_OBJS) $(mach_OBJS)
@@ -235,7 +258,8 @@ DISTFILES = README LICENSE NEWS curry.tex curry.bib \
 	configure configure.in aclocal.m4 config.guess config.sub install-sh \
 	Makefile.in ghc.mk ghc-make.mk hbc.mk nhc.mk makedoc.in in-place-config \
 	configure-bin.in Makefile-bin.in in-place-config-bin \
-	$(SCRIPTS:=.in) $(man_MANS:=.in) $(SRCS) $(PATHUTILS_SRCS) $(IOEXTS_SRCS)
+	$(SCRIPTS:=.in) $(man_MANS:=.in) $(SRCS) \
+	$(PATHUTILS_SRCS) $(IOEXTS_SRCS) $(HS2010_SRCS)
 
 # default target, build all programs and the library
 all: scripts programs runtime curry mans
@@ -396,6 +420,7 @@ distdir:
 	mkdir $(distdir)
 	mkdir $(distdir)/unix $(distdir)/windows
 	mkdir $(distdir)/ghc $(distdir)/hbc $(distdir)/nhc
+	mkdir $(distdir)/hs2010
 	for f in $(DISTFILES); do cp $(srcdir)/$$f $(distdir)/$$f; done
 	for d in $(SUBDIRS); do \
 		mkdir $(distdir)/$$d && \

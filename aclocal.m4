@@ -1,4 +1,4 @@
-# $Id: aclocal.m4 3081 2012-07-30 20:18:48Z wlux $
+# $Id: aclocal.m4 3108 2012-12-03 18:26:45Z wlux $
 #
 # Copyright (c) 2002-2012, Wolfgang Lux
 #
@@ -153,7 +153,7 @@ AC_SUBST(CYI_SHELL)])
 # Haskell compiler
 
 # CURRY_HC_HASKELL98(HC,[ACTION-IF-TRUE],[ACTION-IF-FALSE])
-# Check whether Haskell compiler HC compiles Haskell 98
+# Check whether Haskell compiler HC compiles Haskell 98.
 AC_DEFUN([CURRY_HC_HASKELL98],
 [AC_CACHE_CHECK([whether $$1 supports Haskell 98],
 [curry_cv_prog_$1_haskell98],
@@ -171,14 +171,44 @@ case $curry_cv_prog_$1_haskell98 in
   no ) $3;;
 esac])
 
+# CURRY_HC_HASKELL2010(HC,[ACTION-IF-TRUE],[ACTION-IF-FALSE])
+# Check whether Haskell compiler HC compiles Haskell 2010.
+AC_DEFUN([CURRY_HC_HASKELL2010],
+[AC_CACHE_CHECK([whether $$1 supports Haskell 2010],
+[curry_cv_prog_$1_haskell2010],
+[curry_cv_prog_$1_haskell2010=no
+# Check whether Data.Char.isAlphaNum is available.
+cat <<EOF >conftest.hs
+import Data.Char
+main = print (isAlphaNum 'a')
+EOF
+$$1 $HFLAGS conftest.hs -o conftest >&AS_MESSAGE_LOG_FD 2>&1 && curry_cv_prog_$1_haskell2010=yes
+rm -rf conftest* Main.hi])
+case $curry_cv_prog_$1_haskell2010 in
+  yes ) $2;;
+  no ) $3;;
+esac])
+
+
+# CURRY_HC_STD_HASKELL(HC,[ACTION-IF-TRUE],[ACTION-IF-FALSE])
+# Check whether Haskell compiler HC compiles Haskell 98 or 2010. Sets
+# the variable HASKELL to either hs98, hs2010, or no.
+AC_DEFUN([CURRY_HC_STD_HASKELL],
+[CURRY_HC_HASKELL98($1,[HASKELL=hs98],
+[CURRY_HC_HASKELL2010($1,[HASKELL=hs2010],[HASKELL=no])])
+case $HASKELL in
+  no ) $3;;
+  * ) $2;;
+esac])
+
 # CURRY_PROG_GHC, CURRY_PROG_HBC, CURRY_PROG_NHC
 # Check for ghc, hbc, nhc compiler in the path. Set the variable GHC, HBC,
 # and NHC, respectively, to the command and also set the variable HC to the
-# command if the compiler handles Haskell 98.
+# command if the compiler handles Haskell 98 or Haskell 2010.
 AC_DEFUN([CURRY_PROG_GHC],
 [AC_CHECK_PROG(GHC, ghc, ghc)
 if test -n "$GHC"; then
-  CURRY_HC_HASKELL98(GHC,[HC=$GHC curry_cv_prog_HC_haskell98=$curry_cv_prog_GHC_haskell98])
+  CURRY_HC_STD_HASKELL(GHC,[HC=$GHC curry_cv_prog_HC_haskell98=$curry_cv_prog_GHC_haskell98])
 fi])
 
 AC_DEFUN([CURRY_PROG_HBC],

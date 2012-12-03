@@ -1,4 +1,4 @@
-dnl $Id: configure.in 3075 2012-03-24 10:07:03Z wlux $
+dnl $Id: configure.in 3108 2012-12-03 18:26:45Z wlux $
 dnl
 dnl Copyright (c) 2002-2012, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -174,7 +174,7 @@ AC_ARG_VAR(HFLAGS,[Haskell compiler flags])
 if test -n "$HC"; then
   AC_MSG_CHECKING([for $HC])
   AC_MSG_RESULT([$HC])
-  CURRY_HC_HASKELL98(HC,[],[HC=])
+  CURRY_HC_STD_HASKELL(HC,[],[])
 else
   CURRY_PROG_GHC
   if test -z "$HC"; then
@@ -215,6 +215,9 @@ eof
        IOExts_lhs=ghc/IOExts.lhs],
       [CURRY_GHC_IOEXTS
        IOExts_lhs=])
+    case "$HASKELL" in
+      hs2010 ) HFLAGS="$HFLAGS -ihs2010"
+    esac
     ;;
   hbc* )
     hc=hbc
@@ -356,6 +359,7 @@ AC_SUBST(CURRY_CFLAGS)
 AC_SUBST(hc)
 AC_SUBST(HC)
 AC_SUBST(HFLAGS)
+AC_SUBST(HASKELL)
 AC_SUBST(IOExts_lhs)
 AC_SUBST(INSTALL_DIR)
 AC_SUBST(STDLIB)

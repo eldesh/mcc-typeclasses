@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 3106 2012-11-05 17:49:02Z wlux $
+% $Id: eval.nw 3111 2012-12-21 14:59:52Z wlux $
 %
 % Copyright (c) 2001-2012, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -101,7 +101,9 @@ finished and the queue-me node is overwritten with the result.
 When this code is invoked with an update frame on the top of the
 stack, the queue-me node recorded in the update frame is overwritten
 with an indirection to the queue-me node just entered and the update
-frame is removed from the stack.
+frame is removed from the stack, unless the queue-me node recorded in
+the update frame is the very same node that was just entered. That
+would happen, e.g., for the goal \texttt{let x = id x in x}.
 
 As a minor optimization, if the current thread would return to
 [[stop_thread]] after the queue-me node being entered is overwritten
@@ -118,7 +120,7 @@ FUNCTION(eval_queueMe)
     ThreadQueue wq;
  ENTRY_LABEL(extern, eval_queueMe)
     susp = regs.r[0];
-    if ( regs.ret == update )
+    if ( regs.ret == update && regs.sp[0] != susp )
     {
 	susp2 = regs.sp[0];
 	assert(is_queueMe_node(susp2));

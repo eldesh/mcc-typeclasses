@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: funpat.nw 3112 2012-12-21 15:00:52Z wlux $
+% $Id: funpat.nw 3114 2012-12-23 12:51:19Z wlux $
 %
 % Copyright (c) 2009-2012, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -70,6 +70,8 @@ DECLARE_LABEL(static, funpat_args_2);
 DECLARE_LABEL(static, funpat_papp_args);
 DECLARE_LABEL(static, funpat_bindVars);
 DECLARE_LABEL(static, funpat_bindVars_1);
+DECLARE_LABEL(static, funpat_bindVars_2);
+DECLARE_LABEL(static, funpat_bindVars_3);
 
 #define pair_cons_node_size closure_node_size(3)
 static DEFINE_DATA(pair_cons, ",:", CONS_TAG, 3);
@@ -117,7 +119,7 @@ FUNCTION(funpat_match_1)
 {
     Node *arg1, *arg2, *binds, *tail;
  ENTRY_LABEL(static, funpat_match_1)
-    arg1  = regs.r[0];
+    arg1 = regs.r[0];
     while ( is_tagged_ptr(arg1) && is_indir_node(arg1) )
 	arg1 = arg1->n.node;
 
@@ -126,11 +128,10 @@ FUNCTION(funpat_match_1)
     {
 	if ( is_variable_node(arg1) )
 	{
-
 	    regs.r[0] = arg1;
 	    CHECK_HEAP(1, pair_cons_node_size);
-	    arg1  = regs.r[0];
-	    arg2  = regs.sp[0];
+	    arg1 = regs.r[0];
+	    arg2 = regs.sp[0];
 	    while ( is_tagged_ptr(arg2) && is_indir_node(arg2) )
 		arg2 = arg2->n.node;
 
@@ -139,7 +140,7 @@ FUNCTION(funpat_match_1)
 	    tail->c.args[0] = arg1;
 	    tail->c.args[1] = arg2;
 	    tail->c.args[2] = 0;
-	    regs.hp	  += pair_cons_node_size;
+	    regs.hp	   += pair_cons_node_size;
 
 	    binds = regs.sp[1];
 	    assert(binds != 0);
@@ -171,8 +172,8 @@ FUNCTION(funpat_match_2)
 {
     Node *arg1, *arg2;
  ENTRY_LABEL(static, funpat_match_2)
-    arg1  = regs.sp[0];
-    arg2  = regs.r[0];
+    arg1 = regs.sp[0];
+    arg2 = regs.r[0];
 
     while ( is_tagged_ptr(arg1) && is_indir_node(arg1) )
         arg1 = arg1->n.node;
@@ -356,10 +357,6 @@ The bindings list is processed by function [[funpat_bindVars]]. Recall
 that our bindings list always starts with an empty pair, so the first
 element of the list must be skipped.
 
-\ToDo{Perform unifications concurrently rather than sequentially. In
-  addition, bind all variables before checking equality of multiple
-  bindings.}
-
 <<funpat.c>>=
 static
 FUNCTION(funpat_bindVars)
@@ -377,11 +374,11 @@ FUNCTION(funpat_bindVars)
     }
     RETURN(Success, 1);
 }
-							  
+
 static
 FUNCTION(funpat_bindVars_1)
 {
-    Node *var, *arg, *binds;
+    Node *var, *arg, *binds, *susp;
  ENTRY_LABEL(static, funpat_bindVars_1)
     binds = regs.sp[0];
     assert(binds != 0 && binds->info == &pair_cons_info);
@@ -398,12 +395,26 @@ FUNCTION(funpat_bindVars_1)
 	arg = arg->n.node;
     if ( var->info != variable_info_table || var->v.wq || var->v.cstrs )
     {
-	if ( binds != 0 )
-	{
-	    regs.sp[0] = binds;
-	    CALL2(___61__58__61_, funpat_bindVars_1, var, arg);
-	}
-	CALL_RET2(___61__58__61_, 1, var, arg);
+	if ( binds == 0 )
+	    CALL_RET2(___61__58__61_, 1, var, arg);
+
+	regs.sp[0] = binds;
+	regs.r[0]  = var;
+	regs.r[1]  = arg;
+
+	CHECK_HEAP(2, queueMe_node_size);
+	susp	   = (Node *)regs.hp;
+	susp->info = queueMe_info_table;
+	susp->q.wq = 0;
+	regs.hp	  += queueMe_node_size;
+
+	CHECK_STACK1();
+	regs.sp	 -= 1;
+	regs.r[2] = regs.sp[0] = susp;
+	start_thread(3, funpat_bindVars_2);
+
+	SAVE_RET1(regs.r[2]);
+	CALL2(___61__58__61_, update, regs.r[0], regs.r[1]);
     }
 
     /* Bind the variable; note that we do not need to call bind_var, since we
@@ -429,4 +440,40 @@ FUNCTION(funpat_bindVars_1)
 	GOTO(funpat_bindVars_1);
     }
     RETURN(Success, 1);
+}
+
+static
+FUNCTION(funpat_bindVars_2)
+{
+    Node *r;
+ ENTRY_LABEL(static, funpat_bindVars_2)
+    for ( r = regs.sp[0]; node_kind(r) == INDIR_KIND; r = r->n.node )
+	;
+    if ( node_kind(r) == CAPP_KIND )
+    {
+	regs.sp += 1;
+	GOTO(funpat_bindVars_1);
+    }
+
+    ASSERT(node_kind(r) == QUEUEME_KIND);
+    CHECK_STACK1();
+    regs.sp   -= 1;
+    regs.sp[0] = regs.sp[2];
+    regs.sp[1] = (Node *)funpat_bindVars_3;
+    regs.sp[2] = r;
+    GOTO(funpat_bindVars_1);
+}
+
+static
+FUNCTION(funpat_bindVars_3)
+{
+    Node *r;
+ ENTRY_LABEL(static, funpat_bindVars_3)
+    ASSERT(node_kind(regs.r[0]) == CAPP_KIND);
+    for ( r = regs.sp[0]; node_kind(r) == INDIR_KIND; r = r->n.node )
+	;
+    if ( node_kind(r) == QUEUEME_KIND )
+	ENTER(r, 1);
+    ASSERT(node_kind(r) == CAPP_KIND);
+    RETURN(r, 1);
 }

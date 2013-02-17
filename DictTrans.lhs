@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 3056 2011-10-07 16:27:03Z wlux $
+% $Id: DictTrans.lhs 3123 2013-02-17 16:54:48Z wlux $
 %
 % Copyright (c) 2006-2011, Wolfgang Lux
 % See LICENSE for the full license.
@@ -133,7 +133,6 @@ type variables (cf.\ Sect.~4.3.2 of~\cite{PeytonJones03:Haskell}).
 > liftDecls m tcEnv tyEnv (ClassDecl p _ cls tv ds) =
 >   classDecls tcEnv tyEnv p (qualifyWith m cls) tv ds
 > liftDecls m tcEnv tyEnv (InstanceDecl p cx cls ty ds) =
->   -- NB Don't use expandPolyType tcEnv (QualTypeExpr cx ty) here!
 >   instDecls m tcEnv tyEnv p cls (contextMap (sort . minContext tcEnv) ty') ds
 >   where ty' = toQualType (QualTypeExpr cx ty)
 > liftDecls _ _ _ (DefaultDecl _ _) = []
@@ -260,8 +259,7 @@ uses a default implementation that is equivalent to
 > dictDataDecl tcEnv p cls tv ds =
 >   DataDecl p [] (dictTypeId cls) [tv] [dictConstrDecl p cls tv clss tys] []
 >   where clss = superClasses cls tcEnv
->         tys = map (expandMethodType tcEnv cls tv)
->                   [ty | TypeSig _ fs ty <- ds, _ <- fs]
+>         tys = map (toMethodType cls tv) [ty | TypeSig _ fs ty <- ds, _ <- fs]
 
 > defaultMethodDecl :: ValueEnv -> QualIdent -> [(Ident,Decl QualType)]
 >                   -> Position -> Ident -> TopDecl QualType
@@ -614,13 +612,13 @@ the implicit dictionary arguments to the declaration.
 >             -> DictState (a Type)
 
 > instance DictTrans TopDecl where
->   dictTrans tcEnv iEnv tyEnv dictEnv (DataDecl p cxL tc tvs cs clss) =
+>   dictTrans _ _ _ _ (DataDecl p cxL tc tvs cs clss) =
 >     return (DataDecl p [] tc tvs (map dictTransConstrDecl cs) clss)
 >     where dictTransConstrDecl (ConstrDecl p evs cxR c tys) =
 >             ConstrDecl p evs [] c $
 >             map (fromType (tvs ++ evs)) . arrowArgs $
 >             uncurry transformConstrType $
->             expandConstrType tcEnv cxL (qualify tc) tvs cxR tys
+>             toConstrType cxL (qualify tc) tvs cxR tys
 >   dictTrans _ _ _ _ (NewtypeDecl p cx tc tvs nc clss) =
 >     return (NewtypeDecl p [] tc tvs nc clss)
 >   dictTrans _ _ _ _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
@@ -629,9 +627,9 @@ the implicit dictionary arguments to the declaration.
 
 > instance DictTrans Decl where
 >   dictTrans _ _ _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
->   dictTrans tcEnv _ _ _ (TypeSig p fs ty) =
+>   dictTrans _ _ _ _ (TypeSig p fs ty) =
 >     return (TypeSig p fs (QualTypeExpr [] ty'))
->     where ty' = fromType nameSupply (transformType (expandPolyType tcEnv ty))
+>     where ty' = fromType nameSupply (transformType (toQualType ty))
 >   dictTrans tcEnv iEnv tyEnv dictEnv (FunctionDecl p ty f eqs) =
 >     liftM (FunctionDecl p (transformType ty) f)
 >           (mapM (dictTrans tcEnv iEnv tyEnv dictEnv) eqs)

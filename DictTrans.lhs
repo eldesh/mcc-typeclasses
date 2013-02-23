@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 3123 2013-02-17 16:54:48Z wlux $
+% $Id: DictTrans.lhs 3124 2013-02-23 15:21:13Z wlux $
 %
-% Copyright (c) 2006-2011, Wolfgang Lux
+% Copyright (c) 2006-2013, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{DictTrans.lhs}
@@ -25,6 +25,7 @@ derived from the type class and instance declarations in the module.
 > import Maybe
 > import Monad
 > import PredefIdent
+> import PredefTypes
 > import TopEnv
 > import TrustInfo
 > import Types
@@ -199,11 +200,7 @@ compiler simply lifts default method declarations to the top-level.
 The default method implementations are renamed during lifting in order
 to avoid name conflicts with the method names themselves. If the user
 does not provide a default implementation for a method, the compiler
-uses a default implementation that is equivalent to
-\texttt{Prelude.undefined}.
-
-\ToDo{Use \texttt{Prelude.error} instead of \texttt{Prelude.undefined}
-  as default implementation for omitted methods?}
+uses a default implementation that calls \texttt{Prelude.error}.
 \begin{verbatim}
 
 > bindDictTypes :: ModuleIdent -> TCEnv -> TCEnv
@@ -263,8 +260,12 @@ uses a default implementation that is equivalent to
 
 > defaultMethodDecl :: ValueEnv -> QualIdent -> [(Ident,Decl QualType)]
 >                   -> Position -> Ident -> TopDecl QualType
-> defaultMethodDecl tyEnv cls ds p f =
->   methodDecl qUndefinedId p (defaultMethodId cls f) ty (lookup f ds)
+> defaultMethodDecl tyEnv cls ds p =
+>   methodDecl (defaultMethodId cls) (defaultDefaultMethodDecl tyEnv p) ds
+
+> defaultDefaultMethodDecl :: ValueEnv -> Position -> Ident -> Decl QualType
+> defaultDefaultMethodDecl tyEnv p f =
+>   funDecl p ty f [] (prelError (instType (unqualType ty)) (name f))
 >   where ForAll _ ty = varType f tyEnv
 
 > classDictType :: TCEnv -> ValueEnv -> QualIdent -> MethodList -> QualType
@@ -406,7 +407,7 @@ method's class can be shared among all method stubs of that class.
 For every instance declaration
 \begin{displaymath}
   \mbox{\texttt{instance} \texttt{(}$C_1\,u_{i_1}$\texttt{,}
-    \dots\texttt{,} $C_l\,u_{i_l}$\texttt{)} \texttt{=>}
+    \dots\texttt{,} $C_o\,u_{i_o}$\texttt{)} \texttt{=>}
     $C$ \texttt{($T\,u_1\dots\,u_l$)} \texttt{where} \texttt{\lb}
     $h_{i_1}$ \texttt{=} $e_{i_1}$\texttt{;} \dots\texttt{;}
     $h_{i_m}$ \texttt{=} $e_{i_m}$ \texttt{\rb}},
@@ -484,18 +485,24 @@ of method $f_i$ in class $C$.
 
 > instMethodDecl :: ValueEnv -> Position -> Context -> QualIdent -> Type
 >                -> [(Ident,Decl QualType)] -> Ident -> TopDecl QualType
-> instMethodDecl tyEnv p cx cls ty ds f =
->   methodDecl (qDefaultMethodId cls f) p (instMethodId cls ty f) ty'
->              (lookup f ds)
+> instMethodDecl tyEnv p cx cls ty =
+>   methodDecl (instMethodId cls ty) (defaultInstMethodDecl tyEnv p cx cls ty)
+
+> defaultInstMethodDecl :: ValueEnv -> Position -> Context -> QualIdent -> Type
+>                       -> Ident -> Decl QualType
+> defaultInstMethodDecl tyEnv p cx cls ty f =
+>   funDecl p ty' f [] $
+>   Variable (qualType (instType (unqualType ty'))) (qDefaultMethodId cls f)
 >   where ty' = instMethodType tyEnv cx cls ty f
 
-> methodDecl :: QualIdent -> Position -> Ident -> QualType
->            -> Maybe (Decl QualType) -> TopDecl QualType
-> methodDecl _ _ f _ (Just (FunctionDecl p ty _ eqs)) =
->   BlockDecl (FunctionDecl p ty f (map (rename f) eqs))
->   where rename f (Equation p (FunLhs _ ts) rhs) = Equation p (FunLhs f ts) rhs
-> methodDecl f0 p f ty Nothing =
->   functDecl p ty f [] (Variable (qualType (instType (unqualType ty))) f0)
+> methodDecl :: (Ident -> Ident) -> (Ident -> Decl a) -> [(Ident,Decl a)]
+>            -> Ident -> TopDecl a
+> methodDecl methodId defaultDecl ds f =
+>   BlockDecl (rename (methodId f) (fromMaybe (defaultDecl f) (lookup f ds)))
+>   where rename f (FunctionDecl p ty _ eqs) =
+>           FunctionDecl p ty f (map (renameEqn f) eqs)
+>         renameEqn f (Equation p lhs rhs) = Equation p (renameLhs f lhs) rhs
+>         renameLhs f (FunLhs _ ts) = FunLhs f ts
 
 > instDictType :: TCEnv -> ValueEnv -> QualIdent -> Type -> MethodList -> Type
 > instDictType tcEnv tyEnv cls ty fs =
@@ -1111,7 +1118,17 @@ Convenience functions for constructing parts of the syntax tree.
 Prelude entities.
 \begin{verbatim}
 
-> qUndefinedId :: QualIdent
-> qUndefinedId = qualifyWith preludeMIdent (mkIdent "undefined")
+> qErrorId :: QualIdent
+> qErrorId = qualifyWith preludeMIdent (mkIdent "error")
+
+> prelError :: Type -> String -> Expression QualType
+> prelError a =
+>   Apply (Variable (qualType (TypeArrow stringType a)) qErrorId) . string
+
+> string :: String -> Expression QualType
+> string = foldr (cons . Literal (qualType charType) . Char) nil
+>   where nil = Constructor (qualType stringType) qNilId
+>         cons = Apply . Apply (Constructor (qualType consType) qConsId)
+>         consType = TypeArrow charType (TypeArrow stringType stringType)
 
 \end{verbatim}

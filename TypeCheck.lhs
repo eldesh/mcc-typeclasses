@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3129 2013-04-13 16:25:59Z wlux $
+% $Id: TypeCheck.lhs 3130 2013-04-13 17:03:51Z wlux $
 %
 % Copyright (c) 1999-2013, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1334,15 +1334,13 @@ in \texttt{tcFunctionDecl} above.
 > tcExpr m tcEnv tyEnv p (Do sts e) =
 >   do
 >     fs <- liftM (fsEnv . flip subst tyEnv) fetchSt
->     (cx,mTy) <- freshMonadType
->     ((tyEnv',cx'),sts') <-
->       mapAccumM (uncurry (\tyEnv -> tcStmt m tcEnv tyEnv p mTy)) (tyEnv,cx)
->                 sts
->     ty <- liftM (TypeApply mTy) freshTypeVar
->     (cx'',e') <-
+>     ((tyEnv',cx,mTy),sts') <-
+>       mapAccumM (uncurry3 (flip (tcStmt m tcEnv) p)) (tyEnv,[],Nothing) sts
+>     ty <- liftM (maybe id TypeApply mTy) freshTypeVar
+>     (cx',e') <-
 >       tcExpr m tcEnv tyEnv' p e >>-
->       unify p "statement" (ppExpr 0 e) tcEnv cx' ty
->     checkSkolems p "Expression" (ppExpr 0) tcEnv tyEnv fs cx'' ty (Do sts' e')
+>       unify p "statement" (ppExpr 0 e) tcEnv cx ty
+>     checkSkolems p "Expression" (ppExpr 0) tcEnv tyEnv fs cx' ty (Do sts' e')
 > tcExpr m tcEnv tyEnv p e@(IfThenElse e1 e2 e3) =
 >   do
 >     (cx,e1') <- tcArg m tcEnv tyEnv p "expression" (ppExpr 0 e) [] boolType e1
@@ -1413,28 +1411,32 @@ in \texttt{tcFunctionDecl} above.
 >     (tyEnv',cx',ds') <- tcDecls m tcEnv tyEnv ds
 >     return ((tyEnv',cx ++ cx'),StmtDecl ds')
 
-> tcStmt :: ModuleIdent -> TCEnv -> ValueEnv -> Position -> Type -> Context
->        -> Statement a -> TcState ((ValueEnv,Context),Statement QualType)
-> tcStmt m tcEnv tyEnv p mTy cx (StmtExpr e) =
+> tcStmt :: ModuleIdent -> TCEnv -> ValueEnv -> Position
+>        -> Context -> Maybe Type -> Statement a
+>        -> TcState ((ValueEnv,Context,Maybe Type),Statement QualType)
+> tcStmt m tcEnv tyEnv p cx mTy (StmtExpr e) =
 >   do
+>     (cx',ty) <- maybe freshMonadType (return . (,) []) mTy
 >     alpha <- freshTypeVar
->     (cx',e') <-
+>     (cx'',e') <-
 >       tcExpr m tcEnv tyEnv p e >>-
->       unify p "statement" (ppExpr 0 e) tcEnv cx (TypeApply mTy alpha)
->     return ((tyEnv,cx'),StmtExpr e')
-> tcStmt m tcEnv tyEnv _ mTy cx st@(StmtBind p t e) =
+>       unify p "statement" (ppExpr 0 e) tcEnv (cx ++ cx') (TypeApply ty alpha)
+>     return ((tyEnv,cx'',Just ty),StmtExpr e')
+> tcStmt m tcEnv tyEnv _ cx mTy st@(StmtBind p t e) =
 >   do
+>     (cx',ty) <- maybe freshMonadType (return . (,) []) mTy
 >     alpha <- freshTypeVar
->     (cx',e') <-
->       tcArg m tcEnv tyEnv p "statement" (ppStmt st) cx (TypeApply mTy alpha) e
+>     (cx'',e') <-
+>       tcArg m tcEnv tyEnv p "statement" (ppStmt st) (cx ++ cx')
+>             (TypeApply ty alpha) e
 >     tyEnv' <- bindLambdaVars m tyEnv t
->     (cx'',t') <-
->       tcConstrArg False tcEnv tyEnv' p "statement" (ppStmt st) cx' alpha t
->     return ((tyEnv',cx''),StmtBind p t' e')
-> tcStmt m tcEnv tyEnv _ _ cx (StmtDecl ds) =
+>     (cx''',t') <-
+>       tcConstrArg False tcEnv tyEnv' p "statement" (ppStmt st) cx'' alpha t
+>     return ((tyEnv',cx''',Just ty),StmtBind p t' e')
+> tcStmt m tcEnv tyEnv _ cx mTy (StmtDecl ds) =
 >   do
 >     (tyEnv',cx',ds') <- tcDecls m tcEnv tyEnv ds
->     return ((tyEnv',cx ++ cx'),StmtDecl ds')
+>     return ((tyEnv',cx ++ cx',mTy),StmtDecl ds')
 
 > tcInfixOp :: ValueEnv -> InfixOp a -> TcState (Context,Type,InfixOp QualType)
 > tcInfixOp tyEnv (InfixOp _ op) =

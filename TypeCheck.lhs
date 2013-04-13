@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3056 2011-10-07 16:27:03Z wlux $
+% $Id: TypeCheck.lhs 3128 2013-04-13 15:42:44Z wlux $
 %
-% Copyright (c) 1999-2011, Wolfgang Lux
+% Copyright (c) 1999-2013, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeCheck.lhs}
@@ -1436,12 +1436,16 @@ in \texttt{tcFunctionDecl} above.
 >     return ((tyEnv,cx'),StmtExpr e')
 > tcQual m tcEnv tyEnv _ cx q@(StmtBind p t e) =
 >   do
->     tyEnv' <- bindLambdaVars m tyEnv t
->     (cx',ty,t') <- tcConstrTerm False tcEnv tyEnv' p t
->     (cx'',e') <-
+>     alpha <- freshTypeVar
+>     (cx',e') <-
 >       tcExpr m tcEnv tyEnv p e >>-
 >       unify p "generator" (ppStmt q $-$ text "Term:" <+> ppExpr 0 e)
->             tcEnv (cx ++ cx') (listType ty)
+>             tcEnv cx (listType alpha)
+>     tyEnv' <- bindLambdaVars m tyEnv t
+>     (cx'',t') <-
+>       tcConstrTerm False tcEnv tyEnv' p t >>-
+>       unify p "generator" (ppStmt q $-$ text "Term:" <+> ppConstrTerm 0 t)
+>             tcEnv cx' alpha
 >     return ((tyEnv',cx''),StmtBind p t' e')
 > tcQual m tcEnv tyEnv _ cx (StmtDecl ds) =
 >   do
@@ -1459,12 +1463,16 @@ in \texttt{tcFunctionDecl} above.
 >     return ((tyEnv,cx'),StmtExpr e')
 > tcStmt m tcEnv tyEnv _ mTy cx st@(StmtBind p t e) =
 >   do
->     tyEnv' <- bindLambdaVars m tyEnv t
->     (cx',ty,t') <- tcConstrTerm False tcEnv tyEnv' p t
->     (cx'',e') <-
+>     alpha <- freshTypeVar
+>     (cx',e') <-
 >       tcExpr m tcEnv tyEnv p e >>-
 >       unify p "statement" (ppStmt st $-$ text "Term:" <+> ppExpr 0 e)
->             tcEnv (cx ++ cx') (TypeApply mTy ty)
+>             tcEnv cx (TypeApply mTy alpha)
+>     tyEnv' <- bindLambdaVars m tyEnv t
+>     (cx'',t') <-
+>       tcConstrTerm False tcEnv tyEnv' p t >>-
+>       unify p "statement" (ppStmt st $-$ text "Term:" <+> ppConstrTerm 0 t)
+>             tcEnv cx' alpha
 >     return ((tyEnv',cx''),StmtBind p t' e')
 > tcStmt m tcEnv tyEnv _ _ cx (StmtDecl ds) =
 >   do

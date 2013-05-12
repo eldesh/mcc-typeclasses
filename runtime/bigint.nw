@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: bigint.nw 2877 2009-07-28 14:47:04Z wlux $
+% $Id: bigint.nw 3137 2013-05-12 17:18:37Z wlux $
 %
-% Copyright (c) 2007-2009, Wolfgang Lux
+% Copyright (c) 2007-2013, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Multiprecision Arithmetic}\label{sec:bigint}
@@ -181,7 +181,7 @@ values and from doubles require additional glue code.
 <<libcrypto based emulation code>>=
 #define bnz_set(z,x)		(void)BN_copy(z,x)
 #define bnz_set_si(z,x) \
-	((x) >= 0 ? BN_set_word(z,x) : (BN_zero(z), BN_sub_word(z,-(x))))
+	(void)((x) >= 0 ? BN_set_word(z,x) : (BN_zero(z), BN_sub_word(z,-(x))))
 
 extern void bnz_set_d(BIGNUM *, double);
 extern void bnz_set_str(BIGNUM *, const char *, int);
@@ -414,10 +414,10 @@ context argument. In addition, libcrypto provides only division
 functions that truncate towards zero.
 
 <<libcrypto based emulation code>>=
-#define bnz_fdiv_q(q,x,y)	(void)bnz_fdiv_qr(q,NULL,x,y)
-#define bnz_fdiv_r(r,x,y)	(void)bnz_fdiv_qr(NULL,r,x,y)
-#define bnz_tdiv_q(q,x,y)	(void)bnz_tdiv_qr(q,NULL,x,y)
-#define bnz_tdiv_r(r,x,y)	(void)bnz_tdiv_qr(NULL,r,x,y)
+#define bnz_fdiv_q(q,x,y)	bnz_fdiv_qr(q,NULL,x,y)
+#define bnz_fdiv_r(r,x,y)	bnz_fdiv_qr(NULL,r,x,y)
+#define bnz_tdiv_q(q,x,y)	bnz_tdiv_qr(q,NULL,x,y)
+#define bnz_tdiv_r(r,x,y)	bnz_tdiv_qr(NULL,r,x,y)
 
 extern void bnz_fdiv_qr(BIGNUM *, BIGNUM *, BIGNUM *, BIGNUM *);
 extern void bnz_fdiv_q_2exp(BIGNUM *, BIGNUM *, unsigned long);

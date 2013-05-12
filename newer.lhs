@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: newer.lhs 3135 2013-05-12 15:51:52Z wlux $
+% $Id: newer.lhs 3136 2013-05-12 15:53:27Z wlux $
 %
 % Copyright (c) 2002-2013, Wolfgang Lux
 % See LICENSE for the full license.
@@ -34,6 +34,7 @@ Sect.~\ref{sec:dependencies}).
 > import List
 > import System
 > import Time
+> import Utils
 
 > main =
 >   do
@@ -63,13 +64,5 @@ Sect.~\ref{sec:dependencies}).
 > andM :: Monad m => [m Bool] -> m Bool
 > andM = foldr (>>&) (return True)
 >   where m1 >>& m2 = m1 >>= \b -> if b then m2 else return False
-
-\end{verbatim}
-Unfortunately, the \texttt{hPutStrLn} function is not defined hbc's
-\texttt{IO} library.
-\begin{verbatim}
-
-> putErr s = hPutStr stderr s
-> putErrLn s = putErr (s ++ "\n")
 
 \end{verbatim}

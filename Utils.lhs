@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Utils.lhs 3055 2011-10-07 15:44:49Z wlux $
+% $Id: Utils.lhs 3136 2013-05-12 15:53:27Z wlux $
 %
-% Copyright (c) 2001-2011, Wolfgang Lux
+% Copyright (c) 2001-2013, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Utils.lhs}
@@ -12,6 +12,7 @@ commonly used in the compiler, but not implemented in the Haskell
 \begin{verbatim}
 
 > module Utils where
+> import IO
 > infixr 5 ++!
 
 \end{verbatim}
@@ -106,5 +107,20 @@ The function \texttt{mapAccumM} is a generalization of
 >     (s',y) <- f s x
 >     (s'',ys) <- mapAccumM f s' xs
 >     return (s'',y:ys)
+
+\end{verbatim}
+\paragraph{IO functions}
+\begin{verbatim}
+The IO actions \texttt{putErr} and \texttt{putErrLn} are variants of
+\texttt{putStr} and \texttt{putStrLn} that write their argument string
+to the standard error output. Unfortunately, hbc's \texttt{IO} module
+lacks a definition of \texttt{hPutStrLn}.
+\begin{verbatim}
+
+> putErr :: String -> IO ()
+> putErr = hPutStr stderr
+
+> putErrLn :: String -> IO ()
+> putErrLn s = putErr (unlines [s])
 
 \end{verbatim}

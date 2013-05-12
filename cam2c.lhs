@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: cam2c.lhs 3135 2013-05-12 15:51:52Z wlux $
+% $Id: cam2c.lhs 3136 2013-05-12 15:53:27Z wlux $
 %
 % Copyright (c) 2005-2013, Wolfgang Lux
 % See LICENSE for the full license.
@@ -86,11 +86,6 @@ on the command line, we use the last occurrence.
 >   where goal (Goal g) gs = (f,Just vs) : gs where (f:vs) = words g
 >         goal (IO f) gs = (f,Nothing) : gs
 >         goal _ gs = gs
-
-
-> putErr, putErrLn :: String -> IO ()
-> putErr = hPutStr stderr
-> putErrLn = hPutStr stderr . (++ "\n")
 
 \end{verbatim}
 Besides the \texttt{-o} switch, the compiler understands a few more

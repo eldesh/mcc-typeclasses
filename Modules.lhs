@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Modules.lhs 3055 2011-10-07 15:44:49Z wlux $
+% $Id: Modules.lhs 3136 2013-05-12 15:53:27Z wlux $
 %
-% Copyright (c) 1999-2011, Wolfgang Lux
+% Copyright (c) 1999-2013, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Modules.lhs}
@@ -25,7 +25,6 @@ This module controls the compilation of modules.
 > import InstCheck
 > import InstInfo
 > import Interfaces
-> import IO
 > import KindCheck
 > import List
 > import Monad
@@ -45,6 +44,7 @@ This module controls the compilation of modules.
 > import TypeSyntaxCheck
 > import Unlit
 > import UnusedCheck
+> import Utils
 > import ValueInfo
 
 \end{verbatim}
@@ -180,16 +180,5 @@ Literate source files use the extension \texttt{".lcurry"}.
 
 > isLiterateSource :: FilePath -> Bool
 > isLiterateSource fn = ".lcurry" `isSuffixOf` fn
-
-\end{verbatim}
-Auxiliary functions. Unfortunately, hbc's \texttt{IO} module lacks a
-definition of \texttt{hPutStrLn}.
-\begin{verbatim}
-
-> putErr :: String -> IO ()
-> putErr = hPutStr stderr
-
-> putErrLn :: String -> IO ()
-> putErrLn s = putErr (unlines [s])
 
 \end{verbatim}

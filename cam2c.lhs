@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: cam2c.lhs 3054 2011-10-07 15:19:59Z wlux $
+% $Id: cam2c.lhs 3135 2013-05-12 15:51:52Z wlux $
 %
-% Copyright (c) 2005-2011, Wolfgang Lux
+% Copyright (c) 2005-2013, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{cam2c.lhs}
@@ -31,8 +31,8 @@ compiler.
 >   do
 >     prog <- getProgName
 >     args <- getArgs
->     importPath <- catch (getEnv "CURRY_IMPORT_PATH" >>= return . pathList)
->                         (const (return []))
+>     importPath <- IO.catch (getEnv "CURRY_IMPORT_PATH" >>= return . pathList)
+>                            (const (return []))
 >     cam2c prog args importPath
 
 \end{verbatim}

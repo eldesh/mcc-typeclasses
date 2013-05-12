@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Interfaces.lhs 2905 2009-08-24 16:16:35Z wlux $
+% $Id: Interfaces.lhs 3135 2013-05-12 15:51:52Z wlux $
 %
-% Copyright (c) 1999-2009, Wolfgang Lux
+% Copyright (c) 1999-2013, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Interfaces.lhs}
@@ -244,7 +244,7 @@ this case and therefore it doesn't matter when the file is closed.
 > updateInterface :: FilePath -> Interface -> IO ()
 > updateInterface sfn i =
 >   do
->     eq <- catch (matchInterface ifn i) (const (return False))
+>     eq <- IO.catch (matchInterface ifn i) (const (return False))
 >     unless eq (writeInterface ifn i)
 >   where ifn = interfaceName sfn
 

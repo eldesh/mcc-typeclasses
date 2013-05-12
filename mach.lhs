@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: mach.lhs 1912 2006-05-03 14:53:33Z wlux $
+% $Id: mach.lhs 3135 2013-05-12 15:51:52Z wlux $
 %
-% Copyright (c) 1998-2006, Wolfgang Lux
+% Copyright (c) 1998-2013, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{mach.lhs}
@@ -165,8 +165,8 @@ possibility to enter a little interactive top-level.
 >           alsoCommand1 opts inienv curenv script
 >           where (script,_) = break isSpace s
 >         alsoCommand1 opts inienv curenv script =
->           catch (readScript (verbose opts) (tracer opts) curenv script)
->                 (\e -> do putStrLn (show e); return curenv) >>=
+>           IO.catch (readScript (verbose opts) (tracer opts) curenv script)
+>                    (\e -> do putStrLn (show e); return curenv) >>=
 >           toploop opts inienv
 >         evalCommand opts inienv curenv s =
 >           do

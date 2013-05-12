@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: MachInterp.lhs 3104 2012-10-21 10:51:09Z wlux $
+% $Id: MachInterp.lhs 3135 2013-05-12 15:51:52Z wlux $
 %
-% Copyright (c) 1998-2012, Wolfgang Lux
+% Copyright (c) 1998-2013, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{MachInterp.lhs}
@@ -1439,7 +1439,7 @@ instead.
 > getCharCode =
 >   entry ["_"] $
 >   do
->     c <- liftIO $ catch (liftM Just getChar) handleEOF
+>     c <- liftIO $ IO.catch (liftM Just getChar) handleEOF
 >     maybe (fail "End of file") allocChar c >>= retNode
 >   where handleEOF e = if isEOFError e then return Nothing else ioError e
 
@@ -1447,7 +1447,7 @@ instead.
 > getLineCode =
 >   entry ["_"] $
 >   do
->     cs <- liftIO $ catch getLine handleEOF
+>     cs <- liftIO $ IO.catch getLine handleEOF
 >     mapM allocChar cs >>= list >>= retNode
 >   where handleEOF e = if isEOFError e then return [] else ioError e
 

@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: run.nw 2751 2008-08-30 13:24:59Z wlux $
+% $Id: run.nw 3134 2013-05-12 15:47:51Z wlux $
 %
-% Copyright (c) 2001-2008, Wolfgang Lux
+% Copyright (c) 2001-2013, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Execution}\label{sec:execution}
@@ -190,7 +190,7 @@ extern struct _c_stack {
 # define ENTRY_LABEL(link, l)			\
     __asm__(_##link##_LABEL(_ENTRY_LABEL(l))	\
 	    _ENTRY_LABEL(l) ":" _USE(l));	\
-    __asm__("" : : "g"(&&entry)); entry:
+    __asm__("" : : "g"(&&entry) : "memory"); entry:
 # define _ENTRY_LABEL(l)	#l "_entry"
 # define _extern_LABEL(l)	" .globl " l "\n"
 # define _static_LABEL(l)
@@ -382,7 +382,7 @@ as well.
 
 <<run.c>>=
 #if !USE_TRAMPOLINE
-#include "trace.h"
+# include "trace.h"
 
 # if __GNUC__ == 2 && __GNUC_MINOR__ == 91 && defined(__sparc)
 /* needed to work around an instruction scheduler bug in gcc 2.91 for sparc */

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CPS.lhs 3096 2012-08-13 09:53:52Z wlux $
+% $Id: CPS.lhs 3151 2014-02-12 18:04:55Z wlux $
 %
-% Copyright (c) 2003-2012, Wolfgang Lux
+% Copyright (c) 2003-2013, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CPS.lhs}
@@ -11,7 +11,8 @@
 > module CPS(CPSFunction(..), CPSContinuation(..),
 >            CPSFun(..), CPSCont(..), CPSContFun(..),
 >            BindC(..), BindPapp(..), CaseBlock(..), CPSTag(..), CPSStmt(..),
->            cpsFunction, cpsApply, cpsInst, continuations) where
+>            cpsFunction, cpsApplyFunction, cpsApply, cpsInst,
+>            continuations) where
 > import Cam
 > import List
 > import Set
@@ -95,6 +96,7 @@ arguments with a \texttt{CPSLetPapp} statement.
 > data CPSCont = CPSReturn | CPSCont CPSContFun [Name] CPSCont deriving Show
 > data CPSContFun =
 >     CPSContFun Name Int
+>   | CPSApp Int
 >   | CPSInst Tag
 >   | CPSApply Name
 >   | CPSUpdate
@@ -117,21 +119,23 @@ arguments with a \texttt{CPSLetPapp} statement.
 >   where ws = filter (`notElem` vs) (freeVars st CPSReturn)
 >         (_,st') = cpsStmt f Nothing (True,CPSReturn) 1 st
 
-> cpsApply :: Name -> [Name] -> CPSFunction
-> cpsApply f (v:vs) =
->   CPSFunction f (v:vs) (CPSLetCont f' (CPSExec (CPSEval False v) k' [v]))
->   where f' = CPSContinuation (CPSContFun f 1) [v] vs (CPSSwitchArity v cases)
->         k' = cpsCont f'
+> cpsApplyFunction :: Name -> [Name] -> CPSFunction
+> cpsApplyFunction f (v:vs) =
+>   CPSFunction f (v:vs) $
+>   CPSExec (CPSEval False v) (CPSCont (CPSApp (length vs)) vs CPSReturn) [v]
+
+> cpsApply :: Name -> [Name] -> CPSContinuation
+> cpsApply v vs = CPSContinuation f [v] vs (CPSSwitchArity v cases)
+>   where f = CPSApp (length vs)
 >         cases =
->           cpsRigidCase k' v :
+>           cpsRigidCase (CPSCont f vs CPSReturn) v :
 >           [CPSExecCont (apply v i vs CPSReturn) [v] | i <- [1..length vs]] ++
 >           [CPSLetPapp (BindPapp tmp v vs) (CPSExecCont CPSReturn [tmp])]
 >         apply v i vs = CPSCont (CPSApply v) vs' . applyCont vs''
 >           where (vs',vs'') = splitAt i vs
 >         applyCont vs
 >           | null vs = id
->           | otherwise = CPSCont (CPSContFun (apName (length vs)) 1) vs
->         apName n = mangle ('@' : if n == 1 then "" else show n)
+>           | otherwise = CPSCont (CPSApp (length vs)) vs
 
 > cpsInst :: Name -> Tag -> CPSContinuation
 > cpsInst v t =
@@ -281,6 +285,7 @@ does not need to construct separate closures for each of them.
 
 > contFunVars :: CPSContFun -> [Name]
 > contFunVars (CPSContFun _ _) = []
+> contFunVars (CPSApp _) = []
 > contFunVars (CPSInst _) = []
 > contFunVars (CPSApply v) = [v]
 > contFunVars CPSUpdate = []

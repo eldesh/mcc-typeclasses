@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachInterp.lhs 3135 2013-05-12 15:51:52Z wlux $
+% $Id: MachInterp.lhs 3152 2014-02-12 18:08:19Z wlux $
 %
 % Copyright (c) 1998-2013, Wolfgang Lux
 % See LICENSE for the full license.
@@ -191,13 +191,13 @@ node is evaluated by the enclosing computation.
 
 \end{verbatim}
 \subsubsection{Function Evaluation}
-A function call pushes the arguments onto the data stack and enters
-the specified function. Upon entry, the called function initializes a
-fresh local environment with the nodes from the data stack and then
-executes its code. At the end, the function returns to the current
-context from either the return or the update stack. If both stacks are
-empty, the current thread terminates which eventually may cause a
-deadlock.
+A call to a known function pushes the arguments onto the data stack
+and enters the specified function. Upon entry, the called function
+initializes a fresh local environment with the nodes from the data
+stack and then executes its code. At the end, the function returns to
+the current context from either the return or the update stack. If
+both stacks are empty, the current thread terminates which eventually
+may cause a deadlock.
 \begin{verbatim}
 
 > exec :: Function -> [String] -> Instruction
@@ -224,6 +224,40 @@ deadlock.
 >         deadlock' IOContext = readState (return . Just)
 >         deadlock' GlobalContext = readState (return . Just)
 >         deadlock' _ = stoppedSearch
+
+\end{verbatim}
+When an unknown function is called (via a partial application node),
+the machine must compare the number of arguments supplied in the call
+with the arity of the called function. If too few arguments are
+supplied, a new partial application node is allocated and returned to
+the caller. Otherwise, the function is entered after pushing the
+arguments onto the stack. If too many arguments are supplied, an
+additional return frame is pushed onto the stack as well, which takes
+care of applying the result of the application to the remaining
+arguments.
+\begin{verbatim}
+
+> apply :: String -> [String] -> Instruction
+> apply v vs =
+>   do
+>     ptrs <- readState (getVars vs)
+>     switchRigid v [(ClosureTag,applyPtr ptrs)]
+>                 (const (fail "Type error in Apply: not a function"))
+>   where applyPtr ptrs ptr = deref ptr >>= applyNode ptrs
+>         applyNode ptrs' (ClosureNode f n code ptrs) =
+>           applyClosure f code n (ptrs ++ ptrs')
+>         applyClosure f code n ptrs
+>           | length ptrs < n = allocClosure (f,code,n) ptrs >>= retNode
+>           | otherwise =
+>               do
+>                 let (ptrs',ptrs'') = splitAt n ptrs
+>                 unless (null ptrs'')
+>                        (updateState (pushNodes ptrs'') >>
+>                         updateState (pushCont (applyCont (length ptrs''))))
+>                 updateState (pushNodes ptrs')
+>                 code
+>         applyCont n = entry ("_f" : xs) $ apply "_f" xs
+>           where xs = ['x':show i | i <- [1..n]]
 
 \end{verbatim}
 \texttt{Ccall} statements are intended for implementing calls to
@@ -495,28 +529,8 @@ historical reasons, the compiler uses \texttt{@} instead of
 > applyFunctions = applyFunction : [('@':show i,applyCode i,i+1) | i <- [2..]]
 
 > applyCode :: Int -> Instruction
-> applyCode n =
->   entry ("f" : xs) $
->   do
->     ptrs <- readState (getVars xs)
->     seqStmts "_f" (enter "f")
->          (switchRigid "_f" [(ClosureTag,apply ptrs)]
->                       (const (fail "@: bad argument type!")))
+> applyCode n = entry ("f" : xs) $ seqStmts "_f" (enter "f") (apply "_f" xs)
 >   where xs = ['x':show i | i <- [1..n]]
->         apply ptrs fptr = deref fptr >>= enterNode ptrs
->         enterNode ptrs' (ClosureNode f n code ptrs) =
->           applyClosure f code n (ptrs ++ ptrs')
->         enterNode _ _ = fail "Type error in Exec: not a function"
->         applyClosure f code n ptrs
->           | length ptrs < n = allocClosure (f,code,n) ptrs >>= retNode
->           | otherwise =
->               do
->                 let (ptrs',ptrs'') = splitAt n ptrs
->                 unless (null ptrs'')
->                        (updateState (pushNodes ptrs'') >>
->                         updateState (pushCont (applyCode (length ptrs''))))
->                 updateState (pushNodes ptrs')
->                 code
 
 \end{verbatim}
 In order to handle partial applications of data constructors, the

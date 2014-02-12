@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CamParser.lhs 3054 2011-10-07 15:19:59Z wlux $
+% $Id: CamParser.lhs 3152 2014-02-12 18:08:19Z wlux $
 %
-% Copyright (c) 1999-2011, Wolfgang Lux
+% Copyright (c) 1999-2013, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CamParser.lhs}
@@ -67,7 +67,8 @@ in appendix~\ref{sec:ll-parsecomb}.
 >   Token FloatNum FloatAttributes{ fval = convertSignedFloat mant frac exp }
 
 > data Keyword =
->     KW_bool
+>     KW_apply
+>   | KW_bool
 >   | KW_ccall
 >   | KW_char
 >   | KW_choice
@@ -123,6 +124,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 >   showsPrec _ (Token EOF _) = showString "end-of-file"
 
 > instance Show Keyword where
+>   showsPrec _ KW_apply = showKeyword "apply"
 >   showsPrec _ KW_bool = showKeyword "bool"
 >   showsPrec _ KW_ccall = showKeyword "ccall"
 >   showsPrec _ KW_char = showKeyword "char"
@@ -160,6 +162,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 
 > keywords :: FM String Keyword
 > keywords = fromListFM [
+>     ("apply",    KW_apply),
 >     ("bool",     KW_bool),
 >     ("ccall",    KW_ccall),
 >     ("char",     KW_char),
@@ -338,6 +341,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 > astmt = Return <$-> keyword KW_return <*> node
 >     <|> Eval <$-> keyword KW_eval <*> checkName
 >     <|> Exec <$> name <*> nameList
+>     <|> Apply <$-> keyword KW_apply <*> name <*> nameList
 >     <|> CCall <$-> keyword KW_ccall <*> (Just <$> string `opt` Nothing)
 >               <*> (parens cRetType `opt` Just TypeNodePtr) <*> cCall
 >     <|> flip Switch <$-> keyword KW_switch <*> checkName <*> rf

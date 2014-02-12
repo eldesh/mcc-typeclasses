@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CGen.lhs 3151 2014-02-12 18:04:55Z wlux $
+% $Id: CGen.lhs 3152 2014-02-12 18:08:19Z wlux $
 %
 % Copyright (c) 1998-2013, Wolfgang Lux
 % See LICENSE for the full license.
@@ -109,6 +109,7 @@ function because there is not much chance for them to be shared.
 > linStmts' (Return _) sts = sts
 > linStmts' (Eval _) sts = sts
 > linStmts' (Exec _ _) sts = sts
+> linStmts' (Apply _ _) sts = sts
 > linStmts' (CCall _ _ _) sts = sts
 > linStmts' (Seq (_ :<- st1) st2) sts = linStmts st1 $ linStmts st2 sts
 > linStmts' (Let _ st) sts = linStmts st sts
@@ -123,6 +124,7 @@ function because there is not much chance for them to be shared.
 > nodes (Return n) ns = n : ns
 > nodes (Eval _) ns = ns
 > nodes (Exec _ _) ns = ns
+> nodes (Apply _ _) ns = ns
 > nodes (CCall _ ty _) ns =
 >   case ty of
 >     Just TypeBool -> Constr prelTrue [] : Constr prelFalse [] : ns
@@ -480,8 +482,9 @@ the suspend node associated with the abstract machine code function.
 >   where vs = [Name ('v' : show i) | i <- [1..n]]
 
 > apFunction :: Name -> Int -> [CTopDecl]
-> apFunction f n = funcDefs Private (cpsApplyFunction f vs)
->   where vs = [Name ('v' : show i) | i <- [1..n]]
+> apFunction f n =
+>   funcDefs Private (cpsFunction f (v:vs) (Seq (w :<- Eval v) (Apply w vs)))
+>   where w:v:vs = [Name ('v' : show i) | i <- [0..n]]
 
 > appFunction :: Int -> CTopDecl
 > appFunction n = funcDef Private (cpsApply v vs)

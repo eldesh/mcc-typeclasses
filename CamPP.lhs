@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CamPP.lhs 3054 2011-10-07 15:19:59Z wlux $
+% $Id: CamPP.lhs 3152 2014-02-12 18:08:19Z wlux $
 %
-% Copyright (c) 2002-2011, Wolfgang Lux
+% Copyright (c) 2002-2013, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \subsection{Pretty-printing Abstract Machine Code}
@@ -44,6 +44,7 @@
 > ppStmt (Return e) = ppKW "return" <+> ppExpr e
 > ppStmt (Eval v) = ppKW "eval" <+> ppName v
 > ppStmt (Exec f vs) = ppName f <> ppNames vs
+> ppStmt (Apply v vs) = ppKW "apply" <+> ppName v <+> ppNames vs
 > ppStmt (CCall h ty cc) =
 >   ppKW "ccall" <+> maybe empty ppHeader h <+> ppCRetType ty <> ppCCall cc
 >   where ppHeader h = char '"' <> text h <> char '"'

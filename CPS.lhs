@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CPS.lhs 3151 2014-02-12 18:04:55Z wlux $
+% $Id: CPS.lhs 3152 2014-02-12 18:08:19Z wlux $
 %
 % Copyright (c) 2003-2013, Wolfgang Lux
 % See LICENSE for the full license.
@@ -11,8 +11,7 @@
 > module CPS(CPSFunction(..), CPSContinuation(..),
 >            CPSFun(..), CPSCont(..), CPSContFun(..),
 >            BindC(..), BindPapp(..), CaseBlock(..), CPSTag(..), CPSStmt(..),
->            cpsFunction, cpsApplyFunction, cpsApply, cpsInst,
->            continuations) where
+>            cpsFunction, cpsApply, cpsInst, continuations) where
 > import Cam
 > import List
 > import Set
@@ -119,11 +118,6 @@ arguments with a \texttt{CPSLetPapp} statement.
 >   where ws = filter (`notElem` vs) (freeVars st CPSReturn)
 >         (_,st') = cpsStmt f Nothing (True,CPSReturn) 1 st
 
-> cpsApplyFunction :: Name -> [Name] -> CPSFunction
-> cpsApplyFunction f (v:vs) =
->   CPSFunction f (v:vs) $
->   CPSExec (CPSEval False v) (CPSCont (CPSApp (length vs)) vs CPSReturn) [v]
-
 > cpsApply :: Name -> [Name] -> CPSContinuation
 > cpsApply v vs = CPSContinuation f [v] vs (CPSSwitchArity v cases)
 >   where f = CPSApp (length vs)
@@ -199,6 +193,8 @@ does not need to construct separate closures for each of them.
 >     _ -> (n,CPSLet [Bind tmp e] (CPSExecCont (snd k) [tmp]))
 > cpsStmt _ _ k n (Eval v) = (n,CPSExec (CPSEval (fst k) v) (snd k) [v])
 > cpsStmt _ _ k n (Exec f vs) = (n,CPSExec (CPSFun f) (snd k) vs)
+> cpsStmt _ _ k n (Apply v vs) =
+>   (n,CPSExecCont (CPSCont (CPSApp (length vs)) vs (snd k)) [v])
 > cpsStmt _ _ k n (CCall _ ty cc) =
 >   (n,CPSLetC (BindC tmp ty cc) (CPSExecCont (snd k) [tmp]))
 > cpsStmt f k0 k n (Seq (v :<- st1) st2) =
@@ -209,13 +205,9 @@ does not need to construct separate closures for each of them.
 >       where (n',st2') = cpsStmt f Nothing k n st2
 >     CCall _ ty cc -> (n',CPSLetC (BindC v ty cc) st2')
 >       where (n',st2') = cpsStmt f Nothing k n st2
->     _ -> (n'',CPSLetCont f' st1')
->       where (n',st1') = cpsStmt f k0 (tagged f',cpsCont f') n st1
+>     _ -> (n'',st1')
+>       where (n',st1') = cpsStmtSeq f k0 f' n st1
 >             (n'',f') = cps f k [v] n' st2
->             tagged (CPSContinuation _ vs _ (CPSSwitch tagged v _)) =
->               vs /= [v] || tagged
->             tagged (CPSContinuation _ vs _ (CPSSwitchArity v _)) = vs /= [v]
->             tagged _ = True
 > cpsStmt f _ k n (Let ds st) = (n',foldr CPSLet st' (scc bound free ds))
 >   where (n',st') = cpsStmt f Nothing k n st
 >         bound (Bind v _) = [v]
@@ -230,6 +222,24 @@ does not need to construct separate closures for each of them.
 >   where (n',ks) = mapAccumL (cps f k []) n alts
 >         ks' = map (updEnv (freeVars (Choice alts) (snd k))) ks
 >         updEnv ws (CPSContinuation f vs _ st) = CPSContinuation f vs ws st
+
+> cpsStmtSeq :: Name -> Maybe CPSCont -> CPSContinuation -> Int -> Stmt
+>            -> (Int,CPSStmt)
+> cpsStmtSeq f k0 (CPSContinuation _ vs _ (CPSExecCont k vs')) n st
+>   | vs == vs' = cpsStmt f k0 (tagged k,k) n st
+>   where tagged CPSReturn = True
+>         tagged (CPSCont f _ _) = taggedCont f
+>         taggedCont (CPSContFun _ _) = True
+>         taggedCont (CPSApp _) = False
+>         taggedCont (CPSInst t) = taggedSwitch [t]
+>         taggedCont (CPSApply _) = False
+>         taggedCont CPSUpdate = True
+> cpsStmtSeq f k0 f' n st = (n',CPSLetCont f' st')
+>   where (n',st') = cpsStmt f k0 (tagged f',cpsCont f') n st
+>         tagged (CPSContinuation _ vs _ (CPSSwitch tagged v _)) =
+>           vs /= [v] || tagged
+>         tagged (CPSContinuation _ vs _ (CPSSwitchArity v _)) = vs /= [v]
+>         tagged _ = True
 
 > cpsJumpSwitch :: Name -> (Bool,CPSCont) -> Int -> RF -> Name -> [Case]
 >               -> (Int,CPSStmt)
@@ -294,6 +304,7 @@ does not need to construct separate closures for each of them.
 > stmtVars (Return e) vs = exprVars e ++ vs
 > stmtVars (Eval v) vs = v : vs
 > stmtVars (Exec _ vs) vs' = vs ++ vs'
+> stmtVars (Apply v vs) vs' = v : vs ++ vs'
 > stmtVars (CCall _ _ cc) vs = ccallVars cc ++ vs
 > stmtVars (Seq (v :<- st1) st2) vs =
 >   stmtVars st1 [] ++ filter (v /=) (stmtVars st2 vs)

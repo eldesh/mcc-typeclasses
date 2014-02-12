@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: MachLoader.lhs 3054 2011-10-07 15:19:59Z wlux $
+% $Id: MachLoader.lhs 3152 2014-02-12 18:08:19Z wlux $
 %
-% Copyright (c) 1998-2011, Wolfgang Lux
+% Copyright (c) 1998-2013, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{MachLoader.lhs}
@@ -70,6 +70,7 @@ in order to allow mutual recursion between functions.
 >         translStmt (Return e) = returnNode (translExpr Nothing e)
 >         translStmt (Eval v) = enter (show v)
 >         translStmt (Exec f vs) = exec (lookupFun f fEnv) (map show vs)
+>         translStmt (Apply v vs) = apply (show v) (map show vs)
 >         translStmt (CCall _ _ cc) = translCCall cc
 >         translStmt (Seq (v :<- st1) st2) =
 >           seqStmts (show v) (transl st1) (transl st2)

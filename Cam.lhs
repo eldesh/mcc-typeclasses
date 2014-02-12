@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Cam.lhs 3054 2011-10-07 15:19:59Z wlux $
+% $Id: Cam.lhs 3152 2014-02-12 18:08:19Z wlux $
 %
-% Copyright (c) 1998-2011, Wolfgang Lux
+% Copyright (c) 1998-2013, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Cam.lhs}
@@ -63,6 +63,17 @@ and returns its address. If the node is already in head normal form,
 enters the global function $f$ and passes the nodes referenced by
 $x_1,\dots,x_n$ as arguments to it.
 
+\texttt{Apply} $x(x_1,\dots,x_n)$, applies the node bound to $x$ to
+the nodes referenced by $x_1,\dots,x_n$. If $x$ is bound to a free
+variable the current thread is suspended until the variable is
+instantiated. Otherwise $x$ must be bound to a partial application. If
+the arity of the partial application is $m$ and $m\leq n$, the
+corresponding function is evaluated passing it the arguments from the
+partial application node and the nodes referenced by $x_1,\dots,x_m$.
+The result is applied to the remaining arguments $x_{m+1},\dots,x_n$
+if $m<n$. If $m>n$ a new partial application node is allocated and its
+address is returned.
+
 \texttt{Ccall} $h$ $(\emph{ty})$\emph{cc} evaluates the C code
 \emph{cc}, allocates a fresh node for its result, and returns the
 address of that node. \emph{Cc} is either a static function call
@@ -117,6 +128,7 @@ statement from $\emph{st$_1$},\dots,\emph{st$_n$}$.
 >     Return Expr
 >   | Eval Name
 >   | Exec Name [Name]
+>   | Apply Name [Name]
 >   | CCall (Maybe String) CRetType CCall
 >   | Seq Stmt0 Stmt
 >   | Let [Bind] Stmt

@@ -1,4 +1,4 @@
-dnl $Id: configure-bin.in 3208 2016-06-15 21:29:43Z wlux $
+dnl $Id: configure-bin.in 3209 2016-06-15 21:31:29Z wlux $
 dnl
 dnl Copyright (c) 2002-2013, Wolfgang Lux
 dnl
@@ -27,7 +27,7 @@ if test "$HC_PATH_STYLE" = windows; then
 fi
 
 dnl Checks for libraries.
-AC_SEARCH_LIBS(sin, lm)
+AC_SEARCH_LIBS(sin, m)
 AC_SEARCH_LIBS(inet_addr, nsl)
 AC_SEARCH_LIBS(socket, socket)
 

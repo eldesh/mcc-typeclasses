@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: PathUtils.lhs 2371 2007-06-23 14:08:14Z wlux $
+% $Id: PathUtils.lhs 3220 2016-06-15 22:32:30Z wlux $
 %
-% Copyright (c) 1999-2007, Wolfgang Lux
+% Copyright (c) 1999-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \nwfilename{windows/PathUtils.lhs}
@@ -12,8 +12,7 @@ semantics.
 
 > module PathUtils(pathSep,curDirPath, isRelative,isAbsolute,
 >                  dirname,basename, rootname,extension, catPath,
->                  listSep, pathList, lookupFile) where
-> import Directory
+>                  listSep, pathList) where
 
 \end{verbatim}
 We assume that on Windows systems components of a path name are
@@ -141,19 +140,6 @@ into a list of strings.
 >   case break (listSep ==) s of
 >     (s',"") -> [s']
 >     (s',_:s'') -> s' : pathList s''
-
-\end{verbatim}
-The function \texttt{lookupFile} can be used to search for files. It
-returns the first name from the argument list for which a regular file
-exists in the file system.
-\begin{verbatim}
-
-> lookupFile :: [FilePath] -> IO (Maybe FilePath)
-> lookupFile [] = return Nothing
-> lookupFile (fn:fns) =
->   do
->     so <- doesFileExist fn
->     if so then return (Just fn) else lookupFile fns
 
 \end{verbatim}
 The function \texttt{breakLast} is similar to the standard

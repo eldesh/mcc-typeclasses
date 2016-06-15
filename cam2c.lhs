@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: cam2c.lhs 3136 2013-05-12 15:53:27Z wlux $
+% $Id: cam2c.lhs 3220 2016-06-15 22:32:30Z wlux $
 %
-% Copyright (c) 2005-2013, Wolfgang Lux
+% Copyright (c) 2005-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{cam2c.lhs}
@@ -15,14 +15,14 @@ compiler.
 > import CGen
 > import CCode
 > import CPretty
-> import Pretty                -- required to import Show Doc instance with hbc
+> import Files
 > import Error
+> import GetOpt
 > import IO
 > import List
 > import Maybe
 > import Monad
-> import GetOpt
-> import PathUtils
+> import Pretty                -- required to import Show Doc instance with hbc
 > import System
 > import Utils
 
@@ -31,8 +31,7 @@ compiler.
 >   do
 >     prog <- getProgName
 >     args <- getArgs
->     importPath <- IO.catch (getEnv "CURRY_IMPORT_PATH" >>= return . pathList)
->                            (const (return []))
+>     importPath <- getCurryImportPath
 >     cam2c prog args importPath
 
 \end{verbatim}
@@ -45,7 +44,7 @@ file with the \texttt{-o} switch. If \texttt{-o} occurs more than once
 on the command line, we use the last occurrence.
 \begin{verbatim}
 
-> cam2c :: String -> [String] -> [FilePath] -> IO ()
+> cam2c :: String -> [String] -> [ImportPath] -> IO ()
 > cam2c prog args curryImportPath
 >   | Help `elem` opts = printUsage prog
 >   | null errs =
@@ -72,8 +71,8 @@ on the command line, we use the last occurrence.
 >     exitWith (ExitFailure 1)
 >   where mkErrorLine err = prog ++ ": " ++ err
 
-> importPaths :: [Option] -> [FilePath]
-> importPaths opts = [d | ImportPath d <- opts]
+> importPaths :: [Option] -> [ImportPath]
+> importPaths opts = [ImpDir d | ImportPath d <- opts]
 
 > outputFile :: [Option] -> Maybe FilePath
 > outputFile opts
@@ -126,7 +125,7 @@ recursively loads the imported modules in order to resolve data
 constructor tags in the code.
 \begin{verbatim}
 
-> compileFiles :: [FilePath] -> Maybe FilePath -> [FilePath]
+> compileFiles :: [ImportPath] -> Maybe FilePath -> [FilePath]
 >              -> Maybe (String, Maybe [String]) -> IO ()
 > compileFiles importPath ofn fns g =
 >   do
@@ -158,9 +157,9 @@ constructor tags in the code.
 > parseFile :: FilePath -> IO Module
 > parseFile fn = liftM (ok . parseModule fn) (readFile fn)
 
-> lookupModule :: [FilePath] -> Name -> IO FilePath
+> lookupModule :: [ImportPath] -> Name -> IO FilePath
 > lookupModule importPath m =
->   lookupFile [p `catPath` fn | p <- "" : importPath] >>=
+>   lookupFile (filesInPath (ImpDir "" : importPath) fn) >>=
 >   maybe (ioError (userError (fileNotFound fn))) return
 >   where fn = demangle m ++ ".cam"
 

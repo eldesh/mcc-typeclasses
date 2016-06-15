@@ -1,20 +1,20 @@
--- $Id: cymk.hs 3136 2013-05-12 15:53:27Z wlux $
+-- $Id: cymk.hs 3220 2016-06-15 22:32:30Z wlux $
 --
--- Copyright (c) 2002-2013, Wolfgang Lux
+-- Copyright (c) 2002-2015, Wolfgang Lux
 -- See LICENSE for the full license.
 
 import CurryDeps
+import Files
 import GetOpt
 import IO
 import Maybe
 import Monad
-import PathUtils
 import System
 import Utils
 
 data Options =
   Options{
-    importPaths :: [(Bool,FilePath)],
+    importPaths :: [ImportPath],
     output :: Maybe FilePath,
     goal :: Maybe String,
     debug :: Bool,
@@ -61,9 +61,9 @@ options = [
   ]
 
 selectOption (ImportPath dir) opts =
-  opts{ importPaths = (True,dir) : importPaths opts }
+  opts{ importPaths = ImpDir dir : importPaths opts }
 selectOption (LibPath dir) opts =
-  opts{ importPaths = (False,dir) : importPaths opts }
+  opts{ importPaths = LibDir dir : importPaths opts }
 selectOption (Output file) opts = opts{ output = Just file }
 selectOption (Goal g) opts = opts{ goal = Just g }
 selectOption Debug opts = opts{ debug = True }
@@ -76,11 +76,10 @@ main =
   do
     prog <- getProgName
     args <- getArgs
-    importPath <- IO.catch (getEnv "CURRY_IMPORT_PATH" >>= return . pathList)
-                           (const (return []))
+    importPath <- getCurryImportPath
     cymk prog args importPath
 
-cymk :: String -> [String] -> [FilePath] -> IO ()
+cymk :: String -> [String] -> [ImportPath] -> IO ()
 cymk prog args curryImportPath
   | Help `elem` opts = printUsage prog
   | null errs = processFiles cymkOpts prog files
@@ -88,7 +87,7 @@ cymk prog args curryImportPath
   where (opts,files,errs) = getOpt Permute options args
         cymkOpts =
 	  foldr selectOption
-                defaultOptions{ importPaths = map ((,) False) curryImportPath }
+                defaultOptions{ importPaths = curryImportPath }
                 opts
 
 printUsage :: String -> IO ()

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Goals.lhs 3219 2016-06-15 22:19:48Z wlux $
+% $Id: Goals.lhs 3220 2016-06-15 22:32:30Z wlux $
 %
 % Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -17,6 +17,7 @@ This module controls the compilation of goals.
 > import CurryParser
 > import CurryUtils
 > import Error
+> import Files
 > import IdentInfo
 > import InstInfo
 > import Interfaces
@@ -92,7 +93,7 @@ to those specified on the command line or used in the goal.
 >         cm = caseMode opts
 >         ws = warn opts
 
-> loadGoal :: Task -> [(Bool,FilePath)] -> Bool -> CaseMode -> [Warn]
+> loadGoal :: Task -> [ImportPath] -> Bool -> CaseMode -> [Warn]
 >          -> ModuleIdent -> Maybe String -> [FilePath]
 >          -> ErrorT IO (TCEnv,InstEnv,ValueEnv,Context,Goal QualType)
 > loadGoal task paths debug caseMode warn m g fns =
@@ -108,7 +109,7 @@ to those specified on the command line or used in the goal.
 >     return (tcEnv,iEnv,tyEnv,cx,g''')
 >   where mainGoal m = Goal (first "") (Variable () (qualifyWith m mainId)) []
 
-> loadGoalModules :: [(Bool,FilePath)] -> Bool -> Maybe (Goal a) -> [FilePath]
+> loadGoalModules :: [ImportPath] -> Bool -> Maybe (Goal a) -> [FilePath]
 >                 -> ErrorT IO (ModuleEnv,ModuleIdent,[ImportDecl])
 > loadGoalModules paths debug g fns =
 >   do

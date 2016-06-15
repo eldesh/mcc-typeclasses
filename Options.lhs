@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Options.lhs 3219 2016-06-15 22:19:48Z wlux $
+% $Id: Options.lhs 3220 2016-06-15 22:32:30Z wlux $
 %
 % Copyright (c) 2001-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -9,6 +9,7 @@
 \begin{verbatim}
 
 > module Options where
+> import Files
 > import GetOpt
 
 \end{verbatim}
@@ -18,7 +19,7 @@ all compiler options.
 
 > data Options =
 >   Options {
->     importPaths :: [(Bool,FilePath)], -- directories for searching imports
+>     importPaths :: [ImportPath],      -- directories for searching imports
 >     output :: Maybe FilePath,         -- name of output file
 >     goal :: Maybe (Maybe String),     -- goal to be evaluated
 >     typeIt :: Maybe String,           -- goal to be typed
@@ -187,9 +188,9 @@ print its usage message and terminate.
 
 > selectOption :: Option -> Options -> Options
 > selectOption (ImportPath dir) opts =
->   opts{ importPaths = (True,dir) : importPaths opts }
+>   opts{ importPaths = ImpDir dir : importPaths opts }
 > selectOption (LibPath dir) opts =
->   opts{ importPaths = (False,dir) : importPaths opts }
+>   opts{ importPaths = LibDir dir : importPaths opts }
 > selectOption (Output file) opts = opts{ output = Just file }
 > selectOption (Eval goal) opts = opts{ goal = Just goal }
 > selectOption (Type goal) opts = opts{ typeIt = Just goal }

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Interfaces.lhs 3219 2016-06-15 22:19:48Z wlux $
+% $Id: Interfaces.lhs 3220 2016-06-15 22:32:30Z wlux $
 %
 % Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -22,6 +22,7 @@ goal.
 > import CurryUtils
 > import Env
 > import Error
+> import Files
 > import IdentInfo
 > import Imports
 > import IntfCheck
@@ -68,7 +69,7 @@ recursively load the interfaces of those modules whose entities are
 reexported by the imported modules.
 \begin{verbatim}
 
-> loadInterfaces :: [(Bool,FilePath)] -> ModuleIdent -> [P ModuleIdent]
+> loadInterfaces :: [ImportPath] -> ModuleIdent -> [P ModuleIdent]
 >                -> ErrorT IO ModuleEnv
 > loadInterfaces paths m ms =
 >   do
@@ -77,7 +78,7 @@ reexported by the imported modules.
 >     okM $ checkInterfaces mEnv
 >     return (sanitizeInterfaces m mEnv)
 
-> loadInterface :: Bool -> [(Bool,FilePath)] -> ModuleEnv -> P ModuleIdent
+> loadInterface :: Bool -> [ImportPath] -> ModuleEnv -> P ModuleIdent
 >               -> ErrorT IO ModuleEnv
 > loadInterface fullPath paths mEnv (P p m) =
 >   case lookupEnv m mEnv of
@@ -106,7 +107,7 @@ identifiers that are used in the goal expression and only load the
 interfaces of those standard library modules that appear in that list.
 \begin{verbatim}
 
-> loadGoalInterfaces :: [(Bool,FilePath)] -> [P ModuleIdent] -> [FilePath]
+> loadGoalInterfaces :: [ImportPath] -> [P ModuleIdent] -> [FilePath]
 >                    -> [ModuleIdent] -> ErrorT IO (ModuleEnv,[ModuleIdent])
 > loadGoalInterfaces paths ms fns ms' =
 >   do
@@ -116,12 +117,12 @@ interfaces of those standard library modules that appear in that list.
 >     okM $ checkInterfaces mEnv''
 >     return (mEnv'',ms'')
 
-> loadGoalInterface :: [(Bool,FilePath)] -> ModuleEnv -> FilePath
+> loadGoalInterface :: [ImportPath] -> ModuleEnv -> FilePath
 >                   -> ErrorT IO (ModuleEnv,ModuleIdent)
 > loadGoalInterface paths mEnv fn
->   | extension fn `elem` [srcExt,litExt,intfExt] || pathSep `elem` fn =
+>   | extension fn `elem` moduleExts || pathSep `elem` fn =
 >       do
->         (m,i) <- compileInterface (interfaceName fn)
+>         (m,i) <- compileInterface (interfName fn)
 >         return (bindModule i mEnv,m)
 >   | otherwise =
 >       do
@@ -133,7 +134,7 @@ interfaces of those standard library modules that appear in that list.
 >           case break ('.' ==) cs of
 >             (cs',cs'') -> cs' : components cs''
 
-> loadLibInterface :: [(Bool,FilePath)] -> ModuleEnv -> ModuleIdent
+> loadLibInterface :: [ImportPath] -> ModuleEnv -> ModuleIdent
 >                  -> ErrorT IO ModuleEnv
 > loadLibInterface paths mEnv m =
 >   case lookupEnv m mEnv of
@@ -149,12 +150,11 @@ directory is always searched first unless we look only for standard
 library interfaces.
 \begin{verbatim}
 
-> lookupInterface :: Bool -> [(Bool,FilePath)] -> ModuleIdent
->                 -> IO (Maybe FilePath)
-> lookupInterface fullPath paths m =
->   lookupFile ([ifn | fullPath] ++
->               [catPath p ifn | (source,p) <- paths, fullPath || not source])
->   where ifn = foldr1 catPath (moduleQualifiers m) ++ intfExt
+> lookupInterface :: Bool -> [ImportPath] -> ModuleIdent -> IO (Maybe FilePath)
+> lookupInterface fullPath paths m
+>   | fullPath = lookupFile (filesInPath (ImpDir "" : paths) ifn)
+>   | otherwise = lookupFile (filesInPath [LibDir p | LibDir p <- paths] ifn)
+>   where ifn = foldr1 catPath (moduleQualifiers m) ++ icurryExt
 
 \end{verbatim}
 After parsing an interface, the compiler applies syntax checking to
@@ -269,7 +269,7 @@ this case and therefore it doesn't matter when the file is closed.
 >   do
 >     eq <- IO.catch (matchInterface ifn i) (const (return False))
 >     unless eq (writeInterface ifn i)
->   where ifn = interfaceName sfn
+>   where ifn = interfName sfn
 
 > matchInterface :: FilePath -> Interface -> IO Bool
 > matchInterface ifn i =
@@ -283,9 +283,6 @@ this case and therefore it doesn't matter when the file is closed.
 > writeInterface :: FilePath -> Interface -> IO ()
 > writeInterface ifn = writeFile ifn . showLn . ppInterface
 
-> interfaceName :: FilePath -> FilePath
-> interfaceName fn = rootname fn ++ intfExt
-
 \end{verbatim}
 Auxiliary definitions.
 \begin{verbatim}
@@ -295,14 +292,6 @@ Auxiliary definitions.
 
 > initEnvs :: (PEnv,TCEnv,InstEnv,ValueEnv)
 > initEnvs = (initPEnv,initTCEnv,initIEnv,initDCEnv)
-
-\end{verbatim}
-Various file name extensions.
-\begin{verbatim}
-
-> srcExt = ".curry"
-> litExt = ".lcurry"
-> intfExt = ".icurry"
 
 \end{verbatim}
 Error messages.

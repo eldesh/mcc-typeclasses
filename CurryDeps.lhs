@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryDeps.lhs 3218 2016-06-15 21:52:35Z wlux $
+% $Id: CurryDeps.lhs 3220 2016-06-15 22:32:30Z wlux $
 %
 % Copyright (c) 2002-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -16,12 +16,13 @@ dependencies and to update programs composed of multiple modules.
 > import CurryParser
 > import Env
 > import Error
+> import Files
 > import IO
 > import List
 > import Maybe
 > import Monad
-> import PredefIdent
 > import PathUtils
+> import PredefIdent
 > import SCC
 > import Unlit
 
@@ -39,7 +40,7 @@ Makefile, and the function \texttt{findModules} tries to find a source
 or interface file for each module.
 \begin{verbatim}
 
-> buildScript :: Bool -> Bool -> [(Bool,FilePath)] -> Maybe String
+> buildScript :: Bool -> Bool -> [ImportPath] -> Maybe String
 >             -> Maybe FilePath -> FilePath -> IO [String]
 > buildScript clean debug paths goal output fn =
 >   do
@@ -51,11 +52,11 @@ or interface file for each module.
 >           | otherwise = output `mplus` Just fn
 >         makeScript clean = if clean then makeCleanScript else makeBuildScript
 
-> makeDepend :: [(Bool,FilePath)] -> Maybe FilePath -> [FilePath] -> IO ()
+> makeDepend :: [ImportPath] -> Maybe FilePath -> [FilePath] -> IO ()
 > makeDepend paths output ms =
 >   foldM (deps paths) emptyEnv ms >>= maybe putStr writeFile output . makeDeps
 
-> deps :: [(Bool,FilePath)] -> SourceEnv -> FilePath -> IO SourceEnv
+> deps :: [ImportPath] -> SourceEnv -> FilePath -> IO SourceEnv
 > deps paths mEnv fn
 >   | e `elem` sourceExts = sourceDeps paths (mkMIdent [r]) mEnv fn
 >   | e == icurryExt = return mEnv
@@ -64,18 +65,18 @@ or interface file for each module.
 >   where r = rootname fn
 >         e = extension fn
 
-> targetDeps :: [(Bool,FilePath)] -> SourceEnv -> FilePath -> IO SourceEnv
+> targetDeps :: [ImportPath] -> SourceEnv -> FilePath -> IO SourceEnv
 > targetDeps paths mEnv fn =
 >   lookupFile [fn ++ e | e <- sourceExts] >>=
 >   maybe (return (bindEnv m Unknown mEnv)) (sourceDeps paths m mEnv)
 >   where m = mkMIdent [fn]
 
-> findModules :: [(Bool,FilePath)] -> Maybe FilePath -> [FilePath] -> IO ()
+> findModules :: [ImportPath] -> Maybe FilePath -> [FilePath] -> IO ()
 > findModules paths output ms =
 >   mapM (\fn -> liftM ((fn ++ ": ") ++) (findModule paths fn)) ms >>=
 >   maybe putStr writeFile output . unlines
 
-> findModule :: [(Bool,FilePath)] -> FilePath -> IO FilePath
+> findModule :: [ImportPath] -> FilePath -> IO FilePath
 > findModule paths fn
 >   | e `elem` sourceExts = return fn
 >   | e == icurryExt = lookupModule [] (mkMIdent [r]) >>= return . fromMaybe fn
@@ -98,12 +99,10 @@ looking up source and interface files, whereas directories specified
 with \texttt{-P} options are used for looking up only interface files.
 \begin{verbatim}
 
-> lookupModule :: [(Bool,FilePath)] -> ModuleIdent -> IO (Maybe FilePath)
+> lookupModule :: [ImportPath] -> ModuleIdent -> IO (Maybe FilePath)
 > lookupModule paths m =
->   lookupFile ([fn ++ e | e <- moduleExts] ++
->               [p `catPath` fn ++ e | (source,p) <- paths, e <- exts source])
+>   lookupFile (filesInPathWithExts moduleExts intfExts (ImpDir "" : paths) fn)
 >   where fn = foldr1 catPath (moduleQualifiers m)
->         exts source = if source then moduleExts else [icurryExt]
 
 \end{verbatim}
 In order to compute the dependency graph, source files for each module
@@ -114,7 +113,7 @@ is added implicitly to the list of imported modules except for the
 Prelude itself. Any errors reported by the parser are ignored.
 \begin{verbatim}
 
-> moduleDeps :: [(Bool,FilePath)] -> SourceEnv -> ModuleIdent -> IO SourceEnv
+> moduleDeps :: [ImportPath] -> SourceEnv -> ModuleIdent -> IO SourceEnv
 > moduleDeps paths mEnv m =
 >   case lookupEnv m mEnv of
 >     Just _ -> return mEnv
@@ -128,7 +127,7 @@ Prelude itself. Any errors reported by the parser are ignored.
 >             | otherwise -> sourceDeps paths m mEnv fn
 >           Nothing -> return (bindEnv m Unknown mEnv)
 
-> sourceDeps :: [(Bool,FilePath)] -> ModuleIdent -> SourceEnv -> FilePath
+> sourceDeps :: [ImportPath] -> ModuleIdent -> SourceEnv -> FilePath
 >            -> IO SourceEnv
 > sourceDeps paths m mEnv fn =
 >   do
@@ -297,30 +296,5 @@ where the script is executed.
 >           drop d [interfName fn,objectName False fn,objectName True fn] ++ fs
 >         files (Interface _) fs = fs
 >         files Unknown fs = fs
-
-\end{verbatim}
-The functions \texttt{interfName} and \texttt{objectName} compute the
-name of the interface and object file, respectively, corresponding to
-a source module. Note that output files are always created in the same
-directory as the source file.
-\begin{verbatim}
-
-> interfName :: FilePath -> FilePath
-> interfName fn = rootname fn ++ icurryExt
-
-> objectName :: Bool -> FilePath -> FilePath
-> objectName debug = name (if debug then debugExt else oExt)
->   where name ext fn = rootname fn ++ ext
-
-> curryExt, lcurryExt, icurryExt, oExt, debugExt :: String
-> curryExt = ".curry"
-> lcurryExt = ".lcurry"
-> icurryExt = ".icurry"
-> oExt = ".o"
-> debugExt = ".d.o"
-
-> sourceExts, moduleExts :: [String]
-> sourceExts = [lcurryExt,curryExt]
-> moduleExts = sourceExts ++ [icurryExt]
 
 \end{verbatim}

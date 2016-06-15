@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Interfaces.lhs 3135 2013-05-12 15:51:52Z wlux $
+% $Id: Interfaces.lhs 3219 2016-06-15 22:19:48Z wlux $
 %
-% Copyright (c) 1999-2013, Wolfgang Lux
+% Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Interfaces.lhs}
@@ -10,7 +10,7 @@ This module controls loading of interfaces imported by a module or
 goal.
 \begin{verbatim}
 
-> module Interfaces(ModuleEnv,moduleInterface,
+> module Interfaces(ModuleEnv,moduleInterface,importedInterfaces,
 >                   loadInterfaces,loadGoalInterfaces,
 >                   importModuleIdents,importModules,
 >                   qualifyEnv1,qualifyEnv2,updateInterface) where
@@ -58,6 +58,9 @@ environment.
 > moduleInterface m mEnv =
 >   fromMaybe (internalError "moduleInterface") (lookupEnv m mEnv)
 
+> importedInterfaces :: [ModuleIdent] -> ModuleEnv -> [ModuleIdent]
+> importedInterfaces ms mEnv = filter (isJust . flip lookupEnv mEnv) ms
+
 \end{verbatim}
 The compiler loads the interfaces of all modules imported by the
 compiled module. Since interfaces are closed, it is not necessary to
@@ -65,22 +68,22 @@ recursively load the interfaces of those modules whose entities are
 reexported by the imported modules.
 \begin{verbatim}
 
-> loadInterfaces :: [FilePath] -> ModuleIdent -> [P ModuleIdent]
+> loadInterfaces :: [(Bool,FilePath)] -> ModuleIdent -> [P ModuleIdent]
 >                -> ErrorT IO ModuleEnv
 > loadInterfaces paths m ms =
 >   do
 >     okM $ sequenceE_ [errorAt p (cyclicImport m) | P p m' <- ms, m == m']
->     mEnv <- foldM (loadInterface paths) emptyEnv ms
+>     mEnv <- foldM (loadInterface True paths) emptyEnv ms
 >     okM $ checkInterfaces mEnv
 >     return (sanitizeInterfaces m mEnv)
 
-> loadInterface :: [FilePath] -> ModuleEnv -> P ModuleIdent
+> loadInterface :: Bool -> [(Bool,FilePath)] -> ModuleEnv -> P ModuleIdent
 >               -> ErrorT IO ModuleEnv
-> loadInterface paths mEnv (P p m) =
+> loadInterface fullPath paths mEnv (P p m) =
 >   case lookupEnv m mEnv of
 >     Just _ -> return mEnv
 >     Nothing ->
->       liftErr (lookupInterface paths m) >>=
+>       liftErr (lookupInterface fullPath paths m) >>=
 >       maybe (errorAt p (interfaceNotFound m)) (compileModuleInterface mEnv m)
 
 > compileModuleInterface :: ModuleEnv -> ModuleIdent -> FilePath
@@ -92,21 +95,28 @@ reexported by the imported modules.
 >     return (bindModule i mEnv)
 
 \end{verbatim}
-When compiling a goal, the imported interfaces are specified on the
-command line. Note that it is possible to specify interfaces by their
-file name or by their module name.
+A goal is compiled in an environment where the exported entities of
+the Prelude and of all modules specified on the command line are in
+scope with unqualified imports. In addition the exported entities of
+all standard library modules are in scope with qualified imports.
+Modules can be specified on the command line either by their file name
+or by their module name. To avoid loading the interfaces of all
+standard library modules when compiling a goal, we collect the module
+identifiers that are used in the goal expression and only load the
+interfaces of those standard library modules that appear in that list.
 \begin{verbatim}
 
-> loadGoalInterfaces :: [FilePath] -> [P ModuleIdent] -> [FilePath]
->                    -> ErrorT IO (ModuleEnv,[ModuleIdent])
-> loadGoalInterfaces paths ms fns =
+> loadGoalInterfaces :: [(Bool,FilePath)] -> [P ModuleIdent] -> [FilePath]
+>                    -> [ModuleIdent] -> ErrorT IO (ModuleEnv,[ModuleIdent])
+> loadGoalInterfaces paths ms fns ms' =
 >   do
->     mEnv <- foldM (loadInterface paths) emptyEnv ms
->     (mEnv',ms') <- mapAccumM (loadGoalInterface paths) mEnv fns
->     okM $ checkInterfaces mEnv'
->     return (mEnv',ms')
+>     mEnv <- foldM (loadInterface False paths) emptyEnv ms
+>     (mEnv',ms'') <- mapAccumM (loadGoalInterface paths) mEnv fns
+>     mEnv'' <- foldM (loadLibInterface paths) mEnv' ms'
+>     okM $ checkInterfaces mEnv''
+>     return (mEnv'',ms'')
 
-> loadGoalInterface :: [FilePath] -> ModuleEnv -> FilePath
+> loadGoalInterface :: [(Bool,FilePath)] -> ModuleEnv -> FilePath
 >                   -> ErrorT IO (ModuleEnv,ModuleIdent)
 > loadGoalInterface paths mEnv fn
 >   | extension fn `elem` [srcExt,litExt,intfExt] || pathSep `elem` fn =
@@ -115,7 +125,7 @@ file name or by their module name.
 >         return (bindModule i mEnv,m)
 >   | otherwise =
 >       do
->         mEnv' <- loadInterface paths mEnv (P (first "") m)
+>         mEnv' <- loadInterface True paths mEnv (P (first "") m)
 >         return (mEnv',m)
 >   where m = mkMIdent (components ('.':fn))
 >         components [] = []
@@ -123,14 +133,27 @@ file name or by their module name.
 >           case break ('.' ==) cs of
 >             (cs',cs'') -> cs' : components cs''
 
+> loadLibInterface :: [(Bool,FilePath)] -> ModuleEnv -> ModuleIdent
+>                  -> ErrorT IO ModuleEnv
+> loadLibInterface paths mEnv m =
+>   case lookupEnv m mEnv of
+>     Just _ -> return mEnv
+>     Nothing ->
+>       liftErr (lookupInterface False paths m) >>=
+>       maybe (return mEnv) (compileModuleInterface mEnv m)
+
 \end{verbatim}
 The compiler looks for interface files in the import search path
 using the extension \texttt{".icurry"}. Note that the current
-directory is always searched first.
+directory is always searched first unless we look only for standard
+library interfaces.
 \begin{verbatim}
 
-> lookupInterface :: [FilePath] -> ModuleIdent -> IO (Maybe FilePath)
-> lookupInterface paths m = lookupFile (ifn : [catPath p ifn | p <- paths])
+> lookupInterface :: Bool -> [(Bool,FilePath)] -> ModuleIdent
+>                 -> IO (Maybe FilePath)
+> lookupInterface fullPath paths m =
+>   lookupFile ([ifn | fullPath] ++
+>               [catPath p ifn | (source,p) <- paths, fullPath || not source])
 >   where ifn = foldr1 catPath (moduleQualifiers m) ++ intfExt
 
 \end{verbatim}

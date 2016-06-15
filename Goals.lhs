@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Goals.lhs 3136 2013-05-12 15:53:27Z wlux $
+% $Id: Goals.lhs 3219 2016-06-15 22:19:48Z wlux $
 %
-% Copyright (c) 1999-2013, Wolfgang Lux
+% Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Goals.lhs}
@@ -48,7 +48,12 @@ This module controls the compilation of goals.
 A goal is compiled with respect to the interfaces of the modules
 specified on the command line. The Curry Prelude is implicitly added
 to this set. The entities exported from these modules are in scope
-with their qualified and unqualified names.
+with their qualified and unqualified names. In addition, the entities
+from all standard library modules can be used in a goal with their
+qualified names. To avoid needlessly loading standard library modules
+that are not used in the gaal, the compiler first collects all module
+identifiers used in the goal and restricts the set of imported modules
+to those specified on the command line or used in the goal.
 \begin{verbatim}
 
 > data Task = EvalGoal | TypeGoal deriving Eq
@@ -70,7 +75,7 @@ with their qualified and unqualified names.
 >     liftErr $ mapM_ (doDump opts) dumps >>
 >               writeGoalCode (output opts) ccode
 >   where m = mkMIdent []
->         paths = importPath opts
+>         paths = importPaths opts
 >         dbg = debug opts
 >         tr = if trusted opts then Trust else Suspect
 >         cm = caseMode opts
@@ -83,37 +88,39 @@ with their qualified and unqualified names.
 >       loadGoal TypeGoal paths False cm ws (mkMIdent []) (Just g) fns
 >     liftErr $ maybe putStr writeFile (output opts)
 >             $ showLn (ppQualType tcEnv (QualType cx (typeOf e)))
->   where paths = importPath opts
+>   where paths = importPaths opts
 >         cm = caseMode opts
 >         ws = warn opts
 
-> loadGoal :: Task -> [FilePath] -> Bool -> CaseMode -> [Warn]
+> loadGoal :: Task -> [(Bool,FilePath)] -> Bool -> CaseMode -> [Warn]
 >          -> ModuleIdent -> Maybe String -> [FilePath]
 >          -> ErrorT IO (TCEnv,InstEnv,ValueEnv,Context,Goal QualType)
 > loadGoal task paths debug caseMode warn m g fns =
 >   do
->     (mEnv,m',ds) <- loadGoalModules paths debug fns
->     (tEnv,vEnv,g') <-
->       okM $ maybe (return (mainGoal m')) parseGoal g >>=
->             checkGoalSyntax mEnv ds
->     liftErr $ mapM_ putErrLn $ warnGoalSyntax caseMode warn mEnv ds m g'
->     (tcEnv,iEnv,tyEnv,cx,g'') <-
->       okM $ checkGoal task mEnv m ds tEnv vEnv g'
->     liftErr $ mapM_ putErrLn $ warnGoal warn tyEnv g''
->     return (tcEnv,iEnv,tyEnv,cx,g'')
+>     g' <- okM $ maybe (return Nothing) (fmap Just . parseGoal) g
+>     (mEnv,m',ds) <- loadGoalModules paths debug g' fns
+>     (tEnv,vEnv,g'') <-
+>       okM $ checkGoalSyntax mEnv ds (maybe (mainGoal m') id g')
+>     liftErr $ mapM_ putErrLn $ warnGoalSyntax caseMode warn mEnv ds m g''
+>     (tcEnv,iEnv,tyEnv,cx,g''') <-
+>       okM $ checkGoal task mEnv m ds tEnv vEnv g''
+>     liftErr $ mapM_ putErrLn $ warnGoal warn tyEnv g'''
+>     return (tcEnv,iEnv,tyEnv,cx,g''')
 >   where mainGoal m = Goal (first "") (Variable () (qualifyWith m mainId)) []
 
-> loadGoalModules :: [FilePath] -> Bool -> [FilePath]
+> loadGoalModules :: [(Bool,FilePath)] -> Bool -> Maybe (Goal a) -> [FilePath]
 >                 -> ErrorT IO (ModuleEnv,ModuleIdent,[ImportDecl])
-> loadGoalModules paths debug fns =
+> loadGoalModules paths debug g fns =
 >   do
->     (mEnv,ms') <- loadGoalInterfaces paths ms fns
->     let ms'' = preludeMIdent : ms'
->         ds' = [importDecl p m True [] | m <- ms'']
->         ds'' = [importDecl p m False xs | (m,xs) <- intfImports mEnv ms'']
->     return (mEnv,last ms'',ds' ++ ds'')
+>     (mEnv,ms'') <- loadGoalInterfaces paths ms fns ms'
+>     let ms''' = preludeMIdent : filter (/= preludeMIdent) ms''
+>         ms'''' = importedInterfaces (filter (`notElem` ms''') ms') mEnv
+>         ds' = [importDecl p m True [] | m <- ms''' ++ ms'''']
+>         ds'' = [importDecl p m False xs | (m,xs) <- intfImports mEnv ms''']
+>     return (mEnv,last ms''',ds' ++ ds'')
 >   where p = first ""
 >         ms = map (P p) (preludeMIdent : [debugPreludeMIdent | debug])
+>         ms' = nub (maybe id modules g [])
 >         importDecl p m q xs = ImportDecl p m q Nothing (hideUnqual q xs)
 >         hideUnqual True _ = Nothing
 >         hideUnqual False xs = Just (Hiding p xs)
@@ -267,5 +274,117 @@ showing the bindings of the goal's free variables.
 > prelUnif ty =
 >   Variable (qualType (foldr TypeArrow successType [ty,ty]))
 >            (qualifyWith preludeMIdent (mkIdent "=:="))
+
+\end{verbatim}
+Entities from all standard library modules can always be used with
+their qualified names in a goal. To avoid needlessly loading all of
+those modules, we collect the module identifiers that are actually
+used in the goal.
+\begin{verbatim}
+
+> class Modules a where
+>   modules :: a -> [ModuleIdent] -> [ModuleIdent]
+
+> instance Modules a => Modules [a] where
+>   modules xs ms = foldr modules ms xs
+
+> instance Modules (Goal a) where
+>   modules (Goal _ e ds) = modules e . modules ds
+
+> instance Modules QualTypeExpr where
+>   modules (QualTypeExpr cx ty) = modules cx . modules ty
+
+> instance Modules ClassAssert where
+>   modules (ClassAssert cls ty) = modules cls . modules ty
+
+> instance Modules TypeExpr where
+>   modules (ConstructorType c) = modules c
+>   modules (VariableType _) = id
+>   modules (TupleType tys) = modules tys
+>   modules (ListType ty) = modules ty
+>   modules (ArrowType ty1 ty2) = modules ty1 . modules ty2
+>   modules (ApplyType ty1 ty2) = modules ty1 . modules ty2
+
+> instance Modules (Decl a) where
+>   modules (InfixDecl _ _ _ _) = id
+>   modules (TypeSig _ _ ty) = modules ty
+>   modules (FunctionDecl _ _ _ eqs) = modules eqs
+>   modules (ForeignDecl _ _ _ _ ty) = modules ty
+>   modules (PatternDecl _ t rhs) = modules t . modules rhs
+>   modules (FreeDecl _ _) = id
+>   modules (TrustAnnot _ _ _) = id
+
+> instance Modules (Equation a) where
+>   modules (Equation _ lhs rhs) = modules lhs . modules rhs
+
+> instance Modules (Lhs a) where
+>   modules (FunLhs _ ts) = modules ts
+>   modules (OpLhs t1 _ t2) = modules t1 . modules t2
+>   modules (ApLhs lhs ts) = modules lhs . modules ts
+
+> instance Modules (Rhs a) where
+>   modules (SimpleRhs _ e ds) = modules e . modules ds
+>   modules (GuardedRhs es ds) = modules es . modules ds
+
+> instance Modules (CondExpr a) where
+>   modules (CondExpr _ g e) = modules g . modules e
+
+> instance Modules (ConstrTerm a) where
+>   modules (LiteralPattern _ _) = id
+>   modules (NegativePattern _ _) = id
+>   modules (VariablePattern _ _) = id
+>   modules (ConstructorPattern _ c ts) = modules c . modules ts
+>   modules (InfixPattern _ t1 op t2) = modules t1 . modules op . modules t2
+>   modules (ParenPattern t) = modules t
+>   modules (RecordPattern _ c fs) = modules c . modules fs
+>   modules (TuplePattern ts) = modules ts
+>   modules (ListPattern _ ts) = modules ts
+>   modules (AsPattern _ t) = modules t
+>   modules (LazyPattern t) = modules t
+
+> instance Modules (Expression a) where
+>   modules (Literal _ _) = id
+>   modules (Variable _ v) = modules v
+>   modules (Constructor _ c) = modules c
+>   modules (Paren e) = modules e
+>   modules (Typed e ty) = modules e . modules ty
+>   modules (Record _ c fs) = modules c . modules fs
+>   modules (RecordUpdate e fs) = modules e . modules fs
+>   modules (Tuple es) = modules es
+>   modules (List _ es) = modules es
+>   modules (ListCompr e qs) = modules e . modules qs
+>   modules (EnumFrom e) = modules e
+>   modules (EnumFromThen e1 e2) = modules e1 . modules e2
+>   modules (EnumFromTo e1 e2) = modules e1 . modules e2
+>   modules (EnumFromThenTo e1 e2 e3) = modules e1 . modules e2 . modules e3
+>   modules (UnaryMinus e) = modules e
+>   modules (Apply e1 e2) = modules e1 . modules e2
+>   modules (InfixApply e1 op e2) = modules e1 . modules op . modules e2
+>   modules (LeftSection e op) = modules e . modules op
+>   modules (RightSection op e) = modules op . modules e
+>   modules (Lambda _ ts e) = modules ts . modules e
+>   modules (Let ds e) = modules ds . modules e
+>   modules (Do sts e) = modules sts . modules e
+>   modules (IfThenElse e1 e2 e3) = modules e1 . modules e2 . modules e3
+>   modules (Case e as) = modules e . modules as
+>   modules (Fcase e as) = modules e . modules as
+
+> instance Modules a => Modules (Field a) where
+>   modules (Field _ x) = modules x
+
+> instance Modules (InfixOp a) where
+>   modules (InfixOp _ op) = modules op
+>   modules (InfixConstr _ op) = modules op
+
+> instance Modules (Statement a) where
+>   modules (StmtExpr e) = modules e
+>   modules (StmtBind _ t e) = modules t . modules e
+>   modules (StmtDecl ds) = modules ds
+
+> instance Modules (Alt a) where
+>   modules (Alt _ t e) = modules t . modules e
+
+> instance Modules QualIdent where
+>   modules = maybe id (:) . fst . splitQualIdent
 
 \end{verbatim}

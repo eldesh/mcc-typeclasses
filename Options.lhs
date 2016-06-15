@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Options.lhs 3055 2011-10-07 15:44:49Z wlux $
+% $Id: Options.lhs 3219 2016-06-15 22:19:48Z wlux $
 %
-% Copyright (c) 2001-2011, Wolfgang Lux
+% Copyright (c) 2001-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Options.lhs}
@@ -18,7 +18,7 @@ all compiler options.
 
 > data Options =
 >   Options {
->     importPath :: [FilePath],         -- directories for searching imports
+>     importPaths :: [(Bool,FilePath)], -- directories for searching imports
 >     output :: Maybe FilePath,         -- name of output file
 >     goal :: Maybe (Maybe String),     -- goal to be evaluated
 >     typeIt :: Maybe String,           -- goal to be typed
@@ -34,7 +34,7 @@ all compiler options.
 
 > defaultOptions =
 >   Options{
->     importPath = [],
+>     importPaths = [],
 >     output = Nothing,
 >     goal = Nothing,
 >     typeIt = Nothing,
@@ -90,7 +90,7 @@ library.
 
 > data Option =
 >     Help
->   | ImportPath FilePath | Output FilePath
+>   | ImportPath FilePath | LibPath FilePath | Output FilePath
 >   | Eval (Maybe String) | Type String
 >   | SplitCode | NoInterface | Debug | Trusted
 >   | CaseMode CaseMode | Warn [Warn] | Dump [Dump]
@@ -108,6 +108,8 @@ recognized by the compiler.
 >            "generate code to evaluate GOAL",
 >     Option "t" ["type"] (ReqArg Type "GOAL")
 >            "compute type of GOAL",
+>     Option "P" ["lib-dir"] (ReqArg LibPath "DIR")
+>            "search for library interfaces in DIR",
 >     Option "o" ["output"] (ReqArg Output "FILE")
 >            "write code or type to FILE",
 >     Option "" ["no-icurry"] (NoArg NoInterface)
@@ -185,7 +187,9 @@ print its usage message and terminate.
 
 > selectOption :: Option -> Options -> Options
 > selectOption (ImportPath dir) opts =
->   opts{ importPath = dir : importPath opts }
+>   opts{ importPaths = (True,dir) : importPaths opts }
+> selectOption (LibPath dir) opts =
+>   opts{ importPaths = (False,dir) : importPaths opts }
 > selectOption (Output file) opts = opts{ output = Just file }
 > selectOption (Eval goal) opts = opts{ goal = Just goal }
 > selectOption (Type goal) opts = opts{ typeIt = Just goal }

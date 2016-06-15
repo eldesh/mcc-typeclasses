@@ -3,9 +3,9 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 3211 2016-06-15 21:34:36Z wlux $
+# $Id: cyc.in 3219 2016-06-15 22:19:48Z wlux $
 #
-# Copyright (c) 2002-2013, Wolfgang Lux
+# Copyright (c) 2002-2015, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -172,11 +172,11 @@ while test $# -gt 0; do
     -P )
       arg=`quote "$2"`; shift
       ccopts="$ccopts -I$arg"; @LD_R@ldopts="$ldopts -Wl,-R$arg"
-      ldopts="$ldopts -L$arg"; imports="$imports -i $arg";;
+      ldopts="$ldopts -L$arg"; imports="$imports -P $arg";;
     -P* )
       arg=`expr X"$1" : X'-P\(.*\)'`; arg=`quote "$arg"`
       ccopts="$ccopts -I$arg"; @LD_R@ldopts="$ldopts -Wl,-R$arg"
-      ldopts="$ldopts -L$arg"; imports="$imports -i $arg";;
+      ldopts="$ldopts -L$arg"; imports="$imports -P $arg";;
     -F ) ccopts="$ccopts -F"`quote "$2"`; shift;;
     -F* ) ccopts="$ccopts "`quote "$1"`;;
 

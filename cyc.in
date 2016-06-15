@@ -3,9 +3,9 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 3059 2011-10-20 07:01:17Z wlux $
+# $Id: cyc.in 3210 2016-06-15 21:33:18Z wlux $
 #
-# Copyright (c) 2002-2011, Wolfgang Lux
+# Copyright (c) 2002-2013, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -171,12 +171,12 @@ while test $# -gt 0; do
       ccopts=$ccopts\ -I$arg; imports="$imports -i$arg";;
     -P )
       arg=`quote "$2"`; shift
-      ccopts="$ccopts -I$arg"; ldopts="$ldopts -L$arg"
-      imports="$imports -i $arg";;
+      ccopts="$ccopts -I$arg"; @LD_R@ldopts="$ldopts -R$arg"
+      ldopts="$ldopts -L$arg"; imports="$imports -i $arg";;
     -P* )
       arg=`expr X"$1" : X'-P\(.*\)'`; arg=`quote "$arg"`
-      ccopts="$ccopts -I$arg"; ldopts="$ldopts -L$arg"
-      imports="$imports -i $arg";;
+      ccopts="$ccopts -I$arg"; @LD_R@ldopts="$ldopts -R$arg"
+      ldopts="$ldopts -L$arg"; imports="$imports -i $arg";;
     -F ) ccopts="$ccopts -F"`quote "$2"`; shift;;
     -F* ) ccopts="$ccopts "`quote "$1"`;;
 
@@ -255,10 +255,11 @@ fi
 # Add all default include directories to the C compiler's flags
 ifs=$IFS
 IFS=:
-for d in $CURRY_INCLUDE_PATH; do 
+for d in $CURRY_INCLUDE_PATH; do
   ccopts="$ccopts -I"`quote "$d"`
 done
-for d in $CURRY_LIBRARY_PATH; do 
+for d in $CURRY_LIBRARY_PATH; do
+  @LD_R@ldopts="$ldopts -R"`quote "$d"`
   ldopts="$ldopts -L"`quote "$d"`
 done
 IFS=$ifs

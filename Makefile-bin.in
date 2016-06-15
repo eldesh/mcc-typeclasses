@@ -1,6 +1,6 @@
 # Makefile for the binary distribution of the Curry compiler -*- makefile -*-
 #
-# $Id: Makefile-bin.in 3208 2016-06-15 21:29:43Z wlux $
+# $Id: Makefile-bin.in 3210 2016-06-15 21:33:18Z wlux $
 #
 # Copyright (c) 2002-2013, Wolfgang Lux
 #
@@ -40,7 +40,8 @@ lib_INTF    = $(lib_SRCS:.curry=.icurry)
 lib_HDRS    = lib/*.h
 lib_LIBS    = $(lib_%LIBKIND%_LIBS)
 lib_static_LIBS = lib/*.a
-lib_shared_LIBS = lib/*.dylib
+lib_shared_LIBS = $(lib_static_LIBS) lib/*.so.[0-9]*
+lib_dylib_LIBS  = lib/*.dylib
 man1_MANS   = man/cyc.1 man/cymake.1 man/cyi.1
 
 # default target, show usage and configuration
@@ -95,6 +96,12 @@ install: $(man1_MANS)
 postinstall_static_cmds = \
 	for a in $(libdir)/curry-$(VERSION)/*.a; do $(RANLIB) $$a; done
 postinstall_shared_cmds = \
+	$(postinstall_static_cmds); \
+	for f in $(libdir)/curry-$(VERSION)/*.so.$(VERSION); do \
+		rm -f `echo $$f | sed 's/\.$(VERSION)$$//'`; \
+		ln -s `echo $$f | sed 's:.*/::'` `echo $$f | sed 's/\.$(VERSION)$$//'`; \
+	done
+postinstall_dylib_cmds = \
 	for f in $(libdir)/curry-$(VERSION)/*.$(VERSION).dylib; do \
 		install_name_tool -id $(libdir)/curry-$(VERSION)/`basename $$f` \
 			  -change "`pwd`"/lib/libcurry.$(VERSION).dylib $(libdir)/curry-$(VERSION)/libcurry.$(VERSION).dylib \

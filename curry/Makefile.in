@@ -1,6 +1,6 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 3208 2016-06-15 21:29:43Z wlux $
+# $Id: Makefile.in 3210 2016-06-15 21:33:18Z wlux $
 #
 # Copyright (c) 2004-2013, Wolfgang Lux
 # See ../LICENSE for the full license.
@@ -23,8 +23,8 @@ bindir = @bindir@
 libdir = @libdir@
 
 # configuration variables
-# set libkind to static for static libaries and to shared for dynamic
-# libraries, which are supported only on Mac OS X at present.
+# set libkind to static for static libaries, to shared for shared objects
+# on Linux and *BSD systems and to dylib for dynamic libraries on Mac OS X.
 # set stdlib/debug to yes (or stdlib/debug) to enable and to no to disable
 # building of standard and debugging libraries, resp.
 # note that the Prelude is always compiled
@@ -105,7 +105,8 @@ curry_OBJS = $(curry_INTF:.icurry=.o)
 curry_DOBJS= $(curry_INTF:.icurry=.d.o)
 curry_LIBS = $(curry_$(libkind)_LIBS)
 curry_static_LIBS = libcurry.a
-curry_shared_LIBS = libcurry.dylib libcurry.$(VERSION).dylib
+curry_shared_LIBS = $(curry_static_LIBS) libcurry.so libcurry.so.$(VERSION)
+curry_dylib_LIBS  = libcurry.dylib libcurry.$(VERSION).dylib
 
 debug_SRCS = DebugPrelude.curry
 debug_INTF = $(debug_SRCS:.curry=.icurry)
@@ -113,7 +114,8 @@ debug_CSRC = $(debug_INTF:.icurry=.c) $(curry_DCSRC)
 debug_OBJS = $(debug_INTF:.icurry=.o) $(curry_DOBJS)
 debug_LIBS = $(debug_$(libkind)_LIBS)
 debug_static_LIBS = libcurry_g.a
-debug_shared_LIBS = libcurry_g.dylib libcurry_g.$(VERSION).dylib
+debug_shared_LIBS = $(debug_static_LIBS) libcurry_g.so libcurry_g.so.$(VERSION)
+debug_dylib_LIBS  = libcurry_g.dylib libcurry_g.$(VERSION).dylib
 
 DISTFILES = Makefile.in Prelude.icurry-boot \
 	    $(curry_prelude_SRCS) $(curry_stdlib_SRCS) \
@@ -213,7 +215,21 @@ libcurry_g.a: $(debug_OBJS) $(debug_INTF) $(curry_INTF)
 		xargs $(AR) qc $@
 	$(RANLIB) $@
 
-# OS X shared libraries
+# Linux, *BSD shared objects
+libcurry.so: libcurry.so.$(VERSION)
+	rm -f $@
+	ln -s libcurry.so.$(VERSION) $@
+libcurry.so.$(VERSION): libcurry.a
+	$(CC) -shared -o $@ -Wl,-soname,$@ \
+	      -Wl,--whole-archive libcurry.a -Wl,--no-whole-archive
+libcurry_g.so: libcurry_g.so.$(VERSION)
+	rm -f $@
+	ln -s libcurry_g.so.$(VERSION) $@
+libcurry_g.so.$(VERSION): libcurry_g.a
+	$(CC) -shared -o $@ -Wl,-soname,$@ \
+	      -Wl,--whole-archive libcurry_g.a -Wl,--no-whole-archive
+
+# OS X dynamic libraries
 libcurry.dylib: libcurry.$(VERSION).dylib
 	rm -f $@
 	ln -s libcurry.$(VERSION).dylib $@
@@ -295,6 +311,12 @@ postinstcmd_static = \
 		$(RANLIB) $$a; \
 	done
 postinstcmd_shared = \
+	$(postinstcmd_static); \
+	for f in $(DESTDIR)$(libdir)/curry-$(VERSION)/*.so.$(VERSION); do \
+		rm -f `echo $$f | sed 's/\.$(VERSION)$$//'`; \
+		ln -s `echo $$f | sed 's:.*/::'` `echo $$f | sed 's/\.$(VERSION)$$//'`; \
+	done
+postinstcmd_dylib = \
 	for f in $(DESTDIR)$(libdir)/curry-$(VERSION)/*.$(VERSION).dylib; do \
 		install_name_tool -id $(libdir)/curry-$(VERSION)/`basename $$f` \
 			  -change "`pwd`"/libcurry.$(VERSION).dylib $(libdir)/curry-$(VERSION)/libcurry.$(VERSION).dylib \
@@ -314,6 +336,12 @@ bindistdir: $(BINDISTFILES)
 postbindistcmd_static = \
 	for a in $(distdir)/lib/*.a; do $(RANLIB) $$a; done
 postbindistcmd_shared = \
+	$(postbindistcmd_static); \
+	for f in $(distdir)/lib/*.so.$(VERSION); do \
+		rm -f `echo $$f | sed 's/\.$(VERSION)$$//'`; \
+		ln -s `echo $$f | sed 's:.*/::'` `echo $$f | sed 's/\.$(VERSION)$$//'`; \
+	done
+postbindistcmd_dylib = \
 	for f in $(distdir)/lib/*.$(VERSION).dylib; do \
 		install_name_tool -id `basename $$f` \
 			  -change "`pwd`"/libcurry.$(VERSION).dylib libcurry.$(VERSION).dylib \
@@ -343,6 +371,7 @@ mostlyclean:
 	rm -rf $(curry_OBJS:%.o=.%) $(debug_OBJS:%.o=.%)
 	rm -f $(curry_static_LIBS) $(debug_static_LIBS)
 	rm -f $(curry_shared_LIBS) $(debug_shared_LIBS)
+	rm -f $(curry_dylib_LIBS) $(debug_dylib_LIBS)
 	rm -f core *.core
 clean: mostlyclean
 	for f in $(curry_prelude_SRCS) $(curry_stdlib_SRCS) $(debug_SRCS); do \

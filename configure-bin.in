@@ -1,4 +1,4 @@
-dnl $Id: configure-bin.in 3209 2016-06-15 21:31:29Z wlux $
+dnl $Id: configure-bin.in 3210 2016-06-15 21:33:18Z wlux $
 dnl
 dnl Copyright (c) 2002-2013, Wolfgang Lux
 dnl
@@ -6,6 +6,9 @@ dnl
 AC_INIT([%PACKAGE_NAME% for %TARGET%],[%VERSION%],[wlux@uni-muenster.de])
 AC_PREREQ(2.50)
 AC_CONFIG_SRCDIR(lib/curry.h)
+
+dnl Configuration options
+LD_R=%LD_R%
 
 dnl Checks for programs.
 AC_PROG_CC
@@ -49,6 +52,7 @@ CURRY_CYI_SHELL
 AC_SUBST(CURRY_CFLAGS)
 AC_SUBST(INSTALL_DIR)
 AC_SUBST(HC_PATH_STYLE)
+AC_SUBST(LD_R)
 AC_SUBST_FILE(in_place_config)
 in_place_config=$srcdir/in-place-config
 

@@ -1,6 +1,6 @@
 # Makefile for the Curry compiler
 #
-# $Id: Makefile.in 3208 2016-06-15 21:29:43Z wlux $
+# $Id: Makefile.in 3210 2016-06-15 21:33:18Z wlux $
 #
 # Copyright (c) 2000-2013 Wolfgang Lux
 # See LICENSE for the full license.
@@ -447,6 +447,7 @@ bindistdir: cycc cymk newer runtime curry
 	    -e 's/%VERSION%/@PACKAGE_VERSION@/g' \
 	    -e 's/%CURRY_CFLAGS%/@CURRY_CFLAGS@/g' \
 	    -e 's/%HC_PATH_STYLE%/@HC_PATH_STYLE@/g' \
+	    -e 's/%LD_R%/@LD_R@/' \
 	    -e '/^%AC_CONFIG_COMMANDS%$$/r $(srcdir)/configure-bin-@LIBKIND@' \
 	    -e '/^%AC_CONFIG_COMMANDS%$$/d' \
 	    $(srcdir)/configure-bin.in > $(bindistdir)/configure.in

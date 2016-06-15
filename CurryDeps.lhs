@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CurryDeps.lhs 3216 2016-06-15 21:50:17Z wlux $
+% $Id: CurryDeps.lhs 3218 2016-06-15 21:52:35Z wlux $
 %
 % Copyright (c) 2002-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -228,10 +228,11 @@ where \emph{source} is a source file, \emph{interface} and
 files on which \emph{source} depends, \emph{target} is the executable,
 and \emph{object$_1$}, \dots, \emph{object$_l$} are the object files
 to be linked. The \emph{module-list} is equal to
-\texttt{-M}\emph{target} if no explicit goal has been specified on the
-commmand line and equal to \texttt{-M}\emph{module$_1$} \dots{}
-\texttt{-M}\emph{module$_m$}, where \emph{module$_1$}, \dots,
-\emph{module$_m$} are the modules of the program, otherwise. The
+\texttt{-M}\emph{module$_m$} if no explicit goal has been specified on
+the commmand line and equal to \texttt{-M}\emph{module$_1$} \dots{}
+\texttt{-M}\emph{module$_m$} otherwise, where \emph{module$_1$},
+\dots, \emph{module$_m$} are the modules of the program and
+\emph{module$_m$} in particular is the main module of the program. The
 numbers $i$ and $n$ give the index of the current command and the
 total number of commands in the build script, respectively. These
 numbers can be used to provide feedback to the user about the progress
@@ -256,7 +257,7 @@ the environment where the script is executed.
 >                 ofn = objectName debug fn
 >                 ifns = catMaybes (map interf ms)
 >         link fn = command ("link" : show n : show n : fn : ms ++ os)
->           where m0 = (undefined,Source fn undefined)
+>           where m0 = last mEnv
 >                 ms = catMaybes (map modul (maybe [m0] (const mEnv) goal))
 >                 os = reverse (map (objectName debug . fst) sources)
 >         modul (_,Source fn _) = Just ("-M" ++ fn)

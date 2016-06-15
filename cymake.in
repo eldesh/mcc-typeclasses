@@ -3,7 +3,7 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 3215 2016-06-15 21:48:35Z wlux $
+# $Id: cymake.in 3216 2016-06-15 21:50:17Z wlux $
 #
 # Copyright (c) 2002-2015, Wolfgang Lux
 # See LICENSE for the full license.
@@ -83,12 +83,7 @@ check_source ( ) {
 }
 
 remove ( ) {
-  case $f in	## Dirty trick to remove the correct executable with -o FILENAME
-    *.curry | *.lcurry | *.o ) target=;;
-    * ) target=$f;;
-  esac
   for f in "$@"; do
-    if test "$target" = "$f" && test -n "$output"; then f=$output; fi
     if test -f "$f"; then
       $echo rm -f "$f"
       $exec rm -f "$f"
@@ -109,8 +104,7 @@ compile ( ) {
 }
 
 link ( ) {
-  if test -n "$output"; then target=$output; else target=$3; fi;
-  i=$1 n=$2; shift 3; objs=`quote "$@"`
+  i=$1 n=$2 target=$3; shift 3; objs=`quote "$@"`
   if test -n "$goal"; then
     $progress $i $n linking "$target"
     goal=`quote1 "$goal"` target=`quote1 "$target"`
@@ -146,8 +140,8 @@ while test $# -gt 0; do
     -g | --debug ) mkopts="$mkopts $1"; cyopts="$cyopts $1";;
     --clean ) clean=--clean;;
     --find ) find=--find;;
-    -o ) output="$2"; shift;;
-    -o* ) output=`expr X"$1" : X'-o\(.*\)'`;;
+    -o ) mkopts="$mkopts $1 "`quote1 "$2"` output="$2"; shift;;
+    -o* ) mkopts="$mkopts "`quote1 "$1"` output=`expr X"$1" : X'-o\(.*\)'`;;
     -n ) exec=echo;;
     -###) exec=quote;;
     -v ) verbose=-v; echo=echo cyopts="$cyopts -v";;
@@ -211,7 +205,6 @@ if test -n "$depend$find"; then
     echo 1>&2 "$cymake: no targets"
     exit 1
   fi
-  test -n "$output" && mkopts="$mkopts -o "`quote1 "$output"`
   test -n "$verbose" && \
     eval echo 1>&2 "$cymk" $depend $find "$mkopts" "$imports" "$files"
   eval $exec "$cymk" $depend $find "$mkopts" "$imports" "$files"
@@ -249,11 +242,11 @@ fi
 
 
 if test $# -eq 0; then
+  test -n "$output" || output=a.out
   if test -n "$clean"; then
-    test -n "$output" || output=a.out
     remove "$output"
   else
-    link 1 1 a.out
+    link 1 1 "$output"
   fi
   exit $?
 fi
@@ -273,12 +266,12 @@ for f in "$@"; do
     g=`quote1 "$goal$typeIt"`
     test -n "$verbose" && \
       eval echo 1>&2 "$cymk" $clean "$mkopts" -e "\\\"$g\\\"" "$imports" "$f"
-    eval "$cymk" $clean "$mkopts" -e "$g" -o /tmp/cymake$$ "$imports" "$f" || \
+    eval "$cymk" $clean "$mkopts" -e "$g" "$imports" "$f" > /tmp/cymake$$ || \
       exit $?
   else
     test -n "$verbose" && \
       eval echo 1>&2 "$cymk" $clean "$mkopts" "$imports" "$f"
-    eval "$cymk" $clean "$mkopts" -o /tmp/cymake$$ "$imports" "$f" || exit $?
+    eval "$cymk" $clean "$mkopts" "$imports" "$f" > /tmp/cymake$$ || exit $?
   fi
 
   . /tmp/cymake$$

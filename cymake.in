@@ -3,9 +3,9 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 3216 2016-06-15 21:50:17Z wlux $
+# $Id: cymake.in 3217 2016-06-15 21:51:59Z wlux $
 #
-# Copyright (c) 2002-2015, Wolfgang Lux
+# Copyright (c) 2002-2016, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -242,11 +242,12 @@ fi
 
 
 if test $# -eq 0; then
-  test -n "$output" || output=a.out
+  target=$output
+  test -n "$target" || target=a.out
   if test -n "$clean"; then
-    remove "$output"
+    remove "$target"
   else
-    link 1 1 "$output"
+    link 1 1 "$target"
   fi
   exit $?
 fi

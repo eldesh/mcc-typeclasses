@@ -3,9 +3,9 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 3059 2011-10-20 07:01:17Z wlux $
+# $Id: cyi.in 3214 2016-06-15 21:47:30Z wlux $
 #
-# Copyright (c) 2002-2011, Wolfgang Lux
+# Copyright (c) 2002-2015, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -146,6 +146,26 @@ compile_target ( ) {
   fi
 }
 
+get_link_command ( ) {
+  link_command=
+  if test -n "$source"; then
+    # NB The -e _ option is necessary to force cymake into generating a link
+    #    command for the target, which includes -M options that bring the
+    #    entities of all imported interfaces into scope within the goal. The
+    #    goal expression itself is irrelevant here but must be a non-empty
+    #    string.
+    eval set dummy "`compile_target $* -e _ -### | tail -1`"; shift
+    while test $# -gt 0; do
+      case $1 in
+       -o | -e ) shift;;
+       * ) link_command="$link_command "`quote "$1"`
+      esac
+      shift
+    done
+  fi
+  echo "$link_command"
+}
+
 find_module ( ) {
   "$cymake" --find $cyopts "$1" | sed 's/^.*: //'
 }
@@ -229,21 +249,8 @@ reload ( ) {
   if test -n "$source"; then
     compile_source || return
     set_module "$source"
-    command=
+    command=`get_link_command`
     dcommand=
-    # NB The -e _ option is necessary to force cymake into generating a link
-    #    command for the target, which includes -M options that bring the
-    #    entities of all imported interfaces into scope within the goal. The
-    #    goal expression itself is irrelevant here but must be a non-empty
-    #    string.
-    eval set dummy "`compile_target -e _ -### | tail -1`"; shift
-    while test $# -gt 0; do
-      case $1 in
-	-o | -e ) shift;;
-	* ) command="$command "`quote "$1"`
-      esac
-      shift
-    done
   fi
 }
 
@@ -300,14 +307,7 @@ debug ( ) {
     if test -z "$dcommand"; then
       echo "Preparing $source for debugging; this may take some time..."
       compile_source --debug || return
-      eval set dummy "`compile_target -a --debug -### | tail -1`"; shift
-      while test $# -gt 0; do
-	case $1 in
-	  -o ) shift;;
-	  * ) dcommand="$dcommand "`quote "$1"`
-	esac
-	shift
-      done
+      dcommand=`get_link_command --debug`
     fi
   fi
   eval "${dcommand:-compile_target --debug}" -e "$qgoal" -o /tmp/cyi$$ && /tmp/cyi$$

@@ -1,4 +1,4 @@
-dnl $Id: configure.in 3210 2016-06-15 21:33:18Z wlux $
+dnl $Id: configure.in 3212 2016-06-15 21:35:41Z wlux $
 dnl
 dnl Copyright (c) 2002-2013, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -32,6 +32,7 @@ case $enable_shared in
     case $target_os in
       darwin* ) LIBKIND=dylib LD_R="# ";;
       linux* | freebsd* | netbsdelf* | openbsd* ) LIBKIND=shared LD_R=;;
+      solaris* ) CFLAGS="$CFLAGS -fPIC" LIBKIND=shared LD_R=;;
       * ) # ignore request for enable_shared on all other platforms
         AC_MSG_WARN([--enable-shared ignored on this platform])
         enable_shared= LD_R="# "
@@ -39,6 +40,32 @@ case $enable_shared in
     esac;
 esac
 if test "$enable_shared" = yes; then LIBKIND=$LIBKIND; else LIBKIND=static; fi
+if test "$LIBKIND" = shared; then
+  # Check for linker options to extract all members of an archive when
+  # creating a shared object file. The first pair of options for the GNU
+  # linker, the second pair for the Sun OS linker. Note that the GNU options
+  # must be checked first because GNU ld accepts the Sun OS options but
+  # then simply ignores them.
+  AC_MSG_CHECKING([all extract linker options])
+  save_LDFLAGS=$LDFLAGS
+  for options in "-Wl,--whole-archive -Wl,--no-whole-archive" \
+                 "-Wl,-z,allextract -Wl,-z,defaultextract"
+  do
+    LDFLAGS="$save_LDFLAGS $options"
+    AC_LINK_IFELSE(AC_LANG_PROGRAM([],[]), [], [options=])
+    if test X"$options" != X; then break; fi    
+  done
+  if test X"$options" != X; then
+    set dummy $options
+    ALL_EXTRACT_FLAG=$2
+    DEFAULT_EXTRACT_FLAG=$3
+    AC_MSG_RESULT([$ALL_EXTRACT_FLAG and $DEFAULT_EXTRACT_FLAG])
+  else
+    AC_MSG_RESULT([unknown; disabling shared objects])
+    LIBKIND=static
+  fi
+  LDFLAGS=$save_LDFLAGS
+fi
 
 AC_ARG_ENABLE(trampoline,
  [  --enable-trampoline     use trampoline code to implement tail calls])
@@ -400,6 +427,8 @@ AC_SUBST(IOExts_lhs)
 AC_SUBST(INSTALL_DIR)
 AC_SUBST(LIBKIND)
 AC_SUBST(LD_R)
+AC_SUBST(ALL_EXTRACT_FLAG)
+AC_SUBST(DEFAULT_EXTRACT_FLAG)
 AC_SUBST(STDLIB)
 AC_SUBST(DEBUG)
 AC_SUBST(CAM2C)

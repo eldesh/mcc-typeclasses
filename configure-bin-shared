@@ -1,0 +1,5 @@
+AC_CONFIG_COMMANDS([dylibs], 
+  [for f in lib/*.$version.dylib; do
+     install_name_tool -id "`pwd`"/$f -change libcurry.$version.dylib "`pwd`"/lib/libcurry.$version.dylib $f
+   done],
+  [version=$PACKAGE_VERSION])

@@ -1,4 +1,4 @@
-dnl $Id: configure.in 3150 2014-02-12 17:58:48Z wlux $
+dnl $Id: configure.in 3208 2016-06-15 21:29:43Z wlux $
 dnl
 dnl Copyright (c) 2002-2013, Wolfgang Lux
 dnl See LICENSE for the full license.
@@ -24,6 +24,21 @@ INSTALL_DIR='${INSTALL: -c=} -d -m 755'
 
 
 dnl Check configuration options
+AC_ARG_ENABLE(shared,
+ [  --enable-shared         create dynamic library (only on Mac OS X)])
+case $enable_shared in
+  "" | no ) ;;
+  * )
+    case $target_os in
+      darwin* ) ;;
+      * ) # ignore request for enable_shared on all platforms other than OS X
+        AC_MSG_WARN([--enable-shared ignored on this platform])
+        enable_shared=
+        ;;
+    esac;
+esac
+if test "$enable_shared" = yes; then LIBKIND=shared; else LIBKIND=static; fi
+
 AC_ARG_ENABLE(trampoline,
  [  --enable-trampoline     use trampoline code to implement tail calls])
 AC_ARG_ENABLE(cheney,
@@ -42,13 +57,17 @@ case $enable_trampoline in
     if test -n "$conflict"; then
       AC_MSG_ERROR([Conflicting options specified:
 --disable-trampoline and $conflict are mutually exclusive])
+    fi
+    # non-trampoline code is incompatible with shared libraries
+    if test "$enable_shared" = yes; then
+      AC_MSG_ERROR([--enabled-shared and --disable-trampoline are incompatible])
     fi;;
   "" )
     case $enable_cheney in
       "" | no )
     	# enable trampoline when Gnu C is not used and on systems which use
     	# position independent code
-    	if test "$GCC" != "yes"; then
+    	if test "$GCC" != yes || test "$enable_shared" = yes; then
     	  enable_trampoline=yes
     	else
     	  case $target_os in
@@ -148,7 +167,9 @@ esac
 
 dnl Check for additional C compiler options
 if test "$GCC" = yes; then
-  CURRY_C_DYNAMIC_NO_PIC
+  if test "$enable_shared" != yes; then
+    CURRY_C_DYNAMIC_NO_PIC
+  fi
   CFLAGS="$CFLAGS -Wall"
   CURRY_CFLAGS="$CURRY_CFLAGS -fno-strict-aliasing"
   if test "$enable_trampoline" = no; then
@@ -376,6 +397,7 @@ AC_SUBST(HFLAGS)
 AC_SUBST(HASKELL)
 AC_SUBST(IOExts_lhs)
 AC_SUBST(INSTALL_DIR)
+AC_SUBST(LIBKIND)
 AC_SUBST(STDLIB)
 AC_SUBST(DEBUG)
 AC_SUBST(CAM2C)

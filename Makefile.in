@@ -1,6 +1,6 @@
 # Makefile for the Curry compiler
 #
-# $Id: Makefile.in 3136 2013-05-12 15:53:27Z wlux $
+# $Id: Makefile.in 3208 2016-06-15 21:29:43Z wlux $
 #
 # Copyright (c) 2000-2013 Wolfgang Lux
 # See LICENSE for the full license.
@@ -314,7 +314,7 @@ curry.pdf: newer makedoc tex
 	./makedoc pdflatex
 
 tex: FORCE
-	cd runtime; $(MAKE) tex
+	cd runtime && $(MAKE) tex
 
 makedoc: Makefile $(srcdir)/makedoc.in
 	./config.status $@
@@ -442,16 +442,18 @@ bindistdir: cycc cymk newer runtime curry
 	cp $(srcdir)/README $(srcdir)/LICENSE $(srcdir)/NEWS $(bindistdir)
 	cp $(srcdir)/aclocal.m4 $(srcdir)/install-sh $(bindistdir)
 	cp $(srcdir)/config.guess $(srcdir)/config.sub $(bindistdir)
-	sed -e 's/%PACKAGE_NAME%/@PACKAGE_NAME@/' \
-	    -e 's/%TARGET%/@target_cpu@-@target_os@/' \
-	    -e 's/%VERSION%/@PACKAGE_VERSION@/' \
-	    -e 's/%CURRY_CFLAGS%/@CURRY_CFLAGS@/' \
-	    -e 's/%HC_PATH_STYLE%/@HC_PATH_STYLE@/' \
+	sed -e 's/%PACKAGE_NAME%/@PACKAGE_NAME@/g' \
+	    -e 's/%TARGET%/@target_cpu@-@target_os@/g' \
+	    -e 's/%VERSION%/@PACKAGE_VERSION@/g' \
+	    -e 's/%CURRY_CFLAGS%/@CURRY_CFLAGS@/g' \
+	    -e 's/%HC_PATH_STYLE%/@HC_PATH_STYLE@/g' \
+	    -e '/^%AC_CONFIG_COMMANDS%$$/r $(srcdir)/configure-bin-@LIBKIND@' \
+	    -e '/^%AC_CONFIG_COMMANDS%$$/d' \
 	    $(srcdir)/configure-bin.in > $(bindistdir)/configure.in
-	cp $(srcdir)/Makefile-bin.in $(bindistdir)/Makefile.in
+	sed -e 's/%LIBKIND%/@LIBKIND@/g' $(srcdir)/Makefile-bin.in > $(bindistdir)/Makefile.in
 	cp $(srcdir)/in-place-config-bin $(bindistdir)/in-place-config
-	sed -e "s/%BUILD_DATE%/`date`/" $(srcdir)/cyc.in > $(bindistdir)/bin/cyc.in
-	sed -e "s/%BUILD_DATE%/`date`/" $(srcdir)/cymake.in > $(bindistdir)/bin/cymake.in
+	sed -e "s/%BUILD_DATE%/`date`/g" $(srcdir)/cyc.in > $(bindistdir)/bin/cyc.in
+	sed -e "s/%BUILD_DATE%/`date`/g" $(srcdir)/cymake.in > $(bindistdir)/bin/cymake.in
 	cp $(srcdir)/cyi.in $(bindistdir)/bin
 	for f in cycc cymk newer; do cp $$f $(bindistdir)/lib && strip $(bindistdir)/lib/$$f; done
 	for f in $(man_MANS); do \

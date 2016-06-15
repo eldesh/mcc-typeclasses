@@ -1,8 +1,8 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 3055 2011-10-07 15:44:49Z wlux $
+# $Id: Makefile.in 3208 2016-06-15 21:29:43Z wlux $
 #
-# Copyright (c) 2004-2011, Wolfgang Lux
+# Copyright (c) 2004-2013, Wolfgang Lux
 # See ../LICENSE for the full license.
 #
 
@@ -23,9 +23,12 @@ bindir = @bindir@
 libdir = @libdir@
 
 # configuration variables
-# set to stdlib/debug to enable and to no to disable buidling of standard
-# and debugging libraries, resp.
+# set libkind to static for static libaries and to shared for dynamic
+# libraries, which are supported only on Mac OS X at present.
+# set stdlib/debug to yes (or stdlib/debug) to enable and to no to disable
+# building of standard and debugging libraries, resp.
 # note that the Prelude is always compiled
+libkind = @LIBKIND@
 stdlib = @STDLIB@
 debug = @DEBUG@
 
@@ -33,6 +36,8 @@ debug = @DEBUG@
 CC = @CC@
 CPPFLAGS = -I../runtime -I$(top_srcdir)/runtime -I$(srcdir) @CPPFLAGS@
 CFLAGS = @CFLAGS@
+LDFLAGS = @LDFLAGS@
+LIBS = @LIBS@
 
 AR = ar
 RANLIB = @RANLIB@
@@ -98,13 +103,17 @@ curry_CSRC = $(curry_INTF:.icurry=.c)
 curry_DCSRC= $(curry_INTF:.icurry=.d.c)
 curry_OBJS = $(curry_INTF:.icurry=.o)
 curry_DOBJS= $(curry_INTF:.icurry=.d.o)
-curry_LIBS = libcurry.a
+curry_LIBS = $(curry_$(libkind)_LIBS)
+curry_static_LIBS = libcurry.a
+curry_shared_LIBS = libcurry.dylib libcurry.$(VERSION).dylib
 
 debug_SRCS = DebugPrelude.curry
 debug_INTF = $(debug_SRCS:.curry=.icurry)
 debug_CSRC = $(debug_INTF:.icurry=.c) $(curry_DCSRC)
 debug_OBJS = $(debug_INTF:.icurry=.o) $(curry_DOBJS)
-debug_LIBS = libcurry_g.a
+debug_LIBS = $(debug_$(libkind)_LIBS)
+debug_static_LIBS = libcurry_g.a
+debug_shared_LIBS = libcurry_g.dylib libcurry_g.$(VERSION).dylib
 
 DISTFILES = Makefile.in Prelude.icurry-boot \
 	    $(curry_prelude_SRCS) $(curry_stdlib_SRCS) \
@@ -204,6 +213,20 @@ libcurry_g.a: $(debug_OBJS) $(debug_INTF) $(curry_INTF)
 		xargs $(AR) qc $@
 	$(RANLIB) $@
 
+# OS X shared libraries
+libcurry.dylib: libcurry.$(VERSION).dylib
+	rm -f $@
+	ln -s libcurry.$(VERSION).dylib $@
+libcurry.$(VERSION).dylib: libcurry.a
+	$(CC) -dynamiclib -single_module -all_load -o $@ \
+	      -install_name "`pwd`"/$@ libcurry.a $(LDFLAGS) $(LIBS)
+libcurry_g.dylib: libcurry_g.$(VERSION).dylib
+	rm -f $@
+	ln -s libcurry_g.$(VERSION).dylib $@
+libcurry_g.$(VERSION).dylib: libcurry.dylib libcurry_g.a
+	$(CC) -dynamiclib -single_module -all_load -o $@ \
+	      -install_name "`pwd`"/$@ libcurry_g.a -L. -lcurry $(LDFLAGS) $(LIBS)
+
 # special rules handling mutual recursion between Prelude, Ratio, IO, and Ix
 .Prelude.icurry-boot: $(srcdir)/Prelude.icurry-boot
 	cmp -s Prelude.icurry $(srcdir)/Prelude.icurry-boot || \
@@ -265,8 +288,19 @@ install: $(curry_LIBS) $($(debug:yes=debug)_LIBS)
 	for f in $(curry_SRCS) $($(debug:yes=debug)_SRCS) $(curry_INTF) $($(debug:yes=debug)_INTF) $(curry_LIBS) $($(debug:yes=debug)_LIBS); do \
 		$(INSTALL_DATA) $$f $(DESTDIR)$(libdir)/curry-$(VERSION); \
 	done
+	$(postinstcmd_$(libkind))
+
+postinstcmd_static = \
 	for a in $(DESTDIR)$(libdir)/curry-$(VERSION)/*.a; do \
 		$(RANLIB) $$a; \
+	done
+postinstcmd_shared = \
+	for f in $(DESTDIR)$(libdir)/curry-$(VERSION)/*.$(VERSION).dylib; do \
+		install_name_tool -id $(libdir)/curry-$(VERSION)/`basename $$f` \
+			  -change "`pwd`"/libcurry.$(VERSION).dylib $(libdir)/curry-$(VERSION)/libcurry.$(VERSION).dylib \
+			  $$f; \
+		rm -f `echo $$f | sed 's/\.$(VERSION)\././'`; \
+		ln -s `echo $$f | sed 's:.*/::'` `echo $$f | sed 's/\.$(VERSION)\././'`; \
 	done
 
 # build the distributions
@@ -275,7 +309,18 @@ distdir:
 	cp $(DISTFILES_PATH) $(distdir)
 bindistdir: $(BINDISTFILES)
 	cp $(BINDISTFILES) $(distdir)/lib
+	$(postbindistcmd_$(libkind))
+
+postbindistcmd_static = \
 	for a in $(distdir)/lib/*.a; do $(RANLIB) $$a; done
+postbindistcmd_shared = \
+	for f in $(distdir)/lib/*.$(VERSION).dylib; do \
+		install_name_tool -id `basename $$f` \
+			  -change "`pwd`"/libcurry.$(VERSION).dylib libcurry.$(VERSION).dylib \
+			  $$f; \
+		rm -f `echo $$f | sed 's/\.$(VERSION)\././'`; \
+		ln -s `echo $$f | sed 's:.*/::'` `echo $$f | sed 's/\.$(VERSION)\././'`; \
+	done
 
 # automatic reconfiguration
 $(top_srcdir)/configure: $(top_srcdir)/configure.in $(top_srcdir)/aclocal.m4
@@ -296,7 +341,9 @@ mostlyclean:
 	rm -f $(curry_CSRC) $(curry_INTF) $(curry_OBJS)
 	rm -f $(debug_CSRC) $(debug_INTF) $(debug_OBJS)
 	rm -rf $(curry_OBJS:%.o=.%) $(debug_OBJS:%.o=.%)
-	rm -f $(curry_LIBS) $(debug_LIBS) core *.core
+	rm -f $(curry_static_LIBS) $(debug_static_LIBS)
+	rm -f $(curry_shared_LIBS) $(debug_shared_LIBS)
+	rm -f core *.core
 clean: mostlyclean
 	for f in $(curry_prelude_SRCS) $(curry_stdlib_SRCS) $(debug_SRCS); do \
 		if test -h $$f; then rm $$f; fi; \

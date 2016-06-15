@@ -1,8 +1,8 @@
 # Makefile for the binary distribution of the Curry compiler -*- makefile -*-
 #
-# $Id: Makefile-bin.in 2768 2009-03-26 09:10:57Z wlux $
+# $Id: Makefile-bin.in 3208 2016-06-15 21:29:43Z wlux $
 #
-# Copyright (c) 2002-2009, Wolfgang Lux
+# Copyright (c) 2002-2013, Wolfgang Lux
 #
 
 # package information
@@ -37,8 +37,10 @@ bin_SCRIPTS = bin/cyc bin/cymake bin/cyi
 lib_PROGS   = lib/cycc lib/cymk lib/newer
 lib_SRCS    = lib/*.curry
 lib_INTF    = $(lib_SRCS:.curry=.icurry)
-rts_HDRS    = lib/*.h
-rts_LIB	    = lib/*.a
+lib_HDRS    = lib/*.h
+lib_LIBS    = $(lib_%LIBKIND%_LIBS)
+lib_static_LIBS = lib/*.a
+lib_shared_LIBS = lib/*.dylib
 man1_MANS   = man/cyc.1 man/cymake.1 man/cyi.1
 
 # default target, show usage and configuration
@@ -79,15 +81,26 @@ install: $(man1_MANS)
 	for f in $(lib_PROGS); do \
 		$(INSTALL_PROGRAM) $$f $(libdir)/curry-$(VERSION) || exit $$?; \
 	done
-	for f in $(lib_SRCS) $(lib_INTF) $(rts_HDRS) $(rts_LIB); do \
+	for f in $(lib_SRCS) $(lib_INTF) $(lib_HDRS) $(lib_LIBS); do \
 		$(INSTALL_DATA) $$f $(libdir)/curry-$(VERSION) || exit $$?; \
 	done
-	for a in $(libdir)/curry-$(VERSION)/*.a; do $(RANLIB) $$a; done
+	$(postinstall_%LIBKIND%_cmds)
 	for f in $(man1_MANS); do \
 		man=`basename $$f .1`; \
 		$(INSTALL_DATA) $$f $(mandir)/man1/$$man-$(VERSION).1 && \
 		echo ".so man1/$$man-$(VERSION).1" > $(mandir)/man1/$$man.1 || \
 		exit $$?; \
+	done
+
+postinstall_static_cmds = \
+	for a in $(libdir)/curry-$(VERSION)/*.a; do $(RANLIB) $$a; done
+postinstall_shared_cmds = \
+	for f in $(libdir)/curry-$(VERSION)/*.$(VERSION).dylib; do \
+		install_name_tool -id $(libdir)/curry-$(VERSION)/`basename $$f` \
+			  -change "`pwd`"/lib/libcurry.$(VERSION).dylib $(libdir)/curry-$(VERSION)/libcurry.$(VERSION).dylib \
+			  $$f; \
+		rm -f `echo $$f | sed 's/\.$(VERSION)\././'`; \
+		ln -s `echo $$f | sed 's:.*/::'` `echo $$f | sed 's/\.$(VERSION)\././'`; \
 	done
 
 # uninstall the distribution

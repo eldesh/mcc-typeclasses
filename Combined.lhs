@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Combined.lhs 3226 2016-06-16 08:54:34Z wlux $
+% $Id: Combined.lhs 3230 2016-06-16 09:42:00Z wlux $
 %
 % Copyright (c) 1998-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -27,16 +27,12 @@ cannot define generic state and environment monad classes.
 \end{verbatim}
 \subsection{Identity monad}
 The identity monad only serves as a base monad if no other monad --
-usually either \texttt{[]} or \texttt{IO} -- can be used. It allows to
-derive the usual -- i.e. unparameterized -- state and environment
+usually either \texttt{[]} or \texttt{IO} -- can be used. It allows
+deriving the usual -- i.e. unparameterized -- state and environment
 monads.
-
-Unfortunately, we cannot define \texttt{Id} as a \texttt{newtype}
-because of a bug in the nhc compiler.
 \begin{verbatim}
 
-> -- newtype Id a = Id a
-> data Id a = Id a
+> newtype Id a = Id a
 
 > unId :: Id a -> a
 > unId (Id x) = x
@@ -155,7 +151,7 @@ A variant of the state transformer monad is the environment monad
 which is also known as (state) reader monad.
 \begin{verbatim}
 
-> data ReaderT r m a = ReaderT (r -> m a)
+> newtype ReaderT r m a = ReaderT (r -> m a)
 > type Rt r a = ReaderT r Id a
 
 > unReaderT :: ReaderT r m a -> (r -> m a)
@@ -239,7 +235,7 @@ Another useful monad defined in~\cite{LiangHudakJones95:ModInterp} is
 the error monad.
 \begin{verbatim}
 
-> data ErrorT m a = ErrorT (m (Error a))
+> newtype ErrorT m a = ErrorT (m (Error a))
 
 > unErrorT :: ErrorT m a -> m (Error a)
 > unErrorT (ErrorT m) = m

@@ -6,9 +6,9 @@
 # where latex will create curry.dvi
 #   and pdflatex will create curry.pdf
 #
-# $Id: makedoc.in 1744 2005-08-23 16:17:12Z wlux $
+# $Id: makedoc.in 3222 2016-06-16 06:40:28Z wlux $
 #
-# Copyright (c) 2005, Wolfgang Lux
+# Copyright (c) 2005-2015, Wolfgang Lux
 # See LICENSE for the full license
 #
 
@@ -48,7 +48,7 @@ cd "$srcdir" || exit $?
 # NB information in the .bbl file depends on the .aux file; therefore
 #    run LaTeX first if that file is out of date
 $NEWER curry.bbl curry.bib || {
-  $NEWER curry.aux curry.tex *.lhs runtime/*.tex || {
+  $NEWER curry.aux curry.tex *.lhs hs98/*.lhs runtime/*.tex || {
     $LATEX '\nonstopmode\input{curry}' || exit $?
     grep -e 'LaTeX Error:' curry.log >/dev/null 2>&1 && exit 1
   }

@@ -1,13 +1,13 @@
 # Specific rules for building with hbc
-# $Id: hbc.mk 2638 2008-03-13 08:07:44Z wlux $
+# $Id: hbc.mk 3222 2016-06-16 06:40:28Z wlux $
 #
-# Copyright (c) 2002-2008, Wolfgang Lux
+# Copyright (c) 2002-2015, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
 # specific definitions for hbc
 HBCMAKE = hbcmake
-HBC_HFLAGS = -f $(srcdir)/hbc.mk -I hbc -I $(HC_PATH_STYLE)
+HBC_HFLAGS = -f $(srcdir)/hbc.mk -I hbc -I hs98 -I $(HC_PATH_STYLE)
 HBCFLAGS = -H24m -noflags
 
 # programs

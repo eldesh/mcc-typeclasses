@@ -1,6 +1,6 @@
-dnl $Id: configure.in 3213 2016-06-15 21:36:58Z wlux $
+dnl $Id: configure.in 3222 2016-06-16 06:40:28Z wlux $
 dnl
-dnl Copyright (c) 2002-2013, Wolfgang Lux
+dnl Copyright (c) 2002-2015, Wolfgang Lux
 dnl See LICENSE for the full license.
 dnl
 
@@ -279,9 +279,6 @@ eof
        IOExts_lhs=ghc/IOExts.lhs],
       [CURRY_GHC_IOEXTS
        IOExts_lhs=])
-    case "$HASKELL" in
-      hs2010 ) HFLAGS="$HFLAGS -ihs2010"
-    esac
     ;;
   hbc* )
     hc=hbc

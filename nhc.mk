@@ -1,13 +1,13 @@
 # Specific rules for building with nhc
-# $Id: nhc.mk 2638 2008-03-13 08:07:44Z wlux $
+# $Id: nhc.mk 3222 2016-06-16 06:40:28Z wlux $
 #
-# Copyright (c) 2002-2008, Wolfgang Lux
+# Copyright (c) 2002-2015, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
 # specific definitions for nhc
 HMAKE = hmake
-NHC_HFLAGS = -nhc98 +CTS -H8M -CTS -Inhc -I$(HC_PATH_STYLE)
+NHC_HFLAGS = -nhc98 +CTS -H8M -CTS -Inhc -Ihs98 -I$(HC_PATH_STYLE)
 
 # programs
 # NB The seemingly contrived $(MAKEFLAGS:M-s:S/=/=/) substitution is used in

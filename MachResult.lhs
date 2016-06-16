@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: MachResult.lhs 3103 2012-10-21 10:50:16Z wlux $
+% $Id: MachResult.lhs 3227 2016-06-16 09:05:17Z wlux $
 %
-% Copyright (c) 1998-2012, Wolfgang Lux
+% Copyright (c) 1998-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{MachResult.lhs}
@@ -19,16 +19,22 @@ used in the answer expression.
 > module MachResult where
 > import MachTypes
 > import MachNode
+> import Applicative
 > import Char
-> import List
-> import Set
-> import Monad
-> import Error
 > import Combined
+> import Error
+> import List
+> import Monad
+> import Set
 
 > type BrowseState a = StateT [Integer] MachState a
 
 > newtype MachState a = MachState (MachStateT a)
+> instance Functor MachState where
+>   fmap = liftM
+> instance Applicative MachState where
+>   pure = return
+>   (<*>) = ap
 > instance Monad MachState where
 >   return m = MachState (return m)
 >   MachState m >>= f = MachState (m >>= \x -> let MachState m' = f x in m')

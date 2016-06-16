@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CamParser.lhs 3221 2016-06-16 06:37:55Z wlux $
+% $Id: CamParser.lhs 3224 2016-06-16 07:26:19Z wlux $
 %
 % Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -12,6 +12,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 \begin{verbatim}
 
 > module CamParser(parseModule) where
+> import Applicative
 > import Cam
 > import Position
 > import LexComb
@@ -304,25 +305,25 @@ in appendix~\ref{sec:ll-parsecomb}.
 > parseModule fn s = applyParser camModule lexer fn s
 
 > camModule :: Parser r Token Module
-> camModule = (:) <$> importDecl <*> (semi <-*> camModule `opt` [])
+> camModule = (:) <$> importDecl <*> (semi *> camModule `opt` [])
 >         <|> camDecl `sepBy` semi
 
 > camDecl :: Parser r Token Decl
 > camDecl = dataDecl <|> funcDecl
 
 > importDecl :: Parser r Token Decl
-> importDecl = ImportDecl <$-> keyword KW_import <*> checkName
+> importDecl = ImportDecl <$ keyword KW_import <*> checkName
 
 > dataDecl :: Parser r Token Decl
 > dataDecl =
->   DataDecl <$-> keyword KW_data <*> checkName <*> (nameList `opt` [])
->            <*> (equals <-*> (constrDecl `sepBy1` bar) `opt` [])
+>   DataDecl <$ keyword KW_data <*> checkName <*> (nameList `opt` [])
+>            <*> (equals *> (constrDecl `sepBy1` bar) `opt` [])
 
 > constrDecl :: Parser r Token ConstrDecl
 > constrDecl = ConstrDecl <$> vis <*> name <*> (parenList typ `opt` [])
 
 > typ, atyp :: Parser r Token Type
-> typ = atyp `chainr1` (TypeArr <$-> rightArrow)
+> typ = atyp `chainr1` (TypeArr <$ rightArrow)
 > atyp = name <**> (flip TypeApp <$> parenList typ `opt` TypeVar)
 
 > funcDecl :: Parser r Token Decl
@@ -330,72 +331,70 @@ in appendix~\ref{sec:ll-parsecomb}.
 
 > stmt :: Parser r Token Stmt
 > stmt = name <**> nameStmt
->    <|> Let <$-> keyword KW_let <*> braces (binding `sepBy1` semi)
->            <*-> keyword KW_in <*> stmt
+>    <|> Let <$ keyword KW_let <*> braces (binding `sepBy1` semi)
+>            <* keyword KW_in <*> stmt
 >    <|> astmt <\> name
 >  where nameStmt = flip Exec <$> nameList
->               <|> stmtSeq <$-> leftArrow <*> astmt <*-> checkSemi <*> stmt
+>               <|> stmtSeq <$ leftArrow <*> astmt <* checkSemi <*> stmt
 >        stmtSeq st1 st2 v = Seq (v :<- st1) st2
 
 > astmt :: Parser r Token Stmt
-> astmt = Return <$-> keyword KW_return <*> node
->     <|> Eval <$-> keyword KW_eval <*> checkName
+> astmt = Return <$ keyword KW_return <*> node
+>     <|> Eval <$ keyword KW_eval <*> checkName
 >     <|> Exec <$> name <*> nameList
->     <|> Apply <$-> keyword KW_apply <*> name <*> nameList
->     <|> CCall <$-> keyword KW_ccall <*> (Just <$> string `opt` Nothing)
+>     <|> Apply <$ keyword KW_apply <*> name <*> nameList
+>     <|> CCall <$ keyword KW_ccall <*> (Just <$> string `opt` Nothing)
 >               <*> (parens cRetType `opt` Just TypeNodePtr) <*> cCall
->     <|> flip Switch <$-> keyword KW_switch <*> checkName <*> rf
->                     <*> braces cases
->     <|> Choice <$-> keyword KW_choice <*> braces (stmt `sepBy` bar)
->     <|> leftBrace <-*> stmt <*-> rightBrace
->   where rf = Rigid <$-> keyword KW_rigid <|> Flex <$-> keyword KW_flex
+>     <|> flip Switch <$ keyword KW_switch <*> checkName <*> rf <*> braces cases
+>     <|> Choice <$ keyword KW_choice <*> braces (stmt `sepBy` bar)
+>     <|> leftBrace *> stmt <* rightBrace
+>   where rf = Rigid <$ keyword KW_rigid <|> Flex <$ keyword KW_flex
 
 > binding :: Parser r Token Bind
-> binding = Bind <$> name <*-> checkEquals <*> node
+> binding = Bind <$> name <* checkEquals <*> node
 
 > node :: Parser r Token Expr
 > node = Lit <$> literal
->    <|> Constr <$-> keyword KW_data <*> checkName <*> nameList
->    <|> Papp <$-> keyword KW_papp <*> checkName <*> nameList
->    <|> Closure <$-> keyword KW_fun <*> checkName <*> nameList
->    <|> Lazy <$-> keyword KW_lazy <*> checkName <*> nameList
->    <|> Free <$-> keyword KW_free
+>    <|> Constr <$ keyword KW_data <*> checkName <*> nameList
+>    <|> Papp <$ keyword KW_papp <*> checkName <*> nameList
+>    <|> Closure <$ keyword KW_fun <*> checkName <*> nameList
+>    <|> Lazy <$ keyword KW_lazy <*> checkName <*> nameList
+>    <|> Free <$ keyword KW_free
 >    <|> Var <$> name
 
 > cases :: Parser r Token [Case]
 > cases = return <$> switchCase defaultTag
->     <|> (:) <$> switchCase caseTag <*> (bar <-*> cases `opt` [])
->   where switchCase tag = Case <$> tag <*-> checkColon <*> stmt
+>     <|> (:) <$> switchCase caseTag <*> (bar *> cases `opt` [])
+>   where switchCase tag = Case <$> tag <* checkColon <*> stmt
 
 > literal :: Parser r Token Literal
-> literal = Char . toEnum . fromInteger <$-> keyword KW_char <*> checkInt
->       <|> Int <$-> keyword KW_int <*> checkInt
->       <|> Integer <$-> keyword KW_integer <*> checkInt
->       <|> Float <$-> keyword KW_float <*> checkFloat
+> literal = Char . toEnum . fromInteger <$ keyword KW_char <*> checkInt
+>       <|> Int <$ keyword KW_int <*> checkInt
+>       <|> Integer <$ keyword KW_integer <*> checkInt
+>       <|> Float <$ keyword KW_float <*> checkFloat
 
 > cCall :: Parser r Token CCall
 > cCall = StaticCall <$> (show <$> name) <*> parenList arg
->     <|> DynamicCall <$> parens (checkAsterisk <-*> checkName)
+>     <|> DynamicCall <$> parens (checkAsterisk *> checkName)
 >                     <*> parenList arg
->     <|> StaticAddr <$-> ampersand <*> (show <$> checkName)
+>     <|> StaticAddr <$ ampersand <*> (show <$> checkName)
 >   where arg = (,) <$> parens cArgType <*> checkName
 >           <|> (,) TypeNodePtr <$> name
 
 > cRetType :: Parser r Token CRetType
-> cRetType = Nothing <$-> keyword KW_unit <|> Just <$> cArgType
+> cRetType = Nothing <$ keyword KW_unit <|> Just <$> cArgType
 
 > cArgType :: Parser r Token CArgType
-> cArgType = TypeBool <$-> keyword KW_bool
->        <|> TypeChar <$-> keyword KW_char
->        <|> TypeInt <$-> keyword KW_int
->        <|> TypeFloat <$-> keyword KW_float
->        <|> TypePtr <$-> keyword KW_pointer
->        <|> TypeFunPtr <$-> keyword KW_fun
->        <|> TypeStablePtr <$-> keyword KW_stable
+> cArgType = TypeBool <$ keyword KW_bool
+>        <|> TypeChar <$ keyword KW_char
+>        <|> TypeInt <$ keyword KW_int
+>        <|> TypeFloat <$ keyword KW_float
+>        <|> TypePtr <$ keyword KW_pointer
+>        <|> TypeFunPtr <$ keyword KW_fun
+>        <|> TypeStablePtr <$ keyword KW_stable
 
 > vis :: Parser r Token Visibility
-> vis = Private <$-> keyword KW_private
->   <|> succeed Exported
+> vis = Private <$ keyword KW_private `opt` Exported
 
 > name, checkName :: Parser r Token Name
 > name = Name . sval <$> token Ident
@@ -423,10 +422,10 @@ in appendix~\ref{sec:ll-parsecomb}.
 
 > caseTag :: Parser r Token Tag
 > caseTag = LitCase <$> literal
->       <|> ConstrCase <$-> keyword KW_data <*> checkName <*> nameList
+>       <|> ConstrCase <$ keyword KW_data <*> checkName <*> nameList
 
 > defaultTag :: Parser r Token Tag
-> defaultTag = DefaultCase <$-> keyword KW_default
+> defaultTag = DefaultCase <$ keyword KW_default
 
 > token :: Category -> Parser r Token Attributes
 > token c = attr <$> symbol (Token c NoAttributes)
@@ -470,8 +469,8 @@ in appendix~\ref{sec:ll-parsecomb}.
 > rightBrace = token RightBrace
 
 > parens, braces :: Parser r Token a -> Parser r Token a
-> parens p = leftParen <-*> p <*-> rightParen
-> braces p = leftBrace <-*> p <*-> rightBrace
+> parens p = leftParen *> p <* rightParen
+> braces p = leftBrace *> p <* rightBrace
 >        <?> "{ expected"
 
 \end{verbatim}

@@ -1,6 +1,6 @@
 # Makefile for the Curry compiler
 #
-# $Id: Makefile.in 3223 2016-06-16 06:49:21Z wlux $
+# $Id: Makefile.in 3224 2016-06-16 07:26:19Z wlux $
 #
 # Copyright (c) 2000-2015 Wolfgang Lux
 # See LICENSE for the full license.
@@ -135,6 +135,7 @@ cycc_SRCS = \
 	Position.lhs \
 	GetOpt.hs \
 	Utils.lhs \
+	$(APPLICATIVE_LHS) \
 	$(PATHUTILS_LHS) \
 	$(IOEXTS_LHS) \
 	$(cycc_$(HASKELL)_SRCS)
@@ -165,6 +166,7 @@ cymk_SRCS = \
 	Position.lhs \
 	GetOpt.hs \
 	Utils.lhs \
+	$(APPLICATIVE_LHS) \
 	$(PATHUTILS_LHS) \
 	$(cymk_$(HASKELL)_SRCS)
 cymk_hs2010_SRCS = hs2010/Char.hs hs2010/Directory.hs hs2010/IO.hs \
@@ -204,6 +206,7 @@ cam2c_SRCS = \
 	Set.lhs \
 	Position.lhs \
 	Utils.lhs \
+	$(APPLICATIVE_LHS) \
 	$(PATHUTILS_LHS) \
 	$(cam2c_$(HASKELL)_SRCS)
 cam2c_hs2010_SRCS = hs2010/Char.hs hs2010/Directory.hs hs2010/IO.hs \
@@ -237,6 +240,7 @@ mach_SRCS = \
 	Map.lhs \
 	Set.lhs \
 	Utils.lhs \
+	$(APPLICATIVE_LHS) \
 	$(IOEXTS_LHS) \
 	$(mach_$(HASKELL)_SRCS)
 mach_hs2010_SRCS = hs2010/Char.hs hs2010/IO.hs hs2010/List.hs \
@@ -244,6 +248,9 @@ mach_hs2010_SRCS = hs2010/Char.hs hs2010/IO.hs hs2010/List.hs \
 mach_XXX  = $(mach_SRCS:.hs=.hi)
 mach_INTF = $(mach_XXX:.lhs=.hi)
 mach_OBJS = $(mach_INTF:.hi=.o)
+
+APPLICATIVE_LHS = $(HASKELL)/Applicative.lhs
+APPLICATIVE_SRCS = hs98/Applicative.lhs hs2010/Applicative.lhs
 
 PATHUTILS_LHS = $(HC_PATH_STYLE)/PathUtils.lhs
 PATHUTILS_SRCS = unix/PathUtils.lhs windows/PathUtils.lhs

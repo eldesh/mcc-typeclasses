@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: LLParseComb.lhs 3221 2016-06-16 06:37:55Z wlux $
+% $Id: LLParseComb.lhs 3224 2016-06-16 07:26:19Z wlux $
 %
 % Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -21,23 +21,23 @@ string in this case.
 \begin{verbatim}
 
 > module LLParseComb(Symbol(..),Parser,
->                    applyParser,prefixParser, position,succeed,symbol,
->                    (<?>),(<|>),(<|?>),(<*>),(<\>),(<\\>),
->                    opt,(<$>),(<$->),(<*->),(<-*>),(<**>),(<?*>),(<**?>),(<.>),
->                    many,many1, sepBy,sepBy1, chainr,chainr1,chainl,chainl1,
+>                    applyParser,prefixParser, position,symbol,
+>                    (<?>),(<|?>),(<\>),(<\\>), opt,(<?*>),(<**?>),(<.>),
+>                    sepBy,sepBy1, chainr,chainr1,chainl,chainl1,
 >                    bracket,ops, layoutOn,layoutOff,layoutEnd) where
 > import Prelude hiding(lex)
-> import Position
-> import Set
+> import Applicative
+> import Error
+> import LexComb
 > import Map
 > import Maybe
 > import Monad
-> import Error
-> import LexComb
+> import Position
+> import Set
 
 > infixl 5 <\>, <\\>
-> infixl 4 <*>, <$>, <$->, <*->, <-*>, <**>, <?*>, <**?>, <.>
-> infixl 3 <|>, <|?>
+> infixl 4 <?*>, <**?>, <.>
+> infixl 3 <|?>
 > infixl 2 <?>, `opt`
 
 \end{verbatim}
@@ -60,6 +60,17 @@ string in this case.
 >   showsPrec p (Parser e ps) = showParen (p >= 10) $                      -- $
 >     showString "Parser " . shows (isJust e) .
 >     showChar ' ' . shows (domainFM ps)
+
+> instance Symbol s => Functor (Parser r s) where
+>   fmap f p = pure f <*> p
+
+> instance Symbol s => Applicative (Parser r s) where
+>   pure = succeed
+>   (<*>) = seqP
+
+> instance Symbol s => Alternative (Parser r s) where
+>   empty = succeed (error "Empty parse")
+>   (<|>) = alt
 
 > applyParser :: Symbol s => Parser r s r -> Lexer r s -> FilePath -> String
 >             -> Error r
@@ -107,8 +118,8 @@ string in this case.
 > p <?> msg = p <|> Parser (Just pfail) zeroFM
 >   where pfail _ fail pos _ = fail pos msg
 
-> (<|>) :: Symbol s => Parser r s a -> Parser r s a -> Parser r s a
-> Parser e1 ps1 <|> Parser e2 ps2
+> alt :: Symbol s => Parser r s a -> Parser r s a -> Parser r s a
+> alt (Parser e1 ps1) (Parser e2 ps2)
 >   | isJust e1 && isJust e2 = error "Ambiguous parser for empty word"
 >   | not (nullSet common) = error ("Ambiguous parser for " ++ show common)
 >   | otherwise = Parser (e1 `mplus` e2) (insertIntoFM ps1 ps2)
@@ -153,11 +164,11 @@ and report an ambiguous parse error if both succeed.
 >               | otherwise -> p1
 >             LT -> p2
 
-> (<*>) :: Symbol s => Parser r s (a -> b) -> Parser r s a -> Parser r s b
-> Parser (Just p1) ps1 <*> ~p2@(Parser e2 ps2) =
+> seqP :: Symbol s => Parser r s (a -> b) -> Parser r s a -> Parser r s b
+> seqP (Parser (Just p1) ps1) ~p2@(Parser e2 ps2) =
 >   Parser (fmap (seqEE p1) e2)
 >          (insertIntoFM (fmap (flip seqPP p2) ps1) (fmap (seqEP p1) ps2))
-> Parser Nothing ps1 <*> p2 = Parser Nothing (fmap (flip seqPP p2) ps1)
+> seqP (Parser Nothing ps1) p2 = Parser Nothing (fmap (flip seqPP p2) ps1)
 
 > seqEE :: Symbol s => ParseFun r s (a -> b) -> ParseFun r s a
 >       -> ParseFun r s b
@@ -194,22 +205,7 @@ paper, but were taken from the implementation found on the web.
 \begin{verbatim}
 
 > opt :: Symbol s => Parser r s a -> a -> Parser r s a
-> p `opt` x = p <|> succeed x
-
-> (<$>) :: Symbol s => (a -> b) -> Parser r s a -> Parser r s b
-> f <$> p = succeed f <*> p
-
-> (<$->) :: Symbol s => a -> Parser r s b -> Parser r s a
-> f <$-> p = const f <$> p {-$-}
-
-> (<*->) :: Symbol s => Parser r s a -> Parser r s b -> Parser r s a
-> p <*-> q = const <$> p <*> q {-$-}
-
-> (<-*>) :: Symbol s => Parser r s a -> Parser r s b -> Parser r s b
-> p <-*> q = const id <$> p <*> q {-$-}
-
-> (<**>) :: Symbol s => Parser r s a -> Parser r s (a -> b) -> Parser r s b
-> p <**> q = flip ($) <$> p <*> q
+> p `opt` x = p <|> pure x
 
 > (<?*>) :: Symbol s => Parser r s (a -> a) -> Parser r s a -> Parser r s a
 > p <?*> q = (p `opt` id) <*> q
@@ -221,27 +217,11 @@ paper, but were taken from the implementation found on the web.
 >       -> Parser r s (a -> c)
 > p <.> q = p <**> ((.) <$> q)
 
-> many :: Symbol s => Parser r s a -> Parser r s [a]
-> many p = many1 p `opt` []
-
-> many1 :: Symbol s => Parser r s a -> Parser r s [a]
-> -- many1 p = (:) <$> p <*> many p
-> many1 p = (:) <$> p <*> (many1 p `opt` [])
-
-\end{verbatim}
-The first definition of \texttt{many1} is commented out because it
-does not compile under nhc. This is due to a -- known -- bug in the
-type checker of nhc which expects a default declaration when compiling
-mutually recursive functions with class constraints. However, no such
-default can be given in the above case because neither of the types
-involved is a numeric type.
-\begin{verbatim}
-
 > sepBy :: Symbol s => Parser r s a -> Parser r s b -> Parser r s [a]
 > p `sepBy` q = p `sepBy1` q `opt` []
 
 > sepBy1 :: Symbol s => Parser r s a -> Parser r s b -> Parser r s [a]
-> p `sepBy1` q = (:) <$> p <*> many (q <-*> p) {-$-}
+> p `sepBy1` q = (:) <$> p <*> many (q *> p) {-$-}
 
 > chainr :: Symbol s => Parser r s a -> Parser r s (a -> a -> a) -> a
 >        -> Parser r s a
@@ -264,12 +244,12 @@ involved is a numeric type.
 
 > bracket :: Symbol s => Parser r s a -> Parser r s b -> Parser r s a
 >         -> Parser r s b
-> bracket open p close = open <-*> p <*-> close
+> bracket open p close = open *> p <* close
 
 > ops :: Symbol s => [(s,a)] -> Parser r s a
 > ops [] = error "internal error: ops"
-> ops [(s,x)] = x <$-> symbol s
-> ops ((s,x):rest) = x <$-> symbol s <|> ops rest
+> ops [(s,x)] = x <$ symbol s
+> ops ((s,x):rest) = x <$ symbol s <|> ops rest
 
 \end{verbatim}
 \paragraph{Layout combinators}

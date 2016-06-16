@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Combined.lhs 1912 2006-05-03 14:53:33Z wlux $
+% $Id: Combined.lhs 3226 2016-06-16 08:54:34Z wlux $
 %
-% Copyright (c) 1998-2003, Wolfgang Lux
+% Copyright (c) 1998-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Combined.lhs}
@@ -18,6 +18,7 @@ cannot define generic state and environment monad classes.
 \begin{verbatim}
 
 > module Combined where
+> import Applicative
 > import Error
 > import Monad
 > import IO
@@ -43,6 +44,10 @@ because of a bug in the nhc compiler.
 > instance Functor Id where
 >   fmap f (Id x) = Id (f x)
 
+> instance Applicative Id where
+>   pure x = Id x
+>   Id f <*> Id x = Id (f x)
+
 > instance Monad Id where
 >   return x = Id x
 >   Id x >>= k = k x
@@ -67,14 +72,22 @@ unparameterized version is defined by using the identity monad
 > instance Functor f => Functor (StateT s f) where
 >   fmap f (StateT st) = StateT (fmap (\(x,s') -> (f x,s')) . st)
 
+> instance (Functor m,Monad m) => Applicative (StateT s m) where
+>   pure = return
+>   (<*>) = ap
+
 > instance Monad m => Monad (StateT s m) where
 >   return x = StateT (\s -> return (x,s))
 >   StateT st >>= f = StateT (\s -> st s >>= \(x,s') -> unStateT (f x) s')
 >   fail msg = StateT (const (fail msg))
 
+> instance (Alternative m,Monad m) => Alternative (StateT s m) where
+>   empty = StateT (const empty)
+>   StateT st1 <|> StateT st2 = StateT (\s -> st1 s <|> st2 s)
+
 > instance MonadPlus m => MonadPlus (StateT s m) where
 >   mzero = StateT (const mzero)
->   StateT st `mplus` StateT st' = StateT (\s -> st s `mplus` st' s)
+>   StateT st1 `mplus` StateT st2 = StateT (\s -> st1 s `mplus` st2 s)
 
 > liftSt :: Monad m => m a -> StateT s m a
 > liftSt m = StateT (\s -> m >>= \x -> return (x,s))
@@ -151,10 +164,18 @@ which is also known as (state) reader monad.
 > instance Functor f => Functor (ReaderT r f) where
 >   fmap f (ReaderT rt) = ReaderT (fmap f . rt)
 
+> instance Applicative f => Applicative (ReaderT r f) where
+>   pure x = ReaderT (\_ -> pure x)
+>   ReaderT rt1 <*> ReaderT rt2 = ReaderT (\r -> rt1 r <*> rt2 r)
+
 > instance Monad m => Monad (ReaderT r m) where
 >   return x = ReaderT (\_ -> return x)
 >   ReaderT rt >>= f = ReaderT (\r -> rt r >>= \x -> unReaderT (f x) r)
 >   fail msg = ReaderT (const (fail msg))
+
+> instance Alternative f => Alternative (ReaderT r f) where
+>   empty = ReaderT (\_ -> empty)
+>   ReaderT rt <|> ReaderT rt' = ReaderT (\r -> rt r <|> rt' r)
 
 > instance MonadPlus m => MonadPlus (ReaderT r m) where
 >   mzero = ReaderT (\_ -> mzero)
@@ -226,6 +247,10 @@ the error monad.
 > instance Functor f => Functor (ErrorT f) where
 >   fmap f (ErrorT m) = ErrorT (fmap (fmap f) m)
 
+> instance Applicative f => Applicative (ErrorT f) where
+>   pure = ErrorT . pure . pure
+>   ErrorT m1 <*> ErrorT m2 = ErrorT ((<*>) <$> m1 <*> m2)
+
 > instance Monad m => Monad (ErrorT m) where
 >   return = ErrorT . return . return
 >   fail = ErrorT . return . fail
@@ -233,9 +258,13 @@ the error monad.
 >     where k (Ok x) = unErrorT (f x)
 >           k (Errors msgs) = return (Errors msgs)
 
+> instance Alternative f => Alternative (ErrorT f) where
+>   empty = ErrorT empty
+>   ErrorT m1 <|> ErrorT m2 = ErrorT (m1 <|> m2)
+
 > instance MonadPlus m => MonadPlus (ErrorT m) where
 >   mzero = ErrorT mzero
->   ErrorT m `mplus` ErrorT m' = ErrorT (m `mplus` m')
+>   ErrorT m1 `mplus` ErrorT m2 = ErrorT (m1 `mplus` m2)
 
 > liftErr :: Monad m => m a -> ErrorT m a
 > liftErr = ErrorT . liftM Ok

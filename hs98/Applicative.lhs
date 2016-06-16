@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id$
+% $Id: Applicative.lhs 3229 2016-06-16 09:08:31Z wlux $
 %
 % Copyright (c) 2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -50,6 +50,9 @@ library implementation.
 
 > liftA3 :: Applicative f => (a -> b -> c -> d) -> f a -> f b -> f c -> f d
 > liftA3 f a b c = f <$> a <*> b <*> c
+
+> sequenceA :: Applicative f => [f a] -> f [a]
+> sequenceA = foldr (liftA2 (:)) (pure [])
 
 \end{verbatim}
 As shown in the paper, an \texttt{Applicative} instance can be defined

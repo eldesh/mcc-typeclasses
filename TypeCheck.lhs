@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3225 2016-06-16 08:40:29Z wlux $
+% $Id: TypeCheck.lhs 3229 2016-06-16 09:08:31Z wlux $
 %
 % Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -29,7 +29,7 @@ variable is used.
 \begin{verbatim}
 
 > module TypeCheck(typeCheck,typeCheckGoal) where
-> import Applicative()
+> import Applicative hiding(empty)
 > import Base
 > import Combined
 > import Curry

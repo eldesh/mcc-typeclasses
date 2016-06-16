@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: SplitModule.lhs 3056 2011-10-07 16:27:03Z wlux $
+% $Id: SplitModule.lhs 3228 2016-06-16 09:06:44Z wlux $
 %
-% Copyright (c) 2011, Wolfgang Lux
+% Copyright (c) 2011-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{SplitModule.lhs}
@@ -62,7 +62,8 @@ compilation unit as their wrappers.
 >   concat [map (mkDataModule m is) cs | not debug] ++
 >   zipWith (mkModule m is) (tail xss) dss
 >   where (cs,fs) = partition isDataDecl (filter (not . null . defs) ds)
->         dss = foldr (addGroup es . join) [] (scc defd used (map group fs))
+>         dss =
+>           foldr (addGroup es . joinGroups) [] (scc defd used (map group fs))
 >         xss = scanr (++) [] (map used dss ++ [es])
 >         group d = Group{ defd = defs d, used = funs d, decls = [d] }
 >         isDataDecl (DataDecl _ _ _) = True
@@ -92,8 +93,8 @@ compilation unit as their wrappers.
 > Group xs1 ys1 ds1 +++ ~(Group xs2 ys2 ds2) =
 >   Group (xs1 ++ xs2) (ys1 ++ ys2) (ds1 ++ ds2)
 
-> join :: [Group a] -> Group a
-> join ds = foldr (+++) Group{ defd=[], used=[], decls=[] } ds
+> joinGroups :: [Group a] -> Group a
+> joinGroups ds = foldr (+++) Group{ defd=[], used=[], decls=[] } ds
 
 \end{verbatim}
 The following functions compute the lists of defined values and used

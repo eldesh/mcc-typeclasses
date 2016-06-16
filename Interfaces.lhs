@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Interfaces.lhs 3220 2016-06-15 22:32:30Z wlux $
+% $Id: Interfaces.lhs 3225 2016-06-16 08:40:29Z wlux $
 %
 % Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -14,6 +14,7 @@ goal.
 >                   loadInterfaces,loadGoalInterfaces,
 >                   importModuleIdents,importModules,
 >                   qualifyEnv1,qualifyEnv2,updateInterface) where
+> import Applicative()
 > import Base
 > import Combined
 > import Curry
@@ -73,7 +74,7 @@ reexported by the imported modules.
 >                -> ErrorT IO ModuleEnv
 > loadInterfaces paths m ms =
 >   do
->     okM $ sequenceE_ [errorAt p (cyclicImport m) | P p m' <- ms, m == m']
+>     okM $ sequenceA_ [errorAt p (cyclicImport m) | P p m' <- ms, m == m']
 >     mEnv <- foldM (loadInterface True paths) emptyEnv ms
 >     okM $ checkInterfaces mEnv
 >     return (sanitizeInterfaces m mEnv)
@@ -176,7 +177,7 @@ with their original definitions where the latter are available.
 \begin{verbatim}
 
 > checkInterfaces :: ModuleEnv -> Error ()
-> checkInterfaces mEnv = mapE_ checkInterface is
+> checkInterfaces mEnv = mapA_ checkInterface is
 >   where (ms,is) = unzip (envToList mEnv)
 >         (pEnv,tcEnv,iEnv,tyEnv) = foldl (importInterfaceIntf ms) initEnvs is
 >         checkInterface (Interface m _ ds) =

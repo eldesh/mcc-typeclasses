@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: SyntaxCheck.lhs 3056 2011-10-07 16:27:03Z wlux $
+% $Id: SyntaxCheck.lhs 3225 2016-06-16 08:40:29Z wlux $
 %
-% Copyright (c) 1999-2011, Wolfgang Lux
+% Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{SyntaxCheck.lhs}
@@ -17,6 +17,7 @@ definition.
 \begin{verbatim}
 
 > module SyntaxCheck(syntaxCheck,syntaxCheckGoal) where
+> import Applicative
 > import Base
 > import Char
 > import Curry
@@ -171,10 +172,10 @@ declarations are passed to \texttt{checkMethodDecls}.
 >               -> VarEnv -> [TopDecl a] -> Error (VarEnv,[TopDecl a])
 > checkTopDecls m tEnv cs ls env ds =
 >   do
->     ds' <- liftE joinTopEquations (mapE (disambTopDecl env) ds)
+>     ds' <- liftA joinTopEquations (mapA (disambTopDecl env) ds)
 >     env'' <- checkDeclVars (bindFunc m) xs (concatMap mthds ds') env'
 >                            [d | BlockDecl d <- ds']
->     ds'' <- mapE (checkTopDecl tEnv env'' ops) ds'
+>     ds'' <- mapA (checkTopDecl tEnv env'' ops) ds'
 >     return (env'',ds'')
 >   where ops = [P p op | BlockDecl (InfixDecl p _ _ ops) <- ds, op <- ops]
 >         env' = foldr (bindLabel m) env ls
@@ -190,7 +191,7 @@ declarations are passed to \texttt{checkMethodDecls}.
 > disambTopDecl _ (InstanceDecl p cx cls ty ds) =
 >   return (InstanceDecl p cx cls ty ds)
 > disambTopDecl _ (DefaultDecl p tys) = return (DefaultDecl p tys)
-> disambTopDecl env (BlockDecl d) = liftE BlockDecl (disambBlockDecl env d)
+> disambTopDecl env (BlockDecl d) = liftA BlockDecl (disambBlockDecl env d)
 
 > disambBlockDecl :: VarEnv -> Decl a -> Error (Decl a)
 > disambBlockDecl _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
@@ -237,19 +238,19 @@ declarations are passed to \texttt{checkMethodDecls}.
 > checkTopDecl :: TypeEnv -> VarEnv -> [P Ident] -> TopDecl a
 >                 -> Error (TopDecl a)
 > checkTopDecl _ _ _ (DataDecl p cx tc tvs cs clss) =
->   mapE_ checkDeclLabels cs >> return (DataDecl p cx tc tvs cs clss)
+>   mapA_ checkDeclLabels cs >> return (DataDecl p cx tc tvs cs clss)
 > checkTopDecl _ _ _ (NewtypeDecl p cx tc tvs nc clss) =
 >   return (NewtypeDecl p cx tc tvs nc clss)
 > checkTopDecl _ _ _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
 > checkTopDecl _ env ops (ClassDecl p cx cls tv ds) =
->   liftE (ClassDecl p cx cls tv)
+>   liftA (ClassDecl p cx cls tv)
 >         (checkMethodDecls env (qualify cls) (filter (`elem` fs) ops) fs ds)
 >   where fs = mthds (ClassDecl p cx cls tv ds)
 > checkTopDecl tEnv env _ (InstanceDecl p cx cls ty ds) =
->   liftE (InstanceDecl p cx cls ty) (checkMethodDecls env cls [] fs ds)
+>   liftA (InstanceDecl p cx cls ty) (checkMethodDecls env cls [] fs ds)
 >   where fs = map (P p) (classMthds cls tEnv)
 > checkTopDecl _ _ _ (DefaultDecl p tys) = return (DefaultDecl p tys)
-> checkTopDecl _ env _ (BlockDecl d) = liftE BlockDecl (checkDecl env d)
+> checkTopDecl _ env _ (BlockDecl d) = liftA BlockDecl (checkDecl env d)
 
 \end{verbatim}
 The compiler checks field labels in data type declarations twice
@@ -267,7 +268,7 @@ declaration.
 > checkDeclLabels (ConstrDecl _ _ _ _ _) = return ()
 > checkDeclLabels (ConOpDecl _ _ _ _ _ _) = return ()
 > checkDeclLabels (RecordDecl p evs cx c fs) =
->   mapE_ (errorAt p . duplicateLabel "declaration" . fst)
+>   mapA_ (errorAt p . duplicateLabel "declaration" . fst)
 >         (duplicates (labels (RecordDecl p evs cx c fs)))
 
 \end{verbatim}
@@ -287,7 +288,7 @@ declarations. The final environment can be discarded.
 > checkLocalDecls env ds =
 >   do
 >     env' <- checkDeclVars bindVar [] [] (nestEnv env) ds'
->     ds'' <- mapE (checkDecl env') ds'
+>     ds'' <- mapA (checkDecl env') ds'
 >     return (env',ds'')
 >   where ds' = joinEquations (map (disambDecl env) ds)
 
@@ -360,17 +361,17 @@ declarations. The final environment can be discarded.
 > checkDeclVars :: (P Ident -> VarEnv -> VarEnv) -> [P Ident] -> [P Ident]
 >               -> VarEnv -> [Decl a] -> Error VarEnv
 > checkDeclVars bindVar xs fs env ds =
->   reportDuplicates duplicatePrecedence repeatedPrecedence ops &&>
+>   reportDuplicates duplicatePrecedence repeatedPrecedence ops *>
 >   reportDuplicates duplicateDefinition repeatedDefinition
->                    (mergeBy comparePos xs (mergeBy comparePos fs bvs)) &&>
->   reportDuplicates duplicateTypeSig repeatedTypeSig tys &&>
+>                    (mergeBy comparePos xs (mergeBy comparePos fs bvs)) *>
+>   reportDuplicates duplicateTypeSig repeatedTypeSig tys *>
 >   reportDuplicates (const duplicateDefaultTrustAnnot)
 >                    (const repeatedDefaultTrustAnnot)
->                    [P p () | TrustAnnot p _ [] <- ds] &&>
->   reportDuplicates duplicateTrustAnnot repeatedTrustAnnot trs &&>
->   mapE_ (\(P p v) -> errorAt p (noBody v))
+>                    [P p () | TrustAnnot p _ [] <- ds] *>
+>   reportDuplicates duplicateTrustAnnot repeatedTrustAnnot trs *>
+>   mapA_ (\(P p v) -> errorAt p (noBody v))
 >         (filter (`notElem` xs ++ fs ++ bvs) ops ++
->          filter (`notElem` bvs) (tys ++ trs)) &&>
+>          filter (`notElem` bvs) (tys ++ trs)) *>
 >   return (foldr bindVar env (fs ++ bvs))
 >   where bvs = concatMap vars (filter isValueDecl ds)
 >         tys = concatMap vars (filter isTypeSig ds)
@@ -387,14 +388,14 @@ declarations. The final environment can be discarded.
 > checkDecl _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
 > checkDecl _ (TypeSig p fs ty) = return (TypeSig p fs ty)
 > checkDecl env (FunctionDecl p a f eqs) =
->   checkArity p f eqs &&>
->   liftE (FunctionDecl p a f) (mapE (checkEquation env) eqs)
+>   checkArity p f eqs *>
+>   liftA (FunctionDecl p a f) (mapA (checkEquation env) eqs)
 > checkDecl _ (ForeignDecl p fi a f ty) =
 >   do
 >     fi' <- checkForeign p f fi
 >     return (ForeignDecl p fi' a f ty)
 > checkDecl env (PatternDecl p t rhs) =
->   liftE2 (PatternDecl p) (checkConstrTerm p env t) (checkRhs env rhs)
+>   liftA2 (PatternDecl p) (checkConstrTerm p env t) (checkRhs env rhs)
 > checkDecl _ (FreeDecl p vs) = return (FreeDecl p vs)
 > checkDecl _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
 
@@ -431,21 +432,21 @@ report~\cite{PeytonJones03:Haskell}).
 >                  -> Error [Decl a]
 > checkMethodDecls env cls ops fs ds =
 >   do
->     ds' <- liftE joinEquations (mapE (disambBlockDecl env) ds)
+>     ds' <- liftA joinEquations (mapA (disambBlockDecl env) ds)
 >     checkMethods cls ops fs ds'
->     mapE (checkDecl env) ds'
+>     mapA (checkDecl env) ds'
 
 > checkMethods :: QualIdent -> [P Ident] -> [P Ident] -> [Decl a] -> Error ()
 > checkMethods cls ops fs ds =
->   reportDuplicates duplicatePrecedence repeatedPrecedence (ops ++ ops') &&>
->   reportDuplicates duplicateDefinition repeatedDefinition fs' &&>
+>   reportDuplicates duplicatePrecedence repeatedPrecedence (ops ++ ops') *>
+>   reportDuplicates duplicateDefinition repeatedDefinition fs' *>
 >   reportDuplicates (const duplicateDefaultTrustAnnot)
 >                    (const repeatedDefaultTrustAnnot)
->                    [P p () | TrustAnnot p _ [] <- ds] &&>
->   reportDuplicates duplicateTrustAnnot repeatedTrustAnnot trs &&>
->   mapE_ (\(P p f) -> errorAt p (undefinedMethod cls f))
->         (filter (`notElem` fs) (ops' ++ fs')) &&>
->     mapE_ (\(P p f) -> errorAt p (noBody f)) (filter (`notElem` fs') trs)
+>                    [P p () | TrustAnnot p _ [] <- ds] *>
+>   reportDuplicates duplicateTrustAnnot repeatedTrustAnnot trs *>
+>   mapA_ (\(P p f) -> errorAt p (undefinedMethod cls f))
+>         (filter (`notElem` fs) (ops' ++ fs')) *>
+>     mapA_ (\(P p f) -> errorAt p (noBody f)) (filter (`notElem` fs') trs)
 >   where fs' = [P p f | FunctionDecl p _ f _ <- ds]
 >         ops' = concatMap vars (filter isInfixDecl ds)
 >         trs = concatMap vars (filter isTrustAnnot ds)
@@ -510,11 +511,11 @@ runtime system.
 
 > checkLhsTerm :: Position -> VarEnv -> Lhs a -> Error (Lhs a)
 > checkLhsTerm p env (FunLhs f ts) =
->   liftE (FunLhs f) (mapE (checkConstrTerm p env) ts)
+>   liftA (FunLhs f) (mapA (checkConstrTerm p env) ts)
 > checkLhsTerm p env (OpLhs t1 op t2) =
->   liftE2 (flip OpLhs op) (checkConstrTerm p env t1) (checkConstrTerm p env t2)
+>   liftA2 (flip OpLhs op) (checkConstrTerm p env t1) (checkConstrTerm p env t2)
 > checkLhsTerm p env (ApLhs lhs ts) =
->   liftE2 ApLhs (checkLhsTerm p env lhs) (mapE (checkConstrTerm p env) ts)
+>   liftA2 ApLhs (checkLhsTerm p env lhs) (mapA (checkConstrTerm p env) ts)
 
 > checkArg :: Position -> VarEnv -> ConstrTerm a -> Error (VarEnv,ConstrTerm a)
 > checkArg p env t =
@@ -527,14 +528,14 @@ runtime system.
 >           -> Error (VarEnv,[ConstrTerm a])
 > checkArgs p env ts =
 >   do
->     ts' <- mapE (checkConstrTerm p env) ts
+>     ts' <- mapA (checkConstrTerm p env) ts
 >     env' <- checkBoundVars p env ts'
 >     return (env',ts')
 
 > checkBoundVars :: QuantExpr t => Position -> VarEnv -> t -> Error VarEnv
 > checkBoundVars p env ts =
 >   do
->     mapE_ (errorAt p . duplicateVariable . fst) (duplicates bvs)
+>     mapA_ (errorAt p . duplicateVariable . fst) (duplicates bvs)
 >     return (foldr (bindVar . P p) (nestEnv env) bvs)
 >   where bvs = bv ts
 
@@ -552,7 +553,7 @@ runtime system.
 >           | any isConstr rs -> errorAt p (ambiguousData rs c)
 >           | otherwise -> return (VariablePattern a (unqualify c))
 >   | otherwise =
->       liftE2 ($)
+>       liftA2 ($)
 >              (case qualLookupNestEnv c env of
 >                 [] -> errorAt p (undefinedData c)
 >                 [Constr _] -> return (ConstructorPattern a c)
@@ -560,11 +561,11 @@ runtime system.
 >                 rs
 >                   | any isConstr rs -> errorAt p (ambiguousData rs c)
 >                   | otherwise -> errorAt p (ambiguousFunction rs c))
->              (mapE (checkConstrTerm p env) ts)
+>              (mapA (checkConstrTerm p env) ts)
 > checkConstrTerm p env (FunctionPattern a f ts) =
 >   checkConstrTerm p env (ConstructorPattern a f ts)
 > checkConstrTerm p env (InfixPattern a t1 op t2) =
->   liftE3 (InfixPattern a)
+>   liftA3 (InfixPattern a)
 >          (checkConstrTerm p env t1)
 >          (case qualLookupNestEnv op' env of
 >             [] -> errorAt p (undefinedData op')
@@ -576,7 +577,7 @@ runtime system.
 >          (checkConstrTerm p env t2)
 >   where op' = opName op
 > checkConstrTerm p env (ParenPattern t) =
->   liftE ParenPattern (checkConstrTerm p env t)
+>   liftA ParenPattern (checkConstrTerm p env t)
 > checkConstrTerm p env (RecordPattern a c fs) =
 >   do
 >     fs' <-
@@ -584,18 +585,18 @@ runtime system.
 >          [Constr _] -> return ()
 >          rs
 >            | any isConstr rs -> errorAt p (ambiguousData rs c)
->            | otherwise -> errorAt p (undefinedData c)) &&>
->       mapE (checkField (checkConstrTerm p env)) fs
+>            | otherwise -> errorAt p (undefinedData c)) *>
+>       mapA (checkField (checkConstrTerm p env)) fs
 >     checkFieldLabels "pattern" p env (Just c) fs'
 >     return (RecordPattern a c fs')
 > checkConstrTerm p env (TuplePattern ts) =
->   liftE TuplePattern (mapE (checkConstrTerm p env) ts)
+>   liftA TuplePattern (mapA (checkConstrTerm p env) ts)
 > checkConstrTerm p env (ListPattern a ts) =
->   liftE (ListPattern a) (mapE (checkConstrTerm p env) ts)
+>   liftA (ListPattern a) (mapA (checkConstrTerm p env) ts)
 > checkConstrTerm p env (AsPattern v t) =
->   liftE (AsPattern v) (checkConstrTerm p env t)
+>   liftA (AsPattern v) (checkConstrTerm p env t)
 > checkConstrTerm p env (LazyPattern t) =
->   liftE LazyPattern (checkConstrTerm p env t)
+>   liftA LazyPattern (checkConstrTerm p env t)
 
 > checkRhs :: VarEnv -> Rhs a -> Error (Rhs a)
 > checkRhs env (SimpleRhs p e ds) =
@@ -606,12 +607,12 @@ runtime system.
 > checkRhs env (GuardedRhs es ds) =
 >   do
 >     (env',ds') <- checkLocalDecls env ds
->     es' <- mapE (checkCondExpr env') es
+>     es' <- mapA (checkCondExpr env') es
 >     return (GuardedRhs es' ds')
 
 > checkCondExpr :: VarEnv -> CondExpr a -> Error (CondExpr a)
 > checkCondExpr env (CondExpr p g e) =
->   liftE2 (CondExpr p) (checkExpr p env g) (checkExpr p env e)
+>   liftA2 (CondExpr p) (checkExpr p env g) (checkExpr p env e)
 
 > checkExpr :: Position -> VarEnv -> Expression a -> Error (Expression a)
 > checkExpr _ _ (Literal a l) = return (Literal a l)
@@ -624,8 +625,8 @@ runtime system.
 >         [Var _ _] -> return (Variable a v)
 >         rs -> errorAt p (ambiguousIdent rs v)
 > checkExpr p env (Constructor a c) = checkExpr p env (Variable a c)
-> checkExpr p env (Paren e) = liftE Paren (checkExpr p env e)
-> checkExpr p env (Typed e ty) = liftE (flip Typed ty) (checkExpr p env e)
+> checkExpr p env (Paren e) = liftA Paren (checkExpr p env e)
+> checkExpr p env (Typed e ty) = liftA (flip Typed ty) (checkExpr p env e)
 > checkExpr p env (Record a c fs)
 >   | null fs =
 >       case qualLookupNestEnv c env of
@@ -637,7 +638,7 @@ runtime system.
 > checkExpr p env (RecordUpdate e fs) =
 >   do
 >     (e',fs') <-
->       liftE (,) (checkExpr p env e) &&& mapE (checkField (checkExpr p env)) fs
+>       liftA (,) (checkExpr p env e) <*> mapA (checkField (checkExpr p env)) fs
 >     case e' of
 >       Constructor a c ->
 >         do
@@ -647,35 +648,35 @@ runtime system.
 >         do
 >           checkFieldLabels "update" p env Nothing fs'
 >           return (RecordUpdate e' fs')
-> checkExpr p env (Tuple es) = liftE Tuple (mapE (checkExpr p env) es)
-> checkExpr p env (List a es) = liftE (List a) (mapE (checkExpr p env) es)
+> checkExpr p env (Tuple es) = liftA Tuple (mapA (checkExpr p env) es)
+> checkExpr p env (List a es) = liftA (List a) (mapA (checkExpr p env) es)
 > checkExpr p env (ListCompr e qs) =
 >   do
 >     (env',qs') <- mapAccumM (checkStmt p) env qs
 >     e' <- checkExpr p env' e
 >     return (ListCompr e' qs')
-> checkExpr p env (EnumFrom e) = liftE EnumFrom (checkExpr p env e)
+> checkExpr p env (EnumFrom e) = liftA EnumFrom (checkExpr p env e)
 > checkExpr p env (EnumFromThen e1 e2) =
->   liftE2 EnumFromThen (checkExpr p env e1) (checkExpr p env e2)
+>   liftA2 EnumFromThen (checkExpr p env e1) (checkExpr p env e2)
 > checkExpr p env (EnumFromTo e1 e2) =
->   liftE2 EnumFromTo (checkExpr p env e1) (checkExpr p env e2)
+>   liftA2 EnumFromTo (checkExpr p env e1) (checkExpr p env e2)
 > checkExpr p env (EnumFromThenTo e1 e2 e3) =
->   liftE3 EnumFromThenTo
+>   liftA3 EnumFromThenTo
 >          (checkExpr p env e1)
 >          (checkExpr p env e2)
 >          (checkExpr p env e3)
-> checkExpr p env (UnaryMinus e) = liftE UnaryMinus (checkExpr p env e)
+> checkExpr p env (UnaryMinus e) = liftA UnaryMinus (checkExpr p env e)
 > checkExpr p env (Apply e1 e2) =
->   liftE2 Apply (checkExpr p env e1) (checkExpr p env e2)
+>   liftA2 Apply (checkExpr p env e1) (checkExpr p env e2)
 > checkExpr p env (InfixApply e1 op e2) =
->   liftE3 InfixApply
+>   liftA3 InfixApply
 >          (checkExpr p env e1)
 >          (checkOp p env op)
 >          (checkExpr p env e2)
 > checkExpr p env (LeftSection e op) =
->   liftE2 LeftSection (checkExpr p env e) (checkOp p env op)
+>   liftA2 LeftSection (checkExpr p env e) (checkOp p env op)
 > checkExpr p env (RightSection op e) =
->   liftE2 RightSection (checkOp p env op) (checkExpr p env e)
+>   liftA2 RightSection (checkOp p env op) (checkExpr p env e)
 > checkExpr _ env (Lambda p ts e) =
 >   do
 >     (env',ts') <- checkArgs p env ts
@@ -692,14 +693,14 @@ runtime system.
 >     e' <- checkExpr p env' e
 >     return (Do sts' e')
 > checkExpr p env (IfThenElse e1 e2 e3) =
->   liftE3 IfThenElse
+>   liftA3 IfThenElse
 >          (checkExpr p env e1)
 >          (checkExpr p env e2)
 >          (checkExpr p env e3)
 > checkExpr p env (Case e alts) =
->   liftE2 Case (checkExpr p env e) (mapE (checkAlt env) alts)
+>   liftA2 Case (checkExpr p env e) (mapA (checkAlt env) alts)
 > checkExpr p env (Fcase e alts) =
->   liftE2 Fcase (checkExpr p env e) (mapE (checkAlt env) alts)
+>   liftA2 Fcase (checkExpr p env e) (mapA (checkAlt env) alts)
 
 > checkStmt :: Position -> VarEnv -> Statement a -> Error (VarEnv,Statement a)
 > checkStmt p env (StmtExpr e) =
@@ -749,8 +750,8 @@ Haskell'98 report~\cite{PeytonJones03:Haskell}).
 >                  -> [Field a] -> Error ()
 > checkFieldLabels what p env c fs =
 >   do
->     mapE (checkFieldLabel p env) ls' >>= checkLabels p env c ls'
->     mapE_ (errorAt p . duplicateLabel what . fst)
+>     mapA (checkFieldLabel p env) ls' >>= checkLabels p env c ls'
+>     mapA_ (errorAt p . duplicateLabel what . fst)
 >           (duplicates (map unqualify ls))
 >   where ls = [l | Field l _ <- fs]
 >         ls' = nub ls
@@ -768,13 +769,13 @@ Haskell'98 report~\cite{PeytonJones03:Haskell}).
 > checkLabels :: Position -> VarEnv -> Maybe QualIdent -> [QualIdent]
 >             -> [[QualIdent]] -> Error ()
 > checkLabels p env (Just c) ls css =
->   mapE_ (errorAt p . noLabel c) [l | (l,cs) <- zip ls css, c' `notElem` cs]
+>   mapA_ (errorAt p . noLabel c) [l | (l,cs) <- zip ls css, c' `notElem` cs]
 >   where c' = origName (head (qualLookupNestEnv c env))
 > checkLabels p _ Nothing ls css =
 >   when (null (foldr1 intersect css)) (errorAt p (noCommonConstr ls))
 
 > checkField :: (a -> Error a) -> Field a -> Error (Field a)
-> checkField check (Field l x) = liftE (Field l) (check x)
+> checkField check (Field l x) = liftA (Field l) (check x)
 
 \end{verbatim}
 Auxiliary definitions.
@@ -892,7 +893,7 @@ Error messages.
 > reportDuplicates :: Eq a => (a -> String) -> (a -> String) -> [P a]
 >                  -> Error ()
 > reportDuplicates f1 f2 xs =
->   mapE_ (\(x,xs) -> zipWithE_ report (f1 : repeat f2) (x:xs)) (duplicates xs)
+>   mapA_ (\(x,xs) -> zipWithA_ report (f1 : repeat f2) (x:xs)) (duplicates xs)
 >   where report f (P p x) = errorAt p (f x)
 
 > undefinedVariable :: QualIdent -> String

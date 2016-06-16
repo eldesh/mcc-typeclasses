@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: IntfCheck.lhs 3012 2010-10-04 11:29:23Z wlux $
+% $Id: IntfCheck.lhs 3225 2016-06-16 08:40:29Z wlux $
 %
-% Copyright (c) 2000-2010, Wolfgang Lux
+% Copyright (c) 2000-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{IntfCheck.lhs}
@@ -55,6 +55,7 @@ error for both.
 \begin{verbatim}
 
 > module IntfCheck(intfCheck) where
+> import Applicative()
 > import Base
 > import Curry
 > import CurryUtils
@@ -71,12 +72,13 @@ error for both.
 > import Types
 > import TypeInfo
 > import TypeTrans
+> import Utils
 > import ValueInfo
 
 > intfCheck :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> ValueEnv -> [IDecl]
 >           -> Error ()
 > intfCheck m pEnv tcEnv iEnv tyEnv ds =
->   mapE_ (checkImport pEnv tcEnv iEnv tyEnv)
+>   mapA_ (checkImport pEnv tcEnv iEnv tyEnv)
 >         (filter (isNothing . localIdent m . entity) ds)
 
 > checkImport :: PEnv -> TCEnv -> InstEnv -> ValueEnv -> IDecl -> Error ()

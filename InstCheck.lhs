@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 3056 2011-10-07 16:27:03Z wlux $
+% $Id: InstCheck.lhs 3225 2016-06-16 08:40:29Z wlux $
 %
-% Copyright (c) 2006-2011, Wolfgang Lux
+% Copyright (c) 2006-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{InstCheck.lhs}
@@ -18,6 +18,7 @@ instances of class \texttt{Prelude.Num}.
 \begin{verbatim}
 
 > module InstCheck(instCheck) where
+> import Applicative hiding(empty)
 > import Base
 > import Curry
 > import CurryUtils
@@ -39,12 +40,12 @@ instances of class \texttt{Prelude.Num}.
 > instCheck :: ModuleIdent -> TCEnv -> InstEnv -> [TopDecl a] -> Error InstEnv
 > instCheck m tcEnv iEnv ds =
 >   do
->     mapE_ checkDeriving tds'
+>     mapA_ checkDeriving tds'
 >     iEnv'' <-
 >       foldM (bindDerivedInstances m tcEnv) iEnv'
 >             (sortDeriving (map (declDeriving m tcEnv) tds'))
->     mapE_ (checkInstance tcEnv iEnv'') ids  &&>
->       mapE_ (checkDefault tcEnv iEnv'') dds
+>     mapA_ (checkInstance tcEnv iEnv'') ids *>
+>       mapA_ (checkDefault tcEnv iEnv'') dds
 >     return iEnv''
 >   where (tds,ods) = partition isTypeDecl ds
 >         tds' = filter hasDerivedInstance tds
@@ -171,7 +172,7 @@ contexts for their instance declarations.
 > bindDerivedInstances m tcEnv iEnv ds =
 >   foldM (bindInitialContexts m tcEnv) iEnv ds >>=
 >   fixpoint (\iEnv' -> updateContexts iEnv' . concat)
->            (\iEnv' -> mapE (inferContexts tcEnv iEnv') ds)
+>            (\iEnv' -> mapA (inferContexts tcEnv iEnv') ds)
 >   where fixpoint f m x = m x >>= maybe (return x) (fixpoint f m) . f x
 
 > bindDerived :: ModuleIdent -> TCEnv -> Position -> QualIdent -> QualType
@@ -188,14 +189,14 @@ contexts for their instance declarations.
 
 > inferContexts :: TCEnv -> InstEnv -> Deriving -> Error [(CT,Context)]
 > inferContexts tcEnv iEnv (Deriving p tc ty tys clss) =
->   mapE (inferContext tcEnv iEnv p tc ty tys) clss
+>   mapA (inferContext tcEnv iEnv p tc ty tys) clss
 
 > inferContext :: TCEnv -> InstEnv -> Position -> QualIdent -> QualType
 >              -> [Type] -> QualIdent -> Error (CT,Context)
 > inferContext tcEnv iEnv p tc (QualType cx ty) tys cls =
 >   do
 >     cx'' <- reduceContext p what doc tcEnv iEnv cx'
->     mapE_ (reportUndecidable p what doc tcEnv) cx''
+>     mapA_ (reportUndecidable p what doc tcEnv) cx''
 >     return (CT cls' tc,sort cx'')
 >   where what = "derived instance"
 >         doc = ppInstance tcEnv (TypePred cls ty)
@@ -247,7 +248,7 @@ satisfied by \emph{cx}.
 > checkInstance tcEnv iEnv (InstanceDecl p cx cls ty ds) =
 >   do
 >     cx''' <- reduceContext p what doc tcEnv iEnv cx''
->     mapE_ (errorAt p . noInstance what doc tcEnv)
+>     mapA_ (errorAt p . noInstance what doc tcEnv)
 >           (filter (`notElem` maxContext tcEnv cx') cx''')
 >   where what = "instance declaration"
 >         doc = ppInstance tcEnv (TypePred cls ty')
@@ -263,13 +264,13 @@ respective instances must be empty.
 
 > checkDefault :: TCEnv -> InstEnv -> TopDecl a -> Error ()
 > checkDefault tcEnv iEnv (DefaultDecl p tys) =
->   mapE_ (checkDefaultType tcEnv iEnv p) tys
+>   mapA_ (checkDefaultType tcEnv iEnv p) tys
 
 > checkDefaultType :: TCEnv -> InstEnv -> Position -> TypeExpr -> Error ()
 > checkDefaultType tcEnv iEnv p ty =
 >   do
 >     cx' <- reduceContext p what empty tcEnv iEnv [TypePred qNumId ty']
->     unless (null cx') (mapE_ (errorAt p . noInstance what empty tcEnv) cx')
+>     unless (null cx') (mapA_ (errorAt p . noInstance what empty tcEnv) cx')
 >   where what = "default declaration"
 >         QualType _ ty' = expandPolyType tcEnv (QualTypeExpr [] ty)
 
@@ -286,7 +287,7 @@ implied by other predicates in the context are removed.
 >               -> Error Context
 > reduceContext p what doc tcEnv iEnv cx =
 >   do
->     mapE_ (errorAt p . noInstance what doc tcEnv) cx2
+>     mapA_ (errorAt p . noInstance what doc tcEnv) cx2
 >     return cx1
 >   where (cx1,cx2) =
 >           partitionContext (minContext tcEnv (reduceTypePreds iEnv cx))

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ImportSyntaxCheck.lhs 2724 2008-06-14 16:42:57Z wlux $
+% $Id: ImportSyntaxCheck.lhs 3225 2016-06-16 08:40:29Z wlux $
 %
-% Copyright (c) 2000-2008, Wolfgang Lux
+% Copyright (c) 2000-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ImportSyntaxCheck.lhs}
@@ -12,6 +12,7 @@ import declarations.
 \begin{verbatim}
 
 > module ImportSyntaxCheck(checkImports) where
+> import Applicative
 > import Base
 > import Curry
 > import CurryUtils
@@ -22,10 +23,11 @@ import declarations.
 > import Maybe
 > import PredefIdent
 > import TopEnv
+> import Utils
 
 > checkImports :: Interface -> Maybe ImportSpec -> Error (Maybe ImportSpec)
 > checkImports (Interface m _ ds) =
->   maybe (return Nothing) (liftE Just . expandSpecs m tEnv vEnv)
+>   maybe (return Nothing) (liftA Just . expandSpecs m tEnv vEnv)
 >   where tEnv = bindIdents tidents ds
 >         vEnv = bindIdents vidents ds
 
@@ -79,12 +81,12 @@ Prelude even if its imported entities are specified explicitly.
 > expandSpecs :: ModuleIdent -> ExpTypeEnv -> ExpFunEnv -> ImportSpec
 >             -> Error ImportSpec
 > expandSpecs m tEnv vEnv (Importing p is) =
->   liftE (Importing p . (is' ++) . concat)
->         (mapE (expandImport p m tEnv vEnv) is)
+>   liftA (Importing p . (is' ++) . concat)
+>         (mapA (expandImport p m tEnv vEnv) is)
 >   where is' = [importType t | m == preludeMIdent,
 >                               (tc,t) <- envToList tEnv, isPrimTypeId tc]
 > expandSpecs m tEnv vEnv (Hiding p is) =
->   liftE (Hiding p . concat) (mapE (expandHiding p m tEnv vEnv) is)
+>   liftA (Hiding p . concat) (mapA (expandHiding p m tEnv vEnv) is)
 
 > expandImport :: Position -> ModuleIdent -> ExpTypeEnv -> ExpFunEnv -> Import
 >              -> Error [Import]
@@ -134,7 +136,7 @@ Prelude even if its imported entities are specified explicitly.
 > expandTypeWith p m tEnv tc xs =
 >   do
 >     (isType,xs'') <- elements p m tEnv tc
->     mapE_ (errorAt p . undefinedElement isType tc)
+>     mapA_ (errorAt p . undefinedElement isType tc)
 >           (filter (`notElem` xs'') xs')
 >     return [ImportTypeWith tc xs']
 >   where xs' = nub xs

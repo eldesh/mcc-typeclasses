@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeSyntaxCheck.lhs 3056 2011-10-07 16:27:03Z wlux $
+% $Id: TypeSyntaxCheck.lhs 3225 2016-06-16 08:40:29Z wlux $
 %
-% Copyright (c) 1999-2011, Wolfgang Lux
+% Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeSyntaxCheck.lhs}
@@ -15,6 +15,7 @@ of a capitalization convention.
 \begin{verbatim}
 
 > module TypeSyntaxCheck(typeSyntaxCheck,typeSyntaxCheckGoal) where
+> import Applicative
 > import Base
 > import Curry
 > import CurryPP
@@ -27,6 +28,7 @@ of a capitalization convention.
 > import Pretty
 > import Set
 > import TopEnv
+> import Utils
 
 \end{verbatim}
 In order to check type constructor applications, the compiler
@@ -45,9 +47,9 @@ checking the optional export list of the current module.
 > typeSyntaxCheck m env iEnv ds =
 >   do
 >     reportDuplicates (const duplicateDefault) (const repeatedDefault)
->                      [P p () | DefaultDecl p _ <- ods] &&>
+>                      [P p () | DefaultDecl p _ <- ods] *>
 >       reportDuplicates duplicateType repeatedType (map tident tds)
->     ds' <- mapE (checkTopDecl env') ds
+>     ds' <- mapA (checkTopDecl env') ds
 >     checkInstances env' iEnv ds'
 >     return (env',ds')
 >   where (tds,ods) = partition isTypeDecl ds
@@ -83,16 +85,13 @@ signatures.
 >     cx' <- checkTypeLhs env p cx tvs
 >     checkClosedContext p cx' tvs
 >     cs' <-
->       liftE const (mapE (checkConstrDecl env tvs) cs) &&&
->       mapE_ (checkDClass env tvs) clss
+>       mapA (checkConstrDecl env tvs) cs <* mapA_ (checkDClass env tvs) clss
 >     return (DataDecl p cx' tc tvs cs' clss)
 > checkTopDecl env (NewtypeDecl p cx tc tvs nc clss) =
 >   do
 >     cx' <- checkTypeLhs env p cx tvs
 >     checkClosedContext p cx' tvs
->     nc' <-
->       liftE const (checkNewConstrDecl env tvs nc) &&&
->       mapE_ (checkDClass env tvs) clss
+>     nc' <- checkNewConstrDecl env tvs nc <* mapA_ (checkDClass env tvs) clss
 >     return (NewtypeDecl p cx' tc tvs nc' clss)
 > checkTopDecl env (TypeDecl p tc tvs ty) =
 >   do
@@ -104,29 +103,29 @@ signatures.
 >     cx' <- checkTypeLhs env p cx [tv]
 >     checkClosedContext p cx' [tv]
 >     ds' <-
->       mapE_ (checkSimpleConstraint "class" doc p) cx' &&>
->       mapE (checkDecl env) ds
->     sequenceE_ [checkMethodType tv p ty | TypeSig p _ ty <- ds']
+>       mapA_ (checkSimpleConstraint "class" doc p) cx' *>
+>       mapA (checkDecl env) ds
+>     sequenceA_ [checkMethodType tv p ty | TypeSig p _ ty <- ds']
 >     return (ClassDecl p cx' cls tv ds')
 >   where doc = ppIdent cls <+> ppIdent tv
 > checkTopDecl env (InstanceDecl p cx cls ty ds) =
 >   do
->     (cx',ty') <- checkClass env p [] cls &&> checkInstType env p cx ty
+>     (cx',ty') <- checkClass env p [] cls *> checkInstType env p cx ty
 >     ds' <-
->       mapE_ (checkSimpleConstraint "instance" doc p) cx' &&>
->       mapE (checkDecl env) ds
+>       mapA_ (checkSimpleConstraint "instance" doc p) cx' *>
+>       mapA (checkDecl env) ds
 >     return (InstanceDecl p cx' cls ty' ds')
 >   where doc = ppQIdent cls <+> ppTypeExpr 2 ty
 > checkTopDecl env (DefaultDecl p tys) =
->   liftE (DefaultDecl p) (mapE (checkType env p []) tys)
-> checkTopDecl env (BlockDecl d) = liftE BlockDecl (checkDecl env d)
+>   liftA (DefaultDecl p) (mapA (checkType env p []) tys)
+> checkTopDecl env (BlockDecl d) = liftA BlockDecl (checkDecl env d)
 
 > checkDClass :: TypeEnv -> [Ident] -> DClass -> Error ()
 > checkDClass env tvs (DClass p cls) = checkClass env p tvs cls
 
 > checkGoal :: TypeEnv -> Goal a -> Error (Goal a)
 > checkGoal env (Goal p e ds) =
->   liftE2 (Goal p) (checkExpr env p e) (mapE (checkDecl env) ds)
+>   liftA2 (Goal p) (checkExpr env p e) (mapA (checkDecl env) ds)
 
 \end{verbatim}
 Method type signatures have to obey a few additional restrictions.
@@ -148,22 +147,22 @@ not contain any additional constraints for that type variable
 > checkDecl :: TypeEnv -> Decl a -> Error (Decl a)
 > checkDecl _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
 > checkDecl env (TypeSig p vs ty) =
->   liftE (TypeSig p vs) (checkQualType env p ty)
+>   liftA (TypeSig p vs) (checkQualType env p ty)
 > checkDecl env (FunctionDecl p a f eqs) =
->   liftE (FunctionDecl p a f) (mapE (checkEquation env) eqs)
+>   liftA (FunctionDecl p a f) (mapA (checkEquation env) eqs)
 > checkDecl env (ForeignDecl p fi a f ty) =
->   liftE (ForeignDecl p fi a f) (checkType env p [] ty)
+>   liftA (ForeignDecl p fi a f) (checkType env p [] ty)
 > checkDecl env (PatternDecl p t rhs) =
->   liftE (PatternDecl p t) (checkRhs env rhs)
+>   liftA (PatternDecl p t) (checkRhs env rhs)
 > checkDecl _ (FreeDecl p vs) = return (FreeDecl p vs)
 > checkDecl _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
 
 > checkTypeLhs :: TypeEnv -> Position -> [ClassAssert] -> [Ident]
 >              -> Error [ClassAssert]
 > checkTypeLhs env p cx tvs =
->   mapE_ (errorAt p . nonLinear "left hand side of type declaration" . fst)
->         (duplicates (filter (anonId /=) tvs)) &&>
->   mapE (checkClassAssert env p tvs) cx
+>   mapA_ (errorAt p . nonLinear "left hand side of type declaration" . fst)
+>         (duplicates (filter (anonId /=) tvs)) *>
+>   mapA (checkClassAssert env p tvs) cx
 
 > checkSimpleConstraint :: String -> Doc -> Position -> ClassAssert -> Error ()
 > checkSimpleConstraint what doc p (ClassAssert cls ty) =
@@ -175,7 +174,7 @@ not contain any additional constraints for that type variable
 >   do
 >     cx' <- checkTypeLhs env p cx evs
 >     checkClosedContext p cx' tvs'
->     tys' <- mapE (checkClosedType env p tvs') tys
+>     tys' <- mapA (checkClosedType env p tvs') tys
 >     return (ConstrDecl p evs cx' c tys')
 >   where tvs' = evs ++ tvs
 > checkConstrDecl env tvs (ConOpDecl p evs cx ty1 op ty2) =
@@ -183,7 +182,7 @@ not contain any additional constraints for that type variable
 >     cx' <- checkTypeLhs env p cx evs
 >     checkClosedContext p cx' tvs'
 >     (ty1',ty2') <-
->       liftE (,) (checkClosedType env p tvs' ty1) &&&
+>       liftA (,) (checkClosedType env p tvs' ty1) <*>
 >       checkClosedType env p tvs' ty2
 >     return (ConOpDecl p evs cx' ty1' op ty2')
 >   where tvs' = evs ++ tvs
@@ -191,20 +190,20 @@ not contain any additional constraints for that type variable
 >   do
 >     cx' <- checkTypeLhs env p cx evs
 >     checkClosedContext p cx' tvs'
->     fs' <- mapE (checkFieldDecl env tvs') fs
+>     fs' <- mapA (checkFieldDecl env tvs') fs
 >     return (RecordDecl p evs cx' c fs')
 >   where tvs' = evs ++ tvs
 
 > checkFieldDecl :: TypeEnv -> [Ident] -> FieldDecl -> Error FieldDecl
 > checkFieldDecl env tvs (FieldDecl p ls ty) =
->   liftE (FieldDecl p ls) (checkClosedType env p tvs ty)
+>   liftA (FieldDecl p ls) (checkClosedType env p tvs ty)
 
 > checkNewConstrDecl :: TypeEnv -> [Ident] -> NewConstrDecl
 >                    -> Error NewConstrDecl
 > checkNewConstrDecl env tvs (NewConstrDecl p c ty) =
->   liftE (NewConstrDecl p c) (checkClosedType env p tvs ty)
+>   liftA (NewConstrDecl p c) (checkClosedType env p tvs ty)
 > checkNewConstrDecl env tvs (NewRecordDecl p c l ty) =
->   liftE (NewRecordDecl p c l) (checkClosedType env p tvs ty)
+>   liftA (NewRecordDecl p c l) (checkClosedType env p tvs ty)
 
 \end{verbatim}
 Checking expressions is rather straightforward. The compiler must only
@@ -214,78 +213,78 @@ declaration groups.
 
 > checkEquation :: TypeEnv -> Equation a -> Error (Equation a)
 > checkEquation env (Equation p lhs rhs) =
->   liftE (Equation p lhs) (checkRhs env rhs)
+>   liftA (Equation p lhs) (checkRhs env rhs)
 
 > checkRhs :: TypeEnv -> Rhs a -> Error (Rhs a)
 > checkRhs env (SimpleRhs p e ds) =
->   liftE2 (SimpleRhs p) (checkExpr env p e) (mapE (checkDecl env) ds)
+>   liftA2 (SimpleRhs p) (checkExpr env p e) (mapA (checkDecl env) ds)
 > checkRhs env (GuardedRhs es ds) =
->   liftE2 GuardedRhs (mapE (checkCondExpr env) es) (mapE (checkDecl env) ds)
+>   liftA2 GuardedRhs (mapA (checkCondExpr env) es) (mapA (checkDecl env) ds)
 
 > checkCondExpr :: TypeEnv -> CondExpr a -> Error (CondExpr a)
 > checkCondExpr env (CondExpr p g e) =
->   liftE2 (CondExpr p) (checkExpr env p g) (checkExpr env p e)
+>   liftA2 (CondExpr p) (checkExpr env p g) (checkExpr env p e)
 
 > checkExpr :: TypeEnv -> Position -> Expression a -> Error (Expression a)
 > checkExpr _ _ (Literal a l) = return (Literal a l)
 > checkExpr _ _ (Variable a v) = return (Variable a v)
 > checkExpr _ _ (Constructor a c) = return (Constructor a c)
-> checkExpr env p (Paren e) = liftE Paren (checkExpr env p e)
+> checkExpr env p (Paren e) = liftA Paren (checkExpr env p e)
 > checkExpr env p (Typed e ty) =
->   liftE2 Typed (checkExpr env p e) (checkQualType env p ty)
+>   liftA2 Typed (checkExpr env p e) (checkQualType env p ty)
 > checkExpr env p (Record a c fs) =
->   liftE (Record a c) (mapE (checkField env p) fs)
+>   liftA (Record a c) (mapA (checkField env p) fs)
 > checkExpr env p (RecordUpdate e fs) =
->   liftE2 RecordUpdate (checkExpr env p e) (mapE (checkField env p) fs)
-> checkExpr env p (Tuple es) = liftE Tuple (mapE (checkExpr env p) es)
-> checkExpr env p (List a es) = liftE (List a) (mapE (checkExpr env p) es)
+>   liftA2 RecordUpdate (checkExpr env p e) (mapA (checkField env p) fs)
+> checkExpr env p (Tuple es) = liftA Tuple (mapA (checkExpr env p) es)
+> checkExpr env p (List a es) = liftA (List a) (mapA (checkExpr env p) es)
 > checkExpr env p (ListCompr e qs) =
->   liftE2 ListCompr (checkExpr env p e) (mapE (checkStmt env p) qs)
-> checkExpr env p (EnumFrom e) = liftE EnumFrom (checkExpr env p e)
+>   liftA2 ListCompr (checkExpr env p e) (mapA (checkStmt env p) qs)
+> checkExpr env p (EnumFrom e) = liftA EnumFrom (checkExpr env p e)
 > checkExpr env p (EnumFromThen e1 e2) =
->   liftE2 EnumFromThen (checkExpr env p e1) (checkExpr env p e2)
+>   liftA2 EnumFromThen (checkExpr env p e1) (checkExpr env p e2)
 > checkExpr env p (EnumFromTo e1 e2) =
->   liftE2 EnumFromTo (checkExpr env p e1) (checkExpr env p e2)
+>   liftA2 EnumFromTo (checkExpr env p e1) (checkExpr env p e2)
 > checkExpr env p (EnumFromThenTo e1 e2 e3) =
->   liftE3 EnumFromThenTo
+>   liftA3 EnumFromThenTo
 >          (checkExpr env p e1)
 >          (checkExpr env p e2)
 >          (checkExpr env p e3)
-> checkExpr env p (UnaryMinus e) = liftE UnaryMinus (checkExpr env p e)
+> checkExpr env p (UnaryMinus e) = liftA UnaryMinus (checkExpr env p e)
 > checkExpr env p (Apply e1 e2) =
->   liftE2 Apply (checkExpr env p e1) (checkExpr env p e2)
+>   liftA2 Apply (checkExpr env p e1) (checkExpr env p e2)
 > checkExpr env p (InfixApply e1 op e2) =
->   liftE2 (flip InfixApply op) (checkExpr env p e1) (checkExpr env p e2)
+>   liftA2 (flip InfixApply op) (checkExpr env p e1) (checkExpr env p e2)
 > checkExpr env p (LeftSection e op) =
->   liftE (flip LeftSection op) (checkExpr env p e)
+>   liftA (flip LeftSection op) (checkExpr env p e)
 > checkExpr env p (RightSection op e) =
->   liftE (RightSection op) (checkExpr env p e)
-> checkExpr env _ (Lambda p ts e) = liftE (Lambda p ts) (checkExpr env p e)
+>   liftA (RightSection op) (checkExpr env p e)
+> checkExpr env _ (Lambda p ts e) = liftA (Lambda p ts) (checkExpr env p e)
 > checkExpr env p (Let ds e) =
->   liftE2 Let (mapE (checkDecl env) ds) (checkExpr env p e)
+>   liftA2 Let (mapA (checkDecl env) ds) (checkExpr env p e)
 > checkExpr env p (Do sts e) =
->   liftE2 Do (mapE (checkStmt env p) sts) (checkExpr env p e)
+>   liftA2 Do (mapA (checkStmt env p) sts) (checkExpr env p e)
 > checkExpr env p (IfThenElse e1 e2 e3) =
->   liftE3 IfThenElse
+>   liftA3 IfThenElse
 >          (checkExpr env p e1)
 >          (checkExpr env p e2)
 >          (checkExpr env p e3)
 > checkExpr env p (Case e alts) =
->   liftE2 Case (checkExpr env p e) (mapE (checkAlt env) alts)
+>   liftA2 Case (checkExpr env p e) (mapA (checkAlt env) alts)
 > checkExpr env p (Fcase e alts) =
->   liftE2 Fcase (checkExpr env p e) (mapE (checkAlt env) alts)
+>   liftA2 Fcase (checkExpr env p e) (mapA (checkAlt env) alts)
 
 > checkStmt :: TypeEnv -> Position -> Statement a -> Error (Statement a)
-> checkStmt env p (StmtExpr e) = liftE StmtExpr (checkExpr env p e)
-> checkStmt env _ (StmtBind p t e) = liftE (StmtBind p t) (checkExpr env p e)
-> checkStmt env _ (StmtDecl ds) = liftE StmtDecl (mapE (checkDecl env) ds)
+> checkStmt env p (StmtExpr e) = liftA StmtExpr (checkExpr env p e)
+> checkStmt env _ (StmtBind p t e) = liftA (StmtBind p t) (checkExpr env p e)
+> checkStmt env _ (StmtDecl ds) = liftA StmtDecl (mapA (checkDecl env) ds)
 
 > checkAlt :: TypeEnv -> Alt a -> Error (Alt a)
-> checkAlt env (Alt p t rhs) = liftE (Alt p t) (checkRhs env rhs)
+> checkAlt env (Alt p t rhs) = liftA (Alt p t) (checkRhs env rhs)
 
 > checkField :: TypeEnv -> Position -> Field (Expression a)
 >            -> Error (Field (Expression a))
-> checkField env p (Field l e) = liftE (Field l) (checkExpr env p e)
+> checkField env p (Field l e) = liftA (Field l) (checkExpr env p e)
 
 \end{verbatim}
 The parser cannot distinguish unqualified nullary type constructors
@@ -301,7 +300,7 @@ with the same name.
 > checkClosedType env p tvs ty =
 >   do
 >     ty' <- checkType env p tvs ty
->     mapE_ (errorAt p . unboundVariable)
+>     mapA_ (errorAt p . unboundVariable)
 >           (nub (filter (\tv -> tv == anonId || tv `notElem` tvs) (fv ty')))
 >     return ty'
 
@@ -319,7 +318,7 @@ with the same name.
 > checkQualType env p (QualTypeExpr cx ty) =
 >   do
 >     (cx',ty') <-
->       liftE (,) (mapE (checkClassAssert env p []) cx) &&&
+>       liftA (,) (mapA (checkClassAssert env p []) cx) <*>
 >       checkType env p [] ty
 >     checkClosedContext p cx' (fv ty')
 >     return (QualTypeExpr cx' ty')
@@ -328,7 +327,7 @@ with the same name.
 >                  -> Error ClassAssert
 > checkClassAssert env p tvs (ClassAssert cls ty) =
 >   do
->     ty' <- checkClass env p tvs cls &&> checkType env p tvs ty
+>     ty' <- checkClass env p tvs cls *> checkType env p tvs ty
 >     unless (isVariableType (root ty'))
 >            (errorAt p (invalidConstraint (ClassAssert cls ty')))
 >     return (ClassAssert cls ty')
@@ -337,7 +336,7 @@ with the same name.
 
 > checkClosedContext :: Position -> [ClassAssert] -> [Ident] -> Error ()
 > checkClosedContext p cx tvs =
->   mapE_ (errorAt p . unboundVariable) (nub (filter (`notElem` tvs) (fv cx)))
+>   mapA_ (errorAt p . unboundVariable) (nub (filter (`notElem` tvs) (fv cx)))
 
 > checkType :: TypeEnv -> Position -> [Ident] -> TypeExpr -> Error TypeExpr
 > checkType env p tvs (ConstructorType tc)
@@ -355,13 +354,13 @@ with the same name.
 >   | tv `elem` anonId:tvs = return (VariableType tv)
 >   | otherwise = checkType env p tvs (ConstructorType (qualify tv))
 > checkType env p tvs (TupleType tys) =
->   liftE TupleType (mapE (checkType env p tvs) tys)
+>   liftA TupleType (mapA (checkType env p tvs) tys)
 > checkType env p tvs (ListType ty) =
->   liftE ListType (checkType env p tvs ty)
+>   liftA ListType (checkType env p tvs ty)
 > checkType env p tvs (ArrowType ty1 ty2) =
->   liftE2 ArrowType (checkType env p tvs ty1) (checkType env p tvs ty2)
+>   liftA2 ArrowType (checkType env p tvs ty1) (checkType env p tvs ty2)
 > checkType env p tvs (ApplyType ty1 ty2) =
->   liftE2 ApplyType (checkType env p tvs ty1) (checkType env p tvs ty2)
+>   liftA2 ApplyType (checkType env p tvs ty1) (checkType env p tvs ty2)
 
 > checkClass :: TypeEnv -> Position -> [Ident] -> QualIdent -> Error ()
 > checkClass env p tvs cls
@@ -384,8 +383,8 @@ conflicts between locally defined instances and imported instances.
 > checkInstances :: TypeEnv -> InstSet -> [TopDecl a] -> Error ()
 > checkInstances tEnv iEnv ds =
 >   do
->     sequenceE_ [errorAt p (duplicateInstance (unqualCT tEnv inst))
->                | P p inst <- unique cts, inst `elemSet` iEnv] &&>
+>     sequenceA_ [errorAt p (duplicateInstance (unqualCT tEnv inst))
+>                | P p inst <- unique cts, inst `elemSet` iEnv] *>
 >       reportDuplicates (duplicateInstance . unqualCT tEnv)
 >                        (repeatedInstance . unqualCT tEnv) cts
 >     return ()
@@ -448,7 +447,7 @@ Error messages.
 > reportDuplicates :: Eq a => (a -> String) -> (a -> String) -> [P a]
 >                  -> Error ()
 > reportDuplicates f1 f2 xs =
->   mapE_ (\(x,xs) -> zipWithE_ report (f1 : repeat f2) (x:xs)) (duplicates xs)
+>   mapA_ (\(x,xs) -> zipWithA_ report (f1 : repeat f2) (x:xs)) (duplicates xs)
 >   where report f (P p x) = errorAt p (f x)
 
 > undefinedType :: QualIdent -> String

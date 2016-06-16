@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ExportSyntaxCheck.lhs 2898 2009-08-24 09:40:09Z wlux $
+% $Id: ExportSyntaxCheck.lhs 3225 2016-06-16 08:40:29Z wlux $
 %
-% Copyright (c) 2000-2009, Wolfgang Lux
+% Copyright (c) 2000-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ExportSyntaxCheck.lhs}
@@ -14,6 +14,7 @@ entities.
 \begin{verbatim}
 
 > module ExportSyntaxCheck(checkExports) where
+> import Applicative
 > import Base
 > import Curry
 > import Error
@@ -24,22 +25,23 @@ entities.
 > import PredefIdent
 > import Set
 > import TopEnv
+> import Utils
 
 > checkExports :: ModuleIdent -> [ImportDecl] -> TypeEnv -> FunEnv
 >              -> Maybe ExportSpec -> Error ExportSpec
 > checkExports m is tEnv fEnv es =
 >   do
 >     es' <-
->       liftE (nubExports . canonExports tEnv) (expandSpecs ms m tEnv fEnv es)
+>       liftA (nubExports . canonExports tEnv) (expandSpecs ms m tEnv fEnv es)
 >     checkInterface es'
 >     return es'
 >   where ms = fromListSet [fromMaybe m asM | ImportDecl _ m _ asM _ <- is]
 
 > checkInterface :: ExportSpec -> Error ()
 > checkInterface (Exporting p es) =
->   mapE_ (errorAt p . ambiguousExport . fst)
->         (duplicates [unqualify tc | ExportTypeWith tc _ <- es]) &&>
->   mapE_ (errorAt p . ambiguousExport . fst)
+>   mapA_ (errorAt p . ambiguousExport . fst)
+>         (duplicates [unqualify tc | ExportTypeWith tc _ <- es]) *>
+>   mapA_ (errorAt p . ambiguousExport . fst)
 >         (duplicates ([x | ExportTypeWith _ xs <- es, x <- xs] ++
 >                      [unqualify f | Export f <- es]))
 
@@ -71,8 +73,8 @@ exported by any module other than the Prelude.
 > expandSpecs :: Set ModuleIdent -> ModuleIdent -> TypeEnv -> FunEnv
 >             -> Maybe ExportSpec -> Error ExportSpec
 > expandSpecs ms m tEnv fEnv (Just (Exporting p es)) =
->   liftE (Exporting p . (es' ++) . concat)
->         (mapE (expandExport p (addToSet m ms) tEnv fEnv) es)
+>   liftA (Exporting p . (es' ++) . concat)
+>         (mapA (expandExport p (addToSet m ms) tEnv fEnv) es)
 >   where es' = [exportType t | m == preludeMIdent,
 >                               (tc,t) <- localBindings tEnv, isPrimTypeId tc]
 > expandSpecs _ _ tEnv fEnv Nothing =
@@ -112,7 +114,7 @@ exported by any module other than the Prelude.
 > expandTypeWith p tEnv tc xs =
 >   do
 >     (isType,tc',xs'') <- elements p tEnv tc
->     mapE_ (errorAt p . undefinedElement isType tc)
+>     mapA_ (errorAt p . undefinedElement isType tc)
 >           (filter (`notElem` xs'') xs')
 >     return [ExportTypeWith tc' xs']
 >   where xs' = nub xs

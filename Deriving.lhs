@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Deriving.lhs 2968 2010-06-24 14:39:50Z wlux $
+% $Id: Deriving.lhs 3225 2016-06-16 08:40:29Z wlux $
 %
-% Copyright (c) 2006-2010, Wolfgang Lux
+% Copyright (c) 2006-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Deriving.lhs}
@@ -10,6 +10,7 @@ This module implements the code generating derived instance declarations.
 \begin{verbatim}
 
 > module Deriving(derive) where
+> import Applicative
 > import Base
 > import Curry
 > import Env
@@ -28,14 +29,14 @@ This module implements the code generating derived instance declarations.
 > derive :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> [TopDecl ()]
 >         -> Error [TopDecl ()]
 > derive m pEnv tcEnv iEnv ds =
->   liftE concat (mapE (deriveInstances m pEnv tcEnv iEnv) ds)
+>   liftA concat (mapA (deriveInstances m pEnv tcEnv iEnv) ds)
 
 > deriveInstances :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> TopDecl ()
 >                 -> Error [TopDecl ()]
 > deriveInstances m pEnv tcEnv iEnv (DataDecl _ _ tc tvs cs clss) =
->   mapE (deriveInstance m pEnv tcEnv iEnv tc tvs cs) clss
+>   mapA (deriveInstance m pEnv tcEnv iEnv tc tvs cs) clss
 > deriveInstances m pEnv tcEnv iEnv (NewtypeDecl _ _ tc tvs nc clss) =
->   mapE (deriveInstance m pEnv tcEnv iEnv tc tvs [constrDecl nc]) clss
+>   mapA (deriveInstance m pEnv tcEnv iEnv tc tvs [constrDecl nc]) clss
 >   where constrDecl (NewConstrDecl p c ty) = ConstrDecl p [] [] c [ty]
 >         constrDecl (NewRecordDecl p c l ty) =
 >           RecordDecl p [] [] c [FieldDecl p [l] ty]
@@ -52,7 +53,7 @@ derived.
 > deriveInstance :: ModuleIdent -> PEnv -> TCEnv -> InstEnv -> Ident -> [Ident]
 >                -> [ConstrDecl] -> DClass -> Error (TopDecl ())
 > deriveInstance m pEnv tcEnv iEnv tc tvs cs (DClass p cls) =
->   liftE (InstanceDecl p cx' cls ty' . trustAll p)
+>   liftA (InstanceDecl p cx' cls ty' . trustAll p)
 >         (deriveMethods pEnv tcEnv p (map constr cs) cls)
 >   where cx = snd3 (fromJust (lookupEnv (CT cls' tc') iEnv))
 >         ty = foldl TypeApply (TypeConstructor tc') tvs'

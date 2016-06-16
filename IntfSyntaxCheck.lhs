@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: IntfSyntaxCheck.lhs 2900 2009-08-24 13:03:24Z wlux $
+% $Id: IntfSyntaxCheck.lhs 3225 2016-06-16 08:40:29Z wlux $
 %
-% Copyright (c) 2000-2009, Wolfgang Lux
+% Copyright (c) 2000-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{IntfSyntaxCheck.lhs}
@@ -20,6 +20,7 @@ reference to the global environments.
 \begin{verbatim}
 
 > module IntfSyntaxCheck(intfSyntaxCheck) where
+> import Applicative
 > import Base
 > import Curry
 > import CurryPP
@@ -31,6 +32,7 @@ reference to the global environments.
 > import Pretty
 > import PredefIdent
 > import TopEnv
+> import Utils
 
 \end{verbatim}
 The compiler requires information about the arity of each defined type
@@ -40,7 +42,7 @@ The latter must not occur in type expressions in interfaces.
 \begin{verbatim}
 
 > intfSyntaxCheck :: [IDecl] -> Error [IDecl]
-> intfSyntaxCheck ds = mapE (checkIDecl env) ds
+> intfSyntaxCheck ds = mapA (checkIDecl env) ds
 >   where env = foldr bindType initTEnv (concatMap tidents (map unhide ds))
 >         bindType t = qualBindTopEnv (origName t) t
 
@@ -59,7 +61,7 @@ during syntax checking of type expressions.
 >   do
 >     cx' <- checkTypeLhs env p cx tvs
 >     checkClosedContext p cx' tvs
->     cs' <- mapE (checkConstrDecl env tvs) cs
+>     cs' <- mapA (checkConstrDecl env tvs) cs
 >     checkHiding True p tc (map constr cs ++ nub (concatMap labels cs)) xs
 >     return (IDataDecl p cx' tc k tvs cs' xs)
 > checkIDecl env (INewtypeDecl p cx tc k tvs nc xs) =
@@ -78,7 +80,7 @@ during syntax checking of type expressions.
 >   do
 >     cx' <- checkTypeLhs env p cx [tv]
 >     checkClosedContext p cx' [tv]
->     mapE_ (checkSimpleConstraint "class" doc p) cx'
+>     mapA_ (checkSimpleConstraint "class" doc p) cx'
 >     return (HidingClassDecl p cx' cls k tv)
 >   where doc = ppQIdent cls <+> ppIdent tv
 > checkIDecl env (IClassDecl p cx cls k tv ds fs') =
@@ -86,29 +88,29 @@ during syntax checking of type expressions.
 >     cx' <- checkTypeLhs env p cx [tv]
 >     checkClosedContext p cx' [tv]
 >     ds' <-
->       mapE_ (checkSimpleConstraint "class" doc p) cx' &&>
->       mapE (checkIMethodDecl env tv) ds
+>       mapA_ (checkSimpleConstraint "class" doc p) cx' *>
+>       mapA (checkIMethodDecl env tv) ds
 >     checkHiding False p cls (map imethod ds) fs'
 >     return (IClassDecl p cx' cls k tv ds' fs')
 >   where doc = ppQIdent cls <+> ppIdent tv
 > checkIDecl env (IInstanceDecl p cx cls ty m fs) =
 >   do
->     (cx',ty') <- checkClass env p [] cls &&> checkInstType env p cx ty
->     mapE_ (checkSimpleConstraint "instance" doc p) cx &&>
->       mapE_ (errorAt p . multipleArity . fst) (duplicates (map fst fs))
+>     (cx',ty') <- checkClass env p [] cls *> checkInstType env p cx ty
+>     mapA_ (checkSimpleConstraint "instance" doc p) cx *>
+>       mapA_ (errorAt p . multipleArity . fst) (duplicates (map fst fs))
 >     return (IInstanceDecl p cx' cls ty' m fs)
 >   where doc = ppQIdent cls <+> ppTypeExpr 2 ty
 > checkIDecl env (IFunctionDecl p f n ty) =
->   maybe (return ()) (checkArity p) n &&>
->   liftE (IFunctionDecl p f n) (checkQualType env p ty)
+>   maybe (return ()) (checkArity p) n *>
+>   liftA (IFunctionDecl p f n) (checkQualType env p ty)
 >   where checkArity p n =
 >           unless (n < toInteger (maxBound::Int)) (errorAt p (arityTooBig n))
 
 > checkTypeLhs :: TypeEnv -> Position -> [ClassAssert] -> [Ident]
 >              -> Error [ClassAssert]
 > checkTypeLhs env p cx tvs =
->   mapE_ (errorAt p . nonLinear . fst) (duplicates tvs) &&>
->   mapE (checkClassAssert env p tvs) cx
+>   mapA_ (errorAt p . nonLinear . fst) (duplicates tvs) *>
+>   mapA (checkClassAssert env p tvs) cx
 
 > checkSimpleConstraint :: String -> Doc -> Position -> ClassAssert -> Error ()
 > checkSimpleConstraint what doc p (ClassAssert cls ty) =
@@ -120,7 +122,7 @@ during syntax checking of type expressions.
 >   do
 >     cx' <- checkTypeLhs env p cx evs
 >     checkClosedContext p cx' tvs'
->     tys' <- mapE (checkClosedType env p tvs') tys
+>     tys' <- mapA (checkClosedType env p tvs') tys
 >     return (ConstrDecl p evs cx' c tys')
 >   where tvs' = evs ++ tvs
 > checkConstrDecl env tvs (ConOpDecl p evs cx ty1 op ty2) =
@@ -128,7 +130,7 @@ during syntax checking of type expressions.
 >     cx' <- checkTypeLhs env p cx evs
 >     checkClosedContext p cx' tvs'
 >     (ty1',ty2') <-
->       liftE (,) (checkClosedType env p tvs' ty1) &&&
+>       liftA (,) (checkClosedType env p tvs' ty1) <*>
 >       checkClosedType env p tvs' ty2
 >     return (ConOpDecl p evs cx' ty1' op ty2')
 >   where tvs' = evs ++ tvs
@@ -136,20 +138,20 @@ during syntax checking of type expressions.
 >   do
 >     cx' <- checkTypeLhs env p cx evs
 >     checkClosedContext p cx' tvs'
->     fs' <- mapE (checkFieldDecl env tvs') fs
+>     fs' <- mapA (checkFieldDecl env tvs') fs
 >     return (RecordDecl p evs cx' c fs')
 >   where tvs' = evs ++ tvs
 
 > checkFieldDecl :: TypeEnv -> [Ident] -> FieldDecl -> Error FieldDecl
 > checkFieldDecl env tvs (FieldDecl p ls ty) =
->   liftE (FieldDecl p ls) (checkClosedType env p tvs ty)
+>   liftA (FieldDecl p ls) (checkClosedType env p tvs ty)
 
 > checkNewConstrDecl :: TypeEnv -> [Ident] -> NewConstrDecl
 >                    -> Error NewConstrDecl
 > checkNewConstrDecl env tvs (NewConstrDecl p c ty) =
->   liftE (NewConstrDecl p c) (checkClosedType env p tvs ty)
+>   liftA (NewConstrDecl p c) (checkClosedType env p tvs ty)
 > checkNewConstrDecl env tvs (NewRecordDecl p c l ty) =
->   liftE (NewRecordDecl p c l) (checkClosedType env p tvs ty)
+>   liftA (NewRecordDecl p c l) (checkClosedType env p tvs ty)
 
 > checkIMethodDecl :: TypeEnv -> Ident -> IMethodDecl -> Error IMethodDecl
 > checkIMethodDecl env tv (IMethodDecl p f n ty) =
@@ -167,7 +169,7 @@ during syntax checking of type expressions.
 > checkClosedType env p tvs ty =
 >   do
 >     ty' <- checkType env p tvs ty
->     mapE_ (errorAt p . unboundVariable)
+>     mapA_ (errorAt p . unboundVariable)
 >           (nub (filter (`notElem` tvs) (fv ty')))
 >     return ty'
 
@@ -185,7 +187,7 @@ during syntax checking of type expressions.
 > checkQualType env p (QualTypeExpr cx ty) =
 >   do
 >     (cx',ty') <-
->       liftE (,) (mapE (checkClassAssert env p []) cx) &&&
+>       liftA (,) (mapA (checkClassAssert env p []) cx) <*>
 >       checkType env p [] ty
 >     checkClosedContext p cx' (fv ty')
 >     return (QualTypeExpr cx' ty')
@@ -194,7 +196,7 @@ during syntax checking of type expressions.
 >                  -> Error ClassAssert
 > checkClassAssert env p tvs (ClassAssert cls ty) =
 >   do
->     ty' <- checkClass env p tvs cls &&> checkType env p tvs ty
+>     ty' <- checkClass env p tvs cls *> checkType env p tvs ty
 >     unless (isVariableType (root ty'))
 >            (errorAt p (invalidConstraint (ClassAssert cls ty')))
 >     return (ClassAssert cls ty')
@@ -203,7 +205,7 @@ during syntax checking of type expressions.
 
 > checkClosedContext :: Position -> [ClassAssert] -> [Ident] -> Error ()
 > checkClosedContext p cx tvs =
->   mapE_ (errorAt p . unboundVariable) (nub (filter (`notElem` tvs) (fv cx)))
+>   mapA_ (errorAt p . unboundVariable) (nub (filter (`notElem` tvs) (fv cx)))
 
 > checkType :: TypeEnv -> Position -> [Ident] -> TypeExpr -> Error TypeExpr
 > checkType env p tvs (ConstructorType tc)
@@ -223,12 +225,12 @@ during syntax checking of type expressions.
 >   | tv `elem` tvs = return (VariableType tv)
 >   | otherwise = checkType env p tvs (ConstructorType (qualify tv))
 > checkType env p tvs (TupleType tys) =
->   liftE TupleType (mapE (checkType env p tvs) tys)
-> checkType env p tvs (ListType ty) = liftE ListType (checkType env p tvs ty)
+>   liftA TupleType (mapA (checkType env p tvs) tys)
+> checkType env p tvs (ListType ty) = liftA ListType (checkType env p tvs ty)
 > checkType env p tvs (ArrowType ty1 ty2) =
->   liftE2 ArrowType (checkType env p tvs ty1) (checkType env p tvs ty2)
+>   liftA2 ArrowType (checkType env p tvs ty1) (checkType env p tvs ty2)
 > checkType env p tvs (ApplyType ty1 ty2) =
->   liftE2 ApplyType (checkType env p tvs ty1) (checkType env p tvs ty2)
+>   liftA2 ApplyType (checkType env p tvs ty1) (checkType env p tvs ty2)
 
 > checkClass :: TypeEnv -> Position -> [Ident] -> QualIdent -> Error ()
 > checkClass env p tvs cls
@@ -243,7 +245,7 @@ during syntax checking of type expressions.
 
 > checkHiding :: Bool -> Position -> QualIdent -> [Ident] -> [Ident] -> Error ()
 > checkHiding isType p tc xs xs' =
->   mapE_ (errorAt p . noElement isType tc) (nub (filter (`notElem` xs) xs'))
+>   mapA_ (errorAt p . noElement isType tc) (nub (filter (`notElem` xs) xs'))
 
 \end{verbatim}
 \ToDo{Much of the above code could be shared with module

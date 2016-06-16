@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Utils.lhs 3136 2013-05-12 15:53:27Z wlux $
+% $Id: Utils.lhs 3225 2016-06-16 08:40:29Z wlux $
 %
-% Copyright (c) 2001-2013, Wolfgang Lux
+% Copyright (c) 2001-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Utils.lhs}
@@ -12,6 +12,7 @@ commonly used in the compiler, but not implemented in the Haskell
 \begin{verbatim}
 
 > module Utils where
+> import Applicative
 > import IO
 > infixr 5 ++!
 
@@ -107,6 +108,30 @@ The function \texttt{mapAccumM} is a generalization of
 >     (s',y) <- f s x
 >     (s'',ys) <- mapAccumM f s' xs
 >     return (s'',y:ys)
+
+\end{verbatim}
+\paragraph{Applicative variants of mapM and related functions}
+We also introduce \texttt{Applicative} variants of the standard
+\texttt{sequence}, \texttt{mapM}, and \texttt{zipWithM} functions.
+\begin{verbatim}
+
+> sequenceA :: Applicative f => [f a] -> f [a]
+> sequenceA = foldr (liftA2 (:)) (pure [])
+
+> sequenceA_ :: Applicative f => [f a] -> f ()
+> sequenceA_ = foldr (*>) (pure ())
+
+> mapA :: Applicative f => (a -> f b) -> [a] -> f [b]
+> mapA f xs = sequenceA (map f xs)
+
+> mapA_ :: Applicative f => (a -> f b) -> [a] -> f ()
+> mapA_ f xs = sequenceA_ (map f xs)
+
+> zipWithA :: Applicative f => (a -> b -> f c) -> [a] -> [b] -> f [c]
+> zipWithA f xs ys = sequenceA (zipWith f xs ys)
+
+> zipWithA_ :: Applicative f => (a -> b -> f c) -> [a] -> [b] -> f ()
+> zipWithA_ f xs ys = sequenceA_ (zipWith f xs ys)
 
 \end{verbatim}
 \paragraph{IO functions}

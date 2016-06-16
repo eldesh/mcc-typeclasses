@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3130 2013-04-13 17:03:51Z wlux $
+% $Id: TypeCheck.lhs 3225 2016-06-16 08:40:29Z wlux $
 %
-% Copyright (c) 1999-2013, Wolfgang Lux
+% Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeCheck.lhs}
@@ -29,6 +29,7 @@ variable is used.
 \begin{verbatim}
 
 > module TypeCheck(typeCheck,typeCheckGoal) where
+> import Applicative()
 > import Base
 > import Combined
 > import Curry
@@ -83,7 +84,7 @@ current module to the type environment.
 > typeCheck :: ModuleIdent -> TCEnv -> InstEnv -> ValueEnv -> [TopDecl a]
 >           -> Error (ValueEnv,[TopDecl QualType])
 > typeCheck m tcEnv iEnv tyEnv ds =
->   sequenceE [tcDataDecl tcEnv tvs cs | DataDecl _ _ _ tvs cs _ <- tds] >>
+>   sequenceA [tcDataDecl tcEnv tvs cs | DataDecl _ _ _ tvs cs _ <- tds] >>
 >   run (do
 >          mapM_ (defaultTypes tcEnv) (filter isDefaultDecl tds)
 >          (tyEnv'',cx,vds') <- tcDecls m tcEnv tyEnv' [d | BlockDecl d <- vds]
@@ -277,8 +278,8 @@ the record selection function associated with the field label.
 
 > tcDataDecl :: TCEnv -> [Ident] -> [ConstrDecl] -> Error ()
 > tcDataDecl tcEnv tvs cs =
->   mapE (uncurry (tcFieldLabel tcEnv tvs)) ls >>=
->   mapE_ (uncurry tcFieldLabels) . groupLabels
+>   mapA (uncurry (tcFieldLabel tcEnv tvs)) ls >>=
+>   mapA_ (uncurry tcFieldLabels) . groupLabels
 >   where ls = [(P p l,ty) | RecordDecl _ _ _ _ fs <- cs,
 >                            FieldDecl p ls ty <- fs, l <- ls]
 

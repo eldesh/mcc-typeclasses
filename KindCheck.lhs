@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 3056 2011-10-07 16:27:03Z wlux $
+% $Id: KindCheck.lhs 3225 2016-06-16 08:40:29Z wlux $
 %
-% Copyright (c) 1999-2011, Wolfgang Lux
+% Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{KindCheck.lhs}
@@ -12,6 +12,7 @@ applies kind checking to the module's type signatures.
 \begin{verbatim}
 
 > module KindCheck(kindCheck,kindCheckGoal) where
+> import Applicative hiding(empty)
 > import Base
 > import Combined
 > import Curry
@@ -30,6 +31,7 @@ applies kind checking to the module's type signatures.
 > import Types
 > import TypeInfo
 > import TypeTrans
+> import Utils
 
 > infixl 5 $-$
 
@@ -50,9 +52,9 @@ expanded type synonyms into the type environment.
 > kindCheck :: ModuleIdent -> TCEnv -> [TopDecl a] -> Error TCEnv
 > kindCheck m tcEnv ds =
 >   do
->     checkSynonyms m ds &&> checkSuperClasses m ds
+>     checkSynonyms m ds *> checkSuperClasses m ds
 >     tcEnv' <- foldM (kcDeclGroup m) tcEnv (scc bt (ft m) tds)
->     mapE_ (run . kcTopDecl m tcEnv') ods
+>     mapA_ (run . kcTopDecl m tcEnv') ods
 >     return tcEnv'
 >   where (tds,ods) = partition isTypeDecl ds
 
@@ -208,7 +210,7 @@ checks that the super class hierarchy is acyclic (in function
 \begin{verbatim}
 
 > checkSynonyms :: ModuleIdent -> [TopDecl a] -> Error ()
-> checkSynonyms m = mapE_ (typeDecl m) . scc bound free . filter isTypeDecl
+> checkSynonyms m = mapA_ (typeDecl m) . scc bound free . filter isTypeDecl
 >   where isTypeDecl (TypeDecl _ _ _ _) = True
 >         isTypeDecl _ = False
 >         bound (TypeDecl _ tc _ _) = [tc]
@@ -224,7 +226,7 @@ checks that the super class hierarchy is acyclic (in function
 
 > checkSuperClasses :: ModuleIdent -> [TopDecl a] -> Error ()
 > checkSuperClasses m =
->   mapE_ (classDecl m) . scc bound free . filter isClassDecl
+>   mapA_ (classDecl m) . scc bound free . filter isClassDecl
 >   where bound (ClassDecl _ _ cls _ _) = [cls]
 >         free (ClassDecl _ cx _ _ _) = fc m cx
 

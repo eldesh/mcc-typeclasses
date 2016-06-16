@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: PrecCheck.lhs 3056 2011-10-07 16:27:03Z wlux $
+% $Id: PrecCheck.lhs 3225 2016-06-16 08:40:29Z wlux $
 %
-% Copyright (c) 2001-2011, Wolfgang Lux
+% Copyright (c) 2001-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{PrecCheck.lhs}
@@ -14,6 +14,7 @@ according to the relative precedences of the operators involved.
 \begin{verbatim}
 
 > module PrecCheck(precCheck,precCheckGoal) where
+> import Applicative
 > import Base
 > import Curry
 > import CurryUtils
@@ -23,6 +24,7 @@ according to the relative precedences of the operators involved.
 > import PredefIdent
 > import TopEnv
 > import TypeInfo
+> import Utils
 
 \end{verbatim}
 For each declaration group, the compiler extends the precedence
@@ -94,7 +96,7 @@ because it is used for constructing the module's interface.
 >           -> Error (PEnv,[TopDecl a])
 > precCheck m tcEnv pEnv ds =
 >   do
->     ds'' <- mapE (checkTopDecl m tcEnv pEnv') ds
+>     ds'' <- mapA (checkTopDecl m tcEnv pEnv') ds
 >     return (pEnv',ds'')
 >   where ds' = concatMap decls ds
 >         pEnv' = bindPrecs m ds' (foldr cleanPrecs pEnv ds')
@@ -104,7 +106,7 @@ because it is used for constructing the module's interface.
 
 > precCheckGoal :: ModuleIdent -> PEnv -> Goal a -> Error (Goal a)
 > precCheckGoal m pEnv (Goal p e ds) =
->   liftE2 (Goal p) (checkExpr m p pEnv' e) (mapE (checkDecl m pEnv') ds)
+>   liftA2 (Goal p) (checkExpr m p pEnv' e) (mapA (checkDecl m pEnv') ds)
 >   where pEnv' = bindPrecs m ds pEnv
 
 > checkTopDecl :: ModuleIdent -> TCEnv -> PEnv -> TopDecl a -> Error (TopDecl a)
@@ -114,37 +116,37 @@ because it is used for constructing the module's interface.
 >   return (NewtypeDecl p cx tc tvs nc clss)
 > checkTopDecl _ _ _ (TypeDecl p tc tvs ty) = return (TypeDecl p tc tvs ty)
 > checkTopDecl m _ pEnv (ClassDecl p cx cls tv ds) =
->   liftE (ClassDecl p cx cls tv) (mapE (checkDecl m pEnv') ds)
+>   liftA (ClassDecl p cx cls tv) (mapA (checkDecl m pEnv') ds)
 >   where pEnv' = bindMethodPrecs m qualify ds pEnv
 > checkTopDecl m tcEnv pEnv (InstanceDecl p cx cls ty ds) =
->   liftE (InstanceDecl p cx cls ty) (mapE (checkDecl m pEnv') ds)
+>   liftA (InstanceDecl p cx cls ty) (mapA (checkDecl m pEnv') ds)
 >   where pEnv' = bindMethodPrecs m qual ds pEnv
 >         qual =
 >           maybe qualify (qualifyLike . origName)
 >                 (listToMaybe (qualLookupTopEnv cls tcEnv))
 > checkTopDecl _ _ _ (DefaultDecl p tys) = return (DefaultDecl p tys)
-> checkTopDecl m _ pEnv (BlockDecl d) = liftE BlockDecl (checkDecl m pEnv d)
+> checkTopDecl m _ pEnv (BlockDecl d) = liftA BlockDecl (checkDecl m pEnv d)
 
 > checkDecl :: ModuleIdent -> PEnv -> Decl a -> Error (Decl a)
 > checkDecl _ _ (InfixDecl p fix pr ops) = return (InfixDecl p fix pr ops)
 > checkDecl _ _ (TypeSig p fs ty) = return (TypeSig p fs ty)
 > checkDecl m pEnv (FunctionDecl p a f eqs) =
->   liftE (FunctionDecl p a f) (mapE (checkEqn m pEnv) eqs)
+>   liftA (FunctionDecl p a f) (mapA (checkEqn m pEnv) eqs)
 > checkDecl _ _ (ForeignDecl p fi a f ty) = return (ForeignDecl p fi a f ty)
 > checkDecl m pEnv (PatternDecl p t rhs) =
->   liftE2 (PatternDecl p) (checkConstrTerm p pEnv t) (checkRhs m pEnv rhs)
+>   liftA2 (PatternDecl p) (checkConstrTerm p pEnv t) (checkRhs m pEnv rhs)
 > checkDecl _ _ (FreeDecl p vs) = return (FreeDecl p vs)
 > checkDecl _ _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
 
 > checkEqn :: ModuleIdent -> PEnv -> Equation a -> Error (Equation a)
 > checkEqn m pEnv (Equation p lhs rhs) =
->   liftE2 (Equation p) (checkLhs p pEnv lhs) (checkRhs m pEnv rhs)
+>   liftA2 (Equation p) (checkLhs p pEnv lhs) (checkRhs m pEnv rhs)
 
 > checkLhs :: Position -> PEnv -> Lhs a -> Error (Lhs a)
 > checkLhs p pEnv (FunLhs f ts) =
->   liftE (FunLhs f) (mapE (checkConstrTerm p pEnv) ts)
+>   liftA (FunLhs f) (mapA (checkConstrTerm p pEnv) ts)
 > checkLhs p pEnv (OpLhs t1 op t2) =
->   liftE2 (flip OpLhs op)
+>   liftA2 (flip OpLhs op)
 >          (do
 >             t1' <- checkConstrTerm p pEnv t1
 >             checkOpL p pEnv op t1'
@@ -154,82 +156,82 @@ because it is used for constructing the module's interface.
 >             checkOpR p pEnv op t2'
 >             return t2')
 > checkLhs p pEnv (ApLhs lhs ts) =
->   liftE2 ApLhs (checkLhs p pEnv lhs) (mapE (checkConstrTerm p pEnv) ts)
+>   liftA2 ApLhs (checkLhs p pEnv lhs) (mapA (checkConstrTerm p pEnv) ts)
 
 > checkConstrTerm :: Position -> PEnv -> ConstrTerm a -> Error (ConstrTerm a)
 > checkConstrTerm _ _ (LiteralPattern a l) = return (LiteralPattern a l)
 > checkConstrTerm _ _ (NegativePattern a l) = return (NegativePattern a l)
 > checkConstrTerm _ _ (VariablePattern a v) = return (VariablePattern a v)
 > checkConstrTerm p pEnv (ConstructorPattern a c ts) =
->   liftE (ConstructorPattern a c) (mapE (checkConstrTerm p pEnv) ts)
+>   liftA (ConstructorPattern a c) (mapA (checkConstrTerm p pEnv) ts)
 > checkConstrTerm p pEnv (FunctionPattern a f ts) =
->   liftE (FunctionPattern a f) (mapE (checkConstrTerm p pEnv) ts)
+>   liftA (FunctionPattern a f) (mapA (checkConstrTerm p pEnv) ts)
 > checkConstrTerm p pEnv (InfixPattern a t1 op t2) =
 >   do
 >     (t1',t2') <-
->       liftE (,) (checkConstrTerm p pEnv t1) &&& checkConstrTerm p pEnv t2
+>       liftA (,) (checkConstrTerm p pEnv t1) <*> checkConstrTerm p pEnv t2
 >     fixPrecT p pEnv a t1' op t2'
 > checkConstrTerm p pEnv (ParenPattern t) =
->   liftE ParenPattern (checkConstrTerm p pEnv t)
+>   liftA ParenPattern (checkConstrTerm p pEnv t)
 > checkConstrTerm p pEnv (RecordPattern a c fs) =
->   liftE (RecordPattern a c) (mapE (checkField (checkConstrTerm p pEnv)) fs)
+>   liftA (RecordPattern a c) (mapA (checkField (checkConstrTerm p pEnv)) fs)
 > checkConstrTerm p pEnv (TuplePattern ts) =
->   liftE TuplePattern (mapE (checkConstrTerm p pEnv) ts)
+>   liftA TuplePattern (mapA (checkConstrTerm p pEnv) ts)
 > checkConstrTerm p pEnv (ListPattern a ts) =
->   liftE (ListPattern a) (mapE (checkConstrTerm p pEnv) ts)
+>   liftA (ListPattern a) (mapA (checkConstrTerm p pEnv) ts)
 > checkConstrTerm p pEnv (AsPattern v t) =
->   liftE (AsPattern v) (checkConstrTerm p pEnv t)
+>   liftA (AsPattern v) (checkConstrTerm p pEnv t)
 > checkConstrTerm p pEnv (LazyPattern t) =
->   liftE LazyPattern (checkConstrTerm p pEnv t)
+>   liftA LazyPattern (checkConstrTerm p pEnv t)
 
 > checkRhs :: ModuleIdent -> PEnv -> Rhs a -> Error (Rhs a)
 > checkRhs m pEnv (SimpleRhs p e ds) =
->   liftE2 (SimpleRhs p) (checkExpr m p pEnv' e) (mapE (checkDecl m pEnv') ds)
+>   liftA2 (SimpleRhs p) (checkExpr m p pEnv' e) (mapA (checkDecl m pEnv') ds)
 >   where pEnv' = bindPrecs m ds pEnv
 > checkRhs m pEnv (GuardedRhs es ds) =
->   liftE2 GuardedRhs
->          (mapE (checkCondExpr m pEnv') es)
->          (mapE (checkDecl m pEnv') ds)
+>   liftA2 GuardedRhs
+>          (mapA (checkCondExpr m pEnv') es)
+>          (mapA (checkDecl m pEnv') ds)
 >   where pEnv' = bindPrecs m ds pEnv
 
 > checkCondExpr :: ModuleIdent -> PEnv -> CondExpr a -> Error (CondExpr a)
 > checkCondExpr m pEnv (CondExpr p g e) =
->   liftE2 (CondExpr p) (checkExpr m p pEnv g) (checkExpr m p pEnv e)
+>   liftA2 (CondExpr p) (checkExpr m p pEnv g) (checkExpr m p pEnv e)
 
 > checkExpr :: ModuleIdent -> Position -> PEnv -> Expression a
 >           -> Error (Expression a)
 > checkExpr _ _ _ (Literal a l) = return (Literal a l)
 > checkExpr _ _ _ (Variable a v) = return (Variable a v)
 > checkExpr _ _ _ (Constructor a c) = return (Constructor a c)
-> checkExpr m p pEnv (Paren e) = liftE Paren (checkExpr m p pEnv e)
-> checkExpr m p pEnv (Typed e ty) = liftE (flip Typed ty) (checkExpr m p pEnv e)
+> checkExpr m p pEnv (Paren e) = liftA Paren (checkExpr m p pEnv e)
+> checkExpr m p pEnv (Typed e ty) = liftA (flip Typed ty) (checkExpr m p pEnv e)
 > checkExpr m p pEnv (Record a c fs) =
->   liftE (Record a c) (mapE (checkField (checkExpr m p pEnv)) fs)
+>   liftA (Record a c) (mapA (checkField (checkExpr m p pEnv)) fs)
 > checkExpr m p pEnv (RecordUpdate e fs) =
->   liftE2 RecordUpdate
+>   liftA2 RecordUpdate
 >          (checkExpr m p pEnv e)
->          (mapE (checkField (checkExpr m p pEnv)) fs)
-> checkExpr m p pEnv (Tuple es) = liftE Tuple (mapE (checkExpr m p pEnv) es)
-> checkExpr m p pEnv (List a es) = liftE (List a) (mapE (checkExpr m p pEnv) es)
+>          (mapA (checkField (checkExpr m p pEnv)) fs)
+> checkExpr m p pEnv (Tuple es) = liftA Tuple (mapA (checkExpr m p pEnv) es)
+> checkExpr m p pEnv (List a es) = liftA (List a) (mapA (checkExpr m p pEnv) es)
 > checkExpr m p pEnv (ListCompr e qs) =
->   liftE2 ListCompr (checkExpr m p pEnv' e) (mapE (checkStmt m p pEnv') qs)
+>   liftA2 ListCompr (checkExpr m p pEnv' e) (mapA (checkStmt m p pEnv') qs)
 >   where pEnv' = bindPrecs m [d | StmtDecl ds <- qs, d <- ds] pEnv
-> checkExpr m p pEnv (EnumFrom e) = liftE EnumFrom (checkExpr m p pEnv e)
+> checkExpr m p pEnv (EnumFrom e) = liftA EnumFrom (checkExpr m p pEnv e)
 > checkExpr m p pEnv (EnumFromThen e1 e2) =
->   liftE2 EnumFromThen (checkExpr m p pEnv e1) (checkExpr m p pEnv e2)
+>   liftA2 EnumFromThen (checkExpr m p pEnv e1) (checkExpr m p pEnv e2)
 > checkExpr m p pEnv (EnumFromTo e1 e2) =
->   liftE2 EnumFromTo (checkExpr m p pEnv e1) (checkExpr m p pEnv e2)
+>   liftA2 EnumFromTo (checkExpr m p pEnv e1) (checkExpr m p pEnv e2)
 > checkExpr m p pEnv (EnumFromThenTo e1 e2 e3) =
->   liftE3 EnumFromThenTo
+>   liftA3 EnumFromThenTo
 >          (checkExpr m p pEnv e1)
 >          (checkExpr m p pEnv e2)
 >          (checkExpr m p pEnv e3)
-> checkExpr m p pEnv (UnaryMinus e) = liftE UnaryMinus (checkExpr m p pEnv e)
+> checkExpr m p pEnv (UnaryMinus e) = liftA UnaryMinus (checkExpr m p pEnv e)
 > checkExpr m p pEnv (Apply e1 e2) =
->   liftE2 Apply (checkExpr m p pEnv e1) (checkExpr m p pEnv e2)
+>   liftA2 Apply (checkExpr m p pEnv e1) (checkExpr m p pEnv e2)
 > checkExpr m p pEnv (InfixApply e1 op e2) =
 >   do
->     (e1',e2') <- liftE (,) (checkExpr m p pEnv e1) &&& checkExpr m p pEnv e2
+>     (e1',e2') <- liftA (,) (checkExpr m p pEnv e1) <*> checkExpr m p pEnv e2
 >     fixPrec p pEnv e1' op e2'
 > checkExpr m p pEnv (LeftSection e op) =
 >   do
@@ -242,36 +244,36 @@ because it is used for constructing the module's interface.
 >     checkRSection p pEnv op e'
 >     return (RightSection op e')
 > checkExpr m _ pEnv (Lambda p ts e) =
->   liftE2 (Lambda p) (mapE (checkConstrTerm p pEnv) ts) (checkExpr m p pEnv e)
+>   liftA2 (Lambda p) (mapA (checkConstrTerm p pEnv) ts) (checkExpr m p pEnv e)
 > checkExpr m p pEnv (Let ds e) =
->   liftE2 Let (mapE (checkDecl m pEnv') ds) (checkExpr m p pEnv' e)
+>   liftA2 Let (mapA (checkDecl m pEnv') ds) (checkExpr m p pEnv' e)
 >   where pEnv' = bindPrecs m ds pEnv
 > checkExpr m p pEnv (Do sts e) =
->   liftE2 Do (mapE (checkStmt m p pEnv') sts) (checkExpr m p pEnv' e)
+>   liftA2 Do (mapA (checkStmt m p pEnv') sts) (checkExpr m p pEnv' e)
 >   where pEnv' = bindPrecs m [d | StmtDecl ds <- sts, d <- ds] pEnv
 > checkExpr m p pEnv (IfThenElse e1 e2 e3) =
->   liftE3 IfThenElse
+>   liftA3 IfThenElse
 >          (checkExpr m p pEnv e1)
 >          (checkExpr m p pEnv e2)
 >          (checkExpr m p pEnv e3)
 > checkExpr m p pEnv (Case e alts) =
->   liftE2 Case (checkExpr m p pEnv e) (mapE (checkAlt m pEnv) alts)
+>   liftA2 Case (checkExpr m p pEnv e) (mapA (checkAlt m pEnv) alts)
 > checkExpr m p pEnv (Fcase e alts) =
->   liftE2 Fcase (checkExpr m p pEnv e) (mapE (checkAlt m pEnv) alts)
+>   liftA2 Fcase (checkExpr m p pEnv e) (mapA (checkAlt m pEnv) alts)
 
 > checkStmt :: ModuleIdent -> Position -> PEnv -> Statement a
 >           -> Error (Statement a)
-> checkStmt m p pEnv (StmtExpr e) = liftE StmtExpr (checkExpr m p pEnv e)
+> checkStmt m p pEnv (StmtExpr e) = liftA StmtExpr (checkExpr m p pEnv e)
 > checkStmt m _ pEnv (StmtBind p t e) =
->   liftE2 (StmtBind p) (checkConstrTerm p pEnv t) (checkExpr m p pEnv e)
-> checkStmt m _ pEnv (StmtDecl ds) = liftE StmtDecl (mapE (checkDecl m pEnv) ds)
+>   liftA2 (StmtBind p) (checkConstrTerm p pEnv t) (checkExpr m p pEnv e)
+> checkStmt m _ pEnv (StmtDecl ds) = liftA StmtDecl (mapA (checkDecl m pEnv) ds)
 
 > checkAlt :: ModuleIdent -> PEnv -> Alt a -> Error (Alt a)
 > checkAlt m pEnv (Alt p t rhs) =
->   liftE2 (Alt p) (checkConstrTerm p pEnv t) (checkRhs m pEnv rhs)
+>   liftA2 (Alt p) (checkConstrTerm p pEnv t) (checkRhs m pEnv rhs)
 
 > checkField :: (a -> Error a) -> Field a -> Error (Field a)
-> checkField check (Field l x) = liftE (Field l) (check x)
+> checkField check (Field l x) = liftA (Field l) (check x)
 
 \end{verbatim}
 The functions \texttt{fixPrec}, \texttt{fixUPrec}, and
@@ -315,7 +317,7 @@ argument. Note that both arguments already have been checked before
 >         e' <- fixUPrec p pEnv e1 op1 e2
 >         return (InfixApply e' op2 e3)
 >   | pr2 > 6 =
->       liftE UnaryMinus (fixRPrec p pEnv e1 op1 (InfixApply e2 op2 e3))
+>       liftA UnaryMinus (fixRPrec p pEnv e1 op1 (InfixApply e2 op2 e3))
 >   | otherwise =
 >       errorAt p $ ambiguousParse "unary" (qualify minusId) (opName op2)
 >   where OpPrec fix1 pr1 = opPrec op1 pEnv

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: LLParseComb.lhs 2679 2008-04-22 15:04:17Z wlux $
+% $Id: LLParseComb.lhs 3221 2016-06-16 06:37:55Z wlux $
 %
-% Copyright (c) 1999-2008, Wolfgang Lux
+% Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{LLParseComb.lhs}
@@ -47,33 +47,33 @@ string in this case.
 > class (Ord s,Show s) => Symbol s where
 >   isEOF :: s -> Bool
 
-> type SuccessCont s a = Position -> s -> L a
-> type FailureCont a = Position -> String -> L a
-> type Lexer s a = SuccessCont s a -> FailureCont a -> L a
-> type ParseFun s a b = (a -> SuccessCont s b) -> FailureCont b
->                     -> SuccessCont s b
+> type SuccessCont r s = Position -> s -> L r
+> type FailureCont r = Position -> String -> L r
+> type Lexer r s = SuccessCont r s -> FailureCont r -> L r
+> type ParseFun r s a = (a -> SuccessCont r s) -> FailureCont r
+>                     -> SuccessCont r s
 
-> data Parser s a b = Parser (Maybe (ParseFun s a b))
->                            (FM s (Lexer s b -> ParseFun s a b))
+> data Parser r s a = Parser (Maybe (ParseFun r s a))
+>                            (FM s (Lexer r s -> ParseFun r s a))
 
-> instance Symbol s => Show (Parser s a b) where
+> instance Symbol s => Show (Parser r s a) where
 >   showsPrec p (Parser e ps) = showParen (p >= 10) $                      -- $
 >     showString "Parser " . shows (isJust e) .
 >     showChar ' ' . shows (domainFM ps)
 
-> applyParser :: Symbol s => Parser s a a -> Lexer s a -> FilePath -> String
->             -> Error a
+> applyParser :: Symbol s => Parser r s r -> Lexer r s -> FilePath -> String
+>             -> Error r
 > applyParser p lexer = lex (lexer (choose p lexer done failL) failL)
 >   where done x pos s
 >           | isEOF s = returnL x
 >           | otherwise = failL pos (unexpected s)
 
-> prefixParser :: Symbol s => Parser s a a -> Lexer s a -> FilePath -> String
->              -> Error a
+> prefixParser :: Symbol s => Parser r s r -> Lexer r s -> FilePath -> String
+>              -> Error r
 > prefixParser p lexer = lex (lexer (choose p lexer discard failL) failL)
 >   where discard x _ _ = returnL x
 
-> choose :: Symbol s => Parser s a b -> Lexer s b -> ParseFun s a b
+> choose :: Symbol s => Parser r s a -> Lexer r s -> ParseFun r s a
 > choose (Parser e ps) lexer success fail pos s =
 >   case lookupFM s ps of
 >     Just p -> p lexer success fail pos s
@@ -91,23 +91,23 @@ string in this case.
 \paragraph{Basic combinators}
 \begin{verbatim}
 
-> position :: Symbol s => Parser s Position b
+> position :: Symbol s => Parser r s Position
 > position = Parser (Just p) zeroFM
 >   where p success _ pos = success pos pos
 
-> succeed :: Symbol s => a -> Parser s a b
+> succeed :: Symbol s => a -> Parser r s a
 > succeed x = Parser (Just p) zeroFM
 >   where p success _ = success x
 
-> symbol :: Symbol s => s -> Parser s s a
+> symbol :: Symbol s => s -> Parser r s s
 > symbol s = Parser Nothing (addToFM s p zeroFM)
 >   where p lexer success fail _ s = lexer (success s) fail
 
-> (<?>) :: Symbol s => Parser s a b -> String -> Parser s a b
+> (<?>) :: Symbol s => Parser r s a -> String -> Parser r s a
 > p <?> msg = p <|> Parser (Just pfail) zeroFM
 >   where pfail _ fail pos _ = fail pos msg
 
-> (<|>) :: Symbol s => Parser s a b -> Parser s a b -> Parser s a b
+> (<|>) :: Symbol s => Parser r s a -> Parser r s a -> Parser r s a
 > Parser e1 ps1 <|> Parser e2 ps2
 >   | isJust e1 && isJust e2 = error "Ambiguous parser for empty word"
 >   | not (nullSet common) = error ("Ambiguous parser for " ++ show common)
@@ -128,7 +128,7 @@ functions recognize the same prefix, we choose the one that succeeds
 and report an ambiguous parse error if both succeed.
 \begin{verbatim}
 
-> (<|?>) :: Symbol s => Parser s a b -> Parser s a b -> Parser s a b
+> (<|?>) :: Symbol s => Parser r s a -> Parser r s a -> Parser r s a
 > Parser e1 ps1 <|?> Parser e2 ps2
 >   | isJust e1 && isJust e2 = error "Ambiguous parser for empty word"
 >   | otherwise = Parser (e1 `mplus` e2) (insertIntoFM ps1' ps2)
@@ -153,22 +153,22 @@ and report an ambiguous parse error if both succeed.
 >               | otherwise -> p1
 >             LT -> p2
 
-> (<*>) :: Symbol s => Parser s (a -> b) c -> Parser s a c -> Parser s b c
+> (<*>) :: Symbol s => Parser r s (a -> b) -> Parser r s a -> Parser r s b
 > Parser (Just p1) ps1 <*> ~p2@(Parser e2 ps2) =
 >   Parser (fmap (seqEE p1) e2)
 >          (insertIntoFM (fmap (flip seqPP p2) ps1) (fmap (seqEP p1) ps2))
 > Parser Nothing ps1 <*> p2 = Parser Nothing (fmap (flip seqPP p2) ps1)
 
-> seqEE :: Symbol s => ParseFun s (a -> b) c -> ParseFun s a c
->       -> ParseFun s b c
+> seqEE :: Symbol s => ParseFun r s (a -> b) -> ParseFun r s a
+>       -> ParseFun r s b
 > seqEE p1 p2 success fail = p1 (\f -> p2 (success . f) fail) fail
 
-> seqEP :: Symbol s => ParseFun s (a -> b) c -> (Lexer s c -> ParseFun s a c)
->       -> Lexer s c -> ParseFun s b c
+> seqEP :: Symbol s => ParseFun r s (a -> b) -> (Lexer r s -> ParseFun r s a)
+>       -> Lexer r s -> ParseFun r s b
 > seqEP p1 p2 lexer success fail = p1 (\f -> p2 lexer (success . f) fail) fail
 
-> seqPP :: Symbol s => (Lexer s c -> ParseFun s (a -> b) c) -> Parser s a c
->       -> Lexer s c -> ParseFun s b c
+> seqPP :: Symbol s => (Lexer r s -> ParseFun r s (a -> b)) -> Parser r s a
+>       -> Lexer r s -> ParseFun r s b
 > seqPP p1 p2 lexer success fail =
 >   p1 lexer (\f -> choose p2 lexer (success . f) fail) fail
 
@@ -181,10 +181,10 @@ the first set of a parser. This is useful for combining two parsers
 with an overlapping first set with the deterministic combinator <|>.
 \begin{verbatim}
 
-> (<\>) :: Symbol s => Parser s a c -> Parser s b c -> Parser s a c
+> (<\>) :: Symbol s => Parser r s a -> Parser r s b -> Parser r s a
 > p <\> Parser _ ps = p <\\> map fst (toListFM ps)
 
-> (<\\>) :: Symbol s => Parser s a b -> [s] -> Parser s a b
+> (<\\>) :: Symbol s => Parser r s a -> [s] -> Parser r s a
 > Parser e ps <\\> xs = Parser e (foldr deleteFromFM ps xs)
 
 \end{verbatim}
@@ -193,38 +193,38 @@ Note that some of these combinators have not been published in the
 paper, but were taken from the implementation found on the web.
 \begin{verbatim}
 
-> opt :: Symbol s => Parser s a b -> a -> Parser s a b
+> opt :: Symbol s => Parser r s a -> a -> Parser r s a
 > p `opt` x = p <|> succeed x
 
-> (<$>) :: Symbol s => (a -> b) -> Parser s a c -> Parser s b c
+> (<$>) :: Symbol s => (a -> b) -> Parser r s a -> Parser r s b
 > f <$> p = succeed f <*> p
 
-> (<$->) :: Symbol s => a -> Parser s b c -> Parser s a c
+> (<$->) :: Symbol s => a -> Parser r s b -> Parser r s a
 > f <$-> p = const f <$> p {-$-}
 
-> (<*->) :: Symbol s => Parser s a c -> Parser s b c -> Parser s a c
+> (<*->) :: Symbol s => Parser r s a -> Parser r s b -> Parser r s a
 > p <*-> q = const <$> p <*> q {-$-}
 
-> (<-*>) :: Symbol s => Parser s a c -> Parser s b c -> Parser s b c
+> (<-*>) :: Symbol s => Parser r s a -> Parser r s b -> Parser r s b
 > p <-*> q = const id <$> p <*> q {-$-}
 
-> (<**>) :: Symbol s => Parser s a c -> Parser s (a -> b) c -> Parser s b c
+> (<**>) :: Symbol s => Parser r s a -> Parser r s (a -> b) -> Parser r s b
 > p <**> q = flip ($) <$> p <*> q
 
-> (<?*>) :: Symbol s => Parser s (a -> a) b -> Parser s a b -> Parser s a b
+> (<?*>) :: Symbol s => Parser r s (a -> a) -> Parser r s a -> Parser r s a
 > p <?*> q = (p `opt` id) <*> q
 
-> (<**?>) :: Symbol s => Parser s a b -> Parser s (a -> a) b -> Parser s a b
+> (<**?>) :: Symbol s => Parser r s a -> Parser r s (a -> a) -> Parser r s a
 > p <**?> q = p <**> (q `opt` id)
 
-> (<.>) :: Symbol s => Parser s (a -> b) d -> Parser s (b -> c) d
->       -> Parser s (a -> c) d
+> (<.>) :: Symbol s => Parser r s (a -> b) -> Parser r s (b -> c)
+>       -> Parser r s (a -> c)
 > p <.> q = p <**> ((.) <$> q)
 
-> many :: Symbol s => Parser s a b -> Parser s [a] b
+> many :: Symbol s => Parser r s a -> Parser r s [a]
 > many p = many1 p `opt` []
 
-> many1 :: Symbol s => Parser s a b -> Parser s [a] b
+> many1 :: Symbol s => Parser r s a -> Parser r s [a]
 > -- many1 p = (:) <$> p <*> many p
 > many1 p = (:) <$> p <*> (many1 p `opt` [])
 
@@ -237,36 +237,36 @@ default can be given in the above case because neither of the types
 involved is a numeric type.
 \begin{verbatim}
 
-> sepBy :: Symbol s => Parser s a c -> Parser s b c -> Parser s [a] c
+> sepBy :: Symbol s => Parser r s a -> Parser r s b -> Parser r s [a]
 > p `sepBy` q = p `sepBy1` q `opt` []
 
-> sepBy1 :: Symbol s => Parser s a c -> Parser s b c -> Parser s [a] c
+> sepBy1 :: Symbol s => Parser r s a -> Parser r s b -> Parser r s [a]
 > p `sepBy1` q = (:) <$> p <*> many (q <-*> p) {-$-}
 
-> chainr :: Symbol s => Parser s a b -> Parser s (a -> a -> a) b -> a
->        -> Parser s a b
+> chainr :: Symbol s => Parser r s a -> Parser r s (a -> a -> a) -> a
+>        -> Parser r s a
 > chainr p op x = chainr1 p op `opt` x
 
-> chainr1 :: Symbol s => Parser s a b -> Parser s (a -> a -> a) b
->         -> Parser s a b
+> chainr1 :: Symbol s => Parser r s a -> Parser r s (a -> a -> a)
+>         -> Parser r s a
 > chainr1 p op = r
 >   where r = p <**> (flip <$> op <*> r `opt` id) {-$-}
 
-> chainl :: Symbol s => Parser s a b -> Parser s (a -> a -> a) b -> a
->        -> Parser s a b
+> chainl :: Symbol s => Parser r s a -> Parser r s (a -> a -> a) -> a
+>        -> Parser r s a
 > chainl p op x = chainl1 p op `opt` x
 
-> chainl1 :: Symbol s => Parser s a b -> Parser s (a -> a -> a) b
->         -> Parser s a b
+> chainl1 :: Symbol s => Parser r s a -> Parser r s (a -> a -> a)
+>         -> Parser r s a
 > chainl1 p op = foldF <$> p <*> many (flip <$> op <*> p)
 >   where foldF x [] = x
 >         foldF x (f:fs) = foldF (f x) fs
 
-> bracket :: Symbol s => Parser s a c -> Parser s b c -> Parser s a c
->         -> Parser s b c
+> bracket :: Symbol s => Parser r s a -> Parser r s b -> Parser r s a
+>         -> Parser r s b
 > bracket open p close = open <-*> p <*-> close
 
-> ops :: Symbol s => [(s,a)] -> Parser s a b
+> ops :: Symbol s => [(s,a)] -> Parser r s a
 > ops [] = error "internal error: ops"
 > ops [(s,x)] = x <$-> symbol s
 > ops ((s,x):rest) = x <$-> symbol s <|> ops rest
@@ -278,15 +278,15 @@ After modifying the layout context, the continuation is called with
 the same token and an undefined result.
 \begin{verbatim}
 
-> layoutOn :: Symbol s => Parser s a b
+> layoutOn :: Symbol s => Parser r s a
 > layoutOn = Parser (Just on) zeroFM
 >   where on success _ pos = pushContext (column pos) . success undefined pos
 
-> layoutOff :: Symbol s => Parser s a b
+> layoutOff :: Symbol s => Parser r s a
 > layoutOff = Parser (Just off) zeroFM
 >   where off success _ pos = pushContext (-1) . success undefined pos
 
-> layoutEnd :: Symbol s => Parser s a b
+> layoutEnd :: Symbol s => Parser r s a
 > layoutEnd = Parser (Just end) zeroFM
 >   where end success _ pos = popContext . success undefined pos
 

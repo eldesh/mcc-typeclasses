@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CurryLexer.lhs 3056 2011-10-07 16:27:03Z wlux $
+% $Id: CurryLexer.lhs 3221 2016-06-16 06:37:55Z wlux $
 %
-% Copyright (c) 1999-2011, Wolfgang Lux
+% Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CurryLexer.lhs}
@@ -294,8 +294,8 @@ Character classes
 Lexing functions
 \begin{verbatim}
 
-> type SuccessL a = Position -> Token -> L a
-> type FailL a = Position -> String -> L a
+> type SuccessL r = Position -> Token -> L r
+> type FailL r = Position -> String -> L r
 
 > lexFile :: L [(Position,Token)]
 > lexFile = lexer tokens failL
@@ -303,7 +303,7 @@ Lexing functions
 >           | c == EOF = returnL [(p,t)]
 >           | otherwise = lexFile `thenL` returnL . ((p,t):)
 
-> lexer :: SuccessL a -> FailL a -> L a
+> lexer :: SuccessL r -> FailL r -> L r
 > lexer success fail = skipBlanks
 >   where -- skipBlanks moves past whitespace and comments
 >         skipBlanks p [] bol = success p (tok EOF) p [] bol
@@ -321,7 +321,7 @@ Lexing functions
 >           | otherwise =
 >               (if bol then lexBOL else lexToken) success fail p (c:cs) bol
 
-> nestedComment :: Position -> L a -> FailL a -> L a
+> nestedComment :: Position -> L r -> FailL r -> L r
 > nestedComment p0 _ fail p [] =
 >   fail p0 "Unterminated nested comment at end-of-file" p []
 > nestedComment _ success _ p ('-':'}':cs) = success (incr p 2) cs
@@ -354,7 +354,7 @@ backs up to the beginning of the pragma in that case so that
   in the lexer.}
 \begin{verbatim}
 
-> pragmaBOL :: Position -> String -> (Token -> L a) -> L a -> L a
+> pragmaBOL :: Position -> String -> (Token -> L r) -> L r -> L r
 > pragmaBOL _ _ success noPragma p cs _ [] =
 >   pragma success noPragma p cs False []
 > pragmaBOL p0 s0 success noPragma p cs _ ctxt@(n:_)
@@ -366,7 +366,7 @@ backs up to the beginning of the pragma in that case so that
 >         insertRightBrace _ _ _ _ = success (tok VRightBrace) p0 s0 True
 >         insertSemicolon _ _ _ _ = success (tok VSemicolon) p0 s0 False
 
-> pragma :: (Token -> L a) -> L a -> L a
+> pragma :: (Token -> L r) -> L r -> L r
 > pragma _ noPragma p [] = noPragma p []
 > pragma success noPragma p (c:cs)
 >   | c == '\t' = pragma success noPragma (tab p) cs
@@ -380,7 +380,7 @@ backs up to the beginning of the pragma in that case so that
 >   | otherwise = noPragma p (c:cs)
 >   where (keyword,rest) = span isIdent (c:cs)
 
-> lexBOL :: SuccessL a -> FailL a -> L a
+> lexBOL :: SuccessL r -> FailL r -> L r
 > lexBOL success fail p cs _ [] = lexToken success fail p cs False []
 > lexBOL success fail p cs _ ctxt@(n:_)
 >   | col < n = success p (tok VRightBrace) p cs True ctxt
@@ -388,7 +388,7 @@ backs up to the beginning of the pragma in that case so that
 >   | otherwise = lexToken success fail p cs False ctxt
 >   where col = column p
 
-> lexToken :: SuccessL a -> FailL a -> L a
+> lexToken :: SuccessL r -> FailL r -> L r
 > lexToken success fail p [] = success p (tok EOF) p []
 > lexToken success fail p (c:cs)
 >   | c == '(' = token LeftParen
@@ -409,7 +409,7 @@ backs up to the beginning of the pragma in that case so that
 >   | otherwise = fail p ("Illegal character " ++ show c) p cs
 >   where token t = success p (tok t) (next p) cs
 
-> lexIdent :: (Token -> L a) -> L a
+> lexIdent :: (Token -> L r) -> L r
 > lexIdent cont p cs =
 >   maybe (lexOptQual cont (token Id) [ident]) (cont . token)
 >         (lookupFM ident reserved_and_special_ids)
@@ -417,7 +417,7 @@ backs up to the beginning of the pragma in that case so that
 >   where (ident,rest) = span isIdent cs
 >         token t = idTok t [] ident
 
-> lexSym :: (Token -> L a) -> L a
+> lexSym :: (Token -> L r) -> L r
 > lexSym cont p cs
 >   | "#-}" `isPrefixOf` cs =           -- 3 == length "#-}"
 >       cont (idTok PragmaEnd [] "#-}") (incr p 3) (drop 3 cs)
@@ -427,14 +427,14 @@ backs up to the beginning of the pragma in that case so that
 >   where (sym,rest) = span isSym cs
 >         token t = idTok t [] sym
 
-> lexOptQual :: (Token -> L a) -> Token -> [String] -> L a
+> lexOptQual :: (Token -> L r) -> Token -> [String] -> L r
 > lexOptQual cont token mIdent p ('.':c:cs)
 >   | isAlpha c = lexQualIdent cont identCont mIdent (next p) (c:cs)
 >   | isSym c = lexQualSym cont identCont mIdent (next p) (c:cs)
 >   where identCont _ _ = cont token p ('.':c:cs)
 > lexOptQual cont token mIdent p cs = cont token p cs
 
-> lexQualIdent :: (Token -> L a) -> L a -> [String] -> L a
+> lexQualIdent :: (Token -> L r) -> L r -> [String] -> L r
 > lexQualIdent cont identCont mIdent p cs =
 >   maybe (lexOptQual cont (idTok QId mIdent ident) (mIdent ++ [ident]))
 >         (const identCont)
@@ -442,14 +442,14 @@ backs up to the beginning of the pragma in that case so that
 >         (incr p (length ident)) rest
 >   where (ident,rest) = span isIdent cs
 
-> lexQualSym :: (Token -> L a) -> L a -> [String] -> L a
+> lexQualSym :: (Token -> L r) -> L r -> [String] -> L r
 > lexQualSym cont identCont mIdent p cs =
 >   maybe (cont (idTok QSym mIdent sym)) (const identCont)
 >         (lookupFM sym reserved_ops)
 >         (incr p (length sym)) rest
 >   where (sym,rest) = span isSym cs
 
-> lexNumber :: (Token -> L a) -> L a
+> lexNumber :: (Token -> L r) -> L r
 > lexNumber cont p ('0':c:cs)
 >   | c `elem` "oO" = lexNonDecimal 8 isOctit cont nullCont (incr p 2) cs
 >   | c `elem` "xX" = lexNonDecimal 16 isHexit cont nullCont (incr p 2) cs
@@ -460,17 +460,17 @@ backs up to the beginning of the pragma in that case so that
 >         int _ _ = cont (intTok 10 digits) p' rest
 >         rat frac exp = cont (ratTok digits frac exp)
 
-> lexNonDecimal :: Integer -> (Char -> Bool) -> (Token -> L a) -> L a -> L a
+> lexNonDecimal :: Integer -> (Char -> Bool) -> (Token -> L r) -> L r -> L r
 > lexNonDecimal base isDigit cont nullCont p cs
 >   | null digits = nullCont p cs
 >   | otherwise = cont (intTok base digits) (incr p (length digits)) rest
 >   where (digits,rest) = span isDigit cs
 
-> lexOptFraction :: (String -> Int -> L a) -> L a -> L a
+> lexOptFraction :: (String -> Int -> L r) -> L r -> L r
 > lexOptFraction cont noFrac p ('.':cs) = lexFraction cont noFrac (next p) cs
 > lexOptFraction cont noFrac p cs = lexOptExponent (cont "") noFrac p cs
 
-> lexFraction :: (String -> Int -> L a) -> L a -> L a
+> lexFraction :: (String -> Int -> L r) -> L r -> L r
 > lexFraction cont noFrac p cs
 >   | null frac = noFrac p cs
 >   | otherwise = lexOptExponent (cont frac) noExp p' rest
@@ -478,24 +478,24 @@ backs up to the beginning of the pragma in that case so that
 >         (frac,rest) = span isDigit cs
 >         noExp _ _ = cont frac 0 p' rest
 
-> lexOptExponent :: (Int -> L a) -> L a -> L a
+> lexOptExponent :: (Int -> L r) -> L r -> L r
 > lexOptExponent cont noExp p (c:cs)
 >   | c `elem` "eE" = lexSignedExponent cont noExp (next p) cs
 > lexOptExponent _ noExp p cs = noExp p cs
 
-> lexSignedExponent :: (Int -> L a) -> L a -> L a
+> lexSignedExponent :: (Int -> L r) -> L r -> L r
 > lexSignedExponent cont noExp p ('+':cs) = lexExponent cont noExp (next p) cs
 > lexSignedExponent cont noExp p ('-':cs) =
 >   lexExponent (cont . negate) noExp (next p) cs
 > lexSignedExponent cont noExp p cs = lexExponent cont noExp p cs
 
-> lexExponent :: (Int -> L a) -> L a -> L a
+> lexExponent :: (Int -> L r) -> L r -> L r
 > lexExponent cont noExp p cs
 >   | null digits = noExp p cs
 >   | otherwise = cont (convertIntegral 10 digits) (incr p (length digits)) rest
 >   where (digits,rest) = span isDigit cs
 
-> lexChar :: Position -> (Char -> L a) -> FailL a -> L a
+> lexChar :: Position -> (Char -> L r) -> FailL r -> L r
 > lexChar p0 success fail p [] = fail p0 "Illegal character constant" p []
 > lexChar p0 success fail p (c:cs)
 >   | c == '\\' = lexEscape p (lexCharChar p0 success fail) fail (next p) cs
@@ -503,15 +503,15 @@ backs up to the beginning of the pragma in that case so that
 >   | c == '\t' = lexCharChar p0 success fail c (tab p) cs
 >   | otherwise = lexCharChar p0 success fail c (next p) cs
 
-> lexCharChar :: Position -> (Char -> L a) -> FailL a -> Char -> L a
+> lexCharChar :: Position -> (Char -> L r) -> FailL r -> Char -> L r
 > lexCharChar p0 success fail c = lexCharEnd p0 (success c) fail
 
-> lexCharEnd :: Position -> L a -> FailL a -> L a
+> lexCharEnd :: Position -> L r -> FailL r -> L r
 > lexCharEnd _ success _ p ('\'':cs) = success (next p) cs
 > lexCharEnd p0 _ fail p cs =
 >   fail p0 "Improperly terminated character constant" p cs
 
-> lexString :: Position -> (String -> L a) -> FailL a -> L a
+> lexString :: Position -> (String -> L r) -> FailL r -> L r
 > lexString p0 _ fail p [] =
 >   fail p0 "Improperly terminated string constant" p []
 > lexString p0 success fail p (c:cs)
@@ -521,17 +521,17 @@ backs up to the beginning of the pragma in that case so that
 >   | c == '\t' = lexStringChar p0 success fail c (tab p) cs
 >   | otherwise = lexStringChar p0 success fail c (next p) cs
 
-> lexStringChar :: Position -> (String -> L a) -> FailL a -> Char -> L a
+> lexStringChar :: Position -> (String -> L r) -> FailL r -> Char -> L r
 > lexStringChar p0 success fail c = lexString p0 (success . (c:)) fail
 
-> lexStringEscape :: Position -> Position -> (String -> L a) -> FailL a -> L a
+> lexStringEscape :: Position -> Position -> (String -> L r) -> FailL r -> L r
 > lexStringEscape _ p1 _ fail p [] = lexEscape p1 undefined fail p []
 > lexStringEscape p0 p1 success fail p (c:cs)
 >   | c == '&' = lexString p0 success fail (next p) cs
 >   | isSpace c = lexStringGap (lexString p0 success fail) fail p (c:cs)
 >   | otherwise = lexEscape p1 (lexStringChar p0 success fail) fail p (c:cs)
 
-> lexStringGap :: L a -> FailL a -> L a
+> lexStringGap :: L r -> FailL r -> L r
 > lexStringGap _ fail p [] = fail p "End of file in string gap" p []
 > lexStringGap success fail p (c:cs)
 >   | c == '\\' = success (next p) cs
@@ -540,7 +540,7 @@ backs up to the beginning of the pragma in that case so that
 >   | isSpace c = lexStringGap success fail (next p) cs
 >   | otherwise = fail p ("Illegal character in string gap " ++ show c) p (c:cs)
 
-> lexEscape :: Position -> (Char -> L a) -> FailL a -> L a
+> lexEscape :: Position -> (Char -> L r) -> FailL r -> L r
 > lexEscape _ success _ p ('a':cs) = success '\a' (next p) cs
 > lexEscape _ success _ p ('b':cs) = success '\b' (next p) cs
 > lexEscape _ success _ p ('f':cs) = success '\f' (next p) cs
@@ -562,7 +562,7 @@ backs up to the beginning of the pragma in that case so that
 >   | isDigit c = numEscape 10 isDigit p0 success fail p (c:cs)
 > lexEscape p0 success fail p cs = asciiEscape p0 success fail p cs
 
-> asciiEscape :: Position -> (Char -> L a) -> FailL a -> L a
+> asciiEscape :: Position -> (Char -> L r) -> FailL r -> L r
 > asciiEscape _ success _ p ('N':'U':'L':cs) = success '\NUL' (incr p 3) cs
 > asciiEscape _ success _ p ('S':'O':'H':cs) = success '\SOH' (incr p 3) cs
 > asciiEscape _ success _ p ('S':'T':'X':cs) = success '\STX' (incr p 3) cs
@@ -606,8 +606,8 @@ range supported by the Haskell compiler. Note that hbc and nhc98 up to
 though they actually support a larger character set range.
 \begin{verbatim}
 
-> numEscape :: Int -> (Char -> Bool) -> Position -> (Char -> L a) -> FailL a
->           -> L a
+> numEscape :: Int -> (Char -> Bool) -> Position -> (Char -> L r) -> FailL r
+>           -> L r
 > numEscape base isDigit p0 success fail p cs
 >   | n >= min && n <= max = success (chr n) (incr p (length digits)) rest
 >   | otherwise = fail p0 "Numeric escape out-of-range" p cs

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CamParser.lhs 3152 2014-02-12 18:08:19Z wlux $
+% $Id: CamParser.lhs 3221 2016-06-16 06:37:55Z wlux $
 %
-% Copyright (c) 1999-2013, Wolfgang Lux
+% Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CamParser.lhs}
@@ -190,8 +190,8 @@ in appendix~\ref{sec:ll-parsecomb}.
 >     ("unit",     KW_unit)
 >   ]
 
-> type SuccessL a = Position -> Token -> L a
-> type FailL a = Position -> String -> L a
+> type SuccessL r = Position -> Token -> L r
+> type FailL r = Position -> String -> L r
 
 > lexFile :: L [(Position,Token)]
 > lexFile = lexer tokens failL
@@ -199,7 +199,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 >           | isEOF t = returnL [(p,t)]
 >           | otherwise = lexFile `thenL` returnL . ((p,t):)
 
-> lexer :: SuccessL a -> FailL a -> L a
+> lexer :: SuccessL r -> FailL r -> L r
 > lexer success fail p [] = success p (tok EOF) p []
 > lexer success fail p (c:cs)
 >   | isSpace c = lexer success fail (advance c p) cs
@@ -236,11 +236,11 @@ in appendix~\ref{sec:ll-parsecomb}.
 >         advance _ = next
 >         illegalChar = fail p ("Illegal character " ++ show c) p (c:cs)
 
-> lexIdent :: (String -> L a) -> L a
+> lexIdent :: (String -> L r) -> L r
 > lexIdent success p cs = success ident (incr p (length ident)) rest
 >   where (ident,rest) = span isIdent cs
 
-> lexKeyword :: (Keyword -> L a) -> FailL a -> L a
+> lexKeyword :: (Keyword -> L r) -> FailL r -> L r
 > lexKeyword success fail p cs
 >   | null keyword = fail p "Keyword expected after '.'" p cs
 >   | otherwise =
@@ -249,7 +249,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 >             (lookupFM keyword keywords) (incr p (length keyword)) rest
 >   where (keyword,rest) = span isIdent cs
 
-> lexNumber :: (Token -> L a) -> FailL a -> (String -> String) -> L a
+> lexNumber :: (Token -> L r) -> FailL r -> (String -> String) -> L r
 > lexNumber success fail f p cs
 >   | null digits = fail p ("Digit expected after " ++ show (head (f ""))) p cs
 >   | otherwise = lexOptFraction float int p' rest
@@ -258,36 +258,36 @@ in appendix~\ref{sec:ll-parsecomb}.
 >         int _ _ = success (intTok (f digits)) p' rest
 >         float frac exp = success (floatTok (f digits) frac exp)
 
-> lexOptFraction :: (String -> Int -> L a) -> L a -> L a
+> lexOptFraction :: (String -> Int -> L r) -> L r -> L r
 > lexOptFraction success _ p ('.':cs) = lexFraction success (next p) cs
 > lexOptFraction success noFrac p cs = lexOptExponent (success "") noFrac p cs
 
-> lexFraction :: (String -> Int -> L a) -> L a
+> lexFraction :: (String -> Int -> L r) -> L r
 > lexFraction success p cs = lexOptExponent (success frac) noExp p' rest
 >   where p' = incr p (length frac)
 >         (frac,rest) = span isDigit cs
 >         noExp _ _ = success frac 0 p' rest
 
-> lexOptExponent :: (Int -> L a) -> L a -> L a
+> lexOptExponent :: (Int -> L r) -> L r -> L r
 > lexOptExponent success noExp p (c:cs)
 >   | c `elem` "eE" = lexSignedExponent success noExp (next p) cs
 > lexOptExponent _ noExp p cs = noExp p cs
 
-> lexSignedExponent :: (Int -> L a) -> L a -> L a
+> lexSignedExponent :: (Int -> L r) -> L r -> L r
 > lexSignedExponent success noExp p ('+':cs) =
 >   lexExponent success noExp (next p) cs
 > lexSignedExponent success noExp p ('-':cs) =
 >   lexExponent (success . negate) noExp (next p) cs
 > lexSignedExponent success noExp p cs = lexExponent success noExp p cs
 
-> lexExponent :: (Int -> L a) -> L a -> L a
+> lexExponent :: (Int -> L r) -> L r -> L r
 > lexExponent success noExp p cs
 >   | null digits = noExp p cs
 >   | otherwise = success (exp) (incr p (length digits)) rest
 >   where (digits,rest) = span isDigit cs
 >         exp = convertIntegral 10 digits
 
-> lexString :: (String -> L a) -> FailL a -> L a
+> lexString :: (String -> L r) -> FailL r -> L r
 > lexString _ fail p [] = fail p "Unterminated string constant" p []
 > lexString success fail p (c:cs)
 >   | c == '\"' = success "" (next p) cs
@@ -303,32 +303,32 @@ in appendix~\ref{sec:ll-parsecomb}.
 > parseModule :: FilePath -> String -> Error Module
 > parseModule fn s = applyParser camModule lexer fn s
 
-> camModule :: Parser Token Module a
+> camModule :: Parser r Token Module
 > camModule = (:) <$> importDecl <*> (semi <-*> camModule `opt` [])
 >         <|> camDecl `sepBy` semi
 
-> camDecl :: Parser Token Decl a
+> camDecl :: Parser r Token Decl
 > camDecl = dataDecl <|> funcDecl
 
-> importDecl :: Parser Token Decl a
+> importDecl :: Parser r Token Decl
 > importDecl = ImportDecl <$-> keyword KW_import <*> checkName
 
-> dataDecl :: Parser Token Decl a
+> dataDecl :: Parser r Token Decl
 > dataDecl =
 >   DataDecl <$-> keyword KW_data <*> checkName <*> (nameList `opt` [])
 >            <*> (equals <-*> (constrDecl `sepBy1` bar) `opt` [])
 
-> constrDecl :: Parser Token ConstrDecl a
+> constrDecl :: Parser r Token ConstrDecl
 > constrDecl = ConstrDecl <$> vis <*> name <*> (parenList typ `opt` [])
 
-> typ, atyp :: Parser Token Type a
+> typ, atyp :: Parser r Token Type
 > typ = atyp `chainr1` (TypeArr <$-> rightArrow)
 > atyp = name <**> (flip TypeApp <$> parenList typ `opt` TypeVar)
 
-> funcDecl :: Parser Token Decl a
+> funcDecl :: Parser r Token Decl
 > funcDecl = FunctionDecl <$> vis <*> name <*> nameList <*> braces stmt
 
-> stmt :: Parser Token Stmt a
+> stmt :: Parser r Token Stmt
 > stmt = name <**> nameStmt
 >    <|> Let <$-> keyword KW_let <*> braces (binding `sepBy1` semi)
 >            <*-> keyword KW_in <*> stmt
@@ -337,7 +337,7 @@ in appendix~\ref{sec:ll-parsecomb}.
 >               <|> stmtSeq <$-> leftArrow <*> astmt <*-> checkSemi <*> stmt
 >        stmtSeq st1 st2 v = Seq (v :<- st1) st2
 
-> astmt :: Parser Token Stmt a
+> astmt :: Parser r Token Stmt
 > astmt = Return <$-> keyword KW_return <*> node
 >     <|> Eval <$-> keyword KW_eval <*> checkName
 >     <|> Exec <$> name <*> nameList
@@ -350,10 +350,10 @@ in appendix~\ref{sec:ll-parsecomb}.
 >     <|> leftBrace <-*> stmt <*-> rightBrace
 >   where rf = Rigid <$-> keyword KW_rigid <|> Flex <$-> keyword KW_flex
 
-> binding :: Parser Token Bind a
+> binding :: Parser r Token Bind
 > binding = Bind <$> name <*-> checkEquals <*> node
 
-> node :: Parser Token Expr a
+> node :: Parser r Token Expr
 > node = Lit <$> literal
 >    <|> Constr <$-> keyword KW_data <*> checkName <*> nameList
 >    <|> Papp <$-> keyword KW_papp <*> checkName <*> nameList
@@ -362,18 +362,18 @@ in appendix~\ref{sec:ll-parsecomb}.
 >    <|> Free <$-> keyword KW_free
 >    <|> Var <$> name
 
-> cases :: Parser Token [Case] a
+> cases :: Parser r Token [Case]
 > cases = return <$> switchCase defaultTag
 >     <|> (:) <$> switchCase caseTag <*> (bar <-*> cases `opt` [])
 >   where switchCase tag = Case <$> tag <*-> checkColon <*> stmt
 
-> literal :: Parser Token Literal a
+> literal :: Parser r Token Literal
 > literal = Char . toEnum . fromInteger <$-> keyword KW_char <*> checkInt
 >       <|> Int <$-> keyword KW_int <*> checkInt
 >       <|> Integer <$-> keyword KW_integer <*> checkInt
 >       <|> Float <$-> keyword KW_float <*> checkFloat
 
-> cCall :: Parser Token CCall a
+> cCall :: Parser r Token CCall
 > cCall = StaticCall <$> (show <$> name) <*> parenList arg
 >     <|> DynamicCall <$> parens (checkAsterisk <-*> checkName)
 >                     <*> parenList arg
@@ -381,10 +381,10 @@ in appendix~\ref{sec:ll-parsecomb}.
 >   where arg = (,) <$> parens cArgType <*> checkName
 >           <|> (,) TypeNodePtr <$> name
 
-> cRetType :: Parser Token CRetType a
+> cRetType :: Parser r Token CRetType
 > cRetType = Nothing <$-> keyword KW_unit <|> Just <$> cArgType
 
-> cArgType :: Parser Token CArgType a
+> cArgType :: Parser r Token CArgType
 > cArgType = TypeBool <$-> keyword KW_bool
 >        <|> TypeChar <$-> keyword KW_char
 >        <|> TypeInt <$-> keyword KW_int
@@ -393,83 +393,83 @@ in appendix~\ref{sec:ll-parsecomb}.
 >        <|> TypeFunPtr <$-> keyword KW_fun
 >        <|> TypeStablePtr <$-> keyword KW_stable
 
-> vis :: Parser Token Visibility a
+> vis :: Parser r Token Visibility
 > vis = Private <$-> keyword KW_private
 >   <|> succeed Exported
 
-> name, checkName :: Parser Token Name a
+> name, checkName :: Parser r Token Name
 > name = Name . sval <$> token Ident
 > checkName = name <?> "name expected"
 
-> nameList :: Parser Token [Name] a
+> nameList :: Parser r Token [Name]
 > nameList = parenList name
 
-> parenList :: Parser Token a b -> Parser Token [a] b
+> parenList :: Parser r Token a -> Parser r Token [a]
 > parenList p = parens (p `sepBy` comma)
 
-> keyword :: Keyword -> Parser Token Attributes a
+> keyword :: Keyword -> Parser r Token Attributes
 > keyword k = token (Keyword k)
 
-> int,checkInt :: Parser Token Integer a
+> int,checkInt :: Parser r Token Integer
 > int = ival <$> token IntNum
 > checkInt = int <?> "integer number expected"
 
-> float,checkFloat :: Parser Token Double a
+> float,checkFloat :: Parser r Token Double
 > float = fval <$> token FloatNum
 > checkFloat = float <?> "floating point number expected"
 
-> string :: Parser Token String a
+> string :: Parser r Token String
 > string = sval <$> token String
 
-> caseTag :: Parser Token Tag a
+> caseTag :: Parser r Token Tag
 > caseTag = LitCase <$> literal
 >       <|> ConstrCase <$-> keyword KW_data <*> checkName <*> nameList
 
-> defaultTag :: Parser Token Tag a
+> defaultTag :: Parser r Token Tag
 > defaultTag = DefaultCase <$-> keyword KW_default
 
-> token :: Category -> Parser Token Attributes a
+> token :: Category -> Parser r Token Attributes
 > token c = attr <$> symbol (Token c NoAttributes)
 >   where attr (Token _ a) = a
 
-> equals, checkEquals :: Parser Token Attributes a
+> equals, checkEquals :: Parser r Token Attributes
 > equals = token Equals
 > checkEquals = equals <?> "= expected"
 
-> comma :: Parser Token Attributes a
+> comma :: Parser r Token Attributes
 > comma = token Comma
 
-> colon, checkColon :: Parser Token Attributes a
+> colon, checkColon :: Parser r Token Attributes
 > colon = token Colon
 > checkColon = colon <?> ": expected"
 
-> semi, checkSemi :: Parser Token Attributes a
+> semi, checkSemi :: Parser r Token Attributes
 > semi = token Semicolon
 > checkSemi = semi <?> "; expected"
 
-> bar :: Parser Token Attributes a
+> bar :: Parser r Token Attributes
 > bar = token Bar
 
-> ampersand :: Parser Token Attributes a
+> ampersand :: Parser r Token Attributes
 > ampersand = token Ampersand
 
-> asterisk, checkAsterisk :: Parser Token Attributes a
+> asterisk, checkAsterisk :: Parser r Token Attributes
 > asterisk = token Asterisk
 > checkAsterisk = asterisk <?> "* expected"
 
-> leftArrow, rightArrow :: Parser Token Attributes a
+> leftArrow, rightArrow :: Parser r Token Attributes
 > leftArrow = token LeftArrow
 > rightArrow = token RightArrow
 
-> leftParen, rightParen :: Parser Token Attributes a
+> leftParen, rightParen :: Parser r Token Attributes
 > leftParen = token LeftParen
 > rightParen = token RightParen
 
-> leftBrace, rightBrace :: Parser Token Attributes a
+> leftBrace, rightBrace :: Parser r Token Attributes
 > leftBrace = token LeftBrace
 > rightBrace = token RightBrace
 
-> parens, braces :: Parser Token a b -> Parser Token a b
+> parens, braces :: Parser r Token a -> Parser r Token a
 > parens p = leftParen <-*> p <*-> rightParen
 > braces p = leftBrace <-*> p <*-> rightBrace
 >        <?> "{ expected"

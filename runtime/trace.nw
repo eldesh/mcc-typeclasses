@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: trace.nw 2854 2009-05-29 12:33:07Z wlux $
+% $Id: trace.nw 3235 2016-06-18 16:23:17Z wlux $
 %
-% Copyright (c) 2001-2009, Wolfgang Lux
+% Copyright (c) 2001-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Tracing}
@@ -16,6 +16,7 @@ following formatting directives are supported:
 \item [[%g]] displays the next argument as a floating point number
 \item [[%u]] displays the next argument as an unsigned decimal number
 \item [[%s]] displays the next argument as a string
+\item [[%p]] displays the next argument as a pointer
 \item [[%x]] displays the next argument as an unsigned hexadecimal number
 \item [[%A]] displays the address of the node found as next argument
 \item [[%I]] displays the current thread id and indents the rest of
@@ -95,6 +96,9 @@ trace(const char *fmt, ...)
 	    case 'g':
 	        fprintf(stderr, "%g", va_arg(ap, double));
 	        break;
+	    case 'p':
+		fprintf(stderr, "%p", va_arg(ap, const char *));
+		break;
 	    case 's':
 		fprintf(stderr, "%s", va_arg(ap, const char *));
 		break;
@@ -151,7 +155,7 @@ trace_showaddr(Node *node)
     }
 #endif
     else if ( heap_base <= (word *)node && (word *)node <= heap_end )
-	fprintf(stderr, "-node%lu-", (long)(node - (Node *)heap_base));
+	fprintf(stderr, "-node%lu-", (long)((word *)node - heap_base));
     else
 	fprintf(stderr, "%p", node);
 }

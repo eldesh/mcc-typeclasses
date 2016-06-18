@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CPretty.lhs 2620 2008-02-08 13:20:26Z wlux $
+% $Id: CPretty.lhs 3239 2016-06-18 16:30:31Z wlux $
 %
-% Copyright (c) 2002-2008, Wolfgang Lux
+% Copyright (c) 2002-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CPretty.lhs}
@@ -120,6 +120,12 @@ whether a declaration for the variable is present in the code already.
 >   foldr collectDecl ds (sts1 ++ sts2)
 > collectDecl _ ds = ds
 
+> needsDecl :: CStmt -> Bool
+> needsDecl (CLocalVar _ _ _) = True
+> needsDecl (CStaticArray ty v xs) = True
+> needsDecl (CppCondStmts _ sts1 sts2) = any needsDecl (sts1 ++ sts2)
+> needsDecl _ = False
+
 > ppDecl :: CStmt -> Doc
 > ppDecl (CLocalVar ty v _) = varDecl ty v <> semi
 > ppDecl (CStaticArray ty v xs) = ppTopDecl (CArrayDef CPrivate ty v xs)
@@ -170,8 +176,8 @@ checking for the current indentation.
 
 \end{verbatim}
 If the statement sequence following a case label contains any
-declarations, the compiler automatically encloses the statements in a
-nested block.
+declarations, the compiler automatically generates a local block
+encompassing the statements from the first declaration onward.
 \begin{verbatim}
 
 > ppCase :: CCase -> Doc
@@ -183,8 +189,8 @@ nested block.
 > ppCaseLabel CCaseDefault = text "default"
 
 > ppCaseStmts :: [CStmt] -> Doc
-> ppCaseStmts sts = if null ds then ppStmts sts else ppStmt (CBlock sts)
->   where ds = foldr collectDecl [] sts
+> ppCaseStmts sts = ppStmts (sts1 ++ [CBlock sts2 | not (null sts2)])
+>   where (sts1,sts2) = break needsDecl sts
 
 \end{verbatim}
 The expression printer uses a precedence level in order to insert

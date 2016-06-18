@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: trace.nw 3236 2016-06-18 16:24:09Z wlux $
+% $Id: trace.nw 3237 2016-06-18 16:24:51Z wlux $
 %
 % Copyright (c) 2001-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -228,12 +228,16 @@ trace_shownode(int depth, Node *node)
 	    fprintf(stderr, "%s", lit_double(buf, d));
 	    break;
 	case PTR_KIND:
-	    fprintf(stderr, depth > 0 ? "(%s %p)" : "(%s ...)",
-		    node->info->cname, node->p.ptr);
+	    if ( depth > 0 )
+		fprintf(stderr, "(%s %p)", node->info->cname, node->p.ptr);
+	    else
+		fprintf(stderr, "(%s ...)", node->info->cname);
 	    break;
 	case FOREIGN_PTR_KIND:
-	    fprintf(stderr, depth > 0 ? "(%s %p)" : "(%s ...)",
-		    node->info->cname, node->fp.ptr);
+	    if ( depth > 0 )
+		fprintf(stderr, "(%s %p)", node->info->cname, node->fp.ptr);
+	    else
+		fprintf(stderr, "(%s ...)", node->info->cname);
 	    break;
 	case MUTABLE_KIND:
 	    trace_showapp(depth, node, 1, &node->g.node);

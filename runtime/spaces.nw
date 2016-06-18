@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 3232 2016-06-18 16:20:20Z wlux $
+% $Id: spaces.nw 3234 2016-06-18 16:22:27Z wlux $
 %
 % Copyright (c) 2003-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -552,7 +552,7 @@ discard_search_space()
 #endif
 
     /* release the memory allocated in the current space */
-    release_names(regs.bp->btDict);
+    release_names();
     release_mem();
 }
 

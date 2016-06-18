@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: vars.nw 2709 2008-05-20 08:43:20Z wlux $
+% $Id: vars.nw 3234 2016-06-18 16:22:27Z wlux $
 %
-% Copyright (c) 2002-2008, Wolfgang Lux
+% Copyright (c) 2002-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Naming variables}
@@ -19,16 +19,17 @@ This dictionary is also consulted by the \texttt{dval} function.
 #include "run.h"
 #include "regs.h"
 #include "heap.h"
-#include "stack.h"
 #include "vars.h"
 
 @ 
 At present the dictionary is implemented as a single-linked list
 rooted in [[names_dict]] and a pointer to the last node of the
-dictionary is saved in [[names_tail]].
+dictionary is saved in [[names_tail]]. We also use the global counter
+[[names_count]] to assign unique names to variables.
 
-The type of dictionary nodes has to be exported because the garbage
-collector must update the node pointers in the dictionary.
+The root of the dictionary and the type of dictionary nodes have to be
+exported because the garbage collector must update the node pointers
+in the dictionary.
 \textbf{These declarations should not be used in any other module!}
 
 \ToDo{Use a hash table for the dictionary.}
@@ -40,12 +41,13 @@ struct dict_node {
     struct dict_node *next;		/* link to next variable */
 };
 
-extern struct dict_node *names_dict, *names_tail;
+extern struct dict_node *names_dict;
 
 @ 
 <<vars.c>>=
-struct dict_node *names_dict;
-struct dict_node *names_tail;
+struct dict_node	*names_dict;
+static struct dict_node	*names_tail;
+static unsigned long	names_count;
 
 @ 
 New entries can be inserted into the dictionary using the function
@@ -74,7 +76,7 @@ add_name(Node *node, const char *name)
 
     if ( names_tail == 0 )
     {
-	ASSERT(names_dict == 0);
+	assert(names_dict == 0);
 	names_dict = names_tail = next;
     }
     else
@@ -85,37 +87,110 @@ add_name(Node *node, const char *name)
 }
 
 @ 
-The function [[release_names]] releases all dictionary entries after
-[[new_tail]]. If this argument is [[0]] the whole dictionary is
-released.
+To release dictionary entries quickly around choice points and search
+contexts, we maintain a stack of dictionary save points, which save
+the current dictionary tail and its name counter. Save points are
+allocated with [[malloc]] and released with [[free]] once they are no
+longer used. To avoid unnecessary allocations we reuse an existing
+save point on the top of the stack when a new save point is pushed and
+the state of the dictionary has not changed since the last push. A
+reference count in each save point is used to keep track of how often
+a save point is shared.
 
-This function should be used only to remove the tail of the dictionary
-that was created since the last choice point or search context was
-installed. Releasing longer tails might leave dangling pointers in the
+<<vars.c>>=
+struct dict_savepoint {
+    unsigned int	  refcount;
+    struct dict_node	  *names_tail;
+    unsigned long	  names_count;
+    struct dict_savepoint *next;
+} *savepoints;
+
+@ 
+The function [[save_names_dict]] creates a new save point with the
+current state of the dictionary. If the state of the dictionary is
+unchanged with respect to the most recent save point on the top of the
+stack, the function just increments the reference count of this save
+point. Otherwise a new save point is allocated and pushed onto the
 stack.
 
 <<vars.h>>=
-extern void release_names(struct dict_node *new_tail);
+extern void save_names_dict(void);
 
 @ 
 <<vars.c>>=
 void
-release_names(struct dict_node *new_tail)
+save_names_dict()
 {
-    struct dict_node *curr, *next;
-
-    if ( new_tail != names_tail )
+    if ( savepoints == 0 || savepoints->names_tail != names_tail ||
+	 savepoints->names_count != names_count )
     {
-	names_tail = new_tail;
-	if ( new_tail == 0 )
+	struct dict_savepoint *savepoint =
+	    (struct dict_savepoint *)malloc(sizeof(struct dict_savepoint));
+	if (savepoint == 0)
+	    sys_error("save_names_dict");
+
+	savepoint->refcount    = 1;
+	savepoint->names_tail  = names_tail;
+	savepoint->names_count = names_count;
+	savepoint->next	       = savepoints;
+	savepoints	       = savepoint;
+    }
+    else
+	savepoints->refcount++;
+}
+
+@ 
+The function [[release_names_dict]] releases the most recent save
+point. This function decrements the reference count of that save point
+and if it becomes zero, the memory allocated for the save point is
+released and the save point is popped from the stack.
+
+<<vars.h>>=
+extern void release_names_dict(void);
+
+@ 
+<<vars.c>>=
+void
+release_names_dict()
+{
+    struct dict_savepoint *savepoint = savepoints;
+
+    assert(savepoint != 0 && savepoint->refcount > 0);
+    if (--savepoint->refcount == 0)
+    {
+	savepoints = savepoint->next;
+	free(savepoint);
+    }
+}
+
+@ 
+The function [[release_names]] releases all dictionary entries created
+since the most recent save point was pushed.
+
+<<vars.h>>=
+extern void release_names(void);
+
+@ 
+<<vars.c>>=
+void
+release_names()
+{
+    struct dict_node	  *curr, *next;
+    struct dict_savepoint *savepoint = savepoints;
+
+    assert(savepoint);
+    if ( savepoint->names_tail != names_tail )
+    {
+	names_tail = savepoint->names_tail;
+	if ( savepoint->names_tail == 0 )
 	{
 	    curr       = names_dict;
 	    names_dict = 0;
 	}
 	else
 	{
-	    curr	   = new_tail->next;
-	    new_tail->next = 0;
+	    curr			= savepoint->names_tail->next;
+	    savepoint->names_tail->next = 0;
 	}
 
 	for ( ; curr; curr = next )
@@ -125,6 +200,7 @@ release_names(struct dict_node *new_tail)
 	    free(curr);
 	}
     }
+    names_count = savepoint->names_count;
 }
 
 @ 
@@ -137,18 +213,12 @@ updated to a preceding live dictionary node if necessary.
 
 The function proceeds in three steps. First, the dictionary list is
 reversed in order to be able to advance dictionary pointers backwards.
-In the next step, the choice points and search contexts in the stack
-are processed from top to bottom and all dictionary pointers are set
-to the next dictionary node with a non-null node pointer. In the last
-phase, the dictionary list is reversed again and all nodes which do
-not point to a node are released. In addition, the tail pointer of the
-dictionary is set to the last live dictionary node (if any).
-
-\ToDo{We can speed up the second phase a bit by making use of the fact
-that many choice points will save the same dictionary. We only need to
-find the next used dictionary for the first choice point of such a
-group and can reuse the new dictionary tail for the other choice
-points of that group.}
+In the next step, the stack of save points is processed from top to
+bottom and all dictionary pointers are set to the next dictionary node
+with a non-null node pointer. In the last phase, the dictionary list
+is reversed again and all nodes which do not point to a node are
+released. In addition, the tail pointer of the dictionary is set to
+the last live dictionary node (if any).
 
 <<vars.h>>=
 extern void cleanup_names(void);
@@ -158,8 +228,8 @@ extern void cleanup_names(void);
 void
 cleanup_names()
 {
-    struct dict_node *prev, *curr, *next;
-    Choicepoint	     *cp;
+    struct dict_node	  *prev, *curr, *next;
+    struct dict_savepoint *savepoint;
 
     /* Phase I: reverse the dictionary */
     prev = 0;
@@ -170,13 +240,13 @@ cleanup_names()
 	prev	   = curr;
     }
 
-    /* Phase II: update the control stack */
-    for ( cp = regs.bp; cp; cp = cp->btBp )
+    /* Phase II: update the save point stack */
+    for ( savepoint = savepoints; savepoint; savepoint = savepoint->next )
     {
-	curr = cp->btDict;
+	curr = savepoint->names_tail;
 	while ( curr && curr->node == 0 )
 	    curr = curr->next;
-	cp->btDict = curr;
+	savepoint->names_tail = curr;
     }
 
     /* Phase III: re-reverse the dictionary and release unused nodes */
@@ -231,7 +301,7 @@ extern const char *lookup_name(Node *node)
 }
 
 @ 
-The private function [[gen_name]] uses the counter [[dict_index]] in
+The private function [[gen_name]] uses the counter [[names_count]] in
 order to create unique names. In order to avoid name conflicts with
 entities defined in the program, all generated names start with an
 underscore.
@@ -239,24 +309,19 @@ underscore.
 \ToDo{Provide a runtime option to choose either uppercase or lowercase
 names for generated names.}
 
-\ToDo{Reset the counter when the dictionary is released during
-backtracking.}
-
 <<vars.c>>=
-static unsigned long dict_index;
-
 static const char *
 gen_name()
 {
     char name[13];
 
     name[0] = '_';
-    name[1] = 'a' + dict_index % 26;
-    if ( dict_index < 26 )
+    name[1] = 'a' + names_count % 26;
+    if ( names_count < 26 )
 	name[2] = '\0';
     else
-	sprintf(name + 2, "%ld", dict_index / 26);
-    dict_index++;
+	sprintf(name + 2, "%ld", names_count / 26);
+    names_count++;
 
     return (const char *)strdup(name);
 }

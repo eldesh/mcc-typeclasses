@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 3104 2012-10-21 10:51:09Z wlux $
+% $Id: print.nw 3234 2016-06-18 16:22:27Z wlux $
 %
-% Copyright (c) 2001-2012, Wolfgang Lux
+% Copyright (c) 2001-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Printing the Result}
@@ -64,11 +64,10 @@ static bool hasAnswer;
 void
 print_result(const char **var_names, Node **vars)
 {
-    unsigned int     i, n;
-    struct dict_node *tail;
-    Node	     *result;
+    unsigned int i, n;
+    Node	 *result;
 
-    tail      = names_tail;
+    save_names_dict();
     hasAnswer = false;
     for ( n = 0; var_names[n]; n++ )
 	if ( !is_tagged_ptr(vars[n]) || !is_variable_node(vars[n]) )
@@ -96,7 +95,8 @@ print_result(const char **var_names, Node **vars)
     }
     printf("\n");
 
-    release_names(tail);
+    release_names();
+    release_names_dict();
 }
 
 @

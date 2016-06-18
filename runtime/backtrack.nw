@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 3104 2012-10-21 10:51:09Z wlux $
+% $Id: backtrack.nw 3234 2016-06-18 16:22:27Z wlux $
 %
-% Copyright (c) 2002-2012, Wolfgang Lux
+% Copyright (c) 2002-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Global Search}\label{sec:global-search}
@@ -61,6 +61,7 @@ FUNCTION(choices)
     TRACE(("%I try\n"));
 
     /* create a choice point */
+    save_names_dict();
     push_choice_point(choice_conts + 1);
     copy_stack();
 
@@ -90,7 +91,7 @@ FUNCTION(fail)
 #endif
 
     /* release the memory allocated since the last choice point */
-    release_names(regs.bp->btDict);
+    release_names();
     release_mem();
 
     /* if only one alternative remains, drop the choice point */
@@ -99,6 +100,7 @@ FUNCTION(fail)
     if ( choice_conts[1] == 0 )
     {
 	pop_choice_point();
+	release_names_dict();
 	TRACE(("%I trust\n"));
     }
 

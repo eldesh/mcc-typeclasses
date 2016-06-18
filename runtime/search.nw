@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: search.nw 2854 2009-05-29 12:33:07Z wlux $
+% $Id: search.nw 3234 2016-06-18 16:22:27Z wlux $
 %
-% Copyright (c) 2002-2009, Wolfgang Lux
+% Copyright (c) 2002-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Encapsulated Search}
@@ -27,7 +27,6 @@ extern Node *copy_global(unsigned int, Node *, SearchSpace *);
 @ 
 <<search.c>>=
 #include "curry.h"
-#include "search.h"
 #include "vars.h"
 #include "stats.h"
 
@@ -94,6 +93,7 @@ machine state when the encapsulated search is left again.
 static inline void
 push_search_context()
 {
+    save_names_dict();
     push_choice_point(0);
     regs.handlers = &search_handlers;
 }
@@ -104,6 +104,7 @@ pop_search_context()
     assert(is_search_context(regs.bp));
     leave_context();
     pop_choice_point();
+    release_names_dict();
 }
 
 @ 

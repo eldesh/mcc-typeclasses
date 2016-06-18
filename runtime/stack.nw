@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: stack.nw 3153 2014-02-12 18:09:52Z wlux $
+% $Id: stack.nw 3234 2016-06-18 16:22:27Z wlux $
 %
-% Copyright (c) 2001-2014, Wolfgang Lux
+% Copyright (c) 2001-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{The Stack}
@@ -30,7 +30,6 @@ extern Node **stack_base, **stack_end;
 #include "regs.h"
 #include "heap.h"
 #include "stack.h"
-#include "vars.h"
 #include "main.h"
 
 Node **stack_base;
@@ -125,7 +124,6 @@ typedef struct choicepoint {
 #if !COPY_SEARCH_SPACE
     struct save_rec	   *btTp;	/* saved trail pointer */
 #endif
-    struct dict_node	   *btDict;	/* saved dictionary tail pointer */
     word		   *btHp;	/* saved heap pointer */
     SearchSpace		   *btSpc;	/* saved search space */
     const struct nondet_handlers *btHandlers;
@@ -164,7 +162,6 @@ push_choice_point(const Label *alts)
 #if !COPY_SEARCH_SPACE
     regs.bp->btTp	= regs.tp;
 #endif
-    regs.bp->btDict	= names_tail;
     regs.bp->btHp	= regs.hp;
     regs.bp->btSpc	= regs.ss;
     regs.bp->btHandlers = regs.handlers;

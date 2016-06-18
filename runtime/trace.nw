@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: trace.nw 3235 2016-06-18 16:23:17Z wlux $
+% $Id: trace.nw 3236 2016-06-18 16:24:09Z wlux $
 %
 % Copyright (c) 2001-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -207,6 +207,7 @@ trace_shownode(int depth, Node *node)
 	    fprintf(stderr, "que@%p", node);
 	    break;
 	case INDIR_KIND:
+	    fprintf(stderr, "ind@%p=", node);
 	    trace_shownode(depth, node->n.node);
 	    break;
 	case CHAR_KIND:

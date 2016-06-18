@@ -1,20 +1,21 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 2854 2009-05-29 12:33:07Z wlux $
+% $Id: spaces.nw 3232 2016-06-18 16:20:20Z wlux $
 %
-% Copyright (c) 2003-2009, Wolfgang Lux
+% Copyright (c) 2003-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Managing Search Spaces}\label{sec:spaces}
 By default, the runtime system uses an extended trailing scheme in
 order to manage multiple bindings for variables and shared
 applications in encapsulated search. A new search space is created
-each time [[try]] is applied to a new search goal. Search spaces are
-organized in trees with the root space corresponding to the initial
-evaluation of a particular search goal, and the other nodes of that
-tree corresponding to different evaluation states of that goal. Within
-each tree, the bindings of only one space are active at each time. A
-pointer to this space is recorded in the [[s.active]] field of the
-root space. The current search space is maintained in the register
+each time [[try]] returns successfully with a solved search goal or a
+list of search goals. Search spaces are organized in trees with the
+root space corresponding to the initial, empty state before starting
+the evaluation of a particular search goal, and the other nodes of
+that tree corresponding to different evaluation states of that goal.
+Within each tree, the bindings of only one space are active at each
+time. A pointer to this space is recorded in the [[s.active]] field of
+the root space. The current search space is maintained in the register
 [[regs.ss]].
 
 \textbf{Invariant}: The runtime system preserves the invariant
@@ -96,6 +97,19 @@ itself.
 #else
 # define is_local_space(space)	((space) == regs.ss)
 #endif
+
+@ 
+We sometimes need to mark nodes that should not be processed
+(again). We use the least significant bit of a node's info pointer for       %' 
+this purpose.
+
+<<spaces.c>>=
+#define MARK_FLAG		0x01
+#define is_marked(node)		((long)(node)->info & MARK_FLAG)
+#define mark_node(node) \
+    ((node)->info = (NodeInfo *)((long)(node)->info | MARK_FLAG))
+#define unmark_node(node) \
+    ((node)->info = (NodeInfo *)((long)(node)->info & ~MARK_FLAG))
 
 @ 
 When an encapsulated search returns, a new search space is created,
@@ -419,7 +433,19 @@ local variables and lazy application nodes of the search goal by
 creating a new search space. The new space then becomes the current
 search space. If the trail is empty, i.e., the goal has not bound any
 variables that could be instantiated differently in another solution
-of the goal, no new search space node is allocated.
+of the goal, no new search space node is allocated. When more than one
+update is recorded on the trail for any particular field of a node, we
+record only the first (oldest) update in the script. Note that we use
+a mark bit to record updates of the first field of a node. This
+handles the common case where a lazy application from a parent space
+is updated into a queue-me node and then into an indirection node
+without leaving the encapsulated search. When another field of a node
+is updated, we fall back to a linear scan through the records already
+copied to the script node in order to find redundant trail entries.
+
+\ToDo{We could use a second mark bit to detect multiple updates of the
+  second field of a node. On 64-bit architectures, we could even use
+  a third mark bit to detect multiple updates of the third field.}
 
 <<spaces.h>>=
 #if !COPY_SEARCH_SPACE
@@ -434,7 +460,7 @@ extern void save_search_space(unsigned int n_regs);
 void
 save_search_space(unsigned int n_regs)
 {
-    unsigned int i, n;
+    unsigned int i, j, k, n;
     SearchSpace	 *space;
     Script	 *script;
     ScriptRec	 *scr;
@@ -460,14 +486,38 @@ save_search_space(unsigned int n_regs)
 
 	scr = script->data;
 	tp  = regs.tp = regs.bp->btTp;
-	for ( i = 0; i < n; i++ )
+	for ( i = j = 0; i < n; i++ )
 	{
-	    scr[i].addr    = tp[i].addr;
-	    scr[i].inInfo  = tp[i].addr[INFO_OFS];
-	    scr[i].outInfo = tp[i].info;
-	    scr[i].ofs     = tp[i].ofs;
-	    scr[i].inVal   = tp[i].addr[tp[i].ofs];
-	    scr[i].outVal  = tp[i].val;
+	    if ( tp[i].ofs > 1 )
+	    {
+		for ( k = 0; k < j;  k++ )
+		    if ( scr[k].addr == tp[i].addr && scr[k].ofs == tp[i].ofs )
+			break;
+		if (k < j)
+		    continue;
+	    }
+	    else if ( is_marked((Node *)tp[i].addr) )
+		continue;
+
+	    scr[j].addr    = tp[i].addr;
+	    scr[j].inInfo  = tp[i].addr[INFO_OFS];
+	    scr[j].outInfo = tp[i].info;
+	    scr[j].ofs     = tp[i].ofs;
+	    scr[j].inVal   = tp[i].addr[tp[i].ofs];
+	    scr[j].outVal  = tp[i].val;
+	    if ( scr[j].ofs == 1 )
+		mark_node((Node *)scr[j].addr);
+	    j++;
+	}
+	for ( i = 0; i < j; i++ )
+	    if ( scr[i].ofs == 1 )
+		unmark_node((Node *)scr[i].addr);
+
+	/* eventually fix the length of the script record */
+	if ( j < n )
+	{
+	    script->length = vector_node_size(j * wordsof(ScriptRec));
+	    regs.hp	   = (word *)script + script->length;
 	}
 
 	/* allocate a new search space */
@@ -676,13 +726,6 @@ nodes. Unfortunately, the runtime system currently offers no efficient
 means to check whether a search continuation is closed.
 
 <<spaces.c>>=
-#define MARK_FLAG		0x01
-#define is_marked(node)		((long)(node)->info & MARK_FLAG)
-#define mark_node(node) \
-    ((node)->info = (NodeInfo *)((long)(node)->info | MARK_FLAG))
-#define unmark_node(node) \
-    ((node)->info = (NodeInfo *)((long)(node)->info & ~MARK_FLAG))
-
 #if !COPY_SEARCH_SPACE
 static void copy_search_space(SearchSpace *spc);
 #else

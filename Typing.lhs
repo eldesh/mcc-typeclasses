@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 3241 2016-06-19 10:05:37Z wlux $
+% $Id: Typing.lhs 3242 2016-06-19 10:53:21Z wlux $
 %
 % Copyright (c) 2003-2016, Wolfgang Lux
 % See LICENSE for the full license.
@@ -119,17 +119,7 @@ newtype constructor \texttt{ST} and its type must be changed from
 > etaType _ 0 ty = ty
 > etaType tcEnv n (TypeArrow ty1 ty2) =
 >   TypeArrow ty1 (etaType tcEnv (n - 1) ty2)
-> etaType tcEnv n ty =
->   case unapplyType True ty of
->     (TypeConstructor tc,tys) ->
->       case qualLookupTopEnv tc tcEnv of
->         [AliasType _ n' _ ty'] ->
->           -- NB n' <= length tys here because ty has kind *
->           etaType tcEnv n (applyType (expandAliasType tys' ty') tys'')
->           where (tys',tys'') = splitAt n' tys
->         [_] -> ty
->         _ -> internalError "etaType"
->     _ -> ty
+> etaType tcEnv n ty = maybe ty (etaType tcEnv n) (expandType True tcEnv ty)
 
 \end{verbatim}
 When inlining variable and function definitions, the compiler must
@@ -185,17 +175,19 @@ removed newtypes.
 > matchTypeApp _ _ _ = Nothing
 
 > expand :: TCEnv -> Type -> [Type]
-> expand tcEnv ty = ty : uncurry (expandType tcEnv) (unapplyType False ty)
->   where expandType tcEnv (TypeConstructor tc) tys =
->           case qualLookupTopEnv tc tcEnv of
->             [AliasType _ n _ ty]
->               | n <= length tys ->
->                   expand tcEnv (applyType (expandAliasType tys' ty) tys'')
->               | otherwise -> []
->               where (tys',tys'') = splitAt n tys
->             [_] -> []
->             _ -> internalError "expand"
->         expandType _ _ _ = []
+> expand tcEnv ty = ty : maybe [] (expand tcEnv) (expandType False tcEnv ty)
+
+> expandType :: Bool -> TCEnv -> Type -> Maybe Type
+> expandType dflt tcEnv ty =
+>   case unapplyType dflt ty of
+>     (TypeConstructor tc,tys) ->
+>       case typeAlias tc tcEnv of
+>         Just (n,ty)
+>           | n <= length tys -> Just (applyType (instTypeScheme tys' ty) tys'')
+>           | otherwise -> Nothing
+>           where (tys',tys'') = splitAt n tys
+>         Nothing -> Nothing
+>     _ -> Nothing
 
 \end{verbatim}
 The function \texttt{argumentTypes} returns the labels and the

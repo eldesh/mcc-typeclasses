@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 3124 2013-02-23 15:21:13Z wlux $
+% $Id: DictTrans.lhs 3242 2016-06-19 10:53:21Z wlux $
 %
-% Copyright (c) 2006-2013, Wolfgang Lux
+% Copyright (c) 2006-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{DictTrans.lhs}
@@ -798,7 +798,7 @@ computed for the context instantiated at the appropriate types.
 >   case unapplyType True ty of
 >     (TypeConstructor tc,tys) ->
 >       case lookupEnv (CT cls tc) iEnv of
->         Just (m,cx,_) -> (m,map (expandAliasType tys) cx)
+>         Just (m,cx,_) -> (m,map (instTypeScheme tys) cx)
 >         Nothing ->
 >           internalError ("instContext " ++ show cls ++ " " ++ show tc)
 >     _ ->

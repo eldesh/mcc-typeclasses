@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 3225 2016-06-16 08:40:29Z wlux $
+% $Id: KindCheck.lhs 3242 2016-06-19 10:53:21Z wlux $
 %
 % Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -527,8 +527,8 @@ have kind $\star$.
 > kcTypeExpr :: TCEnv -> Position -> String -> Doc -> Int -> TypeExpr
 >            -> KcState Kind
 > kcTypeExpr tcEnv p _ _ n (ConstructorType tc) =
->   case aliasArity tc tcEnv of
->     Just n'
+>   case typeAlias tc tcEnv of
+>     Just (n',_)
 >       | n >= n' -> return (constrKind tc tcEnv)
 >       | otherwise -> errorAt p (partialAlias tc n' n)
 >     Nothing -> return (constrKind tc tcEnv)

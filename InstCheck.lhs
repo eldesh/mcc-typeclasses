@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 3225 2016-06-16 08:40:29Z wlux $
+% $Id: InstCheck.lhs 3242 2016-06-19 10:53:21Z wlux $
 %
 % Copyright (c) 2006-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -303,7 +303,7 @@ implied by other predicates in the context are removed.
 > instContext iEnv cls ty =
 >   case unapplyType False ty of
 >     (TypeConstructor tc,tys) ->
->       fmap (map (expandAliasType tys) . snd3) (lookupEnv (CT cls tc) iEnv)
+>       fmap (map (instTypeScheme tys) . snd3) (lookupEnv (CT cls tc) iEnv)
 >     _ -> Nothing
 
 > partitionContext :: Context -> (Context,Context)

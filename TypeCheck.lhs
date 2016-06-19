@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3229 2016-06-16 09:08:31Z wlux $
+% $Id: TypeCheck.lhs 3242 2016-06-19 10:53:21Z wlux $
 %
 % Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1619,7 +1619,7 @@ may cause a further extension of the current substitution.
 >     _ ->
 >       case unapplyType False ty of
 >         (TypeConstructor tc,tys) ->
->           fmap (map (expandAliasType tys) . snd3) (lookupEnv (CT cls tc) iEnv)
+>           fmap (map (instTypeScheme tys) . snd3) (lookupEnv (CT cls tc) iEnv)
 >         _ -> Nothing
 
 > partitionContext :: Context -> (Context,Context)
@@ -1793,7 +1793,7 @@ We use negative offsets for fresh type variables.
 > inst (ForAll n (QualType cx ty)) =
 >   do
 >     tys <- replicateM n freshTypeVar
->     return (map (expandAliasType tys) cx,expandAliasType tys ty)
+>     return (map (instTypeScheme tys) cx,instTypeScheme tys ty)
 
 \end{verbatim}
 The function \texttt{skol} instantiates the type of data and newtype
@@ -1812,11 +1812,11 @@ environment.
 >     tys' <- replicateM m freshSkolem
 >     let tys'' = tys ++ tys'
 >     liftSt (updateSt_ (apSnd3 (bindSkolemInsts tys'')))
->     return (map (expandAliasType tys) cxL,expandAliasType tys'' ty)
+>     return (map (instTypeScheme tys) cxL,instTypeScheme tys'' ty)
 >   where cxL = filter (`notElem` cxR) cx
 >         bindSkolemInsts tys dEnv =
 >           foldr bindSkolemInst dEnv
->                 (map (expandAliasType tys) (maxContext tcEnv cxR))
+>                 (map (instTypeScheme tys) (maxContext tcEnv cxR))
 >         bindSkolemInst (TypePred cls ty) dEnv =
 >           bindEnv cls (ty : fromMaybe [] (lookupEnv cls dEnv)) dEnv
 

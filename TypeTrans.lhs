@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 2723 2008-06-14 15:56:40Z wlux $
+% $Id: TypeTrans.lhs 3242 2016-06-19 10:53:21Z wlux $
 %
-% Copyright (c) 1999-2008, Wolfgang Lux
+% Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeTrans.lhs}
@@ -224,7 +224,7 @@ the module containing their definition.
 >   case qualLookupTopEnv tc tcEnv of
 >     [DataType tc' _ _] -> foldl TypeApply (TypeConstructor tc') tys
 >     [RenamingType tc' _ _] -> foldl TypeApply (TypeConstructor tc') tys
->     [AliasType _ n _ ty] -> applyType (expandAliasType tys' ty) tys''
+>     [AliasType _ n _ ty] -> applyType (instTypeScheme tys' ty) tys''
 >       where (tys',tys'') = splitAt n tys
 >     _ -> internalError ("expandType " ++ show tc)
 > expandTypeApp _ (TypeVariable tv) tys = foldl TypeApply (TypeVariable tv) tys

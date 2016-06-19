@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Typing.lhs 2970 2010-07-01 09:11:20Z wlux $
+% $Id: Typing.lhs 3241 2016-06-19 10:05:37Z wlux $
 %
-% Copyright (c) 2003-2010, Wolfgang Lux
+% Copyright (c) 2003-2016, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Typing.lhs}
@@ -189,9 +189,9 @@ removed newtypes.
 >   where expandType tcEnv (TypeConstructor tc) tys =
 >           case qualLookupTopEnv tc tcEnv of
 >             [AliasType _ n _ ty]
->               | n < length tys -> []
->               | otherwise ->
+>               | n <= length tys ->
 >                   expand tcEnv (applyType (expandAliasType tys' ty) tys'')
+>               | otherwise -> []
 >               where (tys',tys'') = splitAt n tys
 >             [_] -> []
 >             _ -> internalError "expand"

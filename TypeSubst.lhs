@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeSubst.lhs 3242 2016-06-19 10:53:21Z wlux $
+% $Id: TypeSubst.lhs 3243 2016-06-19 12:37:10Z wlux $
 %
 % Copyright (c) 2003-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -10,8 +10,9 @@ This module implements substitutions on types.
 \begin{verbatim}
 
 > module TypeSubst(TypeSubst, SubstType(..), bindVar, substVar,
->                  InstTypeScheme(..), normalize, instanceType,
+>                  InstTypeScheme(..), normalize, instanceType, typeExpansions,
 >                  idSubst, bindSubst, compose) where
+> import Ident
 > import List
 > import Maybe
 > import Subst
@@ -126,5 +127,35 @@ variables of the first argument.
 > instanceType :: InstTypeScheme a => Type -> a -> a
 > instanceType ty = instTypeScheme (ty : map TypeVariable [n..])
 >   where ForAll n _ = polyType ty
+
+\end{verbatim}
+The function \texttt{typeExpansions} recursively expands a type
+$T\,t_1\,\dots\,t_n$ as long as the type constructor $T$ denotes a
+type synonym. While the right hand side type of a type synonym
+declaration is already fully expanded when it is saved in the type
+environment, a recursive expansion may be necessary to resolve renamed
+types after making newtype constructors transparent during desugaring
+(see Sect.~\ref{sec:newtype}).  Since renaming types can be (mutually)
+recursive, the expansion may not terminate. Therefore,
+\texttt{typeExpansions} stops expansion after 50 iterations even the
+resulting type still is a synonym.
+
+\ToDo{Make the limit configurable.}
+\begin{verbatim}
+
+> typeExpansions :: (QualIdent -> Maybe (Int,Type)) -> Type -> [Type]
+> typeExpansions typeAlias ty = take 50 (ty : unfoldr expandType ty)
+>   where expandType ty =
+>           case unapplyType False ty of
+>             (TypeConstructor tc,tys) ->
+>                case typeAlias tc of
+>                  Just (n,ty')
+>                    | n <= length tys ->
+>                        Just (dup (applyType (instTypeScheme tys' ty') tys''))
+>                    | otherwise -> Nothing
+>                    where (tys',tys'') = splitAt n tys
+>                  Nothing -> Nothing
+>             _ -> Nothing
+>         dup x = (x,x)
 
 \end{verbatim}

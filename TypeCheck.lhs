@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3242 2016-06-19 10:53:21Z wlux $
+% $Id: TypeCheck.lhs 3243 2016-06-19 12:37:10Z wlux $
 %
 % Copyright (c) 1999-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -910,22 +910,79 @@ case of \texttt{tcTopDecl}.
 
 \end{verbatim}
 \paragraph{Foreign Functions}
-Argument and result types of foreign functions using the
-\texttt{ccall} calling convention are restricted to the basic types
-\texttt{Bool}, \texttt{Char}, \texttt{Int}, \texttt{Float},
-\texttt{Ptr}, \texttt{FunPtr}, and \texttt{StablePtr}. In addition,
-$\texttt{IO}\;t$ is a legitimate result type when $t$ is either one of
-the basic types or \texttt{()}. As an extension to the Haskell foreign
-function interface specification~\cite{Chakravarty03:FFI}, the compiler
-supports the non-standard \texttt{rawcall} calling convention, which
-allows arbitrary argument and result types. However, in contrast
-to the \texttt{ccall} calling convention, no marshaling takes place at
-all even for the basic types (cf.\ Sect.~\ref{sec:il-compile} with
-regard to marshaling). The type of a dynamic function wrapper is
-restricted further to be of the form $\texttt{FunPtr}\;t \rightarrow
-t$, where $t$ is a valid foreign function type, and the type of a
-foreign address must be either $\texttt{Ptr}\;a$ or
-$\texttt{FunPtr}\;a$, where $a$ is an arbitrary type.
+According to the Haskell foreign function interface
+specification~\cite{Chakravarty03:FFI}, argument and result types of
+foreign functions using the \texttt{ccall} calling convention must be
+marshalable foreign types and marshalable foreign result types,
+respectively. A marshalable foreign type is either
+\begin{itemize}
+\item one of the basic types \texttt{Bool}, \texttt{Char},
+  \texttt{Int}, \texttt{Float}, \texttt{Ptr}, \texttt{FunPtr}, and
+  \texttt{StablePtr},\footnote{The Haskell FFI specification knows
+    about more basic types, but these are not yet available in Curry.}
+\item a type $T\,t'_1\,\dots\,t'_n$ where $T$ is defined as a type
+  synomym
+  %\begin{quote}
+    \texttt{type $T\,a_1\,\dots\,a_n$ = $t$}
+  %\end{quote}
+  and the type $t[a_1/t'_1,\dots,a_n/t'_n]$ is a marshalable foreign type, or
+\item a type $T\,t'_1\,\dots\,t'_n$ where $T$ is defined as a renaming
+  type
+  %\begin{quote}
+    \texttt{newtype $T\,a_1\,\dots\,a_n$ = $N$ $t$},
+  %\end{quote}
+  the type $t[a_1/t'_1,\dots,a_n/t'_n]$ is a marshalable foreign type, and
+  the constructor $N$ is visible.
+\end{itemize}
+A marshalable foreign result type is either
+\begin{itemize}
+\item a marshalable foreign type,
+\item the type \texttt{()},
+\item a type of the form $\texttt{IO}\;t$ where $t$ is a marshalable
+  foreign type or \texttt{()},
+\item a type $T\,t'_1\,\dots\,t'_n$ where $T$ is defined as a type
+  synomym
+  %\begin{quote}
+    \texttt{type $T\,a_1\,\dots\,a_n$ = $t$}
+  %\end{quote}
+  and the type $t[a_1/t'_1,\dots,a_n/t'_n]$ is a marshalable foreign result
+  type, or
+\item a type $T\,t'_1\,\dots\,t'_n$ where $T$ is defined as a renaming
+  type
+  %\begin{quote}
+    \texttt{newtype $T\,a_1\,\dots\,a_n$ = $N$ $t$},
+  %\end{quote}
+  the type $t[a_1/t'_1,\dots,a_n/t'_n]$ is a marshalable foreign result
+  type, and the constructor $N$ is visible.
+\end{itemize}
+As an extension to the Haskell foreign function interface
+specification~\cite{Chakravarty03:FFI}, the compiler supports the
+non-standard \texttt{rawcall} calling convention, which allows
+arbitrary argument and result types. However, in contrast to the
+\texttt{ccall} calling convention, no marshaling takes place at all
+even for the basic types (cf.\ Sect.~\ref{sec:il-compile} with regard
+to marshaling). The type of a dynamic function wrapper is restricted
+further to be of the form $\texttt{FunPtr}\;t \rightarrow t$, where
+$t$ is a valid foreign function type, and the type of a foreign
+address must be either $\texttt{Ptr}\;a$ or $\texttt{FunPtr}\;a$,
+where $a$ is an arbitrary type.
+
+To detect valid foreign (result) types, the compiler must expand type
+synonyms and the right hand sides of renaming types in the types used
+in a foreign function declaration. For type synonyms this happens
+automatically when a source code type expression is converted into the
+internal type representation. To expand renaming types, the compiler
+collects all visible newtype constructors from the type environment
+and creates a new environment mapping the respective type constructors
+to their right hand side types. Expansion is complicated by the fact
+that renaming types can be (mutually) recursive and thus expansion of
+a renaming type may not terminate. To avoid non-termination, the
+compiler uses the function \texttt{typeExpansions} to generate a
+finite list of successive expansions of a type and checks for the
+first type that is a valid foreign (result) type in that list. Note
+that the compiler checks each type in the list rather than only the
+last one because this avoids generating the auxiliary environment at
+all when a basic type or a type synonym of a basic type is used.
 
 Note that a foreign function with type $t_1 \rightarrow \dots
 \rightarrow t_n \rightarrow t$ has arity $n$ unless the result type
@@ -939,29 +996,45 @@ equivalent to $\emph{World}\rightarrow(t,\emph{World})$.
 >                -> TcState (ValueEnv,Type)
 > tcForeignFunct m tcEnv tyEnv p (cc,_,ie) f ty =
 >   do
->     checkForeignType cc ty'
+>     checkForeignType cc (renamingTypes tyEnv) ty'
 >     return (bindFun m f (foreignArity ty') (polyType ty') tyEnv,ty')
 >   where ty' = unqualType (expandPolyType tcEnv (QualTypeExpr [] ty))
->         checkForeignType cc ty
+>         checkForeignType cc nts ty
 >           | cc == CallConvPrimitive = return ()
->           | ie == Just "dynamic" = checkCDynCallType tcEnv p cc ty
+>           | ie == Just "dynamic" = checkCDynCallType tcEnv nts p cc ty
 >           | maybe False ('&' `elem`) ie = checkCAddrType tcEnv p ty
->           | otherwise = checkCCallType tcEnv p cc ty
+>           | otherwise = checkCCallType tcEnv nts p cc ty
 
-> checkCCallType :: TCEnv -> Position -> CallConv -> Type -> TcState ()
-> checkCCallType tcEnv p CallConvCCall (TypeArrow ty1 ty2)
->   | isCArgType ty1 = checkCCallType tcEnv p CallConvCCall ty2
+> type NewtypeEnv = Env QualIdent (Int,Type)
+
+> renamingTypes :: ValueEnv -> NewtypeEnv
+> renamingTypes tyEnv = foldr bindRenamingType emptyEnv (allEntities tyEnv)
+>   where bindRenamingType (DataConstructor _ _ _ _) = id
+>         bindRenamingType (NewtypeConstructor _ _ ty) = bindType (rawType ty)
+>         bindRenamingType (Value _ _ _) = id
+>         bindType (TypeArrow ty1 ty2) = bindEnv tc (length tys,ty1)
+>           where (TypeConstructor tc,tys) = unapplyType False ty2
+
+> renamedType :: NewtypeEnv -> QualIdent -> Maybe (Int,Type)
+> renamedType nts tc = lookupEnv tc nts
+
+> checkCCallType :: TCEnv -> NewtypeEnv -> Position -> CallConv -> Type
+>                -> TcState ()
+> checkCCallType tcEnv nts p CallConvCCall (TypeArrow ty1 ty2)
+>   | any isCArgType (typeExpansions (renamedType nts) ty1) =
+>       checkCCallType tcEnv nts p CallConvCCall ty2
 >   | otherwise = errorAt p (invalidCType "argument" tcEnv ty1)
-> checkCCallType tcEnv p CallConvCCall ty
->   | isCRetType ty = return ()
+> checkCCallType tcEnv nts p CallConvCCall ty
+>   | any (isCRetType nts) (typeExpansions (renamedType nts) ty) = return ()
 >   | otherwise = errorAt p (invalidCType "result" tcEnv ty)
-> checkCCallType _ _ CallConvRawCall _ = return ()
+> checkCCallType _ _ _ CallConvRawCall _ = return ()
 
-> checkCDynCallType :: TCEnv -> Position -> CallConv -> Type -> TcState ()
-> checkCDynCallType tcEnv p cc
+> checkCDynCallType :: TCEnv -> NewtypeEnv -> Position -> CallConv -> Type
+>                   -> TcState ()
+> checkCDynCallType tcEnv nts p cc
 >                   (TypeArrow (TypeApply (TypeConstructor tc) ty1) ty2)
->   | tc == qFunPtrId && ty1 == ty2 = checkCCallType tcEnv p cc ty1
-> checkCDynCallType tcEnv p _ ty =
+>   | tc == qFunPtrId && ty1 == ty2 = checkCCallType tcEnv nts p cc ty1
+> checkCDynCallType tcEnv _ p _ ty =
 >   errorAt p (invalidCType "dynamic function" tcEnv ty)
 
 > checkCAddrType :: TCEnv -> Position -> Type -> TcState ()
@@ -975,10 +1048,13 @@ equivalent to $\emph{World}\rightarrow(t,\emph{World})$.
 >   tc `elem` qStablePtrId:cPointerTypeId
 > isCArgType _ = False
 
-> isCRetType :: Type -> Bool
-> isCRetType (TypeApply (TypeConstructor tc) ty)
->   | tc == qIOId = ty == unitType || isCArgType ty
-> isCRetType ty = isCArgType ty
+> isCRetType :: NewtypeEnv -> Type -> Bool
+> isCRetType _ (TypeConstructor tc)
+>   | tc == qUnitId = True
+> isCRetType nts (TypeApply (TypeConstructor tc) ty)
+>   | tc == qIOId =
+>       ty == unitType || any isCArgType (typeExpansions (renamedType nts) ty)
+> isCRetType _ ty = isCArgType ty
 
 > isCPtrType :: Type -> Bool
 > isCPtrType (TypeApply (TypeConstructor tc) _) = tc `elem` cPointerTypeId

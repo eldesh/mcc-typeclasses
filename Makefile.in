@@ -1,6 +1,6 @@
 # Makefile for the Curry compiler
 #
-# $Id: Makefile.in 3224 2016-06-16 07:26:19Z wlux $
+# $Id: Makefile.in 3244 2016-06-20 14:35:34Z wlux $
 #
 # Copyright (c) 2000-2015 Wolfgang Lux
 # See LICENSE for the full license.
@@ -552,7 +552,7 @@ depend-subdirs install-subdirs:
 			*) echo "Making $$target in $$d"; \
 		esac; \
 		(cd $$d && $(MAKE) $$target) || \
-		case $$k in *=*) exit $$?;; *k*) fail=yes;; *) exit $$?;; esac; \
+		{ rc=$$?; case $$k in *=*) exit $$rc;; *k*) fail=yes;; *) exit $$rc;; esac; } \
 	done; \
 	test -z "$$fail"
 

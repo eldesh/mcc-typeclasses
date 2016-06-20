@@ -3,7 +3,7 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 3250 2016-06-20 15:32:17Z wlux $
+# $Id: cyc.in 3251 2016-06-20 15:33:47Z wlux $
 #
 # Copyright (c) 2002-2016, Wolfgang Lux
 # See LICENSE for the full license.
@@ -41,12 +41,12 @@ debug=
 cc="@CC@"
 ccopts=
 ldopts=
-hsize=
-ssize=
-tsize=
-pfail=
-stats=
-trace=
+unset hsize
+unset ssize
+unset tsize
+unset pfail
+unset stats
+unset trace
 saveTemps=
 libs=
 dbglib=
@@ -55,9 +55,9 @@ temps=
 linkfiles=
 imports=
 modules=
-goal=
-typeIt=
-ofile=
+unset goal
+unset typeIt
+unset ofile
 
 # functions
 check_size ( ) {
@@ -240,13 +240,13 @@ if test -n "$verbose"; then
   test "$exec" || echo='echo 1>&2'
 fi
 # Check for conflicting options
-if test -n "$goal" && test -n "$typeIt"; then
+if test -n "${goal+set}" && test -n "${typeIt+set}"; then
   echo 1>&2 "$cyc: conflicting options -e and -T specified"
   exit 1
 fi
 
 # Check for input files
-if test -z "$files$goal$typeIt"; then
+if test -z "$files${goal+set}${typeIt+set}"; then
   test -n "$verbose" && exit 0
   echo 1>&2 "$cyc: no input files"
   exit 1
@@ -279,7 +279,7 @@ trap 'rc=$?; test "$temps" && rm -f $temps; exit $rc' 0 1 2 3 15
 
 # Process all files
 eval set dummy "$files"; shift
-if test -n "$ofile" && test -n "$toC$toS$toO" && test $# -gt 1; then
+if test -n "${ofile+set}" && test -n "$toC$toS$toO" && test $# -gt 1; then
   echo 1>&2 "$cyc: cannot specify -o with -c, -S, or -C and multiple input files"
   exit 1
 fi
@@ -299,7 +299,7 @@ for f in "$@"; do
       stem=`expr "$f" : '\(.*\)\.curry'`
       stem=$stem`expr "$f" : '\(.*\)\.lcurry'`
       if test -n "$toC"; then
-        if test -n "$ofile"; then
+        if test -n "${ofile+set}"; then
 	  target=$ofile
 	else
 	  target=$stem.c
@@ -335,7 +335,7 @@ for f in "$@"; do
       test -n "$stem" || stem=`expr "$f" : '\(.*\)\.[cs]'`
       if test -n "$toS"; then c=-S suffix=.s; else c=-c suffix=.o; fi
       if test -n "$toS$toO"; then
-        if test -n "$ofile"; then
+        if test -n "${ofile+set}"; then
 	  target=$ofile
 	else
 	  target=$stem$suffix
@@ -362,8 +362,8 @@ for f in "$@"; do
 done
 
 # Eventually link the program or compute the goal's type
-if test -n "$typeIt"; then
-  if test -n "$ofile"; then
+if test -n "${typeIt+set}"; then
+  if test -n "${ofile+set}"; then
     # Cygpath workaround: converts path to Windows-style
     if test -n "@CYGPATH@"; then
       ofile2=`@CYGPATH@ -w $ofile`
@@ -375,8 +375,8 @@ if test -n "$typeIt"; then
     target=
   fi
   typeIt2=`quote "$typeIt"`
-  eval $echo "$cycc" "$imports" "$cyccopts" -t"\\\"$typeIt2\\\"" "$modules" "$target" || exit $?
-  eval $exec "$cycc" "$imports" "$cyccopts" -t"$typeIt2" "$modules" "$target" || exit $? || exit $?
+  eval $echo "$cycc" "$imports" "$cyccopts" -t "\\\"$typeIt2\\\"" "$modules" "$target"
+  eval $exec "$cycc" "$imports" "$cyccopts" -t "$typeIt2" "$modules" "$target" || exit $?
 elif test -z "$toC$toS$toO"; then
   target=/tmp/cyc$$.c
   test -n "$debug$saveTemps" || temps="$temps $target"
@@ -386,7 +386,7 @@ elif test -z "$toC$toS$toO"; then
   else
     target2=$target
   fi
-  if test -n "$goal" && test -z "$ofile"; then
+  if test -n "${goal+set}" && test -z "${ofile+set}"; then
     evalNow=$goal
     ofile=/tmp/cyc$$@EXEEXT@
     temps="$temps $ofile"
@@ -394,20 +394,25 @@ elif test -z "$toC$toS$toO"; then
     evalNow=
   fi
 
-  goal=`quote "$goal"`
   target2=`quote "$target2"`
-  eval $echo "$cycc" "$imports" "$cyccopts" -e"\\\"$goal\\\"" "$modules" -o "$target2"
-  eval $exec "$cycc" "$imports" "$cyccopts" -e"$goal" "$modules" -o "$target2" || exit $?
+  if test -n "${goal+set}"; then
+    goal2=`quote "$goal"`
+    eval $echo "$cycc" "$imports" "$cyccopts" -e "\\\"$goal2\\\"" "$modules" -o "$target2"
+    eval $exec "$cycc" "$imports" "$cyccopts" -e "$goal2" "$modules" -o "$target2" || exit $?
+  else
+    eval $echo "$cycc" "$imports" "$cyccopts" --main "$modules" -o "$target2"
+    eval $exec "$cycc" "$imports" "$cyccopts" --main "$modules" -o "$target2" || exit $?
+  fi
 
-  test -n "$hsize" && ldopts="$ldopts -DDEFAULT_HEAPSIZE=$hsize"
-  test -n "$ssize" && ldopts="$ldopts -DDEFAULT_STACKSIZE=$ssize"
-  test -n "$tsize" && ldopts="$ldopts -DDEFAULT_TRAILSIZE=$tsize"
-  test -n "$pfail" && ldopts="$ldopts -DDEFAULT_PRINT_FAIL=$pfail"
-  test -n "$stats" && ldopts="$ldopts -DDEFAULT_SHOW_STATS=$stats"
-  test -n "$trace" && ldopts="$ldopts -DDEFAULT_DO_TRACE=$trace"
-  test -n "$ofile" && ldopts="$ldopts -o "`quote "$ofile"`
-  eval $echo "$cc" $debug "$ccopts" "$ldopts" /tmp/cyc$$.c "$linkfiles" "$libs" $dbglib -lcurry @LIBS@
-  eval $exec "$cc" $debug "$ccopts" "$ldopts" /tmp/cyc$$.c "$linkfiles" "$libs" $dbglib -lcurry @LIBS@ || exit $?
+  test -n "${hsize+set}" && ldopts="$ldopts -DDEFAULT_HEAPSIZE=$hsize"
+  test -n "${ssize+set}" && ldopts="$ldopts -DDEFAULT_STACKSIZE=$ssize"
+  test -n "${tsize+set}" && ldopts="$ldopts -DDEFAULT_TRAILSIZE=$tsize"
+  test -n "${pfail+set}" && ldopts="$ldopts -DDEFAULT_PRINT_FAIL=$pfail"
+  test -n "${stats+set}" && ldopts="$ldopts -DDEFAULT_SHOW_STATS=$stats"
+  test -n "${trace+set}" && ldopts="$ldopts -DDEFAULT_DO_TRACE=$trace"
+  test -n "${ofile+set}" && ldopts="$ldopts -o "`quote "$ofile"`
+  eval $echo "$cc" $debug "$ccopts" "$ldopts" "$target2" "$linkfiles" "$libs" $dbglib -lcurry @LIBS@
+  eval $exec "$cc" $debug "$ccopts" "$ldopts" "$target2" "$linkfiles" "$libs" $dbglib -lcurry @LIBS@ || exit $?
 
   # Eventually evaluate the goal if one was specified
   test -z "$evalNow" || $ofile || exit $?

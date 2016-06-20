@@ -3,7 +3,7 @@
 #
 # Shell script for building Curry programs
 #
-# $Id: cymake.in 3250 2016-06-20 15:32:17Z wlux $
+# $Id: cymake.in 3251 2016-06-20 15:33:47Z wlux $
 #
 # Copyright (c) 2002-2016, Wolfgang Lux
 # See LICENSE for the full license.
@@ -39,9 +39,9 @@ mkopts=
 cyopts=
 ldopts=
 linkAlways=
-goal=
-typeIt=
-output=
+unset goal
+unset typeIt
+unset output
 clean=
 find=
 depend=
@@ -105,15 +105,15 @@ compile ( ) {
 
 link ( ) {
   i=$1 n=$2 target=$3; shift 3; objs=`quote "$@"`
-  if test -n "$goal"; then
+  if test -n "${goal+set}"; then
     $progress $i $n linking "$output"
-    if test -n "$output"; then objs="-o "`quote1 "$output"`" $objs"; fi
+    if test -n "${output+set}"; then objs="-o "`quote1 "$output"`" $objs"; fi
     goal=`quote1 "$goal"`
     eval $echo "$cyc" "$cyopts" "$ldopts" -e "\\\"$goal\\\"" "$objs" "$libs"
     eval $exec "$cyc" "$cyopts" "$ldopts" -e "$goal" "$objs" "$libs" || exit $?
-  elif test -n "$typeIt"; then
+  elif test -n "${typeIt+set}"; then
     $progress $i $n linking ""
-    if test -n "$output"; then objs="-o "`quote1 "$output"`" $objs"; fi
+    if test -n "${output+set}"; then objs="-o "`quote1 "$output"`" $objs"; fi
     typeIt=`quote1 "$typeIt"`
     eval $echo "$cyc" "$cyopts" -T "\\\"$typeIt\\\"" "$objs"
     eval $exec "$cyc" "$cyopts" -T "$typeIt" "$objs" || exit $?
@@ -213,7 +213,7 @@ if test -n "$depend$find"; then
 fi
 
 # Check for input files
-if test -z "$files$goal$typeIt"; then
+if test -z "$files${goal+set}${typeIt+set}"; then
   test -n "$verbose" && exit 0
   echo 1>&2 "$cymake: no targets"
   exit 1
@@ -224,27 +224,26 @@ trap 'rc=$?; rm -f /tmp/cymake$$; exit $rc' 0 1 2 3 15
 
 # Process all targets
 eval set dummy "$files"; shift
-if test -n "$output" && test $# -gt 1; then
+if test -n "${output+set}" && test $# -gt 1; then
   echo 1>&2 "$cymake: cannot specify -o with multiple targets"
   exit 1
 fi
-if test -n "$goal" && test $# -gt 1; then
+if test -n "${goal+set}" && test $# -gt 1; then
   echo 1>&2 "$cymake: cannot specify -e with multiple targets"
   exit 1
 fi
-if test -n "$typeIt" && test $# -gt 1; then
+if test -n "${typeIt+set}" && test $# -gt 1; then
   echo 1>&2 "$cymake: cannot specify -T with multiple targets"
   exit 1
 fi
-if test -n "$goal" && test -n "$typeIt"; then
+if test -n "${goal+set}" && test -n "${typeIt+set}"; then
   echo 1>&2 "$cymake: conflicting options -e and -T specified"
   exit 1
 fi
 
 
 if test $# -eq 0; then
-  target=$output
-  test -n "$target" || target=a.out
+  if test -n "${output+set}"; then target=$output; else target=a.out; fi
   if test -n "$clean"; then
     remove "$target"
   else
@@ -264,7 +263,7 @@ for f in "$@"; do
   esac
   check_source "$f" "$suffix" "$suffixes" || exit $?
   f=`quote1 "$f"`
-  if test -n "$goal$typeIt"; then
+  if test -n "${goal+set}${typeIt+set}"; then
     g=`quote1 "$goal$typeIt"`
     test -n "$verbose" && \
       eval echo 1>&2 "$cymk" $clean "$mkopts" -e "\\\"$g\\\"" "$imports" "$f"

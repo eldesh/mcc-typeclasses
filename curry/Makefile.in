@@ -1,8 +1,8 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 3244 2016-06-20 14:35:34Z wlux $
+# $Id: Makefile.in 3249 2016-06-20 14:50:45Z wlux $
 #
-# Copyright (c) 2004-2015, Wolfgang Lux
+# Copyright (c) 2004-2016, Wolfgang Lux
 # See ../LICENSE for the full license.
 #
 
@@ -223,13 +223,15 @@ libcurry.so: libcurry.so.$(VERSION)
 	ln -s libcurry.so.$(VERSION) $@
 libcurry.so.$(VERSION): libcurry.a
 	$(CC) $(CFLAGS) -shared -o $@ -Wl,-h,$@ \
-	      $(ALL_EXTRACT_FLAG) libcurry.a $(DEFAULT_EXTRACT_FLAG)
+	      $(ALL_EXTRACT_FLAG) libcurry.a $(DEFAULT_EXTRACT_FLAG) \
+	      $(LDFLAGS) $(LIBS)
 libcurry_g.so: libcurry_g.so.$(VERSION)
 	rm -f $@
 	ln -s libcurry_g.so.$(VERSION) $@
 libcurry_g.so.$(VERSION): libcurry_g.a
 	$(CC) $(CFLAGS) -shared -o $@ -Wl,-h,$@ \
-	      $(ALL_EXTRACT_FLAG) libcurry_g.a $(DEFAULT_EXTRACT_FLAG)
+	      $(ALL_EXTRACT_FLAG) libcurry_g.a $(DEFAULT_EXTRACT_FLAG) \
+	      $(LDFLAGS) $(LIBS)
 
 # OS X dynamic libraries
 libcurry.dylib: libcurry.$(VERSION).dylib

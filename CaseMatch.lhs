@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 3085 2012-07-31 16:48:41Z wlux $
+% $Id: CaseMatch.lhs 3252 2016-06-20 19:46:46Z wlux $
 %
-% Copyright (c) 2001-2012, Wolfgang Lux
+% Copyright (c) 2001-2016, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CaseMatch.lhs}
@@ -156,9 +156,8 @@ if it is not restricted by the guard expression.
 > expandRhs m p es e0
 >   | booleanGuards es =
 >       liftM2 expandBooleanGuards (mapM (match m p) es) (liftMaybe e0)
->   | otherwise = liftM mkCond (mapM (match m p) es)
->   where mkCond [CondExpr p g e] = Case g [caseAlt p successPattern e]
->         liftMaybe (Just e0) = liftM Just e0
+>   | otherwise = liftM expandConstraintGuard (mapM (match m p) es)
+>   where liftMaybe (Just e0) = liftM Just e0
 >         liftMaybe Nothing = return Nothing
 
 > expandBooleanGuards :: [CondExpr QualType] -> Maybe (Expression QualType)
@@ -170,6 +169,9 @@ if it is not restricted by the guard expression.
 >   where expand es e0
 >           | null es = maybeToList e0
 >           | otherwise = [expandBooleanGuards es e0]
+
+> expandConstraintGuard :: [CondExpr QualType] -> Expression QualType
+> expandConstraintGuard [CondExpr p g e] = Case g [caseAlt p successPattern e]
 
 > booleanGuards :: [CondExpr QualType] -> Bool
 > booleanGuards [] = False
@@ -256,14 +258,11 @@ bound to a (head) normal form.
 >         ensure e = Apply (prelEnsure (typeOf e)) e
 
 \end{verbatim}
-When injected into a guarded equation or alternative with a constraint
-guard, the additional constraints are evaluated concurrently with the
-guard. On the other hand, a sequence of guarded equations or
-alternatives with boolean guards is transformed into an if-then-else
-cascade first and the function pattern constraints are evaluated
-before entering that expression. As a consequence case alternatives
-with boolean guards will no longer fall through into the remaining
-alternatives if all guards fail. E.g.,
+When injected into a guarded equation or alternative the additional
+constraints are evaluated before the existing guards. This is achieved
+by transforming the existing guards into a right hand side expression.
+As a consequence case alternatives with boolean guards will no longer
+fall through into the remaining alternatives if all guards fail. E.g.,
 \begin{verbatim}
   case [-1] of
     xs ++ [x] | x > 0 -> x
@@ -310,9 +309,9 @@ expression was \texttt{[]}.
 > injectRhs :: [Expression QualType] -> [Decl QualType] -> Rhs QualType
 >           -> Rhs QualType
 > injectRhs cs ds (SimpleRhs p e ds') = injectCond p cs e ds ds'
-> injectRhs cs ds (GuardedRhs es@(CondExpr p g e : _) ds')
+> injectRhs cs ds (GuardedRhs es@(CondExpr p _ _ : _) ds')
 >   | booleanGuards es = injectCond p cs (expandBooleanGuards es Nothing) ds ds'
->   | otherwise = injectCond p (cs ++ [g]) e ds ds'
+>   | otherwise = injectCond p cs (expandConstraintGuard es) ds ds'
 
 > injectCond :: Position -> [Expression QualType] -> Expression QualType
 >            -> [Decl QualType] -> [Decl QualType] -> Rhs QualType
@@ -787,7 +786,7 @@ Prelude entities
 > prelFromInteger ty = preludeFun [integerType] ty "fromInteger"
 > prelFromRational ty = preludeFun [rationalType] ty "fromRational"
 
-> unify, prelEnsure :: Type -> Expression QualType
+> unify, prelEnsure, prelUnknown :: Type -> Expression QualType
 > unify ty = preludeFun [ty,ty] successType "=:<="
 > prelEnsure ty = preludeFun [ty] ty "ensureNotFree"
 > prelUnknown ty = preludeFun [] ty "unknown"

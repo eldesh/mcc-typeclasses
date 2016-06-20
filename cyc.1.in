@@ -4,9 +4,9 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cyc.1.in 2743 2008-08-05 15:10:42Z wlux $
+.\" $Id: cyc.1.in 3250 2016-06-20 15:32:17Z wlux $
 .\"
-.\" Copyright (c) 2004-2008, Wolfgang Lux
+.\" Copyright (c) 2004-2016, Wolfgang Lux
 .\" See LICENSE for the full license.
 .\"
 .Dd 17.11.05               \" DATE 
@@ -372,6 +372,13 @@ of the run. If specified more than once, also print memory statistics
 at each garbage collection.
 .It Fl e Ar goal
 Evaluate
+.Ar goal
+instead of producing an executable file. If this option is combined
+with
+.Fl o Ar file ,
+an executable is produced in
+.Ar file
+that evaluates
 .Ar goal
 instead of
 .Li main .

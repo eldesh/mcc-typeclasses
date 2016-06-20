@@ -3,9 +3,9 @@
 #
 # A poor (wo)man's interactive top-level for Curry
 #
-# $Id: cyi.in 3214 2016-06-15 21:47:30Z wlux $
+# $Id: cyi.in 3250 2016-06-20 15:32:17Z wlux $
 #
-# Copyright (c) 2002-2015, Wolfgang Lux
+# Copyright (c) 2002-2016, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -157,7 +157,7 @@ get_link_command ( ) {
     eval set dummy "`compile_target $* -e _ -### | tail -1`"; shift
     while test $# -gt 0; do
       case $1 in
-       -o | -e ) shift;;
+       -e ) shift;;
        * ) link_command="$link_command "`quote "$1"`
       esac
       shift
@@ -293,12 +293,9 @@ edit ( ) {
   esac
 }
 
-trap 'rc=$?; rm -f /tmp/cyi$$@EXEEXT@; exit $rc' 0 1 15
-trap 'rm -f /tmp/cyi$$@EXEEXT@' 2 3
 evaluate ( ) {
   set_goal "$1" || return
-  eval "${command:-compile_target}" -e "$qgoal" -o /tmp/cyi$$ && /tmp/cyi$$
-  rm -f /tmp/cyi$$@EXEEXT@
+  eval "${command:-compile_target}" -e "$qgoal"
 }
 
 debug ( ) {
@@ -310,8 +307,7 @@ debug ( ) {
       dcommand=`get_link_command --debug`
     fi
   fi
-  eval "${dcommand:-compile_target --debug}" -e "$qgoal" -o /tmp/cyi$$ && /tmp/cyi$$
-  rm -f /tmp/cyi$$@EXEEXT@
+  eval "${dcommand:-compile_target --debug}" -e "$qgoal"
 }
 
 type_goal ( ) {

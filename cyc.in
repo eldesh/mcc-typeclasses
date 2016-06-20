@@ -3,9 +3,9 @@
 #
 # Shell script for compiling Curry modules
 #
-# $Id: cyc.in 3219 2016-06-15 22:19:48Z wlux $
+# $Id: cyc.in 3250 2016-06-20 15:32:17Z wlux $
 #
-# Copyright (c) 2002-2015, Wolfgang Lux
+# Copyright (c) 2002-2016, Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -386,6 +386,14 @@ elif test -z "$toC$toS$toO"; then
   else
     target2=$target
   fi
+  if test -n "$goal" && test -z "$ofile"; then
+    evalNow=$goal
+    ofile=/tmp/cyc$$@EXEEXT@
+    temps="$temps $ofile"
+  else
+    evalNow=
+  fi
+
   goal=`quote "$goal"`
   target2=`quote "$target2"`
   eval $echo "$cycc" "$imports" "$cyccopts" -e"\\\"$goal\\\"" "$modules" -o "$target2"
@@ -400,6 +408,9 @@ elif test -z "$toC$toS$toO"; then
   test -n "$ofile" && ldopts="$ldopts -o "`quote "$ofile"`
   eval $echo "$cc" $debug "$ccopts" "$ldopts" /tmp/cyc$$.c "$linkfiles" "$libs" $dbglib -lcurry @LIBS@
   eval $exec "$cc" $debug "$ccopts" "$ldopts" /tmp/cyc$$.c "$linkfiles" "$libs" $dbglib -lcurry @LIBS@ || exit $?
+
+  # Eventually evaluate the goal if one was specified
+  test -z "$evalNow" || $ofile || exit $?
 fi
 
 # done

@@ -4,9 +4,9 @@
 .\"man mdoc for the short list of editing options
 .\"/usr/share/misc/mdoc.template
 .\"
-.\" $Id: cymake.1.in 2945 2010-06-11 10:39:16Z wlux $
+.\" $Id: cymake.1.in 3250 2016-06-20 15:32:17Z wlux $
 .\"
-.\" Copyright (c) 2004-2010, Wolfgang Lux
+.\" Copyright (c) 2004-2016, Wolfgang Lux
 .\" See LICENSE for the full license.
 .\"
 .Dd 17.11.05               \" DATE 
@@ -107,20 +107,25 @@ directory and then along the search path. If no file is found,
 .Ar f
 is empty. 
 .It Fl a
-Always link the executable, even if it is not out of date with respect
-to its object files.
-.Pp
-This option is deprecated. Use
-.Fl e Li main
-(or any other goal) to force relinking.
+When an executable is produced, the executable is always relinked,
+even if it is not out of date with respect to its object files.
 .It Fl e Ar goal
 Evaluate
 .Ar goal
+instead of producing an executable file. If this option is combined
+with
+.Fl o Ar file ,
+an executable is produced in
+.Ar file
+that evaluates
+.Ar goal
 instead of function
 .Li main .
-The executable is always relinked, even if it appears to be not out of
-date with respect to its object files. This option cannot be used when
-compiling more than one module.
+In that case, the executable is always relinked as with the
+.Fl a
+option, even if it appears to be not out of date with respect to its
+object files. This option cannot be used when compiling more than one
+module.
 .It Fl T Ar goal
 Compute the type of
 .Ar goal .

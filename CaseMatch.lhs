@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 3252 2016-06-20 19:46:46Z wlux $
+% $Id: CaseMatch.lhs 3253 2016-06-20 20:18:56Z wlux $
 %
 % Copyright (c) 2001-2016, Wolfgang Lux
 % See LICENSE for the full license.
@@ -174,7 +174,7 @@ if it is not restricted by the guard expression.
 > expandConstraintGuard [CondExpr p g e] = Case g [caseAlt p successPattern e]
 
 > booleanGuards :: [CondExpr QualType] -> Bool
-> booleanGuards [] = False
+> booleanGuards [] = True
 > booleanGuards (CondExpr _ g _ : es) = not (null es) || typeOf g == boolType
 
 > instance CaseMatch CondExpr where
@@ -421,12 +421,12 @@ comprehensible.
 >   | null vars = e1
 >   | null nonVars = e2
 >   | otherwise =
->       optMatch m (join (liftM2 (matchOr p) e1 e2)) (v:) vs (map skipArg as)
+>       optMatch m (join (liftM2 (matchOr p) e1 e2)) (v:) vs (map shiftArg as)
 >   where (vars,nonVars) = partition (isVarPattern . fst) (map tagAlt as)
 >         e1 = matchInductive m id v vs nonVars
 >         e2 = flexMatch m p vs (map (matchVar (snd v) . snd) vars)
 >         tagAlt (p,t:ts,rhs) = (pattern t,(p,id,t:ts,rhs))
->         skipArg (p,t:ts,rhs) = (p,(t:),ts,rhs)
+>         shiftArg (p,t:ts,rhs) = (p,(t:),ts,rhs)
 >         matchVar v (p,_,t:ts,rhs) = (p,ts,bindVars p v t rhs)
 
 > optMatch :: ModuleIdent -> CaseMatchState (Expression QualType)
@@ -436,10 +436,10 @@ comprehensible.
 > optMatch m e prefix (v:vs) as
 >   | null vars = matchInductive m prefix v vs nonVars
 >   | null nonVars = optMatch m e prefix vs (map (matchVar (snd v)) as)
->   | otherwise = optMatch m e (prefix . (v:)) vs (map skipArg as)
+>   | otherwise = optMatch m e (prefix . (v:)) vs (map shiftArg as)
 >   where (vars,nonVars) = partition (isVarPattern . fst) (map tagAlt as)
 >         tagAlt (p,prefix,t:ts,rhs) = (pattern t,(p,prefix,t:ts,rhs))
->         skipArg (p,prefix,t:ts,rhs) = (p,prefix . (t:),ts,rhs)
+>         shiftArg (p,prefix,t:ts,rhs) = (p,prefix . (t:),ts,rhs)
 >         matchVar v (p,prefix,t:ts,rhs) = (p,prefix,ts,bindVars p v t rhs)
 
 > matchInductive :: ModuleIdent -> ([(QualType,Ident)] -> [(QualType,Ident)])
@@ -516,8 +516,9 @@ heads and not in case expressions.
 The essential difference between pattern matching in rigid case
 expressions on one hand and function heads and flexible fcase
 expressions on the other hand is that in case expressions,
-alternatives are matched from top to bottom and evaluation commits to
-the first alternative with a matching pattern. If an alternative uses
+alternatives are matched from top to bottom and patterns are matched
+from left to right in each alternative. Evaluation commits to the
+first alternative with a matching pattern. If an alternative uses
 boolean guards and all guards of that alternative fail, pattern
 matching continues with the next alternative as if the pattern did not
 match. As an extension, we also support constraint guards, but do not
@@ -555,6 +556,30 @@ defining the respective group. Note that the algorithm carefully
 preserves the order of alternatives, which means that the first
 alternatives of a group matching a literal or constructor rooted term
 may have a variable pattern at the selected position.
+
+In addition to the matching alternatives, the compiler must also
+include non-matching alternatives with a non-variable pattern left of
+the selected position in each group. This is necessary to obey the
+top-down, left to right matching semantics for case expressions. For
+instance, in the following, contrived case expression\footnote{This
+  example is derived from similar code in
+  \cite{KarachaliasSchrijversVytiniotisPeytonJones2015:GADTs}.}
+\begin{verbatim}
+  case (x,y) of
+    (_,False) -> 1
+    (True,False) -> 2
+    (_,True) -> 3
+\end{verbatim}
+the second alternative must be included in the alternatives for
+\verb|y| matching \verb|True| because according to the semantics, when
+the first alternative does not match (\verb|y| reduces to \verb|True|
+rather than \verb|False|) the second alternative is tried next and
+this first evaluates \verb|x| to a ground term. When we include a
+non-matching alternative in a group, we must replace all arguments to
+the right of the selected position by variable patterns to prevent
+further evaluation after the non-matching pattern and change the right
+hand side into an expression that always fails. We use a guarded right
+hand side with no alternatives for this purpose here.
 
 Overloaded (numeric) literals complicate pattern matching because the
 representation of an overloaded numeric literal is not known at
@@ -685,7 +710,7 @@ where the default alternative is redundant.
 >     VariablePattern _ _
 >       | all (isVarPattern . fst) (tail as') ->
 >           rigidMatch m prefix vs (map (matchVar (snd v)) as)
->       | otherwise -> rigidMatch m (prefix . (v:)) vs (map skipArg as)
+>       | otherwise -> rigidMatch m (prefix . (v:)) vs (map shiftArg as)
 >     t'@(LiteralPattern _ l')
 >       | ty `elem` charType:numTypes ->
 >           liftM (Case (uncurry mkVar v))
@@ -706,7 +731,7 @@ where the default alternative is redundant.
 >   where as' = map tagAlt as
 >         (lts,cts,vts) = partitionPatterns (nub (map fst as'))
 >         tagAlt (p,prefix,t:ts,rhs) = (pattern t,(p,prefix,t:ts,rhs))
->         skipArg (p,prefix,t:ts,rhs) = (p,prefix . (t:),ts,rhs)
+>         shiftArg (p,prefix,t:ts,rhs) = (p,prefix . (t:),ts,rhs)
 >         matchVar v (p,prefix,t:ts,rhs) = (p,prefix,ts,bindVars p v t rhs)
 >         dupArg (p,prefix,t:ts,rhs) =
 >           (p,prefix . (asLiteral v t :),asConstrApp v t:ts,rhs)
@@ -740,11 +765,18 @@ where the default alternative is redundant.
 >           | isVarPattern t = uncurry VariablePattern v
 >           | otherwise = head (filter (not . isVarPattern) ts)
 >         ts = [t | (_,_,t:_,_) <- as']
->         as' = [a | (t',a) <- as, t' == t || isVarPattern t']
+>         as' = concatMap (select t) as
 >         pos (p,_,_,_) = p
 >         expandArg ts' (p,prefix,t:ts,rhs) =
 >           (p,id,prefix (arguments' ts' t ++ ts),bindVars p (snd v) t rhs)
 >         arguments' ts' t = if isVarPattern t then ts' else arguments t
+>         select t (t',a)
+>           | t' == t || isVarPattern t' = [a]
+>           | not (all isVarPattern (prefix [])) = [(p,prefix,ts',rhs')]
+>           | otherwise = []
+>           where (p,prefix,_,_) = a
+>                 ts' = map (uncurry VariablePattern) (v:vs)
+>                 rhs' = GuardedRhs [] []
 
 > matchLitAlt :: Bool -> ModuleIdent 
 >             -> ([(QualType,Ident)] -> [(QualType,Ident)]) -> (QualType,Ident)

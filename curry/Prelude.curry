@@ -1,6 +1,6 @@
--- $Id: Prelude.curry 3095 2012-08-13 09:52:59Z wlux $
+-- $Id: Prelude.curry 3255 2016-06-21 07:14:44Z wlux $
 --
--- Copyright (c) 1999-2012, Wolfgang Lux
+-- Copyright (c) 1999-2016, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module Prelude((.), id, const, curry, uncurry, flip, until,
@@ -26,7 +26,7 @@ module Prelude((.), id, const, curry, uncurry, flip, until,
                subtract, even, odd, gcd, lcm, (^), (^^),
                fromIntegral, realToFrac,
                Int(), Integer(), Float(), Ratio(), Rational(),
-               Success(), (=:=), (=/=), (=:<=), success, (&), (&>),
+               Success(), (=:=), (=/=), (=:<=), (==<=), success, (&), (&>),
                Maybe(..), maybe,
                Either(..), either,
                IO(), done, sequence, sequence_, mapM, mapM_,
@@ -50,7 +50,7 @@ infixl 8 ^, ^^, **
 infixl 7 *, /, `quot`, `rem`, `div`, `mod`
 infixl 6 +, -
 infixr 5 :, ++
-infix  4 =:=, =/=, =:<=, ==, /=, <, >, <=, >=
+infix  4 =:=, =/=, =:<=, ==<=, ==, /=, <, >, <=, >=
 infix  4 `elem`, `notElem`
 infixr 3 &&
 infixr 2 ||
@@ -1127,6 +1127,10 @@ foreign import primitive (=/=) :: a -> a -> Success
 --- Lazy unification (for function patterns only)
 -- To do: This should not be exported from the Prelude, but from module Unsafe
 foreign import primitive (=:<=) :: a -> a -> Success
+
+--- Lazy unification (for function patterns only)
+-- To do: This should not be exported from the Prelude, but from module Unsafe
+foreign import primitive (==<=) :: a -> a -> Success
 
 --- Always satisfiable constraint
 success :: Success

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 3254 2016-06-20 20:37:18Z wlux $
+% $Id: CaseMatch.lhs 3255 2016-06-21 07:14:44Z wlux $
 %
 % Copyright (c) 2001-2016, Wolfgang Lux
 % See LICENSE for the full license.
@@ -241,7 +241,7 @@ bound to a (head) normal form.
 >   where elimFP (p,ts,rhs) =
 >           do
 >             (ts',fpss) <- mapAndUnzipM liftFP ts
->             return (p,ts',inject id p (concat fpss) rhs)
+>             return (p,ts',inject p unify (concat fpss) rhs)
 
 > matchRigid :: ModuleIdent -> [Match QualType]
 >            -> CaseMatchState ([(QualType,Ident)],Expression QualType)
@@ -254,8 +254,7 @@ bound to a (head) normal form.
 >   where elimFP (p,ts,rhs) =
 >           do
 >             (ts',fpss) <- mapAndUnzipM liftFP ts
->             return (p,id,ts',inject ensure p (concat fpss) rhs)
->         ensure e = Apply (prelEnsure (typeOf e)) e
+>             return (p,id,ts',inject p unifyRigid (concat fpss) rhs)
 
 \end{verbatim}
 When the additional constraints are injected into a guarded equation
@@ -298,13 +297,13 @@ reduces to 0.
 >     (t',fps) <- liftFP t
 >     return (AsPattern v t',fps)
 
-> inject :: (Expression QualType -> Expression QualType) -> Position
+> inject :: Position -> (Type -> Expression QualType)
 >        -> [((QualType,Ident),ConstrTerm QualType)] -> Rhs QualType
 >        -> Rhs QualType
-> inject f p fps
+> inject p unify fps
 >   | null fps = id
 >   | otherwise = injectRhs (foldr1 (Apply . Apply prelConj) cs) ds
->   where cs = [apply (unify' ty) [toExpr t,f (mkVar ty v)] | ((ty,v),t) <- fps]
+>   where cs = [apply (unify' ty) [toExpr t,mkVar ty v] | ((ty,v),t) <- fps]
 >         ds = concatMap (decls p . snd) fps
 >         unify' = unify . unqualType
 
@@ -816,9 +815,9 @@ Prelude entities
 > prelFromInteger ty = preludeFun [integerType] ty "fromInteger"
 > prelFromRational ty = preludeFun [rationalType] ty "fromRational"
 
-> unify, prelEnsure, prelUnknown :: Type -> Expression QualType
+> unify, unifyRigid, prelUnknown :: Type -> Expression QualType
 > unify ty = preludeFun [ty,ty] successType "=:<="
-> prelEnsure ty = preludeFun [ty] ty "ensureNotFree"
+> unifyRigid ty = preludeFun [ty,ty] successType "==<="
 > prelUnknown ty = preludeFun [] ty "unknown"
 
 > preludeFun :: [Type] -> Type -> String -> Expression QualType

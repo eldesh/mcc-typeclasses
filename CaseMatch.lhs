@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 3255 2016-06-21 07:14:44Z wlux $
+% $Id: CaseMatch.lhs 3256 2016-06-21 07:36:56Z wlux $
 %
 % Copyright (c) 2001-2016, Wolfgang Lux
 % See LICENSE for the full license.
@@ -41,33 +41,10 @@ constraints.
 
 \end{verbatim}
 The case flattening phase is applied recursively to all declarations
-and expressions of the desugared source code. A special case is made
-for pattern declarations. Since we cannot flatten the left hand side
-of a pattern declaration $t$~\texttt{=}~$e$, where $t$ is not a
-variable pattern, and also cannot insert the additional constraints
-for any transformed function patterns\footnote{Recall that the guards
-  of a pattern declaration apply to the right hand side expression
-  against which the pattern is matched.}, it is first transformed into
-the form $(x_1,\dots,x_n)$~\texttt{=} \texttt{fcase}~$e$ \texttt{of}
-\texttt{\lb}~$\sigma t \rightarrow (x'_1,\dots,x'_n)$~\texttt{\rb},
-where $x_1,\dots,x_n$ are the variables occurring in $t$,
-$x'_1,\dots,x'_n$ are fresh variables, and $\sigma$ is the
-substitution $\{ x_1 \mapsto x'_1, \dots, x_n \mapsto x'_n \}$. After
-simplification, the compiler will replace the transformed pattern
-declaration by individual declarations for those variables from
-$\{x_1,\dots,x_n\}$ that are used in the scope of the declaration
-using a space-leak avoiding transformation of pattern bindings (cf.\ 
-Sect.~\ref{sec:pattern-bindings}).
-
-Note that we make deliberate use of the tuple syntax for the pattern
-on the left hand side of the transformed declaration and the body of
-the fcase expression on its right hand side. This makes it easier to
-determine the variables of the pattern and to handle optimizations on
-the right hand side of the declaration during later phases of the
-compiler. Also note that pattern declarations with only a single
-variable automatically degenerate into normal variable declarations.
-For instance, \texttt{Just x = unknown} becomes \texttt{x = fcase
-  unknown of \lb{} Just a1 -> a1 \rb{}}.
+and expressions of the desugared source code. Recall that pattern
+declarations have been transformed already into normalized form, where
+the left hand side is either a variable or a tuple pattern, and hence
+only the right hand sides of such declarations need to be transformed.
 \begin{verbatim}
 
 > type CaseMatchState a = ReaderT TCEnv (StateT Int Id) a
@@ -103,32 +80,9 @@ For instance, \texttt{Just x = unknown} becomes \texttt{x = fcase
 >         matchFlex m p [(p,ts,rhs) | Equation p (FunLhs _ ts) rhs <- eqs]
 >       return (funDecl p ty f (map (uncurry VariablePattern) vs) e)
 >   match _ _ (ForeignDecl p fi ty f ty') = return (ForeignDecl p fi ty f ty')
->   match m _ (PatternDecl p t rhs) =
->     match m p rhs >>= liftM (uncurry (PatternDecl p)) . matchLhs m t
+>   match m _ (PatternDecl p t rhs) = liftM (PatternDecl p t) (match m p rhs)
 >   match _ _ (FreeDecl p vs) = return (FreeDecl p vs)
 >   match _ _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
-
-> matchLhs :: ModuleIdent -> ConstrTerm QualType -> Rhs QualType
->          -> CaseMatchState (ConstrTerm QualType,Rhs QualType)
-> matchLhs m t (SimpleRhs p e _)
->   | isVarPattern t = return (t,mkRhs p e)
->   | otherwise =
->       do
->         vs' <- mapM (freshVar "_#case" . unqualType . fst) vs
->         let t' = rename (zip (map snd vs) (map snd vs')) t
->             rhs' = mkRhs p (tupleExpr (map (uncurry mkVar) vs'))
->         ([v],e') <- matchFlex m p [(p,[t'],rhs')]
->         return (tuplePattern ts,mkRhs p (mkCase m p v e e'))
->   where vs = vars t
->         ts = map (uncurry VariablePattern) vs
->         rename _ (LiteralPattern ty l) = LiteralPattern ty l
->         rename vs (VariablePattern ty v) = VariablePattern ty (renameVar vs v)
->         rename vs (ConstructorPattern ty c ts) =
->           ConstructorPattern ty c (map (rename vs) ts)
->         rename vs (FunctionPattern ty f ts) =
->           FunctionPattern ty f (map (rename vs) ts)
->         rename vs (AsPattern v t) = AsPattern (renameVar vs v) (rename vs t)
->         renameVar vs v = maybe v id (lookup v vs)
 
 \end{verbatim}
 A list of guarded equations or alternatives with boolean guards is
@@ -848,26 +802,5 @@ Auxiliary definitions
 > addDecl :: Decl a -> Rhs a -> Rhs a
 > addDecl d (SimpleRhs p e ds) = SimpleRhs p e (d : ds)
 > addDecl d (GuardedRhs es ds) = GuardedRhs es (d : ds)
-
-> vars :: ConstrTerm QualType -> [(QualType,Ident)]
-> vars (LiteralPattern _ _) = []
-> vars (VariablePattern ty v) = [(ty,v) | unRenameIdent v /= anonId]
-> vars (ConstructorPattern _ _ ts) = concatMap vars ts
-> vars (FunctionPattern _ _ ts) = concatMap vars ts
-> vars (AsPattern v t) = (qualType (typeOf t),v) : vars t
-
-> tuplePattern :: [ConstrTerm QualType] -> ConstrTerm QualType
-> tuplePattern ts =
->   case ts of
->     [] -> ConstructorPattern qualUnitType qUnitId []
->     [t] -> t
->     _ -> TuplePattern ts
-
-> tupleExpr :: [Expression QualType] -> Expression QualType
-> tupleExpr es =
->   case es of
->     [] -> Constructor qualUnitType qUnitId
->     [e] -> e
->     _ -> Tuple es
 
 \end{verbatim}

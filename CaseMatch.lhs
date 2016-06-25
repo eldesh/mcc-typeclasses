@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 3258 2016-06-25 20:58:26Z wlux $
+% $Id: CaseMatch.lhs 3259 2016-06-25 21:14:03Z wlux $
 %
 % Copyright (c) 2001-2016, Wolfgang Lux
 % See LICENSE for the full license.
@@ -33,6 +33,7 @@ constraints.
 > import Monad
 > import PredefIdent
 > import PredefTypes
+> import Ratio
 > import Types
 > import TypeInfo
 > import Typing
@@ -639,8 +640,14 @@ where the default alternative is redundant.
 > polyNum :: Type -> Literal -> Expression QualType
 > polyNum ty (Integer i) =
 >   Apply (prelFromInteger ty) (Literal qualIntegerType (Integer i))
-> polyNum ty (Rational r) =
->   Apply (prelFromRational ty) (Literal qualRationalType (Rational r))
+> polyNum ty (Rational r)
+>   | ty == rationalType = rationalNum r
+>   | otherwise = Apply (prelFromRational ty) (rationalNum r)
+
+> rationalNum :: Rational -> Expression QualType
+> rationalNum r =
+>   foldl applyToInteger (ratioConstr integerType) [numerator r,denominator r]
+>   where applyToInteger e = Apply e . Literal qualIntegerType . Integer
 
 > asLiteral :: (a,Ident) -> ConstrTerm a -> ConstrTerm a
 > asLiteral _ t@(LiteralPattern _ _) = t
@@ -783,6 +790,11 @@ Prelude entities
 > preludeFun tys ty f =
 >   Variable (qualType (foldr TypeArrow ty tys))
 >            (qualifyWith preludeMIdent (mkIdent f))
+
+> ratioConstr :: Type -> Expression QualType
+> ratioConstr ty =
+>   Constructor (qualType (TypeArrow ty (TypeArrow ty (ratioType ty))))
+>               (qualifyWith ratioMIdent (mkIdent ":%"))
 
 > truePattern, falsePattern, successPattern :: ConstrTerm QualType
 > truePattern = ConstructorPattern qualBoolType qTrueId []

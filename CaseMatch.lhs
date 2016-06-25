@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 3259 2016-06-25 21:14:03Z wlux $
+% $Id: CaseMatch.lhs 3260 2016-06-25 23:00:28Z wlux $
 %
 % Copyright (c) 2001-2016, Wolfgang Lux
 % See LICENSE for the full license.
@@ -649,14 +649,21 @@ where the default alternative is redundant.
 >   foldl applyToInteger (ratioConstr integerType) [numerator r,denominator r]
 >   where applyToInteger e = Apply e . Literal qualIntegerType . Integer
 
-> asLiteral :: (a,Ident) -> ConstrTerm a -> ConstrTerm a
-> asLiteral _ t@(LiteralPattern _ _) = t
-> asLiteral v (VariablePattern _ _) = uncurry VariablePattern v
-> asLiteral v (ConstructorPattern _ _ _) = uncurry VariablePattern v
-> asLiteral v (AsPattern v' t) = AsPattern v' (asLiteral v t)
+> isNum :: Literal -> Bool
+> isNum (Char _) = False
+> isNum (Integer _) = True
+> isNum (Rational _) = True
+
+> asNum :: (a,Ident) -> ConstrTerm a -> ConstrTerm a
+> asNum v t@(LiteralPattern _ l) =
+>   if isNum l then t else uncurry VariablePattern v
+> asNum v (VariablePattern _ _) = uncurry VariablePattern v
+> asNum v (ConstructorPattern _ _ _) = uncurry VariablePattern v
+> asNum v (AsPattern v' t) = AsPattern v' (asNum v t)
 
 > asConstrApp :: (a,Ident) -> ConstrTerm a -> ConstrTerm a
-> asConstrApp v (LiteralPattern _ _) = uncurry VariablePattern v
+> asConstrApp v t@(LiteralPattern _ l) =
+>   if isNum l then uncurry VariablePattern v else t
 > asConstrApp _ t@(VariablePattern _ _) = t
 > asConstrApp _ t@(ConstructorPattern _ _ _) = t
 > asConstrApp v (AsPattern v' t) = AsPattern v' (asConstrApp v t)
@@ -678,17 +685,22 @@ where the default alternative is redundant.
 >       | all (isVarPattern . fst) (tail as') ->
 >           rigidMatch m prefix vs (map (matchVar (snd v)) as)
 >       | otherwise -> rigidMatch m (prefix . (v:)) vs (map shiftArg as)
->     t'@(LiteralPattern _ l')
->       | ty `elem` charType:numTypes ->
+>     LiteralPattern _ (Char _)
+>       | null nts ->
 >           liftM (Case (uncurry mkVar v))
->                 (mapM (matchCaseAlt m prefix v vs as') (lts ++ vts))
+>                 (mapM (matchCaseAlt m prefix v vs as') (cts ++ vts))
+>       | otherwise -> rigidMatch m (prefix . (v:)) (v:vs) (map dupArg as)
+>     t'@(LiteralPattern _ l')
+>       | ty `elem` numTypes ->
+>           liftM (Case (uncurry mkVar v))
+>                 (mapM (matchCaseAlt m prefix v vs as') (nts ++ vts))
 >       | otherwise ->
 >           liftM (Case (eqNum ty v l') . catMaybes)
->                 (sequence [matchLitAlt True m prefix v vs as' t',
->                            matchLitAlt False m prefix v vs as' t'])
+>                 (sequence [matchNumAlt True m prefix v vs as' t',
+>                            matchNumAlt False m prefix v vs as' t'])
 >       where ty = unqualType (fst v)
 >     ConstructorPattern _ _ _
->       | null lts ->
+>       | null nts ->
 >           do
 >             tcEnv <- envRt
 >             liftM (Case (uncurry mkVar v))
@@ -696,12 +708,12 @@ where the default alternative is redundant.
 >                         (cts ++ if allCases tcEnv v cts then [] else vts))
 >       | otherwise -> rigidMatch m (prefix . (v:)) (v:vs) (map dupArg as)
 >   where as' = map tagAlt as
->         (lts,cts,vts) = partitionPatterns (nub (map fst as'))
+>         (nts,cts,vts) = partitionPatterns (nub (map fst as'))
 >         tagAlt (p,prefix,t:ts,rhs) = (pattern t,(p,prefix,t:ts,rhs))
 >         shiftArg (p,prefix,t:ts,rhs) = (p,prefix . (t:),ts,rhs)
 >         matchVar v (p,prefix,t:ts,rhs) = (p,prefix,ts,bindVars p v t rhs)
 >         dupArg (p,prefix,t:ts,rhs) =
->           (p,prefix . (asLiteral v t :),asConstrApp v t:ts,rhs)
+>           (p,prefix . (asNum v t :),asConstrApp v t:ts,rhs)
 >         eqNum ty v l = apply (prelEq ty) [uncurry mkVar v,polyNum ty l]
 >         allCases tcEnv (ty,_) ts = length cs == length ts
 >           where cs = constructors (rootOfType (unqualType ty)) tcEnv
@@ -709,10 +721,11 @@ where the default alternative is redundant.
 > partitionPatterns :: [ConstrTerm a]
 >                   -> ([ConstrTerm a],[ConstrTerm a],[ConstrTerm a])
 > partitionPatterns = foldr partition ([],[],[])
->   where partition t@(LiteralPattern _ _) ~(lts,cts,vts) = (t:lts,cts,vts)
->         partition t@(VariablePattern _ _) ~(lts,cts,vts) = (lts,cts,t:vts)
->         partition t@(ConstructorPattern _ _ _) ~(lts,cts,vts) =
->           (lts,t:cts,vts)
+>   where partition t@(LiteralPattern _ l) ~(nts,cts,vts) =
+>           if isNum l then (t:nts,cts,vts) else (nts,t:cts,vts)
+>         partition t@(VariablePattern _ _) ~(nts,cts,vts) = (nts,cts,t:vts)
+>         partition t@(ConstructorPattern _ _ _) ~(nts,cts,vts) =
+>           (nts,t:cts,vts)
 
 > matchCaseAlt :: ModuleIdent -> ([(QualType,Ident)] -> [(QualType,Ident)])
 >              -> (QualType,Ident) -> [(QualType,Ident)]
@@ -741,11 +754,11 @@ where the default alternative is redundant.
 >                 ts' = map (uncurry VariablePattern) (v:vs)
 >                 rhs' = GuardedRhs [] []
 
-> matchLitAlt :: Bool -> ModuleIdent 
+> matchNumAlt :: Bool -> ModuleIdent 
 >             -> ([(QualType,Ident)] -> [(QualType,Ident)]) -> (QualType,Ident)
 >             -> [(QualType,Ident)] -> [(ConstrTerm (),Match' QualType)]
 >             -> ConstrTerm () -> CaseMatchState (Maybe (Alt QualType))
-> matchLitAlt eq m prefix v vs as t
+> matchNumAlt eq m prefix v vs as t
 >   | null as' = return Nothing
 >   | otherwise =
 >       liftM (Just . caseAlt (pos (head as')) t')

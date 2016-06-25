@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 3256 2016-06-21 07:36:56Z wlux $
+% $Id: CaseMatch.lhs 3258 2016-06-25 20:58:26Z wlux $
 %
 % Copyright (c) 2001-2016, Wolfgang Lux
 % See LICENSE for the full license.
@@ -270,7 +270,10 @@ reduces to 0.
 >              (ds ++ ds')
 
 > toExpr :: ConstrTerm QualType -> Expression QualType
-> toExpr (LiteralPattern ty l) = Literal ty l
+> toExpr (LiteralPattern ty l)
+>   | ty' `elem` charType:numTypes = Literal ty l
+>   | otherwise = polyNum ty' l
+>   where ty' = unqualType ty
 > toExpr (VariablePattern ty v) = mkVar ty v
 > toExpr (ConstructorPattern ty c ts) =
 >   apply (Constructor (qualType ty') c) (map toExpr ts)
@@ -633,6 +636,12 @@ alternatives. Thus, the example is effectively transformed into
 where the default alternative is redundant.
 \begin{verbatim}
 
+> polyNum :: Type -> Literal -> Expression QualType
+> polyNum ty (Integer i) =
+>   Apply (prelFromInteger ty) (Literal qualIntegerType (Integer i))
+> polyNum ty (Rational r) =
+>   Apply (prelFromRational ty) (Literal qualRationalType (Rational r))
+
 > asLiteral :: (a,Ident) -> ConstrTerm a -> ConstrTerm a
 > asLiteral _ t@(LiteralPattern _ _) = t
 > asLiteral v (VariablePattern _ _) = uncurry VariablePattern v
@@ -686,11 +695,7 @@ where the default alternative is redundant.
 >         matchVar v (p,prefix,t:ts,rhs) = (p,prefix,ts,bindVars p v t rhs)
 >         dupArg (p,prefix,t:ts,rhs) =
 >           (p,prefix . (asLiteral v t :),asConstrApp v t:ts,rhs)
->         eqNum ty v l = apply (prelEq ty) [uncurry mkVar v,numLit ty l]
->         numLit ty (Integer i) =
->           Apply (prelFromInteger ty) (Literal qualIntegerType (Integer i))
->         numLit ty (Rational r) =
->           Apply (prelFromRational ty) (Literal qualRationalType (Rational r))
+>         eqNum ty v l = apply (prelEq ty) [uncurry mkVar v,polyNum ty l]
 >         allCases tcEnv (ty,_) ts = length cs == length ts
 >           where cs = constructors (rootOfType (unqualType ty)) tcEnv
 

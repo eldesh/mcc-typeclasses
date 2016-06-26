@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3257 2016-06-25 17:08:51Z wlux $
+% $Id: TypeCheck.lhs 3261 2016-06-26 07:24:47Z wlux $
 %
 % Copyright (c) 1999-2016, Wolfgang Lux
 % See LICENSE for the full license.
@@ -59,7 +59,7 @@ variable is used.
 > infixl 1 >>-, >>=-
 
 > ($-$) :: Doc -> Doc -> Doc
-> x $-$ y = x $$ space $$ y
+> x $-$ y = x $$ text "" $$ y
 
 > (>>-) :: Monad m => m (a,b,c) -> (a -> b -> m a) -> m (a,c)
 > m >>- f =

@@ -1,6 +1,6 @@
 # Makefile for the Curry compiler
 #
-# $Id: Makefile.in 3247 2016-06-20 14:43:16Z wlux $
+# $Id: Makefile.in 3262 2016-06-26 07:28:18Z wlux $
 #
 # Copyright (c) 2000-2016 Wolfgang Lux
 # See LICENSE for the full license.
@@ -42,7 +42,7 @@ LN_S = @LN_S@
 PROGRAMS = cycc cymk newer @CAM2C@ @MACH@
 SCRIPTS = cyc cymake cyi
 man_MANS = cyc.1 cymake.1 cyi.1
-SUBDIRS = doc runtime curry
+SUBDIRS = doc runtime curry test
 
 cycc_SRCS = \
 	cycc.hs \
@@ -475,6 +475,11 @@ bindistdir: cycc cymk newer runtime curry
 		(cd $$d && $(MAKE) bindistdir distdir=../$(bindistdir)) || \
 		exit $$?; \
 	done
+
+# run the test suite
+.PHONY: test
+test: FORCE
+	cd test && $(MAKE) test
 
 # automatic reconfiguration
 $(srcdir)/configure: $(srcdir)/configure.in $(srcdir)/aclocal.m4

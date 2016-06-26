@@ -1,0 +1,83 @@
+# Makefile for the Curry test suite
+#
+# $Id: Makefile.in 3203 2016-05-22 11:58:45Z wlux $
+#
+# Copyright (c) 2015-2016, Wolfgang Lux
+# See ../LICENSE for the full license.
+#
+
+@SET_MAKE@
+
+# package information
+PACKAGE = @PACKAGE_TARNAME@
+VERSION = @PACKAGE_VERSION@
+
+# source directory
+top_srcdir = @top_srcdir@
+srcdir = @srcdir@
+VPATH = @srcdir@
+
+# install directories
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+bindir = @bindir@
+libdir = @libdir@
+
+# program definitions
+INSTALL = @INSTALL@
+INSTALL_PROGRAM = @INSTALL_PROGRAM@
+INSTALL_DATA = @INSTALL_DATA@
+INSTALL_DIR = @INSTALL_DIR@
+
+# file lists
+DISTFILES = Makefile.in runtests.sh
+DISTFILES_PATH = $(DISTFILES:%=@srcdir@/%)
+BINDISTFILES =
+
+# suffix rules
+
+# default target: run the tests
+.PHONY: all test
+all: test
+test:
+	CYMAKE=`pwd`/../cymake; export CYMAKE; \
+	cd $(srcdir) && ./runtests.sh $(TESTS)
+
+# build the distribution
+# distdir must be set by the caller
+distdir: $(DISTFILES_PATH)
+	cp $(DISTFILES_PATH) $(distdir)
+	distdir=`cd $(distdir); pwd`; cd $(srcdir) && \
+	find . -name all.T -o -name '*.curry' -o -name '*.lcurry' \
+	    -o -name '*.compile.err' -o -name '*.run.out' -o -name '*.run.err' \
+	    -o -name '*.eval-*.out' -o -name '*.eval-*.err' \
+	    -o -name '*.type-*.out' -o -name '*.type-*.err' | \
+	cpio -pdu "$$distdir"
+
+# nothing to do for binary distributions
+bindistdir: $(BINDISTFILES)
+
+# install target is empty
+install:
+
+# automatic reconfiguration
+$(top_srcdir)/configure: $(top_srcdir)/configure.in $(top_srcdir)/aclocal.m4
+	cd $(top_srcdir) && autoconf
+
+.PRECIOUS: Makefile
+Makefile: $(srcdir)/Makefile.in ../config.status
+	cd .. && ./config.status test/Makefile
+
+.PRECIOUS: ../config.status
+../config.status: $(top_srcdir)/configure
+	cd .. && ./config.status --recheck
+
+# clean up
+mostlyclean:
+clean: mostlyclean
+distclean: clean
+	-rm -f Makefile
+maintainerclean: distclean
+
+# dependencies
+depend:

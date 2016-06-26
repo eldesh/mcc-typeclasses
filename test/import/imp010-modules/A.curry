@@ -1,0 +1,1 @@
+type Bool = Prelude.Bool

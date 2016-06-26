@@ -1,0 +1,7 @@
+"pv003.curry", line 5.8: Type error in infix application
+'a' : nil
+
+Term: nil
+Inferred type: [Int]
+Expected type: [Char]
+Types Char and Int are incompatible

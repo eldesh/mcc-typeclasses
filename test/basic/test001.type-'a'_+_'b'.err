@@ -1,0 +1,5 @@
+line 1.1: Missing Num Char instance
+in infix application
+'a' + 'b'
+
+Term: 'a'

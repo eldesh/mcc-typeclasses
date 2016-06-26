@@ -1,0 +1,12 @@
+compile pass imp001.curry
+compile fail imp002.curry
+compile fail imp003.curry
+run pass imp004.curry
+compile pass imp005.curry
+compile pass imp006.curry
+compile pass imp007.curry
+compile pass imp008.curry
+compile pass imp009.curry
+compile pass imp010.curry
+compile pass imp011.curry
+run pass imp012.curry

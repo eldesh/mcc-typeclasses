@@ -1,0 +1,4 @@
+"imp003.curry", line 4.15: Ambiguous variable (Prelude.+)
+Could refer to: (Prelude.+), (A.+)
+"imp003.curry", line 4.15: Ambiguous variable (Prelude.-)
+Could refer to: (Prelude.-), (A.-)

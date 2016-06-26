@@ -1,0 +1,6 @@
+"rec005.curry", line 4.13: T1 defined more than once
+"rec005.curry", line 5.17: Redefinition of T1
+"rec005.curry", line 4.29: val defined more than once
+"rec005.curry", line 7.15: Redefinition of val
+"rec005.curry", line 6.17: f defined more than once
+"rec005.curry", line 9.1: Redefinition of f

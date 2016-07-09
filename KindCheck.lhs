@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: KindCheck.lhs 3242 2016-06-19 10:53:21Z wlux $
+% $Id: KindCheck.lhs 3264 2016-07-09 15:45:04Z wlux $
 %
-% Copyright (c) 1999-2015, Wolfgang Lux
+% Copyright (c) 1999-2016, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{KindCheck.lhs}
@@ -36,7 +36,7 @@ applies kind checking to the module's type signatures.
 > infixl 5 $-$
 
 > ($-$) :: Doc -> Doc -> Doc
-> x $-$ y = x $$ space $$ y
+> x $-$ y = x $$ text "" $$ y
 
 \end{verbatim}
 In order to infer kinds for type constructors and type classes, the

@@ -1,0 +1,4 @@
+"tc015.curry", line 2.1: Type signature too general
+Function: f
+Inferred type: (Eq a, Show a) => a -> [Char]
+Type signature: (Show a, Show a) => a -> String

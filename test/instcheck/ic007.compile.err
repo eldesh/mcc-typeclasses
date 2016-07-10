@@ -1,0 +1,5 @@
+"ic007.curry", line 15.13: Missing Eq U instance
+in infix application
+x1 == y1
+
+Term: x1

@@ -1,0 +1,2 @@
+"ic004.curry", line 3.1: Missing Eq (T a b) instance
+in derived instance Ord (T a b)

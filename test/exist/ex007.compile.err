@@ -1,0 +1,3 @@
+"ex007.curry", line 5.1: Existential type escapes out of its scope
+Equation: bad (Key x f) xs = fmap (const x) xs == fmap (const x) xs
+Type: (Eq (_10 _?8), Functor _10) => Key _7 -> _10 _14 -> Bool

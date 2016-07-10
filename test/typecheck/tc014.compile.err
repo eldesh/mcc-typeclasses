@@ -1,0 +1,4 @@
+"tc014.curry", line 5.1: Type signature too general
+Function: f
+Inferred type: Success
+Type signature: Eq a => a

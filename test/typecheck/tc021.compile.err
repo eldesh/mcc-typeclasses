@@ -1,0 +1,4 @@
+"tc021.curry", line 2.1: Ambiguous type variable _5 in type
+Eq _5 => Char
+inferred for equation
+f = const 'a' (undefined :: Eq a => a)

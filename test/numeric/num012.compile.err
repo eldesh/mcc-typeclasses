@@ -1,0 +1,7 @@
+"num012.curry", line 39.46: Type error in case pattern
+S (S n) -> even n
+
+Term: S (S n)
+Inferred type: Nat
+Expected type: Int
+Types Nat and Int are incompatible

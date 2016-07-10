@@ -1,0 +1,5 @@
+"tc027.curry", line 23.8: Missing Fractional Integer instance
+in application
+decodeN 1.0
+
+Term: 1.0

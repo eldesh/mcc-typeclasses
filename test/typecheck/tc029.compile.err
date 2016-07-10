@@ -1,0 +1,3 @@
+"tc029.curry", line 11.9: Ambiguous type variable _47 in type
+(Num _49, Bounded _47, Enum _47, Ord _47) => [_49] -> [_49]
+inferred for function decode

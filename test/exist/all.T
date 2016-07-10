@@ -4,3 +4,9 @@ run pass ex003.curry
 run pass ex004.curry
 run pass ex005.curry
 compile pass ex006.curry
+compile fail ex007.curry
+compile fail ex008.curry
+run pass ex009.curry
+run pass ex010.curry
+run pass ex011.curry
+run pass ex012.curry

@@ -1,0 +1,2 @@
+"ic003.curry", line 4.1: Missing Eq (T a b) instance
+in instance declaration Ord (T a b)

@@ -1,0 +1,7 @@
+"num013.curry", line 41.18: Type error in application
+even n
+
+Term: n
+Inferred type: Nat
+Expected type: Int
+Types Nat and Int are incompatible

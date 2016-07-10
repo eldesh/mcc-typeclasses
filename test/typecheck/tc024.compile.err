@@ -1,0 +1,3 @@
+"tc024.curry", line 5.9: Missing Eq Success instance
+in equation
+h z = z &> g x

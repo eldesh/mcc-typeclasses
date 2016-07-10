@@ -1,0 +1,4 @@
+"tc018.curry", line 3.7: Type signature too general
+Expression: x
+Inferred type: _3
+Type signature: a

@@ -1,0 +1,3 @@
+"tc013.curry", line 5.11: Missing Ord (() -> Bool) instance
+in expression
+f ()

@@ -1,0 +1,7 @@
+"tc011.curry", line 3.8: Type error in application
+f "Hello"
+
+Term: "Hello"
+Inferred type: [Char]
+Expected type: [Int]
+Types Int and Char are incompatible

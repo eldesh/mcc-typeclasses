@@ -1,0 +1,5 @@
+"ex008.curry", line 5.17: Missing Eq _?6 instance
+in infix application
+x == x
+
+Term: x

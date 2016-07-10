@@ -1,0 +1,4 @@
+"ic006.curry", line 10.3: Method type not general enough
+Method: (==)
+Inferred type: Eq b => T a b -> T a b -> Bool
+Expected type: T a b -> T a b -> Bool

@@ -1,0 +1,2 @@
+"cls012.curry", line 4.1: Illegal class constraint Eq (a Int)
+in derived instance Eq (T a)

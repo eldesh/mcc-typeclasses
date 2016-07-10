@@ -1,0 +1,13 @@
+compile pass pm001.curry
+run pass pm002.curry
+run pass pm003.curry
+run pass pm004.curry
+run pass pm005.curry
+compile pass pm006.curry
+run pass pm007.curry
+compile pass pm008.curry
+compile pass pm009.curry
+run pass pm010.curry
+run pass pm011.curry
+run pass pm012.curry
+compile fail pm013.curry

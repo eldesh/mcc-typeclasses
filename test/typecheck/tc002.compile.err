@@ -1,0 +1,4 @@
+"tc002.curry", line 11.1: Ambiguous type variable _10 in type
+(Show _10, Read _10) => [Char] -> [Char]
+inferred for equation
+ambi = show . read

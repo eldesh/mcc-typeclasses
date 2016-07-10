@@ -1,0 +1,4 @@
+"tc008.curry", line 18.1: Ambiguous type variable _8 in type
+(Eq _8, Ord _4, Eq _3) => _3 -> _4 -> Bool
+inferred for equation
+f x z = (x == x) || g z undefined

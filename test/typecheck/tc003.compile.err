@@ -1,0 +1,4 @@
+"tc003.curry", line 14.9: Ambiguous type variable _16 in type
+(Show _16, Read _16) => (Char, [Char])
+inferred for pattern declaration
+(y, z) = (\(c : cs) -> (c, cs)) $ show (read x)

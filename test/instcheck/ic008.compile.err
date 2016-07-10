@@ -1,0 +1,6 @@
+"ic008.curry", line 5.1: More than one Show () instance declaration
+"ic008.curry", line 6.1: More than one Show [] instance declaration
+"ic008.curry", line 9.1: More than one Eq [] instance declaration
+"ic008.curry", line 16.1: More than one Functor -> instance declaration
+"ic008.curry", line 14.1: More than one Eq -> instance declaration
+"ic008.curry", line 15.1: Repeated Eq -> instance declaration

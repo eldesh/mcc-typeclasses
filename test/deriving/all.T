@@ -1,0 +1,9 @@
+run pass der001.curry
+compile fail der002.curry
+compile fail der003.curry
+compile pass der004.curry
+compile fail der005.curry
+compile fail der006.curry
+compile fail der007.curry
+compile pass der008.curry
+run pass der009.curry

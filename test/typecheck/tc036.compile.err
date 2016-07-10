@@ -1,0 +1,5 @@
+"tc036.curry", line 21.1: Ambiguous type variable _17 in type
+(Functor _8, Eq (_8 (_17 -> _17))) => _8 _16 -> Bool
+inferred for equation
+f xs = g (const id)
+  where g h = fmap h xs == fmap h xs

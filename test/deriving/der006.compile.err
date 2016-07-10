@@ -1,0 +1,4 @@
+"der006.curry", line 10.1: Type signature too general
+Function: f
+Inferred type: Eq a => U a -> U a -> Bool
+Type signature: U a -> U a -> Bool

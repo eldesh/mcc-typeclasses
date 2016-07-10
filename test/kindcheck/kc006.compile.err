@@ -1,0 +1,6 @@
+"kc006.curry", line 17.1: Kind error in type expression
+Tree []
+
+Type: []
+Inferred kind: * -> *
+Expected kind: *

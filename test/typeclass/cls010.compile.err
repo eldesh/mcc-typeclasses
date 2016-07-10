@@ -1,0 +1,4 @@
+"cls010.curry", line 3.1: Illegal class constraint Eq (f Int)
+in class declaration C f
+Constraints in class and instance declarations must be of the
+form C u, where u is a type variable.

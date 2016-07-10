@@ -1,0 +1,4 @@
+"tc022.curry", line 11.7: Ambiguous type variable _9 in type
+(Show _9, Read _9) => [Char]
+inferred for explicitly typed expression
+show (read x)

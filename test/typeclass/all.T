@@ -1,0 +1,17 @@
+compile fail cls001.curry
+run pass cls002.curry
+run pass cls003.curry
+compile pass cls004.curry
+compile fail cls005.curry
+compile pass cls006.curry
+compile fail cls007.curry
+compile pass cls008.curry
+compile fail cls009.curry
+compile fail cls010.curry
+compile fail cls011.curry
+compile fail cls012.curry
+run pass cls013.curry
+compile pass cls014.curry
+compile pass cls015.curry
+compile pass cls016.curry
+run pass cls017.curry

@@ -1,0 +1,5 @@
+"tc012.curry", line 3.13: Missing Ord (() -> Bool) instance
+in expression
+if b then f <= f else f ()
+
+Term: f ()

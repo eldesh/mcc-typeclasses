@@ -1,0 +1,5 @@
+"tc019.curry", line 2.5: Missing Eq Success instance
+in infix application
+(undefined :: Eq a => a) &> success
+
+Term: (undefined :: Eq a => a)

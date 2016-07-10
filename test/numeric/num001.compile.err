@@ -1,0 +1,5 @@
+"num001.curry", line 5.11: Missing Integral Float instance
+in infix application
+x `div` 1
+
+Term: x

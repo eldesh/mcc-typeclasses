@@ -1,0 +1,2 @@
+"der003.curry", line 17.1: Illegal class constraint Eq (a (T a b))
+in derived instance Eq (T a b)

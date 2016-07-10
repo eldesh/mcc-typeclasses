@@ -1,0 +1,5 @@
+"num002.curry", line 5.11: Missing Fractional Int instance
+in infix application
+x / 1
+
+Term: x

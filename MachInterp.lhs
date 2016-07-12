@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachInterp.lhs 3268 2016-07-12 20:42:40Z wlux $
+% $Id: MachInterp.lhs 3269 2016-07-12 20:44:20Z wlux $
 %
 % Copyright (c) 1998-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1136,21 +1136,25 @@ free variables of the search goal.
 >         solveNode goal =
 >           do
 >             space <- read'updateState newSearchSpace
+>             goal' <- globalGoal goal
 >             goalVar <- read'updateState (allocNode (VarNode [] []))
->             goalApp <- applyGoal goal goalVar
+>             goalApp <- applyGoal goal' goalVar
 >             updateState (pushSearchContext goalApp goalVar space)
 >             updateState newThread
 >             updateState (setVar "c" goalApp)
->             seqStmts "_c" (enter "c")
->                      $ switchRigid "_c" [(successTag,retNode)]
->                      $ const (fail "try: bad goal result type!")
->         applyGoal (ClosureNode f n code ptrs) var
+>             enter "c"
+>         globalGoal (ClosureNode f n code ptrs)
 >           | length ptrs + 1 == n =
 >               do
 >                 ptrs' <- globalArgs ptrs
->                 read'updateState
->                   (allocNode (LazyNode f n code (ptrs' ++ [var])))
+>                 read'updateState (allocNode (ClosureNode f n code ptrs'))
 >           | otherwise = fail "try: invalid search goal"
+>         applyGoal goal var =
+>           read'updateState (allocNode (LazyNode "" 2 solveGoal [goal,var]))
+>         solveGoal =
+>           entry ["g","v"] $ seqStmts "_c" (apply "g" ["v"])
+>                           $ switchRigid "_c" [(successTag,retNode)]
+>                           $ const (fail "try: bad goal result type!")
 
 \end{verbatim}
 When a computation fails within an encapsulated search, the current

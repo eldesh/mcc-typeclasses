@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: MachInterp.lhs 3270 2016-07-12 20:45:35Z wlux $
+% $Id: MachInterp.lhs 3271 2016-07-12 20:50:27Z wlux $
 %
-% Copyright (c) 1998-2015, Wolfgang Lux
+% Copyright (c) 1998-2016, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{MachInterp.lhs}
@@ -1386,7 +1386,7 @@ instead.
 >     cont <- readState saveContinuation
 >     space <- read'updateState saveSearchSpace
 >     (goalApp,goalVar) <- read'updateState popSearchContext
->     updateState (pushCont (resumeSearch ptr goalApp goalVar cont space))
+>     updateState (pushCont (resumeSearch goalApp goalVar cont space))
 >     updateState initEnv
 >     suspend ptr node
 >   where assertGlobalRef (GlobalAppNode _ space) =
@@ -1440,9 +1440,9 @@ instead.
 >         globalNode ptr (GlobalVarNode _ _) = return (IndirNode ptr)
 >         globalNode _ _ = fail "resumeSearch: non-hnf result"
 
-> resumeSearch :: NodePtr -> NodePtr -> NodePtr -> ThreadQueue -> SearchSpace
+> resumeSearch :: NodePtr -> NodePtr -> ThreadQueue -> SearchSpace
 >              -> Instruction
-> resumeSearch gptr goalApp goalVar cont space =
+> resumeSearch goalApp goalVar cont space =
 >   do
 >     space' <- read'updateState newSearchSpace
 >     updateState (pushSearchContext goalApp goalVar space')

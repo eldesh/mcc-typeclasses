@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: spaces.nw 3234 2016-06-18 16:22:27Z wlux $
+% $Id: spaces.nw 3272 2016-07-12 20:52:28Z wlux $
 %
-% Copyright (c) 2003-2015, Wolfgang Lux
+% Copyright (c) 2003-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Managing Search Spaces}\label{sec:spaces}
@@ -385,7 +385,18 @@ child of the other space. Obviously, this is possible only if the
 current space is a root space and not shared with another computation.
 This is detected by checking whether the current search space is
 allocated in the current heap segment. Otherwise, the graph of the
-search continuation must be copied into the current space.
+search continuation must be copied into the current space. In
+addition, the graph of the search continuation must be copied when it
+was returned from a local encapsulated search started from the current
+search space. This restriction is necessary to preserve the invariant
+that (mutable) nodes allocated by a search goal cannot be accessed
+from an enclosing search goal, as updates of such nodes might not
+be correctly recorded on the trail and hence those updates might not
+be undone when switching to another alternative of the local goal.
+Since we reparent the current space only if it is a root space and
+allocated in the current heap segment, we can easily exclude search
+spaces used by a local search goal by restricting to spaces that are
+allocated below the current heap segment.
 
 \ToDo{The requirement that the current search space must be allocated
   in the current heap segment is a little bit too strong. It would be
@@ -395,7 +406,11 @@ search continuation must be copied into the current space.
   E.g., if \texttt{g} is bound to a (partially) solved search goal in
   \texttt{let invalid = 3*3 in try (\char`\\x -> x=/=invalid \& g x)}
   the search space allocated by \texttt{try} could be made a child of
-  \texttt{g}'s search space and copying could be avoided.} %'
+  \texttt{g}'s search space and copying could be avoided. However,           %'
+  when the current restrictions were lifted it would become very
+  difficult to prove that the current space is not shared and the
+  other space is not used by a local search goal and hence reparenting
+  would be safe.}
 
 <<spaces.h>>=
 #if !COPY_SEARCH_SPACE
@@ -410,12 +425,14 @@ extern bool inject_search_space(SearchSpace *);
 bool
 inject_search_space(SearchSpace *space)
 {
-    /* fail if current space is not allocated in the current heap segment */
-    if ( (word *)regs.ss < regs.hlim )
+    /* fail if the current space is not a root space or might be shared
+     * also fail if the other space belongs to a local search goal */
+    if ( regs.ss->parent || (word *)regs.ss < regs.hlim ||
+	 (word *)space >= regs.hlim )
 	return false;
 
     /* otherwise re-parent the current space */
-    assert(!regs.ss->parent && regs.ss->root == regs.ss);
+    assert(regs.ss->root == regs.ss);
     regs.ss->root     = space->root;
     regs.ss->parent   = space;
     regs.ss->s.script = 0;

@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: search.nw 3266 2016-07-12 20:38:47Z wlux $
+% $Id: search.nw 3272 2016-07-12 20:52:28Z wlux $
 %
-% Copyright (c) 2002-2015, Wolfgang Lux
+% Copyright (c) 2002-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Encapsulated Search}
@@ -245,12 +245,6 @@ FUNCTION(solved_goal)
     Node *cont, *res, *arg;
  ENTRY_LABEL(static, solved_goal)
     cont = regs.r[0];
-    while ( is_global_var_node(cont) )
-    {
-	cont = cont->g.node;
-	while ( is_indir_node(cont) )
-	    cont = cont->n.node;
-    }
     assert(is_search_cont_node(cont));
     res = copy_graph(2, cont->sc.var, cont->sc.ss);
 
@@ -314,21 +308,9 @@ FUNCTION(search_cont)
     Node *arg, *cont;
  ENTRY_LABEL(static, search_cont)
     cont = regs.r[0];
-    if ( is_search_cont_node(cont) )
-	cont = copy_graph(2, cont, cont->sc.ss);
-    else
-    {
-	while ( is_global_var_node(cont) )
-	{
-	    cont = cont->g.node;
-	    while ( is_indir_node(cont) )
-		cont = cont->n.node;
-	}
-	assert(is_search_cont_node(cont));
-	if ( !inject_search_space(cont->sc.ss) )
-	    cont = copy_graph(2, cont, cont->sc.ss);
-    }
-    regs.r[0] = cont;
+    assert(is_search_cont_node(cont));
+    if ( !inject_search_space(cont->sc.ss) )
+	regs.r[0] = cont = copy_graph(2, cont, cont->sc.ss);
     restore_continuation(2, cont->sc.code, cont->sc.rq);
 
     /* NB reload cont -- restore_continuation might invoke gc */

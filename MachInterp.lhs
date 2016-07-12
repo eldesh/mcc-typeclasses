@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: MachInterp.lhs 3152 2014-02-12 18:08:19Z wlux $
+% $Id: MachInterp.lhs 3267 2016-07-12 20:41:13Z wlux $
 %
-% Copyright (c) 1998-2013, Wolfgang Lux
+% Copyright (c) 1998-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{MachInterp.lhs}
@@ -851,9 +851,6 @@ constructors, which can proceed concurrently.
 >   bindVar ptr1 var1 ptr2 unifySuccess
 > unifyNodes ptr1 var1@(GlobalVarNode _ _) ptr2 var2@(VarNode _ _) =
 >   bindVar ptr2 var2 ptr1 unifySuccess
-> unifyNodes ptr1 var1@(GlobalVarNode _ _) ptr2 var2@(GlobalVarNode _ _)
->   | ptr1 == ptr2 = unifySuccess
->   | otherwise = suspendSearch ptr1 var1 (unifyTerms ptr1 ptr2)
 > unifyNodes ptr1 var@(VarNode _ _) ptr2 node =
 >   occursCheck ptr1 node >>= \occurs ->
 >   if occurs then
@@ -864,6 +861,13 @@ constructors, which can proceed concurrently.
 >       bindVar ptr1 var ptr' (unifyArgs ptrs)
 > unifyNodes ptr1 node ptr2 var@(VarNode _ _) =
 >   unifyNodes ptr2 var ptr1 node
+> unifyNodes ptr1 var1@(GlobalVarNode _ _) ptr2 var2@(GlobalVarNode _ _)
+>   | ptr1 == ptr2 = unifySuccess
+>   | otherwise = suspendSearch ptr1 var1 (unifyTerms ptr1 ptr2)
+> unifyNodes ptr1 var@(GlobalVarNode _ _) ptr2 _ =
+>   suspendSearch ptr1 var (unifyTerms ptr1 ptr2)
+> unifyNodes ptr1 _ ptr2 var@(GlobalVarNode _ _) =
+>   suspendSearch ptr2 var (unifyTerms ptr1 ptr2)
 > unifyNodes _ (CharNode c) _ (CharNode d)
 >   | c == d = unifySuccess
 >   | otherwise = failAndBacktrack
@@ -1007,11 +1011,8 @@ for the disequality \texttt{(0:xs) =/= [0]}.}
 > diseqNodes ptr1 var1@(GlobalVarNode _ _) ptr2 var2@(VarNode cs2 wq2) =
 >   do
 >     updateState (saveBinding ptr2 var2)
->     updateNode ptr1 (VarNode (DisEq ptr1 : cs2) wq2)
+>     updateNode ptr2 (VarNode (DisEq ptr1 : cs2) wq2)
 >     diseqSuccess
-> diseqNodes ptr1 var1@(GlobalVarNode _ _) ptr2 var2@(GlobalVarNode _ _)
->   | ptr1 == ptr2 = failAndBacktrack
->   | otherwise = suspendSearch ptr1 var1 (diseqTerms ptr1 ptr2)
 > diseqNodes ptr1 var@(VarNode cs wq) ptr2 node =
 >   occursCheck ptr1 node >>= \occurs ->
 >   if occurs then
@@ -1025,6 +1026,13 @@ for the disequality \texttt{(0:xs) =/= [0]}.}
 >       unifyArgs (map (\(_,ptr) -> (ptr,ptr)) ptrs)
 > diseqNodes ptr1 node ptr2 var@(VarNode _ _) =
 >   diseqNodes ptr2 var ptr1 node
+> diseqNodes ptr1 var1@(GlobalVarNode _ _) ptr2 var2@(GlobalVarNode _ _)
+>   | ptr1 == ptr2 = failAndBacktrack
+>   | otherwise = suspendSearch ptr1 var1 (diseqTerms ptr1 ptr2)
+> diseqNodes ptr1 var@(GlobalVarNode _ _) ptr2 _ =
+>   suspendSearch ptr1 var (diseqTerms ptr1 ptr2)
+> diseqNodes ptr1 _ ptr2 var@(GlobalVarNode _ _) =
+>   suspendSearch ptr2 var (diseqTerms ptr1 ptr2)
 > diseqNodes _ (CharNode c) _ (CharNode d)
 >   | c /= d = diseqSuccess
 >   | otherwise = failAndBacktrack

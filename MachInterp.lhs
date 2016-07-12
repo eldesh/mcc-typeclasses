@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachInterp.lhs 3267 2016-07-12 20:41:13Z wlux $
+% $Id: MachInterp.lhs 3268 2016-07-12 20:42:40Z wlux $
 %
 % Copyright (c) 1998-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1284,10 +1284,14 @@ copied into the current search space using \texttt{copyGraph}. We must
 be careful to preserve sharing of variable nodes when they are copied.
 In addition, we must copy only local variables. The same would hold
 for unevaluated lazy applications. However, the result bound to the
-goal variable cannot contain any unevaluated applications. In order to
-preserve sharing of local variables, every copied variable is
-temporarily bound to its copy. This binding is recorded on the trail
-and is undone after the graph has been copied.
+goal variable cannot contain any unevaluated applications. To preserve
+sharing of local variables, every copied variable is temporarily bound
+to its copy. This binding is recorded on the trail and is undone after
+the graph has been copied. It is essential to use a global variable
+for referencing the copied variable. If an indirection node were used
+instead, another copy of the (copied) variable would be created for
+the next reference to the same variable and thus sharing would be
+lost.
 
 Note that we use a temporary search context here to be able to undo
 the bindings performed during copying.
@@ -1317,7 +1321,7 @@ the bindings performed during copying.
 >               cs' <- mapM (copyConstraint goalSpace curSpace) cs
 >               ptr' <- read'updateState (allocNode (VarNode cs' []))
 >               updateState (saveBinding ptr var)
->               updateNode ptr (IndirNode ptr')
+>               updateNode ptr (GlobalVarNode ptr' curSpace)
 >               return ptr'
 >           else
 >             fail "cannot copy variable with non-empty waitlist"

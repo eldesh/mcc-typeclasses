@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachInterp.lhs 3269 2016-07-12 20:44:20Z wlux $
+% $Id: MachInterp.lhs 3270 2016-07-12 20:45:35Z wlux $
 %
 % Copyright (c) 1998-2015, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1399,29 +1399,26 @@ instead.
 >         suspend ptr node@(GlobalAppNode ptr' space) =
 >           readState (isALocalSpace space) >>= \so ->
 >           if so then
->             updateState (setVar "x" ptr') >> enter "x"
+>             do
+>               updateState (pushCont (updateGlobal ptr))
+>               updateState (setVar "x" ptr') >> enter "x"
 >           else
->             suspendSearch ptr node (retNode ptr)
+>             suspendSearch ptr node ret
 >         suspend ptr node@(GlobalVarNode ptr' space) =
 >           readState (isALocalSpace space) >>= \so ->
 >           if so then
->             updateState (setVar "x" ptr') >> switchRigid "x" [] retNode
+>             do
+>               updateState (pushCont (updateGlobal ptr))
+>               updateState (setVar "x" ptr') >> switchRigid "x" [] retNode
 >           else
->             suspendSearch ptr node (retNode ptr)
-
-> resumeSearch ::
->     NodePtr -> NodePtr -> NodePtr -> ThreadQueue -> SearchSpace -> Instruction
-> resumeSearch gptr goalApp goalVar cont space =
->   do
->     ptr <- read'updateState popNode
->     deref gptr >>= updateState . saveBinding gptr
->     deref ptr >>= globalNode ptr >>= updateNode gptr
->     space' <- read'updateState newSearchSpace
->     updateState (pushSearchContext goalApp goalVar space')
->     updateState (restoreSearchSpace space)
->     updateState (resumeContinuation cont)
->     switchContext
->   where globalNode ptr (CharNode _) = return (IndirNode ptr)
+>             suspendSearch ptr node ret
+>         updateGlobal gptr =
+>           do
+>             ptr <- read'updateState popNode
+>             deref gptr >>= updateState . saveBinding gptr
+>             deref ptr >>= globalNode ptr >>= updateNode gptr
+>             ret
+>         globalNode ptr (CharNode _) = return (IndirNode ptr)
 >         globalNode ptr (IntNode _) = return (IndirNode ptr)
 >         globalNode ptr (FloatNode _) = return (IndirNode ptr)
 >         globalNode _ (ConstructorNode t c ptrs) =
@@ -1440,11 +1437,18 @@ instead.
 >                 return (IndirNode ptr)
 >         globalNode _ (IndirNode ptr) = deref ptr >>= globalNode ptr
 >         globalNode ptr (SearchContinuation _ _ _ _) = return (IndirNode ptr)
->         globalNode _ (GlobalAppNode ptr space) =
->           return (GlobalAppNode ptr space)
->         globalNode _ (GlobalVarNode ptr space) =
->           return (GlobalVarNode ptr space)
+>         globalNode ptr (GlobalVarNode _ _) = return (IndirNode ptr)
 >         globalNode _ _ = fail "resumeSearch: non-hnf result"
+
+> resumeSearch :: NodePtr -> NodePtr -> NodePtr -> ThreadQueue -> SearchSpace
+>              -> Instruction
+> resumeSearch gptr goalApp goalVar cont space =
+>   do
+>     space' <- read'updateState newSearchSpace
+>     updateState (pushSearchContext goalApp goalVar space')
+>     updateState (restoreSearchSpace space)
+>     updateState (resumeContinuation cont)
+>     switchContext
 
 > globalArgs :: [NodePtr] -> MachStateT [NodePtr]
 > globalArgs ptrs =

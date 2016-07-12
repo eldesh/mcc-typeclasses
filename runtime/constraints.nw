@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: constraints.nw 2860 2009-06-03 05:45:36Z wlux $
+% $Id: constraints.nw 3266 2016-07-12 20:38:47Z wlux $
 %
-% Copyright (c) 2002-2009, Wolfgang Lux
+% Copyright (c) 2002-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Concurrent Conjunction}\label{sec:concurrent}
@@ -156,6 +156,19 @@ FUNCTION(___38_)
 	ENT(c1);
 
     case LVAR_KIND:
+	/* evaluate the other argument then delay */
+	switch ( node_tag(c2) )
+	{
+	case EVAL_TAG:
+	    SAVE_RET1(c1);
+	    CALL_ENT(c2, ___38__2);
+	case LVAR_TAG:
+	case GVAR_TAG:
+	    SAVE_RET1(c2);
+	    CALL1(sync_var, ___38__3, c1);
+	}
+	RET(c1);
+
     case GVAR_KIND:
 	/* evaluate the other argument then delay */
 	switch ( node_tag(c2) )
@@ -164,8 +177,9 @@ FUNCTION(___38_)
 	    SAVE_RET1(c1);
 	    CALL_ENT(c2, ___38__2);
 	case LVAR_TAG:
+	case GVAR_TAG:
 	    SAVE_RET1(c2);
-	    CALL1(sync_var, ___38__3, c1);
+	    CALL1(sync_global, ___38__3, c1);
 	}
 	RET(c1);
 
@@ -205,8 +219,9 @@ FUNCTION(___38__2)
     for ( c2 = regs.sp[0]; node_kind(c2) == INDIR_KIND; c2 = c2->n.node )
 	;
 
-    if ( node_tag(c1) == LVAR_TAG )
+    switch ( node_tag(c1) )
     {
+    case LVAR_TAG:
 	switch ( node_kind(c2) )
 	{
 	case QUEUEME_KIND:
@@ -220,9 +235,26 @@ FUNCTION(___38__2)
 	    assert(node_kind(c2) == CAPP_KIND);
 	}
 	RETURN(c1, 1);
+
+    case GVAR_TAG:
+	switch ( node_kind(c2) )
+	{
+	case QUEUEME_KIND:
+	    regs.sp[0] = c1;
+	    CALL_ENT(c2, ___38__2);
+	case LVAR_KIND:
+	case GVAR_KIND:
+	    regs.sp[0] = c2;
+	    CALL1(sync_global, ___38__3, c1);
+	default:
+	    assert(node_kind(c2) == CAPP_KIND);
+	}
+	RETURN(c1, 1);
+
+    default:
+	assert(node_kind(c1) == CAPP_KIND);
     }
 
-    assert(node_kind(c1) == CAPP_KIND);
     if ( node_kind(c2) == QUEUEME_KIND )
 	ENTER(c2, 1);
     RETURN(c2, 1);

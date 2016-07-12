@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: cam.nw 3067 2012-03-11 22:15:50Z wlux $
+% $Id: cam.nw 3266 2016-07-12 20:38:47Z wlux $
 %
-% Copyright (c) 2001-2012, Wolfgang Lux
+% Copyright (c) 2001-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Abstract Machine Code Macros}
@@ -237,6 +237,7 @@ this is the entry point of the function that uses the [[MATCH]] macro.
 	if ( is_tagged_ptr(regs.r[0]) )				     \
 	    switch ( regs.r[0]->info->tag ) {			     \
 	    case INDIR_TAG: regs.r[0] = regs.r[0]->n.node; continue; \
+	    case GVAR_TAG: regs.ret = (l); GOTO(sync_global);	     \
 	    case LVAR_TAG: regs.ret = (l); GOTO(sync_var);
 #define END_MATCH_RIGID						     \
 	    }							     \
@@ -247,6 +248,7 @@ this is the entry point of the function that uses the [[MATCH]] macro.
     for (;;) {							 \
 	switch ( regs.r[0]->info->tag ) {			 \
 	case INDIR_TAG: regs.r[0] = regs.r[0]->n.node; continue; \
+	case GVAR_TAG: regs.ret = (l); GOTO(sync_global);	 \
 	case LVAR_TAG: regs.ret = (l); GOTO(sync_var);
 #define END_MATCH_RIGID_NODE					 \
 	}							 \

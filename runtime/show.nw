@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: show.nw 3067 2012-03-11 22:15:50Z wlux $
+% $Id: show.nw 3266 2016-07-12 20:38:47Z wlux $
 %
-% Copyright (c) 2001-2012, Wolfgang Lux
+% Copyright (c) 2001-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Show Function}
@@ -951,8 +951,9 @@ FUNCTION(showList_1)
 		    regs.r[0] = hd = hd->n.node;
 		    continue;
 		case LVAR_KIND:
-		case GVAR_KIND:
 		    CALL1(sync_var, showList_1, hd);
+		case GVAR_KIND:
+		    CALL1(sync_global, showList_1, hd);
 		case CHAR_KIND:
 #if NO_POINTER_TAGS
 		    kind = is_string;
@@ -1174,6 +1175,7 @@ FUNCTION(dvalCons)
 	goto again;
 
     case LVAR_TAG:
+    case GVAR_TAG:
     case EVAL_TAG:
 	regs.r[0] = list;
 	CHECK_HEAP(2, suspend_node_size(4) + cons_node_size);

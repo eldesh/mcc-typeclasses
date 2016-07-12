@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: equal.nw 2853 2009-05-29 11:55:01Z wlux $
+% $Id: equal.nw 3266 2016-07-12 20:38:47Z wlux $
 %
-% Copyright (c) 2001-2008, Wolfgang Lux
+% Copyright (c) 2001-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Strict Equality}
@@ -36,6 +36,7 @@ extern Node *primEqAddr(Node *, Node *);
 #include "stack.h"
 #include "eval.h"
 #include "threads.h"
+#include "search.h"
 #include "equal.h"
 #include "unify.h"
 #include "cam.h"

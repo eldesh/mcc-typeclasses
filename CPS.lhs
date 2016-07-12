@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: CPS.lhs 3152 2014-02-12 18:08:19Z wlux $
+% $Id: CPS.lhs 3266 2016-07-12 20:38:47Z wlux $
 %
-% Copyright (c) 2003-2013, Wolfgang Lux
+% Copyright (c) 2003-2015, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{CPS.lhs}
@@ -48,28 +48,22 @@ A CPS continuation function has two argument lists. The first contains
 the proper arguments of the function and the second the free variables
 of the function's body. Note that \texttt{CPSChoice} does not allow
 passing arguments to its continuations, so these continuations must
-not have proper function arguments (cf. \texttt{cpsInst} below). The
+not have proper function arguments (cf.\ \texttt{cpsInst} below). The
 continuation argument of a continuation function provides the context
 in which it is defined and called. At present, we make use of this
 feature only to provide a more efficient calling sequence for the code
 that instantiates variables in a flexible switch.
 
-The idiosyncratic \texttt{CPSSwitchVar} statement allows
-distinguishing local and global unbound logical variables of a search
-goal within an encapsulated search. The first alternative is chosen
-for a global unbound variable, which must not be instantiated, and the
-second is chosen for a local unbound variable, which can be
-instantiated.
-
-A statement \texttt{CPSSwitchArity \char`\{\ 0:$st_0$; \dots;
-  n:$st_n$; \_:$st_{n+1}$ \char`\}} dispatches on the arity, i.e., the
-number of missing arguments, of a matched partial application node.
-The first statement $st_0$, corresponding to arity 0, is selected when
-an unbound logical variable is matched, and the last statement
-$st_{n+1}$ is selected if the arity of the matched node is greater
-than $n$. This default case will allocate a fresh partial application
-node combining the arguments of the matched node and the supplied
-arguments with a \texttt{CPSLetPapp} statement.
+A statement \texttt{CPSSwitchArity \char`\{\ gvar:$st_g$; free:$st_l$;
+  1:$st_1$; $\dots$ n:$st_n$; \_:$st_{n+1}$ \char`\}} dispatches on
+the arity, i.e., the number of missing arguments, of a matched partial
+application node. The first two statements $st_g$ and $st_l$ are
+selected when a global variable or an unbound logical variable is
+matched, respectively. The last statement $st_{n+1}$ is selected if
+the arity of the matched node is greater than $n$. This default case
+is used to allocate a fresh partial application node combining the
+arguments of the matched node and the supplied arguments with a
+\texttt{CPSLetPapp} statement.
 \begin{verbatim}
 
 > data CPSFunction = CPSFunction Name [Name] CPSStmt deriving Show
@@ -85,13 +79,13 @@ arguments with a \texttt{CPSLetPapp} statement.
 >   | CPSLetPapp BindPapp CPSStmt
 >   | CPSLetCont CPSContinuation CPSStmt
 >   | CPSSwitch Bool Name [CaseBlock]
->   | CPSSwitchVar Name CPSStmt CPSStmt
 >   | CPSSwitchArity Name [CPSStmt]
 >   | CPSChoice (Maybe Name) [CPSCont]
 >   deriving Show
 
 > data CPSFun =
->   CPSFun Name | CPSEval Bool Name | CPSUnify | CPSDelay deriving Show
+>   CPSFun Name | CPSEval Bool Name | CPSUnify | CPSDelay | CPSReadGlobal
+>   deriving Show
 > data CPSCont = CPSReturn | CPSCont CPSContFun [Name] CPSCont deriving Show
 > data CPSContFun =
 >     CPSContFun Name Int
@@ -108,6 +102,7 @@ arguments with a \texttt{CPSLetPapp} statement.
 >     CPSLitCase Literal
 >   | CPSConstrCase Name [Name]
 >   | CPSFreeCase
+>   | CPSGlobalCase
 >   | CPSDefaultCase
 >   deriving Show
 
@@ -121,8 +116,9 @@ arguments with a \texttt{CPSLetPapp} statement.
 > cpsApply :: Name -> [Name] -> CPSContinuation
 > cpsApply v vs = CPSContinuation f [v] vs (CPSSwitchArity v cases)
 >   where f = CPSApp (length vs)
+>         k = CPSCont f vs CPSReturn
 >         cases =
->           cpsRigidCase (CPSCont f vs CPSReturn) v :
+>           cpsRigidCase CPSGlobalCase k v : cpsRigidCase CPSFreeCase k v :
 >           [CPSExecCont (apply v i vs CPSReturn) [v] | i <- [1..length vs]] ++
 >           [CPSLetPapp (BindPapp tmp v vs) (CPSExecCont CPSReturn [tmp])]
 >         apply v i vs = CPSCont (CPSApply v) vs' . applyCont vs''
@@ -251,19 +247,25 @@ does not need to construct separate closures for each of them.
 
 > cpsSwitch :: Name -> CPSCont -> (Bool,CPSCont) -> Int -> RF -> Name -> [Case]
 >           -> (Int,CPSStmt)
-> cpsSwitch f k0 k n rf v cases = (n',CPSSwitch tagged v (vcase ++ cases'))
->   where vcase = map (CaseBlock CPSFreeCase) (cpsVarCase rf k0 v ts)
+> cpsSwitch f k0 k n rf v cases =
+>   (n',CPSSwitch tagged v (gcase ++ vcase ++ cases'))
+>   where gcase = map (CaseBlock CPSGlobalCase) (cpsGlobalCase rf k0 v ts)
+>         vcase = map (CaseBlock CPSFreeCase) (cpsVarCase rf k0 v ts)
 >         (n',cases') = mapAccumL (cpsCase f k) n cases
 >         ts = [t | Case t _ <- cases, t /= DefaultCase]
 >         tagged = taggedSwitch ts
 
-> cpsVarCase :: RF -> CPSCont -> Name -> [Tag] -> [CPSStmt]
-> cpsVarCase Rigid k v _ = [cpsRigidCase k v]
-> cpsVarCase Flex k v ts =
->   [CPSSwitchVar v (cpsRigidCase k v) (cpsFlexCase k v ts) | not (null ts)]
+> cpsGlobalCase :: RF -> CPSCont -> Name -> [Tag] -> [CPSStmt]
+> cpsGlobalCase Rigid k v _ = [cpsRigidCase CPSGlobalCase k v]
+> cpsGlobalCase Flex k v ts = [cpsRigidCase CPSGlobalCase k v | not (null ts)]
 
-> cpsRigidCase :: CPSCont -> Name -> CPSStmt
-> cpsRigidCase k v = CPSExec CPSDelay k [v]
+> cpsVarCase :: RF -> CPSCont -> Name -> [Tag] -> [CPSStmt]
+> cpsVarCase Rigid k v _ = [cpsRigidCase CPSFreeCase k v]
+> cpsVarCase Flex k v ts = [cpsFlexCase k v ts | not (null ts)]
+
+> cpsRigidCase :: CPSTag -> CPSCont -> Name -> CPSStmt
+> cpsRigidCase CPSGlobalCase k v = CPSExec CPSReadGlobal k [v]
+> cpsRigidCase CPSFreeCase k v = CPSExec CPSDelay k [v]
 
 > cpsFlexCase :: CPSCont -> Name -> [Tag] -> CPSStmt
 > cpsFlexCase k v ts = cpsFlexChoice v [CPSCont (CPSInst t) [v] k | t <- ts]
@@ -361,7 +363,6 @@ functions defined in a transformed function.
 > contsStmt (CPSLetCont k st) = k : contsCont k ++ contsStmt st
 > contsStmt (CPSSwitch _ _ cases) =
 >   concat [contsStmt st | CaseBlock _ st <- cases]
-> contsStmt (CPSSwitchVar _ st1 st2) = contsStmt st1 ++ contsStmt st2
 > contsStmt (CPSSwitchArity _ sts) = concatMap contsStmt sts
 > contsStmt (CPSChoice _ _) = []
 

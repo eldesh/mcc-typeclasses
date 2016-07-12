@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 3015 2010-11-16 21:13:35Z wlux $
+% $Id: heap.nw 3266 2016-07-12 20:38:47Z wlux $
 %
-% Copyright (c) 2001-2009, Wolfgang Lux
+% Copyright (c) 2001-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{The Heap}\label{sec:heap}
@@ -195,9 +195,11 @@ principle, small integer numbers and character codes could be stored
 in the [[tag]] field of integer and character nodes, respectively.
 However, the runtime system does not use this possibility at present.
 
-The three special tag values [[INDIR_TAG]], [[LVAR_TAG]], and
-[[EVAL_TAG]] are reserved for indirection nodes, logical variables,
-and unevaluated function applications including queue-me nodes.
+The four special tag values [[INDIR_TAG]], [[LVAR_TAG]], [[GVAR_TAG]],
+and [[EVAL_TAG]] are reserved for indirection nodes, logical
+variables, global variables of a search goal in an encapsulated
+search, and unevaluated function applications including queue-me
+nodes and global applications.
 
 The length of a node includes the descriptor pointer; a valid size
 must therefore be greater than 0. If the length in the descriptor is
@@ -247,7 +249,8 @@ struct node_info
 enum {
     INDIR_TAG = -1,
     LVAR_TAG  = -2,
-    EVAL_TAG  = -3
+    GVAR_TAG  = -3,
+    EVAL_TAG  = -4
 };
 
 #define node_kind(node)		(node)->info->kind
@@ -741,13 +744,13 @@ The free variables of a search goal cannot be evaluated or
 instantiated within an encapsulated search. In order to implement the
 necessary write barrier, references to the free variables of a search
 goal are wrapped in global reference nodes. There are two kinds of
-global reference nodes. Those with kind [[GAPP_KIND]], which are
-possibly unevaluated, and those with kind [[GVAR_KIND]], which are
-known to be in head normal form but may be uninstantiated. When a
-global reference is evaluated to a non-variable head normal form, the
-global reference node is changed into an indirection node, which
-points to a copy of the term with all arguments wrapped in global
-reference nodes.
+global reference nodes. Those with kind [[GAPP_KIND]] and tag
+[[EVAL_TAG]], which are possibly unevaluated, and those with kind
+[[GVAR_KIND]] and tag [[GVAR_TAG]], which are known to be in head
+normal form but may be uninstantiated. When a global reference is
+evaluated to a non-variable head normal form, the global reference
+node is changed into an indirection node, which points to a copy of
+the term with all arguments wrapped in global reference nodes.
 
 An important invariant maintained by the runtime system is that global
 reference nodes are used only for references to nodes which are not

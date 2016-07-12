@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 3111 2012-12-21 14:59:52Z wlux $
+% $Id: eval.nw 3266 2016-07-12 20:38:47Z wlux $
 %
-% Copyright (c) 2001-2012, Wolfgang Lux
+% Copyright (c) 2001-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Evaluation}\label{sec:eval}
@@ -396,9 +396,6 @@ DECLARE_LABEL(extern, sync_var);
 FUNCTION(sync_var)
 {
  ENTRY_LABEL(extern, sync_var)
-    if ( is_global_var_node(regs.r[0]) )
-	GOTO(sync_global);
-
     SAVE_RET1(regs.r[0]);
     regs.ret = resume;
     GOTO(delay_thread);

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: search.nw 3234 2016-06-18 16:22:27Z wlux $
+% $Id: search.nw 3266 2016-07-12 20:38:47Z wlux $
 %
 % Copyright (c) 2002-2015, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -72,7 +72,7 @@ static NodeInfo global_app_info_table[] = {
     { INDIR_KIND, INDIR_TAG, global_ref_node_size, 0, 0, eval_indir, 0, 0, 0 }
 };
 static NodeInfo global_var_info_table[] = {
-    { GVAR_KIND, LVAR_TAG, global_ref_node_size, 0, 0, eval_whnf, 0, 0, 0 },
+    { GVAR_KIND, GVAR_TAG, global_ref_node_size, 0, 0, eval_whnf, 0, 0, 0 },
     { INDIR_KIND, INDIR_TAG, global_ref_node_size, 0, 0, eval_indir, 0, 0, 0 }
 };
 #else
@@ -80,7 +80,7 @@ static NodeInfo global_app_info_table[] = {
     { GAPP_KIND, EVAL_TAG, global_ref_node_size, 0, 0, eval_global, 0, 0, 0 }
 };
 static NodeInfo global_var_info_table[] = {
-    { GVAR_KIND, LVAR_TAG, global_ref_node_size, 0, 0, eval_whnf, 0, 0, 0 }
+    { GVAR_KIND, GVAR_TAG, global_ref_node_size, 0, 0, eval_whnf, 0, 0, 0 }
 };
 #endif
 
@@ -525,7 +525,7 @@ FUNCTION(fail_search)
 
 @ 
 The function [[suspend_search]] suspends the current search goal and
-eventually enclosing search goals in order to make [[space]] the
+eventually any enclosing search goals in order to make [[space]] the
 current search space. This is intended to allow evaluation of a global
 lazy application within an encapsulated search and in order to suspend
 an encapsulated search until a global free variable is instantiated,
@@ -628,13 +628,14 @@ space as by [[encapsulate]] below -- must not be updated within an
 encapsulated search. In order to prevent unintended updates, such
 arguments are wrapped in global reference nodes when [[try]] is
 applied to a search goal. There are two kinds of global reference
-nodes, global application nodes with kind [[GAPP_KIND]], which are not
-known to be in head normal form, and global variable nodes with kind
-[[GVAR_KIND]], which may point to a global free variable node. Note
-that at the point where a global reference node is examined by its
-search goal, a global application node may have been evaluated to head
-normal form and a global free variable instantiated to a non-variable
-term, respectively, by a concurrent computation in the global space.
+nodes, global application nodes with kind [[GAPP_KIND]] and tag
+[[EVAL_TAG]], which are not known to be in head normal form, and
+global variable nodes with kind [[GVAR_KIND]] and tag [[GVAR_TAG]],
+which may point to a global free variable node. Note that at the point
+where a global reference node is examined by its search goal, a global
+application node may have been evaluated to head normal form and a
+global free variable instantiated to a non-variable term,
+respectively, by a concurrent computation in the global space.
 
 The evaluation method [[eval_global]] of a global application node
 first suspends the current search goal via [[suspend_search]] and then
@@ -657,6 +658,14 @@ is updated into an indirection to the copied node. Note that
 enclosing search space when the global variable is instantiated to a
 non-variable term already.
 
+As a special case, when [[sync_global]] detects a global variable node
+that points to another global variable node in an enclosing search
+space, the inner variable is immediately updated into an indirection
+to the outer variable. In addition, the extra return frame added by
+[[suspend_search]] is dropped, which would otherwise allocate a
+redundant copy of the result before resuming the inner encapsulated
+search.
+
 <<search.c>>=
 static
 FUNCTION(eval_global)
@@ -675,7 +684,7 @@ FUNCTION(eval_global)
 
 FUNCTION(sync_global)
 {
-    Node	*node;
+    Node	*gref, *node;
     SearchSpace *spc;
  ENTRY_LABEL(extern, sync_global)
     assert(is_global_var_node(regs.r[0]) && !is_local_space(regs.r[0]->g.spc));
@@ -698,6 +707,31 @@ FUNCTION(sync_global)
 	    regs.sp   -= 1;
 	    regs.sp[0] = regs.r[0];
 	    CALL1(sync_var, update_global, regs.r[1]);
+	case GVAR_TAG:
+	    regs.r[1] = node;
+	    suspend_search(2, spc);
+	    gref = regs.r[0];
+	    node = regs.r[1];
+	    TRACE(("%I %N = %N\n", gref, node));
+#if !COPY_SEARCH_SPACE
+	    if ( (word *)gref < regs.hlim )
+	    {
+		assert(&gref->g.node == &gref->n.node);
+		DO_SAVE(gref, g.node);
+		gref->info++;
+	    }
+	    else
+#endif
+		gref->info = &indir_info;
+	    gref->n.node = node;
+	    assert(regs.ret == copy_result &&
+		   (Label)regs.sp[0] == resume_search);
+	    regs.ret  = (Label)*regs.sp++;
+	    regs.r[0] = node;
+	    assert(!is_local_space(node->g.spc));
+	    spc	 = node->g.spc;
+	    node = node->g.node;
+	    continue;
 	case EVAL_TAG:
 	    curry_panic("sync_global: unevaluated application\n");
 	default:

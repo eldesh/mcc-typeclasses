@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: MachResult.lhs 3227 2016-06-16 09:05:17Z wlux $
+% $Id: MachResult.lhs 3273 2016-07-13 21:23:01Z wlux $
 %
-% Copyright (c) 1998-2015, Wolfgang Lux
+% Copyright (c) 1998-2016, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{MachResult.lhs}
@@ -57,11 +57,8 @@ used in the answer expression.
 >     Ptr adr ref <- derefPtr ptr
 >     node <- readRef ref
 >     exp <- browseExpression 0 names adr node
->     return (showsAnswer (isSuccess node) (answer ++ cstrs) exp)
+>     return (showsAnswer (answer ++ cstrs) exp)
 >   where names = variableNames freeVars
->         isSuccess (ConstructorNode _ cName []) = cName == success
->           where ConstructorTag _ success _ = successTag
->         isSuccess _ = False
 
 > browseExpression :: Int -> [String] -> Integer -> Node -> BrowseState ShowS
 > browseExpression p names adr (CharNode c) = return (shows c)
@@ -203,10 +200,9 @@ used in the answer expression.
 >     IndirNode ptr -> constrainedVars vars ptr
 >     _ -> return vars
 
-> showsAnswer :: Bool -> [ShowS] -> ShowS -> ShowS
-> showsAnswer isSuccess answer exp
+> showsAnswer :: [ShowS] -> ShowS -> ShowS
+> showsAnswer answer exp
 >   | null answer = exp
->   | isSuccess = braces ('{','}') (catBy ", " answer)
 >   | otherwise = braces ('{','}') (catBy ", " answer) . showChar ' ' . exp
 
 > showsTerm :: Int -> String -> [ShowS] -> ShowS

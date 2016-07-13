@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3261 2016-06-26 07:24:47Z wlux $
+% $Id: TypeCheck.lhs 3273 2016-07-13 21:23:01Z wlux $
 %
 % Copyright (c) 1999-2016, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1231,20 +1231,17 @@ in \texttt{tcFunctionDecl} above.
 > tcRhs m tcEnv tyEnv (GuardedRhs es ds) =
 >   do
 >     (tyEnv',cx,ds') <- tcDecls m tcEnv tyEnv ds
->     gty <- guardType es
 >     ty <- freshTypeVar
->     (cx',es') <- mapAccumM (tcCondExpr m tcEnv tyEnv' gty ty) cx es
+>     (cx',es') <- mapAccumM (tcCondExpr m tcEnv tyEnv' ty) cx es
 >     return (cx',ty,GuardedRhs es' ds')
->   where guardType es
->           | length es > 1 = return boolType
->           | otherwise = freshConstrained guardTypes
 
-> tcCondExpr :: ModuleIdent -> TCEnv -> ValueEnv -> Type -> Type -> Context
+> tcCondExpr :: ModuleIdent -> TCEnv -> ValueEnv -> Type -> Context
 >            -> CondExpr a -> TcState (Context,CondExpr QualType)
-> tcCondExpr m tcEnv tyEnv gty ty cx (CondExpr p g e) =
+> tcCondExpr m tcEnv tyEnv ty cx (CondExpr p g e) =
 >   do
 >     (cx',g') <-
->       tcExpr m tcEnv tyEnv p g >>- unify p "guard" (ppExpr 0 g) tcEnv cx gty
+>       tcExpr m tcEnv tyEnv p g >>-
+>       unify p "guard" (ppExpr 0 g) tcEnv cx boolType
 >     (cx'',e') <-
 >       tcExpr m tcEnv tyEnv p e >>-
 >       unify p "expression" (ppExpr 0 e) tcEnv cx' ty

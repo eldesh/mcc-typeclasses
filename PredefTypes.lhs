@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: PredefTypes.lhs 2969 2010-06-29 13:00:29Z wlux $
+% $Id: PredefTypes.lhs 3273 2016-07-13 21:23:01Z wlux $
 %
-% Copyright (c) 2002-2010, Wolfgang Lux
+% Copyright (c) 2002-2016, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{PredefTypes.lhs}
@@ -16,7 +16,7 @@ compiler.
 > import Types
 
 > unitType,boolType,charType,intType,integerType,floatType,rationalType :: Type
-> stringType,successType :: Type
+> stringType :: Type
 > unitType = TypeConstructor qUnitId
 > boolType = TypeConstructor qBoolId
 > charType = TypeConstructor qCharId
@@ -25,7 +25,6 @@ compiler.
 > floatType = TypeConstructor qFloatId
 > rationalType = ratioType integerType
 > stringType = listType charType
-> successType = TypeConstructor qSuccessId
 
 > listType,ioType,ratioType :: Type -> Type
 > listType = TypeApply (TypeConstructor qListId)
@@ -45,22 +44,11 @@ compiler.
 > qualFloatType = QualType [] floatType
 > qualRationalType = qualRatioType qualIntegerType
 > qualStringType = qualListType qualCharType
-> qualSuccessType = QualType [] successType
 
 > qualListType,qualIOType,qualRatioType :: QualType -> QualType
 > qualListType (QualType cx ty) = QualType cx (listType ty)
 > qualIOType (QualType cx ty) = QualType cx (ioType ty)
 > qualRatioType (QualType cx ty) = QualType cx (ratioType ty)
-
-\end{verbatim}
-The variable \texttt{guardTypes} maintains the list of types
-admissible for guard expressions. The first type of this list
-(\texttt{Success}), is used as default type if the guard's type cannot
-be determined otherwise.
-\begin{verbatim}
-
-> guardTypes :: [Type]
-> guardTypes = [successType,boolType]
 
 \end{verbatim}
 The variables \texttt{numTypes} and \texttt{fracTypes} maintain the

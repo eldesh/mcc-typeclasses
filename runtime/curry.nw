@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: curry.nw 2750 2008-08-30 13:21:58Z wlux $
+% $Id: curry.nw 3273 2016-07-13 21:23:01Z wlux $
 %
-% Copyright (c) 2002-2008, Wolfgang Lux
+% Copyright (c) 2002-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \section{The Runtime System}
@@ -116,7 +116,7 @@ Currently, the following configuration options are supported.
   for the goal \verb|nat n & n =:= S Z| and the program
 \begin{verbatim}
 data Nat = Z | S Nat
-nat Z     = success
+nat Z     = True
 nat (S n) = nat n
 \end{verbatim}
   Note that stability may lead to non-termination in some unusual

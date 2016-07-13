@@ -11,7 +11,6 @@ data (,) a b = (,) a b
 data (,,) a b c = (,,) a b c
 data [] a = [] | a : [a]
 data Bool = False | True
-data Success = Success
 data IO a
 
 (.) :: (b -> c) -> (a -> b) -> (a -> c)
@@ -48,9 +47,8 @@ foldl f z (x:xs) = foldl f (f z x) xs
 concat = foldr (++) []
 concatMap f = concat . map f
 
-success = Success
-foreign import primitive (&) :: Success -> Success -> Success
-foreign import primitive (=:=) :: a -> a -> Success
+foreign import primitive (&) :: Bool -> Bool -> Bool
+foreign import primitive (=:=) :: a -> a -> Bool
 c &> e | c = e
 
 foreign import primitive return :: a -> IO a

@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 3260 2016-06-25 23:00:28Z wlux $
+% $Id: CaseMatch.lhs 3273 2016-07-13 21:23:01Z wlux $
 %
 % Copyright (c) 2001-2016, Wolfgang Lux
 % See LICENSE for the full license.
@@ -17,10 +17,9 @@ $C\,v_1\dots v_n$, or $v\texttt{@}(C\,v_1\dots v_n)$ where $l$ is a
 literal, $v$ and $v_1, \dots, v_n$ are variables, and $C$ is a data
 constructor.\footnote{Recall that all newtype constructors have been
   removed previously.} During this transformation, the compiler also
-replaces (boolean) guards by if-then-else cascades, changes
-if-then-else expressions into equivalent case expressions, and
-transforms function patterns into equivalent right hand side
-constraints.
+replaces guards by if-then-else cascades, changes if-then-else
+expressions into equivalent case expressions, and transforms function
+patterns into equivalent right hand side constraints.
 \begin{verbatim}
 
 > module CaseMatch(caseMatch) where
@@ -86,13 +85,8 @@ only the right hand sides of such declarations need to be transformed.
 >   match _ _ (TrustAnnot p tr fs) = return (TrustAnnot p tr fs)
 
 \end{verbatim}
-A list of guarded equations or alternatives with boolean guards is
-expanded into a nested if-then-else expression, whereas a guarded
-equation or alternative with a constraint guard is replaced by a case
-expression. Note that if the guard type is \texttt{Success} only a
-single guard is allowed for each equation. We check whether the
-guard's type is \texttt{Bool} because it defaults to \texttt{Success}
-if it is not restricted by the guard expression.
+A list of guarded equations or alternatives is expanded into the
+equivalent of a nested if-then-else expression.
 \begin{verbatim}
 
 > instance CaseMatch Rhs where
@@ -108,29 +102,19 @@ if it is not restricted by the guard expression.
 > expandRhs :: ModuleIdent -> Position -> [CondExpr QualType]
 >           -> Maybe (CaseMatchState (Expression QualType))
 >           -> CaseMatchState (Expression QualType)
-> expandRhs m p es e0
->   | booleanGuards es =
->       liftM2 expandBooleanGuards (mapM (match m p) es) (liftMaybe e0)
->   | otherwise = liftM expandConstraintGuard (mapM (match m p) es)
+> expandRhs m p es e0 = liftM2 expandGuards (mapM (match m p) es) (liftMaybe e0)
 >   where liftMaybe (Just e0) = liftM Just e0
 >         liftMaybe Nothing = return Nothing
 
-> expandBooleanGuards :: [CondExpr QualType] -> Maybe (Expression QualType)
->                     -> Expression QualType
-> expandBooleanGuards [] (Just e0) = e0
-> expandBooleanGuards (CondExpr p g e1:es) e0 =
+> expandGuards :: [CondExpr QualType] -> Maybe (Expression QualType)
+>              -> Expression QualType
+> expandGuards [] (Just e0) = e0
+> expandGuards (CondExpr p g e1:es) e0 =
 >   Case g (caseAlt p truePattern e1 :
 >           map (caseAlt p falsePattern) (expand es e0))
 >   where expand es e0
 >           | null es = maybeToList e0
->           | otherwise = [expandBooleanGuards es e0]
-
-> expandConstraintGuard :: [CondExpr QualType] -> Expression QualType
-> expandConstraintGuard [CondExpr p g e] = Case g [caseAlt p successPattern e]
-
-> booleanGuards :: [CondExpr QualType] -> Bool
-> booleanGuards [] = True
-> booleanGuards (CondExpr _ g _ : es) = not (null es) || typeOf g == boolType
+>           | otherwise = [expandGuards es e0]
 
 > instance CaseMatch CondExpr where
 >   match m _ (CondExpr p g e) = liftM2 (CondExpr p) (match m p g) (match m p e)
@@ -267,8 +251,8 @@ reduces to 0.
 > injectRhs c ds (SimpleRhs p e ds') =
 >   GuardedRhs [CondExpr p c e] (ds ++ ds')
 > injectRhs c ds (GuardedRhs (CondExpr p g e : es) ds') =
->   GuardedRhs (CondExpr p (expandConstraintGuard [CondExpr p c g]) e : es)
->              (ds ++ ds')
+>   GuardedRhs (CondExpr p g' e : es) (ds ++ ds')
+>   where g' = expandGuards [CondExpr p c g] Nothing
 
 > toExpr :: ConstrTerm QualType -> Expression QualType
 > toExpr (LiteralPattern ty l)
@@ -474,25 +458,8 @@ expressions on the other hand is that in case expressions,
 alternatives are matched from top to bottom and patterns are matched
 from left to right in each alternative. Evaluation commits to the
 first alternative with a matching pattern. If an alternative uses
-boolean guards and all guards of that alternative fail, pattern
-matching continues with the next alternative as if the pattern did not
-match. As an extension, we also support constraint guards, but do not
-fall through to the remaining alternatives if the guard fails, since
-this cannot be implemented without negation of constraints. For
-instance, the expression
-\begin{verbatim}
-  case x of
-    Left y | y >= 0 -> 1
-    Right z | z =/= 0.0 -> 2
-    _ -> 3
-\end{verbatim}
-reduces to 3 if \texttt{x} is bound to an application of \texttt{Left}
-to a negative number because pattern matching continues when the
-boolean guard \texttt{y >= 0} reduces to \texttt{False}. On the other
-hand, the case expression does not reduce to 3 if \texttt{x} is bound
-to \texttt{Right 0.0} because pattern matching does not continue after
-the constraint guard \texttt{z =/= 0.0} fails. Instead, the whole case
-expression fails in this case.
+guards and all guards of that alternative fail, pattern matching
+continues with the next alternative as if the pattern did not match.
 
 Our algorithm scans the arguments of the first alternative from left
 to right until finding a literal or a constructor application. If such
@@ -502,7 +469,7 @@ variable pattern at the selected position and the groups are defined
 by mutually distinct roots. If no such position is found, the first
 alternative is selected and the remaining alternatives are used in
 order to define a default (case) expression when the selected
-alternative is defined with a list of boolean guards.
+alternative is defined with a list of guarded expressions.
 
 Including alternatives with a variable pattern at the selected
 position causes the aforementioned code duplication. The variable
@@ -787,7 +754,7 @@ Prelude entities
 \begin{verbatim}
 
 > prelConj :: Expression QualType
-> prelConj = preludeFun [successType,successType] successType "&"
+> prelConj = preludeFun [boolType,boolType] boolType "&"
 
 > prelEq, prelFromInteger, prelFromRational :: Type -> Expression QualType
 > prelEq ty = preludeFun [ty,ty] boolType "=="
@@ -795,8 +762,8 @@ Prelude entities
 > prelFromRational ty = preludeFun [rationalType] ty "fromRational"
 
 > unify, unifyRigid, prelUnknown :: Type -> Expression QualType
-> unify ty = preludeFun [ty,ty] successType "=:<="
-> unifyRigid ty = preludeFun [ty,ty] successType "==<="
+> unify ty = preludeFun [ty,ty] boolType "=:<="
+> unifyRigid ty = preludeFun [ty,ty] boolType "==<="
 > prelUnknown ty = preludeFun [] ty "unknown"
 
 > preludeFun :: [Type] -> Type -> String -> Expression QualType
@@ -809,10 +776,9 @@ Prelude entities
 >   Constructor (qualType (TypeArrow ty (TypeArrow ty (ratioType ty))))
 >               (qualifyWith ratioMIdent (mkIdent ":%"))
 
-> truePattern, falsePattern, successPattern :: ConstrTerm QualType
+> truePattern, falsePattern :: ConstrTerm QualType
 > truePattern = ConstructorPattern qualBoolType qTrueId []
 > falsePattern = ConstructorPattern qualBoolType qFalseId []
-> successPattern = ConstructorPattern qualSuccessType qSuccessId []
 
 \end{verbatim}
 Auxiliary definitions

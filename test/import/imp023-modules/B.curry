@@ -2,7 +2,7 @@ module B where
 import A
 
 class C a where
-  f :: a -> Success
+  f :: a -> Bool
 
 instance C T where
-  f T = success
+  f T = True

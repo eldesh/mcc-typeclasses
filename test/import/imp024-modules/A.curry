@@ -1,4 +1,4 @@
 module A where
 
 class C a where
-  f :: a -> Success
+  f :: a -> Bool

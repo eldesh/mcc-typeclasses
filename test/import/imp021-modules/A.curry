@@ -4,10 +4,10 @@ class C a where
   f :: a -> a
 
 class D a where
-  g :: a -> Success
+  g :: a -> Bool
 
 instance D Int where
-  g 0 = success
+  g 0 = True
 
 instance D a => C (Maybe a) where
   f (Just x) | g x = Just x

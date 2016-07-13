@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: constraints.nw 3266 2016-07-12 20:38:47Z wlux $
+% $Id: constraints.nw 3273 2016-07-13 21:23:01Z wlux $
 %
-% Copyright (c) 2002-2015, Wolfgang Lux
+% Copyright (c) 2002-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Concurrent Conjunction}\label{sec:concurrent}
@@ -20,64 +20,45 @@ This file implements the concurrent conjunction of two constraints
 #include "eval.h"
 #include "threads.h"
 #include "search.h"
+#include "unify.h"
 #include "cam.h"
 
 @
-The code for a concurrent conjunction of two constraints creates a new
-thread only when both arguments are unevaluated applications. In that
-case, the first argument is evaluated in the child thread and the
-parent thread evaluates the second argument. After evaluating the
-second argument, the parent thread is suspended until the first
-constraint is solved. If the first argument is an updatable
-application node, this is achieved by evaluating the first argument in
-the parent after the second one. If the first argument is a
-non-updatable application, a fresh queue-me node is created for this
-purpose.
-
-\textbf{Don't try to avoid allocating a fresh queue-me node by
-  flipping the arguments if the first argument is a non-updatable
-  application and the second one is an updatable application, since
-  this would destroy the global thread order maintained by the thread
-  management code.} %'
-
-Note that an unbound variable can be returned from a concurrent
-conjunction, This follows the specification
+The code for a concurrent conjunction is defined to be equivalent to
+the definition
 \begin{verbatim}
-  success & y = y
-  x & success = x
+  True & True = True
 \end{verbatim}
-It is up to the caller to decide how an unbound variable is handled.
-For instance, in the implementation of concurrent conjunction below,
-the current thread is delayed until the first argument is instantiated
-when both arguments are unbound variables.
-
-\ToDo{Make the implementation of \texttt{\&} more symmetric in this
-  case so that the current thread is woken after either of the
-  variables is instantiated.}
+except for evaluating both arguments concurrently. To that end both
+arguments are evaluated on separate threads, except when one argument
+is already a head normal form. In that case an uninstantiated variable
+is bound to the constant \verb{True} and then the other argument is
+evaluated on the current thread.
 
 <<constraints.c>>=
 DECLARE_LABEL(extern, ___38_);
 DECLARE_LABEL(static, ___38__1);
 DECLARE_LABEL(static, ___38__2);
 DECLARE_LABEL(static, ___38__3);
+DECLARE_LABEL(static, ___38__4);
+
+#define NO_SOLUTION "(&): no match"
 
 FUNCTION(___38_)
 {
     Node *c1, *c2, *aux;
  ENTRY_LABEL(extern, ___38_)
-    for ( c1 = regs.r[0]; node_kind(c1) == INDIR_KIND; c1 = c1->n.node )
+    for ( c1 = regs.r[0]; node_tag(c1) == INDIR_TAG; c1 = c1->n.node )
 	;
-    for ( c2 = regs.r[1]; node_kind(c2) == INDIR_KIND; c2 = c2->n.node )
+    for ( c2 = regs.r[1]; node_tag(c2) == INDIR_TAG; c2 = c2->n.node )
 	;
 
-    switch ( node_kind(c1) )
+    switch ( node_tag(c1) )
     {
-    case FAPP_KIND:
-	switch ( node_kind(c2) )
+    case EVAL_TAG:
+	switch ( node_tag(c2) )
 	{
-	case GAPP_KIND:
-	case SUSPEND_KIND:
-	case FAPP_KIND:
+	case EVAL_TAG:
 	    regs.r[0] = c1;
 	    regs.r[1] = c2;
 	    CHECK_HEAP(2, queueMe_node_size);
@@ -86,200 +67,114 @@ FUNCTION(___38_)
 	    aux->q.wq = 0;
 	    regs.hp  += queueMe_node_size;
 
-	    SAVE_RET2(aux, regs.r[1]);
+	    SAVE_RET2(regs.r[1], aux);
 	    regs.r[1] = aux;
 	    start_thread(2, ___38__1);
 
-	    SAVE_REGS(1);
-	    CALL_ENT(regs.r[0], update);
-	}
-	/* FALL THROUGH!!! */
-    case SUSPEND_KIND:
-	switch ( node_kind(c2) )
-	{
-	case GAPP_KIND:
-	case SUSPEND_KIND:
-	case FAPP_KIND:
-	    SAVE_RET2(c1, c2);
-	    regs.r[0] = c1;
-	    start_thread(1, ___38__1);
-	    ENT(regs.r[0]);
-	case QUEUEME_KIND:
-	case LVAR_KIND:
-	case GVAR_KIND:
-	    SAVE_RET1(c2);
-	    CALL_ENT(c1, ___38__2);
-	default:
-	    assert(node_kind(c2) == CAPP_KIND);
-	}
-	ENT(c1);
+	    SAVE_RET3(Prelude_True, (Node *)update, regs.r[1]);
+	    CALL_ENT(regs.r[0], ___38__4);
 
-    case QUEUEME_KIND:
-	switch ( node_kind(c2) )
-	{
-	case GAPP_KIND:
-	case SUSPEND_KIND:
-	case FAPP_KIND:
-	    SAVE_RET1(c1);
-	    CALL_ENT(c2, ___38__2);
-	case QUEUEME_KIND:
-	case LVAR_KIND:
-	case GVAR_KIND:
-	    SAVE_RET1(c2);
-	    CALL_ENT(c1, ___38__2);
-	default:
-	    assert(node_kind(c2) == CAPP_KIND);
-	}
-	ENT(c1);
-
-    case GAPP_KIND:
-	switch ( node_kind(c2) )
-	{
-	case GAPP_KIND:
-	    regs.r[0] = c1->g.node;
-	    regs.r[1] = c2->g.node;
-	    suspend_search(2, regs.bp->btSpc);
-	    GOTO(___38_);
-	case SUSPEND_KIND:
-	case FAPP_KIND:
-	    /* Note: no concurrent evaluation possible here */
-	    SAVE_RET2(c1, c2);
-	    CALL_ENT(c1, ___38__1);
-	case QUEUEME_KIND:
-	case LVAR_KIND:
-	case GVAR_KIND:
-	    SAVE_RET1(c2);
-	    CALL_ENT(c1, ___38__2);
-	default:
-	    assert(node_kind(c2) == CAPP_KIND);
-	}
-	ENT(c1);
-
-    case LVAR_KIND:
-	/* evaluate the other argument then delay */
-	switch ( node_tag(c2) )
-	{
-	case EVAL_TAG:
-	    SAVE_RET1(c1);
-	    CALL_ENT(c2, ___38__2);
 	case LVAR_TAG:
-	case GVAR_TAG:
-	    SAVE_RET1(c2);
-	    CALL1(sync_var, ___38__3, c1);
-	}
-	RET(c1);
-
-    case GVAR_KIND:
-	/* evaluate the other argument then delay */
-	switch ( node_tag(c2) )
-	{
-	case EVAL_TAG:
 	    SAVE_RET1(c1);
-	    CALL_ENT(c2, ___38__2);
-	case LVAR_TAG:
+	    CALL2(bind_var, ___38__3, c2, Prelude_True);
+
 	case GVAR_TAG:
-	    SAVE_RET1(c2);
-	    CALL1(sync_global, ___38__3, c1);
+	    SAVE_RET1(c1);
+	    CALL1(sync_global, ___38__2, c2);
+
+	default:
+	    if ( c2 == Prelude_False )
+		FAIL(NO_SOLUTION);
+	    assert(c2 == Prelude_True);
 	}
-	RET(c1);
+	SAVE_RET1(Prelude_True);
+	CALL_ENT(c1, ___38__4);
+
+    case LVAR_TAG:
+	SAVE_RET1(c2);
+	CALL2(bind_var, ___38__3, c1, Prelude_True);
+
+    case GVAR_TAG:
+	SAVE_RET1(c2);
+	CALL1(sync_global, ___38__2, c1);
 
     default:
-	assert(node_kind(c1) == CAPP_KIND);
+	if ( c1 == Prelude_False )
+	    FAIL(NO_SOLUTION);
+	assert(c1 == Prelude_True);
     }
-
-    /* trivial case */
-    if ( c2->info->tag == EVAL_TAG )
-	ENT(c2);
-    RET(c2);
+    SAVE_RET1(Prelude_True);
+    CALL_ENT(c2, ___38__4);
 }
 
 static
 FUNCTION(___38__1)
 {
  ENTRY_LABEL(static, ___38__1)
-    CALL_RET2(___38_, 2, regs.sp[0], regs.sp[1]);
+    regs.r[0] = regs.sp[0];
+    regs.sp  += 1;
+    EVAL(___38__4);
+}
+
+static
+FUNCTION(___38__2)
+{
+    Node *r;
+ ENTRY_LABEL(static, ___38__2)
+    for ( r = regs.r[0]; node_tag(r) == INDIR_TAG; r = r->n.node )
+	;
+    if ( r == Prelude_False )
+	 FAIL(NO_SOLUTION);
+    assert(r == Prelude_True);
+    GOTO(___38__3);
+}
+
+static
+FUNCTION(___38__3)
+{
+ ENTRY_LABEL(static, ___38__3)
+    regs.r[0]  = regs.sp[0];
+    regs.sp[0] = Prelude_True;
+    EVAL(___38__4);
 }
 
 @
 When an argument has been evaluated to head normal form, it must be
-either a variable or the constant [[Success]]. In the former case, we
-may return the variable if the other argument was evaluated to
-[[Success]] in the meantime. In the latter case we can simply return
-the other argument to the caller except if it is still a queue-me
-node.
+either a variable or one of the constants [[True]] and [[False]]. If
+an argument reduces to [[False]] the whole conjunction fails with a no
+match error. Otherwise, an unbound variable is instantiated to
+[[True]] and then returns the other argument, which at this point must
+be either the constant [[True]] or a queue-me node.
 
 <<constraints.c>>=
 static
-FUNCTION(___38__2)
+FUNCTION(___38__4)
 {
-    Node *c1, *c2;
- ENTRY_LABEL(static, ___38__2)
-    for ( c1 = regs.r[0]; node_kind(c1) == INDIR_KIND; c1 = c1->n.node )
-	;
-    for ( c2 = regs.sp[0]; node_kind(c2) == INDIR_KIND; c2 = c2->n.node )
+    Node *arg;
+ ENTRY_LABEL(static, ___38__4)
+    for ( arg = regs.r[0]; node_tag(arg) == INDIR_TAG; arg = arg->n.node )
 	;
 
-    switch ( node_tag(c1) )
+    switch ( node_tag(arg) )
     {
     case LVAR_TAG:
-	switch ( node_kind(c2) )
-	{
-	case QUEUEME_KIND:
-	    regs.sp[0] = c1;
-	    CALL_ENT(c2, ___38__2);
-	case LVAR_KIND:
-	case GVAR_KIND:
-	    regs.sp[0] = c2;
-	    CALL1(sync_var, ___38__3, c1);
-	default:
-	    assert(node_kind(c2) == CAPP_KIND);
-	}
-	RETURN(c1, 1);
+	CALL2(bind_var, ___38__4, arg, Prelude_True);
 
     case GVAR_TAG:
-	switch ( node_kind(c2) )
-	{
-	case QUEUEME_KIND:
-	    regs.sp[0] = c1;
-	    CALL_ENT(c2, ___38__2);
-	case LVAR_KIND:
-	case GVAR_KIND:
-	    regs.sp[0] = c2;
-	    CALL1(sync_global, ___38__3, c1);
-	default:
-	    assert(node_kind(c2) == CAPP_KIND);
-	}
-	RETURN(c1, 1);
+	CALL1(sync_global, ___38__4, arg);
 
     default:
-	assert(node_kind(c1) == CAPP_KIND);
+	if ( arg == Prelude_False )
+	    FAIL(NO_SOLUTION);
+	assert(arg == Prelude_True);
     }
 
-    if ( node_kind(c2) == QUEUEME_KIND )
-	ENTER(c2, 1);
-    RETURN(c2, 1);
-}
-
-@
-After waiting until an unbound variable has been instantiated, we can
-always return the other argument. Note that the code below is invoked
-only if the other argument was a variable node.
-
-<<constraints.c>>=
-static
-FUNCTION(___38__3)
-{
-    Node *c1, *c2;
- ENTRY_LABEL(static, ___38__3)
-    for ( c1 = regs.r[0]; node_kind(c1) == INDIR_KIND; c1 = c1->n.node )
+    for ( arg = regs.sp[0]; node_kind(arg) == INDIR_KIND; arg = arg->n.node )
 	;
-    for ( c2 = regs.sp[0]; node_kind(c2) == INDIR_KIND; c2 = c2->n.node )
-	;
-    assert(node_kind(c1) == CAPP_KIND);
-    assert(node_kind(c2) == CAPP_KIND || node_kind(c2) == LVAR_KIND ||
-	   node_kind(c2) == GVAR_KIND);
-
-    RETURN(c2, 1);
+    if ( node_kind(arg) == QUEUEME_KIND )
+	ENTER(arg, 1);
+    assert(arg == Prelude_True);
+    RETURN(arg, 1);
 }
 
 @ 
@@ -291,6 +186,11 @@ argument is already in head normal form.
 <<constraints.c>>=
 DECLARE_LABEL(extern, __spawnConstraint);
 DECLARE_LABEL(static, __spawnConstraint_1);
+DECLARE_LABEL(static, __spawnConstraint_2);
+DECLARE_LABEL(static, __spawnConstraint_3);
+
+#undef NO_SOLUTION
+#define NO_SOLUTION "spawnConstraint: no match"
 
 FUNCTION(__spawnConstraint)
 {
@@ -299,18 +199,27 @@ FUNCTION(__spawnConstraint)
     c = regs.r[0];
     for (;;)
     {
-	switch ( node_kind(c) )
+	switch ( node_tag(c) )
 	{
-	case INDIR_KIND:
+	case INDIR_TAG:
 	    c = c->n.node;
 	    continue;
-	case GAPP_KIND:
-	case SUSPEND_KIND:
-	case FAPP_KIND:
+	case EVAL_TAG:
 	    SAVE_REGS(1);
 	    regs.r[0] = c;
-	    start_thread(1, __spawnConstraint_1);
-	    ENT(regs.r[0]);
+	    start_thread(1, __spawnConstraint_3);
+	    SAVE_REGS(0);
+	    CALL_ENT(regs.r[0], __spawnConstraint_1);
+	case LVAR_TAG:
+	    SAVE_REGS(1);
+	    CALL2(bind_var, __spawnConstraint_3, c, Prelude_True);
+	case GVAR_TAG:
+	    SAVE_REGS(1);
+	    CALL1(bind_var, __spawnConstraint_2, c);
+	default:
+	    if ( c == Prelude_False )
+		FAIL(NO_SOLUTION);
+	    assert(c == Prelude_True);
 	}
 	break;
     }
@@ -324,8 +233,48 @@ FUNCTION(__spawnConstraint)
 static
 FUNCTION(__spawnConstraint_1)
 {
+    Node *c;
+ ENTRY_LABEL(extern, __spawnConstraint_1)
+    c = regs.r[0];
+    for (;;)
+    {
+	switch ( node_tag(c) )
+	{
+	case INDIR_TAG:
+	    c = c->n.node;
+	    continue;
+	case LVAR_TAG:
+	    CALL_RET2(bind_var, 0, c, Prelude_True);
+	case GVAR_TAG:
+	    CALL1(bind_var, __spawnConstraint_1, c);
+	default:
+	    if ( c == Prelude_False )
+		FAIL(NO_SOLUTION);
+	    assert(c == Prelude_True);
+	}
+	break;
+    }
+    RETURN(c, 0);
+}
+
+static
+FUNCTION(__spawnConstraint_2)
+{
+    Node *c;
+ ENTRY_LABEL(static, __spawnConstraint_2)
+    for ( c = regs.r[0]; node_tag(c) == INDIR_TAG; c = c->n.node )
+	;
+    if ( c == Prelude_False )
+	FAIL(NO_SOLUTION);
+    assert(c == Prelude_True);
+    GOTO(__spawnConstraint_3);
+}
+
+static
+FUNCTION(__spawnConstraint_3)
+{
     Node *x;
- ENTRY_LABEL(static, __spawnConstraint_1)
+ ENTRY_LABEL(static, __spawnConstraint_3)
     x = regs.sp[0];
     if ( is_tagged_ptr(x) )
 	ENTER(x, 1);

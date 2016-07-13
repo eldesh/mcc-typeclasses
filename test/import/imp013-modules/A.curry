@@ -4,7 +4,7 @@ data T = T
 class C a
 instance C T
 
-f :: C a => a -> Success
-f _ = success
+f :: C a => a -> Bool
+f _ = True
 
 g = T

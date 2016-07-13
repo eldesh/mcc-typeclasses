@@ -1,6 +1,6 @@
--- $Id: Parser.curry 3087 2012-08-01 18:47:26Z wlux $
+-- $Id: Parser.curry 3273 2016-07-13 21:23:01Z wlux $
 -- 
--- Copyright (c) 2004-2012, Wolfgang Lux
+-- Copyright (c) 2004-2016, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 -- Functional logic parsing combinators based on
@@ -50,7 +50,7 @@ terminal t (t':ts) | t =:= t' = ts
 -- parsing combinator with representation
 type ParserRep a s = a -> Parser s
 
-satisfy :: (a -> Success) -> ParserRep a a
+satisfy :: (a -> Bool) -> ParserRep a a
 satisfy p t (t':ts) | t =:= t' &> p t = ts
 
 (<||>) :: ParserRep a b -> ParserRep a b -> ParserRep a b
@@ -62,7 +62,7 @@ satisfy p t (t':ts) | t =:= t' &> p t = ts
 --    the same purpose as in (<*>) and avoids the quadratic time
 --    complexity entailed by the first unification in the original
 --    implementation:
---      (p >>> e) r ts | p ts =:= ts' &> e =:= r = ts' where ts' free
+--      (p >>> e) r ts | solve (p ts =:= ts') &> e =:= r = ts' where ts' free
 (>>>) :: Parser a -> b -> ParserRep b a
 (p >>> e) r ts =
   fcase p ts of
@@ -78,7 +78,7 @@ star p rep = some p rep
 
 -- invoking parsers
 -- NB these functions were not defined in the paper
-parse :: Parser a -> [a] -> Success
+parse :: Parser a -> [a] -> Bool
 parse p ts = p ts =:= []
 
 parseRep :: ParserRep a b -> [b] -> a

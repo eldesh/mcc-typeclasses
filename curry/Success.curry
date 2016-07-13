@@ -1,6 +1,6 @@
--- $Id: Success.curry 1874 2006-03-18 14:46:46Z wlux $
+-- $Id: Success.curry 3273 2016-07-13 21:23:01Z wlux $
 --
--- Copyright (c) 2002-2004, Wolfgang Lux
+-- Copyright (c) 2002-2016, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module Success(module Success, Success, success, (&), (&>), ground) where
@@ -10,23 +10,23 @@ infix  0 ==>, <==
 ground = ensureGround
 
 -- Computes the concurrent conjunction of a list of constraints
-andC :: [Success] -> Success
-andC = foldr (&) success
+andC :: [Bool] -> Bool
+andC = foldr (&) True
 
 -- Computes the sequential conjunction of a list of constraints
-andS :: [Success] -> Success
-andS = foldr (&>) success
+andS :: [Bool] -> Bool
+andS = foldr (&>) True
 
 -- Is a given predicate satisfied by all elements in a list?
-allC :: (a -> Success) -> [a] -> Success
+allC :: (a -> Bool) -> [a] -> Bool
 allC p = andC . map p
 
 -- (c ==> x) evaluates x if the constraint c is satisfied
-(==>) :: Success -> a -> a
+(==>) :: Bool -> a -> a
 c ==> x | c = x
 
 -- (x <== c) is equivalent to (c ==> x)
-(<==) :: a -> Success -> a
+(<==) :: a -> Bool -> a
 x <== c | c = x
 
 -- (choose xs) non-deterministically chooses one element from the list xs

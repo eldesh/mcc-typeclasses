@@ -1,4 +1,4 @@
 "tc017.curry", line 2.7: Type signature too general
-Expression: success
-Inferred type: Success
+Expression: putStr ""
+Inferred type: IO ()
 Type signature: Eq a => a

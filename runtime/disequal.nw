@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: disequal.nw 3008 2010-09-01 09:59:41Z wlux $
+% $Id: disequal.nw 3273 2016-07-13 21:23:01Z wlux $
 %
-% Copyright (c) 2002-2010, Wolfgang Lux
+% Copyright (c) 2002-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Disequality Constraints}
@@ -122,7 +122,7 @@ FUNCTION(___61__47__61__2)
 	int n = eq_root(arg1, arg2);
 
 	if ( n < 0 )
-	    RETURN(Success, 1);
+	    RETURN(Prelude_True, 1);
 	else if ( n > 0 )
 	{
 	    bool exist_type;
@@ -133,7 +133,7 @@ FUNCTION(___61__47__61__2)
 	    exist_type = is_eapp_node(arg1) || is_papp_node(arg1);
 	    arglist    = eq_args(0, arg1, arg2, n);
 	    if ( !arglist )
-		RETURN(Success, 1);
+		RETURN(Prelude_True, 1);
 
 	    if ( arglist != nil )
 	    {
@@ -207,7 +207,7 @@ FUNCTION(diseq_var)
     /* occurs check */
     occ = occurs(occurs_no_nf, regs.r[0], regs.sp[0]);
     if ( occ == occurs_yes )
-	RETURN(Success, 1);
+	RETURN(Prelude_True, 1);
 
     /* add the constraint to the variable */
     CHECK_HEAP(1, diseq_constraint_size);
@@ -233,7 +233,7 @@ FUNCTION(diseq_var)
 
 	CALL_RET2(___61__58__61_, 1, var, regs.sp[0]);
     }
-    RETURN(Success, 1);
+    RETURN(Prelude_True, 1);
 
 }
 
@@ -317,7 +317,7 @@ FUNCTION(diseq_papp_args)
     Node *arglist;
  ENTRY_LABEL(static, diseq_papp_args)
     if ( regs.r[0] != CONST(__Prelude__True) )
-	RETURN(Success, 1);
+	RETURN(Prelude_True, 1);
 
     arglist = regs.sp[0];
     if ( arglist == nil )

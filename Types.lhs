@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Types.lhs 2690 2008-05-01 20:40:17Z wlux $
+% $Id: Types.lhs 3273 2016-07-13 21:23:01Z wlux $
 %
-% Copyright (c) 2002-2008, Wolfgang Lux
+% Copyright (c) 2002-2016, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Types.lhs}
@@ -21,16 +21,15 @@ application of a type to another type. The \texttt{TypeConstrained}
 and \texttt{TypeSkolem} constructors represent two special cases of
 type variables. A \texttt{TypeConstrained} variable represents a type
 variable that is restricted to a particular set of types. At present,
-this is used for typing guard expressions, which are restricted to be
-either of type \texttt{Bool} or of type \texttt{Success}, and integer
-literals in patterns, which are restricted to types \texttt{Int} and
-\texttt{Float}. If the type is not restricted, it defaults to the
-first type from the constraint list. A \texttt{TypeSkolem} variable is
-used for handling skolem types, which result from matching data
-constructors with existentially quantified types. Since arrow types
-are used so frequently, we use \texttt{TypeArrow} $t_1$ $t_2$
-consistently as a shorthand for the application of the arrow type
-constructor \texttt{(->)} to the two types $t_1$ and $t_2$.
+this is used for integer literals in patterns, which are restricted to
+types \texttt{Int} and \texttt{Float}. If the type is not restricted,
+it defaults to the first type from the constraint list. A
+\texttt{TypeSkolem} variable is used for handling skolem types, which
+result from matching data constructors with existentially quantified
+types. Since arrow types are used so frequently, we use
+\texttt{TypeArrow} $t_1$ $t_2$ consistently as a shorthand for the
+application of the arrow type constructor \texttt{(->)} to the two
+types $t_1$ and $t_2$.
 
 Type variables are represented with deBruijn style indices. Universally
 quantified type variables are assigned indices in the order of their

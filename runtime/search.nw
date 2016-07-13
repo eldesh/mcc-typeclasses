@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: search.nw 3272 2016-07-12 20:52:28Z wlux $
+% $Id: search.nw 3273 2016-07-13 21:23:01Z wlux $
 %
 % Copyright (c) 2002-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -218,9 +218,21 @@ FUNCTION(__try_1)
 static
 FUNCTION(__try_2)
 {
+    Node *r;
  ENTRY_LABEL(static, __try_2)
-    MATCH_RIGID_DATA(__try_2);
-    assert(regs.r[0] == Success);
+    for ( r = regs.r[0]; node_tag(r) == INDIR_TAG; r = r->n.node )
+	;
+    switch ( node_tag(r) )
+    {
+    case LVAR_TAG:
+	CALL2(bind_var, __try_2, r, Prelude_True);
+    case GVAR_TAG:
+	CALL1(sync_global, __try_2, r);
+    default:
+	if ( r == Prelude_False )
+	    FAIL("no solution");
+	assert(r == Prelude_True);
+    }
     GOTO(update);
 }
 
@@ -233,10 +245,10 @@ ensures that multiple applications of a (partially) solved search goal
 to different arguments succeed, if the (partial) solution contains
 free variables. For instance, the expression
 \begin{verbatim}
-  let [g] = try (\x -> success) in g 0 & g 1
+  let [g] = try (\x -> True) in g 0 & g 1
 \end{verbatim}
-succeeds because \verb|try (\x -> success)| is equivalent to
-\verb|[\x -> success]|.
+succeeds because \verb|try (\x -> True)| is equivalent to
+\verb|[\x -> True]|.
 
 <<search.c>>=
 static
@@ -263,7 +275,7 @@ static
 FUNCTION(search_goal_success)
 {
  ENTRY_LABEL(static, search_goal_success)
-    RETURN(Success, 0);
+    RETURN(Prelude_True, 0);
 }
 
 @ 
@@ -299,7 +311,7 @@ space, which must be short-circuited.
 Note that [[search_goal_proceed]] discards the value on the top of the
 stack and therefore it does not matter that [[bind_var]] returns the
 argument to which [[search_cont]] was applied, whereas the equality
-constraint returns the constant [[Success]].
+constraint returns the constant [[True]].
 
 <<search.c>>=
 static
@@ -341,10 +353,9 @@ the search goal either did succeed or a deadlock has occurred. Both
 cases can be distinguished by examining the queue-me node allocated by
 [[try]] for that purpose. If evaluation of the search goal was
 successful, the queue-me node has been overwritten with (an
-indirection to) [[Success]]. Thus, if this node is not bound to
-[[Success]], the evaluation has stopped due to a deadlock. In that
-case, the calling thread cannot be continued, too, and is terminated
-instantly.
+indirection to) [[True]]. Thus, if this node is not bound to [[True]],
+the evaluation has stopped due to a deadlock. In that case, the
+calling thread cannot be continued, too, and is terminated instantly.
 
 \ToDo{Instead of waiting for the deadlock to propagate up to the
   global context, report an error when a deadlock occurs.}
@@ -362,7 +373,7 @@ FUNCTION(deadlock_search)
 	switch ( goal->info->kind )
 	{
 	case CAPP_KIND:
-	    assert(goal == Success);
+	    assert(goal == Prelude_True);
 	    break;
 	case QUEUEME_KIND:
 	    TRACE(("deadlock in encapsulated search\n"));

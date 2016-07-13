@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 3266 2016-07-12 20:38:47Z wlux $
+% $Id: heap.nw 3273 2016-07-13 21:23:01Z wlux $
 %
-% Copyright (c) 2001-2015, Wolfgang Lux
+% Copyright (c) 2001-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{The Heap}\label{sec:heap}
@@ -869,7 +869,7 @@ info pointer of a data constructor.
 
 @ 
 The descriptors for the data constructors \texttt{()}, \texttt{[]},
-\texttt{:}, \texttt{Bool}, and \texttt{Success}, which are defined in
+\texttt{:}, and \texttt{True} and \texttt{False}, which are defined in
 the Prelude, are used at various places in the runtime system.
 
 <<heap.h>>=
@@ -877,24 +877,20 @@ the Prelude, are used at various places in the runtime system.
 # define UNIT_TAG	__Prelude___40__41__tag
 # define NIL_TAG	__Prelude___91__93__tag
 # define CONS_TAG	__Prelude___58__tag
-# define SUCCESS_TAG	__Prelude__Success_tag
 
 enum { UNIT_TAG };
 enum { NIL_TAG, CONS_TAG };
-enum { SUCCESS_TAG };
 
 DECLARE_CONST(__Prelude___40__41_);
 DECLARE_CONST(__Prelude___91__93_);
 DECLARE_DATA(__Prelude___58_);
 DECLARE_CONST(__Prelude__True);
 DECLARE_CONST(__Prelude__False);
-DECLARE_CONST(__Prelude__Success);
 
 # define nil		CONST(__Prelude___91__93_)
 # define unit		CONST(__Prelude___40__41_)
 # define Prelude_False	CONST(__Prelude__False)
 # define Prelude_True	CONST(__Prelude__True)
-# define Success	CONST(__Prelude__Success)
 # define cons_info	__Prelude___58__info
 # define cons_node_size	closure_node_size(2)
 #endif

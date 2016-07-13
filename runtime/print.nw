@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: print.nw 3234 2016-06-18 16:22:27Z wlux $
+% $Id: print.nw 3273 2016-07-13 21:23:01Z wlux $
 %
-% Copyright (c) 2001-2015, Wolfgang Lux
+% Copyright (c) 2001-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Printing the Result}
@@ -55,8 +55,7 @@ when the initial goal application is allocated (see
 Sect.~\ref{sec:global-search}).
 
 The global variable [[hasAnswer]] is set to [[true]] when a constraint
-for a variable is printed. In that case, also the redundant value
-\texttt{success} is not shown in the result of a constraint goal.
+for a variable is printed.
 
 <<print.c>>=
 static bool hasAnswer;
@@ -78,21 +77,9 @@ print_result(const char **var_names, Node **vars)
     for ( i = 0; i < n; i++ )
 	print_constraints(vars[i]);
 
-    if ( !hasAnswer )
-	print_node(0, result);
-    else
-    {
-	while ( is_tagged_ptr(result) && is_indir_node(result) )
-	    result = result->n.node;
-	if ( !is_tagged_ptr(result) ||
-	     result->info != CONST(__Prelude__Success)->info )
-	{
-	    printf("} ");
-	    print_node(0, result);
-	}
-	else
-	    printf("}");
-    }
+    if ( hasAnswer )
+	printf("} ");
+    print_node(0, result);
     printf("\n");
 
     release_names();

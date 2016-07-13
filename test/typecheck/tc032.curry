@@ -15,7 +15,7 @@ h y = f (0::Int) y
 
 -- The main function checks all three functions at different
 -- types and should succeed.
-main = foldr (&>) success [
+main = foldr (&>) True [
     f () (Just ()) =:= True,
     f 1.0 [1,2,3] =:= False,
     g () =:= False,

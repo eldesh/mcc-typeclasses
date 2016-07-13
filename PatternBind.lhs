@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: PatternBind.lhs 3057 2011-10-07 16:37:43Z wlux $
+% $Id: PatternBind.lhs 3273 2016-07-13 21:23:01Z wlux $
 %
-% Copyright (c) 2003-2011, Wolfgang Lux
+% Copyright (c) 2003-2016, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{PatternBind.lhs}
@@ -178,7 +178,7 @@ constraint $v_0$.
 >     (VariablePattern _ _,_) -> return [PatternDecl p t rhs]
 >     (TuplePattern ts,SimpleRhs _ e _) ->
 >       do
->         v0 <- freshVar "_#pbt" successType
+>         v0 <- freshVar "_#pbt" boolType
 >         return (updateDecl m p v0 vs e :
 >                 map (selectorDecl m p (uncurry mkVar v0)) vs)
 >       where vs = [(ty,v) | VariablePattern ty v <- ts]
@@ -195,8 +195,8 @@ constraint $v_0$.
 
 > cond :: Position -> Expression QualType -> Expression QualType
 >      -> Expression QualType
-> cond p c e = Case c [caseAlt p successPattern e]
->   where successPattern = ConstructorPattern qualSuccessType qSuccessId []
+> cond p c e = Case c [caseAlt p truePattern e]
+>   where truePattern = ConstructorPattern qualBoolType qTrueId []
 
 > update :: ModuleIdent -> (QualType,Ident) -> Expression QualType
 >        -> Expression QualType
@@ -215,8 +215,8 @@ Pattern binding primitives.
 \begin{verbatim}
 
 > pbUpdate, pbReturn :: ModuleIdent -> Type -> Expression QualType
-> pbUpdate m ty = pbFun m [ty,ty] successType "_#update"
-> pbReturn m ty = pbFun m [successType,ty] ty "_#return"
+> pbUpdate m ty = pbFun m [ty,ty] boolType "_#update"
+> pbReturn m ty = pbFun m [boolType,ty] ty "_#return"
 
 > pbFun :: ModuleIdent -> [Type] -> Type -> String -> Expression QualType
 > pbFun m tys ty f =

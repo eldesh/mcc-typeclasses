@@ -1,6 +1,6 @@
--- $Id: DebugPrelude.curry 2600 2008-01-11 17:52:38Z wlux $
+-- $Id: DebugPrelude.curry 3273 2016-07-13 21:23:01Z wlux $
 --
--- Copyright (c) 2007-2008, Wolfgang Lux
+-- Copyright (c) 2007-2016, Wolfgang Lux
 -- See ../LICENSE for the full license.
 --
 -- Prelude to be included  (automatically) in all the programs
@@ -43,11 +43,11 @@ flatten (x:xs) =
     CTreeNode _ _ _ _ _  -> x : flatten xs
 
 
-try' :: (a -> (Success,CTree)) -> ([a -> (Success,CTree)], CTree)
+try' :: (a -> (Bool,CTree)) -> ([a -> (Bool,CTree)], CTree)
 try' g = (map wrap (try (unwrap g)), CTreeVoid)
 
 unwrap g (x,t) = case g x of (r,t') | r -> t =:= t'
-wrap   g x | g (x,t) = (success,t) where t free
+wrap   g x | g (x,t) = (True,t) where t free
 
 
 type IOT a = IO (a, CTree)
@@ -87,14 +87,14 @@ fixIO' f = fixIO (wrap f)
 --    there is nothing we can do about that. Encapsulate creates an
 --    independent copy of its argument, which includes all computation
 --    trees created locally during e's evaluation.
-encapsulate' :: a -> IOT (a -> (Success, CTree))
+encapsulate' :: a -> IOT (a -> (Bool, CTree))
 encapsulate' e = encapsulate e >>= \g -> return' (\x -> (g x, CTreeVoid))
-  where foreign import primitive encapsulate :: a -> IO (a -> Success)
+  where foreign import primitive encapsulate :: a -> IO (a -> Bool)
 
 foreign import primitive "unsafePerformIO" unsafePerformIO' :: IOT a -> (a, CTree)
 
 
-startDebugging :: (a -> (Success,CTree)) -> IO ()
+startDebugging :: (a -> (Bool,CTree)) -> IO ()
 startDebugging = navigate . findall . unwrap
 
 startIODebugging :: IOT a -> IO ()

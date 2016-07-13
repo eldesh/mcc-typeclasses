@@ -1,6 +1,6 @@
--- $Id: AllSolutions.curry 2878 2009-07-28 15:51:55Z wlux $
+-- $Id: AllSolutions.curry 3273 2016-07-13 21:23:01Z wlux $
 --
--- Copyright (c) 2004-2009, Wolfgang Lux
+-- Copyright (c) 2004-2016, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 module AllSolutions(SearchTree(..), getSearchTree, allValuesD, allValuesB,
@@ -18,7 +18,7 @@ instance Functor SearchTree where
   fmap f (Or ts) = Or (map (fmap f) ts)
 
 
-foreign import primitive encapsulate :: a -> IO (a -> Success)
+foreign import primitive encapsulate :: a -> IO (a -> Bool)
 
 getSearchTree :: a -> IO (SearchTree a)
 getSearchTree x = encapsulate x >>= \g -> return (tree g)
@@ -39,10 +39,10 @@ allValuesB t = all [t]
           | null ts = []
           | otherwise = [x | Val x <- ts] ++ all [t | Or ts' <- ts, t <- ts']
 
-getOneSolution :: (a -> Success) -> IO (Maybe a)
+getOneSolution :: (a -> Bool) -> IO (Maybe a)
 getOneSolution g = liftM listToMaybe (getAllSolutions g)
 
-getAllSolutions :: (a -> Success) -> IO [a]
+getAllSolutions :: (a -> Bool) -> IO [a]
 getAllSolutions g = getAllValues (unpack g)
 
 getOneValue :: a -> IO (Maybe a)
@@ -51,5 +51,5 @@ getOneValue x = liftM listToMaybe (getAllValues x)
 getAllValues :: a -> IO [a]
 getAllValues x = liftM allValuesD (getSearchTree x)
 
-getAllFailures :: a -> (a -> Success) -> IO [a]
+getAllFailures :: a -> (a -> Bool) -> IO [a]
 getAllFailures x g = getAllValues x >>= filterM (liftM null . getAllValues . g)

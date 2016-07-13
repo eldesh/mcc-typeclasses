@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 3266 2016-07-12 20:38:47Z wlux $
+% $Id: eval.nw 3273 2016-07-13 21:23:01Z wlux $
 %
-% Copyright (c) 2001-2015, Wolfgang Lux
+% Copyright (c) 2001-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Evaluation}\label{sec:eval}
@@ -234,7 +234,7 @@ first, [[pbUpdate]], is a variant of [[update]] that expects two
 arguments, a lazy application node that returns a component of the
 pattern and the value of that component. Like [[update]], [[pbUpdate]]
 overwrites the lazy application node with its result. However, it
-returns [[Success]] and not the value of the component.
+returns [[True]] and not the value of the component.
 
 As the raison d'\^etre for the pattern binding update strategy is to %'
 fix a space leak by updating all components of a pattern immediately
@@ -328,14 +328,14 @@ FUNCTION(__pbUpdate)
     default:
 	invalid_arg("pbUpdate", node_kind(susp));
     }
-    RET(Success);
+    RET(Prelude_True);
 }
 
 @ 
 The other primitive for the implementation of pattern binding updates
 is [[pbReturn]]. This primitive also has two arguments. The first is
 assumed to be an expression that evaluates the pattern's value, binds %'
-all of its components via [[pbUpdate]], and then returns [[Success]].
+all of its components via [[pbUpdate]], and then returns [[True]].
 The second argument is a reference to the component of the pattern
 being returned. When a lazy application of [[pbReturn]] is evaluated
 it expects to find an update frame for its second argument on the

@@ -7,8 +7,8 @@
 pat1 x y = (const const x x y, const y x)
 pat2 x y = (const const x x y, const x y)
 
-f1 (pat1 _ _) = success
-f2 (pat2 _ _) = success
+f1 (pat1 _ _) = True
+f2 (pat2 _ _) = True
 
 goal1 x | f1 (failed,failed) = x =:= ()
 goal2 x | f2 (unknown,failed) = x =:= ()

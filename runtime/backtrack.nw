@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: backtrack.nw 3234 2016-06-18 16:22:27Z wlux $
+% $Id: backtrack.nw 3273 2016-07-13 21:23:01Z wlux $
 %
-% Copyright (c) 2002-2015, Wolfgang Lux
+% Copyright (c) 2002-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Global Search}\label{sec:global-search}
@@ -335,6 +335,7 @@ do_eval(Label ip)
 	susp = susp->n.node;
     if ( is_tagged_ptr(susp) && is_queueMe_node(susp) )
 	return (Node *)-1;
+    assert(susp == Prelude_True);
 
     return regs.bp ? ((Node **)regs.bp)[-2] : stack_end[-2];
 }

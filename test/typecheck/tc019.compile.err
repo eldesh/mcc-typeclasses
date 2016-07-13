@@ -1,5 +1,5 @@
-"tc019.curry", line 2.5: Missing Eq Success instance
+"tc019.curry", line 2.5: Missing Eq (IO _3) instance
 in infix application
-(undefined :: Eq a => a) &> success
+(undefined :: Eq a => a) >> putStr ""
 
-Term: (undefined :: Eq a => a)
+Term: putStr ""

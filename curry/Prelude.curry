@@ -1,4 +1,4 @@
--- $Id: Prelude.curry 3255 2016-06-21 07:14:44Z wlux $
+-- $Id: Prelude.curry 3273 2016-07-13 21:23:01Z wlux $
 --
 -- Copyright (c) 1999-2016, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -9,7 +9,7 @@ module Prelude((.), id, const, curry, uncurry, flip, until,
                error, undefined, failed,
                Eq(..), Ord(..), Enum(..), Bounded(..), Show(..),
                Functor(..), Monad(..),
-               Bool(..), (&&), (||), not, if_then_else, otherwise,
+               Bool(..), (&&), (||), not, if_then_else, otherwise, solve,
                Ordering(..),
                fst, snd,
                head, tail, null, (++), length, (!!),
@@ -26,7 +26,7 @@ module Prelude((.), id, const, curry, uncurry, flip, until,
                subtract, even, odd, gcd, lcm, (^), (^^),
                fromIntegral, realToFrac,
                Int(), Integer(), Float(), Ratio(), Rational(),
-               Success(), (=:=), (=/=), (=:<=), (==<=), success, (&), (&>),
+               Success, (=:=), (=/=), (=:<=), (==<=), success, (&), (&>),
                Maybe(..), maybe,
                Either(..), either,
                IO(), done, sequence, sequence_, mapM, mapM_,
@@ -272,6 +272,12 @@ if_then_else b t f =
 --- Useful name for the last condition in a sequence of conditional equations.
 otherwise       :: Bool
 otherwise       = True
+
+
+--- Enforce a boolean condition to be True.
+--- The computation fails if the argument evaluates to False.
+solve :: Bool -> Bool
+solve True = True
 
 
 -- Ordering
@@ -1111,37 +1117,30 @@ instance RealFloat Float where
   toFloat x = x
   
 
--- Constraints
--- NB The Success constructor is not exported from the Prelude, but the
---    compiler knows about it
-data Success = Success
-instance Show Success where
-  show c | c = "success"
-
 --- Equational constraint
-foreign import primitive (=:=) :: a -> a -> Success
+foreign import primitive (=:=) :: a -> a -> Bool
 
 --- Disequality constraint
-foreign import primitive (=/=) :: a -> a -> Success
+foreign import primitive (=/=) :: a -> a -> Bool
 
 --- Lazy unification (for function patterns only)
 -- To do: This should not be exported from the Prelude, but from module Unsafe
-foreign import primitive (=:<=) :: a -> a -> Success
+foreign import primitive (=:<=) :: a -> a -> Bool
 
 --- Lazy unification (for function patterns only)
 -- To do: This should not be exported from the Prelude, but from module Unsafe
-foreign import primitive (==<=) :: a -> a -> Success
+foreign import primitive (==<=) :: a -> a -> Bool
 
---- Always satisfiable constraint
-success :: Success
-success = Success
 
 --- Concurrent conjunction of constraints
-foreign import primitive (&) :: Success -> Success -> Success
+--- NB The definition of (&) is equivalent to True & True = True,
+--- but with both arguments being evaluated concurrently
+foreign import primitive (&) :: Bool -> Bool -> Bool
 
---- Guarded evaluation
-(&>) :: Success -> a -> a
-c &> e = case c of Success -> e
+--- Constrained expression. (c &> e) is evaluated by first solving c
+--- and then evaluating e.
+(&>) :: Bool -> a -> a
+True &> x = x
 
 
 -- Maybe type
@@ -1239,8 +1238,8 @@ interact f = getContents >>= putStr . f
 
 --- Solves a constraint as an I/O action.
 --- Note: the constraint should be always solvable in a deterministic way
-doSolve :: Success -> IO ()
-doSolve constraint | constraint = done
+doSolve :: Bool -> IO ()
+doSolve b | b = done
 
 
 -- Auxiliary monad functions
@@ -1294,7 +1293,7 @@ foreign import primitive catch :: IO a -> (IOError -> IO a) -> IO a
 -- Encapsulated search:
 
 --- Basic search control operator.
-foreign import primitive try :: (a -> Success) -> [a -> Success]
+foreign import primitive try :: (a -> Bool) -> [a -> Bool]
 
 
 --- Non-deterministic choice par excellence
@@ -1308,15 +1307,22 @@ unknown :: a
 unknown = x where x free
 
 
+-- Type of constraints (included for backward compatibility)
+type Success = Bool
+
+success :: Success
+success = True
+
+
 --- Inject operator which adds the application of the unary
 --- procedure p to the search variable to the search goal
 --- taken from Oz. p x comes before g x to enable a test+generate
 --- form in a sequential implementation.
-inject	   :: (a -> Success) -> (a -> Success) -> (a -> Success) 
+inject	   :: (a -> Bool) -> (a -> Bool) -> (a -> Bool)
 inject g p = \x -> p x & g x
 
 --- Compute all solutions via a left-to-right strategy.
-solveAll   :: (a -> Success) -> [a -> Success]
+solveAll   :: (a -> Bool) -> [a -> Bool]
 solveAll g = all (try g) []
   where all []           gs  = all2 gs
         all [g]          gs  = g : all2 gs 
@@ -1327,7 +1333,7 @@ solveAll g = all (try g) []
 
 
 --- Get the first solution via left-to-right strategy.
-once :: (a -> Success) -> a -> Success
+once :: (a -> Bool) -> a -> Bool
 once g = head (solveAll g)
 
 
@@ -1335,7 +1341,7 @@ once g = head (solveAll g)
 --- a specified operator that can always take a decision which
 --- of two solutions is better.
 --- In general, the comparison operation should be rigid in its arguments!
-best    :: (a -> Success) -> (a -> a -> Bool) -> [a -> Success]
+best    :: (a -> Bool) -> (a -> a -> Bool) -> [a -> Bool]
 best g compare = bestHelp [] (try g) []
  where
    bestHelp [] []     curbest = curbest
@@ -1352,32 +1358,32 @@ best g compare = bestHelp [] (try g) []
    
    constrain b []        = b
    constrain b [curbest] =
-       inject b (\x -> let y free in curbest y & compare x y =:= True)
+       inject b (\x -> let y free in curbest y & compare x y)
 
 
 --- Get all solutions via left-to-right strategy and unpack
 --- the values from the lambda-abstractions.
 --- Similar to Prolog's findall.
-findall :: (a -> Success) -> [a]
+findall :: (a -> Bool) -> [a]
 findall g = map unpack (solveAll g)
 
 --- Get the first solution via left-to-right strategy
 --- and unpack the values from the search goals.
-findfirst :: (a -> Success) -> a
+findfirst :: (a -> Bool) -> a
 findfirst g = head (findall g)
 
 
 --- Show the solution of a solved constraint.
-browse  :: Show a => (a -> Success) -> IO ()
+browse  :: Show a => (a -> Bool) -> IO ()
 browse g = putStr (show (unpack g))
 
 --- Unpack solutions from a list of lambda abstractions and write 
 --- them to the screen.
-browseList :: Show a => [a -> Success] -> IO ()
+browseList :: Show a => [a -> Bool] -> IO ()
 browseList [] = done
 browseList (g:gs) = browse g >> putChar '\n' >> browseList gs
 
 
 --- Unpack a solution's value from a (solved) search goal.
-unpack  :: (a -> Success) -> a
+unpack  :: (a -> Bool) -> a
 unpack g | g x  = x  where x free

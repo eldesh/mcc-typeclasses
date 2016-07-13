@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: MachInterp.lhs 3271 2016-07-12 20:50:27Z wlux $
+% $Id: MachInterp.lhs 3273 2016-07-13 21:23:01Z wlux $
 %
 % Copyright (c) 1998-2016, Wolfgang Lux
 % See LICENSE for the full license.
@@ -308,7 +308,7 @@ non-variable term. For instance, in
 \begin{verbatim}
   main = concatMap try (map (`inject` nonNull) (try goal))
   goal xs = length xs =:= 1
-  nonNull (_:_) = success
+  nonNull (_:_) = True
 \end{verbatim}
 the goal variable is bound to a list node before the search
 continuations are resumed that were returned by the inner \texttt{try}
@@ -737,12 +737,8 @@ of the values \texttt{LT}, \texttt{EQ}, \texttt{GT} defined in the
 \subsubsection{Concurrent Conjunction}
 The concurrent conjunction operator \texttt{\&} evaluates two
 constraints concurrently. It tries to avoid the creation of a
-new thread whenever this is possible. Note that the result of
-\texttt{\&} may be an unbound variable.
+new thread whenever this is possible.
 \begin{verbatim}
-
-> success :: MachStateT NodePtr
-> success = read'updateState (atom successTag)
 
 > concConjFunction :: Function
 > concConjFunction = ("&",concConjCode,2)
@@ -751,65 +747,47 @@ new thread whenever this is possible. Note that the result of
 > concConjCode =
 >   entry ["c1","c2"] $
 >   switch "c1"
->          [(LazyTag,suspension),(QueueMeTag,queueMe),(VariableTag,variable),
->           (GlobalAppTag,globalApp),(GlobalVarTag,variable)]
->          (const (enter "c2"))
->   where suspension ptr1 =
+>          [(LazyTag,eval),(QueueMeTag,eval),(GlobalAppTag,eval),
+>           (VariableTag,variable1),(GlobalVarTag,delaySearch match1),
+>           (trueTag,const solve2),
+>           (falseTag,const failAndBacktrack)]
+>          (const (fail "Type error in (&)"))
+>   where eval ptr1 =
 >           switch "c2"
 >                  [(LazyTag,const (concurrent ptr1)),
->                   (QueueMeTag,const sequential),
->                   (VariableTag,const sequential),
+>                   (QueueMeTag,const (concurrent ptr1)),
 >                   (GlobalAppTag,const (concurrent ptr1)),
->                   (GlobalVarTag,const sequential)]
->                  (const (enter "c1"))
->         queueMe ptr1 =
->           switch "c2"
->                  [(LazyTag,const (flipArguments >> sequential)),
->                   (QueueMeTag,const sequential),
->                   (VariableTag,const sequential),
->                   (GlobalAppTag,const (flipArguments >> sequential)),
->                   (GlobalVarTag,const sequential)]
->                  (const (enter "c1"))
->         variable ptr1 =
->           switch "c2"
->                  [(LazyTag,const (flipArguments >> sequential)),
->                   (QueueMeTag,const (flipArguments >> sequential)),
->                   (VariableTag,wait ptr1),
->                   (GlobalAppTag,const (flipArguments >> sequential)),
->                   (GlobalVarTag,wait ptr1)]
->                  (const (retNode ptr1))
->         globalApp ptr1 =
->           switch "c2"
->                  [(LazyTag,const sequential),
->                   (QueueMeTag,const sequential),
->                   (VariableTag,const sequential),
->                   (GlobalAppTag,const sequential),
->                   (GlobalVarTag,const sequential)]
->                  (const (enter "c1"))
+>                   (VariableTag,variable2),(GlobalVarTag,delaySearch match2),
+>                   (trueTag,const solve1),
+>                   (falseTag,const failAndBacktrack)]
+>                  (const (fail "Type error in (&)"))
 >         concurrent ptr1 =
 >           do
->             updateState (interruptThread (flipArguments >> sequential))
+>             qptr <- read'updateState (allocNode (LazyNode "" 1 solve [ptr1]))
+>             updateState (setVar "_c1" qptr)
+>             updateState (interruptThread (seqStmts "_" solve2 (enter "_c1")))
 >             updateState newThread
->             updateState (setVar "c1" ptr1)
->             enter "c1"
->         sequential = seqStmts "_c1" (enter "c1") sequentialCont
->         sequentialCont =
->           switch "_c1"
->                  [(LazyTag,const (fail "This cannot happen")),
->                   (QueueMeTag,const (fail "This cannot happen")),
->                   (VariableTag,variable),
->                   (GlobalAppTag,const (fail "This cannot happen")),
->                   (GlobalVarTag,variable)]
->                  (const (enter "c2"))
->         wait ptr1 ptr2 =
->           do
->             updateState (setVars ["_c1","_c2"] [ptr1,ptr2])
->             switchRigid "_c1" [] (const (enter "_c2"))
->         flipArguments =
->           do
->             ptr1 <- readState (getVar "c1")
->             ptr2 <- readState (getVar "c2")
->             updateState (setVars ["c1","c2"] [ptr2,ptr1])
+>             updateState (setVar "_c1" qptr)
+>             enter "_c1"
+>         solve = entry ["c1"] $ solve1
+>         variable1 = instantiate (trueTag,const solve2)
+>         variable2 = instantiate (trueTag,const solve1)
+>         match1 =
+>           switch "c1"
+>                  [(trueTag,const solve2),
+>                   (falseTag,const failAndBacktrack)]
+>                  (const (fail "This cannot happen"))
+>         match2 =
+>           switch "c2"
+>                  [(trueTag,const solve1),
+>                   (falseTag,const failAndBacktrack)]
+>                  (const (fail "This cannot happen"))
+>         solve1 =
+>           seqStmts "_c1" (enter "c1") $
+>           switchFlex "_c1" [(trueTag,retNode)] (const failAndBacktrack)
+>         solve2 =
+>           seqStmts "_c2" (enter "c2") $
+>           switchFlex "_c2" [(trueTag,retNode)] (const failAndBacktrack)
 
 \end{verbatim}
 \subsubsection{Equality Constraints}
@@ -919,7 +897,7 @@ constructors, which can proceed concurrently.
 >             enter "c"
 
 > unifySuccess :: Instruction
-> unifySuccess = success >>= retNode
+> unifySuccess = true >>= retNode
 
 > occursCheck :: NodePtr -> Node -> MachStateT Bool
 > occursCheck vptr (ConstructorNode _ _ args)
@@ -1061,7 +1039,7 @@ for the disequality \texttt{(0:xs) =/= [0]}.}
 >   where diseqFirst = updateState (pushNodes [ptr1,ptr2]) >> diseqCode
 
 > diseqSuccess :: Instruction
-> diseqSuccess = success >>= retNode
+> diseqSuccess = true >>= retNode
 
 \end{verbatim}
 \subsubsection{Pattern Binding Updates}
@@ -1091,13 +1069,13 @@ update frame.
 >           do
 >             updateState (saveBinding lptr lazy)
 >             updateNode lptr (IndirNode ptr)
->             success >>= retNode
+>             true >>= retNode
 >         updateLazy lptr ptr lazy@(QueueMeNode wq) =
 >           do
 >             updateState (saveBinding lptr lazy)
 >             updateNode lptr (IndirNode ptr)
 >             updateState (wakeThreads wq)
->             success >>= retNode
+>             true >>= retNode
 >         updateLazy _ ptr lazy@(IndirNode lptr) = update lptr ptr
 >         updateLazy _ _ _ = fail "Invalid pattern binding update"
 
@@ -1107,7 +1085,7 @@ update frame.
 >     read'updateState popCont
 >     read'updateState (popNodes 3) >>= updateState . pushNodes . take 2
 >     entry ["p","v"] $ seqStmts "_p" (enter "p")
->                     $ switchRigid "_p" [(successTag,const (enter "v"))]
+>                     $ switchRigid "_p" [(trueTag,const (enter "v"))]
 >                     $ const (fail "Type error in pattern binding update")
 
 \end{verbatim}
@@ -1153,8 +1131,8 @@ free variables of the search goal.
 >           read'updateState (allocNode (LazyNode "" 2 solveGoal [goal,var]))
 >         solveGoal =
 >           entry ["g","v"] $ seqStmts "_c" (apply "g" ["v"])
->                           $ switchRigid "_c" [(successTag,retNode)]
->                           $ const (fail "try: bad goal result type!")
+>                           $ switchFlex "_c" [(trueTag,retNode)]
+>                           $ const failAndBacktrack
 
 \end{verbatim}
 When a computation fails within an encapsulated search, the current

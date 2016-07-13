@@ -1,6 +1,6 @@
--- $Id: Ports.curry 2041 2006-12-13 09:43:43Z wlux $
+-- $Id: Ports.curry 3273 2016-07-13 21:23:01Z wlux $
 --
--- Copyright (c) 2004-2006, Wolfgang Lux
+-- Copyright (c) 2004-2016, Wolfgang Lux
 -- See ../LICENSE for the full license.
 
 -- Ports implementation for MCC
@@ -18,16 +18,15 @@ import Unsafe
 
 newtype Port a = Port (IORef [a]) deriving Eq
 
-
-openPort :: Port a -> [a] -> Success
+openPort :: Port a -> [a] -> Bool
 openPort (Port r) ms = r =:= unsafePerformIO (newIORef ms)
 
-closePort :: Port a -> Success
+closePort :: Port a -> Bool
 closePort (Port r) = unsafePerformIO (readIORef r) =:= []
 
 -- NB: the message must be evaluated to normal form *before* the
 --     port is updated; hence the guard expression.
-send :: a -> Port a -> Success
+send :: a -> Port a -> Bool
 send m (Port r) | m =:= m' =
   unsafePerformIO (do ms <- readIORef r; writeIORef r ms'; return ms) =:= m':ms'
   where m',ms' free
@@ -64,7 +63,7 @@ streamPort hClose h =
 	  do
 	     mapIO_ (msg . ensureNotFree) (ensureSpine ms)
 	     hClose h
-	     return success
+	     return True
 	msg (SP_Put s) = hPutStrLn h s
 	msg (SP_GetLine s) = hGetLine h >>= doSolve . (s =:=)
 	msg (SP_GetChar c) = hGetChar h >>= doSolve . (c =:=)
@@ -90,6 +89,6 @@ choiceSPEP sp ep
 
 -- Active objects
 
-newObject :: (a -> [b] -> Success) -> a -> Port b -> Success
+newObject :: (a -> [b] -> Bool) -> a -> Port b -> Bool
 newObject f s p = openPort p ms & f s (map ensureNotFree (ensureSpine ms))
   where ms free

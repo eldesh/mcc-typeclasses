@@ -9,7 +9,7 @@
 --    non-deterministic choice occurs.
 pat x y xs = (const const x x y, const x y, null x)
 
-f (pat _ _ _) = success
+f (pat _ _ _) = True
 
 goal x = f (unknown,unknown,x)
 

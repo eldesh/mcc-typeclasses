@@ -1,14 +1,14 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 3008 2010-09-01 09:59:41Z wlux $
+% $Id: unify.nw 3273 2016-07-13 21:23:01Z wlux $
 %
-% Copyright (c) 2001-2010, Wolfgang Lux
+% Copyright (c) 2001-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Unification}\label{sec:unification}
 The equality constraint \texttt{=:=} tries to unify its arguments. The
 auxiliary entry point [[bind_var]] is used to bind a variable to a
 data term that does not contain this variable. Note that [[bind_var]]
-does not return [[Success]], but the node to which the variable was
+does not return [[True]], but the node to which the variable was
 bound.
 
 <<unify.h>>=
@@ -148,7 +148,7 @@ FUNCTION(___61__58__61__2)
 	}
     }
 
-    RETURN(Success, 1);
+    RETURN(Prelude_True, 1);
 }
 
 @ 
@@ -530,7 +530,7 @@ The unification of the arguments of data terms proceeds
 concurrently. Instead of calling the code for the predefined operator
 [[&]], we handle the concurrent evaluation ourselves. Thus, we can
 make use of the fact that the unification always returns the value
-[[Success]] and can never return an unbound variable.
+[[True]] and can never return an unbound variable.
 
 <<unify.c>>=
 static
@@ -576,6 +576,7 @@ FUNCTION(unify_args_1)
 	    r = r->n.node;
 	    continue;
 	case CAPP_KIND:
+	    assert(r == Prelude_True);
 	    regs.sp += 1;
 	    break;
 	case QUEUEME_KIND:
@@ -611,6 +612,7 @@ FUNCTION(unify_args_2)
 	case QUEUEME_KIND:
 	    ENTER(r, 1);
 	case CAPP_KIND:
+	    assert(r == Prelude_True);
 	    break;
 	default:
 	    invalid_arg("unify_args_2", node_kind(r));
@@ -648,7 +650,7 @@ FUNCTION(unify_papp_args)
 
     arglist = regs.sp[0];
     if ( arglist == nil )
-	RETURN(Success, 1);
+	RETURN(Prelude_True, 1);
     ASSERT(arglist->info == INFO(pair_cons));
 
     regs.sp[0] = arglist->c.args[2];
@@ -852,7 +854,7 @@ FUNCTION(unify_var_1)
 {
  ENTRY_LABEL(static, unify_var_1)
     if ( regs.sp[0] == nil )
-	RETURN(Success, 1);
+	RETURN(Prelude_True, 1);
     GOTO(unify_args);
 }
 
@@ -905,7 +907,7 @@ order to restrict the search space, as in the following example:
 \begin{verbatim}
   main = concatMap try $ map (`inject` nonNull) $ try goal
   goal xs = length xs =:= 1
-  nonNull (_:_) = success
+  nonNull (_:_) = True
 \end{verbatim}
 In this case, [[bind_var]] is implicitly transformed into a
 unification between the two values.

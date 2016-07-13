@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 3056 2011-10-07 16:27:03Z wlux $
+% $Id: Exports.lhs 3273 2016-07-13 21:23:01Z wlux $
 %
-% Copyright (c) 2000-2011, Wolfgang Lux
+% Copyright (c) 2000-2016, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Exports.lhs}
@@ -18,14 +18,12 @@ do not appear in the interface. If only some constructors or field
 labels of a type are not exported all constructors appear in the
 interface, but a pragma marks the constructors and field labels which
 are not exported as hidden to prevent their use in user code. A
-special case is made for the Prelude's \texttt{Success} type, whose
-only constructor is not exported from the Prelude. Since the compiler
-makes use of this constructor when flattening guard expressions (cf.\
-Sect.~\ref{sec:flatcase}), \texttt{typeDecl}'s \texttt{DataType} case
-explicitly forces the \texttt{Success} constructor to appear as hidden
-data constructor in the interface. For a similar reason, the compiler
-also forces the \verb|:%| constructor of type \texttt{Ratio.Ratio} to
-appear in interfaces.
+special case is made for the \verb|:%| constructor of type
+\texttt{Ratio.Ratio} to appear as hidden data constructor in the
+interface even though the type itself is exported as an abstract type.
+This is necessary because the compiler uses the constructor internally
+to define rational number constants  (cf.\ Sect.~\ref{sec:desugar}
+and~\ref{sec:flatcase}).
 
 \textbf{Attention:} The compiler assumes that the environments passed
 to \texttt{exportInterface} reflect the types of the module's entities
@@ -89,7 +87,7 @@ correct arity annotations are written to the interface.
 > typeDecl tcEnv aEnv tyEnv tvs (ExportTypeWith tc xs) ds =
 >   case qualLookupTopEnv tc tcEnv of
 >     [DataType _ k cs]
->       | null xs && tc /= qSuccessId && tc /= qRatioId ->
+>       | null xs && tc /= qRatioId ->
 >           iTypeDecl IDataDecl [] tc tvs n k [] [] : ds
 >       | otherwise -> iTypeDecl IDataDecl cx' tc tvs n k cs' xs' : ds
 >       where n = kindArity k

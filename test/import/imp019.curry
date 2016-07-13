@@ -4,7 +4,7 @@ module imp019 where
 import A as imp019 {-sic!-}
 
 class C a where
-  h :: a -> Success
+  h :: a -> Bool
 
 -- NB we cannot declare a type signature for test (nor an instance of
 --    class C) because both C and imp019.C are ambiguous. However, the

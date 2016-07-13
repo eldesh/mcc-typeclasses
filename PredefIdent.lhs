@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: PredefIdent.lhs 2805 2009-04-26 17:26:16Z wlux $
+% $Id: PredefIdent.lhs 3273 2016-07-13 21:23:01Z wlux $
 %
-% Copyright (c) 1999-2009, Wolfgang Lux
+% Copyright (c) 1999-2016, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{PredefIdent.lhs}
@@ -52,7 +52,7 @@ abstraction, which is based on its position in the source code.
 >   | otherwise = error "internal error: tupleArity"
 >   where n = length (name x) - 1
 
-> boolId, charId, intId, integerId, floatId, ratioId, ioId, successId :: Ident
+> boolId, charId, intId, integerId, floatId, ratioId, ioId :: Ident
 > boolId    = mkIdent "Bool"
 > charId    = mkIdent "Char"
 > intId     = mkIdent "Int"
@@ -60,7 +60,6 @@ abstraction, which is based on its position in the source code.
 > floatId   = mkIdent "Float"
 > ratioId   = mkIdent "Ratio"
 > ioId      = mkIdent "IO"
-> successId = mkIdent "Success"
 
 > eqId, ordId, enumId, boundedId, showId, numId, fractionalId, monadId :: Ident
 > eqId         = mkIdent "Eq"
@@ -101,15 +100,13 @@ abstraction, which is based on its position in the source code.
 > qTupleArity :: QualIdent -> Int
 > qTupleArity = tupleArity . unqualify
 
-> qBoolId, qCharId, qIntId, qIntegerId, qFloatId, qRatioId :: QualIdent
-> qSuccessId, qIOId :: QualIdent
+> qBoolId, qCharId, qIntId, qIntegerId, qFloatId, qRatioId, qIOId :: QualIdent
 > qBoolId = qualifyWith preludeMIdent boolId
 > qCharId = qualifyWith preludeMIdent charId
 > qIntId = qualifyWith preludeMIdent intId
 > qIntegerId = qualifyWith preludeMIdent integerId
 > qFloatId = qualifyWith preludeMIdent floatId
 > qRatioId = qualifyWith ratioMIdent ratioId
-> qSuccessId = qualifyWith preludeMIdent successId
 > qIOId = qualifyWith preludeMIdent ioId
 
 > qEqId, qOrdId, qEnumId, qBoundedId, qShowId :: QualIdent

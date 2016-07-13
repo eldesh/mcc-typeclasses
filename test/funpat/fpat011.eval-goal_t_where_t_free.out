@@ -1,2 +1,2 @@
-{t = Var "x"}
-{t = Var "x"}
+{t = Var "x"} True
+{t = Var "x"} True

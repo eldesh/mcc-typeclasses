@@ -19,11 +19,11 @@ inst_Num_Float = Num{ inst_Eq_Num = inst_Eq_Float, (+) = (Prelude.+), (-) = (Pre
 -- so that fromInt is applied to the dictionary from coin's first argument.
 -- The actual implementation below uses an ugly workaround to apply fromInt
 -- to that dictionary.
---coin d (fromInt d 0) = success
---coin d (fromInt d 1) = success
+--coin d (fromInt d 0) = True
+--coin d (fromInt d 1) = True
 coin d n = coin' n
-  where coin' (fromInt' 0) = success
-  	coin' (fromInt' 1) = success
+  where coin' (fromInt' 0) = True
+  	coin' (fromInt' 1) = True
 	fromInt' = fromInt d
 
 main =

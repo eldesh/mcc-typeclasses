@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: MachTypes.lhs 3002 2010-08-30 19:41:06Z wlux $
+% $Id: MachTypes.lhs 3273 2016-07-13 21:23:01Z wlux $
 %
-% Copyright (c) 1998-2009, Wolfgang Lux
+% Copyright (c) 1998-2016, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \subsection{Basic Types}
@@ -201,11 +201,10 @@ space are saved.
 > nodeTag (GlobalVarNode _ _) = GlobalVarTag
 > nodeTag (SearchContinuation _ _ _ _) = SearchTag
 
-> nilTag, consTag, unitTag, successTag :: NodeTag
+> nilTag, consTag, unitTag :: NodeTag
 > nilTag  = ConstructorTag 0 "Prelude.[]" 0
 > consTag = ConstructorTag 1 "Prelude.:" 2
 > unitTag = ConstructorTag 0 "Prelude.()" 0
-> successTag = ConstructorTag 0 "Prelude.Success" 0
 
 > isTupleName :: String -> Bool
 > isTupleName ('P':'r':'e':'l':'u':'d':'e':'.':'(':',':cs) =

@@ -6,7 +6,7 @@
 notNull []    = False                     -- NB []{} is not a legal expression!
 notNull (:){} = True
 
-consP (:){} = success
+consP (:){} = True
 
 main | notNull (:){} && (consP xs &> True) = doSolve (xs =:= "Abc") >> print xs
   where xs free

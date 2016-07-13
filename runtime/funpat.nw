@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: funpat.nw 3255 2016-06-21 07:14:44Z wlux $
+% $Id: funpat.nw 3273 2016-07-13 21:23:01Z wlux $
 %
 % Copyright (c) 2009-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -193,7 +193,7 @@ FUNCTION(funpat_match_1)
 #endif
 	    binds->c.args[2] = tail;
 	    
-	    RETURN(Success, 2);
+	    RETURN(Prelude_True, 2);
 	}
 	else if ( is_global_var_node(arg1) )
 	{
@@ -270,7 +270,7 @@ FUNCTION(funpat_match_2)
 	}
     }
 
-    RETURN(Success, 2);
+    RETURN(Prelude_True, 2);
 }
 
 @
@@ -278,7 +278,7 @@ The unification of the arguments of data terms proceeds
 concurrently. Instead of calling the code for the predefined operator
 [[(&)]], we handle concurrent evaluation ourselves. Thus, we can
 make use of the fact that the unification always returns the value
-[[Success]] and can never return an unbound variable.
+[[True]] and can never return an unbound variable.
 
 <<funpat.c>>=
 static
@@ -331,13 +331,13 @@ FUNCTION(funpat_args_1)
     for ( r = regs.sp[0]; node_kind(r) == INDIR_KIND; r = r->n.node )
 	;
 
-    if ( node_kind(r) == CAPP_KIND )
+    if ( r == Prelude_True )
     {
 	regs.sp += 1;
 	GOTO(funpat_args);
     }
 
-    ASSERT(node_kind(r) == QUEUEME_KIND);
+    assert(node_kind(r) == QUEUEME_KIND);
     CHECK_STACK1();
     regs.sp   -= 1;
     regs.sp[0] = regs.sp[2];
@@ -352,13 +352,13 @@ FUNCTION(funpat_args_2)
 {
     Node *r;
  ENTRY_LABEL(static, funpat_args_2)
-    ASSERT(node_kind(regs.r[0]) == CAPP_KIND);
+    assert(regs.r[0] == Prelude_True);
     for ( r = regs.sp[0]; node_kind(r) == INDIR_KIND; r = r->n.node )
 	;
-    if ( node_kind(r) == QUEUEME_KIND )
-	ENTER(r, 1);
-    ASSERT(node_kind(r) == CAPP_KIND);
-    RETURN(r, 1);
+    if ( r == Prelude_True )
+	RETURN(r, 1);
+    assert(node_kind(r) == QUEUEME_KIND);
+    ENTER(r, 1);
 }
 
 @ 
@@ -386,7 +386,7 @@ FUNCTION(funpat_papp_args)
 
     arglist = regs.sp[0];
     if ( arglist == nil )
-	RETURN(Success, 2);
+	RETURN(Prelude_True, 2);
 
     regs.sp[0] = arglist->c.args[2];
     CALL2(___61__61_, funpat_papp_args, arglist->c.args[0], arglist->c.args[1]);
@@ -419,7 +419,7 @@ FUNCTION(funpat_bindVars)
 	regs.sp[0] = binds;
 	GOTO(funpat_bindVars_1);
     }
-    RETURN(Success, 1);
+    RETURN(Prelude_True, 1);
 }
 
 static
@@ -486,7 +486,7 @@ FUNCTION(funpat_bindVars_1)
 	regs.sp[0] = binds;
 	GOTO(funpat_bindVars_1);
     }
-    RETURN(Success, 1);
+    RETURN(Prelude_True, 1);
 }
 
 static
@@ -557,7 +557,7 @@ FUNCTION(funpat_bindVarsRigid_1)
 
     binds = regs.sp[0];
     if ( binds == 0 )
-	RETURN(Success, 1);
+	RETURN(Prelude_True, 1);
 
     assert(binds->info == &rigid_pair_cons_info);
     assert(binds->c.args[0] != 0 && binds->c.args[1] != 0);

@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: funpat.nw 3273 2016-07-13 21:23:01Z wlux $
+% $Id: funpat.nw 3274 2016-07-14 19:39:55Z wlux $
 %
 % Copyright (c) 2009-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -261,7 +261,7 @@ FUNCTION(funpat_match_2)
 		regs.sp[0] = arglist;
 		if ( exist_type )
 		{
-		    regs.r[0] = CONST(__Prelude__True);
+		    regs.r[0] = Prelude_True;
 		    GOTO(funpat_papp_args);
 		}
 		else
@@ -381,7 +381,7 @@ FUNCTION(funpat_papp_args)
 {
     Node *arglist;
  ENTRY_LABEL(static, funpat_papp_args)
-    if ( regs.r[0] != CONST(__Prelude__True) )
+    if ( regs.r[0] != Prelude_True )
 	FAIL(NO_SOLUTION);
 
     arglist = regs.sp[0];
@@ -542,7 +542,7 @@ FUNCTION(funpat_bindVarsRigid)
     binds = regs.sp[0];
     assert(binds != 0 && binds->info == &rigid_pair_cons_info);
     assert(binds->c.args[0] == 0 && binds->c.args[1] == 0);
-    regs.r[0]  = CONST(__Prelude__True);
+    regs.r[0]  = Prelude_True;
     regs.sp[0] = binds->c.args[2];
     GOTO(funpat_bindVarsRigid_1);
 }
@@ -552,7 +552,7 @@ FUNCTION(funpat_bindVarsRigid_1)
 {
     Node *var, *arg, *binds;
  ENTRY_LABEL(static, funpat_bindVarsRigid_1)
-    if ( regs.r[0] != CONST(__Prelude__True) )
+    if ( regs.r[0] != Prelude_True )
 	FAIL(NO_SOLUTION);
 
     binds = regs.sp[0];
@@ -594,9 +594,9 @@ FUNCTION(funpat_bindVarsRigid_1)
 	var->n.node = arg;
     }
 
-    /* The following assignment is redundant because evaluation would
-     * have failed if regs.r[0] does not point to Prelude.True. */
-    /*regs.r[0]  = CONST(__Prelude__True);*/
+    /* NB The following assignment is redundant because evaluation would
+     * have failed if regs.r[0] did not point to Prelude.True. */
+    /*regs.r[0]  = Prelude_True;*/
     regs.sp[0] = binds;
     GOTO(funpat_bindVarsRigid_1);
 }

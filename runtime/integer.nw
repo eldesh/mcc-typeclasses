@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: integer.nw 3022 2010-12-20 09:10:07Z wlux $
+% $Id: integer.nw 3274 2016-07-14 19:39:55Z wlux $
 %
 % Copyright (c) 2007-2009, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -30,12 +30,13 @@ integers.
 #include "eval.h"
 #include "integer.h"
 
-DECLARE_CONST(__Prelude__False);
-DECLARE_CONST(__Prelude__True);
-
 DECLARE_CONST(__Prelude__LT);
 DECLARE_CONST(__Prelude__EQ);
 DECLARE_CONST(__Prelude__GT);
+
+#define Prelude_LT      CONST(__Prelude__LT)
+#define Prelude_EQ      CONST(__Prelude__EQ)
+#define Prelude_GT      CONST(__Prelude__GT)
 
 #define pair_node_size	closure_node_size(2)
 #define pair_info	__Prelude___40__44__41__info
@@ -287,7 +288,7 @@ primEqInteger(Node *x, Node *y)
 #endif
 	cmp = mpz_cmp(x->bi.mpz, y->bi.mpz);
 
-    return cmp == 0 ? CONST(__Prelude__True) : CONST(__Prelude__False);
+    return cmp == 0 ? Prelude_True : Prelude_False;
 }
 
 Node *
@@ -309,7 +310,7 @@ primNeqInteger(Node *x, Node *y)
 #endif
 	cmp = mpz_cmp(x->bi.mpz, y->bi.mpz);
 
-    return cmp != 0 ? CONST(__Prelude__True) : CONST(__Prelude__False);
+    return cmp != 0 ? Prelude_True : Prelude_False;
 }
 
 Node *
@@ -331,7 +332,7 @@ primLtInteger(Node *x, Node *y)
 #endif
 	cmp = mpz_cmp(x->bi.mpz, y->bi.mpz);
 
-    return cmp < 0 ? CONST(__Prelude__True) : CONST(__Prelude__False);
+    return cmp < 0 ? Prelude_True : Prelude_False;
 }
 
 Node *
@@ -353,7 +354,7 @@ primLeqInteger(Node *x, Node *y)
 #endif
 	cmp = mpz_cmp(x->bi.mpz, y->bi.mpz);
 
-    return cmp <= 0 ? CONST(__Prelude__True) : CONST(__Prelude__False);
+    return cmp <= 0 ? Prelude_True : Prelude_False;
 }
 
 Node *
@@ -375,7 +376,7 @@ primGeqInteger(Node *x, Node *y)
 #endif
 	cmp = mpz_cmp(x->bi.mpz, y->bi.mpz);
 
-    return cmp >= 0 ? CONST(__Prelude__True) : CONST(__Prelude__False);
+    return cmp >= 0 ? Prelude_True : Prelude_False;
 }
 
 Node *
@@ -397,7 +398,7 @@ primGtInteger(Node *x, Node *y)
 #endif
 	cmp = mpz_cmp(x->bi.mpz, y->bi.mpz);
 
-    return cmp > 0 ? CONST(__Prelude__True) : CONST(__Prelude__False);
+    return cmp > 0 ? Prelude_True : Prelude_False;
 }
 
 Node *
@@ -419,9 +420,7 @@ primCompareInteger(Node *x, Node *y)
 #endif
 	cmp = mpz_cmp(x->bi.mpz, y->bi.mpz);
 
-    return cmp > 0 ? CONST(__Prelude__GT) :
-	   cmp < 0 ? CONST(__Prelude__LT) :
-	   CONST(__Prelude__EQ);
+    return cmp > 0 ? Prelude_GT : cmp < 0 ? Prelude_LT : Prelude_EQ;
 }
 
 @ 
@@ -1364,7 +1363,6 @@ primComplBitInteger(Node *x, Node *y)
 Node *
 primTestBitInteger(Node *x, Node *y)
 {
-    bool r;
     long n;
 
     INIT_MP_TMP();
@@ -1375,8 +1373,7 @@ primTestBitInteger(Node *x, Node *y)
     else
 #endif
 	mpz_set(mp_tmp, x->bi.mpz);
-    r = n >= 0 && mpz_tstbit(mp_tmp, n);
-    return r ? CONST(__Prelude__True) : CONST(__Prelude__False);
+    return n >= 0 && mpz_tstbit(mp_tmp, n) ? Prelude_True : Prelude_False;
 }
 
 @ 

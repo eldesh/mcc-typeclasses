@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: unify.nw 3273 2016-07-13 21:23:01Z wlux $
+% $Id: unify.nw 3274 2016-07-14 19:39:55Z wlux $
 %
 % Copyright (c) 2001-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -139,7 +139,7 @@ FUNCTION(___61__58__61__2)
 		regs.sp[0] = arglist;
 		if ( exist_type )
 		{
-		    regs.r[0] = CONST(__Prelude__True);
+		    regs.r[0] = Prelude_True;
 		    GOTO(unify_papp_args);
 		}
 		else
@@ -645,7 +645,7 @@ FUNCTION(unify_papp_args)
 {
     Node *arglist;
  ENTRY_LABEL(static, unify_papp_args)
-    if ( regs.r[0] != CONST(__Prelude__True) )
+    if ( regs.r[0] != Prelude_True )
 	FAIL(NO_SOLUTION);
 
     arglist = regs.sp[0];

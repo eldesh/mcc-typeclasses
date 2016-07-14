@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: eval.nw 3273 2016-07-13 21:23:01Z wlux $
+% $Id: eval.nw 3274 2016-07-14 19:39:55Z wlux $
 %
 % Copyright (c) 2001-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -483,11 +483,11 @@ FUNCTION(__isVar_1)
 	regs.ret  = __isVar_2;
 	GOTO(yield_delay_thread);
 #else
-	r = CONST(__Prelude__True);
+	r = Prelude_True;
 #endif
     }
     else
-	r = CONST(__Prelude__False);
+	r = Prelude_False;
     RETURN(r, 0);
 }
 
@@ -501,9 +501,9 @@ FUNCTION(__isVar_2)
     while ( is_tagged_ptr(node) && is_indir_node(node) )
 	node = node->n.node;
     if ( is_tagged_ptr(node) && is_variable_node(node) )
-	r = CONST(__Prelude__True);
+	r = Prelude_True;
     else
-	r = CONST(__Prelude__False);
+	r = Prelude_False;
     RETURN(r, 1);
 }
 #endif

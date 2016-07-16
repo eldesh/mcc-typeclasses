@@ -4,4 +4,4 @@
 Term: nil
 Inferred type: [Int]
 Expected type: [Char]
-Types Char and Int are incompatible
+Types Int and Char are incompatible

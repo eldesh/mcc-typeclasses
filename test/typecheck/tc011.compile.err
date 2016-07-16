@@ -4,4 +4,4 @@ f "Hello"
 Term: "Hello"
 Inferred type: [Char]
 Expected type: [Int]
-Types Int and Char are incompatible
+Types Char and Int are incompatible

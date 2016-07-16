@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-# $Id: runtests.sh 3203 2016-05-22 11:58:45Z wlux $
+# $Id: runtests.sh 3280 2016-07-16 16:31:46Z wlux $
 #
 # Copyright (c) 2015-2016, Wolfgang Lux
 # See ../LICENSE for the full license.
@@ -80,6 +80,8 @@ fi
 rm $f
 
 # check options
+# FIXME do not clean tests automatically, but provide an extra option
+# to do that.
 script=all
 recursive=default
 while test $# -gt 0; do
@@ -223,7 +225,7 @@ run_fail ( ) {
 eval_success ( ) {
   compile_success "$1" "$2" "$3" || return $?
   if "$CYMAKE" $LDFLAGS -q -i$3-modules $3 -e"$4" -o$3 $LDLIBS; then
-    stem=$3.eval-`echo "$4" | tr ' ' _`
+    stem=$3.eval-`printf '%s' "$4" | tr -cs '[:alnum:]' '[_*]'`
     if test -f $stem.in; then stdin=$stem.in; else stdin=/dev/null; fi
     ./$3 < $stdin > /tmp/eval.out 2> /tmp/eval.err
     $diff $stem.out /tmp/eval.out || status=unexpected_fail
@@ -249,7 +251,7 @@ eval_success ( ) {
 eval_fail ( ) {
   compile_success "$1" "$2" "$3" || return $?
   if "$CYMAKE" $LDFLAGS -q -i$3-modules $3 -e"$4" -o$3 $LDLIBS; then
-    stem=$3.eval-`echo "$4" | tr ' ' _`
+    stem=$3.eval-`printf '%s' "$4" | tr -cs '[:alnum:]' '[_*]'`
     if test -f $stem.in; then stdin=$stem.in; else stdin=/dev/null; fi
     ./$3 < $stdin > /tmp/eval.out 2> /tmp/eval.err
     status=expected_fail
@@ -271,7 +273,7 @@ eval_fail ( ) {
 type_success ( ) {
   compile_success "$1" "$2" "$3" || return $?
   if "$CYMAKE" $LDFLAGS -q -i$3-modules $3 -T"$4" > /tmp/type.out 2> /tmp/type.err; then
-    $diff $3.type-`echo "$4" | tr ' ' _`.out /tmp/type.out || status=unexpected_fail
+    $diff $3.type-`printf '%s' "$4" | tr -cs '[:alnum:]' '[_*]'`.out /tmp/type.out || status=unexpected_fail
   else
     echo "*** Unexpected failure of $1/$3 ***"
     cat /tmp/type.err
@@ -295,7 +297,7 @@ type_fail ( ) {
     status=unexpected_pass
   else
     status=expected_fail
-    $diff $3.type-`echo "$4" | tr ' ' _`.err /tmp/type.err || status=unexpected_fail
+    $diff $3.type-`printf '%s' "$4" | tr -cs '[:alnum:]' '[_*]'`.err /tmp/type.err || status=unexpected_fail
   fi
 }
 

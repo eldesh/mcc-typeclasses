@@ -6,7 +6,7 @@
 -- [*] The same error could happen in the standard, trailing
 -- configuration, too, if the two continuations returned from the
 -- initial try application were continued in the global search space
--- (cf. fp007.curry).
+-- (cf. fpat007.curry).
 
 -- NB The normal forms of pat x y xs are ([],[],True) and (_:_,_:_,False).
 --    It is important that x is used (at least) twice before the

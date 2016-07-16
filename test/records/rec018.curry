@@ -3,7 +3,7 @@
 -- imported without its type from one of the modules. Note that it is
 -- unclear whether a label can be used in a record (update) expression in
 -- this case or not and MCC does not allow it at present. (See also
--- ../test0017 for the obvious variant of this example.)
+-- rec017.curry for the obvious variant of this example.)
 
 import B(len)
 import qualified A(T(..))

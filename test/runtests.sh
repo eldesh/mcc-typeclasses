@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-# $Id: runtests.sh 3280 2016-07-16 16:31:46Z wlux $
+# $Id: runtests.sh 3281 2016-07-16 16:32:47Z wlux $
 #
 # Copyright (c) 2015-2016, Wolfgang Lux
 # See ../LICENSE for the full license.
@@ -84,6 +84,7 @@ rm $f
 # to do that.
 script=all
 recursive=default
+noskip=no
 while test $# -gt 0; do
   case $1 in
     "" ) ;;
@@ -103,6 +104,7 @@ Valid options:
                                  (default if no directories given)
   -n, --nonrec, --non-recursive  do not recurse into subdirectories
                                  (default with explicit directories)
+  --noskip, --no-skip            include skipped tests
 EOF
       exit;;
     -t | --test )
@@ -111,6 +113,7 @@ EOF
     --test=* ) script=`echo "$1" | sed 's/^--test=//'`; shift;;
     -r | --rec | --recursive ) recursive=yes; shift;;
     -n | --nonrec | --non-recursive ) recursive=no; shift;;
+    --noskip | --no-skip ) noskip=yes; shift;;
     -* )
       echo "$cmd: unknown option" >&2
       echo "Use $cmd -h to get a list of valid options" >&2
@@ -311,6 +314,22 @@ do_test ( ) {
     lineno=0
     while read test expect src goal; do
       lineno=`expr $lineno + 1`
+      case $noskip in
+      	yes )
+      	  while :; do
+      	    case $test in
+              skip )
+		read test expect src goal <<EOF
+$expect $src $goal
+EOF
+		continue;;
+      	      skip* )
+		test=`echo "$test" | cut -c5- | sed 's/^[^A-Za-z0-9]//'`
+		continue;;
+      	    esac
+            break
+      	  done;;
+      esac
       case $src in
 	*.curry ) mod=`expr $src : '\(.*\)'.curry`;;
 	*.lcurry ) mod=`expr $src : '\(.*\)'.lcurry`;;
@@ -369,6 +388,22 @@ do_test ( ) {
       esac
     done < "$script".T
     while read test expect src goal; do
+      case $noskip in
+      	yes )
+      	  while :; do
+      	    case $test in
+              skip )
+		read test expect src goal <<EOF
+$expect $src $goal
+EOF
+		continue;;
+      	      skip* )
+		test=`echo "$test" | cut -c5- | sed 's/^[^A-Za-z0-9]//'`
+		continue;;
+      	    esac
+            break
+      	  done;;
+      esac
       case $src in
 	*.curry ) mod=`expr $src : '\(.*\)'.curry`;;
 	*.lcurry ) mod=`expr $src : '\(.*\)'.lcurry`;;

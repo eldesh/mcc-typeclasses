@@ -1,6 +1,6 @@
 # Makefile for the Curry runtime system
 #
-# $Id: Makefile.in 3248 2016-06-20 14:45:36Z wlux $
+# $Id: Makefile.in 3284 2016-07-17 21:09:50Z wlux $
 #
 # Copyright (c) 2001-2016, Wolfgang Lux
 # See ../LICENSE for the full license.
@@ -137,11 +137,11 @@ BINDISTFILES = config.h $(rts_H_PATH)
 .c.o:
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 .nw.h:
-	cd $(*D) && $(TANGLE) $(TCFLAGS) -R$(@F) $(<F) | $(CPIF) -ne $(@F)
+	cd $(*D) && $(TANGLE) $(TCFLAGS) -R$(@F) $(*F).nw | $(CPIF) -ne $(@F)
 .nw.c:
-	cd $(*D) && $(TANGLE) $(TCFLAGS) -R$(@F) $(<F) | $(CPIF) -ne $(@F)
+	cd $(*D) && $(TANGLE) $(TCFLAGS) -R$(@F) $(*F).nw | $(CPIF) -ne $(@F)
 .nw.tex:
-	cd $(*D) && $(WEAVE) $(WFLAGS) -filter "sed -f protect-us-in-defn" $(<F) > $(@F)
+	cd $(*D) && $(WEAVE) $(WFLAGS) -filter "sed -f protect-us-in-defn" $(*F).nw > $(@F)
 
 # default target, build the runtime system
 all: rts

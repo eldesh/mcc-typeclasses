@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 3273 2016-07-13 21:23:01Z wlux $
+% $Id: heap.nw 3289 2016-07-30 12:47:51Z wlux $
 %
 % Copyright (c) 2001-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -942,10 +942,10 @@ is named by adding the function's arity to the prefix [[eval_lazy_]].        %'
 For benefit of the printing code, the runtime system implements two
 predicates [[is_tuple]] and [[is_operator]] that check whether a node
 info corresponds to a tuple and an operator, respectively. The
-function [[is_tuple]] returns [[true]], if the name consists of a
+function [[is_tuple]] returns [[true]] if the name consists of a
 (non-empty) sequence of commas which are enclosed in parentheses and
 optionally prefixed with module name \texttt{Prelude}. The function
-[[is_operator]] returns [[true]], if the name contains any
+[[is_operator]] returns [[true]] if the name contains any
 non-alphanumeric characters except for [[']] and [[_]]. Dots ([[.]]) %'
 that precede an alphanumeric character are ignored because they are
 assumed to separate a module qualifier from the unqualified name. Note
@@ -990,13 +990,8 @@ is_operator(NodeInfo *info)
 	    cp++;
 	if ( !isalnum(*cp) && *cp != '\'' && *cp != '_' )
 	    return true;
-	else if ( *cp == '_' )
-	{
-	    if ( cp[1] == '#' )
-		cp++;
-	    else if ( strncmp(cp + 1, "debug#", 6) )
-		cp += 6;
-	}
+	else if ( *cp == '_' && cp[1] == '#' )
+	    cp++;
     }
     return false;
 }

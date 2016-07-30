@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 3273 2016-07-13 21:23:01Z wlux $
+% $Id: DTransform.lhs 3292 2016-07-30 12:55:31Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
 % Copyright (c) 2003-2016, Wolfgang Lux
@@ -774,7 +774,7 @@ of \texttt{aux$N$}, \texttt{result$N$}, and \texttt{tree$N$}.
 > createTree qId lVars rule resultId trees =
 >   node fName fParams fResult fRule clean
 >   where (idModule,ident) = splitQualIdent qId
->         fNameCh = maybe "" moduleName idModule ++ "." ++ name ident
+>         fNameCh = maybe "" moduleName idModule ++ "." ++ show ident
 >         fName   = debugBuildList (map (Literal . Char) fNameCh)
 >         fParams = debugBuildList (map (dEvalApply.Variable) lVars)
 >         fResult = (dEvalApply.Variable) resultId

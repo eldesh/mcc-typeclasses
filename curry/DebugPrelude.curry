@@ -1,4 +1,4 @@
--- $Id: DebugPrelude.curry 3273 2016-07-13 21:23:01Z wlux $
+-- $Id: DebugPrelude.curry 3292 2016-07-30 12:55:31Z wlux $
 --
 -- Copyright (c) 2007-2016, Wolfgang Lux
 -- See ../LICENSE for the full license.
@@ -183,7 +183,25 @@ buggyTree n@(CTreeNode name args result rule trees) =
                 Quit -> return True
 
 basicArrow (CTreeNode name args result rule trees) =
-    name++concatMap (' ':) args++"  -> "++result
+    arrowHead name args++"  -> "++result
+
+arrowHead name args
+  | isOp name =
+      case args of
+        [arg1,arg2] -> arg1 ++ ' ' : name ++ ' ' : arg2
+	_ -> '(' : name ++ ')' : concatMap (' ':) args
+  | otherwise = name ++ concatMap (' ':) args
+  where isOp cs = maybeOp False cs
+        maybeOp isOp cs =
+	  case dropWhile ('.'/=) cs of
+	    "" -> isOp
+	    "." -> True
+	    '.':c:cs'
+	      | isDigit c && all isDigit cs' -> isOp
+	      | isAlpha c -> maybeOp False cs'
+	      | otherwise -> maybeOp True (c:cs')
+	isAlpha c = c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c == '_'
+	isDigit c = c >= '0' && c <= '9'
 
 
 

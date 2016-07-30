@@ -1,5 +1,5 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: heap.nw 3289 2016-07-30 12:47:51Z wlux $
+% $Id: heap.nw 3290 2016-07-30 12:49:53Z wlux $
 %
 % Copyright (c) 2001-2016, Wolfgang Lux
 % See ../LICENSE for the full license.
@@ -945,12 +945,17 @@ info corresponds to a tuple and an operator, respectively. The
 function [[is_tuple]] returns [[true]] if the name consists of a
 (non-empty) sequence of commas which are enclosed in parentheses and
 optionally prefixed with module name \texttt{Prelude}. The function
-[[is_operator]] returns [[true]] if the name contains any
-non-alphanumeric characters except for [[']] and [[_]]. Dots ([[.]]) %'
-that precede an alphanumeric character are ignored because they are
-assumed to separate a module qualifier from the unqualified name. Note
-that the empty list and unit constructors are not considered
-operators.
+[[is_operator]] returns [[true]] if the last component of the node's %'
+name does not begin with an alphanumeric character or an underscore
+([[_]]). Name components are separated by dots ([[.]]), but a dot is
+also a valid character in an operator symbol. Thus, [[==.>]] could be
+either a single component or two components [[==]] and [[>]] separated
+by a dot. Fortunately, this ambiguity does not matter for detecting
+operator symbols as with both readings the name is considered an
+operator. A special case is made for a dot that is followed by a
+digit. Since neither a plain identifier nor an operator symbol can
+start with a digit, we do not consider a dot followed by a digit a
+separator between two name components.
 
 <<heap.h>>=
 extern bool is_tuple(NodeInfo *info);
@@ -977,23 +982,27 @@ is_tuple(NodeInfo *info)
 bool
 is_operator(NodeInfo *info)
 {
+    bool       is_op;
     const char *cp;
 
-    if ( info == CONST(__Prelude___91__93_)->info
-	 || info == CONST(__Prelude___40__41_)->info
-	 || !info->cname )
+    if ( info == CONST(__Prelude___91__93_)->info ||
+	 info == CONST(__Prelude___40__41_)->info ||
+	 !info->cname )
 	return false;
 
-    for ( cp = info->cname; *cp != '\0'; cp++ )
-    {
-	if ( *cp == '.' )
-	    cp++;
-	if ( !isalnum(*cp) && *cp != '\'' && *cp != '_' )
-	    return true;
-	else if ( *cp == '_' && cp[1] == '#' )
-	    cp++;
-    }
-    return false;
+    cp	  = info->cname;
+    is_op = !isalpha(*cp) && *cp != '_';
+    while ( *cp != '\0' )
+	if ( *cp++ == '.' )
+	{
+	    if ( *cp == '\0' )
+		is_op = true;
+	    else if ( isalpha(*cp) || *cp == '_' )
+		is_op = false;
+	    else if ( !isdigit(*cp) )
+		is_op = true;
+	}
+    return is_op;
 }
 
 @ 

@@ -1,0 +1,7 @@
+"pv010.curry", line 7.8: Type error in application
+Cons "a" l0
+
+Term: l0
+Inferred type: List Bool
+Expected type: List [Char]
+Types Bool and [Char] are incompatible

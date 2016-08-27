@@ -1,0 +1,7 @@
+"pv007.curry", line 4.8: Type error in infix application
+"a" : l0
+
+Term: l0
+Inferred type: [Bool]
+Expected type: [[Char]]
+Types Bool and [Char] are incompatible

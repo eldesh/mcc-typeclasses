@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3282 2016-07-16 16:37:55Z wlux $
+% $Id: TypeCheck.lhs 3294 2016-08-27 14:47:13Z wlux $
 %
 % Copyright (c) 1999-2016, Wolfgang Lux
 % See LICENSE for the full license.
@@ -353,17 +353,17 @@ should not be a prerequisite for type checking. A good compromise is
 to allow polymorphic generalization for variables that are bound to
 expressions for which the compiler can easily prove that they do not
 contain free variables. The distinction between expansive and
-non-expansive expressions comes to help here, which is used by ML-like
-languages in order to ensure type soundness in the presence of
+non-expansive expressions comes to help here, which is used with
+ML-like languages to ensure type soundness in the presence of
 imperative effects~\cite{WrightFelleisen94:TypeSoundness}. In Curry, a
 non-expansive expression is either
 \begin{itemize}\label{non-expansive}
 \item a literal,
-\item a variable,
-\item an application of a constructor with arity $n$ to at most $n$
+\item a bound variable,
+\item an application of a data constructor with arity $n$ to $n$
   non-expansive expressions,
-\item an application of a function with arity $n$ to at most $n-1$
-  non-expansive expressions, or
+\item a partial application of a function or constructor with arity
+  $n$ to $m<n$ non-expansive expressions,
 \item a let expression whose body is a non-expansive expression and
   whose local declarations are either function declarations or
   variable declarations of the form \texttt{$x$=$e$} where $e$ is a
@@ -751,18 +751,15 @@ context because the context of a function's type signature is
 > isNonExpansiveApp :: TCEnv -> ValueEnv -> Int -> Expression a -> Bool
 > isNonExpansiveApp _ _ _ (Literal _ _) = True
 > isNonExpansiveApp _ tyEnv n (Variable _ v)
->   | unqualify v == anonId = False
+>   | unRenameIdent (unqualify v) == anonId = False
 >   | isRenamed (unqualify v) = n == 0 || n < arity v tyEnv
 >   | otherwise = n < arity v tyEnv
 > isNonExpansiveApp _ _ _ (Constructor _ _) = True
 > isNonExpansiveApp tcEnv tyEnv n (Paren e) = isNonExpansiveApp tcEnv tyEnv n e
 > isNonExpansiveApp tcEnv tyEnv n (Typed e _) =
 >   isNonExpansiveApp tcEnv tyEnv n e
-> isNonExpansiveApp tcEnv tyEnv _ (Record _ _ fs) =
->   isNonExpansive tcEnv tyEnv fs
->   -- FIXME: stricly speaking a record construction is non-expansive
->   -- only if *all* field labels are present; for instance, (:){}
->   -- probably should be considered expansive
+> isNonExpansiveApp tcEnv tyEnv _ (Record _ c fs) =
+>   arity c tyEnv == length fs && isNonExpansive tcEnv tyEnv fs
 > isNonExpansiveApp tcEnv tyEnv _ (Tuple es) = isNonExpansive tcEnv tyEnv es
 > isNonExpansiveApp tcEnv tyEnv _ (List _ es) = isNonExpansive tcEnv tyEnv es
 > isNonExpansiveApp tcEnv tyEnv n (Apply f e) =

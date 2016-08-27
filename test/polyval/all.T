@@ -4,3 +4,8 @@ compile fail pv003.curry
 compile fail pv004.curry
 run pass pv005.curry
 compile pass pv006.curry
+compile fail pv007.curry
+compile pass pv008.curry
+compile fail pv009.curry
+compile fail pv010.curry
+compile pass pv011.curry

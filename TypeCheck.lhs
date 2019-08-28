@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3294 2016-08-27 14:47:13Z wlux $
+% $Id: TypeCheck.lhs 3298 2019-08-28 15:38:22Z wlux $
 %
 % Copyright (c) 1999-2016, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1525,7 +1525,7 @@ in \texttt{tcFunctionDecl} above.
 >         -> Context -> Field (a b) -> TcState (Context,Field (a QualType))
 > tcField tc what doc tcEnv tyEnv p ty cx (Field l x) =
 >   do
->     (cx',TypeArrow ty1 ty2) <- inst (funType l tyEnv)
+>     (cx',~(TypeArrow ty1 ty2)) <- inst (funType l tyEnv)
 >     -- NB the following unification cannot fail; it serves only for
 >     --    instantiating the type variables in the field label's type
 >     unify p "field label" empty tcEnv [] ty [] ty1

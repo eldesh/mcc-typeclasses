@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: CaseMatch.lhs 3273 2016-07-13 21:23:01Z wlux $
+% $Id: CaseMatch.lhs 3298 2019-08-28 15:38:22Z wlux $
 %
 % Copyright (c) 2001-2016, Wolfgang Lux
 % See LICENSE for the full license.
@@ -133,12 +133,12 @@ equivalent of a nested if-then-else expression.
 >   match m p (Case e as) =
 >     do
 >       e' <- match m p e
->       ([v],e'') <- matchRigid m [(p,[t],rhs) | Alt p t rhs <- as]
+>       (~[v],e'') <- matchRigid m [(p,[t],rhs) | Alt p t rhs <- as]
 >       return (mkCase m p v e' e'')
 >   match m p (Fcase e as) =
 >     do
 >       e' <- match m p e
->       ([v],e'') <- matchFlex m p [(p,[t],rhs) | Alt p t rhs <- as]
+>       (~[v],e'') <- matchFlex m p [(p,[t],rhs) | Alt p t rhs <- as]
 >       return (mkCase m p v e' e'')
 
 \end{verbatim}

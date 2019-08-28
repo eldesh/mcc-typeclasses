@@ -1,6 +1,6 @@
 # Makefile for the Curry compiler
 #
-# $Id: Makefile.in 3262 2016-06-26 07:28:18Z wlux $
+# $Id: Makefile.in 3297 2019-08-28 15:32:52Z wlux $
 #
 # Copyright (c) 2000-2016 Wolfgang Lux
 # See LICENSE for the full license.
@@ -136,6 +136,7 @@ cycc_SRCS = \
 	GetOpt.hs \
 	Utils.lhs \
 	$(APPLICATIVE_LHS) \
+	$(SEMIGROUP_LHS) \
 	$(PATHUTILS_LHS) \
 	$(IOEXTS_LHS) \
 	$(cycc_$(HASKELL)_SRCS)
@@ -207,6 +208,7 @@ cam2c_SRCS = \
 	Position.lhs \
 	Utils.lhs \
 	$(APPLICATIVE_LHS) \
+	$(SEMIGROUP_LHS) \
 	$(PATHUTILS_LHS) \
 	$(cam2c_$(HASKELL)_SRCS)
 cam2c_hs2010_SRCS = hs2010/Char.hs hs2010/Directory.hs hs2010/IO.hs \
@@ -252,6 +254,9 @@ mach_OBJS = $(mach_INTF:.hi=.o)
 APPLICATIVE_LHS = $(HASKELL)/Applicative.lhs
 APPLICATIVE_SRCS = hs98/Applicative.lhs hs2010/Applicative.lhs
 
+SEMIGROUP_LHS = $(HASKELL)/Semigroup.lhs
+SEMIGROUP_SRCS = hs98/Semigroup.lhs hs2010/Semigroup.lhs
+
 PATHUTILS_LHS = $(HC_PATH_STYLE)/PathUtils.lhs
 PATHUTILS_SRCS = unix/PathUtils.lhs windows/PathUtils.lhs
 
@@ -272,7 +277,7 @@ DISTFILES = README LICENSE NEWS curry.tex curry.bib \
 	configure-bin.in Makefile-bin.in in-place-config-bin \
 	$(SCRIPTS:=.in) $(man_MANS:=.in) $(SRCS) \
 	$(PATHUTILS_SRCS) $(IOEXTS_SRCS) $(HS2010_SRCS) \
-	$(APPLICATIVE_SRCS)
+	$(APPLICATIVE_SRCS) $(SEMIGROUP_SRCS)
 
 # default target, build all programs and the library
 all: scripts programs runtime curry mans

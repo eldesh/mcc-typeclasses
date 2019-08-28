@@ -167,7 +167,7 @@ module Pretty (
         semi, comma, colon, space, equals,
         lparen, rparen, lbrack, rbrack, lbrace, rbrace,
 
-        (<>), (<+>), hcat, hsep, 
+        Semigroup(..), (<+>), hcat, hsep, 
         ($$), ($+$), vcat, 
         sep, cat, 
         fsep, fcat, 
@@ -181,9 +181,9 @@ module Pretty (
 -- Don't import Util( assertPanic ) because it makes a loop in the module structure
 
 import Ratio
-infixl 6 <> 
-infixl 6 <+>
-infixl 5 $$, $+$
+import Semigroup
+infixr 6 <+>
+infixr 5 $$, $+$
 \end{code}
 
 
@@ -229,7 +229,7 @@ rational :: Rational -> Doc
 Combining @Doc@ values
 
 \begin{code}
-(<>)   :: Doc -> Doc -> Doc     -- Beside
+--(<>) :: Doc -> Doc -> Doc     -- Beside
 hcat   :: [Doc] -> Doc          -- List version of <>
 (<+>)  :: Doc -> Doc -> Doc     -- Beside, separated by space
 hsep   :: [Doc] -> Doc          -- List version of <+>
@@ -587,8 +587,9 @@ nilAboveNest g k q           | (not g) && (k > 0)        -- No newline if no ove
 *********************************************************
 
 \begin{code}
-p <>  q = Beside p False q
-p <+> q = Beside p True  q
+instance Semigroup Doc where
+  p <> q = Beside p False q
+p <+> q  = Beside p True  q
 
 beside :: Doc -> Bool -> RDoc -> RDoc
 -- Specification: beside g p q = p <g> q

@@ -10,3 +10,8 @@ eval pass test003.curry goal1
 eval pass test003.curry goal2
 eval fail test003.curry goal3
 eval fail test003.curry goal4
+eval pass test004.curry goal1
+eval pass test004.curry goal2
+eval pass test004.curry goal3
+eval pass test004.curry goal4
+eval fail test004.curry goal5

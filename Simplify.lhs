@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Simplify.lhs 3079 2012-06-19 13:21:05Z wlux $
+% $Id: Simplify.lhs 3300 2019-08-31 10:23:56Z wlux $
 %
-% Copyright (c) 2003-2011, Wolfgang Lux
+% Copyright (c) 2003-2019, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Simplify.lhs}
@@ -15,7 +15,8 @@ Currently, the following optimizations are implemented:
 \item Remove unused declarations.
 \item Inline simple constants.
 \item Compute minimal binding groups.
-\item Apply $\eta$-expansion to function definitions when possible.
+\item Apply $\eta$-expansion to function definitions and
+  $\lambda$-abstractions whose body is a $\lambda$-abstraction.
 \item Under certain conditions, inline local function definitions.
 \end{itemize}
 \begin{verbatim}
@@ -87,7 +88,7 @@ Currently, the following optimizations are implemented:
 >   return (tyEnv,[ForeignDecl p fi ty f ty'])
 > simplifyDecl m tyEnv env (PatternDecl p t rhs) =
 >   do
->     rhs' <- simplifyRhs m tyEnv env rhs >>= etaExpandRhs tyEnv
+>     rhs' <- simplifyRhs m tyEnv env rhs
 >     case (t,rhs') of
 >       (VariablePattern ty f,SimpleRhs _ (Lambda _ ts e) _) ->
 >         return (changeArity m f (length ts) tyEnv,[funDecl p ty f ts e])
@@ -105,7 +106,7 @@ Currently, the following optimizations are implemented:
 >                  -> SimplifyState (ValueEnv,Equation QualType)
 > simplifyEquation m tyEnv env (Equation p lhs rhs) =
 >   do
->     rhs' <- simplifyRhs m tyEnv' env rhs >>= etaExpandRhs tyEnv'
+>     rhs' <- simplifyRhs m tyEnv' env rhs
 >     case (simplifyLhs (qfv m rhs') lhs,rhs') of
 >       (FunLhs f ts,SimpleRhs p' (Lambda _ ts' e') _) ->
 >         return (changeArity m f (length ts + length ts') tyEnv,
@@ -127,205 +128,6 @@ Currently, the following optimizations are implemented:
 >                 -> Expression QualType -> SimplifyState (Expression QualType)
 > simplifyAppExpr m tyEnv p env e =
 >   simplifyApp p e [] >>= simplifyExpr m tyEnv p env
-
-\end{verbatim}
-\label{eta-expansion}
-After transforming the right hand side of a variable declaration and
-the body of a function equation\footnote{Recall that after making
-  pattern matching explicit each function is defined by exactly one
-  equation.}, respectively, the compiler tries to $\eta$-expand the
-definition. Using $\eta$-expanded definitions has the advantage that
-the compiler can avoid intermediate lazy applications. For instance,
-if the \texttt{map} function were defined as follows
-\begin{verbatim}
-  map f = foldr (\x -> (f x :)) []
-\end{verbatim}
-the compiler would compile the application \texttt{map (1+) [0..]}
-into an expression that is equivalent to
-\begin{verbatim}
-  let a1 = map (1+) in a1 [0..]
-\end{verbatim}
-whereas the $\eta$-expanded version of \texttt{map} could be applied
-directly to both arguments.
-
-However, one must be careful with $\eta$-expansion because it can have
-an effect on sharing and thus can change the semantics of a program.
-For instance, consider the functions
-\begin{verbatim}
-  f1 g h    = filter (g ? h)
-  f2 g h xs = filter (g ? h) xs
-\end{verbatim}
-and the goals \texttt{map (f1 even odd) [[0,1], [2,3]]} and
-\texttt{map (f2 even odd) [[0,1], [2,3]]}. The first of these has only
-two solutions, namely \texttt{[[0],[2]]} and \texttt{[[1],[3]]},
-because the expression \texttt{(even ?\ odd)} is evaluated only once,
-whereas the second has four solutions because the expression
-\texttt{(even ?\ odd)} is evaluated independently for the two argument
-lists \texttt{[0,1]} and \texttt{[2,3]}.
-
-Obviously, $\eta$-expansion of an equation \texttt{$f\,t_1\dots t_n$ =
-  $e$} is safe if the two expressions \texttt{($f\,x_1\dots x_n$,
-  $f\,x_1\dots x_n$)} and \texttt{let a = $f\,x_1\dots x_n$ in (a,a)}
-are equivalent. In order to find a safe approximation of definitions
-for which this property holds, the distinction between expansive and
-non-expansive expressions is useful again, which was introduced to
-identify let-bound variables for which polymorphic generalization is
-safe (see p.~\pageref{non-expansive} in Sect.~\ref{non-expansive}). An
-expression is non-expansive if it is either
-\begin{itemize}
-\item a literal,
-\item a variable,
-\item an application of a constructor with arity $n$ to at most $n$
-  non-expansive expressions,
-\item an application of a function or $\lambda$-abstraction with arity
-  $n$ to at most $n-1$ non-expansive expressions,
-\item an application of a $\lambda$-abstraction with arity $n$ to $n$
-  or more non-expansive expressions and the application of the
-  $\lambda$-abstraction's body to the excess arguments is
-  non-expansive, or
-\item a let expression whose body is a non-expansive expression and
-  whose local declarations are either function declarations or
-  variable declarations of the form \texttt{$x$=$e$} where $e$ is a
-  non-expansive expression.
-\end{itemize}
-A function or variable definition can be $\eta$-expanded safely if its
-body is a non-expansive expression.
-\begin{verbatim}
-
-> etaExpandRhs :: ValueEnv -> Rhs QualType -> SimplifyState (Rhs QualType)
-> etaExpandRhs tyEnv rhs@(SimpleRhs p e _) =
->   do
->     (ts',e') <- etaExpand tyEnv e
->     return (if null ts' then rhs else SimpleRhs p (Lambda p ts' e') [])
-
-> etaExpand :: ValueEnv -> Expression QualType
->           -> SimplifyState ([ConstrTerm QualType],Expression QualType)
-> etaExpand tyEnv e =
->   do
->     tcEnv <- envRt
->     etaExpr tcEnv tyEnv e
-
-> etaExpr :: TCEnv -> ValueEnv -> Expression QualType
->         -> SimplifyState ([ConstrTerm QualType],Expression QualType)
-> etaExpr _ _ (Lambda _ ts e) = return (ts,e)
-> etaExpr tcEnv tyEnv e
->   | isNonExpansive tyEnv 0 e && not (null tys) =
->       do
->         vs <- mapM (freshVar "_#eta") tys
->         return (map (uncurry VariablePattern) vs,
->                 etaApply e' (map (uncurry mkVar) vs))
->   | otherwise = return ([],e)
->   where n = exprArity tyEnv e
->         (ty',e') = expandTypeAnnot tcEnv n e
->         tys = take n (arrowArgs ty')
->         etaApply e es =
->           case e of
->             Let ds e -> Let ds (etaApply e es)
->             _ -> apply e es
-
-> isNonExpansive :: ValueEnv -> Int -> Expression QualType -> Bool
-> isNonExpansive _ _ (Literal _ _) = True
-> isNonExpansive tyEnv n (Variable _ x)
->   | not (isQualified x) = n == 0 || n < arity x tyEnv
->   | otherwise = n < arity x tyEnv
-> isNonExpansive _ _ (Constructor _ _) = True
-> isNonExpansive tyEnv n (Tuple es) = n == 0 && all (isNonExpansive tyEnv 0) es
-> isNonExpansive tyEnv n (Apply e1 e2) =
->   isNonExpansive tyEnv (n + 1) e1 && isNonExpansive tyEnv 0 e2
-> isNonExpansive tyEnv n (Lambda _ ts e) =
->   n' < 0 || isNonExpansive (bindTerms ts tyEnv) n' e
->   where n' = n - length ts
-> isNonExpansive tyEnv n (Let ds e) =
->   all (isNonExpansiveDecl tyEnv') ds && isNonExpansive tyEnv' n e
->   where tyEnv' = bindDecls ds tyEnv
-> isNonExpansive _ _ (Case _ _) = False
-> isNonExpansive _ _ (Fcase _ _) = False
-
-> isNonExpansiveDecl :: ValueEnv -> Decl QualType -> Bool
-> isNonExpansiveDecl _ (FunctionDecl _ _ _ _) = True
-> isNonExpansiveDecl _ (ForeignDecl _ _ _ _ _) = True
-> isNonExpansiveDecl tyEnv (PatternDecl _ _ (SimpleRhs _ e _)) =
->   isNonExpansive tyEnv 0 e
-> isNonExpansiveDecl _ (FreeDecl _ _) = False
-
-> exprArity :: ValueEnv -> Expression QualType -> Int
-> exprArity _ (Literal _ _) = 0
-> exprArity tyEnv (Variable _ x) = arity x tyEnv
-> exprArity tyEnv (Constructor _ c) = arity c tyEnv
-> exprArity _ (Tuple _) = 0
-> exprArity tyEnv (Apply e _) = exprArity tyEnv e - 1
-> exprArity _ (Lambda _ ts _) = length ts
-> exprArity tyEnv (Let ds e) = exprArity (bindDecls ds tyEnv) e
-> exprArity _ (Case _ _) = 0
-> exprArity _ (Fcase _ _) = 0
-
-\end{verbatim}
-Since newtype constructors have been removed already, the compiler may
-perform $\eta$-expansion even across newtypes. For instance, given the
-source definitions
-\begin{verbatim}
-  newtype ST s a = ST (s -> (a,s))
-  doneST     = returnST ()
-  returnST x = ST (\s -> (x,s))
-\end{verbatim}
-the functions \texttt{doneST} and \texttt{returnST} are expanded into
-functions with arity one and two, respectively. In order to determine
-the types of the variables added by $\eta$-expansion in such cases,
-the compiler must expand the type annotations as well. In the example,
-the type annotation of function \texttt{returnST} in the definition of
-\texttt{doneST} is changed from $() \rightarrow
-\texttt{ST}\,\alpha_1\,()$ to $() \rightarrow \alpha_1 \rightarrow
-((),\alpha_1)$. This is implemented in function
-\texttt{expandTypeAnnot}, which tries to expand the type annotations
-of $e$'s root such that the expression has (at least) arity $n$. Note
-that this may fail when the newtype's definition is not visible in the
-current module.
-\begin{verbatim}
-
-> expandTypeAnnot :: TCEnv -> Int -> Expression QualType
->                 -> (Type,Expression QualType)
-> expandTypeAnnot tcEnv n e
->   | n <= arrowArity ty = (ty,e)
->   | otherwise = (ty',fixType ty' e)
->   where ty = typeOf e
->         ty' = etaType tcEnv n ty
-
-> fixType :: Type -> Expression QualType -> Expression QualType
-> fixType ty (Literal _ l) = Literal (qualType ty) l
-> fixType ty (Variable _ v) = Variable (qualType ty) v
-> fixType ty (Constructor _ c) = Constructor (qualType ty) c
-> fixType _ (Tuple es) = Tuple es
-> fixType ty (Apply e1 e2) = Apply (fixType (TypeArrow (typeOf e2) ty) e1) e2
-> fixType ty (Lambda p ts e) = Lambda p ts (fixType (foldr match ty ts) e)
->   where match _ (TypeArrow _ ty) = ty
-> fixType ty (Let ds e) = Let ds (fixType ty e)
-> fixType ty (Case e as) = Case e (map (fixTypeAlt ty) as)
-> fixType ty (Fcase e as) = Fcase e (map (fixTypeAlt ty) as)
-
-> fixTypeAlt :: Type -> Alt QualType -> Alt QualType
-> fixTypeAlt ty (Alt p t rhs) = Alt p t (fixTypeRhs ty rhs)
-
-> fixTypeRhs :: Type -> Rhs QualType -> Rhs QualType
-> fixTypeRhs ty (SimpleRhs p e _) = SimpleRhs p (fixType ty e) []
-
-\end{verbatim}
-Before other optimizations are applied to expressions, the simplifier
-first transforms applications of let and (f)case expressions by
-pushing the application down into the body of let expressions and into
-the alternatives of (f)case expressions, respectively. In order to
-avoid code duplication, arguments that are pushed into the
-alternatives of a (f)case expression by this transformation are bound
-to local variables (unless there is only one alternative). If these
-arguments are just simple variables or literal constants, the
-optimizations performed in \texttt{simplifyExpr} below will substitute
-these values and the let declarations will be removed. In addition,
-beta-reduction is applied to saturated applications of
-$\lambda$-abstractions, changing \texttt{(\bs$x_1 \dots\, x_m$ -> $e$)
-  $e_1 \dots\, e_m \; e_{m+1} \dots\, e_n$} into \texttt{let $x_1$ =
-  $e_1$ in \dots\ let $x_m$ = $e_m$ in $e$ $e_{m+1} \dots\, e_n$}.
-Note that this transformation is correct because the renaming phase
-ensures that $x_1,\dots,x_m$ are not free in $e_1,\dots,e_n$.
-\begin{verbatim}
 
 > simplifyApp :: Position -> Expression QualType -> [Expression QualType]
 >             -> SimplifyState (Expression QualType)
@@ -397,10 +199,8 @@ in later phases of the compiler.
 >       do
 >         tcEnv <- envRt
 >         maybe (return (Variable ty v))
->               (simplifyExpr m tyEnv p env . substExpr tcEnv (unqualType ty))
+>               (simplifyExpr m tyEnv p env . withType tcEnv (unqualType ty))
 >               (lookupEnv (unqualify v) env)
->   where substExpr tcEnv ty =
->           snd . expandTypeAnnot tcEnv (arrowArity ty) . withType tcEnv ty
 > simplifyExpr _ _ _ _ (Constructor ty c) = return (Constructor ty c)
 > simplifyExpr m tyEnv p env (Tuple es) =
 >   liftM Tuple (mapM (simplifyAppExpr m tyEnv p env) es)
@@ -411,9 +211,12 @@ in later phases of the compiler.
 >     return (Apply e1' e2')
 > simplifyExpr m tyEnv _ env (Lambda p ts e) =
 >   do
->     (ts',e') <- simplifyAppExpr m tyEnv' p env e >>= etaExpand tyEnv'
->     let ts'' = map (simplifyPattern (qfv m (Lambda p ts' e'))) ts ++ ts'
->     return (etaReduce m (bindTerms ts' tyEnv') p ts'' e')
+>     e' <- simplifyAppExpr m tyEnv' p env e
+>     let ts' = map (simplifyPattern (qfv m (Lambda p ts e'))) ts
+>     case e' of
+>       Lambda _ ts'' e'' ->
+>         return (etaReduce m (bindTerms ts'' tyEnv') p (ts' ++ ts'') e'')
+>       _ -> return (etaReduce m tyEnv' p ts' e')
 >   where tyEnv' = bindTerms ts tyEnv
 > simplifyExpr m tyEnv p env (Let ds e) =
 >   simplifyLet m tyEnv p env (scc bv (qfv m) (foldr hoistDecls [] ds)) e

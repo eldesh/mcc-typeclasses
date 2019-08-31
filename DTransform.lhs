@@ -1,8 +1,8 @@
 % -*- LaTeX -*-
-% $Id: DTransform.lhs 3292 2016-07-30 12:55:31Z wlux $
+% $Id: DTransform.lhs 3300 2019-08-31 10:23:56Z wlux $
 %
 % Copyright (c) 2001-2002, Rafael Caballero
-% Copyright (c) 2003-2016, Wolfgang Lux
+% Copyright (c) 2003-2019, Wolfgang Lux
 %
 % 2002/04/10 19:00:00 Added emptyNode as constructor in type cTree
 \nwfilename{DTransform.lhs}
@@ -223,8 +223,8 @@ code for the debugger (cf. Sect.~\ref{sec:desugar}).
 >   | arity == 0 = Apply startIODebugging . Apply debugPerformIO
 >   | isIOType ty = Apply startIODebugging
 >   | otherwise = Apply startDebugging
->   where startDebugging = Function debugFunctionqId 1
->         startIODebugging = Function debugIOFunctionqId 2
+>   where startDebugging = Function debugFunctionqId 0
+>         startIODebugging = Function debugIOFunctionqId 1
 
 
 \end{verbatim}
@@ -274,7 +274,11 @@ the same arity as the original primitives.
 >              -> (Expression,[Decl])
 > debugForeign f cc s n vs ty =
 >   case foreignWrapper cc s of
->     Just f' -> (createApply (Function (debugQualPreludeName f') n) vs,[])
+>     Just f'
+>       | isIOType (resultType ty) ->
+>           (Apply (primApply f' (n - 1) (init vs)) (last vs),[])
+>       | otherwise -> (primApply f' n vs,[])
+>       where primApply f = createApply . Function (debugQualPreludeName f)
 >     Nothing -> (debugForeign1 s ty (Function f n) vs,[ForeignDecl f cc s ty])
 
 > debugForeign1 :: String -> Type -> Expression -> [Expression] -> Expression
@@ -285,7 +289,7 @@ the same arity as the original primitives.
 >       createApply preludeBind [createApply f (init vs),debugReturn,last vs]
 >   | otherwise = debugBuildPairExp (createApply f vs) void
 >   where preludeBind = Function (debugQualPreludeName ">>=") 3
->         debugReturn = Function (debugQualPreludeName "return'") 2
+>         debugReturn = Function (debugQualPreludeName "return'") 1
 >         isFunctType ty = isArrowType ty || isIOType ty
 
 > foreignWrapper :: CallConv -> String -> Maybe String
@@ -780,11 +784,11 @@ of \texttt{aux$N$}, \texttt{result$N$}, and \texttt{tree$N$}.
 >         fResult = (dEvalApply.Variable) resultId
 >         fRule   = debugBuildList (map (Literal . Char) rule)
 >         clean   = if null trees then debugNil
->                   else Apply (Function debugClean 1) (debugBuildList trees)
+>                   else Apply (Function debugClean 0) (debugBuildList trees)
 
 > createEmptyNode :: String -> Ident -> [Expression] -> Expression
 > createEmptyNode _ _ trees = if null trees then void else emptyNode clean
->   where clean = Apply (Function debugClean 1) (debugBuildList trees)
+>   where clean = Apply (Function debugClean 0) (debugBuildList trees)
 
 > letBindings :: Rec -> Context -> [Binding] -> Context
 > letBindings NonRec lets ds = lets . Let NonRec ds

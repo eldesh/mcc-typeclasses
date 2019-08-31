@@ -241,7 +241,7 @@ and :: [Bool] -> Bool;
 any :: (a -> Bool) -> [a] -> Bool;
 appendFile :: [Char] -> [Char] -> IO ();
 best :: (a -> Bool) -> (a -> a -> Bool) -> [a -> Bool];
-break :: (a -> Bool) -> [a] -> ([a], [a]);
+break :: {-# ARITY 1 #-} (a -> Bool) -> [a] -> ([a], [a]);
 browse :: Show a => (a -> Bool) -> IO ();
 browseList :: Show a => [a -> Bool] -> IO ();
 catch :: {-# ARITY 3 #-} IO a -> ([Char] -> IO a) -> IO a;
@@ -284,12 +284,12 @@ interact :: ([Char] -> [Char]) -> IO ();
 ioError :: {-# ARITY 2 #-} [Char] -> IO a;
 iterate :: (a -> a) -> a -> [a];
 lcm :: Integral a => a -> a -> a;
-length :: [a] -> Int;
+length :: {-# ARITY 0 #-} [a] -> Int;
 lines :: [Char] -> [[Char]];
 lookup :: Eq a => a -> [(a, b)] -> Maybe b;
 map :: (a -> b) -> [a] -> [b];
-mapIO :: (a -> IO b) -> [a] -> IO [b];
-mapIO_ :: (a -> IO b) -> [a] -> IO ();
+mapIO :: {-# ARITY 0 #-} (a -> IO b) -> [a] -> IO [b];
+mapIO_ :: {-# ARITY 0 #-} (a -> IO b) -> [a] -> IO ();
 mapM :: Monad b => (a -> b c) -> [a] -> b [c];
 mapM_ :: Monad b => (a -> b c) -> [a] -> b ();
 maybe :: a -> (b -> a) -> Maybe b -> a;
@@ -309,16 +309,16 @@ readFile :: [Char] -> IO [Char];
 realToFrac :: (Real a, Fractional b) => a -> b;
 repeat :: a -> [a];
 replicate :: Int -> a -> [a];
-reverse :: [a] -> [a];
+reverse :: {-# ARITY 0 #-} [a] -> [a];
 seq :: a -> b -> b;
 sequence :: {-# ARITY 0 #-} Monad a => [a b] -> a [b];
 sequenceIO :: {-# ARITY 0 #-} [IO a] -> IO [a];
 sequenceIO_ :: {-# ARITY 0 #-} [IO a] -> IO ();
 sequence_ :: {-# ARITY 0 #-} Monad a => [a b] -> a ();
-showChar :: Char -> [Char] -> [Char];
+showChar :: {-# ARITY 1 #-} Char -> [Char] -> [Char];
 showParen :: {-# ARITY 2 #-} Bool -> ([Char] -> [Char]) ->
 			     [Char] -> [Char];
-showString :: [Char] -> [Char] -> [Char];
+showString :: {-# ARITY 1 #-} [Char] -> [Char] -> [Char];
 shows :: {-# ARITY 0 #-} Show a => a -> [Char] -> [Char];
 snd :: (a, b) -> b;
 solve :: Bool -> Bool;
@@ -342,8 +342,8 @@ unzip :: [(a, b)] -> ([a], [b]);
 unzip3 :: [(a, b, c)] -> ([a], [b], [c]);
 words :: [Char] -> [[Char]];
 writeFile :: [Char] -> [Char] -> IO ();
-zip :: [a] -> [b] -> [(a, b)];
-zip3 :: [a] -> [b] -> [c] -> [(a, b, c)];
+zip :: {-# ARITY 0 #-} [a] -> [b] -> [(a, b)];
+zip3 :: {-# ARITY 0 #-} [a] -> [b] -> [c] -> [(a, b, c)];
 zipWith :: (a -> b -> c) -> [a] -> [b] -> [c];
 zipWith3 :: (a -> b -> c -> d) -> [a] -> [b] -> [c] -> [d];
 (||) :: Bool -> Bool -> Bool;
@@ -369,8 +369,7 @@ instance Enum Bool
   {-# ARITY succ 1 pred 1 toEnum 1 fromEnum 1 enumFrom 1
 	    enumFromThen 2 #-};
 instance Enum Char
-  {-# ARITY succ 1 pred 1 toEnum 1 fromEnum 1 enumFrom 1
-	    enumFromThen 2 #-};
+  {-# ARITY succ 1 pred 1 enumFrom 1 enumFromThen 2 #-};
 instance Eq () {-# ARITY (==) 2 #-};
 instance (Eq a, Eq b) => Eq (a, b) {-# ARITY (==) 2 #-};
 instance (Eq a, Eq b, Eq c) => Eq (a, b, c) {-# ARITY (==) 2 #-};
@@ -385,49 +384,36 @@ instance (Eq a, Eq b, Eq c, Eq d, Eq e, Eq f, Eq g) =>
 	 Eq (a, b, c, d, e, f, g)
   {-# ARITY (==) 2 #-};
 instance Eq Bool {-# ARITY (==) 2 #-};
-instance Eq Char {-# ARITY (==) 2 (/=) 2 #-};
+instance Eq Char;
 instance (Eq a, Eq b) => Eq (Either a b) {-# ARITY (==) 2 #-};
 instance Eq a => Eq [a] {-# ARITY (==) 2 #-};
 instance Enum Float
   {-# ARITY succ 1 pred 1 toEnum 1 fromEnum 1 enumFrom 1
 	    enumFromThen 2 enumFromTo 2 enumFromThenTo 3 #-};
-instance Eq Float {-# ARITY (==) 2 (/=) 2 #-};
-instance Floating Float
-  {-# ARITY exp 1 log 1 sqrt 1 (**) 2 sin 1 cos 1 tan 1 asin 1 acos 1
-	    atan 1 sinh 1 cosh 1 tanh 1 asinh 1 acosh 1 atanh 1 #-};
-instance Fractional Float
-  {-# ARITY (/) 2 fromRational 1 fromFloat 1 #-};
-instance Functor [] {-# ARITY fmap 2 #-};
+instance Eq Float;
+instance Floating Float;
+instance Fractional Float {-# ARITY fromRational 1 fromFloat 1 #-};
+instance Functor [];
 instance Functor IO {-# ARITY fmap 2 #-};
 instance Bounded Int;
 instance Enum Int
   {-# ARITY succ 1 pred 1 toEnum 1 fromEnum 1 enumFrom 1
 	    enumFromThen 2 enumFromTo 2 enumFromThenTo 3 #-};
-instance Eq Int {-# ARITY (==) 2 (/=) 2 #-};
+instance Eq Int;
 instance Enum Integer
-  {-# ARITY succ 1 pred 1 toEnum 1 fromEnum 1 enumFrom 1
-	    enumFromThen 2 enumFromTo 2 enumFromThenTo 3 #-};
-instance Eq Integer {-# ARITY (==) 2 (/=) 2 #-};
-instance Integral Int
-  {-# ARITY quot 2 rem 2 div 2 mod 2 quotRem 2 divMod 2 toInt 1
-	    toInteger 1 #-};
-instance Integral Integer
-  {-# ARITY quot 2 rem 2 div 2 mod 2 quotRem 2 divMod 2 toInt 1
-	    toInteger 1 #-};
+  {-# ARITY toEnum 1 fromEnum 1 enumFrom 1 enumFromThen 2
+	    enumFromTo 2 enumFromThenTo 3 #-};
+instance Eq Integer;
+instance Integral Int {-# ARITY quotRem 2 divMod 2 toInt 1 #-};
+instance Integral Integer {-# ARITY toInt 1 toInteger 1 #-};
 instance Eq a => Eq (Maybe a) {-# ARITY (==) 2 #-};
 instance Functor Maybe {-# ARITY fmap 2 #-};
-instance Monad IO {-# ARITY return 2 (>>=) 3 (>>) 3 fail 2 #-};
+instance Monad IO {-# ARITY fail 1 #-};
 instance Monad Maybe {-# ARITY return 1 (>>=) 2 (>>) 2 fail 1 #-};
 instance Monad [] {-# ARITY return 1 (>>=) 2 fail 1 #-};
-instance Num Float
-  {-# ARITY (+) 2 (-) 2 (*) 2 negate 1 abs 1 signum 1 fromInt 1
-	    fromInteger 1 #-};
-instance Num Int
-  {-# ARITY (+) 2 (-) 2 (*) 2 negate 1 abs 1 signum 1 fromInt 1
-	    fromInteger 1 #-};
-instance Num Integer
-  {-# ARITY (+) 2 (-) 2 (*) 2 negate 1 abs 1 signum 1 fromInt 1
-	    fromInteger 1 #-};
+instance Num Float {-# ARITY negate 1 abs 1 signum 1 #-};
+instance Num Int {-# ARITY negate 1 abs 1 signum 1 fromInt 1 #-};
+instance Num Integer {-# ARITY fromInt 1 fromInteger 1 #-};
 instance Ord () {-# ARITY compare 2 #-};
 instance (Ord a, Ord b) => Ord (a, b) {-# ARITY compare 2 #-};
 instance (Ord a, Ord b, Ord c) => Ord (a, b, c)
@@ -443,14 +429,12 @@ instance (Ord a, Ord b, Ord c, Ord d, Ord e, Ord f, Ord g) =>
 	 Ord (a, b, c, d, e, f, g)
   {-# ARITY compare 2 #-};
 instance Ord Bool {-# ARITY compare 2 #-};
-instance Ord Char {-# ARITY (<) 2 (<=) 2 (>=) 2 (>) 2 #-};
+instance Ord Char;
 instance (Ord a, Ord b) => Ord (Either a b)
   {-# ARITY compare 2 #-};
-instance Ord Float
-  {-# ARITY compare 2 (<) 2 (<=) 2 (>=) 2 (>) 2 #-};
-instance Ord Int {-# ARITY (<) 2 (<=) 2 (>=) 2 (>) 2 #-};
-instance Ord Integer
-  {-# ARITY compare 2 (<) 2 (<=) 2 (>=) 2 (>) 2 #-};
+instance Ord Float {-# ARITY compare 2 #-};
+instance Ord Int;
+instance Ord Integer;
 instance Ord a => Ord (Maybe a) {-# ARITY compare 2 #-};
 instance Ord a => Ord [a] {-# ARITY compare 2 #-};
 instance Bounded Ordering;
@@ -459,10 +443,10 @@ instance Enum Ordering
 	    enumFromThen 2 #-};
 instance Eq Ordering {-# ARITY (==) 2 #-};
 instance Ord Ordering {-# ARITY compare 2 #-};
-instance Real Float {-# ARITY toRational 1 #-};
+instance Real Float;
 instance Real Int {-# ARITY toRational 1 #-};
 instance Real Integer {-# ARITY toRational 1 #-};
-instance RealFloat Float {-# ARITY atan2 2 toFloat 1 #-};
+instance RealFloat Float {-# ARITY toFloat 1 #-};
 instance RealFrac Float {-# ARITY properFraction 1 #-};
 instance Show () {-# ARITY showsPrec 2 #-};
 instance (Show a, Show b) => Show (a, b) {-# ARITY showsPrec 2 #-};
@@ -481,7 +465,7 @@ instance (Show a, Show b, Show c, Show d, Show e, Show f,
 	 Show (a, b, c, d, e, f, g)
   {-# ARITY showsPrec 2 #-};
 instance Show Bool {-# ARITY showsPrec 2 #-};
-instance Show Char {-# ARITY showsPrec 3 showList 1 #-};
+instance Show Char {-# ARITY showsPrec 1 showList 1 #-};
 instance (Show a, Show b) => Show (Either a b)
   {-# ARITY showsPrec 2 #-};
 instance Show Float {-# ARITY showsPrec 2 #-};
@@ -492,8 +476,8 @@ instance Show Ordering {-# ARITY showsPrec 2 #-};
 instance Show a => Show [a] {-# ARITY showsPrec 1 #-};
 instance Integral a => Enum (Ratio.Ratio a)
   {-# MODULE Ratio #-}
-  {-# ARITY succ 1 pred 1 toEnum 1 enumFrom 1 enumFromThen 2
-	    enumFromTo 2 enumFromThenTo 3 #-};
+  {-# ARITY succ 1 pred 1 enumFrom 1 enumFromThen 2 enumFromTo 2
+	    enumFromThenTo 3 #-};
 instance Integral a => Eq (Ratio.Ratio a)
   {-# MODULE Ratio #-}
   {-# ARITY (==) 2 #-};

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 3273 2016-07-13 21:23:01Z wlux $
+% $Id: Exports.lhs 3300 2019-08-31 10:23:56Z wlux $
 %
-% Copyright (c) 2000-2016, Wolfgang Lux
+% Copyright (c) 2000-2019, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Exports.lhs}
@@ -182,7 +182,7 @@ correct arity annotations are written to the interface.
 \end{verbatim}
 Simplification can change the arity of an exported function defined in
 the current module via $\eta$-expansion (cf.\ 
-Sect.~\ref{eta-expansion}). In order to generate correct arity
+Sect.~\ref{sec:simplify}). In order to generate correct arity
 annotations, the compiler collects the arities of all user defined
 functions at the top-level and in the class and instance declarations
 of the transformed code in an auxiliary environment. Note that we

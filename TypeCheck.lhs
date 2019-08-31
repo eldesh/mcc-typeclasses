@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3298 2019-08-28 15:38:22Z wlux $
+% $Id: TypeCheck.lhs 3301 2019-08-31 10:43:03Z wlux $
 %
-% Copyright (c) 1999-2016, Wolfgang Lux
+% Copyright (c) 1999-2019, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeCheck.lhs}
@@ -2013,7 +2013,7 @@ Error functions.
 > ambiguousType :: String -> Doc -> TCEnv -> [Int] -> Context -> Type
 >               -> String
 > ambiguousType what doc tcEnv tvs cx ty = show $
->   vcat [text "Ambiguous type variable" <> plural tvs <+>
+>   vcat [(text "Ambiguous type variable" <> plural tvs) <+>
 >           list (map (ppType tcEnv . TypeVariable) tvs) <+> text "in type",
 >         ppQualType tcEnv (canonType (QualType cx ty)),
 >         text "inferred for" <+> text what, doc]

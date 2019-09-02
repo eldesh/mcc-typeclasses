@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3301 2019-08-31 10:43:03Z wlux $
+% $Id: TypeCheck.lhs 3302 2019-09-02 17:15:29Z wlux $
 %
 % Copyright (c) 1999-2019, Wolfgang Lux
 % See LICENSE for the full license.
@@ -524,6 +524,7 @@ general than the type signature.
 >   do
 >     (cx',ty',t') <- tcConstrTerm False tcEnv tyEnv p t
 >     (cx'',rhs') <-
+>       withLocalScope $                                                    -- $
 >       tcRhs m tcEnv tyEnv rhs >>-
 >       unifyDecl p "pattern declaration" (ppDecl d) tcEnv tyEnv (cx++cx') ty'
 >     return (cx'',(ty',PatternDecl p t' rhs'))
@@ -549,6 +550,7 @@ general than the type signature.
 > tcEqn :: ModuleIdent -> TCEnv -> ValueEnv -> Set Int -> Position
 >       -> Lhs a -> Rhs a -> TcState (Context,Type,Equation QualType)
 > tcEqn m tcEnv tyEnv fs p lhs rhs =
+>   withLocalScope $                                                        -- $
 >   do
 >     tyEnv' <- bindLambdaVars m tyEnv lhs
 >     (cx,tys,lhs') <- tcLhs tcEnv tyEnv' p lhs
@@ -1305,6 +1307,7 @@ in \texttt{tcFunctionDecl} above.
 >     return (cx,listType ty,List (qualType (listType ty)) es')
 >   where doc = ppExpr 0 e
 > tcExpr m tcEnv tyEnv p (ListCompr e qs) =
+>   withLocalScope $                                                        -- $
 >   do
 >     fs <- liftM (fsEnv . flip subst tyEnv) fetchSt
 >     ((tyEnv',cx),qs') <-
@@ -1386,6 +1389,7 @@ in \texttt{tcFunctionDecl} above.
 >     (cx',e1') <- tcArg m tcEnv tyEnv p "right section" (ppExpr 0 e) cx beta e1
 >     return (cx',TypeArrow alpha gamma,RightSection op' e1')
 > tcExpr m tcEnv tyEnv _ (Lambda p ts e) =
+>   withLocalScope $                                                        -- $
 >   do
 >     fs <- liftM (fsEnv . flip subst tyEnv) fetchSt
 >     tyEnv' <- bindLambdaVars m tyEnv ts
@@ -1396,6 +1400,7 @@ in \texttt{tcFunctionDecl} above.
 >     checkSkolems p "Expression" (ppExpr 0) tcEnv tyEnv fs cx'
 >                  (foldr TypeArrow ty tys) (Lambda p ts' e')
 > tcExpr m tcEnv tyEnv p (Let ds e) =
+>   withLocalScope $                                                        -- $
 >   do
 >     fs <- liftM (fsEnv . flip subst tyEnv) fetchSt
 >     (tyEnv',cx,ds') <- tcDecls m tcEnv tyEnv ds
@@ -1403,6 +1408,7 @@ in \texttt{tcFunctionDecl} above.
 >     cx'' <- reduceContext p "expression" (ppExpr 0 e') tcEnv (cx ++ cx')
 >     checkSkolems p "Expression" (ppExpr 0) tcEnv tyEnv fs cx'' ty (Let ds' e')
 > tcExpr m tcEnv tyEnv p (Do sts e) =
+>   withLocalScope $                                                        -- $
 >   do
 >     fs <- liftM (fsEnv . flip subst tyEnv) fetchSt
 >     ((tyEnv',cx,mTy),sts') <-
@@ -1451,6 +1457,7 @@ in \texttt{tcFunctionDecl} above.
 >          -> Type -> Type -> Position -> ConstrTerm a -> Rhs a
 >          -> TcState (Context,Type,Alt QualType)
 > tcAltern poly m tcEnv tyEnv fs tyLhs tyRhs p t rhs =
+>   withLocalScope $                                                        -- $
 >   do
 >     tyEnv' <- bindLambdaVars m tyEnv t
 >     (cx,t') <- tcConstrArg poly tcEnv tyEnv' p "case pattern" doc [] tyLhs t
@@ -1889,6 +1896,22 @@ environment.
 >                 (map (instTypeScheme tys) (maxContext tcEnv cxR))
 >         bindSkolemInst (TypePred cls ty) dEnv =
 >           bindEnv cls (ty : fromMaybe [] (lookupEnv cls dEnv)) dEnv
+
+\end{verbatim}
+All instances added to the dynamic instance environment in this way
+must be removed from the environment upon leaving the scope of the
+respective data constructor. This can be achieved with combinator
+\texttt{withLocalScope}, which restores the initial dynamic instance
+environment after computing the result of its argument.
+\begin{verbatim}
+
+> withLocalScope :: TcState a -> TcState a
+> withLocalScope m =
+>   do
+>     dEnv <- liftM snd3 (liftSt fetchSt)
+>     x <- m
+>     liftSt (updateSt_ (apSnd3 (const dEnv)))
+>     return x
 
 \end{verbatim}
 The function \texttt{gen} generalizes a context \emph{cx} and a type

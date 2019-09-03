@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3302 2019-09-02 17:15:29Z wlux $
+% $Id: TypeCheck.lhs 3303 2019-09-03 17:14:52Z wlux $
 %
 % Copyright (c) 1999-2019, Wolfgang Lux
 % See LICENSE for the full license.
@@ -522,9 +522,8 @@ general than the type signature.
 >   tcFunctionDecl m tcEnv tyEnv cx (varType f tyEnv) p f eqs
 > tcDecl m tcEnv tyEnv cx d@(PatternDecl p t rhs) =
 >   do
->     (cx',ty',t') <- tcConstrTerm False tcEnv tyEnv p t
+>     (cx',ty',t') <- withLocalScope $ tcConstrTerm False tcEnv tyEnv p t   -- $
 >     (cx'',rhs') <-
->       withLocalScope $                                                    -- $
 >       tcRhs m tcEnv tyEnv rhs >>-
 >       unifyDecl p "pattern declaration" (ppDecl d) tcEnv tyEnv (cx++cx') ty'
 >     return (cx'',(ty',PatternDecl p t' rhs'))
@@ -1172,6 +1171,7 @@ in \texttt{tcFunctionDecl} above.
 >       unify p "pattern" (ppConstrTerm 0 t) tcEnv [] ty
 >     return (cx,ty,AsPattern v t'')
 > tcConstrTerm poly tcEnv tyEnv p (LazyPattern t) =
+>   withLocalScope $                                                        -- $
 >   do
 >     (cx,ty,t') <- tcConstrTerm poly tcEnv tyEnv p t
 >     return (cx,ty,LazyPattern t')

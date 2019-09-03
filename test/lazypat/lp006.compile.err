@@ -1,0 +1,5 @@
+"lp006.curry", line 15.20: Missing Show _?10 instance
+in application
+show x
+
+Term: x

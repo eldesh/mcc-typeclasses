@@ -1,8 +1,8 @@
 #! /bin/sh
 #
-# $Id: runtests.sh 3281 2016-07-16 16:32:47Z wlux $
+# $Id: runtests.sh 3310 2019-12-07 16:18:19Z wlux $
 #
-# Copyright (c) 2015-2016, Wolfgang Lux
+# Copyright (c) 2015-2019, Wolfgang Lux
 # See ../LICENSE for the full license.
 #
 
@@ -66,7 +66,7 @@ cmd=`basename $0`
 
 # check whether diff supports the -u flag, also try gdiff and gnudiff
 # FIXME This should be configure time check.
-f=/tmp/`basename $0`.$$
+f=/tmp/$cmd.$$
 touch $f
 if diff -u $f $f >/dev/null 2>&1; then
   diff='diff -u'
@@ -136,9 +136,9 @@ unexpected_passes=0
 unexpected_failures=0
 
 # clean out temporary files created during the tests
+OUTDIR=/tmp/$cmd.$$
 clean ( ) {
-  rm -f /tmp/compile.out /tmp/compile.err /tmp/run.out /tmp/run.err \
-        /tmp/eval.out /tmp/eval.err /tmp/type.out /tmp/type.err
+  rm -rf $OUTDIR
 }
 trap 'clean; exit 9' 1 2 3 15
 
@@ -148,11 +148,11 @@ trap 'clean; exit 9' 1 2 3 15
 # SOURCE is the name of the source file (relative to DIRECTORY)
 # MODULE is the name of the source file without the .curry or .lcurry extension
 compile_success ( ) {
-  if "$CYMAKE" $CYFLAGS -q -i$3-modules $2 > /tmp/compile.out 2> /tmp/compile.err; then
+  if "$CYMAKE" $CYFLAGS -q -i$3-modules $2 > $OUTDIR/compile.out 2> $OUTDIR/compile.err; then
     status=expected_pass
   else
     echo "*** Unexpected failure for $1/$2 ***"
-    cat /tmp/compile.err
+    cat $OUTDIR/compile.err
     status=unexpected_fail
     return 1;
   fi
@@ -165,10 +165,10 @@ compile_success ( ) {
 # SOURCE is the name of the source file (relative to DIRECTORY)
 # MODULE is the name of the source file without the .curry or .lcurry extension
 compile_fail ( ) {
-  if "$CYMAKE" $CYFLAGS -q -i$3-modules $2 > /tmp/compile.out 2> /tmp/compile.err; then
+  if "$CYMAKE" $CYFLAGS -q -i$3-modules $2 > $OUTDIR/compile.out 2> $OUTDIR/compile.err; then
     echo "*** Unexpected success for $1/$2 ***"
     status=unexpected_pass
-  elif $diff $3.compile.err /tmp/compile.err; then
+  elif $diff $3.compile.err $OUTDIR/compile.err; then
     status=expected_fail
   else
     status=unexpected_fail
@@ -185,11 +185,11 @@ run_success ( ) {
   compile_success "$1" "$2" "$3" || return $?
   if "$CYMAKE" $LDFLAGS -q -i$3-modules $3 $LDLIBS; then
     if test -f $3.run.in; then stdin=$3.run.in; else stdin=/dev/null; fi
-    ./$3 < $stdin > /tmp/run.out 2> /tmp/run.err
-    $diff $3.run.out /tmp/run.out || status=unexpected_fail
-    if test -s /tmp/run.err; then
+    ./$3 < $stdin > $OUTDIR/run.out 2> $OUTDIR/run.err
+    $diff $3.run.out $OUTDIR/run.out || status=unexpected_fail
+    if test -s $OUTDIR/run.err; then
       echo "*** Unexpected failure of $1/$3 ***"
-      cat /tmp/run.err
+      cat $OUTDIR/run.err
       status=unexpected_fail
     fi
   else
@@ -208,10 +208,10 @@ run_fail ( ) {
   compile_success "$1" "$2" "$3" || return $?
   if "$CYMAKE" $LDFLAGS -q -i$3-modules $3 $LDLIBS; then
     if test -f $3.run.in; then stdin=$3.run.in; else stdin=/dev/null; fi
-    ./$3 < $stdin > /tmp/run.out 2> /tmp/run.err
+    ./$3 < $stdin > $OUTDIR/run.out 2> $OUTDIR/run.err
     status=expected_fail
-    $diff $3.run.out /tmp/run.out || status=unexpected_fail
-    $diff $3.run.err /tmp/run.err || status=unexpected_fail
+    $diff $3.run.out $OUTDIR/run.out || status=unexpected_fail
+    $diff $3.run.err $OUTDIR/run.err || status=unexpected_fail
   else
     status=unexpected_fail
   fi
@@ -230,11 +230,11 @@ eval_success ( ) {
   if "$CYMAKE" $LDFLAGS -q -i$3-modules $3 -e"$4" -o$3 $LDLIBS; then
     stem=$3.eval-`printf '%s' "$4" | tr -cs '[:alnum:]' '[_*]'`
     if test -f $stem.in; then stdin=$stem.in; else stdin=/dev/null; fi
-    ./$3 < $stdin > /tmp/eval.out 2> /tmp/eval.err
-    $diff $stem.out /tmp/eval.out || status=unexpected_fail
-    if test -s /tmp/eval.err; then
+    ./$3 < $stdin > $OUTDIR/eval.out 2> $OUTDIR/eval.err
+    $diff $stem.out $OUTDIR/eval.out || status=unexpected_fail
+    if test -s $OUTDIR/eval.err; then
       echo "*** Unexpected failure of $1/$3 ***"
-      cat /tmp/eval.err
+      cat $OUTDIR/eval.err
       status=unexpected_fail
     fi
   else
@@ -256,10 +256,10 @@ eval_fail ( ) {
   if "$CYMAKE" $LDFLAGS -q -i$3-modules $3 -e"$4" -o$3 $LDLIBS; then
     stem=$3.eval-`printf '%s' "$4" | tr -cs '[:alnum:]' '[_*]'`
     if test -f $stem.in; then stdin=$stem.in; else stdin=/dev/null; fi
-    ./$3 < $stdin > /tmp/eval.out 2> /tmp/eval.err
+    ./$3 < $stdin > $OUTDIR/eval.out 2> $OUTDIR/eval.err
     status=expected_fail
-    $diff $stem.out /tmp/eval.out || status=unexpected_fail
-    $diff $stem.err /tmp/eval.err || status=unexpected_fail
+    $diff $stem.out $OUTDIR/eval.out || status=unexpected_fail
+    $diff $stem.err $OUTDIR/eval.err || status=unexpected_fail
   else
     status=unexpected_fail
   fi
@@ -275,11 +275,11 @@ eval_fail ( ) {
 # GOAL is the goal to be typed
 type_success ( ) {
   compile_success "$1" "$2" "$3" || return $?
-  if "$CYMAKE" $LDFLAGS -q -i$3-modules $3 -T"$4" > /tmp/type.out 2> /tmp/type.err; then
-    $diff $3.type-`printf '%s' "$4" | tr -cs '[:alnum:]' '[_*]'`.out /tmp/type.out || status=unexpected_fail
+  if "$CYMAKE" $LDFLAGS -q -i$3-modules $3 -T"$4" > $OUTDIR/type.out 2> $OUTDIR/type.err; then
+    $diff $3.type-`printf '%s' "$4" | tr -cs '[:alnum:]' '[_*]'`.out $OUTDIR/type.out || status=unexpected_fail
   else
     echo "*** Unexpected failure of $1/$3 ***"
-    cat /tmp/type.err
+    cat $OUTDIR/type.err
     status=unexpected_fail
   fi
 }
@@ -294,13 +294,13 @@ type_success ( ) {
 # GOAL is the goal to be typed
 type_fail ( ) {
   compile_success "$1" "$2" "$3" || return $?
-  if "$CYMAKE" $LDFLAGS -q -i$3-modules $3 -T"$4" > /tmp/type.out 2> /tmp/type.err; then
+  if "$CYMAKE" $LDFLAGS -q -i$3-modules $3 -T"$4" > $OUTDIR/type.out 2> $OUTDIR/type.err; then
     echo "*** Unexpected success of $1/$3 ***"
-    cat /tmp/type.out
+    cat $OUTDIR/type.out
     status=unexpected_pass
   else
     status=expected_fail
-    $diff $3.type-`printf '%s' "$4" | tr -cs '[:alnum:]' '[_*]'`.err /tmp/type.err || status=unexpected_fail
+    $diff $3.type-`printf '%s' "$4" | tr -cs '[:alnum:]' '[_*]'`.err $OUTDIR/type.err || status=unexpected_fail
   fi
 }
 
@@ -414,13 +414,13 @@ EOF
         run | eval | type ) "$CYMAKE" $CYFLAGS -q -i$mod-modules --clean $mod;;
       esac
     done < "$script".T
-    clean
   fi
   cd "$cwd"
 }
 
 # run tests in the specified subdirectories or the current directory
 # and eventually all of their subdirectories
+mkdir $OUTDIR || exit $?
 case $# in 0 ) set .;; esac
 for d in "$@"; do
   if test $recursive = yes; then
@@ -431,6 +431,7 @@ for d in "$@"; do
     do_test "$d"
   fi
 done
+clean
 
 # print final statistics
 echo

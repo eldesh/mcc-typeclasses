@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3304 2019-12-07 12:42:59Z wlux $
+% $Id: TypeCheck.lhs 3305 2019-12-07 13:12:45Z wlux $
 %
 % Copyright (c) 1999-2019, Wolfgang Lux
 % See LICENSE for the full license.
@@ -601,19 +601,19 @@ instance, given the two functions
   f2 _ [] = []
   f2 n (x:xs) = if x < 0 then f2 (n + 1) xs else x : f1 xs
 \end{verbatim}
-the compiler infers types $\alpha_1 \rightarrow \alpha_1$ and
-$\beta_1 \rightarrow \alpha_1 \rightarrow \alpha_1$ for \texttt{f1}
-and \texttt{f2}, respectively. In addition, the constraints
-$\texttt{Num}\,\alpha_1, \texttt{Ord}\,\alpha_1,
+the compiler infers types $[\alpha_1] \rightarrow [\alpha_1]$ and
+$\beta_1 \rightarrow [\alpha_1] \rightarrow [\alpha_1]$ for
+\texttt{f1} and \texttt{f2}, respectively. In addition, the
+constraints $\texttt{Num}\,\alpha_1, \texttt{Ord}\,\alpha_1,
 \texttt{Num}\,\beta_1$ are inferred, which means that \texttt{f1}'s
 type is ambiguous because $\beta_1$ does not appear in its
 type. This is detected in function \texttt{dfltDecl} below, which
 fixes the type $\beta_1$ to the default numeric type (\texttt{Int} at
 present). Thus, the compiler finally infers types $\forall\alpha .
-(\texttt{Num}\,\alpha, \texttt{Ord}\,\alpha) \Rightarrow \alpha
-\rightarrow \alpha$ and $\forall\alpha . (\texttt{Num}\,\alpha,
-\texttt{Ord}\,\alpha) \Rightarrow \texttt{Int} \rightarrow \alpha
-\rightarrow \alpha$ for \texttt{f1} and \texttt{f2}, respectively.
+(\texttt{Num}\,\alpha, \texttt{Ord}\,\alpha) \Rightarrow [\alpha]
+\rightarrow [\alpha]$ and $\forall\alpha . (\texttt{Num}\,\alpha,
+\texttt{Ord}\,\alpha) \Rightarrow \texttt{Int} \rightarrow [\alpha]
+\rightarrow [\alpha]$ for \texttt{f1} and \texttt{f2}, respectively.
 
 It would be possible to infer more general types for \texttt{f1} and
 \texttt{f2} by keeping the (generalized) $\texttt{Num}\,\beta_1$

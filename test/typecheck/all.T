@@ -37,3 +37,6 @@ compile fail tc036.curry
 run pass tc037.curry
 compile pass tc038.curry
 compile pass tc039.curry
+compile pass tc040.curry
+type pass tc040.curry f1''
+type pass tc040.curry f2''

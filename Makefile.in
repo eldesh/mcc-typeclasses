@@ -1,8 +1,8 @@
 # Makefile for the Curry compiler
 #
-# $Id: Makefile.in 3297 2019-08-28 15:32:52Z wlux $
+# $Id: Makefile.in 3309 2019-12-07 16:16:49Z wlux $
 #
-# Copyright (c) 2000-2016 Wolfgang Lux
+# Copyright (c) 2000-2019 Wolfgang Lux
 # See LICENSE for the full license.
 #
 
@@ -360,8 +360,7 @@ TeXShop: tex
 #    add the identity substitution :S/=/=/, which yields a System V compatible
 #    variable substitution of the form :SUFFIX=REPL.
 .DEFAULT:
-	@test ! -r $@ -a -f $(srcdir)/$@ && \
-	(test -d $(@D) || mkdir $(@D)) && \
+	@test ! -r $@ -a -f $(srcdir)/$@ && mkdir -p $(@D) && \
 	if expr $(srcdir) : '/.*' >/dev/null; then \
 		(set dummy $(MAKEFLAGS:M-s:S/=/=/); \
 		 case $$2 in *=*) set -x;; *s*) ;; *) set -x;; esac; \

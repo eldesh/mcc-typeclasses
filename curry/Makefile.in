@@ -1,8 +1,8 @@
 # Makefile for the Curry library
 #
-# $Id: Makefile.in 3249 2016-06-20 14:50:45Z wlux $
+# $Id: Makefile.in 3309 2019-12-07 16:16:49Z wlux $
 #
-# Copyright (c) 2004-2016, Wolfgang Lux
+# Copyright (c) 2004-2019, Wolfgang Lux
 # See ../LICENSE for the full license.
 #
 
@@ -288,8 +288,7 @@ Ix.o: Prelude.icurry
 #    add the identity substitution :S/=/=/, which yields a System V compatible
 #    variable substitution of the form :SUFFIX=REPL.
 .DEFAULT:
-	@test ! -r $@ -a -f $(srcdir)/$@ && \
-	(test -d $(@D) || mkdir $(@D)) && \
+	@test ! -r $@ -a -f $(srcdir)/$@ && mkdir -p $(@D) && \
 	if expr $(srcdir) : '/.*' >/dev/null; then \
 		(set dummy $(MAKEFLAGS:M-s:S/=/=/); \
 		 case $$2 in *=*) set -x;; *s*) ;; *) set -x;; esac; \

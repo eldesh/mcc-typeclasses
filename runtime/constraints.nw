@@ -1,7 +1,7 @@
 % -*- noweb-code-mode: c-mode -*-
-% $Id: constraints.nw 3273 2016-07-13 21:23:01Z wlux $
+% $Id: constraints.nw 3311 2019-12-07 16:19:55Z wlux $
 %
-% Copyright (c) 2002-2016, Wolfgang Lux
+% Copyright (c) 2002-2019, Wolfgang Lux
 % See ../LICENSE for the full license.
 %
 \subsection{Concurrent Conjunction}\label{sec:concurrent}
@@ -32,7 +32,7 @@ the definition
 except for evaluating both arguments concurrently. To that end both
 arguments are evaluated on separate threads, except when one argument
 is already a head normal form. In that case an uninstantiated variable
-is bound to the constant \verb{True} and then the other argument is
+is bound to the constant \verb|True| and then the other argument is
 evaluated on the current thread.
 
 <<constraints.c>>=

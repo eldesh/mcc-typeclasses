@@ -30,3 +30,5 @@ eval pass fpat017.curry goal6
 eval fail fpat017.curry goal7
 eval pass fpat017.curry goal8
 eval fail fpat017.curry goal9
+type pass fpat018.curry g
+type pass fpat018.curry g'

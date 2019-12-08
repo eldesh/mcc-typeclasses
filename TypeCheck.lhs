@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3305 2019-12-07 13:12:45Z wlux $
+% $Id: TypeCheck.lhs 3312 2019-12-08 13:03:47Z wlux $
 %
 % Copyright (c) 1999-2019, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1189,6 +1189,18 @@ in \texttt{tcFunctionDecl} above.
 >   where (tys,ty') = arrowUnapply ty
 >         n = length ts
 
+\end{verbatim}
+Typing of a function pattern is a bit more complicated because the
+compiler must be prepared to deal with partial applications. In
+addition, since the function pattern effectively gets transformed into
+an application expression in an extra guard (see
+Sect.~\ref{sec:flatcase}), the function pattern's own arguments cannot
+be used to dynamically introduce new type class instances when
+matching a data constructor with a right hand side context. In this
+regard, the function pattern's argument must all be treated as if they
+were lazy patterns.
+\begin{verbatim}
+
 > tcFunctPattern :: Bool -> TCEnv -> ValueEnv -> Position -> Doc -> QualIdent
 >                -> ([ConstrTerm QualType] -> [ConstrTerm QualType])
 >                -> Context -> Type -> [ConstrTerm a]
@@ -1199,8 +1211,9 @@ in \texttt{tcFunctionDecl} above.
 >   do
 >     (alpha,beta) <-
 >       tcArrow p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t) tcEnv ty
->     (cx',t'') <- tcConstrArg poly tcEnv tyEnv p "pattern" doc cx alpha t'
->     tcFunctPattern poly tcEnv tyEnv p doc f (ts . (t'':)) cx' beta ts'
+>     (cx',t'') <- withLocalScope $                                         -- $
+>       tcConstrArg poly tcEnv tyEnv p "pattern" doc [] alpha t'
+>     tcFunctPattern poly tcEnv tyEnv p doc f (ts . (t'':)) (cx ++ cx') beta ts'
 >   where t = FunctionPattern (qualType ty) f (ts [])
 
 > tcConstrArg :: Bool -> TCEnv -> ValueEnv -> Position -> String -> Doc

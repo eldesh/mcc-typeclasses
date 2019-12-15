@@ -6,5 +6,9 @@
 
 data T a = Eq a => C a
 f (C c) = c
+
 g (f (C c)) | c == c = c
 g' fp = case fp of f (C c) | c == c -> c
+
+h (C c `const` _) | c == c = c
+h' fp = case fp of C c `const` _ | c == c -> c

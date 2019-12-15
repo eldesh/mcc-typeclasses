@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3312 2019-12-08 13:03:47Z wlux $
+% $Id: TypeCheck.lhs 3315 2019-12-15 18:03:03Z wlux $
 %
 % Copyright (c) 1999-2019, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1129,7 +1129,7 @@ in \texttt{tcFunctionDecl} above.
 > tcConstrTerm poly tcEnv tyEnv p t@(FunctionPattern _ f ts) =
 >   do
 >     (cx,ty) <- inst (funType f tyEnv)
->     tcFunctPattern poly tcEnv tyEnv p (ppConstrTerm 0 t) f id cx ty ts
+>     tcFunctPattern poly tcEnv tyEnv p (ppConstrTerm 0 t) f cx ty ts
 > tcConstrTerm poly tcEnv tyEnv p t@(InfixPattern _ t1 op t2) =
 >   do
 >     (cx,ty) <- tcPatternOp tcEnv tyEnv p op
@@ -1189,6 +1189,13 @@ in \texttt{tcFunctionDecl} above.
 >   where (tys,ty') = arrowUnapply ty
 >         n = length ts
 
+> tcConstrArg :: Bool -> TCEnv -> ValueEnv -> Position -> String -> Doc
+>             -> Context -> Type -> ConstrTerm a
+>             -> TcState (Context,ConstrTerm QualType)
+> tcConstrArg poly tcEnv tyEnv p what doc cx ty t =
+>   tcConstrTerm poly tcEnv tyEnv p t >>-
+>   unify p what (doc $-$ text "Term:" <+> ppConstrTerm 0 t) tcEnv cx ty
+
 \end{verbatim}
 Typing of a function pattern is a bit more complicated because the
 compiler must be prepared to deal with partial applications. In
@@ -1202,26 +1209,26 @@ were lazy patterns.
 \begin{verbatim}
 
 > tcFunctPattern :: Bool -> TCEnv -> ValueEnv -> Position -> Doc -> QualIdent
->                -> ([ConstrTerm QualType] -> [ConstrTerm QualType])
 >                -> Context -> Type -> [ConstrTerm a]
 >                -> TcState (Context,Type,ConstrTerm QualType)
-> tcFunctPattern _ _ _ _ _ f ts cx ty [] =
->   return (cx,ty,FunctionPattern (qualType ty) f (ts []))
-> tcFunctPattern poly tcEnv tyEnv p doc f ts cx ty (t':ts') =
+> tcFunctPattern poly tcEnv tyEnv p doc f cx ty ts =
+>   do
+>     ((cx',ty'),ts') <-
+>       mapAccumM (tcFunPatArg poly tcEnv tyEnv p doc f) (cx,ty)
+>                 (zip (inits ts) ts)
+>     return (cx',ty',FunctionPattern (qualType ty') f ts')
+
+> tcFunPatArg :: Bool -> TCEnv -> ValueEnv -> Position -> Doc -> QualIdent
+>             -> (Context,Type) -> ([ConstrTerm a],ConstrTerm a)
+>             -> TcState ((Context,Type),ConstrTerm QualType)
+> tcFunPatArg poly tcEnv tyEnv p doc f (cx,ty) (ts,t) =
 >   do
 >     (alpha,beta) <-
->       tcArrow p "pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t) tcEnv ty
->     (cx',t'') <- withLocalScope $                                         -- $
->       tcConstrArg poly tcEnv tyEnv p "pattern" doc [] alpha t'
->     tcFunctPattern poly tcEnv tyEnv p doc f (ts . (t'':)) (cx ++ cx') beta ts'
->   where t = FunctionPattern (qualType ty) f (ts [])
-
-> tcConstrArg :: Bool -> TCEnv -> ValueEnv -> Position -> String -> Doc
->             -> Context -> Type -> ConstrTerm a
->             -> TcState (Context,ConstrTerm QualType)
-> tcConstrArg poly tcEnv tyEnv p what doc cx ty t =
->   tcConstrTerm poly tcEnv tyEnv p t >>-
->   unify p what (doc $-$ text "Term:" <+> ppConstrTerm 0 t) tcEnv cx ty
+>       tcArrow p "pattern" (doc $-$ text "Term:" <+> doc') tcEnv ty
+>     (cx',t') <- withLocalScope $                                          -- $
+>       tcConstrArg poly tcEnv tyEnv p "pattern" doc [] alpha t
+>     return ((cx ++ cx',beta),t')
+>   where doc' = ppConstrTerm 0 (FunctionPattern undefined f ts)
 
 > tcPatternOp :: TCEnv -> ValueEnv -> Position -> InfixOp a
 >             -> TcState (Context,Type)

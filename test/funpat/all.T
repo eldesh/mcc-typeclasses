@@ -34,3 +34,7 @@ type pass fpat018.curry g
 type pass fpat018.curry g'
 type pass fpat018.curry h
 type pass fpat018.curry h'
+compile fail fpat019.curry
+compile fail fpat020.curry
+type pass fpat021.curry f
+type pass fpat021.curry g

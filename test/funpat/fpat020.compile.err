@@ -1,0 +1,3 @@
+"fpat020.curry", line 13.1: Missing Show _?7 instance
+in pattern
+Showable x `const` _

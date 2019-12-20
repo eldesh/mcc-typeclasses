@@ -1,0 +1,3 @@
+"fpat019.curry", line 13.1: Missing Show _?5 instance
+in pattern
+id (Showable x)

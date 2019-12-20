@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3316 2019-12-15 18:13:41Z wlux $
+% $Id: TypeCheck.lhs 3318 2019-12-20 15:30:50Z wlux $
 %
 % Copyright (c) 1999-2019, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1216,9 +1216,10 @@ addition, since the function pattern effectively gets transformed into
 an application expression in an extra guard (see
 Sect.~\ref{sec:flatcase}), the function pattern's own arguments cannot
 be used to dynamically introduce new type class instances when
-matching a data constructor with a right hand side context. In this
-regard, the function pattern's argument must all be treated as if they
-were lazy patterns.
+matching a data constructor with a right hand side context. Instead,
+the corresponding instances must be added to the type class
+constraints of the function pattern.
+\label{typing-funpat}
 \begin{verbatim}
 
 > tcFunctPattern :: Bool -> TCEnv -> ValueEnv -> Position -> Doc -> QualIdent
@@ -1238,9 +1239,10 @@ were lazy patterns.
 >   do
 >     (alpha,beta) <-
 >       tcArrow p "pattern" (doc $-$ text "Term:" <+> doc') tcEnv ty
->     (cx',t') <- withLocalScope $                                          -- $
+>     (cx'',(cx',t')) <- withLocalScope' tcEnv $                            -- $
 >       tcConstrArg poly tcEnv tyEnv p "pattern" doc [] alpha t
->     return ((cx ++ cx',beta),t')
+>     cx''' <- reduceContext p "pattern" doc tcEnv (cx' ++ cx'')
+>     return ((cx ++ cx''',beta),t')
 >   where doc' = ppConstrTerm 0 (FunctionPattern undefined f ts)
 
 > tcRhs :: ModuleIdent -> TCEnv -> ValueEnv -> Rhs a
@@ -1421,7 +1423,6 @@ were lazy patterns.
 >     checkSkolems p "Expression" (ppExpr 0) tcEnv tyEnv fs cx'
 >                  (foldr TypeArrow ty tys) (Lambda p ts' e')
 > tcExpr m tcEnv tyEnv p (Let ds e) =
->   withLocalScope $                                                        -- $
 >   do
 >     fs <- liftM (fsEnv . flip subst tyEnv) fetchSt
 >     (tyEnv',cx,ds') <- tcDecls m tcEnv tyEnv ds
@@ -1947,7 +1948,13 @@ All instances added to the dynamic instance environment in this way
 must be removed from the environment upon leaving the scope of the
 respective data constructor. This can be achieved with combinator
 \texttt{withLocalScope}, which restores the initial dynamic instance
-environment after computing the result of its argument.
+environment after computing the result of its argument. The variant
+\texttt{withLocalScope'}, in addition to the result of its argument,
+also returns the type class instances that were added to the dynamic
+instance environment within the local scope. This is supposed to be
+used with function patterns, which must add those instances to the
+type class constraints of the enclosing scope (see
+p.~\pageref{typing-funpat}).
 \begin{verbatim}
 
 > withLocalScope :: TcState a -> TcState a
@@ -1957,6 +1964,18 @@ environment after computing the result of its argument.
 >     x <- m
 >     liftSt (updateSt_ (apSnd3 (const dEnv)))
 >     return x
+
+> withLocalScope' :: TCEnv -> TcState a -> TcState (Context,a)
+> withLocalScope' tcEnv m =
+>   do
+>     dEnv <- liftM snd3 (liftSt fetchSt)
+>     x <- m
+>     dEnv' <- liftM snd3 (liftSt (updateSt (apSnd3 (const dEnv))))
+>     return (minContext tcEnv (dEnv' `diffContext` dEnv),x)
+>   where dEnv1 `diffContext` dEnv2 =
+>           [TypePred cls ty | (cls,tys) <- envToList dEnv1,
+>                              let tys' = fromMaybe [] (lookupEnv cls dEnv2),
+>                              ty <- filter (`notElem` tys') tys]
 
 \end{verbatim}
 The function \texttt{gen} generalizes a context \emph{cx} and a type

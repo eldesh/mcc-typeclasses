@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3319 2019-12-25 15:32:36Z wlux $
+% $Id: TypeCheck.lhs 3320 2019-12-25 16:27:19Z wlux $
 %
 % Copyright (c) 1999-2019, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1147,11 +1147,9 @@ in \texttt{tcFunctionDecl} above.
 > tcConstrTerm poly tcEnv tyEnv p t@(RecordPattern _ c fs) =
 >   do
 >     (cx,ty) <- liftM (apSnd arrowBase) (skol tcEnv (conType c tyEnv))
->     (cx',fs') <-
->       mapAccumM (tcField (tcConstrTerm poly) "pattern" doc tcEnv tyEnv p ty)
->                 cx fs
+>     (cx',fs') <- mapAccumM (tcFieldPattern poly tcEnv tyEnv p doc ty) cx fs
 >     return (cx',ty,RecordPattern (qualType ty) c fs')
->   where doc t1 = ppConstrTerm 0 t $-$ text "Term:" <+> ppConstrTerm 0 t1
+>   where doc = ppConstrTerm 0 t
 > tcConstrTerm poly tcEnv tyEnv p (TuplePattern ts) =
 >   do
 >     (cxs,tys,ts') <- liftM unzip3 $ mapM (tcConstrTerm poly tcEnv tyEnv p) ts
@@ -1260,6 +1258,18 @@ constraints of the function pattern.
 >     return ((cx ++ cx''',beta),t')
 >   where doc' = ppConstrTerm 0 (FunctionPattern undefined f ts)
 
+> tcFieldPattern :: Bool -> TCEnv -> ValueEnv -> Position -> Doc
+>                -> Type -> Context -> Field (ConstrTerm a)
+>                -> TcState (Context,Field (ConstrTerm QualType))
+> tcFieldPattern poly tcEnv tyEnv p doc ty cx (Field l t) =
+>   do
+>     (cx',ty') <- tcFieldType tcEnv tyEnv p ty l
+>     (cx'',t') <-
+>       tcConstrTerm poly tcEnv tyEnv p t >>-
+>       unify p "record pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t)
+>             tcEnv (cx ++ cx') ty'
+>     return (cx'',Field l t')
+
 > tcRhs :: ModuleIdent -> TCEnv -> ValueEnv -> Rhs a
 >       -> TcState (Context,Type,Rhs QualType)
 > tcRhs m tcEnv tyEnv (SimpleRhs p e ds) =
@@ -1326,16 +1336,16 @@ constraints of the function pattern.
 >   do
 >     (cx,ty) <- liftM (apSnd arrowBase) (inst (thd3 (conType c tyEnv)))
 >     (cx',fs') <-
->       mapAccumM (tcField (tcExpr m) "construction" doc tcEnv tyEnv p ty) cx fs
+>       mapAccumM (tcField m tcEnv tyEnv p "record construction" doc ty) cx fs
 >     return (cx',ty,Record (qualType ty) c fs')
->   where doc e1 = ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1
+>   where doc = ppExpr 0 e
 > tcExpr m tcEnv tyEnv p e@(RecordUpdate e1 fs) =
 >   do
 >     (cx,ty,e1') <- tcExpr m tcEnv tyEnv p e1
 >     (cx',fs') <-
->       mapAccumM (tcField (tcExpr m) "update" doc tcEnv tyEnv p ty) cx fs
+>       mapAccumM (tcField m tcEnv tyEnv p "record update" doc ty) cx fs
 >     return (cx',ty,RecordUpdate e1' fs')
->   where doc e1 = ppExpr 0 e $-$ text "Term:" <+> ppExpr 0 e1
+>   where doc = ppExpr 0 e
 > tcExpr m tcEnv tyEnv p (Tuple es) =
 >   do
 >     (cxs,tys,es') <- liftM unzip3 $ mapM (tcExpr m tcEnv tyEnv p) es
@@ -1587,20 +1597,26 @@ constraints of the function pattern.
 >     (cx,ty) <- inst (thd3 (conType op tyEnv))
 >     return (cx,ty,InfixConstr (qualType ty) op)
 
-> tcField :: (TCEnv -> ValueEnv -> Position -> a b
->             -> TcState (Context,Type,a QualType))
->         -> String -> (a b -> Doc) -> TCEnv -> ValueEnv -> Position -> Type
->         -> Context -> Field (a b) -> TcState (Context,Field (a QualType))
-> tcField tc what doc tcEnv tyEnv p ty cx (Field l x) =
+> tcFieldType :: TCEnv -> ValueEnv -> Position -> Type -> QualIdent
+>             -> TcState (Context,Type)
+> tcFieldType tcEnv tyEnv p ty l =
 >   do
->     (cx',~(TypeArrow ty1 ty2)) <- inst (funType l tyEnv)
+>     (cx,~(TypeArrow ty1 ty2)) <- inst (funType l tyEnv)
 >     -- NB the following unification cannot fail; it serves only for
 >     --    instantiating the type variables in the field label's type
 >     unify p "field label" empty tcEnv [] ty [] ty1
->     (cx'',x') <-
->       tc tcEnv tyEnv p x >>-
->       unify p ("record " ++ what) (doc x) tcEnv (cx ++ cx') ty2
->     return (cx'',Field l x')
+>     return (cx,ty2)
+
+> tcField :: ModuleIdent -> TCEnv -> ValueEnv -> Position -> String -> Doc
+>         -> Type -> Context -> Field (Expression a)
+>         -> TcState (Context,Field (Expression QualType))
+> tcField m tcEnv tyEnv p what doc ty cx (Field l e) =
+>   do
+>     (cx',ty') <- tcFieldType tcEnv tyEnv p ty l
+>     (cx'',e') <-
+>       tcExpr m tcEnv tyEnv p e >>-
+>       unify p what (doc $-$ text "Term:" <+> ppExpr 0 e) tcEnv (cx ++ cx') ty'
+>     return (cx'',Field l e')
 
 \end{verbatim}
 The function \texttt{tcArrow} checks that its argument can be used as

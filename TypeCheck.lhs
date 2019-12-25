@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3318 2019-12-20 15:30:50Z wlux $
+% $Id: TypeCheck.lhs 3319 2019-12-25 15:32:36Z wlux $
 %
 % Copyright (c) 1999-2019, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1130,28 +1130,15 @@ in \texttt{tcFunctionDecl} above.
 >   do
 >     (cx,ty) <- inst (funType f tyEnv)
 >     tcFunctPattern poly tcEnv tyEnv p (ppConstrTerm 0 t) f cx ty ts
-> tcConstrTerm poly tcEnv tyEnv p
->              t@(InfixPattern _ t1 op@(InfixConstr _ c) t2) =
+> tcConstrTerm poly tcEnv tyEnv p t@(InfixPattern _ t1 (InfixConstr _ c) t2) =
 >   do
 >     (cx,ty) <- skol tcEnv (conType c tyEnv)
->     unless (arrowArity ty == 2) (errorAt p (wrongArity c (arrowArity ty) 2))
->     (alpha,beta,gamma) <-
->       tcBinary p "infix pattern" (doc $-$ text "Operator:" <+> ppOp op)
->                tcEnv ty
->     (cx',t1') <- tcConstrArg poly tcEnv tyEnv p "pattern" doc cx alpha t1
->     (cx'',t2') <- tcConstrArg poly tcEnv tyEnv p "pattern" doc cx' beta t2
->     return (cx'',gamma,InfixPattern (qualType gamma) t1' op t2')
+>     tcConstrInfixApp poly tcEnv tyEnv p doc c cx ty t1 t2
 >   where doc = ppConstrTerm 0 t
-> tcConstrTerm poly tcEnv tyEnv p t@(InfixPattern _ t1 op@(InfixOp _ f) t2) =
+> tcConstrTerm poly tcEnv tyEnv p t@(InfixPattern _ t1 (InfixOp _ f) t2) =
 >   do
 >     (cx,ty) <- inst (funType f tyEnv)
->     -- NB tcBinary used here only for better error reporting
->     tcBinary p "infix pattern" (doc $-$ text "Operator:" <+> ppOp op)
->              tcEnv ty
->     ((cx',ty'),t1') <- tcFunPatArg poly tcEnv tyEnv p doc f (cx,ty) ([],t1)
->     ((cx'',ty''),t2') <-
->       tcFunPatArg poly tcEnv tyEnv p doc f (cx',ty') ([t1],t2)
->     return (cx'',ty'',InfixPattern (qualType ty'') t1' op t2')
+>     tcFunOpPattern poly tcEnv tyEnv p doc f cx ty t1 t2
 >   where doc = ppConstrTerm 0 t
 > tcConstrTerm poly tcEnv tyEnv p (ParenPattern t) =
 >   do
@@ -1202,6 +1189,20 @@ in \texttt{tcFunctionDecl} above.
 >   where (tys,ty') = arrowUnapply ty
 >         n = length ts
 
+> tcConstrInfixApp :: Bool -> TCEnv -> ValueEnv -> Position -> Doc -> QualIdent
+>                  -> Context -> Type -> ConstrTerm a -> ConstrTerm a
+>                  -> TcState (Context,Type,ConstrTerm QualType)
+> tcConstrInfixApp poly tcEnv tyEnv p doc c cx ty t1 t2 =
+>   do
+>     unless (arrowArity ty == 2) (errorAt p (wrongArity c (arrowArity ty) 2))
+>     (alpha,beta,gamma) <-
+>       tcBinary p "infix pattern" (doc $-$ text "Operator:" <+> ppOp op)
+>                tcEnv ty
+>     (cx',t1') <- tcConstrArg poly tcEnv tyEnv p "pattern" doc cx alpha t1
+>     (cx'',t2') <- tcConstrArg poly tcEnv tyEnv p "pattern" doc cx' beta t2
+>     return (cx'',gamma,InfixPattern (qualType gamma) t1' op t2')
+>   where op = InfixConstr () c
+
 > tcConstrArg :: Bool -> TCEnv -> ValueEnv -> Position -> String -> Doc
 >             -> Context -> Type -> ConstrTerm a
 >             -> TcState (Context,ConstrTerm QualType)
@@ -1231,6 +1232,20 @@ constraints of the function pattern.
 >       mapAccumM (tcFunPatArg poly tcEnv tyEnv p doc f) (cx,ty)
 >                 (zip (inits ts) ts)
 >     return (cx',ty',FunctionPattern (qualType ty') f ts')
+
+> tcFunOpPattern :: Bool -> TCEnv -> ValueEnv -> Position -> Doc -> QualIdent
+>                -> Context -> Type -> ConstrTerm a -> ConstrTerm a
+>                -> TcState (Context,Type,ConstrTerm QualType)
+> tcFunOpPattern poly tcEnv tyEnv p doc f cx ty t1 t2 =
+>   do
+>     -- NB tcBinary used here only for better error reporting
+>     tcBinary p "infix pattern" (doc $-$ text "Operator:" <+> ppOp op)
+>              tcEnv ty
+>     ((cx',ty'),t1') <- tcFunPatArg poly tcEnv tyEnv p doc f (cx,ty) ([],t1)
+>     ((cx'',ty''),t2') <-
+>       tcFunPatArg poly tcEnv tyEnv p doc f (cx',ty') ([t1],t2)
+>     return (cx'',ty'',InfixPattern (qualType ty'') t1' op t2')
+>   where op = InfixOp () f
 
 > tcFunPatArg :: Bool -> TCEnv -> ValueEnv -> Position -> Doc -> QualIdent
 >             -> (Context,Type) -> ([ConstrTerm a],ConstrTerm a)

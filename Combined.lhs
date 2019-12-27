@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Combined.lhs 3230 2016-06-16 09:42:00Z wlux $
+% $Id: Combined.lhs 3321 2019-12-27 10:56:53Z wlux $
 %
-% Copyright (c) 1998-2015, Wolfgang Lux
+% Copyright (c) 1998-2019, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Combined.lhs}
@@ -130,6 +130,9 @@ state transformers.
 > changeSt :: Monad m => s -> StateT s m s
 > changeSt = updateSt . const
 
+> mapStateSt :: Monad m => (m (a,s) -> m (b,s)) -> StateT s m a -> StateT s m b
+> mapStateSt f (StateT st) = StateT (\s -> f (st s))
+
 \end{verbatim}
 Currying and uncurrying for state monads has been implemented
 in~\cite{Fokker95:JPEG}. Here we extend this implementation to the
@@ -210,6 +213,9 @@ appropriate instance functions for the type \texttt{ReaderT} instead.
 
 > putEnvRt :: Monad m => r -> ReaderT r m a -> ReaderT r m a
 > putEnvRt r (ReaderT rt) = ReaderT (\_ -> rt r)
+
+> mapEnvRt :: Monad m => (r -> r) -> ReaderT r m a -> ReaderT r m a
+> mapEnvRt f (ReaderT rt) = ReaderT (\r -> rt (f r))
 
 \end{verbatim}
 Currying can also be applied to state reader monads.

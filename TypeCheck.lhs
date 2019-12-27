@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3320 2019-12-25 16:27:19Z wlux $
+% $Id: TypeCheck.lhs 3321 2019-12-27 10:56:53Z wlux $
 %
 % Copyright (c) 1999-2019, Wolfgang Lux
 % See LICENSE for the full license.
@@ -56,6 +56,7 @@ variable is used.
 > import ValueInfo
 
 > infixl 5 $-$
+> infixr 5 <++>
 > infixl 1 >>-, >>=-
 
 > ($-$) :: Doc -> Doc -> Doc
@@ -85,8 +86,8 @@ current module to the type environment.
 >           -> Error (ValueEnv,[TopDecl QualType])
 > typeCheck m tcEnv iEnv tyEnv ds =
 >   sequenceA [tcDataDecl tcEnv tvs cs | DataDecl _ _ _ tvs cs _ <- tds] >>
->   run (do
->          mapM_ (defaultTypes tcEnv) (filter isDefaultDecl tds)
+>   run (withDefaultTypes (defaultTypes tcEnv tds) $
+>        do
 >          (tyEnv'',cx,vds') <- tcDecls m tcEnv tyEnv' [d | BlockDecl d <- vds]
 >          unless (null cx) (internalError ("typeCheck " ++ show cx))
 >          tds' <- mapM (tcTopDecl m tcEnv tyEnv'') tds
@@ -107,7 +108,8 @@ non-empty context for the goal's type or not.
 > typeCheckGoal :: Bool -> ModuleIdent -> TCEnv -> InstEnv -> ValueEnv -> Goal a
 >               -> Error (Context,Goal QualType)
 > typeCheckGoal forEval m tcEnv iEnv tyEnv g =
->   run (do
+>   run (withDefaultTypes (map qualType defaultDefaultTypes) $
+>        do
 >          (cx',g') <-
 >            tcGoal m tcEnv tyEnv g >>= uncurry3 (defaultGoalType forEval tcEnv)
 >          theta <- fetchSt
@@ -125,9 +127,9 @@ non-empty context for the goal's type or not.
 >     return (cx',Goal p e ds)
 
 \end{verbatim}
-The type checker makes use of nested state monads in order to maintain
-the current substitution, the instance environment, and a counter,
-which is used for generating fresh type variables.
+The type checker makes use of nested state and reader monads in order
+to maintain the current substitution, the instance environment, and a
+counter, which is used for generating fresh type variables.
 
 In order to handle the introduction of local instances when matching a
 data constructor with a non-empty right hand side context, the type
@@ -141,12 +143,11 @@ For lack of a better place, we also include the list of default types
 in the extended instance environment.
 \begin{verbatim}
 
-> type TcState a = StateT TypeSubst (StateT InstEnv' (StateT Int Error)) a
+> type TcState a = StateT TypeSubst (ReaderT InstEnv' (StateT Int Error)) a
 > type InstEnv' = ([Type],Env QualIdent [Type],InstEnv)
 
 > run :: TcState a -> InstEnv -> Error a
-> run m iEnv =
->   callSt (callSt (callSt m idSubst) (defaultDefaultTypes,emptyEnv,iEnv)) 1
+> run m iEnv = callSt (callRt (callSt m idSubst) ([],emptyEnv,iEnv)) 1
 
 \end{verbatim}
 The list of default types is given either by a default declaration in
@@ -166,11 +167,16 @@ whole module.
   a command line switch.}
 \begin{verbatim}
 
-> defaultTypes :: TCEnv -> TopDecl a -> TcState ()
-> defaultTypes tcEnv (DefaultDecl _ tys) =
+> withDefaultTypes :: [QualType] -> TcState a -> TcState a
+> withDefaultTypes tys m =
 >   do
->     tys' <- mapM (liftM snd . inst . typeScheme . defaultType) tys
->     liftSt (updateSt_ (apFst3 (const tys')))
+>     tys' <- mapM (liftM snd . inst . typeScheme) tys
+>     mapStateSt (mapEnvRt (apFst3 (const tys'))) m
+
+> defaultTypes :: TCEnv -> [TopDecl a] -> [QualType]
+> defaultTypes tcEnv ds =
+>   foldl (const id) (map qualType defaultDefaultTypes)
+>         [map defaultType tys | DefaultDecl _ tys <- ds]
 >   where defaultType = expandPolyType tcEnv . QualTypeExpr []
 
 > defaultDefaultTypes :: [Type]
@@ -522,10 +528,10 @@ general than the type signature.
 >   tcFunctionDecl m tcEnv tyEnv cx (varType f tyEnv) p f eqs
 > tcDecl m tcEnv tyEnv cx d@(PatternDecl p t rhs) =
 >   do
->     (cx',ty',t') <- withLocalScope $ tcConstrTerm False tcEnv tyEnv p t   -- $
+>     ((cxL',_),ty',t') <- tcConstrTerm False tcEnv tyEnv p t
 >     (cx'',rhs') <-
 >       tcRhs m tcEnv tyEnv rhs >>-
->       unifyDecl p "pattern declaration" (ppDecl d) tcEnv tyEnv (cx++cx') ty'
+>       unifyDecl p "pattern declaration" (ppDecl d) tcEnv tyEnv (cx++cxL') ty'
 >     return (cx'',(ty',PatternDecl p t' rhs'))
 
 > tcFunctionDecl :: ModuleIdent -> TCEnv -> ValueEnv -> Context
@@ -549,14 +555,13 @@ general than the type signature.
 > tcEqn :: ModuleIdent -> TCEnv -> ValueEnv -> Set Int -> Position
 >       -> Lhs a -> Rhs a -> TcState (Context,Type,Equation QualType)
 > tcEqn m tcEnv tyEnv fs p lhs rhs =
->   withLocalScope $                                                        -- $
 >   do
 >     tyEnv' <- bindLambdaVars m tyEnv lhs
->     (cx,tys,lhs') <- tcLhs tcEnv tyEnv' p lhs
->     (cx',ty,rhs') <- tcRhs m tcEnv tyEnv' rhs
+>     ((cxL,cxR),tys,lhs') <- tcLhs tcEnv tyEnv' p lhs
+>     (cx',ty,rhs') <- withInstances tcEnv cxR $ tcRhs m tcEnv tyEnv' rhs
 >     cx'' <-
 >       reduceContext p "equation" (ppEquation (Equation p lhs' rhs')) tcEnv
->                     (cx ++ cx')
+>                     (cxL ++ cx')
 >     checkSkolems p "Equation" ppEquation tcEnv tyEnv fs cx''
 >                  (foldr TypeArrow ty tys) (Equation p lhs' rhs')
 
@@ -1074,6 +1079,19 @@ patterns.
   overloading should in some way acknowledge the set of types
   specified in a default declaration if one is present.}
 
+While computing the type of a pattern, the compiler has to manage two
+kinds of contexts. Type constraints that are due to left hand side
+contexts in data type declarations, but also those that stem from
+numeric literals and function patterns, denote type class instances
+that must be present when the pattern is evaluated. Type constraints
+that are due to right hand side contexts in data type declarations, on
+the other hand, introduce extra instances for only the scope of the
+pattern. Note that since patterns are not necessarily evaluated from
+left to right, dynamic instances are made available only to the
+arguments of the pattern that introduces them and the body of the
+corresponding function equation, alternative or lambda expression, but
+not to any sibling patterns.
+
 When computing the type of a variable in a pattern, we ignore the
 context of the variable's type (which can only be due to a type
 signature in the same declaration group) for just the same reason as
@@ -1090,50 +1108,66 @@ in \texttt{tcFunctionDecl} above.
 >   | otherwise = liftM ((,) []) (freshConstrained fracTypes)
 > tcLiteral _ (String _) = return ([],stringType)
 
+
+> type ContextPair = (Context,Context)
+
+> (<++>) :: ContextPair -> ContextPair -> ContextPair
+> (cxL1,cxR1) <++> ~(cxL2,cxR2) = (cxL1 ++ cxL2,cxR1 ++ cxR2)
+
+> cpConcat :: [ContextPair] -> ContextPair
+> cpConcat = foldr (<++>) ([],[])
+
 > tcLhs :: TCEnv -> ValueEnv -> Position -> Lhs a
->       -> TcState (Context,[Type],Lhs QualType)
+>       -> TcState (ContextPair,[Type],Lhs QualType)
 > tcLhs tcEnv tyEnv p (FunLhs f ts) =
 >   do
 >     (cxs,tys,ts') <- liftM unzip3 $ mapM (tcConstrTerm False tcEnv tyEnv p) ts
->     return (concat cxs,tys,FunLhs f ts')
+>     return (cpConcat cxs,tys,FunLhs f ts')
 > tcLhs tcEnv tyEnv p (OpLhs t1 op t2) =
 >   do
 >     (cx1,ty1,t1') <- tcConstrTerm False tcEnv tyEnv p t1
 >     (cx2,ty2,t2') <- tcConstrTerm False tcEnv tyEnv p t2
->     return (cx1 ++ cx2,[ty1,ty2],OpLhs t1' op t2')
+>     return (cx1 <++> cx2,[ty1,ty2],OpLhs t1' op t2')
 > tcLhs tcEnv tyEnv p (ApLhs lhs ts) =
 >   do
 >     (cx,tys1,lhs') <- tcLhs tcEnv tyEnv p lhs
 >     (cxs,tys2,ts') <-
 >       liftM unzip3 $ mapM (tcConstrTerm False tcEnv tyEnv p) ts
->     return (cx ++ concat cxs,tys1 ++ tys2,ApLhs lhs' ts')
+>     return (cx <++> cpConcat cxs,tys1 ++ tys2,ApLhs lhs' ts')
 
 > tcConstrTerm :: Bool -> TCEnv -> ValueEnv -> Position -> ConstrTerm a
->              -> TcState (Context,Type,ConstrTerm QualType)
+>              -> TcState (ContextPair,Type,ConstrTerm QualType)
 > tcConstrTerm poly _ _ _ (LiteralPattern _ l) =
 >   do
 >     (cx,ty) <- tcLiteral poly l
->     return (cx,ty,LiteralPattern (qualType ty) l)
+>     return ((cx,[]),ty,LiteralPattern (qualType ty) l)
 > tcConstrTerm poly _ _ _ (NegativePattern _ l) =
 >   do
 >     (cx,ty) <- tcLiteral poly l
->     return (cx,ty,NegativePattern (qualType ty) l)
+>     return ((cx,[]),ty,NegativePattern (qualType ty) l)
 > tcConstrTerm _ _ tyEnv _ (VariablePattern _ v) =
 >   do
 >     (_,ty) <- inst (varType v tyEnv)
->     return ([],ty,VariablePattern (qualType ty) v)
+>     return (([],[]),ty,VariablePattern (qualType ty) v)
 > tcConstrTerm poly tcEnv tyEnv p t@(ConstructorPattern _ c ts) =
 >   do
->     (cx,ty) <- skol tcEnv (conType c tyEnv)
->     tcConstrApp poly tcEnv tyEnv p (ppConstrTerm 0 t) c cx ty ts
+>     ((cxL,cxR),ty) <- skol (conType c tyEnv)
+>     (cx',ty',t') <- withInstances tcEnv cxR $
+>       tcConstrApp poly tcEnv tyEnv p doc c ty ts
+>     cxL'' <- reduceContext p "pattern" doc tcEnv cxL
+>     return ((cxL'',cxR) <++> cx',ty',t')
+>   where doc = ppConstrTerm 0 t
 > tcConstrTerm poly tcEnv tyEnv p t@(FunctionPattern _ f ts) =
 >   do
 >     (cx,ty) <- inst (funType f tyEnv)
 >     tcFunctPattern poly tcEnv tyEnv p (ppConstrTerm 0 t) f cx ty ts
 > tcConstrTerm poly tcEnv tyEnv p t@(InfixPattern _ t1 (InfixConstr _ c) t2) =
 >   do
->     (cx,ty) <- skol tcEnv (conType c tyEnv)
->     tcConstrInfixApp poly tcEnv tyEnv p doc c cx ty t1 t2
+>     ((cxL,cxR),ty) <- skol (conType c tyEnv)
+>     (cx',ty',t') <- withInstances tcEnv cxR $
+>       tcConstrInfixApp poly tcEnv tyEnv p doc c ty t1 t2
+>     cxL'' <- reduceContext p "pattern" doc tcEnv cxL
+>     return ((cxL'',cxR) <++> cx',ty',t')
 >   where doc = ppConstrTerm 0 t
 > tcConstrTerm poly tcEnv tyEnv p t@(InfixPattern _ t1 (InfixOp _ f) t2) =
 >   do
@@ -1146,19 +1180,22 @@ in \texttt{tcFunctionDecl} above.
 >     return (cx,ty,ParenPattern t')
 > tcConstrTerm poly tcEnv tyEnv p t@(RecordPattern _ c fs) =
 >   do
->     (cx,ty) <- liftM (apSnd arrowBase) (skol tcEnv (conType c tyEnv))
->     (cx',fs') <- mapAccumM (tcFieldPattern poly tcEnv tyEnv p doc ty) cx fs
->     return (cx',ty,RecordPattern (qualType ty) c fs')
+>     ((cxL,cxR),ty) <- liftM (apSnd arrowBase) (skol (conType c tyEnv))
+>     (cx',fs') <- withInstances tcEnv cxR $
+>       mapAccumM (tcFieldPattern poly tcEnv tyEnv p doc ty) ([],[]) fs
+>     cxL'' <- reduceContext p "pattern" doc tcEnv cxL
+>     return ((cxL'',cxR) <++> cx',ty,RecordPattern (qualType ty) c fs')
 >   where doc = ppConstrTerm 0 t
 > tcConstrTerm poly tcEnv tyEnv p (TuplePattern ts) =
 >   do
 >     (cxs,tys,ts') <- liftM unzip3 $ mapM (tcConstrTerm poly tcEnv tyEnv p) ts
->     return (concat cxs,tupleType tys,TuplePattern ts')
+>     return (cpConcat cxs,tupleType tys,TuplePattern ts')
 > tcConstrTerm poly tcEnv tyEnv p t@(ListPattern _ ts) =
 >   do
 >     ty <- freshTypeVar
 >     (cx,ts') <-
->       mapAccumM (flip (tcConstrArg poly tcEnv tyEnv p "pattern" doc) ty) [] ts
+>       mapAccumM (flip (tcConstrArg poly tcEnv tyEnv p "pattern" doc) ty)
+>                 ([],[]) ts
 >     return (cx,listType ty,ListPattern (qualType (listType ty)) ts')
 >   where doc = ppConstrTerm 0 t
 > tcConstrTerm poly tcEnv tyEnv p t@(AsPattern v t') =
@@ -1166,47 +1203,46 @@ in \texttt{tcFunctionDecl} above.
 >     (_,ty) <- inst (varType v tyEnv)
 >     (cx,t'') <-
 >       tcConstrTerm poly tcEnv tyEnv p t' >>-
->       unify p "pattern" (ppConstrTerm 0 t) tcEnv [] ty
+>       unifyTerm p "pattern" (ppConstrTerm 0 t) tcEnv ([],[]) ty
 >     return (cx,ty,AsPattern v t'')
 > tcConstrTerm poly tcEnv tyEnv p (LazyPattern t) =
->   withLocalScope $                                                        -- $
 >   do
->     (cx,ty,t') <- tcConstrTerm poly tcEnv tyEnv p t
->     return (cx,ty,LazyPattern t')
+>     ((cxL,_),ty,t') <- tcConstrTerm poly tcEnv tyEnv p t
+>     return ((cxL,[]),ty,LazyPattern t')
 
 > tcConstrApp :: Bool -> TCEnv -> ValueEnv -> Position -> Doc -> QualIdent
->             -> Context -> Type -> [ConstrTerm a]
->             -> TcState (Context,Type,ConstrTerm QualType)
-> tcConstrApp poly tcEnv tyEnv p doc c cx ty ts =
+>             -> Type -> [ConstrTerm a]
+>             -> TcState (ContextPair,Type,ConstrTerm QualType)
+> tcConstrApp poly tcEnv tyEnv p doc c ty ts =
 >   do
 >     unless (length tys == n) (errorAt p (wrongArity c (length tys) n))
->     (cx',ts') <-
->       mapAccumM (uncurry . tcConstrArg poly tcEnv tyEnv p "pattern" doc) cx
->                 (zip tys ts)
->     return (cx',ty',ConstructorPattern (qualType ty') c ts')
+>     (cx,ts') <-
+>       mapAccumM (uncurry . tcConstrArg poly tcEnv tyEnv p "pattern" doc)
+>                 ([],[]) (zip tys ts)
+>     return (cx,ty',ConstructorPattern (qualType ty') c ts')
 >   where (tys,ty') = arrowUnapply ty
 >         n = length ts
 
 > tcConstrInfixApp :: Bool -> TCEnv -> ValueEnv -> Position -> Doc -> QualIdent
->                  -> Context -> Type -> ConstrTerm a -> ConstrTerm a
->                  -> TcState (Context,Type,ConstrTerm QualType)
-> tcConstrInfixApp poly tcEnv tyEnv p doc c cx ty t1 t2 =
+>                  -> Type -> ConstrTerm a -> ConstrTerm a
+>                  -> TcState (ContextPair,Type,ConstrTerm QualType)
+> tcConstrInfixApp poly tcEnv tyEnv p doc c ty t1 t2 =
 >   do
 >     unless (arrowArity ty == 2) (errorAt p (wrongArity c (arrowArity ty) 2))
 >     (alpha,beta,gamma) <-
 >       tcBinary p "infix pattern" (doc $-$ text "Operator:" <+> ppOp op)
 >                tcEnv ty
->     (cx',t1') <- tcConstrArg poly tcEnv tyEnv p "pattern" doc cx alpha t1
->     (cx'',t2') <- tcConstrArg poly tcEnv tyEnv p "pattern" doc cx' beta t2
->     return (cx'',gamma,InfixPattern (qualType gamma) t1' op t2')
+>     (cx,t1') <- tcConstrArg poly tcEnv tyEnv p "pattern" doc ([],[]) alpha t1
+>     (cx',t2') <- tcConstrArg poly tcEnv tyEnv p "pattern" doc cx beta t2
+>     return (cx',gamma,InfixPattern (qualType gamma) t1' op t2')
 >   where op = InfixConstr () c
 
 > tcConstrArg :: Bool -> TCEnv -> ValueEnv -> Position -> String -> Doc
->             -> Context -> Type -> ConstrTerm a
->             -> TcState (Context,ConstrTerm QualType)
+>             -> ContextPair -> Type -> ConstrTerm a
+>             -> TcState (ContextPair,ConstrTerm QualType)
 > tcConstrArg poly tcEnv tyEnv p what doc cx ty t =
 >   tcConstrTerm poly tcEnv tyEnv p t >>-
->   unify p what (doc $-$ text "Term:" <+> ppConstrTerm 0 t) tcEnv cx ty
+>   unifyTerm p what (doc $-$ text "Term:" <+> ppConstrTerm 0 t) tcEnv cx ty
 
 \end{verbatim}
 Typing of a function pattern is a bit more complicated because the
@@ -1218,22 +1254,21 @@ be used to dynamically introduce new type class instances when
 matching a data constructor with a right hand side context. Instead,
 the corresponding instances must be added to the type class
 constraints of the function pattern.
-\label{typing-funpat}
 \begin{verbatim}
 
 > tcFunctPattern :: Bool -> TCEnv -> ValueEnv -> Position -> Doc -> QualIdent
 >                -> Context -> Type -> [ConstrTerm a]
->                -> TcState (Context,Type,ConstrTerm QualType)
+>                -> TcState (ContextPair,Type,ConstrTerm QualType)
 > tcFunctPattern poly tcEnv tyEnv p doc f cx ty ts =
 >   do
 >     ((cx',ty'),ts') <-
 >       mapAccumM (tcFunPatArg poly tcEnv tyEnv p doc f) (cx,ty)
 >                 (zip (inits ts) ts)
->     return (cx',ty',FunctionPattern (qualType ty') f ts')
+>     return ((cx',[]),ty',FunctionPattern (qualType ty') f ts')
 
 > tcFunOpPattern :: Bool -> TCEnv -> ValueEnv -> Position -> Doc -> QualIdent
 >                -> Context -> Type -> ConstrTerm a -> ConstrTerm a
->                -> TcState (Context,Type,ConstrTerm QualType)
+>                -> TcState (ContextPair,Type,ConstrTerm QualType)
 > tcFunOpPattern poly tcEnv tyEnv p doc f cx ty t1 t2 =
 >   do
 >     -- NB tcBinary used here only for better error reporting
@@ -1242,7 +1277,7 @@ constraints of the function pattern.
 >     ((cx',ty'),t1') <- tcFunPatArg poly tcEnv tyEnv p doc f (cx,ty) ([],t1)
 >     ((cx'',ty''),t2') <-
 >       tcFunPatArg poly tcEnv tyEnv p doc f (cx',ty') ([t1],t2)
->     return (cx'',ty'',InfixPattern (qualType ty'') t1' op t2')
+>     return ((cx'',[]),ty'',InfixPattern (qualType ty'') t1' op t2')
 >   where op = InfixOp () f
 
 > tcFunPatArg :: Bool -> TCEnv -> ValueEnv -> Position -> Doc -> QualIdent
@@ -1252,23 +1287,31 @@ constraints of the function pattern.
 >   do
 >     (alpha,beta) <-
 >       tcArrow p "pattern" (doc $-$ text "Term:" <+> doc') tcEnv ty
->     (cx'',(cx',t')) <- withLocalScope' tcEnv $                            -- $
->       tcConstrArg poly tcEnv tyEnv p "pattern" doc [] alpha t
->     cx''' <- reduceContext p "pattern" doc tcEnv (cx' ++ cx'')
->     return ((cx ++ cx''',beta),t')
+>     ((cxL',cxR'),t') <-
+>       tcConstrArg poly tcEnv tyEnv p "pattern" doc (cx,[]) alpha t
+>     cx'' <- reduceContext p "pattern" doc tcEnv (cxL' ++ cxR')
+>     return ((cx'',beta),t')
 >   where doc' = ppConstrTerm 0 (FunctionPattern undefined f ts)
 
 > tcFieldPattern :: Bool -> TCEnv -> ValueEnv -> Position -> Doc
->                -> Type -> Context -> Field (ConstrTerm a)
->                -> TcState (Context,Field (ConstrTerm QualType))
+>                -> Type -> ContextPair -> Field (ConstrTerm a)
+>                -> TcState (ContextPair,Field (ConstrTerm QualType))
 > tcFieldPattern poly tcEnv tyEnv p doc ty cx (Field l t) =
 >   do
 >     (cx',ty') <- tcFieldType tcEnv tyEnv p ty l
 >     (cx'',t') <-
 >       tcConstrTerm poly tcEnv tyEnv p t >>-
->       unify p "record pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t)
->             tcEnv (cx ++ cx') ty'
+>       unifyTerm p "record pattern" (doc $-$ text "Term:" <+> ppConstrTerm 0 t)
+>                 tcEnv (cx <++> (cx',[])) ty'
 >     return (cx'',Field l t')
+
+> unifyTerm :: Position -> String -> Doc -> TCEnv -> ContextPair -> Type
+>           -> ContextPair -> Type -> TcState ContextPair
+> unifyTerm p what doc tcEnv (cxL1,cxR1) ty1 (cxL2,cxR2) ty2 =
+>   do
+>     cx' <- unify p what doc tcEnv cxL1 ty1 cxL2 ty2
+>     return (cx',cxR1 ++ cxR2)
+
 
 > tcRhs :: ModuleIdent -> TCEnv -> ValueEnv -> Rhs a
 >       -> TcState (Context,Type,Rhs QualType)
@@ -1360,7 +1403,7 @@ constraints of the function pattern.
 > tcExpr m tcEnv tyEnv p (ListCompr e qs) =
 >   do
 >     fs <- liftM (fsEnv . flip subst tyEnv) fetchSt
->     (cx,ty,qs',e') <- withLocalScope $ tcQuals m tcEnv tyEnv p qs e       -- $
+>     (cx,ty,qs',e') <- tcQuals m tcEnv tyEnv p qs e
 >     cx' <- reduceContext p "expression" (ppExpr 0 (ListCompr e' qs')) tcEnv cx
 >     checkSkolems p "Expression" (ppExpr 0) tcEnv tyEnv fs cx' ty
 >                  (ListCompr e' qs')
@@ -1437,15 +1480,14 @@ constraints of the function pattern.
 >     (cx',e1') <- tcArg m tcEnv tyEnv p "right section" (ppExpr 0 e) cx beta e1
 >     return (cx',TypeArrow alpha gamma,RightSection op' e1')
 > tcExpr m tcEnv tyEnv _ (Lambda p ts e) =
->   withLocalScope $                                                        -- $
 >   do
 >     fs <- liftM (fsEnv . flip subst tyEnv) fetchSt
 >     tyEnv' <- bindLambdaVars m tyEnv ts
->     (cxs,tys,ts') <-
->       liftM unzip3 $ mapM (tcConstrTerm False tcEnv tyEnv' p) ts
->     (cx,ty,e') <- tcExpr m tcEnv tyEnv' p e
->     cx' <- reduceContext p "expression" (ppExpr 0 e') tcEnv (concat cxs ++ cx)
->     checkSkolems p "Expression" (ppExpr 0) tcEnv tyEnv fs cx'
+>     ((cxL,cxR),tys,ts') <- liftM (apFst3 cpConcat . unzip3) $
+>       mapM (tcConstrTerm False tcEnv tyEnv' p) ts
+>     (cx',ty,e') <- withInstances tcEnv cxR $ tcExpr m tcEnv tyEnv' p e
+>     cx'' <- reduceContext p "expression" (ppExpr 0 e') tcEnv (cxL ++ cx')
+>     checkSkolems p "Expression" (ppExpr 0) tcEnv tyEnv fs cx''
 >                  (foldr TypeArrow ty tys) (Lambda p ts' e')
 > tcExpr m tcEnv tyEnv p (Let ds e) =
 >   do
@@ -1457,8 +1499,7 @@ constraints of the function pattern.
 > tcExpr m tcEnv tyEnv p (Do sts e) =
 >   do
 >     fs <- liftM (fsEnv . flip subst tyEnv) fetchSt
->     (cx,ty,sts',e') <-
->       withLocalScope $ tcStmts m tcEnv tyEnv p Nothing sts e              -- $
+>     (cx,ty,sts',e') <- tcStmts m tcEnv tyEnv p Nothing sts e
 >     cx' <- reduceContext p "expression" (ppExpr 0 (Do sts' e')) tcEnv cx
 >     checkSkolems p "Expression" (ppExpr 0) tcEnv tyEnv fs cx' ty (Do sts' e')
 > tcExpr m tcEnv tyEnv p e@(IfThenElse e1 e2 e3) =
@@ -1493,20 +1534,20 @@ constraints of the function pattern.
 > tcAlt :: Bool -> ModuleIdent -> TCEnv -> ValueEnv -> Set Int -> Type -> Type
 >       -> Context -> Alt a -> TcState (Context,Alt QualType)
 > tcAlt poly m tcEnv tyEnv fs tyLhs tyRhs cx a@(Alt p t rhs) =
->   tcAltern poly m tcEnv tyEnv fs tyLhs tyRhs p t rhs >>- 
+>   tcAltern poly m tcEnv tyEnv fs tyLhs tyRhs p t rhs >>-
 >   unify p "case alternative" (ppAlt a) tcEnv cx tyRhs
 
 > tcAltern :: Bool -> ModuleIdent -> TCEnv -> ValueEnv -> Set Int
 >          -> Type -> Type -> Position -> ConstrTerm a -> Rhs a
 >          -> TcState (Context,Type,Alt QualType)
 > tcAltern poly m tcEnv tyEnv fs tyLhs tyRhs p t rhs =
->   withLocalScope $                                                        -- $
 >   do
 >     tyEnv' <- bindLambdaVars m tyEnv t
->     (cx,t') <- tcConstrArg poly tcEnv tyEnv' p "case pattern" doc [] tyLhs t
->     (cx',ty',rhs') <- tcRhs m tcEnv tyEnv' rhs
+>     ((cxL,cxR),t') <-
+>       tcConstrArg poly tcEnv tyEnv' p "case pattern" doc ([],[]) tyLhs t
+>     (cx',ty',rhs') <- withInstances tcEnv cxR $ tcRhs m tcEnv tyEnv' rhs
 >     cx'' <-
->       reduceContext p "alternative" (ppAlt (Alt p t' rhs')) tcEnv (cx ++ cx')
+>       reduceContext p "alternative" (ppAlt (Alt p t' rhs')) tcEnv (cxL ++ cx')
 >     checkSkolems p "Alternative" ppAlt tcEnv tyEnv fs cx'' ty' (Alt p t' rhs')
 >   where doc = ppAlt (Alt p t rhs)
 
@@ -1519,18 +1560,18 @@ constraints of the function pattern.
 >     return (cx,listType ty,[],e')
 > tcQuals m tcEnv tyEnv p (q:qs) e =
 >   do
->     (tyEnv',cx,q') <- tcQual m tcEnv tyEnv p q
->     (cx',ty,qs',e') <- tcQuals m tcEnv tyEnv' p qs e
->     return (cx ++ cx',ty,q':qs',e')
+>     (tyEnv',(cxL,cxR),q') <- tcQual m tcEnv tyEnv p q
+>     (cx',ty,qs',e') <- withInstances tcEnv cxR $ tcQuals m tcEnv tyEnv' p qs e
+>     return (cxL ++ cx',ty,q':qs',e')
 
 > tcQual :: ModuleIdent -> TCEnv -> ValueEnv -> Position -> Statement a
->        -> TcState (ValueEnv,Context,Statement QualType)
+>        -> TcState (ValueEnv,ContextPair,Statement QualType)
 > tcQual m tcEnv tyEnv p (StmtExpr e) =
 >   do
 >     (cx',e') <-
 >       tcExpr m tcEnv tyEnv p e >>-
 >       unify p "guard" (ppExpr 0 e) tcEnv [] boolType
->     return (tyEnv,cx',StmtExpr e')
+>     return (tyEnv,(cx',[]),StmtExpr e')
 > tcQual m tcEnv tyEnv _ q@(StmtBind p t e) =
 >   do
 >     alpha <- freshTypeVar
@@ -1538,12 +1579,12 @@ constraints of the function pattern.
 >       tcArg m tcEnv tyEnv p "generator" (ppStmt q) [] (listType alpha) e
 >     tyEnv' <- bindLambdaVars m tyEnv t
 >     (cx'',t') <-
->       tcConstrArg False tcEnv tyEnv' p "generator" (ppStmt q) [] alpha t
->     return (tyEnv',cx' ++ cx'',StmtBind p t' e')
+>       tcConstrArg False tcEnv tyEnv' p "generator" (ppStmt q) ([],[]) alpha t
+>     return (tyEnv',(cx',[]) <++> cx'',StmtBind p t' e')
 > tcQual m tcEnv tyEnv _ (StmtDecl ds) =
 >   do
 >     (tyEnv',cx',ds') <- tcDecls m tcEnv tyEnv ds
->     return (tyEnv',cx',StmtDecl ds')
+>     return (tyEnv',(cx',[]),StmtDecl ds')
 
 > tcStmts :: ModuleIdent -> TCEnv -> ValueEnv -> Position
 >         -> Maybe Type -> [Statement a] -> Expression a
@@ -1557,13 +1598,14 @@ constraints of the function pattern.
 >     return (cx,ty,[],e')
 > tcStmts m tcEnv tyEnv p mTy (st:sts) e =
 >   do
->     (tyEnv',cx,mTy',st') <- tcStmt m tcEnv tyEnv p mTy st
->     (cx',ty,sts',e') <- tcStmts m tcEnv tyEnv' p mTy' sts e
->     return (cx ++ cx',ty,st':sts',e')
+>     (tyEnv',(cxL,cxR),mTy',st') <- tcStmt m tcEnv tyEnv p mTy st
+>     (cx',ty,sts',e') <-
+>       withInstances tcEnv cxR $ tcStmts m tcEnv tyEnv' p mTy' sts e
+>     return (cxL ++ cx',ty,st':sts',e')
 
 > tcStmt :: ModuleIdent -> TCEnv -> ValueEnv -> Position
 >        -> Maybe Type -> Statement a
->        -> TcState (ValueEnv,Context,Maybe Type,Statement QualType)
+>        -> TcState (ValueEnv,ContextPair,Maybe Type,Statement QualType)
 > tcStmt m tcEnv tyEnv p mTy (StmtExpr e) =
 >   do
 >     (cx',ty) <- maybe freshMonadType (return . (,) []) mTy
@@ -1571,7 +1613,7 @@ constraints of the function pattern.
 >     (cx'',e') <-
 >       tcExpr m tcEnv tyEnv p e >>-
 >       unify p "statement" (ppExpr 0 e) tcEnv cx' (TypeApply ty alpha)
->     return (tyEnv,cx'',Just ty,StmtExpr e')
+>     return (tyEnv,(cx'',[]),Just ty,StmtExpr e')
 > tcStmt m tcEnv tyEnv _ mTy st@(StmtBind p t e) =
 >   do
 >     (cx',ty) <- maybe freshMonadType (return . (,) []) mTy
@@ -1580,12 +1622,12 @@ constraints of the function pattern.
 >       tcArg m tcEnv tyEnv p "statement" (ppStmt st) cx' (TypeApply ty alpha) e
 >     tyEnv' <- bindLambdaVars m tyEnv t
 >     (cx''',t') <-
->       tcConstrArg False tcEnv tyEnv' p "statement" (ppStmt st) [] alpha t
->     return (tyEnv',cx'' ++ cx''',Just ty,StmtBind p t' e')
+>       tcConstrArg False tcEnv tyEnv' p "statement" (ppStmt st) ([],[]) alpha t
+>     return (tyEnv',(cx'',[]) <++> cx''',Just ty,StmtBind p t' e')
 > tcStmt m tcEnv tyEnv _ mTy (StmtDecl ds) =
 >   do
 >     (tyEnv',cx',ds') <- tcDecls m tcEnv tyEnv ds
->     return (tyEnv',cx',mTy,StmtDecl ds')
+>     return (tyEnv',(cx',[]),mTy,StmtDecl ds')
 
 > tcInfixOp :: ValueEnv -> InfixOp a -> TcState (Context,Type,InfixOp QualType)
 > tcInfixOp tyEnv (InfixOp _ op) =
@@ -1751,7 +1793,7 @@ may cause a further extension of the current substitution.
 > reduceContext p what doc tcEnv cx =
 >   do
 >     theta <- fetchSt
->     iEnv <- liftM (apSnd3 (fmap (subst theta))) (liftSt fetchSt)
+>     iEnv <- liftM (apSnd3 (fmap (subst theta))) (liftSt envRt)
 >     let cx' = subst theta cx
 >         (cx1,cx2) =
 >           partitionContext (minContext tcEnv (reduceTypePreds iEnv cx'))
@@ -1841,7 +1883,7 @@ library.
 >               -> Type -> TcState Context
 > applyDefaults p what doc tcEnv fvs cx ty =
 >   do
->     iEnv <- liftSt fetchSt
+>     iEnv <- liftSt envRt
 >     let theta =
 >           foldr (bindDefault tcEnv iEnv cx) idSubst
 >                 (nub [tv | TypePred cls (TypeVariable tv) <- cx,
@@ -1917,7 +1959,7 @@ We use negative offsets for fresh type variables.
 \begin{verbatim}
 
 > fresh :: (Int -> a) -> TcState a
-> fresh f = liftM f (liftSt (liftSt (updateSt (1 +))))
+> fresh f = liftM f (liftSt (liftRt (updateSt (1 +))))
 
 > freshVar :: (Int -> a) -> TcState a
 > freshVar f = fresh (\n -> f (- n))
@@ -1954,59 +1996,32 @@ The function \texttt{skol} instantiates the type of data and newtype
 constructors in patterns. All universally quantified type variables
 are instantiated with fresh type variables and all existentially
 quantified type variables are instantiated with fresh skolem types.
-All constraints that appear on the right hand side of the
-constructor's declaration are added to the dynamic instance
-environment.
 \begin{verbatim}
 
-> skol :: TCEnv -> ([Ident],ConstrInfo,TypeScheme) -> TcState (Context,Type)
-> skol tcEnv (_,ConstrInfo m cxR,ForAll n (QualType cx ty)) =
+> skol :: ([Ident],ConstrInfo,TypeScheme) -> TcState (ContextPair,Type)
+> skol (_,ConstrInfo m cxR,ForAll n (QualType cx ty)) =
 >   do
 >     tys <- replicateM (n - m) freshTypeVar
 >     tys' <- replicateM m freshSkolem
 >     let tys'' = tys ++ tys'
->     liftSt (updateSt_ (apSnd3 (bindSkolemInsts tys'')))
->     return (map (instTypeScheme tys) cxL,instTypeScheme tys'' ty)
+>     return ((map (instTypeScheme tys) cxL,map (instTypeScheme tys'') cxR),
+>             instTypeScheme tys'' ty)
 >   where cxL = filter (`notElem` cxR) cx
->         bindSkolemInsts tys dEnv =
->           foldr bindSkolemInst dEnv
->                 (map (instTypeScheme tys) (maxContext tcEnv cxR))
->         bindSkolemInst (TypePred cls ty) dEnv =
->           bindEnv cls (ty : fromMaybe [] (lookupEnv cls dEnv)) dEnv
 
 \end{verbatim}
-All instances added to the dynamic instance environment in this way
-must be removed from the environment upon leaving the scope of the
-respective data constructor. This can be achieved with combinator
-\texttt{withLocalScope}, which restores the initial dynamic instance
-environment after computing the result of its argument. The variant
-\texttt{withLocalScope'}, in addition to the result of its argument,
-also returns the type class instances that were added to the dynamic
-instance environment within the local scope. This is supposed to be
-used with function patterns, which must add those instances to the
-type class constraints of the enclosing scope (see
-p.~\pageref{typing-funpat}).
+When a data constructors with type constraints on the right hand side
+of its declaration is used in a pattern, instances corresponding to
+those type constraints are added to the dynamic instance environment
+for the scope of the pattern.
 \begin{verbatim}
 
-> withLocalScope :: TcState a -> TcState a
-> withLocalScope m =
->   do
->     dEnv <- liftM snd3 (liftSt fetchSt)
->     x <- m
->     liftSt (updateSt_ (apSnd3 (const dEnv)))
->     return x
-
-> withLocalScope' :: TCEnv -> TcState a -> TcState (Context,a)
-> withLocalScope' tcEnv m =
->   do
->     dEnv <- liftM snd3 (liftSt fetchSt)
->     x <- m
->     dEnv' <- liftM snd3 (liftSt (updateSt (apSnd3 (const dEnv))))
->     return (minContext tcEnv (dEnv' `diffContext` dEnv),x)
->   where dEnv1 `diffContext` dEnv2 =
->           [TypePred cls ty | (cls,tys) <- envToList dEnv1,
->                              let tys' = fromMaybe [] (lookupEnv cls dEnv2),
->                              ty <- filter (`notElem` tys') tys]
+> withInstances :: TCEnv -> Context -> TcState a -> TcState a
+> withInstances tcEnv = mapStateSt . mapEnvRt . apSnd3 . bindInsts
+>   where bindInsts cx dEnv = foldr bindInst dEnv (maxContext tcEnv cx)
+>         bindInst (TypePred cls ty) dEnv =
+>           bindEnv cls (bindType ty (lookupEnv cls dEnv)) dEnv
+>         bindType ty (Just tys) = if ty `elem` tys then tys else ty:tys
+>         bindType ty Nothing = [ty]
 
 \end{verbatim}
 The function \texttt{gen} generalizes a context \emph{cx} and a type

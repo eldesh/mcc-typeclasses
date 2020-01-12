@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Imports.lhs 2899 2009-08-24 09:52:45Z wlux $
+% $Id: Imports.lhs 3323 2020-01-12 20:55:00Z wlux $
 %
-% Copyright (c) 2000-2009, Wolfgang Lux
+% Copyright (c) 2000-2020, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Imports.lhs}
@@ -167,17 +167,26 @@ following functions.
 > clsMthd (IMethodDecl _ f n _) = (f,maybe 0 fromInteger n)
 
 > values :: IDecl -> [ValueInfo]
-> values (IDataDecl _ cx tc _ tvs cs xs) =
->   map (dataConstr cx tc tvs) (filter ((`notElem` xs) . constr) cs) ++
->   map (uncurry (fieldLabel cx tc tvs)) (nubBy sameLabel ls)
->   where ls = [(l,ty) | RecordDecl _ _ _ _ fs <- cs,
->                        FieldDecl _ ls ty <- fs, l <- ls, l `notElem` xs]
->         sameLabel (l1,_) (l2,_) = l1 == l2
+> values (IDataDecl _ cxL tc _ tvs cs xs) =
+>   [dataConstr tc c ls ci ty | (c,ls,(ci,ty)) <- cs', c `notElem` xs] ++
+>   [fieldLabel tc l ty | (l,ty) <- ls, l `notElem` xs]
+>   where cs' = map (con . constr) cs
+>         ls = joinLabels (map labs cs')
+>         constr (ConstrDecl _ _ cxR c tys) = (cxR,c,zip (repeat anonId) tys)
+>         constr (ConOpDecl _ _ cxR ty1 op ty2) =
+>           (cxR,op,[(anonId,ty1),(anonId,ty2)])
+>         constr (RecordDecl _ _ cxR c fs) =
+>           (cxR,c,[(l,ty) | FieldDecl _ ls ty <- fs, l <- ls])
+>         con (cxR,c,tys) = (c,ls,toConstrType cxL tc tvs cxR tys')
+>           where (ls,tys') = unzip tys
+>         labs (_,ls,(ci,ty)) = labelTypes ls ci ty
 > values (INewtypeDecl _ cx tc _ tvs nc xs) =
->   map (newConstr cx tc tvs) [nc | nconstr nc `notElem` xs] ++
->   case nc of
->     NewConstrDecl _ _ _ -> []
->     NewRecordDecl _ c l ty -> [fieldLabel cx tc tvs l ty | l `notElem` xs]
+>   [newConstr tc c l ty | c `notElem` xs] ++
+>   [fieldLabel tc l ty' | (l,ty') <- labelTypes [l] ci ty, l `notElem` xs]
+>   where (c,l,(ci,ty)) = ncon (nconstr nc)
+>         nconstr (NewConstrDecl _ c ty) = (c,anonId,ty)
+>         nconstr (NewRecordDecl _ c l ty) = (c,l,ty)
+>         ncon (c,l,ty) = (c,l,toConstrType cx tc tvs [] [ty])
 > values (IClassDecl _ _ cls _ tv ds fs') =
 >   map (classMethod cls tv) (filter ((`notElem` fs') . imethod) ds)
 > values (IFunctionDecl _ f n ty) = [Value f n' (typeScheme ty')]
@@ -185,37 +194,16 @@ following functions.
 >         ty' = toQualType ty
 > values _ = []
 
-> dataConstr :: [ClassAssert] -> QualIdent -> [Ident] -> ConstrDecl -> ValueInfo
-> dataConstr cxL tc tvs (ConstrDecl _ _ cxR c tys) =
->   con cxL tc tvs cxR c (zip (repeat anonId) tys)
-> dataConstr cxL tc tvs (ConOpDecl _ _ cxR ty1 op ty2) =
->   con cxL tc tvs cxR op [(anonId,ty1),(anonId,ty2)]
-> dataConstr cxL tc tvs (RecordDecl _ _ cxR c fs) =
->   con cxL tc tvs cxR c [(l,ty) | FieldDecl _ ls ty <- fs, l <- ls]
-
-> con :: [ClassAssert] -> QualIdent -> [Ident] -> [ClassAssert] -> Ident
->     -> [(Ident,TypeExpr)] -> ValueInfo
-> con cxL tc tvs cxR c tys =
->   DataConstructor (qualifyLike tc c) ls ci (typeScheme ty)
->   where (ci,ty) = toConstrType cxL tc tvs cxR tys'
->         (ls,tys') = unzip tys
-
-> newConstr :: [ClassAssert] -> QualIdent -> [Ident] -> NewConstrDecl
->           -> ValueInfo
-> newConstr cx tc tvs (NewConstrDecl _ c ty) = ncon cx tc tvs c anonId ty
-> newConstr cx tc tvs (NewRecordDecl _ c l ty) = ncon cx tc tvs c l ty
-
-> ncon :: [ClassAssert] -> QualIdent -> [Ident] -> Ident -> Ident -> TypeExpr
->      -> ValueInfo
-> ncon cx tc tvs c l ty =
->   NewtypeConstructor (qualifyLike tc c) l (typeScheme ty')
->   where ty' = snd (toConstrType cx tc tvs [] [ty])
-
-> fieldLabel :: [ClassAssert] -> QualIdent -> [Ident] -> Ident -> TypeExpr
+> dataConstr :: QualIdent -> Ident -> [Ident] -> ConstrInfo -> QualType
 >            -> ValueInfo
-> fieldLabel cx tc tvs l ty =
->   Value (qualifyLike tc l) 1 (typeScheme (toQualType ty'))
->   where ty' = QualTypeExpr cx (ArrowType (constrType tc tvs) ty)
+> dataConstr tc c ls ci ty =
+>   DataConstructor (qualifyLike tc c) ls ci (typeScheme ty)
+
+> newConstr :: QualIdent -> Ident -> Ident -> QualType -> ValueInfo
+> newConstr tc c l ty = NewtypeConstructor (qualifyLike tc c) l (typeScheme ty)
+
+> fieldLabel :: QualIdent -> Ident -> QualType -> ValueInfo
+> fieldLabel tc l ty = Value (qualifyLike tc l) 1 (typeScheme ty)
 
 > classMethod :: QualIdent -> Ident -> IMethodDecl -> ValueInfo
 > classMethod cls tv (IMethodDecl _ f _ ty) =

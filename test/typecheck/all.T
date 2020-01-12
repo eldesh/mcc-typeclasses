@@ -42,3 +42,11 @@ type pass tc040.curry f1''
 type pass tc040.curry f2''
 type pass tc041.curry zero
 type pass tc041.curry add
+type pass tc042.curry left
+type pass tc042.curry common
+type pass tc042.curry right
+type pass tc042.curry l
+type pass tc042.curry c
+type pass tc042.curry r
+type pass tc042.curry new
+type pass tc042.curry n

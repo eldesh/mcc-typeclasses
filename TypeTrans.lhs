@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 3322 2020-01-12 14:45:55Z wlux $
+% $Id: TypeTrans.lhs 3323 2020-01-12 20:55:00Z wlux $
 %
 % Copyright (c) 1999-2020, Wolfgang Lux
 % See LICENSE for the full license.
@@ -14,6 +14,7 @@ external type representations.
 >                  fromType, fromQualType,
 >                  expandMonoType, expandConstrType, expandMethodType,
 >                  expandPolyType, minContext, maxContext,
+>                  labelTypes, joinLabels,
 >                  ppType, ppQualType, ppTypeScheme, ppInstance) where
 > import Base
 > import Curry
@@ -277,6 +278,48 @@ by the predicates in the given context.
 > maxContext tcEnv cx = nub (concatMap implied cx)
 >   where implied (TypePred cls ty) =
 >           [TypePred cls' ty | cls' <- sort (allSuperClasses cls tcEnv)]
+
+\end{verbatim}
+The function \texttt{labelTypes} derives the types of all field labels
+for a particular data constructor declaration from the constructor's
+type. The resulting types are intended to be used for the selector
+functions associated with the field labels and therefore only type
+constraints from the left hand side context of the type declaration
+are taken into account.
+\begin{verbatim}
+
+> labelTypes :: [Ident] -> ConstrInfo -> QualType -> [(Ident,QualType)]
+> labelTypes ls (ConstrInfo _ cxR) (QualType cx ty) =
+>   [(l,QualType cxL (TypeArrow ty' ty)) | (l,ty) <- zip ls tys, l /= anonId]
+>   where (tys,ty') = arrowUnapply ty
+>         cxL = filter (`notElem` cxR) cx
+
+\end{verbatim}
+A field label may be defined for more than one data constructor of a
+particular data type. In this case, the plain type of the field label
+must be the same for all occurrences of the label and the context of
+the type must include the constraints that apply to each individual
+occurrence of the label. The function \texttt{joinLabels} can be used
+to compute the types of all field labels of a data type from the
+concatenated results of applying \texttt{labelTypes} to each data
+constructor of the type. Note that the function relies on the contexts
+of all types being in canonical form, i.e., sorted.
+\begin{verbatim}
+
+> joinLabels :: [[(Ident,QualType)]] -> [(Ident,QualType)]
+> joinLabels =
+>   map (foldl1 joinTypes) . groupBy eqLabel . sortBy cmpLabel . concat
+>   where joinTypes (l,QualType cx1 ty) (_,QualType cx2 _) =
+>           (l,QualType (joinContexts cx1 cx2) ty)
+>         joinContexts cx [] = cx
+>         joinContexts [] cx = cx
+>         joinContexts cx1@(tp1:tps1) cx2@(tp2:tps2) =
+>           case compare tp1 tp2 of
+>             LT -> tp1 : joinContexts tps1 cx2
+>             EQ -> tp1 : joinContexts tps1 tps2
+>             GT -> tp2 : joinContexts cx1 tps2
+>         eqLabel (l1,_) (l2,_) = l1 == l2
+>         cmpLabel (l1,_) (l2,_) = compare l1 l2
 
 \end{verbatim}
 The following functions implement pretty-printing for types by

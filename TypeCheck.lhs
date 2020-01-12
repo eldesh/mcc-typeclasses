@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3321 2019-12-27 10:56:53Z wlux $
+% $Id: TypeCheck.lhs 3323 2020-01-12 20:55:00Z wlux $
 %
-% Copyright (c) 1999-2019, Wolfgang Lux
+% Copyright (c) 1999-2020, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeCheck.lhs}
@@ -192,24 +192,27 @@ their types are expanded.
 
 > bindTypeValues :: ModuleIdent -> TCEnv -> TopDecl a -> ValueEnv -> ValueEnv
 > bindTypeValues m tcEnv (DataDecl _ cxL tc tvs cs _) tyEnv =
->   foldr bindCon (foldr (uncurry bindLab) tyEnv (nubBy sameLabel ls)) cs
->   where ls = [(l,ty) | RecordDecl _ _ _ _ fs <- cs,
->                        FieldDecl _ ls ty <- fs, l <- ls]
->         bindCon (ConstrDecl _ _ cxR c tys) =
->           bindConstr m tcEnv cxL tc tvs cxR c (zip (repeat anonId) tys)
->         bindCon (ConOpDecl _ _ cxR ty1 op ty2) =
->           bindConstr m tcEnv cxL tc tvs cxR op [(anonId,ty1),(anonId,ty2)]
->         bindCon (RecordDecl _ _ cxR c fs) =
->           bindConstr m tcEnv cxL tc tvs cxR c tys
->           where tys = [(l,ty) | FieldDecl _ ls ty <- fs, l <- ls]
->         bindLab = bindLabel m tcEnv cxL tc tvs
->         sameLabel (l1,_) (l2,_) = l1 == l2
-> bindTypeValues m tcEnv (NewtypeDecl _ cx tc tvs nc _) tyEnv = bind nc tyEnv
->   where bind (NewConstrDecl _ c ty) =
->           bindNewConstr m tcEnv cx tc tvs c anonId ty
->         bind (NewRecordDecl _ c l ty) =
->           bindNewConstr m tcEnv cx tc tvs c l ty .
->           bindLabel m tcEnv cx tc tvs l ty
+>   foldr bindCon (foldr (uncurry (bindLabel m)) tyEnv ls) cs'
+>   where cs' = map (con . constr) cs
+>         ls = joinLabels (map labs cs')
+>         bindCon (c,ls,(ci,ty)) = bindConstr m c ls ci ty
+>         constr (ConstrDecl _ _ cxR c tys) = (cxR,c,zip (repeat anonId) tys)
+>         constr (ConOpDecl _ _ cxR ty1 op ty2) =
+>           (cxR,op,[(anonId,ty1),(anonId,ty2)])
+>         constr (RecordDecl _ _ cxR c fs) =
+>           (cxR,c,[(l,ty) | FieldDecl _ ls ty <- fs, l <- ls])
+>         con (cxR,c,tys) =
+>           (c,ls,expandConstrType tcEnv cxL (qualifyWith m tc) tvs cxR tys')
+>           where (ls,tys') = unzip tys
+>         labs (_,ls,(ci,ty)) = labelTypes ls ci ty
+> bindTypeValues m tcEnv (NewtypeDecl _ cx tc tvs nc _) tyEnv =
+>   bindNewConstr m c l ty $
+>   foldr (uncurry (bindLabel m)) tyEnv (labelTypes [l] ci ty)
+>   where (c,l,(ci,ty)) = ncon (nconstr nc)
+>         nconstr (NewConstrDecl _ c ty) = (c,anonId,ty)
+>         nconstr (NewRecordDecl _ c l ty) = (c,l,ty)
+>         ncon (c,l,ty) =
+>           (c,l,expandConstrType tcEnv cx (qualifyWith m tc) tvs [] [ty])
 > bindTypeValues _ _ (TypeDecl _ _ _ _) tyEnv = tyEnv
 > bindTypeValues m tcEnv (ClassDecl _ _ cls tv ds) tyEnv = foldr bind tyEnv ds
 >   where cls' = qualifyWith m cls
@@ -221,26 +224,19 @@ their types are expanded.
 > bindTypeValues _ _ (DefaultDecl _ _) tyEnv = tyEnv
 > bindTypeValues _ _ (BlockDecl _) tyEnv = tyEnv
 
-> bindConstr :: ModuleIdent -> TCEnv -> [ClassAssert] -> Ident -> [Ident]
->            -> [ClassAssert] -> Ident -> [(Ident,TypeExpr)] -> ValueEnv
->            -> ValueEnv
-> bindConstr m tcEnv cxL tc tvs cxR c tys = globalBindTopEnv m c $
+> bindConstr :: ModuleIdent -> Ident -> [Ident] -> ConstrInfo -> QualType
+>            -> ValueEnv -> ValueEnv
+> bindConstr m c ls ci ty = globalBindTopEnv m c $
 >   DataConstructor (qualifyWith m c) ls ci (typeScheme ty)
->   where (ci,ty) = expandConstrType tcEnv cxL (qualifyWith m tc) tvs cxR tys'
->         (ls,tys') = unzip tys
 
-> bindNewConstr :: ModuleIdent -> TCEnv -> [ClassAssert] -> Ident -> [Ident]
->               -> Ident -> Ident -> TypeExpr -> ValueEnv -> ValueEnv
-> bindNewConstr m tcEnv cx tc tvs c l ty = globalBindTopEnv m c $
->   NewtypeConstructor (qualifyWith m c) l (typeScheme ty')
->   where ty' = snd (expandConstrType tcEnv cx (qualifyWith m tc) tvs [] [ty])
+> bindNewConstr :: ModuleIdent -> Ident -> Ident -> QualType -> ValueEnv
+>               -> ValueEnv
+> bindNewConstr m c l ty = globalBindTopEnv m c $
+>   NewtypeConstructor (qualifyWith m c) l (typeScheme ty)
 
-> bindLabel :: ModuleIdent -> TCEnv -> [ClassAssert] -> Ident -> [Ident]
->           -> Ident -> TypeExpr -> ValueEnv -> ValueEnv
-> bindLabel m tcEnv cx tc tvs l ty =
->   globalBindTopEnv m l (Value (qualifyWith m l) 1 (typeScheme ty'))
->   where ty' = expandPolyType tcEnv (QualTypeExpr cx (ArrowType ty0 ty))
->         ty0 = constrType (qualifyWith m tc) tvs
+> bindLabel :: ModuleIdent -> Ident -> QualType -> ValueEnv -> ValueEnv
+> bindLabel m l ty =
+>   globalBindTopEnv m l (Value (qualifyWith m l) 1 (typeScheme ty))
 
 > bindMethods :: ModuleIdent -> TCEnv -> QualIdent -> Ident -> [Ident]
 >             -> QualTypeExpr -> ValueEnv -> ValueEnv
@@ -250,10 +246,6 @@ their types are expanded.
 
 > bindMethod :: ModuleIdent -> TypeScheme -> Ident -> ValueEnv -> ValueEnv
 > bindMethod m ty f = globalBindTopEnv m f (Value (qualifyWith m f) 0 ty)
-
-> constrType :: QualIdent -> [Ident] -> TypeExpr
-> constrType tc tvs =
->   foldl ApplyType (ConstructorType tc) (map VariableType tvs)
 
 \end{verbatim}
 \paragraph{Type Signatures}

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: InstCheck.lhs 3242 2016-06-19 10:53:21Z wlux $
+% $Id: InstCheck.lhs 3322 2020-01-12 14:45:55Z wlux $
 %
-% Copyright (c) 2006-2015, Wolfgang Lux
+% Copyright (c) 2006-2020, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{InstCheck.lhs}
@@ -132,25 +132,25 @@ their super classes.
 
 > declDeriving :: ModuleIdent -> TCEnv -> TopDecl a -> Deriving
 > declDeriving m tcEnv (DataDecl p cx tc tvs cs clss) =
->   mkDeriving m tcEnv p (cx ++ concat cxs) tc tvs (concat tyss) clss
+>   mkDeriving m tcEnv p cx tc tvs (concat cxs) (concat tyss) clss
 >   where (cxs,tyss) = unzip (map constrTypes cs)
 >         constrTypes (ConstrDecl _ _ cx _ tys) = (cx,tys)
 >         constrTypes (ConOpDecl _ _ cx ty1 _ ty2) = (cx,[ty1,ty2])
 >         constrTypes (RecordDecl _ _ cx _ fs) = (cx,tys)
 >           where tys = [ty | FieldDecl _ ls ty <- fs, l <- ls]
 > declDeriving m tcEnv (NewtypeDecl p cx tc tvs nc clss) =
->   mkDeriving m tcEnv p cx tc tvs [nconstrType nc] clss
+>   mkDeriving m tcEnv p cx tc tvs [] [nconstrType nc] clss
 >   where nconstrType (NewConstrDecl _ _ ty) = ty
 >         nconstrType (NewRecordDecl _ _ _ ty) = ty
 
 > mkDeriving :: ModuleIdent -> TCEnv -> Position -> [ClassAssert] -> Ident
->            -> [Ident] -> [TypeExpr] -> [DClass] -> Deriving
-> mkDeriving m tcEnv p cx tc tvs tys dclss =
+>            -> [Ident] -> [ClassAssert] -> [TypeExpr] -> [DClass] -> Deriving
+> mkDeriving m tcEnv p cxL tc tvs cxR tys dclss =
 >   Deriving p tc' (QualType cx' ty'') tys' (sortClasses tcEnv clss)
 >   where tc' = qualifyWith m tc
 >         clss = [cls | DClass _ cls <- dclss]
 >         (tys',ty'') = arrowUnapply ty'
->         QualType cx' ty' = snd (expandConstrType tcEnv cx tc' tvs [] tys)
+>         QualType cx' ty' = snd (expandConstrType tcEnv cxL tc' tvs cxR tys)
 
 > sortClasses :: TCEnv -> [QualIdent] -> [QualIdent]
 > sortClasses tcEnv clss =

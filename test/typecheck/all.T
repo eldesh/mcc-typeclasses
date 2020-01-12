@@ -40,3 +40,5 @@ compile pass tc039.curry
 compile pass tc040.curry
 type pass tc040.curry f1''
 type pass tc040.curry f2''
+type pass tc041.curry zero
+type pass tc041.curry add

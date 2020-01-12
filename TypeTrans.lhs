@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 3242 2016-06-19 10:53:21Z wlux $
+% $Id: TypeTrans.lhs 3322 2020-01-12 14:45:55Z wlux $
 %
-% Copyright (c) 1999-2015, Wolfgang Lux
+% Copyright (c) 1999-2020, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{TypeTrans.lhs}
@@ -36,9 +36,30 @@ converts a qualified type expression into a qualified type.
 
 The function \texttt{toConstrType} returns the type and additional
 information for a data or newtype constructor. A special feature of
-this function is that it restricts the context to those type variables
-which are free in the argument types as specified in Sect.~4.2.1 of
-the revised Haskell'98 report~\cite{PeytonJones03:Haskell}.
+this function is that it restricts the context on the left hand side
+of the type declaration to those constraints that affect the free type
+variables from the argument types, as specified in Sect.~4.2.1 of the
+revised Haskell'98 report~\cite{PeytonJones03:Haskell}. Type
+constraints from a right hand context are not pruned because they
+introduce additional local instances for the scope of a pattern. For
+instance, consider an implementation of sets based on ordered binary
+trees that incorporate their ordering relation:
+\begin{verbatim}
+  data Set a = Ord a => Empty | Ord a => Elem (Set a) a (Set a)
+  add x t@Empty = Elem t x t
+  add x (Elem l y r) =
+    case compare x y of
+      LT -> Elem (add x l) y r
+      EQ -> Elem l y r
+      GT -> Elem l y (add x r)
+\end{verbatim}
+Without the \texttt{Ord a} constraint for the \texttt{Empty}
+constructor, the \texttt{Ord} instance required by the \texttt{Elem}
+expression in the body of the first equation would have to be supplied
+to this function. Note that the as-pattern is necessary to tell the
+compiler that the \texttt{Elem} expression on the right hand side
+belongs to the same \texttt{Set} type as the \texttt{Empty} pattern on
+the left hand side.
 
 The function \texttt{toMethodType} returns the type of a type class
 method. It adds the implicit type class constraint to the method's
@@ -48,7 +69,7 @@ assigned index 0.
 Type variables are assigned ascending indices in the order of their
 occurrence in the types. It is possible to pass a list of additional
 type variables to these functions, which are assigned indices before
-those variables occurring in the type.  This allows preserving the
+those variables occurring in the type. This allows preserving the
 order of type variables in the left hand side of a type declaration
 and in the head of a type class declaration, respectively.
 
@@ -71,12 +92,11 @@ indices independently in each type expression.
 > toConstrType :: [ClassAssert] -> QualIdent -> [Ident] -> [ClassAssert]
 >              -> [TypeExpr] -> (ConstrInfo,QualType)
 > toConstrType cxL tc tvs cxR tys =
->   (ConstrInfo (length (filter (`notElem` tvs) tvs'')) (toContext' tvs' cxR'),
->    canonType (toQualType' tvs' (QualTypeExpr (cxL' ++ cxR') ty')))
+>   (ConstrInfo (length (filter (`notElem` tvs) tvs'')) (toContext' tvs' cxR),
+>    canonType (toQualType' tvs' (QualTypeExpr (cxL' ++ cxR) ty')))
 >   where tvs' = enumTypeVars tvs tys
 >         tvs'' = nub (fv tys)
 >         cxL' = restrictContext tvs'' cxL
->         cxR' = restrictContext tvs'' cxR
 >         ty' = foldr ArrowType ty0 tys
 >         ty0 = foldl ApplyType (ConstructorType tc) (map VariableType tvs)
 
@@ -171,10 +191,11 @@ conversion.
 
 The function \texttt{expandConstrType} computes the type and
 additional information for a data or newtype constructor. Similar to
-\texttt{toConstrType}, the type's context is restricted to those type
-variables which are free in the argument types. However, type synonyms
-are expanded and type constructors and type classes are qualified with
-the name of the module containing their definition.
+\texttt{toConstrType}, the type's left hand side context is restricted
+to those type constraints that apply to the free variables of the
+argument types. However, type synonyms are expanded and type
+constructors and type classes are qualified with the name of the
+module containing their definition.
 
 The function \texttt{expandMethodType} converts the type of a type
 class method. Similar to function \texttt{toMethodType}, the implicit

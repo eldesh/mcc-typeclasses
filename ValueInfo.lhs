@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: ValueInfo.lhs 2970 2010-07-01 09:11:20Z wlux $
+% $Id: ValueInfo.lhs 3324 2020-01-13 20:54:07Z wlux $
 %
-% Copyright (c) 1999-2010, Wolfgang Lux
+% Copyright (c) 1999-2020, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{ValueInfo.lhs}
@@ -121,29 +121,22 @@ $\emph{cx}_r$ introduces additional instances that are available
 inside a context where $C$ is matched. Operationally, this means that
 a dictionary argument is added to $C$ for each element of the context
 $\emph{cx}_r$ (and therefore must be provided when $C$ is applied).
-Since $C$'s type is
+Note that $C$'s type is
 \begin{displaymath}
 \forall u_1 \dots u_n \, v_1 \dots v_{n'}.\;\emph{cx} \Rightarrow
 t_1 \rightarrow \dots \rightarrow t_k \rightarrow T\,u_1 \dots u_n
 \end{displaymath}
-where $cx$ is the concatenation of $\emph{cx}_l$ and $\emph{cx}_r$
-restricted to the type variables that appear in $t_1,\dots,t_k$, it is
-sufficient to record $\emph{cx}_r$ in addition to the constructor's
-type. We also record the number of existentially quantified type
-variables $n'$ in the additional data constructor information because
-it simplifies distinguishing universally and existentially quantified
-type variables in $C$'s type.
-
-The function \texttt{stdConstrInfo} returns the trivial data
-constructor information for a data (or newtype) constructor that has
-no existentially quantified type variables and whose right hand side
-context is empty.
+where \emph{cx} is the union of $\emph{cx}_l$ restricted to the type
+variables that appear in $t_1,\dots,t_k$ and $\emph{cx}_r$. Since we
+cannot recover $\emph{cx}_l$ and $\emph{cx}_r$ from this type, we
+record both contexts as additional information for the data
+constructor. We also record the number of existentially quantified
+type variables $n'$ in the additional data constructor information
+because it simplifies distinguishing universally and existentially
+quantified type variables in $C$'s type.
 \begin{verbatim}
 
-> data ConstrInfo = ConstrInfo Int Context deriving (Eq,Show)
-
-> stdConstrInfo :: ConstrInfo
-> stdConstrInfo = ConstrInfo 0 []
+> data ConstrInfo = ConstrInfo Int Context Context deriving (Eq,Show)
 
 \end{verbatim}
 The functions \texttt{conType}, \texttt{varType}, and \texttt{funType}
@@ -165,7 +158,8 @@ function even when the function's name is ambiguous.
 > conType c tyEnv =
 >   case qualLookupTopEnv c tyEnv of
 >     [DataConstructor _ ls ci ty] -> (ls,ci,ty)
->     [NewtypeConstructor _ l ty] -> ([l],stdConstrInfo,ty)
+>     [NewtypeConstructor _ l ty] -> ([l],ConstrInfo 0 (context ty) [],ty)
+>       where context (ForAll _ (QualType cx _)) = cx
 >     _ -> internalError ("conType " ++ show c)
 
 > varType :: Ident -> ValueEnv -> TypeScheme

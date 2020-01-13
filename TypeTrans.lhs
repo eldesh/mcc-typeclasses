@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeTrans.lhs 3323 2020-01-12 20:55:00Z wlux $
+% $Id: TypeTrans.lhs 3324 2020-01-13 20:54:07Z wlux $
 %
 % Copyright (c) 1999-2020, Wolfgang Lux
 % See LICENSE for the full license.
@@ -93,11 +93,13 @@ indices independently in each type expression.
 > toConstrType :: [ClassAssert] -> QualIdent -> [Ident] -> [ClassAssert]
 >              -> [TypeExpr] -> (ConstrInfo,QualType)
 > toConstrType cxL tc tvs cxR tys =
->   (ConstrInfo (length (filter (`notElem` tvs) tvs'')) (toContext' tvs' cxR),
->    canonType (toQualType' tvs' (QualTypeExpr (cxL' ++ cxR) ty')))
+>   (ConstrInfo (length (filter (`notElem` tvs) tvs'')) cxL' cxR',
+>    canonType (QualType cx' (toType' tvs' ty')))
 >   where tvs' = enumTypeVars tvs tys
 >         tvs'' = nub (fv tys)
->         cxL' = restrictContext tvs'' cxL
+>         cxL' = toContext' tvs' (restrictContext tvs'' cxL)
+>         cxR' = toContext' tvs' cxR
+>         cx' = cxL' ++ filter (`notElem` cxL') cxR'
 >         ty' = foldr ArrowType ty0 tys
 >         ty0 = foldl ApplyType (ConstructorType tc) (map VariableType tvs)
 
@@ -212,9 +214,11 @@ the module containing their definition.
 > expandConstrType :: TCEnv -> [ClassAssert] -> QualIdent -> [Ident]
 >                  -> [ClassAssert] -> [TypeExpr] -> (ConstrInfo,QualType)
 > expandConstrType tcEnv cxL tc tvs cxR tys =
->   (ConstrInfo n' cxR'',normalize n (expandQualType tcEnv ty'))
+>   (ConstrInfo n' cxL'' cxR'',normalize n (expandQualType tcEnv ty'))
 >   where n = length tvs
->         (ConstrInfo n' cxR',ty') = toConstrType cxL tc tvs cxR tys
+>         (ConstrInfo n' cxL' cxR',ty') = toConstrType cxL tc tvs cxR tys
+>         QualType cxL'' _ =
+>           normalize n (expandQualType tcEnv (contextMap (const cxL') ty'))
 >         QualType cxR'' _ =
 >           normalize n (expandQualType tcEnv (contextMap (const cxR') ty'))
 
@@ -289,10 +293,10 @@ are taken into account.
 \begin{verbatim}
 
 > labelTypes :: [Ident] -> ConstrInfo -> QualType -> [(Ident,QualType)]
-> labelTypes ls (ConstrInfo _ cxR) (QualType cx ty) =
->   [(l,QualType cxL (TypeArrow ty' ty)) | (l,ty) <- zip ls tys, l /= anonId]
+> labelTypes ls (ConstrInfo _ cxL _) (QualType _ ty) =
+>   [(l,QualType cxL' (TypeArrow ty' ty)) | (l,ty) <- zip ls tys, l /= anonId]
 >   where (tys,ty') = arrowUnapply ty
->         cxL = filter (`notElem` cxR) cx
+>         cxL' = sort cxL
 
 \end{verbatim}
 A field label may be defined for more than one data constructor of a

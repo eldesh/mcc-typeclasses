@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: Exports.lhs 3300 2019-08-31 10:23:56Z wlux $
+% $Id: Exports.lhs 3324 2020-01-13 20:54:07Z wlux $
 %
-% Copyright (c) 2000-2019, Wolfgang Lux
+% Copyright (c) 2000-2020, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{Exports.lhs}
@@ -130,9 +130,8 @@ correct arity annotations are written to the interface.
 >   | any (`elem` xs) ls = (cxL,RecordDecl noPos evs cxR' c fs)
 >   | otherwise = (cxL,ConstrDecl noPos evs cxR' c tys)
 >   where evs = drop (n - n') (take n tvs)
->         (ls,ConstrInfo n' cxR,ForAll n (QualType cx ty)) =
+>         (ls,ConstrInfo n' cxL cxR,ForAll n (QualType _ ty)) =
 >           conType (qualifyLike tc c) tyEnv
->         cxL = filter (`notElem` cxR) cx
 >         QualTypeExpr cxR' ty' = fromQualType tvs (QualType cxR ty)
 >         tys = argTypes ty'
 >         fs = zipWith (FieldDecl noPos . return) ls tys

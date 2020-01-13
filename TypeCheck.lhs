@@ -1,5 +1,5 @@
 % -*- LaTeX -*-
-% $Id: TypeCheck.lhs 3323 2020-01-12 20:55:00Z wlux $
+% $Id: TypeCheck.lhs 3324 2020-01-13 20:54:07Z wlux $
 %
 % Copyright (c) 1999-2020, Wolfgang Lux
 % See LICENSE for the full license.
@@ -1991,14 +1991,13 @@ quantified type variables are instantiated with fresh skolem types.
 \begin{verbatim}
 
 > skol :: ([Ident],ConstrInfo,TypeScheme) -> TcState (ContextPair,Type)
-> skol (_,ConstrInfo m cxR,ForAll n (QualType cx ty)) =
+> skol (_,ConstrInfo m cxL cxR,ForAll n (QualType _ ty)) =
 >   do
 >     tys <- replicateM (n - m) freshTypeVar
 >     tys' <- replicateM m freshSkolem
 >     let tys'' = tys ++ tys'
 >     return ((map (instTypeScheme tys) cxL,map (instTypeScheme tys'') cxR),
 >             instTypeScheme tys'' ty)
->   where cxL = filter (`notElem` cxR) cx
 
 \end{verbatim}
 When a data constructors with type constraints on the right hand side

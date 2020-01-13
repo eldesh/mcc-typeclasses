@@ -50,3 +50,5 @@ type pass tc042.curry c
 type pass tc042.curry r
 type pass tc042.curry new
 type pass tc042.curry n
+type pass tc043.curry incr
+type pass tc043.curry tautology

@@ -1,7 +1,7 @@
 % -*- LaTeX -*-
-% $Id: DictTrans.lhs 3242 2016-06-19 10:53:21Z wlux $
+% $Id: DictTrans.lhs 3324 2020-01-13 20:54:07Z wlux $
 %
-% Copyright (c) 2006-2015, Wolfgang Lux
+% Copyright (c) 2006-2020, Wolfgang Lux
 % See LICENSE for the full license.
 %
 \nwfilename{DictTrans.lhs}
@@ -228,7 +228,7 @@ uses a default implementation that calls \texttt{Prelude.error}.
 > bindClassDict :: ModuleIdent -> QualIdent -> QualType -> ValueEnv -> ValueEnv
 > bindClassDict m c (QualType cx ty) =
 >   bindEntity m c (DataConstructor c ls ci (typeScheme (QualType cx ty)))
->   where ci = ConstrInfo 0 cx
+>   where ci = ConstrInfo 0 [] cx
 >         ls = replicate (arrowArity ty) anonId
 
 > bindDefaultMethod :: ModuleIdent -> ValueEnv -> QualIdent -> (Ident,Int)
@@ -604,7 +604,7 @@ the implicit dictionary arguments to the declaration.
 >           DataConstructor c ls' (constrInfo ci) (ForAll n (qualType ty'))
 >           where ty' = transformConstrType ci ty
 >                 ls' = replicate (arrowArity ty' - length ls) anonId ++ ls
->                 constrInfo (ConstrInfo n _) = ConstrInfo n []
+>                 constrInfo (ConstrInfo n _ _) = ConstrInfo n [] []
 >         transInfo (NewtypeConstructor c l ty) =
 >           NewtypeConstructor c l (tmap (qualType . unqualType) ty)
 >         transInfo (Value f n ty) = Value f n' ty'
@@ -1100,7 +1100,7 @@ declaration.
 \begin{verbatim}
 
 > constrTypeRhs :: ConstrInfo -> QualType -> QualType
-> constrTypeRhs (ConstrInfo _ cxR) (QualType _ ty) = QualType cxR ty
+> constrTypeRhs (ConstrInfo _ _ cxR) (QualType _ ty) = QualType cxR ty
 
 > conTypeRhs :: QualIdent -> ValueEnv -> TypeScheme
 > conTypeRhs c tyEnv = tmap (constrTypeRhs ci) ty
